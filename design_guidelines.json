@@ -1,0 +1,97 @@
+{
+  "theme": "LIGHT",
+  "archetype": "Archetype 1 (Organic & Earthy) - Saudi Fintech Variant",
+  "rtl_mandatory": true,
+  "typography": {
+    "fonts": {
+      "headings": "Tajawal",
+      "body": "Cairo",
+      "install_command": "Import Tajawal and Cairo from Google Fonts in the main CSS file."
+    },
+    "rules": {
+      "hierarchy": "Headings must be tracking-tight. Body text needs slightly larger sizes due to Arabic glyph dimensions.",
+      "alignment": "text-right by default due to RTL.",
+      "sizes": {
+        "h1": "text-4xl sm:text-5xl lg:text-5xl",
+        "h2": "text-2xl sm:text-3xl lg:text-4xl",
+        "body": "text-base sm:text-lg",
+        "small": "text-sm"
+      }
+    }
+  },
+  "colors": {
+    "background": "#F8F9FA",
+    "surface": "#FFFFFF",
+    "primary": {
+      "DEFAULT": "#0A3622",
+      "foreground": "#FFFFFF",
+      "hover": "#134E36"
+    },
+    "secondary": {
+      "DEFAULT": "#D4AF37",
+      "foreground": "#111827"
+    },
+    "accent": {
+      "DEFAULT": "#F3F4F1",
+      "foreground": "#0A3622"
+    },
+    "text": {
+      "primary": "#111827",
+      "muted": "#4B5563"
+    },
+    "border": "#E5E7EB",
+    "status": {
+      "success": "#16A34A",
+      "danger": "#DC2626",
+      "warning": "#D97706"
+    }
+  },
+  "layout_and_spacing": {
+    "grid_system": "MODE B: THE 'CONTROL ROOM' GRID",
+    "spacing_scale": "Generous Spacing (p-6, p-8) for breathing room within containers.",
+    "dashboard_rules": {
+      "top_row": "KPI Summary Cards (Total Sales, Orders, Profit). Use col-span-1.",
+      "second_row": "Charts and Breakdowns. Main Chart col-span-2, Feed/List col-span-1.",
+      "alignment": "Optical alignment prioritizing RTL scanning logic."
+    },
+    "rtl_specifics": {
+      "sidebar": "Placed on the RIGHT side of the screen.",
+      "margins": "Use ms- and me- instead of ml- and mr- (margin-start, margin-end) or explicit ms-/me- utilities.",
+      "padding": "Use ps- and pe- instead of pl- and pr-."
+    }
+  },
+  "components": {
+    "cards": "Flat background, 1px subtle border (border-border), rounded-xl. No heavy shadows. On hover: slight lift, shadow-sm.",
+    "buttons": "rounded-lg. Primary buttons use #0A3622 background. Ensure text color changes on hover.",
+    "charts": "Recharts. Use Line charts for trends, Horizontal Bar charts for shipping/payment breakdowns. Tooltips must support RTL.",
+    "inputs": "Shadcn components heavily customized. Ensure text-right for input fields and right-aligned icons."
+  },
+  "media": {
+    "auth_background": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/9126576d79013e8b54614eb6ef7268db1c88914c10825a71376e455fc32c7233.png",
+      "description": "Use as the background image for the split-screen login/register page. Add a bg-black/30 overlay to ensure text contrast if putting text over it."
+    },
+    "empty_state_upload": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/80b8ed57e8b03ecce86ccb201f79210f057fc21e43eab9fd1aa0648fc95c6bb3.png",
+      "description": "Use this on the 'Upload Excel' drag-and-drop area when no file is selected. Max-width 150px."
+    },
+    "app_logo": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/7442ea205389f621204fe34f0227a9eb96c5dc9456e124084892392ec36990f5.png",
+      "description": "Use as the main application logo in the Sidebar and Navbar."
+    },
+    "user_placeholder": {
+      "url": "https://images.pexels.com/photos/8939040/pexels-photo-8939040.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Use for the user profile avatar or dropdown toggle."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Ensure the HTML document has dir='rtl' and lang='ar'. Verify Shadcn components behave correctly in RTL.",
+    "Use Phosphor Icons (yarn add @phosphor-icons/react).",
+    "All interactive elements MUST have data-testid attributes (e.g., data-testid='upload-excel-btn').",
+    "Do NOT use glassmorphism. This is a secure financial app, use solid surfaces.",
+    "Use Recharts for all visual data. Tooltips must render RTL correctly.",
+    "Do not use Inter font. Strictly use Tajawal for headings and Cairo for body.",
+    "Use Tailwind logical properties like padding-inline-start (ps-) instead of pl- to ensure RTL compatibility.",
+    "Write all frontend layout in .jsx/.js as the system does not support .tsx."
+  ]
+}
