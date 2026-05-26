@@ -72,6 +72,7 @@ class PaymentMethod(BaseModel):
 class ShippingCompany(BaseModel):
     name: str
     cost_per_order: float = Field(ge=0)
+    vat_percent: float = Field(ge=0, le=100, default=0.0)
 
 
 class SettingsIn(BaseModel):

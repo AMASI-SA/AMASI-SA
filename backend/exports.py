@@ -139,10 +139,10 @@ def export_report_excel(report: dict) -> bytes:
 
     # Shipping breakdown
     row += 2
-    ws.merge_range(row, 0, row, 3, "تفاصيل شركات الشحن", title_fmt)
+    ws.merge_range(row, 0, row, 5, "تفاصيل شركات الشحن", title_fmt)
     ws.set_row(row, 28)
     row += 1
-    headers = ["شركة الشحن", "عدد الطلبات", "تكلفة الشحنة", "الإجمالي"]
+    headers = ["شركة الشحن", "عدد الطلبات", "تكلفة الشحنة", "قبل الضريبة", "ضريبة %", "الإجمالي"]
     for c, h in enumerate(headers):
         ws.write(row, c, h, header_fmt)
     row += 1
@@ -150,7 +150,9 @@ def export_report_excel(report: dict) -> bytes:
         ws.write(row, 0, sc.get("name", ""), cell_fmt)
         ws.write_number(row, 1, int(sc.get("orders_count", 0)), num_fmt)
         ws.write_number(row, 2, float(sc.get("cost_per_order", 0)), num_fmt)
-        ws.write_number(row, 3, float(sc.get("total_cost", 0)), num_fmt)
+        ws.write_number(row, 3, float(sc.get("base_cost", sc.get("total_cost", 0))), num_fmt)
+        ws.write_number(row, 4, float(sc.get("vat_percent", 0)), num_fmt)
+        ws.write_number(row, 5, float(sc.get("total_cost", 0)), num_fmt)
         row += 1
 
     # Daily costs
@@ -262,16 +264,18 @@ def export_report_pdf(report: dict) -> bytes:
 
     # Shipping breakdown
     elements.append(Paragraph(_ar("تفاصيل شركات الشحن"), h2_style))
-    sh_data = [[_ar("الإجمالي"), _ar("تكلفة الشحنة"), _ar("عدد الطلبات"), _ar("شركة الشحن")]]
+    sh_data = [[_ar("الإجمالي"), _ar("ضريبة %"), _ar("قبل الضريبة"), _ar("تكلفة الشحنة"), _ar("عدد الطلبات"), _ar("شركة الشحن")]]
     for sc in report.get("shipping_breakdown", []):
         sh_data.append([
             _ar(f"{sc.get('total_cost', 0):,.2f}"),
+            _ar(f"{sc.get('vat_percent', 0):.2f}"),
+            _ar(f"{sc.get('base_cost', sc.get('total_cost', 0)):,.2f}"),
             _ar(f"{sc.get('cost_per_order', 0):,.2f}"),
             _ar(f"{sc.get('orders_count', 0)}"),
             _ar(sc.get("name", "")),
         ])
     if len(sh_data) > 1:
-        t = Table(sh_data, colWidths=[3.5 * cm, 3.5 * cm, 3 * cm, 5 * cm])
+        t = Table(sh_data, colWidths=[2.6*cm, 1.8*cm, 2.4*cm, 2.4*cm, 2.2*cm, 3.6*cm])
         t.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (-1, -1), _FONT_NAME),
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F1")),

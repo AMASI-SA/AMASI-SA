@@ -235,7 +235,13 @@ def match_settings(
         }
         for p in payment_settings
     }
-    shipping_map = {normalize_name(s["name"]): float(s.get("cost_per_order", 0)) for s in shipping_settings}
+    shipping_map = {
+        normalize_name(s["name"]): {
+            "cost_per_order": float(s.get("cost_per_order", 0) or 0),
+            "vat_percent": float(s.get("vat_percent", 0) or 0),
+        }
+        for s in shipping_settings
+    }
 
     payment_breakdown = []
     total_payment_fees = 0.0
@@ -278,21 +284,30 @@ def match_settings(
     total_shipping_cost = 0.0
     for sc in parsed["shipping_companies"]:
         key = normalize_name(sc["name"])
-        cost = shipping_map.get(key)
-        if cost is None:
+        cfg = shipping_map.get(key)
+        if cfg is None:
             for k, v in shipping_map.items():
                 if k and (k in key or key in k):
-                    cost = v
+                    cfg = v
                     break
-        cost = cost if cost is not None else 0.0
-        total = round(cost * sc["orders_count"], 2)
+        matched = cfg is not None
+        cfg = cfg or {"cost_per_order": 0.0, "vat_percent": 0.0}
+
+        cost = cfg["cost_per_order"]
+        vat_pct = cfg["vat_percent"]
+        base_cost = round(cost * sc["orders_count"], 2)
+        vat_amount = round(base_cost * vat_pct / 100.0, 2)
+        total = round(base_cost + vat_amount, 2)
         total_shipping_cost += total
         shipping_breakdown.append({
             "name": sc["name"],
             "orders_count": sc["orders_count"],
             "cost_per_order": cost,
+            "base_cost": base_cost,
+            "vat_percent": vat_pct,
+            "vat_amount": vat_amount,
             "total_cost": total,
-            "matched": cost > 0 or key in shipping_map,
+            "matched": matched,
         })
 
     return {

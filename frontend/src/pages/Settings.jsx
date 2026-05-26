@@ -32,6 +32,7 @@ export default function Settings() {
                 shipping_companies: shippings.map((s) => ({
                     name: (s.name || "").trim(),
                     cost_per_order: Number(s.cost_per_order || 0),
+                    vat_percent: Number(s.vat_percent || 0),
                 })).filter((s) => s.name),
             });
             toast.success("تم حفظ الإعدادات");
@@ -168,17 +169,24 @@ export default function Settings() {
                 <div className="flex items-center justify-between mb-5">
                     <div>
                         <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>شركات الشحن وتكاليفها</h2>
-                        <p className="text-sm text-muted-foreground mt-1">تكلفة الشحنة الواحدة (ر.س) لكل شركة</p>
+                        <p className="text-sm text-muted-foreground mt-1">تكلفة الشحنة (ر.س) + نسبة الضريبة على الشحن</p>
                     </div>
                     <button
-                        onClick={() => setShippings([...shippings, { name: "", cost_per_order: 0 }])}
+                        onClick={() => setShippings([...shippings, { name: "", cost_per_order: 0, vat_percent: 15 }])}
                         className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-accent transition-colors"
                         data-testid="add-shipping-btn"
                     >
                         <Plus size={16} weight="bold" /> إضافة
                     </button>
                 </div>
-                <div className="space-y-2" data-testid="shipping-companies-list">
+                <div className="space-y-3" data-testid="shipping-companies-list">
+                    {/* Header row */}
+                    <div className="grid grid-cols-12 gap-3 text-xs font-semibold text-muted-foreground px-1 hidden md:grid">
+                        <div className="col-span-5">اسم شركة الشحن</div>
+                        <div className="col-span-3 text-center">تكلفة الشحنة (ر.س)</div>
+                        <div className="col-span-3 text-center">نسبة الضريبة على الشحن %</div>
+                        <div className="col-span-1"></div>
+                    </div>
                     {shippings.map((s, i) => (
                         <div key={i} className="grid grid-cols-12 gap-3 items-center">
                             <input
@@ -190,10 +198,10 @@ export default function Settings() {
                                     setShippings(arr);
                                 }}
                                 placeholder="اسم شركة الشحن"
-                                className="col-span-7 px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                                className="col-span-5 px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
                                 data-testid={`shipping-name-${i}`}
                             />
-                            <div className="col-span-4 flex items-center border border-border rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand overflow-hidden">
+                            <div className="col-span-3 flex items-center border border-border rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand overflow-hidden">
                                 <input
                                     type="number"
                                     min={0} step="0.01"
@@ -208,6 +216,23 @@ export default function Settings() {
                                     data-testid={`shipping-cost-${i}`}
                                 />
                                 <span className="px-3 py-2.5 text-sm font-bold text-muted-foreground bg-accent/60 border-s border-border whitespace-nowrap">ر.س</span>
+                            </div>
+                            <div className="col-span-3 flex items-center border border-border rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand overflow-hidden">
+                                <input
+                                    type="number"
+                                    min={0} max={100} step="0.01"
+                                    value={s.vat_percent ?? 0}
+                                    onChange={(e) => {
+                                        const arr = [...shippings];
+                                        arr[i] = { ...arr[i], vat_percent: e.target.value };
+                                        setShippings(arr);
+                                    }}
+                                    dir="ltr"
+                                    className="flex-1 min-w-0 px-3 py-2.5 text-base bg-transparent focus:outline-none num text-right"
+                                    placeholder="15"
+                                    data-testid={`shipping-vat-${i}`}
+                                />
+                                <span className="px-3 py-2.5 text-sm font-bold text-muted-foreground bg-accent/60 border-s border-border">%</span>
                             </div>
                             <button
                                 onClick={() => setShippings(shippings.filter((_, idx) => idx !== i))}

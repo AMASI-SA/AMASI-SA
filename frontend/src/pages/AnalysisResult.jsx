@@ -191,29 +191,35 @@ export default function AnalysisResult() {
             <div className="rounded-xl border border-border bg-white p-6">
                 <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>تفاصيل شركات الشحن</h3>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right" data-testid="shipping-breakdown-table">
-                        <thead className="text-sm text-muted-foreground border-b border-border">
+                    <table className="w-full text-right text-sm" data-testid="shipping-breakdown-table">
+                        <thead className="text-xs text-muted-foreground border-b border-border">
                             <tr>
                                 <th className="py-3 font-semibold">شركة الشحن</th>
                                 <th className="py-3 font-semibold">عدد الطلبات</th>
                                 <th className="py-3 font-semibold">تكلفة الشحنة</th>
+                                <th className="py-3 font-semibold">قبل الضريبة</th>
+                                <th className="py-3 font-semibold">ضريبة %</th>
+                                <th className="py-3 font-semibold">قيمة الضريبة</th>
                                 <th className="py-3 font-semibold">الإجمالي</th>
                             </tr>
                         </thead>
                         <tbody>
                             {r.shipping_breakdown.map((sh, i) => (
                                 <tr key={i} className="border-b border-border last:border-0">
-                                    <td className="py-3 font-semibold">
+                                    <td className="py-3 font-semibold whitespace-nowrap">
                                         {sh.name}
                                         {!sh.matched && (
-                                            <span className="ms-2 inline-flex items-center gap-1 text-amber-600 text-xs">
-                                                <Warning size={14} /> غير مُعد
+                                            <span className="ms-1 inline-flex items-center gap-0.5 text-amber-600 text-xs">
+                                                <Warning size={12} />
                                             </span>
                                         )}
                                     </td>
                                     <td className="py-3 num">{formatInt(sh.orders_count)}</td>
                                     <td className="py-3 num">{formatMoney(sh.cost_per_order)}</td>
-                                    <td className="py-3 num font-semibold">{formatMoney(sh.total_cost)}</td>
+                                    <td className="py-3 num">{formatMoney(sh.base_cost ?? sh.total_cost)}</td>
+                                    <td className="py-3 num">{formatPercent(sh.vat_percent ?? 0)}</td>
+                                    <td className="py-3 num text-muted-foreground">{formatMoney(sh.vat_amount ?? 0)}</td>
+                                    <td className="py-3 num font-bold text-red-700">{formatMoney(sh.total_cost)}</td>
                                 </tr>
                             ))}
                         </tbody>
