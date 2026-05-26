@@ -346,10 +346,14 @@ export default function Reports() {
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie data={agg.shippings.map((s) => ({ name: s.name, value: s.orders_count }))}
-                                             dataKey="value" outerRadius={90} label={(e) => e.name}>
-                                            {agg.shippings.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
+                                             dataKey="value" outerRadius={100}>
+                                            {agg.shippings.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} stroke="#fff" strokeWidth={2} className="cursor-pointer" />)}
                                         </Pie>
-                                        <Tooltip formatter={(v) => formatInt(v) + " طلب"} contentStyle={{ direction: "rtl", fontFamily: "Cairo" }} />
+                                        <Tooltip
+                                            formatter={(v, name) => [formatInt(v) + " طلب", name]}
+                                            contentStyle={{ direction: "rtl", fontFamily: "Cairo", borderRadius: 8, border: "1px solid #E5E7EB" }}
+                                        />
+                                        <Legend wrapperStyle={{ fontFamily: "Cairo", fontSize: 12 }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
