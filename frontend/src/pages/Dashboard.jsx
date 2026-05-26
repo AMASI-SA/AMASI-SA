@@ -185,7 +185,7 @@ export default function Dashboard() {
                         <Kpi icon={Percent} label="إجمالي الضريبة المخصومة (ر.س)" value={formatMoney(totals.total_vat)} hint="ضريبة الدفع + الشحن" testid="kpi-total-vat" />
                         <Kpi icon={Megaphone} label="تكاليف الإعلانات (ر.س)" value={formatMoney(totals.total_ads_cost)} testid="kpi-ads" />
                         <Kpi icon={Package} label="تكاليف المنتجات (ر.س)" value={formatMoney(totals.total_product_cost)} testid="kpi-products" />
-                        <Kpi icon={TrendUp} label="صافي الربح (ر.س)" value={formatMoney(totals.net_profit)} accent testid="kpi-net-profit" />
+                        <Kpi icon={TrendUp} label="صافي الربح النهائي (ر.س)" value={formatMoney(totals.net_profit)} hint="بعد التكاليف اليومية" accent testid="kpi-net-profit" />
                     </div>
 
                     {/* Monthly chart */}
@@ -219,12 +219,15 @@ export default function Dashboard() {
 
                     {/* Recent analyses */}
                     <div className="rounded-xl border border-border bg-white p-6">
-                        <div className="flex items-center justify-between mb-5">
+                        <div className="flex items-center justify-between mb-2">
                             <h2 className="text-2xl font-bold text-foreground" style={{ fontFamily: "Tajawal" }}>آخر التحاليل</h2>
                             <Link to="/history" className="text-brand text-sm font-semibold hover:underline inline-flex items-center gap-1" data-testid="see-all-history">
                                 عرض الكل <CaretLeft size={16} />
                             </Link>
                         </div>
+                        <p className="text-xs text-muted-foreground mb-5">
+                            * صافي ربح كل تحليل محسوب قبل خصم التكاليف اليومية (تكاليف الإعلانات والمنتجات اليومية تُخصم على مستوى الفترة في بطاقة "صافي الربح النهائي").
+                        </p>
                         {recent.length === 0 ? (
                             <div className="text-center py-10 text-muted-foreground">لم تقم بإجراء أي تحليل بعد.</div>
                         ) : (
@@ -236,7 +239,7 @@ export default function Dashboard() {
                                             <th className="pb-3 font-semibold">التاريخ</th>
                                             <th className="pb-3 font-semibold">الطلبات</th>
                                             <th className="pb-3 font-semibold">المبيعات</th>
-                                            <th className="pb-3 font-semibold">صافي الربح</th>
+                                            <th className="pb-3 font-semibold">صافي ربح التحليل *</th>
                                             <th className="pb-3 font-semibold"></th>
                                         </tr>
                                     </thead>
