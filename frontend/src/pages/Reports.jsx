@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ChartPieSlice } from "@phosphor-icons/react";
+import { useEffect, useMemo, useState } from "react";
+import { ChartPieSlice, CalendarBlank } from "@phosphor-icons/react";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
     PieChart, Pie, Cell,
@@ -10,17 +10,44 @@ import { formatMoney, formatInt } from "../lib/format";
 const COLORS = ["#0A3622", "#D4AF37", "#16A34A", "#D97706", "#0EA5E9", "#7C3AED", "#DC2626", "#0891B2"];
 
 export default function Reports() {
-    const [analyses, setAnalyses] = useState([]);
+    const [allAnalyses, setAllAnalyses] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [fromDate, setFromDate] = useState("");
+    const [toDate, setToDate] = useState("");
 
     useEffect(() => {
         (async () => {
             try {
                 const { data } = await api.get("/analyses");
-                setAnalyses(data || []);
+                setAllAnalyses(data || []);
             } finally { setLoading(false); }
         })();
     }, []);
+
+    const setPreset = (kind) => {
+        const today = new Date();
+        const iso = (d) => d.toISOString().slice(0, 10);
+        let f = "", t = iso(today);
+        if (kind === "today") { f = t; }
+        else if (kind === "7d") { const d = new Date(today); d.setDate(d.getDate() - 6); f = iso(d); }
+        else if (kind === "30d") { const d = new Date(today); d.setDate(d.getDate() - 29); f = iso(d); }
+        else if (kind === "month") { const d = new Date(today.getFullYear(), today.getMonth(), 1); f = iso(d); }
+        else if (kind === "year") { const d = new Date(today.getFullYear(), 0, 1); f = iso(d); }
+        setFromDate(f);
+        setToDate(t);
+    };
+    const resetRange = () => { setFromDate(""); setToDate(""); };
+
+    // Apply date filter
+    const analyses = useMemo(() => {
+        if (!fromDate && !toDate) return allAnalyses;
+        return allAnalyses.filter((a) => {
+            const d = (a.date || "").slice(0, 10);
+            if (fromDate && d < fromDate) return false;
+            if (toDate && d > toDate) return false;
+            return true;
+        });
+    }, [allAnalyses, fromDate, toDate]);
 
     // Aggregate across all analyses
     const agg = (() => {
@@ -75,14 +102,66 @@ export default function Reports() {
             <div>
                 <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>التقارير</h1>
                 <p className="text-muted-foreground mt-2 text-base">
-                    تقارير مجمَّعة عبر جميع التحاليل المحفوظة لديك.
+                    {(fromDate || toDate)
+                        ? `عرض البيانات من ${fromDate || "البداية"} إلى ${toDate || "الآن"}`
+                        : "تقارير مجمَّعة عبر جميع التحاليل المحفوظة لديك."}
                 </p>
+            </div>
+
+            {/* Date range filter */}
+            <div className="rounded-xl border border-border bg-white p-4 flex flex-col md:flex-row md:items-center gap-3 flex-wrap" data-testid="reports-date-filter">
+                <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+                    <CalendarBlank size={20} weight="duotone" /> الفترة الزمنية:
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-xs text-muted-foreground">من</label>
+                    <input
+                        type="date"
+                        value={fromDate}
+                        onChange={(e) => setFromDate(e.target.value)}
+                        className="px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                        data-testid="reports-date-from"
+                        dir="ltr"
+                    />
+                    <label className="text-xs text-muted-foreground ms-2">إلى</label>
+                    <input
+                        type="date"
+                        value={toDate}
+                        onChange={(e) => setToDate(e.target.value)}
+                        className="px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                        data-testid="reports-date-to"
+                        dir="ltr"
+                    />
+                    {(fromDate || toDate) && (
+                        <button
+                            onClick={resetRange}
+                            className="px-3 py-2 border border-border text-sm font-semibold rounded-lg hover:bg-accent transition-colors"
+                            data-testid="reports-reset-date"
+                        >إعادة تعيين</button>
+                    )}
+                </div>
+                <div className="flex items-center gap-1.5 md:ms-auto flex-wrap">
+                    {[
+                        { k: "today", label: "اليوم" },
+                        { k: "7d", label: "آخر أسبوع" },
+                        { k: "30d", label: "آخر شهر" },
+                        { k: "month", label: "هذا الشهر" },
+                        { k: "year", label: "هذه السنة" },
+                    ].map(p => (
+                        <button key={p.k} onClick={() => setPreset(p.k)}
+                            className="px-3 py-1.5 border border-border rounded-lg text-xs font-semibold hover:bg-brand hover:text-white hover:border-brand transition-colors"
+                            data-testid={`reports-preset-${p.k}`}
+                        >{p.label}</button>
+                    ))}
+                </div>
             </div>
 
             {analyses.length === 0 ? (
                 <div className="rounded-xl border border-border bg-white p-12 text-center">
                     <ChartPieSlice size={48} weight="duotone" className="text-brand mx-auto mb-3" />
-                    <p className="text-muted-foreground">لا توجد بيانات بعد. ابدأ بتحليل ملف Excel من سلة.</p>
+                    <p className="text-muted-foreground">
+                        {(fromDate || toDate) ? "لا توجد تحاليل ضمن الفترة المحددة." : "لا توجد بيانات بعد. ابدأ بتحليل ملف Excel من سلة."}
+                    </p>
                 </div>
             ) : (
                 <>
