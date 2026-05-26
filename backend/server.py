@@ -370,6 +370,15 @@ async def dashboard(user: dict = Depends(current_user)):
         + d.get("google_ads", 0) + d.get("product_costs", 0)
         for d in daily
     )
+    daily_ads_total = sum(
+        d.get("snapchat_ads", 0) + d.get("snapchat_ads_2", 0)
+        + d.get("tiktok_ads", 0) + d.get("instagram_ads", 0)
+        + d.get("google_ads", 0)
+        for d in daily
+    )
+    daily_products_total = sum(d.get("product_costs", 0) for d in daily)
+    # Net profit is reduced by daily costs (which aren't captured in per-analysis reports)
+    net_profit_adjusted = net_profit - daily_ads_total - daily_products_total
 
     # Monthly trend (sum sales by month)
     from collections import defaultdict
@@ -390,11 +399,13 @@ async def dashboard(user: dict = Depends(current_user)):
             "total_orders": int(total_orders),
             "total_payment_fees": round(total_fees, 2),
             "total_shipping_cost": round(total_shipping, 2),
-            "total_ads_cost": round(total_ads, 2),
-            "total_product_cost": round(total_products, 2),
-            "net_profit": round(net_profit, 2),
+            "total_ads_cost": round(total_ads + daily_ads_total, 2),
+            "total_product_cost": round(total_products + daily_products_total, 2),
+            "net_profit": round(net_profit_adjusted, 2),
             "total_vat": round(total_vat, 2),
             "daily_costs_total": round(daily_totals, 2),
+            "daily_ads_total": round(daily_ads_total, 2),
+            "daily_products_total": round(daily_products_total, 2),
             "analyses_count": len(analyses),
         },
         "monthly": monthly,

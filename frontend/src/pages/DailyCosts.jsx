@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Trash, FloppyDisk, Receipt } from "@phosphor-icons/react";
+import { useEffect, useRef, useState } from "react";
+import { Trash, FloppyDisk, Receipt, PencilSimple, X } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { formatMoney, todayISO } from "../lib/format";
@@ -7,6 +7,8 @@ import { formatMoney, todayISO } from "../lib/format";
 export default function DailyCosts() {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [editing, setEditing] = useState(null); // date string when editing
+    const formRef = useRef(null);
 
     // form
     const [date, setDate] = useState(todayISO());
@@ -18,6 +20,26 @@ export default function DailyCosts() {
     const [prod, setProd] = useState("");
     const [notes, setNotes] = useState("");
     const [saving, setSaving] = useState(false);
+
+    const resetForm = () => {
+        setEditing(null);
+        setDate(todayISO());
+        setSnap(""); setSnap2(""); setTik(""); setInsta(""); setGoogle(""); setProd(""); setNotes("");
+    };
+
+    const startEdit = (it) => {
+        setEditing(it.date);
+        setDate(it.date);
+        setSnap(String(it.snapchat_ads ?? ""));
+        setSnap2(String(it.snapchat_ads_2 ?? ""));
+        setTik(String(it.tiktok_ads ?? ""));
+        setInsta(String(it.instagram_ads ?? ""));
+        setGoogle(String(it.google_ads ?? ""));
+        setProd(String(it.product_costs ?? ""));
+        setNotes(it.notes || "");
+        // scroll to form
+        formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
 
     const load = async () => {
         try {
@@ -42,8 +64,8 @@ export default function DailyCosts() {
                 product_costs: Number(prod || 0),
                 notes,
             });
-            toast.success("تم حفظ التكاليف اليومية");
-            setSnap(""); setSnap2(""); setTik(""); setInsta(""); setGoogle(""); setProd(""); setNotes("");
+            toast.success(editing ? "تم تحديث تكاليف اليوم" : "تم حفظ التكاليف اليومية");
+            resetForm();
             await load();
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail));
@@ -72,8 +94,19 @@ export default function DailyCosts() {
                 <p className="text-muted-foreground mt-2 text-base">سجّل مصروفاتك اليومية على منصات الإعلانات والمنتجات.</p>
             </div>
 
-            <form onSubmit={submit} className="rounded-xl border border-border bg-white p-6" data-testid="daily-costs-form">
-                <h2 className="text-xl font-bold mb-5" style={{ fontFamily: "Tajawal" }}>إضافة / تحديث تكاليف يوم</h2>
+            <form ref={formRef} onSubmit={submit} className="rounded-xl border border-border bg-white p-6" data-testid="daily-costs-form">
+                <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-xl font-bold" style={{ fontFamily: "Tajawal" }}>
+                        {editing ? `تعديل تكاليف يوم ${editing}` : "إضافة / تحديث تكاليف يوم"}
+                    </h2>
+                    {editing && (
+                        <button type="button" onClick={resetForm}
+                            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-red-600"
+                            data-testid="cancel-edit-btn">
+                            <X size={16} /> إلغاء التعديل
+                        </button>
+                    )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div>
                         <label className="block text-sm font-semibold mb-1.5">التاريخ</label>
@@ -109,7 +142,7 @@ export default function DailyCosts() {
                         className="inline-flex items-center gap-2 px-5 py-3 bg-brand text-white font-bold rounded-lg bg-brand-hover transition-colors disabled:opacity-60"
                         data-testid="save-daily-btn">
                         <FloppyDisk size={20} weight="bold" />
-                        {saving ? "جاري الحفظ…" : "حفظ"}
+                        {saving ? "جاري الحفظ…" : (editing ? "حفظ التعديل" : "حفظ")}
                     </button>
                 </div>
             </form>
@@ -156,11 +189,18 @@ export default function DailyCosts() {
                                         <td className="num text-center">{formatMoney(it.product_costs)}</td>
                                         <td className="num text-center font-bold text-brand">{formatMoney(total(it))}</td>
                                         <td className="text-center">
-                                            <button onClick={() => remove(it.date)}
-                                                className="p-2 rounded-lg border border-border hover:bg-red-50 hover:text-red-600 transition-colors"
-                                                title="حذف" data-testid={`delete-daily-${it.date}`}>
-                                                <Trash size={16} />
-                                            </button>
+                                            <div className="inline-flex items-center gap-1">
+                                                <button onClick={() => startEdit(it)}
+                                                    className="p-2 rounded-lg border border-border hover:bg-brand hover:text-white hover:border-brand transition-colors"
+                                                    title="تعديل" data-testid={`edit-daily-${it.date}`}>
+                                                    <PencilSimple size={16} />
+                                                </button>
+                                                <button onClick={() => remove(it.date)}
+                                                    className="p-2 rounded-lg border border-border hover:bg-red-50 hover:text-red-600 transition-colors"
+                                                    title="حذف" data-testid={`delete-daily-${it.date}`}>
+                                                    <Trash size={16} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
