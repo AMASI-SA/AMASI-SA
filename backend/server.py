@@ -356,6 +356,14 @@ async def dashboard(user: dict = Depends(current_user)):
     total_products = sum(a["report"]["summary"].get("total_product_cost", 0) for a in analyses)
     net_profit = sum(a["report"]["summary"]["net_profit"] for a in analyses)
 
+    # Total VAT deducted across all analyses (from payment fees + shipping)
+    total_vat = 0.0
+    for a in analyses:
+        for p in a["report"].get("payment_breakdown", []):
+            total_vat += float(p.get("vat_amount", 0) or 0)
+        for s in a["report"].get("shipping_breakdown", []):
+            total_vat += float(s.get("vat_amount", 0) or 0)
+
     daily_totals = sum(
         d.get("snapchat_ads", 0) + d.get("snapchat_ads_2", 0)
         + d.get("tiktok_ads", 0) + d.get("instagram_ads", 0)
@@ -385,6 +393,7 @@ async def dashboard(user: dict = Depends(current_user)):
             "total_ads_cost": round(total_ads, 2),
             "total_product_cost": round(total_products, 2),
             "net_profit": round(net_profit, 2),
+            "total_vat": round(total_vat, 2),
             "daily_costs_total": round(daily_totals, 2),
             "analyses_count": len(analyses),
         },

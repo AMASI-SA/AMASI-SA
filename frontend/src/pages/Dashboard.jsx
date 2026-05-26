@@ -10,6 +10,7 @@ import {
     TrendUp,
     CaretLeft,
     UploadSimple,
+    Percent,
 } from "@phosphor-icons/react";
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -93,9 +94,9 @@ export default function Dashboard() {
                         <Kpi icon={ShoppingBag} label="إجمالي الطلبات" value={formatInt(totals.total_orders)} testid="kpi-total-orders" />
                         <Kpi icon={Receipt} label="رسوم بوابات الدفع (ر.س)" value={formatMoney(totals.total_payment_fees)} testid="kpi-payment-fees" />
                         <Kpi icon={Truck} label="تكاليف الشحن (ر.س)" value={formatMoney(totals.total_shipping_cost)} testid="kpi-shipping-cost" />
+                        <Kpi icon={Percent} label="إجمالي الضريبة المخصومة (ر.س)" value={formatMoney(totals.total_vat)} hint="ضريبة الدفع + الشحن" testid="kpi-total-vat" />
                         <Kpi icon={Megaphone} label="تكاليف الإعلانات (ر.س)" value={formatMoney(totals.total_ads_cost)} testid="kpi-ads" />
                         <Kpi icon={Package} label="تكاليف المنتجات (ر.س)" value={formatMoney(totals.total_product_cost)} testid="kpi-products" />
-                        <Kpi icon={TrendUp} label="عدد التحاليل" value={formatInt(totals.analyses_count)} testid="kpi-count" />
                         <Kpi icon={TrendUp} label="صافي الربح (ر.س)" value={formatMoney(totals.net_profit)} accent testid="kpi-net-profit" />
                     </div>
 
