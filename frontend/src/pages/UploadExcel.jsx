@@ -16,10 +16,6 @@ export default function UploadExcel() {
 
     const [name, setName] = useState("");
     const [date, setDate] = useState(todayISO());
-    const [snap, setSnap] = useState("");
-    const [tiktok, setTiktok] = useState("");
-    const [insta, setInsta] = useState("");
-    const [products, setProducts] = useState("");
 
     const onDrop = (e) => {
         e.preventDefault();
@@ -38,14 +34,7 @@ export default function UploadExcel() {
         try {
             const fd = new FormData();
             fd.append("file", file);
-            const params = new URLSearchParams({
-                name,
-                date,
-                snapchat_ads: snap || "0",
-                tiktok_ads: tiktok || "0",
-                instagram_ads: insta || "0",
-                product_costs: products || "0",
-            });
+            const params = new URLSearchParams({ name, date });
             const { data } = await api.post(`/analyses?${params.toString()}`, fd, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
@@ -65,7 +54,7 @@ export default function UploadExcel() {
                     تحليل ملف Excel
                 </h1>
                 <p className="text-muted-foreground mt-2 text-base">
-                    ارفع ملف Excel المُصدَّر من منصة سلة، أضف تكاليف اليوم، واحصل على تقرير محاسبي كامل.
+                    ارفع ملف Excel المُصدَّر من منصة سلة واحصل على تقرير محاسبي كامل. يمكنك إضافة التكاليف اليومية من صفحة "التكاليف اليومية".
                 </p>
             </div>
 
@@ -146,33 +135,6 @@ export default function UploadExcel() {
                                     style={{ textAlign: "right" }}
                                 />
                             </div>
-                        </div>
-                    </div>
-
-                    <div className="rounded-xl border border-border bg-white p-5">
-                        <h3 className="text-lg font-bold mb-1" style={{ fontFamily: "Tajawal" }}>التكاليف اليومية</h3>
-                        <p className="text-xs text-muted-foreground mb-4">يمكنك إضافتها لاحقاً من صفحة التكاليف</p>
-                        <div className="space-y-3">
-                            {[
-                                { label: "إعلانات سناب شات", value: snap, setter: setSnap, testid: "cost-snap" },
-                                { label: "إعلانات تيك توك", value: tiktok, setter: setTiktok, testid: "cost-tiktok" },
-                                { label: "إعلانات إنستقرام", value: insta, setter: setInsta, testid: "cost-insta" },
-                                { label: "تكاليف المنتجات", value: products, setter: setProducts, testid: "cost-products" },
-                            ].map((row) => (
-                                <div key={row.testid} className="flex items-center justify-between gap-3">
-                                    <label className="text-sm font-medium flex-1">{row.label}</label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        step="0.01"
-                                        value={row.value}
-                                        onChange={(e) => row.setter(e.target.value)}
-                                        placeholder="0.00"
-                                        className="w-28 px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand num"
-                                        data-testid={row.testid}
-                                    />
-                                </div>
-                            ))}
                         </div>
                     </div>
 
