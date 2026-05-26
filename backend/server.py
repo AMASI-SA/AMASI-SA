@@ -343,10 +343,28 @@ async def export_pdf(analysis_id: str, user: dict = Depends(current_user)):
 
 # ── Dashboard aggregate ───────────────────────────────────────────────────────
 @api.get("/dashboard")
-async def dashboard(user: dict = Depends(current_user)):
-    """Return aggregated totals across all saved analyses and daily costs."""
-    analyses = await db.analyses.find({"user_id": user["id"]}, {"_id": 0, "report.orders_sample": 0}).to_list(1000)
-    daily = await db.daily_costs.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+async def dashboard(
+    user: dict = Depends(current_user),
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+):
+    """Return aggregated totals across all saved analyses and daily costs.
+
+    Optional filters: from_date / to_date (ISO YYYY-MM-DD) inclusive on `date` field.
+    """
+    analyses_q = {"user_id": user["id"]}
+    daily_q = {"user_id": user["id"]}
+    if from_date or to_date:
+        date_filter = {}
+        if from_date:
+            date_filter["$gte"] = from_date
+        if to_date:
+            date_filter["$lte"] = to_date
+        analyses_q["date"] = date_filter
+        daily_q["date"] = date_filter
+
+    analyses = await db.analyses.find(analyses_q, {"_id": 0, "report.orders_sample": 0}).to_list(1000)
+    daily = await db.daily_costs.find(daily_q, {"_id": 0}).to_list(1000)
 
     total_sales = sum(a["report"]["summary"]["total_sales"] for a in analyses)
     total_orders = sum(a["report"]["summary"]["total_orders"] for a in analyses)
@@ -394,6 +412,7 @@ async def dashboard(user: dict = Depends(current_user)):
     ], key=lambda x: x["month"])
 
     return {
+        "range": {"from_date": from_date, "to_date": to_date},
         "totals": {
             "total_sales": round(total_sales, 2),
             "total_orders": int(total_orders),
