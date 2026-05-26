@@ -26,6 +26,10 @@ SHIPPING_COLS = [
     "شركة الشحن", "وسيلة الشحن", "موفر الشحن", "مزود الشحن",
     "shipping company", "shipping", "courier", "carrier",
 ]
+SOURCE_COLS = [
+    "مصدر الطلب", "المصدر", "مصدر", "قناة البيع", "القناة",
+    "order source", "source", "channel", "platform",
+]
 ORDER_ID_COLS = ["رقم الطلب", "order id", "order number", "id", "#"]
 STATUS_COLS = ["حالة الطلب", "الحالة", "status"]
 DATE_COLS = ["تاريخ الطلب", "التاريخ", "date", "created at"]
@@ -117,6 +121,7 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
     col_total = _match_col(headers_norm, TOTAL_COLS)
     col_payment = _match_col(headers_norm, PAYMENT_COLS)
     col_shipping = _match_col(headers_norm, SHIPPING_COLS)
+    col_source = _match_col(headers_norm, SOURCE_COLS)
     col_order = _match_col(headers_norm, ORDER_ID_COLS)
     col_status = _match_col(headers_norm, STATUS_COLS)
     col_date = _match_col(headers_norm, DATE_COLS)
@@ -132,6 +137,7 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
     total_orders = 0
     payments: dict[str, dict] = {}
     shippings: dict[str, dict] = {}
+    sources: dict[str, dict] = {}
     sample_orders: list[dict] = []
 
     for row in data_rows:
@@ -156,6 +162,11 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
             if col_shipping is not None and col_shipping < len(row) and row[col_shipping]
             else "غير محدد"
         )
+        source_name = (
+            str(row[col_source]).strip()
+            if col_source is not None and col_source < len(row) and row[col_source]
+            else "غير محدد"
+        )
 
         total_sales += amount
         total_orders += 1
@@ -166,6 +177,10 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
 
         s = shippings.setdefault(shipping_name, {"name": shipping_name, "orders_count": 0})
         s["orders_count"] += 1
+
+        src = sources.setdefault(source_name, {"name": source_name, "orders_count": 0, "total_sales": 0.0})
+        src["orders_count"] += 1
+        src["total_sales"] += amount
 
         if len(sample_orders) < 10:
             sample_orders.append({
@@ -190,11 +205,16 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
         "shipping_companies": [
             v for v in sorted(shippings.values(), key=lambda x: -x["orders_count"])
         ],
+        "order_sources": [
+            {**v, "total_sales": round(v["total_sales"], 2)}
+            for v in sorted(sources.values(), key=lambda x: -x["orders_count"])
+        ],
         "orders_sample": sample_orders,
         "detected_columns": {
             "total": headers[col_total] if col_total is not None else None,
             "payment": headers[col_payment] if col_payment is not None else None,
             "shipping": headers[col_shipping] if col_shipping is not None else None,
+            "source": headers[col_source] if col_source is not None else None,
             "order_id": headers[col_order] if col_order is not None else None,
         },
     }

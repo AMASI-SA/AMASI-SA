@@ -54,6 +54,7 @@ export default function Reports() {
         let total_sales = 0, total_orders = 0, total_fees = 0, total_ship = 0, total_ads = 0, total_prods = 0, net = 0;
         const paymentMap = {};
         const shipMap = {};
+        const sourceMap = {};
         for (const a of analyses) {
             const s = a.report.summary;
             total_sales += s.total_sales;
@@ -74,11 +75,17 @@ export default function Reports() {
                 shipMap[sh.name].orders_count += sh.orders_count;
                 shipMap[sh.name].total_cost += sh.total_cost;
             }
+            for (const src of a.report.order_sources || []) {
+                if (!sourceMap[src.name]) sourceMap[src.name] = { name: src.name, orders_count: 0, total_sales: 0 };
+                sourceMap[src.name].orders_count += src.orders_count;
+                sourceMap[src.name].total_sales += src.total_sales || 0;
+            }
         }
         return {
             total_sales, total_orders, total_fees, total_ship, total_ads, total_prods, net,
             payments: Object.values(paymentMap).sort((a, b) => b.total_sales - a.total_sales),
             shippings: Object.values(shipMap).sort((a, b) => b.orders_count - a.orders_count),
+            sources: Object.values(sourceMap).sort((a, b) => b.orders_count - a.orders_count),
         };
     })();
 
@@ -236,6 +243,60 @@ export default function Reports() {
                                 </ResponsiveContainer>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Order sources */}
+                    <div className="rounded-xl border border-border bg-white p-6">
+                        <div className="flex items-center justify-between mb-5">
+                            <div>
+                                <h3 className="text-xl font-bold" style={{ fontFamily: "Tajawal" }}>مصادر الطلبات</h3>
+                                <p className="text-xs text-muted-foreground mt-1">عدد ومبيعات الطلبات حسب مصدر الطلب من ملفات Excel.</p>
+                            </div>
+                        </div>
+                        {agg.sources.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground text-sm">
+                                لم يتم العثور على عمود "مصدر الطلب" في الملفات. تأكد من أن الملف يحتوي على عمود بهذا الاسم.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <table
+                                    className="w-full text-right text-sm border-collapse
+                                        [&_th]:px-3 [&_th]:border-s [&_th]:border-border
+                                        [&_td]:px-3 [&_td]:border-s [&_td]:border-border
+                                        [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
+                                    data-testid="agg-sources-table"
+                                >
+                                    <thead className="text-muted-foreground bg-accent/40 border-b-2 border-border">
+                                        <tr>
+                                            <th className="py-3 font-semibold">مصدر الطلب</th>
+                                            <th className="py-3 font-semibold">عدد الطلبات</th>
+                                            <th className="py-3 font-semibold">إجمالي المبيعات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {agg.sources.map((s, i) => (
+                                            <tr key={i} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
+                                                <td className="py-2.5 font-semibold">{s.name}</td>
+                                                <td className="py-2.5 num font-bold text-brand">{formatInt(s.orders_count)}</td>
+                                                <td className="py-2.5 num">{formatMoney(s.total_sales || 0)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <div className="h-64" data-testid="sources-pie">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={agg.sources.map((s) => ({ name: s.name, value: s.orders_count }))}
+                                                 dataKey="value" outerRadius={90} label={(e) => e.name}>
+                                                {agg.sources.map((_, i) => <Cell key={i} fill={COLORS[(i + 4) % COLORS.length]} />)}
+                                            </Pie>
+                                            <Tooltip formatter={(v) => formatInt(v) + " طلب"} contentStyle={{ direction: "rtl", fontFamily: "Cairo" }} />
+                                            <Legend wrapperStyle={{ fontFamily: "Cairo" }} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Aggregate tables */}

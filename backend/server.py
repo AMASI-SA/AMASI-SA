@@ -233,6 +233,7 @@ def _build_report(parsed: dict, payment_settings, shipping_settings,
         },
         "payment_breakdown": matched["payment_breakdown"],
         "shipping_breakdown": matched["shipping_breakdown"],
+        "order_sources": parsed.get("order_sources", []),
         "daily_costs": {
             "snapchat_ads": float(snapchat_ads),
             "tiktok_ads": float(tiktok_ads),
