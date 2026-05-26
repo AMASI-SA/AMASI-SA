@@ -11,6 +11,7 @@ const COLORS = ["#0A3622", "#D4AF37", "#16A34A", "#D97706", "#0EA5E9", "#7C3AED"
 
 export default function Reports() {
     const [allAnalyses, setAllAnalyses] = useState([]);
+    const [allDaily, setAllDaily] = useState([]);
     const [loading, setLoading] = useState(true);
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
@@ -18,8 +19,12 @@ export default function Reports() {
     useEffect(() => {
         (async () => {
             try {
-                const { data } = await api.get("/analyses");
-                setAllAnalyses(data || []);
+                const [aRes, dRes] = await Promise.all([
+                    api.get("/analyses"),
+                    api.get("/daily-costs"),
+                ]);
+                setAllAnalyses(aRes.data || []);
+                setAllDaily(dRes.data || []);
             } finally { setLoading(false); }
         })();
     }, []);
@@ -48,6 +53,31 @@ export default function Reports() {
             return true;
         });
     }, [allAnalyses, fromDate, toDate]);
+
+    const daily = useMemo(() => {
+        if (!fromDate && !toDate) return allDaily;
+        return allDaily.filter((d) => {
+            const x = (d.date || "").slice(0, 10);
+            if (fromDate && x < fromDate) return false;
+            if (toDate && x > toDate) return false;
+            return true;
+        });
+    }, [allDaily, fromDate, toDate]);
+
+    // Aggregate daily ads
+    const adsAgg = useMemo(() => {
+        const totals = { snap: 0, snap2: 0, tiktok: 0, insta: 0, google: 0, products: 0 };
+        for (const d of daily) {
+            totals.snap += Number(d.snapchat_ads || 0);
+            totals.snap2 += Number(d.snapchat_ads_2 || 0);
+            totals.tiktok += Number(d.tiktok_ads || 0);
+            totals.insta += Number(d.instagram_ads || 0);
+            totals.google += Number(d.google_ads || 0);
+            totals.products += Number(d.product_costs || 0);
+        }
+        const totalAds = totals.snap + totals.snap2 + totals.tiktok + totals.insta + totals.google;
+        return { ...totals, totalAds, totalProducts: totals.products };
+    }, [daily]);
 
     // Aggregate across all analyses
     const agg = (() => {
@@ -179,10 +209,10 @@ export default function Reports() {
                             { label: "إجمالي الطلبات", value: agg.total_orders, isInt: true },
                             { label: "رسوم الدفع", value: agg.total_fees },
                             { label: "الشحن", value: agg.total_ship },
-                            { label: "الإعلانات", value: agg.total_ads },
-                            { label: "المنتجات", value: agg.total_prods },
+                            { label: "الإعلانات (يومي)", value: adsAgg.totalAds },
+                            { label: "المنتجات (يومي)", value: adsAgg.totalProducts },
                             { label: "عدد التحاليل", value: analyses.length, isInt: true },
-                            { label: "صافي الربح", value: agg.net, accent: true },
+                            { label: "صافي الربح النهائي", value: agg.net - adsAgg.totalAds - adsAgg.totalProducts, accent: true },
                         ].map((c, idx) => (
                             <div key={idx} className={`rounded-xl border p-5 ${c.accent ? "bg-brand text-white border-brand" : "bg-white border-border"}`} data-testid={`agg-kpi-${idx}`}>
                                 <div className={`text-sm mb-1 ${c.accent ? "text-white/80" : "text-muted-foreground"}`}>{c.label}</div>
@@ -191,6 +221,83 @@ export default function Reports() {
                                 </div>
                             </div>
                         ))}
+                    </div>
+
+                    {/* Ads breakdown by platform */}
+                    <div className="rounded-xl border border-border bg-white p-6">
+                        <div className="flex items-center justify-between mb-5">
+                            <div>
+                                <h3 className="text-xl font-bold" style={{ fontFamily: "Tajawal" }}>تكاليف الإعلانات حسب المنصة</h3>
+                                <p className="text-xs text-muted-foreground mt-1">إجماليات الإعلانات والمنتجات من سجل التكاليف اليومية للفترة المحددة.</p>
+                            </div>
+                            <div className="text-end">
+                                <div className="text-xs text-muted-foreground">إجمالي الإعلانات</div>
+                                <div className="text-2xl font-extrabold text-brand num" style={{ fontFamily: "Tajawal" }}>{formatMoney(adsAgg.totalAds)}</div>
+                            </div>
+                        </div>
+                        {adsAgg.totalAds === 0 && adsAgg.totalProducts === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground text-sm">
+                                لم تسجل أي تكاليف يومية في هذه الفترة.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <table
+                                    className="w-full text-right text-sm border-collapse
+                                        [&_th]:px-3 [&_th]:border-s [&_th]:border-border
+                                        [&_td]:px-3 [&_td]:border-s [&_td]:border-border
+                                        [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
+                                    data-testid="agg-ads-table"
+                                >
+                                    <thead className="text-muted-foreground bg-accent/40 border-b-2 border-border">
+                                        <tr>
+                                            <th className="py-3 font-semibold">المنصة</th>
+                                            <th className="py-3 font-semibold">الإجمالي (ر.س)</th>
+                                            <th className="py-3 font-semibold">% من الإعلانات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {[
+                                            { name: "سناب شات", value: adsAgg.snap },
+                                            { name: "سناب شات 2", value: adsAgg.snap2 },
+                                            { name: "تيك توك", value: adsAgg.tiktok },
+                                            { name: "إنستقرام", value: adsAgg.insta },
+                                            { name: "جوجل", value: adsAgg.google },
+                                        ].map((row, i) => (
+                                            <tr key={i} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
+                                                <td className="py-2.5 font-semibold">{row.name}</td>
+                                                <td className="py-2.5 num font-bold">{formatMoney(row.value)}</td>
+                                                <td className="py-2.5 num text-muted-foreground">
+                                                    {adsAgg.totalAds > 0 ? ((row.value / adsAgg.totalAds) * 100).toFixed(1) + "%" : "—"}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        <tr className="bg-accent/30 font-bold">
+                                            <td className="py-2.5">المنتجات (مصاريف يومية)</td>
+                                            <td className="py-2.5 num text-red-700">{formatMoney(adsAgg.totalProducts)}</td>
+                                            <td className="py-2.5 text-muted-foreground">—</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div className="h-64" data-testid="ads-pie">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={[
+                                                { name: "سناب شات", value: adsAgg.snap },
+                                                { name: "سناب شات 2", value: adsAgg.snap2 },
+                                                { name: "تيك توك", value: adsAgg.tiktok },
+                                                { name: "إنستقرام", value: adsAgg.insta },
+                                                { name: "جوجل", value: adsAgg.google },
+                                            ].filter(x => x.value > 0)}
+                                                 dataKey="value" outerRadius={90} label={(e) => e.name}>
+                                                {[0,1,2,3,4].map((i) => <Cell key={i} fill={COLORS[(i + 1) % COLORS.length]} />)}
+                                            </Pie>
+                                            <Tooltip formatter={(v) => formatMoney(v) + " ر.س"} contentStyle={{ direction: "rtl", fontFamily: "Cairo" }} />
+                                            <Legend wrapperStyle={{ fontFamily: "Cairo" }} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Monthly chart */}
