@@ -28,8 +28,12 @@ SHIPPING_COLS = [
 ]
 SOURCE_COLS = [
     "مصدر الطلب", "المصدر", "مصدر", "قناة البيع", "القناة",
-    "order source", "source", "channel", "platform",
+    "مصدر الزيارة", "مصدر العميل", "نوع المصدر",
+    "order source", "source", "channel", "platform", "referrer",
 ]
+
+# Salla exports place the order source at column BA (index 52, 0-indexed) by default.
+SALLA_SOURCE_COL_INDEX = 52  # Excel column "BA"
 ORDER_ID_COLS = ["رقم الطلب", "order id", "order number", "id", "#"]
 STATUS_COLS = ["حالة الطلب", "الحالة", "status"]
 DATE_COLS = ["تاريخ الطلب", "التاريخ", "date", "created at"]
@@ -125,6 +129,10 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
     col_order = _match_col(headers_norm, ORDER_ID_COLS)
     col_status = _match_col(headers_norm, STATUS_COLS)
     col_date = _match_col(headers_norm, DATE_COLS)
+
+    # Fallback: Salla exports place order source at column BA (index 52)
+    if col_source is None and len(headers) > SALLA_SOURCE_COL_INDEX:
+        col_source = SALLA_SOURCE_COL_INDEX
 
     if col_total is None:
         raise ValueError(
