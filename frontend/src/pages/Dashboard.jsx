@@ -204,7 +204,7 @@ export default function Dashboard() {
                             </div>
                         ) : (
                             <div className="h-72" data-testid="monthly-chart">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}>
                                     <LineChart data={monthly} margin={{ top: 8, right: 20, left: 20, bottom: 8 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                                         <XAxis dataKey="month" tick={{ fontSize: 12, fontFamily: "Cairo" }} reversed />

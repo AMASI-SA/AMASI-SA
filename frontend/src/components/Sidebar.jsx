@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import {
     House,
     UploadSimple,
@@ -21,11 +21,9 @@ const links = [
 
 export default function Sidebar() {
     const { user, logout } = useAuth();
-    const navigate = useNavigate();
 
     const onLogout = async () => {
         await logout();
-        navigate("/login");
     };
 
     return (

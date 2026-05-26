@@ -112,7 +112,7 @@ export default function AnalysisResult() {
                 <div className="rounded-xl border border-border bg-white p-6">
                     <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>توزيع المبيعات حسب طريقة الدفع</h3>
                     <div className="h-72" data-testid="payment-pie-chart">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}>
                             <PieChart>
                                 <Pie data={paymentPie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={(e) => e.name}>
                                     {paymentPie.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
@@ -127,7 +127,7 @@ export default function AnalysisResult() {
                 <div className="rounded-xl border border-border bg-white p-6">
                     <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>شركات الشحن</h3>
                     <div className="h-72" data-testid="shipping-bar-chart">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}>
                             <BarChart data={shippingBars} layout="vertical">
                                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                                 <XAxis type="number" tick={{ fontSize: 12, fontFamily: "Cairo" }} />

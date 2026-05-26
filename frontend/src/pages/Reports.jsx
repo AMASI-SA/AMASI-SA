@@ -279,7 +279,7 @@ export default function Reports() {
                                     </tbody>
                                 </table>
                                 <div className="h-64" data-testid="ads-pie">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}>
                                         <PieChart>
                                             <Pie data={[
                                                 { name: "سناب شات", value: adsAgg.snap },
@@ -307,7 +307,7 @@ export default function Reports() {
                     <div className="rounded-xl border border-border bg-white p-6">
                         <h2 className="text-2xl font-bold mb-5" style={{ fontFamily: "Tajawal" }}>المبيعات والأرباح والإعلانات</h2>
                         <div className="h-80" data-testid="monthly-bar-chart">
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}>
                                 <BarChart data={monthly}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                                     <XAxis dataKey="month" tick={{ fontSize: 12, fontFamily: "Cairo" }} reversed />
@@ -327,7 +327,7 @@ export default function Reports() {
                         <div className="rounded-xl border border-border bg-white p-6">
                             <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>طرق الدفع — المبيعات</h3>
                             <div className="h-72" data-testid="pay-pie">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}>
                                     <PieChart>
                                         <Pie data={agg.payments.map((p) => ({ name: p.name, value: p.total_sales }))}
                                              dataKey="value" outerRadius={100}>
@@ -346,7 +346,7 @@ export default function Reports() {
                         <div className="rounded-xl border border-border bg-white p-6">
                             <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>شركات الشحن — الطلبات</h3>
                             <div className="h-72" data-testid="ship-pie">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}>
                                     <PieChart>
                                         <Pie data={agg.shippings.map((s) => ({ name: s.name, value: s.orders_count }))}
                                              dataKey="value" outerRadius={100}>
@@ -402,7 +402,7 @@ export default function Reports() {
                                     </tbody>
                                 </table>
                                 <div className="h-64" data-testid="sources-pie">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}>
                                         <PieChart>
                                             <Pie data={agg.sources.map((s) => ({ name: s.name, value: s.orders_count }))}
                                                  dataKey="value" outerRadius={90}>

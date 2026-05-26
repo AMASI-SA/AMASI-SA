@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Trash, FloppyDisk, Receipt, PencilSimple, X } from "@phosphor-icons/react";
+import { Trash, FloppyDisk, Receipt, PencilSimple, X, Ghost } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { formatMoney, todayISO } from "../lib/format";
@@ -20,6 +20,33 @@ export default function DailyCosts() {
     const [prod, setProd] = useState("");
     const [notes, setNotes] = useState("");
     const [saving, setSaving] = useState(false);
+    const [snapFetching, setSnapFetching] = useState(false);
+    const [snapConnected, setSnapConnected] = useState(false);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const { data } = await api.get("/snapchat/config");
+                setSnapConnected(!!(data.connected && data.ad_account_id));
+            } catch { setSnapConnected(false); }
+        })();
+    }, []);
+
+    const fetchFromSnap = async () => {
+        if (!date) {
+            toast.error("اختر التاريخ أولاً");
+            return;
+        }
+        setSnapFetching(true);
+        try {
+            const { data } = await api.get(`/snapchat/daily-spend?date=${encodeURIComponent(date)}`);
+            const amount = Number(data?.spend || 0);
+            setSnap(String(amount));
+            toast.success(`تم جلب صرف سناب ليوم ${date}: ${amount} ر.س`);
+        } catch (err) {
+            toast.error(formatApiErrorDetail(err.response?.data?.detail));
+        } finally { setSnapFetching(false); }
+    };
 
     const resetForm = () => {
         setEditing(null);
@@ -114,8 +141,27 @@ export default function DailyCosts() {
                             className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
                             data-testid="daily-date-input" dir="ltr" style={{ textAlign: "right" }} />
                     </div>
+                    <div>
+                        <label className="block text-sm font-semibold mb-1.5">سناب شات (ر.س)</label>
+                        <div className="flex gap-2">
+                            <input type="number" min={0} step="0.01" value={snap} onChange={(e) => setSnap(e.target.value)}
+                                placeholder="0.00"
+                                className="flex-1 min-w-0 px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand num"
+                                data-testid="daily-snap-input" />
+                            <button
+                                type="button"
+                                onClick={fetchFromSnap}
+                                disabled={!snapConnected || snapFetching}
+                                title={snapConnected ? "جلب التكلفة من Snapchat Ads" : "اربط حساب سناب من الإعدادات لتفعيل هذا الزر"}
+                                className="shrink-0 inline-flex items-center justify-center w-11 rounded-lg border border-border text-black transition-opacity disabled:opacity-40"
+                                style={{ background: snapConnected ? "#FFFC00" : undefined }}
+                                data-testid="daily-snap-fetch-btn"
+                            >
+                                <Ghost size={18} weight={snapConnected ? "fill" : "regular"} />
+                            </button>
+                        </div>
+                    </div>
                     {[
-                        { label: "سناب شات", value: snap, setter: setSnap, testid: "daily-snap-input" },
                         { label: "سناب شات 2", value: snap2, setter: setSnap2, testid: "daily-snap2-input" },
                         { label: "تيك توك", value: tik, setter: setTik, testid: "daily-tiktok-input" },
                         { label: "إنستقرام", value: insta, setter: setInsta, testid: "daily-insta-input" },

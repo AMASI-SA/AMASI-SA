@@ -1,0 +1,56 @@
+{
+  "summary": "Snapchat Marketing API integration tested end-to-end (backend + frontend). All 19 Snapchat backend tests pass + 23 regression tests pass (42/42). Frontend Snapchat UI works: section renders, fields persist, status shows correctly, connect button disabled when empty, daily-snap-fetch-btn rendered & disabled without real connection. CRITICAL BUG FOUND: logout does NOT actually log the user out — backend /api/auth/logout sends Set-Cookie with SameSite=lax while original login cookies were SameSite=None; Secure, so browsers don't clear them. After frontend window.location.replace('/login'), the cookie auto-restores session and the user lands back on dashboard. Recharts width(-1) warnings: not observed in console during nav across pages.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/auth/logout",
+        "issue": "clear_auth_cookies() uses response.delete_cookie('access_token', path='/') without secure=True/samesite='none'. Login cookies were set with SameSite=None;Secure → deletion Set-Cookie has SameSite=lax → browser does NOT clear the original cookie → /api/auth/me still returns the user. Confirmed via curl: after POST /api/auth/logout 200, GET /api/auth/me still returns 200 with the user. This is the ROOT CAUSE of the logout race the frontend window.location.replace fix was meant to mitigate. Fix: update /app/backend/auth.py clear_auth_cookies to pass secure=True, samesite='none', path='/' (and httponly=True) so the deletion cookie matches the original attributes.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "logout-btn",
+        "issue": "Clicking logout-btn calls /api/auth/logout (200) and window.location.replace('/login'), but because backend does not actually invalidate the cookie (see backend critical), the new /login page is immediately re-authenticated via cookie and redirects back to dashboard. Playwright test stuck at /daily-costs → after navigate to /login the page rendered dashboard again. The fix must be on backend.",
+        "affected_selectors": ["[data-testid='logout-btn']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_snapchat.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/snapchat_results.xml"
+  ],
+  "action_items": [
+    "BACKEND CRITICAL: In /app/backend/auth.py clear_auth_cookies(), call response.delete_cookie('access_token', path='/', secure=True, samesite='none', httponly=True) and same for refresh_token. Without this, logout is effectively a no-op for cookie sessions and the new window.location.replace('/login') workaround is hidden by auto re-auth via /me.",
+    "(Optional) Add server-side refresh_token revocation/blacklist so even leaked tokens are invalidated.",
+    "(Optional) After backend fix, verify Playwright logout flow ends on /login and does not auto-redirect to /."
+  ],
+  "critical_code_review_comments": [
+    "auth.py clear_auth_cookies must mirror set_auth_cookies attributes (secure/samesite/httponly/path) — current mismatch causes silent logout failure.",
+    "snapchat_routes.py: OAuth callback correctly returns RedirectResponse to /settings?snapchat=error&... on all failure paths (no 500 leaks). State is signed JWT with user_id, ttl 10 min — good.",
+    "snapchat_routes.py: client_secret never leaked through GET /config — verified.",
+    "Unique index on snapchat_connections.user_id is created on startup (server.py:491) — correct for upsert-per-user semantics.",
+    "Frontend Settings.jsx: snap-connect-btn correctly disabled when has_credentials=false; flips to enabled after save. Good UX.",
+    "Frontend DailyCosts.jsx: daily-snap-fetch-btn disabled when snapchat not connected (no refresh_token) — correct."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_snapchat.py (NEW — 19 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (42/42 pytest including 19 new snapchat tests)",
+    "frontend": "85% (Snapchat UI + DailyCosts + regression pages all PASS; logout flow FAIL due to backend cookie bug — not a frontend defect)"
+  },
+  "test_credentials": "admin@hesab.app / admin123 (seeded) — from /app/memory/test_credentials.md. Snapchat tests use auto-registered TEST_snap_<uuid>@hesab.app",
+  "seed_data_creation": "Recreated /tmp/salla_test.xlsx (10-row Salla orders fixture) for regression tests. Two ephemeral TEST_snap_*@hesab.app users + snapchat_connections rows for user A (cleaned by DELETE /api/snapchat/config at end of suite).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Snapchat integration backend is solid (auth required everywhere, redirects on callback errors, per-user isolation works, no client_secret leak, unique index enforced). DO NOT try real OAuth exchange with snapchat.com — credentials are placeholders. The logout cookie bug is independent of Snapchat work; once backend auth.py clear_auth_cookies is fixed (add secure=True, samesite='none', httponly=True), re-run the Playwright logout assertion. Test file: /app/backend/tests/test_snapchat.py covers POST/GET/DELETE /config, /authorize-url, /oauth/callback (3 redirect paths), /adaccounts, /daily-spend, /select-adaccount, and user isolation. Recharts width(-1) console warnings: monitored during page navigation, none captured — fix appears effective.",
+  "rca of the issue": "Logout cookie not cleared. Login path (auth.py set_auth_cookies) sets access_token with httponly=True, secure=True, samesite='none', path='/'. Logout path (clear_auth_cookies) calls response.delete_cookie('access_token', path='/') with no other attributes; Starlette emits Set-Cookie with default SameSite=lax and no Secure flag. Modern browsers treat the deletion cookie as a different cookie (because SameSite/Secure differ) and DO NOT remove the original. Verified by curl: POST /api/auth/logout 200 → cookie jar still contains access_token → subsequent GET /api/auth/me returns the user. Mitigation: pass matching attributes to delete_cookie: response.delete_cookie('access_token', path='/', secure=True, samesite='none', httponly=True) and same for refresh_token."
+}

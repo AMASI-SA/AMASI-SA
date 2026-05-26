@@ -39,7 +39,9 @@ export function AuthProvider({ children }) {
     const logout = async () => {
         try { await api.post("/auth/logout"); } catch {}
         localStorage.removeItem("access_token");
-        setUser(false);
+        // Hard reload to /login guarantees protected-route logic re-evaluates immediately
+        // (and clears any in-flight state on Dashboard/Reports pages).
+        window.location.replace("/login");
     };
 
     return (

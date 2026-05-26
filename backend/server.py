@@ -32,6 +32,7 @@ from auth import (
 )
 from excel_parser import parse_salla_excel, match_settings
 from exports import export_report_excel, export_report_pdf
+from snapchat_routes import attach_snapchat_routes
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -461,6 +462,7 @@ async def root():
 
 
 # ── App wiring ────────────────────────────────────────────────────────────────
+attach_snapchat_routes(api, db)
 app.include_router(api)
 
 # CORS
@@ -486,6 +488,7 @@ async def on_startup():
     await db.settings.create_index("user_id", unique=True)
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
     await db.analyses.create_index([("user_id", 1), ("created_at", -1)])
+    await db.snapchat_connections.create_index("user_id", unique=True)
     await seed_admin(db)
     logger.info("Hesab backend started successfully.")
 
