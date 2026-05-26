@@ -82,8 +82,10 @@ class SettingsIn(BaseModel):
 class DailyCostsIn(BaseModel):
     date: str  # YYYY-MM-DD
     snapchat_ads: float = 0.0
+    snapchat_ads_2: float = 0.0
     tiktok_ads: float = 0.0
     instagram_ads: float = 0.0
+    google_ads: float = 0.0
     product_costs: float = 0.0
     notes: Optional[str] = ""
 
@@ -181,8 +183,10 @@ async def upsert_daily_costs(payload: DailyCostsIn, user: dict = Depends(current
         "user_id": user["id"],
         "date": payload.date,
         "snapchat_ads": payload.snapchat_ads,
+        "snapchat_ads_2": payload.snapchat_ads_2,
         "tiktok_ads": payload.tiktok_ads,
         "instagram_ads": payload.instagram_ads,
+        "google_ads": payload.google_ads,
         "product_costs": payload.product_costs,
         "notes": payload.notes or "",
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -351,7 +355,12 @@ async def dashboard(user: dict = Depends(current_user)):
     total_products = sum(a["report"]["summary"].get("total_product_cost", 0) for a in analyses)
     net_profit = sum(a["report"]["summary"]["net_profit"] for a in analyses)
 
-    daily_totals = sum(d.get("snapchat_ads", 0) + d.get("tiktok_ads", 0) + d.get("instagram_ads", 0) + d.get("product_costs", 0) for d in daily)
+    daily_totals = sum(
+        d.get("snapchat_ads", 0) + d.get("snapchat_ads_2", 0)
+        + d.get("tiktok_ads", 0) + d.get("instagram_ads", 0)
+        + d.get("google_ads", 0) + d.get("product_costs", 0)
+        for d in daily
+    )
 
     # Monthly trend (sum sales by month)
     from collections import defaultdict

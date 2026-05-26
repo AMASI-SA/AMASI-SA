@@ -163,18 +163,24 @@ export default function Reports() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div className="rounded-xl border border-border bg-white p-6">
                             <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>إجمالي طرق الدفع</h3>
-                            <table className="w-full text-right text-sm" data-testid="agg-payments-table">
-                                <thead className="text-muted-foreground border-b border-border">
+                            <table
+                                className="w-full text-right text-sm border-collapse
+                                    [&_th]:px-3 [&_th]:border-s [&_th]:border-border
+                                    [&_td]:px-3 [&_td]:border-s [&_td]:border-border
+                                    [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
+                                data-testid="agg-payments-table"
+                            >
+                                <thead className="text-muted-foreground bg-accent/40 border-b-2 border-border">
                                     <tr>
-                                        <th className="py-2.5 font-semibold">الاسم</th>
-                                        <th className="py-2.5 font-semibold">الطلبات</th>
-                                        <th className="py-2.5 font-semibold">المبيعات</th>
-                                        <th className="py-2.5 font-semibold">العمولة</th>
+                                        <th className="py-3 font-semibold">الاسم</th>
+                                        <th className="py-3 font-semibold">الطلبات</th>
+                                        <th className="py-3 font-semibold">المبيعات</th>
+                                        <th className="py-3 font-semibold">العمولة</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {agg.payments.map((p, i) => (
-                                        <tr key={i} className="border-b border-border last:border-0">
+                                        <tr key={i} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
                                             <td className="py-2.5 font-semibold">{p.name}</td>
                                             <td className="py-2.5 num">{formatInt(p.orders_count)}</td>
                                             <td className="py-2.5 num">{formatMoney(p.total_sales)}</td>
@@ -187,17 +193,23 @@ export default function Reports() {
 
                         <div className="rounded-xl border border-border bg-white p-6">
                             <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>إجمالي شركات الشحن</h3>
-                            <table className="w-full text-right text-sm" data-testid="agg-shipping-table">
-                                <thead className="text-muted-foreground border-b border-border">
+                            <table
+                                className="w-full text-right text-sm border-collapse
+                                    [&_th]:px-3 [&_th]:border-s [&_th]:border-border
+                                    [&_td]:px-3 [&_td]:border-s [&_td]:border-border
+                                    [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
+                                data-testid="agg-shipping-table"
+                            >
+                                <thead className="text-muted-foreground bg-accent/40 border-b-2 border-border">
                                     <tr>
-                                        <th className="py-2.5 font-semibold">الاسم</th>
-                                        <th className="py-2.5 font-semibold">الطلبات</th>
-                                        <th className="py-2.5 font-semibold">الإجمالي</th>
+                                        <th className="py-3 font-semibold">الاسم</th>
+                                        <th className="py-3 font-semibold">الطلبات</th>
+                                        <th className="py-3 font-semibold">الإجمالي</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {agg.shippings.map((s, i) => (
-                                        <tr key={i} className="border-b border-border last:border-0">
+                                        <tr key={i} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
                                             <td className="py-2.5 font-semibold">{s.name}</td>
                                             <td className="py-2.5 num">{formatInt(s.orders_count)}</td>
                                             <td className="py-2.5 num font-semibold">{formatMoney(s.total_cost)}</td>
