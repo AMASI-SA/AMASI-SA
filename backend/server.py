@@ -64,7 +64,9 @@ class LoginIn(BaseModel):
 
 class PaymentMethod(BaseModel):
     name: str
-    commission_percent: float = Field(ge=0, le=100)
+    commission_percent: float = Field(ge=0, le=100, default=0.0)
+    fixed_fee: float = Field(ge=0, default=0.0)
+    vat_percent: float = Field(ge=0, le=100, default=0.0)
 
 
 class ShippingCompany(BaseModel):

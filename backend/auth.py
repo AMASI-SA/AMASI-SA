@@ -123,12 +123,12 @@ async def seed_admin(db) -> None:
 
 
 DEFAULT_PAYMENT_METHODS = [
-    {"name": "مدى", "commission_percent": 2.0},
-    {"name": "Apple Pay", "commission_percent": 2.5},
-    {"name": "تمارا", "commission_percent": 6.99},
-    {"name": "تابي", "commission_percent": 5.0},
-    {"name": "بطاقة ائتمانية", "commission_percent": 2.75},
-    {"name": "الدفع عند الاستلام", "commission_percent": 0.0},
+    {"name": "مدى", "commission_percent": 1.0, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": "Apple Pay", "commission_percent": 2.5, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": "تمارا", "commission_percent": 6.99, "fixed_fee": 0.0, "vat_percent": 15.0},
+    {"name": "تابي", "commission_percent": 5.0, "fixed_fee": 0.0, "vat_percent": 15.0},
+    {"name": "بطاقة ائتمانية", "commission_percent": 2.75, "fixed_fee": 1.0, "vat_percent": 15.0},
+    {"name": "الدفع عند الاستلام", "commission_percent": 0.0, "fixed_fee": 0.0, "vat_percent": 0.0},
 ]
 
 DEFAULT_SHIPPING_COMPANIES = [

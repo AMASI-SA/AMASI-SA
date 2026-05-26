@@ -218,33 +218,60 @@ def match_settings(
 ) -> dict:
     """Cross-reference parsed totals with user-provided commission rates and shipping costs.
 
-    Unmatched names get 0% commission / 0 SAR shipping but are still returned.
+    Payment fee formula:
+        base_commission = (total_sales * commission_percent / 100)
+                        + (orders_count * fixed_fee)
+        vat_amount      = base_commission * vat_percent / 100
+        fee_amount      = base_commission + vat_amount
+
+    Unmatched names get 0 / 0 / 0 but are still returned.
     """
-    payment_map = {normalize_name(p["name"]): float(p.get("commission_percent", 0)) for p in payment_settings}
+    # Build lookup: normalized name -> full config dict
+    payment_map = {
+        normalize_name(p["name"]): {
+            "commission_percent": float(p.get("commission_percent", 0) or 0),
+            "fixed_fee": float(p.get("fixed_fee", 0) or 0),
+            "vat_percent": float(p.get("vat_percent", 0) or 0),
+        }
+        for p in payment_settings
+    }
     shipping_map = {normalize_name(s["name"]): float(s.get("cost_per_order", 0)) for s in shipping_settings}
 
     payment_breakdown = []
     total_payment_fees = 0.0
     for pm in parsed["payment_methods"]:
         key = normalize_name(pm["name"])
-        pct = payment_map.get(key)
+        cfg = payment_map.get(key)
         # fuzzy contains match if exact key not found
-        if pct is None:
+        if cfg is None:
             for k, v in payment_map.items():
                 if k and (k in key or key in k):
-                    pct = v
+                    cfg = v
                     break
-        pct = pct if pct is not None else 0.0
-        fee = round(pm["total_sales"] * pct / 100.0, 2)
-        total_payment_fees += fee
+        matched = cfg is not None
+        cfg = cfg or {"commission_percent": 0.0, "fixed_fee": 0.0, "vat_percent": 0.0}
+
+        pct = cfg["commission_percent"]
+        fixed = cfg["fixed_fee"]
+        vat_pct = cfg["vat_percent"]
+
+        base_commission = round(pm["total_sales"] * pct / 100.0 + pm["orders_count"] * fixed, 2)
+        vat_amount = round(base_commission * vat_pct / 100.0, 2)
+        fee_amount = round(base_commission + vat_amount, 2)
+        total_payment_fees += fee_amount
+
         payment_breakdown.append({
             "name": pm["name"],
             "orders_count": pm["orders_count"],
             "total_sales": pm["total_sales"],
             "commission_percent": pct,
-            "fee_amount": fee,
-            "net_amount": round(pm["total_sales"] - fee, 2),
-            "matched": pct > 0 or key in payment_map,
+            "fixed_fee": fixed,
+            "vat_percent": vat_pct,
+            "base_commission": base_commission,
+            "vat_amount": vat_amount,
+            "fee_amount": fee_amount,
+            "net_amount": round(pm["total_sales"] - fee_amount, 2),
+            "matched": matched,
         })
 
     shipping_breakdown = []

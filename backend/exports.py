@@ -115,10 +115,14 @@ def export_report_excel(report: dict) -> bytes:
 
     # Payment breakdown
     row += 2
-    ws.merge_range(row, 0, row, 4, "تفاصيل طرق الدفع", title_fmt)
+    ws.merge_range(row, 0, row, 7, "تفاصيل طرق الدفع", title_fmt)
     ws.set_row(row, 28)
     row += 1
-    headers = ["طريقة الدفع", "عدد الطلبات", "إجمالي المبيعات", "نسبة العمولة %", "قيمة العمولة"]
+    headers = [
+        "طريقة الدفع", "عدد الطلبات", "إجمالي المبيعات",
+        "نسبة % ", "مبلغ ثابت", "العمولة الأساسية",
+        "ضريبة % ", "إجمالي العمولة",
+    ]
     for c, h in enumerate(headers):
         ws.write(row, c, h, header_fmt)
     row += 1
@@ -127,7 +131,10 @@ def export_report_excel(report: dict) -> bytes:
         ws.write_number(row, 1, int(pm.get("orders_count", 0)), num_fmt)
         ws.write_number(row, 2, float(pm.get("total_sales", 0)), num_fmt)
         ws.write_number(row, 3, float(pm.get("commission_percent", 0)), num_fmt)
-        ws.write_number(row, 4, float(pm.get("fee_amount", 0)), num_fmt)
+        ws.write_number(row, 4, float(pm.get("fixed_fee", 0)), num_fmt)
+        ws.write_number(row, 5, float(pm.get("base_commission", pm.get("fee_amount", 0))), num_fmt)
+        ws.write_number(row, 6, float(pm.get("vat_percent", 0)), num_fmt)
+        ws.write_number(row, 7, float(pm.get("fee_amount", 0)), num_fmt)
         row += 1
 
     # Shipping breakdown
@@ -224,26 +231,30 @@ def export_report_pdf(report: dict) -> bytes:
     # Payment breakdown
     elements.append(Paragraph(_ar("تفاصيل طرق الدفع"), h2_style))
     pm_data = [[
-        _ar("قيمة العمولة"), _ar("نسبة %"), _ar("إجمالي المبيعات"),
-        _ar("عدد الطلبات"), _ar("طريقة الدفع"),
+        _ar("إجمالي العمولة"), _ar("ضريبة %"), _ar("العمولة الأساسية"),
+        _ar("مبلغ ثابت"), _ar("نسبة %"),
+        _ar("إجمالي المبيعات"), _ar("عدد الطلبات"), _ar("طريقة الدفع"),
     ]]
     for pm in report.get("payment_breakdown", []):
         pm_data.append([
             _ar(f"{pm.get('fee_amount', 0):,.2f}"),
+            _ar(f"{pm.get('vat_percent', 0):.2f}"),
+            _ar(f"{pm.get('base_commission', pm.get('fee_amount', 0)):,.2f}"),
+            _ar(f"{pm.get('fixed_fee', 0):,.2f}"),
             _ar(f"{pm.get('commission_percent', 0):.2f}"),
             _ar(f"{pm.get('total_sales', 0):,.2f}"),
             _ar(f"{pm.get('orders_count', 0)}"),
             _ar(pm.get("name", "")),
         ])
     if len(pm_data) > 1:
-        t = Table(pm_data, colWidths=[3 * cm, 2.5 * cm, 4 * cm, 2.5 * cm, 4 * cm])
+        t = Table(pm_data, colWidths=[2.2*cm, 1.6*cm, 2.2*cm, 1.7*cm, 1.5*cm, 2.4*cm, 1.8*cm, 3*cm])
         t.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (-1, -1), _FONT_NAME),
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F1")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0A3622")),
             ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
             ("TOPPADDING", (0, 0), (-1, -1), 5),
         ]))

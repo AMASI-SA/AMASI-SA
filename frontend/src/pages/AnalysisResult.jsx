@@ -146,32 +146,40 @@ export default function AnalysisResult() {
             <div className="rounded-xl border border-border bg-white p-6">
                 <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>تفاصيل طرق الدفع</h3>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right" data-testid="payment-breakdown-table">
-                        <thead className="text-sm text-muted-foreground border-b border-border">
+                    <table className="w-full text-right text-sm" data-testid="payment-breakdown-table">
+                        <thead className="text-xs text-muted-foreground border-b border-border">
                             <tr>
                                 <th className="py-3 font-semibold">طريقة الدفع</th>
-                                <th className="py-3 font-semibold">عدد الطلبات</th>
-                                <th className="py-3 font-semibold">إجمالي المبيعات</th>
-                                <th className="py-3 font-semibold">نسبة العمولة</th>
-                                <th className="py-3 font-semibold">قيمة العمولة</th>
+                                <th className="py-3 font-semibold">الطلبات</th>
+                                <th className="py-3 font-semibold">المبيعات</th>
+                                <th className="py-3 font-semibold">نسبة %</th>
+                                <th className="py-3 font-semibold">مبلغ ثابت</th>
+                                <th className="py-3 font-semibold">العمولة الأساسية</th>
+                                <th className="py-3 font-semibold">ضريبة %</th>
+                                <th className="py-3 font-semibold">قيمة الضريبة</th>
+                                <th className="py-3 font-semibold">إجمالي العمولة</th>
                                 <th className="py-3 font-semibold">الصافي</th>
                             </tr>
                         </thead>
                         <tbody>
                             {r.payment_breakdown.map((p, i) => (
                                 <tr key={i} className="border-b border-border last:border-0">
-                                    <td className="py-3 font-semibold">
+                                    <td className="py-3 font-semibold whitespace-nowrap">
                                         {p.name}
                                         {!p.matched && (
-                                            <span title="لم يتم العثور على عمولة لهذه الطريقة في الإعدادات" className="ms-2 inline-flex items-center gap-1 text-amber-600 text-xs">
-                                                <Warning size={14} /> غير مُعد
+                                            <span title="غير معد في الإعدادات" className="ms-1 inline-flex items-center gap-0.5 text-amber-600 text-xs">
+                                                <Warning size={12} />
                                             </span>
                                         )}
                                     </td>
                                     <td className="py-3 num">{formatInt(p.orders_count)}</td>
                                     <td className="py-3 num">{formatMoney(p.total_sales)}</td>
                                     <td className="py-3 num">{formatPercent(p.commission_percent)}</td>
-                                    <td className="py-3 num text-red-700">{formatMoney(p.fee_amount)}</td>
+                                    <td className="py-3 num">{formatMoney(p.fixed_fee ?? 0)}</td>
+                                    <td className="py-3 num">{formatMoney(p.base_commission ?? p.fee_amount)}</td>
+                                    <td className="py-3 num">{formatPercent(p.vat_percent ?? 0)}</td>
+                                    <td className="py-3 num text-muted-foreground">{formatMoney(p.vat_amount ?? 0)}</td>
+                                    <td className="py-3 num text-red-700 font-bold">{formatMoney(p.fee_amount)}</td>
                                     <td className="py-3 num font-semibold">{formatMoney(p.net_amount)}</td>
                                 </tr>
                             ))}

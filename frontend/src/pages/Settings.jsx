@@ -26,6 +26,8 @@ export default function Settings() {
                 payment_methods: payments.map((p) => ({
                     name: (p.name || "").trim(),
                     commission_percent: Number(p.commission_percent || 0),
+                    fixed_fee: Number(p.fixed_fee || 0),
+                    vat_percent: Number(p.vat_percent || 0),
                 })).filter((p) => p.name),
                 shipping_companies: shippings.map((s) => ({
                     name: (s.name || "").trim(),
@@ -65,17 +67,25 @@ export default function Settings() {
                 <div className="flex items-center justify-between mb-5">
                     <div>
                         <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>طرق الدفع وعمولاتها</h2>
-                        <p className="text-sm text-muted-foreground mt-1">حدّد نسبة العمولة (%) لكل طريقة دفع</p>
+                        <p className="text-sm text-muted-foreground mt-1">نسبة % + مبلغ ثابت لكل طلب + نسبة ضريبة على إجمالي العمولة</p>
                     </div>
                     <button
-                        onClick={() => setPayments([...payments, { name: "", commission_percent: 0 }])}
+                        onClick={() => setPayments([...payments, { name: "", commission_percent: 0, fixed_fee: 0, vat_percent: 15 }])}
                         className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-accent transition-colors"
                         data-testid="add-payment-btn"
                     >
                         <Plus size={16} weight="bold" /> إضافة
                     </button>
                 </div>
-                <div className="space-y-2" data-testid="payment-methods-list">
+                <div className="space-y-3" data-testid="payment-methods-list">
+                    {/* Header row */}
+                    <div className="grid grid-cols-12 gap-3 text-xs font-semibold text-muted-foreground px-1 hidden md:grid">
+                        <div className="col-span-4">اسم بوابة الدفع</div>
+                        <div className="col-span-2 text-center">النسبة %</div>
+                        <div className="col-span-2 text-center">مبلغ ثابت (ر.س)</div>
+                        <div className="col-span-3 text-center">نسبة الضريبة على العمولة %</div>
+                        <div className="col-span-1"></div>
+                    </div>
                     {payments.map((p, i) => (
                         <div key={i} className="grid grid-cols-12 gap-3 items-center">
                             <input
@@ -87,23 +97,58 @@ export default function Settings() {
                                     setPayments(arr);
                                 }}
                                 placeholder="اسم بوابة الدفع"
-                                className="col-span-7 px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                                className="col-span-4 px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
                                 data-testid={`payment-name-${i}`}
                             />
-                            <div className="col-span-4 relative">
+                            <div className="col-span-2 flex items-center border border-border rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand overflow-hidden">
                                 <input
                                     type="number"
                                     min={0} max={100} step="0.01"
-                                    value={p.commission_percent}
+                                    value={p.commission_percent ?? 0}
                                     onChange={(e) => {
                                         const arr = [...payments];
                                         arr[i] = { ...arr[i], commission_percent: e.target.value };
                                         setPayments(arr);
                                     }}
-                                    className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand num pe-9"
+                                    dir="ltr"
+                                    className="flex-1 min-w-0 px-3 py-2.5 text-base bg-transparent focus:outline-none num text-right"
                                     data-testid={`payment-rate-${i}`}
                                 />
-                                <span className="absolute top-2.5 left-3 text-muted-foreground text-sm font-bold">%</span>
+                                <span className="px-3 py-2.5 text-sm font-bold text-muted-foreground bg-accent/60 border-s border-border">%</span>
+                            </div>
+                            <div className="col-span-2 flex items-center border border-border rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand overflow-hidden">
+                                <input
+                                    type="number"
+                                    min={0} step="0.01"
+                                    value={p.fixed_fee ?? 0}
+                                    onChange={(e) => {
+                                        const arr = [...payments];
+                                        arr[i] = { ...arr[i], fixed_fee: e.target.value };
+                                        setPayments(arr);
+                                    }}
+                                    dir="ltr"
+                                    className="flex-1 min-w-0 px-3 py-2.5 text-base bg-transparent focus:outline-none num text-right"
+                                    placeholder="0.00"
+                                    data-testid={`payment-fixed-${i}`}
+                                />
+                                <span className="px-3 py-2.5 text-xs font-bold text-muted-foreground bg-accent/60 border-s border-border whitespace-nowrap">ر.س</span>
+                            </div>
+                            <div className="col-span-3 flex items-center border border-border rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand overflow-hidden">
+                                <input
+                                    type="number"
+                                    min={0} max={100} step="0.01"
+                                    value={p.vat_percent ?? 0}
+                                    onChange={(e) => {
+                                        const arr = [...payments];
+                                        arr[i] = { ...arr[i], vat_percent: e.target.value };
+                                        setPayments(arr);
+                                    }}
+                                    dir="ltr"
+                                    className="flex-1 min-w-0 px-3 py-2.5 text-base bg-transparent focus:outline-none num text-right"
+                                    placeholder="15"
+                                    data-testid={`payment-vat-${i}`}
+                                />
+                                <span className="px-3 py-2.5 text-sm font-bold text-muted-foreground bg-accent/60 border-s border-border">%</span>
                             </div>
                             <button
                                 onClick={() => setPayments(payments.filter((_, idx) => idx !== i))}
@@ -148,7 +193,7 @@ export default function Settings() {
                                 className="col-span-7 px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
                                 data-testid={`shipping-name-${i}`}
                             />
-                            <div className="col-span-4 relative">
+                            <div className="col-span-4 flex items-center border border-border rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand overflow-hidden">
                                 <input
                                     type="number"
                                     min={0} step="0.01"
@@ -158,10 +203,11 @@ export default function Settings() {
                                         arr[i] = { ...arr[i], cost_per_order: e.target.value };
                                         setShippings(arr);
                                     }}
-                                    className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand num pe-12"
+                                    dir="ltr"
+                                    className="flex-1 min-w-0 px-3 py-2.5 text-base bg-transparent focus:outline-none num text-right"
                                     data-testid={`shipping-cost-${i}`}
                                 />
-                                <span className="absolute top-2.5 left-3 text-muted-foreground text-sm font-bold">ر.س</span>
+                                <span className="px-3 py-2.5 text-sm font-bold text-muted-foreground bg-accent/60 border-s border-border whitespace-nowrap">ر.س</span>
                             </div>
                             <button
                                 onClick={() => setShippings(shippings.filter((_, idx) => idx !== i))}
