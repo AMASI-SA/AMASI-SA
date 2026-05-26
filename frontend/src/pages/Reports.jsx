@@ -288,11 +288,14 @@ export default function Reports() {
                                                 { name: "إنستقرام", value: adsAgg.insta },
                                                 { name: "جوجل", value: adsAgg.google },
                                             ].filter(x => x.value > 0)}
-                                                 dataKey="value" outerRadius={90} label={(e) => e.name}>
-                                                {[0,1,2,3,4].map((i) => <Cell key={i} fill={COLORS[(i + 1) % COLORS.length]} />)}
+                                                 dataKey="value" outerRadius={90}>
+                                                {[0,1,2,3,4].map((i) => <Cell key={i} fill={COLORS[(i + 1) % COLORS.length]} stroke="#fff" strokeWidth={2} className="cursor-pointer" />)}
                                             </Pie>
-                                            <Tooltip formatter={(v) => formatMoney(v) + " ر.س"} contentStyle={{ direction: "rtl", fontFamily: "Cairo" }} />
-                                            <Legend wrapperStyle={{ fontFamily: "Cairo" }} />
+                                            <Tooltip
+                                                formatter={(v, name) => [formatMoney(v) + " ر.س", name]}
+                                                contentStyle={{ direction: "rtl", fontFamily: "Cairo", borderRadius: 8, border: "1px solid #E5E7EB" }}
+                                            />
+                                            <Legend wrapperStyle={{ fontFamily: "Cairo", fontSize: 12 }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
