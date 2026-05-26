@@ -327,10 +327,14 @@ export default function Reports() {
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie data={agg.payments.map((p) => ({ name: p.name, value: p.total_sales }))}
-                                             dataKey="value" outerRadius={90} label={(e) => e.name}>
-                                            {agg.payments.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                                             dataKey="value" outerRadius={100}>
+                                            {agg.payments.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="#fff" strokeWidth={2} className="cursor-pointer" />)}
                                         </Pie>
-                                        <Tooltip formatter={(v) => formatMoney(v) + " ر.س"} contentStyle={{ direction: "rtl", fontFamily: "Cairo" }} />
+                                        <Tooltip
+                                            formatter={(v, name) => [formatMoney(v) + " ر.س", name]}
+                                            contentStyle={{ direction: "rtl", fontFamily: "Cairo", borderRadius: 8, border: "1px solid #E5E7EB" }}
+                                        />
+                                        <Legend wrapperStyle={{ fontFamily: "Cairo", fontSize: 12 }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
