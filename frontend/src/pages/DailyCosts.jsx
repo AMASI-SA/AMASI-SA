@@ -127,37 +127,35 @@ export default function DailyCosts() {
                     <div className="overflow-x-auto">
                         <table
                             className="w-full text-right text-sm border-collapse
-                                [&_th]:px-3 [&_th]:border-s [&_th]:border-border
-                                [&_td]:px-3 [&_td]:border-s [&_td]:border-border
-                                [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0
-                                [&_th:last-child]:border-s-0 [&_td:last-child]:border-s-0"
+                                [&_th]:px-3 [&_th]:py-3 [&_th]:border [&_th]:border-border [&_th]:whitespace-nowrap
+                                [&_td]:px-3 [&_td]:py-3 [&_td]:border [&_td]:border-border [&_td]:whitespace-nowrap"
                             data-testid="daily-costs-table"
                         >
-                            <thead className="text-muted-foreground bg-accent/40 border-b-2 border-border">
+                            <thead className="text-muted-foreground bg-accent/60">
                                 <tr>
-                                    <th className="py-3 font-semibold">التاريخ</th>
-                                    <th className="py-3 font-semibold">سناب شات</th>
-                                    <th className="py-3 font-semibold">سناب شات 2</th>
-                                    <th className="py-3 font-semibold">تيك توك</th>
-                                    <th className="py-3 font-semibold">إنستقرام</th>
-                                    <th className="py-3 font-semibold">جوجل</th>
-                                    <th className="py-3 font-semibold">المنتجات</th>
-                                    <th className="py-3 font-semibold">الإجمالي</th>
-                                    <th className="py-3 font-semibold"></th>
+                                    <th className="font-semibold text-center">التاريخ</th>
+                                    <th className="font-semibold text-center">سناب شات</th>
+                                    <th className="font-semibold text-center">سناب شات 2</th>
+                                    <th className="font-semibold text-center">تيك توك</th>
+                                    <th className="font-semibold text-center">إنستقرام</th>
+                                    <th className="font-semibold text-center">جوجل</th>
+                                    <th className="font-semibold text-center">المنتجات</th>
+                                    <th className="font-semibold text-center">الإجمالي</th>
+                                    <th className="font-semibold w-12"></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {items.map((it) => (
-                                    <tr key={it.date} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
-                                        <td className="py-3 num font-semibold">{it.date}</td>
-                                        <td className="py-3 num">{formatMoney(it.snapchat_ads)}</td>
-                                        <td className="py-3 num">{formatMoney(it.snapchat_ads_2 || 0)}</td>
-                                        <td className="py-3 num">{formatMoney(it.tiktok_ads)}</td>
-                                        <td className="py-3 num">{formatMoney(it.instagram_ads)}</td>
-                                        <td className="py-3 num">{formatMoney(it.google_ads || 0)}</td>
-                                        <td className="py-3 num">{formatMoney(it.product_costs)}</td>
-                                        <td className="py-3 num font-bold text-brand">{formatMoney(total(it))}</td>
-                                        <td className="py-3">
+                                    <tr key={it.date} className="hover:bg-accent/30 transition-colors">
+                                        <td className="num font-semibold text-center">{it.date}</td>
+                                        <td className="num text-center">{formatMoney(it.snapchat_ads)}</td>
+                                        <td className="num text-center">{formatMoney(it.snapchat_ads_2 || 0)}</td>
+                                        <td className="num text-center">{formatMoney(it.tiktok_ads)}</td>
+                                        <td className="num text-center">{formatMoney(it.instagram_ads)}</td>
+                                        <td className="num text-center">{formatMoney(it.google_ads || 0)}</td>
+                                        <td className="num text-center">{formatMoney(it.product_costs)}</td>
+                                        <td className="num text-center font-bold text-brand">{formatMoney(total(it))}</td>
+                                        <td className="text-center">
                                             <button onClick={() => remove(it.date)}
                                                 className="p-2 rounded-lg border border-border hover:bg-red-50 hover:text-red-600 transition-colors"
                                                 title="حذف" data-testid={`delete-daily-${it.date}`}>
