@@ -120,7 +120,7 @@ export default function DailyCosts() {
                         { label: "تيك توك", value: tik, setter: setTik, testid: "daily-tiktok-input" },
                         { label: "إنستقرام", value: insta, setter: setInsta, testid: "daily-insta-input" },
                         { label: "جوجل", value: google, setter: setGoogle, testid: "daily-google-input" },
-                        { label: "المنتجات", value: prod, setter: setProd, testid: "daily-products-input" },
+                        { label: "مصاريف يومية", value: prod, setter: setProd, testid: "daily-products-input" },
                     ].map((c) => (
                         <div key={c.testid}>
                             <label className="block text-sm font-semibold mb-1.5">{c.label} (ر.س)</label>
@@ -172,7 +172,7 @@ export default function DailyCosts() {
                                     <th className="font-semibold text-center">تيك توك</th>
                                     <th className="font-semibold text-center">إنستقرام</th>
                                     <th className="font-semibold text-center">جوجل</th>
-                                    <th className="font-semibold text-center">المنتجات</th>
+                                    <th className="font-semibold text-center">مصاريف يومية</th>
                                     <th className="font-semibold text-center">الإجمالي</th>
                                     <th className="font-semibold w-12"></th>
                                 </tr>

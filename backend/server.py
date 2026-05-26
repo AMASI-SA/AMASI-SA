@@ -377,9 +377,18 @@ async def dashboard(
 
     # Total VAT deducted across all analyses (from payment fees + shipping)
     total_vat = 0.0
+    bnpl_fees = 0.0
+    other_payment_fees = 0.0
+    bnpl_keywords = ("تمارا", "تابي", "tamara", "tabby")
     for a in analyses:
         for p in a["report"].get("payment_breakdown", []):
             total_vat += float(p.get("vat_amount", 0) or 0)
+            name_lc = (p.get("name", "") or "").strip().lower()
+            fee = float(p.get("fee_amount", 0) or 0)
+            if any(k in name_lc for k in bnpl_keywords):
+                bnpl_fees += fee
+            else:
+                other_payment_fees += fee
         for s in a["report"].get("shipping_breakdown", []):
             total_vat += float(s.get("vat_amount", 0) or 0)
 
@@ -418,9 +427,12 @@ async def dashboard(
             "total_sales": round(total_sales, 2),
             "total_orders": int(total_orders),
             "total_payment_fees": round(total_fees, 2),
+            "bnpl_fees": round(bnpl_fees, 2),
+            "other_payment_fees": round(other_payment_fees, 2),
             "total_shipping_cost": round(total_shipping, 2),
             "total_ads_cost": round(total_ads + daily_ads_total, 2),
-            "total_product_cost": round(total_products + daily_products_total, 2),
+            "total_product_cost": round(total_products, 2),
+            "daily_expenses_total": round(daily_products_total, 2),
             "net_profit": round(net_profit_adjusted, 2),
             "total_vat": round(total_vat, 2),
             "daily_costs_total": round(daily_totals, 2),

@@ -210,7 +210,7 @@ export default function Reports() {
                             { label: "رسوم الدفع", value: agg.total_fees },
                             { label: "الشحن", value: agg.total_ship },
                             { label: "الإعلانات (يومي)", value: adsAgg.totalAds },
-                            { label: "المنتجات (يومي)", value: adsAgg.totalProducts },
+                            { label: "مصاريف يومية", value: adsAgg.totalProducts },
                             { label: "عدد التحاليل", value: analyses.length, isInt: true },
                             { label: "صافي الربح النهائي", value: agg.net - adsAgg.totalAds - adsAgg.totalProducts, accent: true },
                         ].map((c, idx) => (
@@ -272,7 +272,7 @@ export default function Reports() {
                                             </tr>
                                         ))}
                                         <tr className="bg-accent/30 font-bold">
-                                            <td className="py-2.5">المنتجات (مصاريف يومية)</td>
+                                            <td className="py-2.5">مصاريف يومية</td>
                                             <td className="py-2.5 num text-red-700">{formatMoney(adsAgg.totalProducts)}</td>
                                             <td className="py-2.5 text-muted-foreground">—</td>
                                         </tr>
