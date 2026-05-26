@@ -16,6 +16,7 @@ export default function UploadExcel() {
 
     const [name, setName] = useState("");
     const [date, setDate] = useState(todayISO());
+    const [productCosts, setProductCosts] = useState("");
 
     const onDrop = (e) => {
         e.preventDefault();
@@ -34,7 +35,11 @@ export default function UploadExcel() {
         try {
             const fd = new FormData();
             fd.append("file", file);
-            const params = new URLSearchParams({ name, date });
+            const params = new URLSearchParams({
+                name,
+                date,
+                product_costs: productCosts || "0",
+            });
             const { data } = await api.post(`/analyses?${params.toString()}`, fd, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
@@ -54,7 +59,7 @@ export default function UploadExcel() {
                     تحليل ملف Excel
                 </h1>
                 <p className="text-muted-foreground mt-2 text-base">
-                    ارفع ملف Excel المُصدَّر من منصة سلة واحصل على تقرير محاسبي كامل. يمكنك إضافة التكاليف اليومية من صفحة "التكاليف اليومية".
+                    ارفع ملف Excel المُصدَّر من منصة سلة وأدخل تكلفة المنتجات للحصول على تقرير محاسبي كامل. تكاليف الإعلانات تُدار من صفحة "التكاليف اليومية".
                 </p>
             </div>
 
@@ -134,6 +139,24 @@ export default function UploadExcel() {
                                     dir="ltr"
                                     style={{ textAlign: "right" }}
                                 />
+                            </div>
+                            <div>
+                                <label className="text-sm font-semibold mb-1.5 block">تكاليف المنتجات (ر.س)</label>
+                                <div className="flex items-center border border-border rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand overflow-hidden">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step="0.01"
+                                        value={productCosts}
+                                        onChange={(e) => setProductCosts(e.target.value)}
+                                        placeholder="0.00"
+                                        dir="ltr"
+                                        className="flex-1 min-w-0 px-3 py-2.5 text-base bg-transparent focus:outline-none num text-right"
+                                        data-testid="product-costs-input"
+                                    />
+                                    <span className="px-3 py-2.5 text-xs font-bold text-muted-foreground bg-accent/60 border-s border-border whitespace-nowrap">ر.س</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1.5">إجمالي تكلفة شراء/إنتاج المنتجات في هذا الملف.</p>
                             </div>
                         </div>
                     </div>
