@@ -67,8 +67,17 @@ def set_auth_cookies(response, access_token: str, refresh_token: str) -> None:
 
 
 def clear_auth_cookies(response) -> None:
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/")
+    # Must mirror set_auth_cookies attributes (path, secure, samesite, httponly)
+    # otherwise modern browsers treat the Set-Cookie as a different cookie and
+    # do NOT remove the original session cookie — making logout a no-op.
+    for name in ("access_token", "refresh_token"):
+        response.delete_cookie(
+            key=name,
+            path="/",
+            secure=True,
+            samesite="none",
+            httponly=True,
+        )
 
 
 def _extract_token(request: Request) -> Optional[str]:
