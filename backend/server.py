@@ -380,7 +380,7 @@ async def dashboard(
     total_vat = 0.0
     bnpl_fees = 0.0
     other_payment_fees = 0.0
-    bnpl_keywords = ("تمارا", "تابي", "tamara", "tabby")
+    bnpl_keywords = ("تمارا", "تابي", "إمكان", "امكان", "tamara", "tabby", "emkan", "emkaninstallment", "amkan")
     for a in analyses:
         for p in a["report"].get("payment_breakdown", []):
             total_vat += float(p.get("vat_amount", 0) or 0)

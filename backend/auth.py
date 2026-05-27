@@ -136,6 +136,7 @@ DEFAULT_PAYMENT_METHODS = [
     {"name": "Apple Pay", "commission_percent": 2.5, "fixed_fee": 1.0, "vat_percent": 15.0},
     {"name": "تمارا", "commission_percent": 6.99, "fixed_fee": 0.0, "vat_percent": 15.0},
     {"name": "تابي", "commission_percent": 5.0, "fixed_fee": 0.0, "vat_percent": 15.0},
+    {"name": "إمكان", "commission_percent": 5.0, "fixed_fee": 0.0, "vat_percent": 15.0},
     {"name": "بطاقة ائتمانية", "commission_percent": 2.75, "fixed_fee": 1.0, "vat_percent": 15.0},
     {"name": "الدفع عند الاستلام", "commission_percent": 0.0, "fixed_fee": 0.0, "vat_percent": 0.0},
 ]
