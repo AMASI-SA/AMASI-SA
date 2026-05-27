@@ -7,6 +7,11 @@ import api, { formatApiErrorDetail } from "../lib/api";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const DEFAULT_SNAP_REDIRECT = `${BACKEND_URL}/api/snapchat/oauth/callback`;
 
+// Stable per-row id for React keys (so deleting middle rows does not re-mount inputs)
+let _rowSeq = 0;
+const newRowId = () => `r${Date.now().toString(36)}_${(_rowSeq += 1)}`;
+const withRowIds = (arr) => (arr || []).map((it) => ({ _rid: it?._rid || newRowId(), ...it }));
+
 export default function Settings() {
     const [payments, setPayments] = useState([]);
     const [shippings, setShippings] = useState([]);
@@ -41,15 +46,17 @@ export default function Settings() {
                 ad_account_id: data.ad_account_id || "",
                 ad_account_name: data.ad_account_name || "",
             });
-        } catch {}
+        } catch (err) {
+            console.debug("loadSnapConfig failed:", err);
+        }
     };
 
     useEffect(() => {
         (async () => {
             try {
                 const { data } = await api.get("/settings");
-                setPayments(data.payment_methods || []);
-                setShippings(data.shipping_companies || []);
+                setPayments(withRowIds(data.payment_methods));
+                setShippings(withRowIds(data.shipping_companies));
             } finally { setLoading(false); }
         })();
         loadSnapConfig();
@@ -190,7 +197,7 @@ export default function Settings() {
                         <p className="text-sm text-muted-foreground mt-1">نسبة % + مبلغ ثابت لكل طلب + نسبة ضريبة على إجمالي العمولة</p>
                     </div>
                     <button
-                        onClick={() => setPayments([...payments, { name: "", commission_percent: 0, fixed_fee: 0, vat_percent: 15 }])}
+                        onClick={() => setPayments([...payments, { _rid: newRowId(), name: "", commission_percent: 0, fixed_fee: 0, vat_percent: 15 }])}
                         className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-accent transition-colors"
                         data-testid="add-payment-btn"
                     >
@@ -207,7 +214,7 @@ export default function Settings() {
                         <div className="col-span-1"></div>
                     </div>
                     {payments.map((p, i) => (
-                        <div key={i} className="grid grid-cols-12 gap-3 items-center">
+                        <div key={p._rid || `p-${i}`} className="grid grid-cols-12 gap-3 items-center">
                             <input
                                 type="text"
                                 value={p.name}
@@ -291,7 +298,7 @@ export default function Settings() {
                         <p className="text-sm text-muted-foreground mt-1">تكلفة الشحنة (ر.س) + نسبة الضريبة على الشحن</p>
                     </div>
                     <button
-                        onClick={() => setShippings([...shippings, { name: "", cost_per_order: 0, vat_percent: 15 }])}
+                        onClick={() => setShippings([...shippings, { _rid: newRowId(), name: "", cost_per_order: 0, vat_percent: 15 }])}
                         className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-accent transition-colors"
                         data-testid="add-shipping-btn"
                     >
@@ -307,7 +314,7 @@ export default function Settings() {
                         <div className="col-span-1"></div>
                     </div>
                     {shippings.map((s, i) => (
-                        <div key={i} className="grid grid-cols-12 gap-3 items-center">
+                        <div key={s._rid || `s-${i}`} className="grid grid-cols-12 gap-3 items-center">
                             <input
                                 type="text"
                                 value={s.name}

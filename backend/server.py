@@ -379,14 +379,27 @@ async def dashboard(
     # Total VAT deducted across all analyses (from payment fees + shipping)
     total_vat = 0.0
     bnpl_fees = 0.0
+    tamara_fees = 0.0
+    tabby_fees = 0.0
+    emkan_fees = 0.0
     other_payment_fees = 0.0
-    bnpl_keywords = ("تمارا", "تابي", "إمكان", "امكان", "tamara", "tabby", "emkan", "emkaninstallment", "amkan")
+    tamara_keywords = ("تمارا", "tamara")
+    tabby_keywords = ("تابي", "tabby")
+    emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
+    bnpl_keywords = tamara_keywords + tabby_keywords + emkan_keywords
     for a in analyses:
         for p in a["report"].get("payment_breakdown", []):
             total_vat += float(p.get("vat_amount", 0) or 0)
             name_lc = (p.get("name", "") or "").strip().lower()
             fee = float(p.get("fee_amount", 0) or 0)
-            if any(k in name_lc for k in bnpl_keywords):
+            if any(k in name_lc for k in tamara_keywords):
+                tamara_fees += fee
+                bnpl_fees += fee
+            elif any(k in name_lc for k in tabby_keywords):
+                tabby_fees += fee
+                bnpl_fees += fee
+            elif any(k in name_lc for k in emkan_keywords):
+                emkan_fees += fee
                 bnpl_fees += fee
             else:
                 other_payment_fees += fee
@@ -429,6 +442,9 @@ async def dashboard(
             "total_orders": int(total_orders),
             "total_payment_fees": round(total_fees, 2),
             "bnpl_fees": round(bnpl_fees, 2),
+            "tamara_fees": round(tamara_fees, 2),
+            "tabby_fees": round(tabby_fees, 2),
+            "emkan_fees": round(emkan_fees, 2),
             "other_payment_fees": round(other_payment_fees, 2),
             "total_shipping_cost": round(total_shipping, 2),
             "total_ads_cost": round(total_ads + daily_ads_total, 2),

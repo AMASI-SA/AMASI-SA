@@ -28,7 +28,10 @@ export default function DailyCosts() {
             try {
                 const { data } = await api.get("/snapchat/config");
                 setSnapConnected(!!(data.connected && data.ad_account_id));
-            } catch { setSnapConnected(false); }
+            } catch (err) {
+                console.debug("snapchat config probe failed (treated as disconnected):", err);
+                setSnapConnected(false);
+            }
         })();
     }, []);
 

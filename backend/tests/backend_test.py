@@ -10,8 +10,8 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://salla-analytics.prev
 API = f"{BASE_URL}/api"
 SAMPLE_XLSX = "/tmp/salla_test.xlsx"
 
-ADMIN_EMAIL = "admin@hesab.app"
-ADMIN_PASSWORD = "admin123"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@hesab.app")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

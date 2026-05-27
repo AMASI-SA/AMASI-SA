@@ -37,7 +37,12 @@ export function AuthProvider({ children }) {
     };
 
     const logout = async () => {
-        try { await api.post("/auth/logout"); } catch {}
+        try {
+            await api.post("/auth/logout");
+        } catch (err) {
+            // Best-effort: server may already consider us logged out. Still clear client state.
+            console.debug("logout request failed:", err);
+        }
         localStorage.removeItem("access_token");
         // Hard reload to /login guarantees protected-route logic re-evaluates immediately
         // (and clears any in-flight state on Dashboard/Reports pages).
