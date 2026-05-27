@@ -12,6 +12,7 @@ import {
     UploadSimple,
     Percent,
     CalendarBlank,
+    Wallet,
 } from "@phosphor-icons/react";
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -181,9 +182,11 @@ export default function Dashboard() {
                         <Kpi icon={Coins} label="إجمالي المبيعات (ر.س)" value={formatMoney(totals.total_sales)} accent testid="kpi-total-sales" />
                         <Kpi icon={ShoppingBag} label="إجمالي الطلبات" value={formatInt(totals.total_orders)} testid="kpi-total-orders" />
                         <Kpi icon={Receipt} label="رسوم بوابات الدفع (ر.س)" value={formatMoney(totals.other_payment_fees)} hint="عدا تمارا وتابي وإمكان" testid="kpi-payment-fees" />
+                        <Kpi icon={Wallet} label="صافي المدفوعات الإلكترونية (ر.س)" value={formatMoney(totals.electronic_net)} hint="المبيعات − العمولات" testid="kpi-electronic-net" />
                         <Kpi icon={Receipt} label="رسوم تمارا (ر.س)" value={formatMoney(totals.tamara_fees)} hint="BNPL" testid="kpi-tamara-fees" />
                         <Kpi icon={Receipt} label="رسوم تابي (ر.س)" value={formatMoney(totals.tabby_fees)} hint="BNPL" testid="kpi-tabby-fees" />
                         <Kpi icon={Receipt} label="رسوم إمكان (ر.س)" value={formatMoney(totals.emkan_fees)} hint="BNPL" testid="kpi-emkan-fees" />
+                        <Kpi icon={Wallet} label="صافي تمارا وتابي وإمكان (ر.س)" value={formatMoney(totals.bnpl_net)} hint="بعد خصم العمولات" testid="kpi-bnpl-net" />
                         <Kpi icon={Truck} label="تكاليف الشحن (ر.س)" value={formatMoney(totals.total_shipping_cost)} testid="kpi-shipping-cost" />
                         <Kpi icon={Percent} label="إجمالي الضريبة المخصومة (ر.س)" value={formatMoney(totals.total_vat)} hint="ضريبة الدفع + الشحن" testid="kpi-total-vat" />
                         <Kpi icon={Megaphone} label="تكاليف الإعلانات (ر.س)" value={formatMoney(totals.total_ads_cost)} testid="kpi-ads" />

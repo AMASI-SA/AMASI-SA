@@ -383,26 +383,40 @@ async def dashboard(
     tabby_fees = 0.0
     emkan_fees = 0.0
     other_payment_fees = 0.0
+    # Gross sales per category (used to compute "net after fees")
+    bnpl_sales = 0.0
+    other_payment_sales = 0.0
+    cod_sales = 0.0
+    cod_fees = 0.0
     tamara_keywords = ("تمارا", "tamara")
     tabby_keywords = ("تابي", "tabby")
     emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
+    cod_keywords = ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery")
     bnpl_keywords = tamara_keywords + tabby_keywords + emkan_keywords
     for a in analyses:
         for p in a["report"].get("payment_breakdown", []):
             total_vat += float(p.get("vat_amount", 0) or 0)
             name_lc = (p.get("name", "") or "").strip().lower()
             fee = float(p.get("fee_amount", 0) or 0)
+            sales = float(p.get("total_sales", 0) or 0)
             if any(k in name_lc for k in tamara_keywords):
                 tamara_fees += fee
                 bnpl_fees += fee
+                bnpl_sales += sales
             elif any(k in name_lc for k in tabby_keywords):
                 tabby_fees += fee
                 bnpl_fees += fee
+                bnpl_sales += sales
             elif any(k in name_lc for k in emkan_keywords):
                 emkan_fees += fee
                 bnpl_fees += fee
+                bnpl_sales += sales
+            elif any(k in name_lc for k in cod_keywords):
+                cod_fees += fee
+                cod_sales += sales
             else:
                 other_payment_fees += fee
+                other_payment_sales += sales
         for s in a["report"].get("shipping_breakdown", []):
             total_vat += float(s.get("vat_amount", 0) or 0)
 
@@ -446,6 +460,9 @@ async def dashboard(
             "tabby_fees": round(tabby_fees, 2),
             "emkan_fees": round(emkan_fees, 2),
             "other_payment_fees": round(other_payment_fees, 2),
+            # Net after fees deduction
+            "electronic_net": round(other_payment_sales - other_payment_fees, 2),
+            "bnpl_net": round(bnpl_sales - bnpl_fees, 2),
             "total_shipping_cost": round(total_shipping, 2),
             "total_ads_cost": round(total_ads + daily_ads_total, 2),
             "total_product_cost": round(total_products, 2),
