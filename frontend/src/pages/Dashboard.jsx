@@ -13,6 +13,7 @@ import {
     Percent,
     CalendarBlank,
     Wallet,
+    Bank,
 } from "@phosphor-icons/react";
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -188,6 +189,8 @@ export default function Dashboard() {
                         <Kpi icon={Receipt} label="رسوم إمكان (ر.س)" value={formatMoney(totals.emkan_fees)} hint="BNPL" testid="kpi-emkan-fees" />
                         <Kpi icon={Wallet} label="صافي تمارا وتابي وإمكان (ر.س)" value={formatMoney(totals.bnpl_net)} hint="بعد خصم العمولات" testid="kpi-bnpl-net" />
                         <Kpi icon={Truck} label="تكاليف الشحن (ر.س)" value={formatMoney(totals.total_shipping_cost)} testid="kpi-shipping-cost" />
+                        <Kpi icon={Truck} label="مستحقات الشحن الآجل (ر.س)" value={formatMoney(totals.deferred_shipping_cost)} hint="ذمم للشركات الآجلة" testid="kpi-deferred-shipping" />
+                        <Kpi icon={Bank} label="المتوقع من سلة (ر.س)" value={formatMoney(totals.expected_salla_transfer)} hint="حوالة سلة المتوقعة" accent testid="kpi-expected-salla" />
                         <Kpi icon={Percent} label="إجمالي الضريبة المخصومة (ر.س)" value={formatMoney(totals.total_vat)} hint="ضريبة الدفع + الشحن" testid="kpi-total-vat" />
                         <Kpi icon={Megaphone} label="تكاليف الإعلانات (ر.س)" value={formatMoney(totals.total_ads_cost)} testid="kpi-ads" />
                         <Kpi icon={Package} label="تكاليف المنتجات (ر.س)" value={formatMoney(totals.total_product_cost)} hint="من ملفات Excel" testid="kpi-products" />

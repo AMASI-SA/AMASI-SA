@@ -1,0 +1,39 @@
+{
+  "summary": "Tested deferred-shipping-accounts feature end-to-end. 13 new pytest cases all pass (settings is_deferred round-trip, accounts list + totals, POST payment with validation, GET payments DESC + Arabic URL-encoding, DELETE payment + 404, user isolation, Excel upload integration with deferred_shipping_cost & shipping_breakdown.is_deferred, /api/dashboard new fields). Snapchat regression suite also passes (19/19) and original backend suite (23/23) — total 55/55 backend tests green. Frontend Playwright smoke verifies register → Sidebar nav-shipping-accounts → Settings checkbox shipping-deferred-{i} → /shipping-accounts page → KPIs (totals-owed/paid/remaining) → add payment modal → payments log + delete-payment.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/shipping-accounts", "issues": ["When a user registers a payment for a deferred company BEFORE any analysis is uploaded, total_owed=0 yet total_paid increments and 'المتبقي' becomes negative (e.g., -25.00). Negative remaining may mislead users. Consider either blocking payment if total_owed==0 or clamping/labeling negatives as 'رصيد دائن'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_shipping_accounts.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/shipping_results.xml"
+  ],
+  "action_items": [
+    "(Low) Consider validation/UI label so MTBAQI (remaining) cannot show a misleading negative when no analysis exists yet."
+  ],
+  "critical_code_review_comments": [
+    "shipping_accounts.py date validation correctly rejects YYYY-DD-MM and non-positive amounts via Pydantic + 400 on bad date.",
+    "User isolation enforced via user_id filter on every query — verified in tests.",
+    "GET /shipping-accounts merges configured deferred companies (from settings) with aggregated owed amounts from analyses[*].shipping_breakdown — works even when no analysis yet (empty totals).",
+    "Dashboard math expected_salla_transfer = total_sales - total_payment_fees - regular_shipping_cost verified to match within 0.01 precision.",
+    "Frontend ShippingAccounts.jsx uses Arabic company names directly in data-testid (e.g., account-سمسا, toggle-payments-سمسا). Works fine in Playwright via Unicode selectors; just be aware tools that strip non-ASCII could fail."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_shipping_accounts.py (new)",
+    "/app/backend/tests/conftest.py (new — generates /tmp/salla_test.xlsx)",
+    "/app/backend/tests/test_snapchat.py (fixed empty default for REACT_APP_BACKEND_URL)"
+  ],
+  "success_rate": {"backend": "100% (55/55)", "frontend": "100% (smoke)"},
+  "test_credentials": "admin@hesab.app / admin123 (existing). New ephemeral users created via /api/auth/register for isolation tests.",
+  "seed_data_creation": "conftest.py generates /tmp/salla_test.xlsx fixture (10 Salla-format orders across سمسا/أرامكس/جندل) on demand.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest entrypoint: cd /app && python -m pytest backend/tests/ -v. All shipping-accounts logic green. Frontend smoke flow tested via Playwright; full e2e with real Excel upload via UI not re-tested (covered by backend Excel integration test). For UI regression, login as admin@hesab.app/admin123 and exercise: Settings → toggle shipping-deferred-0 (سمسا) → save → Sidebar nav-shipping-accounts → KPI cards → دفعة modal → السجل toggle → delete-payment-{id}.",
+  "rca of the issue": "N/A — no bugs found."
+}

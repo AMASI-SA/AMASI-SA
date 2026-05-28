@@ -159,6 +159,7 @@ export default function Settings() {
                     name: (s.name || "").trim(),
                     cost_per_order: Number(s.cost_per_order || 0),
                     vat_percent: Number(s.vat_percent || 0),
+                    is_deferred: !!s.is_deferred,
                 })).filter((s) => s.name),
             });
             toast.success("تم حفظ الإعدادات");
@@ -298,7 +299,7 @@ export default function Settings() {
                         <p className="text-sm text-muted-foreground mt-1">تكلفة الشحنة (ر.س) + نسبة الضريبة على الشحن</p>
                     </div>
                     <button
-                        onClick={() => setShippings([...shippings, { _rid: newRowId(), name: "", cost_per_order: 0, vat_percent: 15 }])}
+                        onClick={() => setShippings([...shippings, { _rid: newRowId(), name: "", cost_per_order: 0, vat_percent: 15, is_deferred: false }])}
                         className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-accent transition-colors"
                         data-testid="add-shipping-btn"
                     >
@@ -307,14 +308,15 @@ export default function Settings() {
                 </div>
                 <div className="space-y-3" data-testid="shipping-companies-list">
                     {/* Header row */}
-                    <div className="grid grid-cols-12 gap-3 text-xs font-semibold text-muted-foreground px-1 hidden md:grid">
+                    <div className="grid grid-cols-14 gap-3 text-xs font-semibold text-muted-foreground px-1 hidden md:grid">
                         <div className="col-span-5">اسم شركة الشحن</div>
                         <div className="col-span-3 text-center">تكلفة الشحنة (ر.س)</div>
                         <div className="col-span-3 text-center">نسبة الضريبة على الشحن %</div>
+                        <div className="col-span-2 text-center" title="شركات لا تخصم تكلفتها من حوالة سلة">آجل</div>
                         <div className="col-span-1"></div>
                     </div>
                     {shippings.map((s, i) => (
-                        <div key={s._rid || `s-${i}`} className="grid grid-cols-12 gap-3 items-center">
+                        <div key={s._rid || `s-${i}`} className="grid grid-cols-14 gap-3 items-center">
                             <input
                                 type="text"
                                 value={s.name}
@@ -360,6 +362,23 @@ export default function Settings() {
                                 />
                                 <span className="px-3 py-2.5 text-sm font-bold text-muted-foreground bg-accent/60 border-s border-border">%</span>
                             </div>
+                            <label
+                                className={`col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors select-none ${s.is_deferred ? "bg-amber-50 border-amber-300 text-amber-800" : "border-border bg-white hover:bg-accent/40"}`}
+                                title="إذا فُعّل: لا تُخصم تكلفته من حوالة سلة، وتُسجَّل كذمم مستحقة"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={!!s.is_deferred}
+                                    onChange={(e) => {
+                                        const arr = [...shippings];
+                                        arr[i] = { ...arr[i], is_deferred: e.target.checked };
+                                        setShippings(arr);
+                                    }}
+                                    className="w-4 h-4 accent-amber-500 cursor-pointer"
+                                    data-testid={`shipping-deferred-${i}`}
+                                />
+                                <span className="text-xs font-bold">{s.is_deferred ? "آجل" : "—"}</span>
+                            </label>
                             <button
                                 onClick={() => setShippings(shippings.filter((_, idx) => idx !== i))}
                                 className="col-span-1 p-2.5 rounded-lg border border-border hover:bg-red-50 hover:text-red-600 transition-colors"

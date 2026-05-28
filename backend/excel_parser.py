@@ -267,6 +267,7 @@ def match_settings(
         normalize_name(s["name"]): {
             "cost_per_order": float(s.get("cost_per_order", 0) or 0),
             "vat_percent": float(s.get("vat_percent", 0) or 0),
+            "is_deferred": bool(s.get("is_deferred", False)),
         }
         for s in shipping_settings
     }
@@ -310,6 +311,7 @@ def match_settings(
 
     shipping_breakdown = []
     total_shipping_cost = 0.0
+    deferred_shipping_cost = 0.0
     for sc in parsed["shipping_companies"]:
         key = normalize_name(sc["name"])
         cfg = shipping_map.get(key)
@@ -319,14 +321,17 @@ def match_settings(
                     cfg = v
                     break
         matched = cfg is not None
-        cfg = cfg or {"cost_per_order": 0.0, "vat_percent": 0.0}
+        cfg = cfg or {"cost_per_order": 0.0, "vat_percent": 0.0, "is_deferred": False}
 
         cost = cfg["cost_per_order"]
         vat_pct = cfg["vat_percent"]
+        is_deferred = bool(cfg.get("is_deferred", False))
         base_cost = round(cost * sc["orders_count"], 2)
         vat_amount = round(base_cost * vat_pct / 100.0, 2)
         total = round(base_cost + vat_amount, 2)
         total_shipping_cost += total
+        if is_deferred:
+            deferred_shipping_cost += total
         shipping_breakdown.append({
             "name": sc["name"],
             "orders_count": sc["orders_count"],
@@ -336,6 +341,7 @@ def match_settings(
             "vat_amount": vat_amount,
             "total_cost": total,
             "matched": matched,
+            "is_deferred": is_deferred,
         })
 
     return {
@@ -343,4 +349,5 @@ def match_settings(
         "shipping_breakdown": shipping_breakdown,
         "total_payment_fees": round(total_payment_fees, 2),
         "total_shipping_cost": round(total_shipping_cost, 2),
+        "deferred_shipping_cost": round(deferred_shipping_cost, 2),
     }

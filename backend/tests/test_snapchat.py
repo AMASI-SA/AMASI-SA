@@ -11,7 +11,7 @@ import pytest
 import requests
 from urllib.parse import urlparse, parse_qs
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://salla-analytics.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
 

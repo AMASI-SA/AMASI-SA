@@ -7,6 +7,7 @@ import {
     Receipt,
     SignOut,
     ChartPieSlice,
+    Truck,
 } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
 
@@ -16,6 +17,7 @@ const links = [
     { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },
     { to: "/daily-costs", label: "التكاليف اليومية", icon: Receipt, testid: "nav-daily-costs" },
     { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
+    { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
     { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" },
 ];
 

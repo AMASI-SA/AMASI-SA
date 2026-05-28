@@ -33,6 +33,7 @@ from auth import (
 from excel_parser import parse_salla_excel, match_settings
 from exports import export_report_excel, export_report_pdf
 from snapchat_routes import attach_snapchat_routes
+from shipping_accounts import attach_shipping_accounts_routes
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -74,6 +75,7 @@ class ShippingCompany(BaseModel):
     name: str
     cost_per_order: float = Field(ge=0)
     vat_percent: float = Field(ge=0, le=100, default=0.0)
+    is_deferred: bool = False  # if True: cost not deducted from Salla→bank transfer (accounts payable)
 
 
 class SettingsIn(BaseModel):
@@ -227,6 +229,7 @@ def _build_report(parsed: dict, payment_settings, shipping_settings,
             "total_orders": parsed["total_orders"],
             "total_payment_fees": matched["total_payment_fees"],
             "total_shipping_cost": matched["total_shipping_cost"],
+            "deferred_shipping_cost": matched.get("deferred_shipping_cost", 0.0),
             "total_ads_cost": total_ads,
             "total_product_cost": float(product_costs),
             "net_revenue_after_fees": round(parsed["total_sales"] - matched["total_payment_fees"], 2),
@@ -372,6 +375,7 @@ async def dashboard(
     total_orders = sum(a["report"]["summary"]["total_orders"] for a in analyses)
     total_fees = sum(a["report"]["summary"]["total_payment_fees"] for a in analyses)
     total_shipping = sum(a["report"]["summary"]["total_shipping_cost"] for a in analyses)
+    deferred_shipping = sum(a["report"]["summary"].get("deferred_shipping_cost", 0) for a in analyses)
     total_ads = sum(a["report"]["summary"].get("total_ads_cost", 0) for a in analyses)
     total_products = sum(a["report"]["summary"].get("total_product_cost", 0) for a in analyses)
     net_profit = sum(a["report"]["summary"]["net_profit"] for a in analyses)
@@ -392,7 +396,6 @@ async def dashboard(
     tabby_keywords = ("تابي", "tabby")
     emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
     cod_keywords = ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery")
-    bnpl_keywords = tamara_keywords + tabby_keywords + emkan_keywords
     for a in analyses:
         for p in a["report"].get("payment_breakdown", []):
             total_vat += float(p.get("vat_amount", 0) or 0)
@@ -464,6 +467,12 @@ async def dashboard(
             "electronic_net": round(other_payment_sales - other_payment_fees, 2),
             "bnpl_net": round(bnpl_sales - bnpl_fees, 2),
             "total_shipping_cost": round(total_shipping, 2),
+            "deferred_shipping_cost": round(deferred_shipping, 2),
+            "regular_shipping_cost": round(total_shipping - deferred_shipping, 2),
+            # المتوقع تحويله من سلة إلى البنك = المبيعات − عمولات الدفع − شحن غير آجل
+            "expected_salla_transfer": round(
+                total_sales - total_fees - (total_shipping - deferred_shipping), 2
+            ),
             "total_ads_cost": round(total_ads + daily_ads_total, 2),
             "total_product_cost": round(total_products, 2),
             "daily_expenses_total": round(daily_products_total, 2),
@@ -496,6 +505,7 @@ async def root():
 
 # ── App wiring ────────────────────────────────────────────────────────────────
 attach_snapchat_routes(api, db)
+attach_shipping_accounts_routes(api, db)
 app.include_router(api)
 
 # CORS
@@ -522,6 +532,7 @@ async def on_startup():
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
     await db.analyses.create_index([("user_id", 1), ("created_at", -1)])
     await db.snapchat_connections.create_index("user_id", unique=True)
+    await db.shipping_payments.create_index([("user_id", 1), ("company_name", 1), ("payment_date", -1)])
     await seed_admin(db)
     logger.info("Hesab backend started successfully.")
 

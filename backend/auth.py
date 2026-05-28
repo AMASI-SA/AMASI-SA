@@ -142,11 +142,11 @@ DEFAULT_PAYMENT_METHODS = [
 ]
 
 DEFAULT_SHIPPING_COMPANIES = [
-    {"name": "سمسا", "cost_per_order": 23.0, "vat_percent": 15.0},
-    {"name": "جندل", "cost_per_order": 19.0, "vat_percent": 15.0},
-    {"name": "أرامكس", "cost_per_order": 27.0, "vat_percent": 15.0},
-    {"name": "DHL", "cost_per_order": 35.0, "vat_percent": 15.0},
-    {"name": "ريد بوكس", "cost_per_order": 21.0, "vat_percent": 15.0},
+    {"name": "سمسا", "cost_per_order": 23.0, "vat_percent": 15.0, "is_deferred": False},
+    {"name": "جندل", "cost_per_order": 19.0, "vat_percent": 15.0, "is_deferred": False},
+    {"name": "أرامكس", "cost_per_order": 27.0, "vat_percent": 15.0, "is_deferred": False},
+    {"name": "DHL", "cost_per_order": 35.0, "vat_percent": 15.0, "is_deferred": False},
+    {"name": "ريد بوكس", "cost_per_order": 21.0, "vat_percent": 15.0, "is_deferred": False},
 ]
 
 
