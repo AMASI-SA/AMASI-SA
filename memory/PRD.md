@@ -20,6 +20,23 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## Implemented (2026-05 — Deferred Shipping Companies)
+- ✅ **Two-tier shipping**: each shipping company can be marked `is_deferred=true` in Settings.
+  - Regular companies: cost deducted directly from sales (default behavior).
+  - Deferred companies: cost still counted as expense (net_profit), but **not** deducted from the projected Salla→bank transfer.
+- ✅ **New backend module** `shipping_accounts.py`:
+  - `GET /api/shipping-accounts` — list each deferred company with total_owed (from analyses) + total_paid (from ledger) + remaining.
+  - `GET /api/shipping-accounts/{company}/payments` — payment history (DESC by date).
+  - `POST /api/shipping-accounts/{company}/payments` — record a payment {amount, payment_date, invoice_number, note}.
+  - `DELETE /api/shipping-accounts/payments/{payment_id}` — undo a payment.
+  - MongoDB collection `shipping_payments` with index `(user_id, company_name, payment_date desc)`.
+- ✅ **Excel parser & report**: `match_settings()` now propagates `is_deferred` into each `shipping_breakdown` row and computes `deferred_shipping_cost` aggregate.
+- ✅ **Dashboard**: new fields/KPIs `deferred_shipping_cost`, `regular_shipping_cost`, and `expected_salla_transfer = total_sales − total_payment_fees − regular_shipping_cost`.
+- ✅ **Frontend page** `/shipping-accounts` (`ShippingAccounts.jsx`): summary KPIs (Owed/Paid/Remaining), per-company cards with progress bar, expandable payment ledger (with delete), and "add payment" modal.
+- ✅ **Settings UI**: 14-column grid with a dedicated "آجل" checkbox per shipping row.
+- ✅ **Sidebar**: new `حسابات الشحن الآجلة` link.
+- ✅ Testing: **55/55 backend tests pass** (13 new shipping-accounts tests, 19 snapchat, 23 base). Frontend Playwright smoke green.
+
 ## Implemented (2026-02)
 - ✅ JWT custom auth (register/login/logout/me) with httpOnly cookies + bearer token.
 - ✅ Sidebar layout (RTL) — 6 صفحات: Dashboard, Upload, History, Daily Costs, Reports, Settings.

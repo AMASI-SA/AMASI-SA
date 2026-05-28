@@ -145,7 +145,7 @@ export default function ShippingAccounts() {
                                 </div>
                                 <Stat label="مستحق" value={acc.total_owed} testid={`owed-${acc.name}`} />
                                 <Stat label="مدفوع" value={acc.total_paid} testid={`paid-${acc.name}`} tone="success" />
-                                <Stat label="متبقي" value={acc.remaining} testid={`remaining-${acc.name}`} tone={acc.remaining > 0 ? "warn" : "success"} />
+                                <Stat label="متبقي" value={Math.abs(acc.remaining)} testid={`remaining-${acc.name}`} tone={acc.remaining > 0 ? "warn" : (acc.remaining < 0 ? "credit" : "success")} suffix={acc.remaining < 0 ? "(رصيد دائن)" : ""} />
                                 <div className="md:col-span-3 flex items-center gap-2 justify-start md:justify-end">
                                     <button
                                         type="button"
@@ -336,11 +336,12 @@ function Card({ title, value, testid, tone = "neutral" }) {
     );
 }
 
-function Stat({ label, value, testid, tone = "neutral" }) {
+function Stat({ label, value, testid, tone = "neutral", suffix = "" }) {
     const colors = {
         neutral: "text-foreground",
         success: "text-emerald-700",
         warn: "text-amber-700",
+        credit: "text-sky-700",
     };
     return (
         <div className="md:col-span-2" data-testid={testid}>
@@ -348,6 +349,7 @@ function Stat({ label, value, testid, tone = "neutral" }) {
             <p className={`text-lg md:text-xl font-bold num ${colors[tone]}`}>
                 {formatMoney(value)} <span className="text-xs text-muted-foreground font-semibold">ر.س</span>
             </p>
+            {suffix ? <p className="text-[10px] text-sky-700 font-bold mt-0.5">{suffix}</p> : null}
         </div>
     );
 }
