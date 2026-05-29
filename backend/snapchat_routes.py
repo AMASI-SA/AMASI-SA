@@ -75,6 +75,14 @@ def _build_router(db) -> APIRouter:
         async with httpx.AsyncClient(timeout=20.0) as http:
             try:
                 resp = await http.post(SNAPCHAT_TOKEN_URL, data=data)
+                if resp.status_code == 400 and "invalid_client" in (resp.text or "").lower():
+                    # Retry with HTTP Basic Auth
+                    logger.info("Snapchat refresh invalid_client via form body; retrying with Basic Auth")
+                    resp = await http.post(
+                        SNAPCHAT_TOKEN_URL,
+                        data={"refresh_token": conn["refresh_token"], "grant_type": "refresh_token"},
+                        auth=(conn["client_id"], conn["client_secret"]),
+                    )
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 logger.error("Snapchat refresh failed: %s", exc.response.text)
@@ -235,20 +243,39 @@ def _build_router(db) -> APIRouter:
         if not conn:
             return RedirectResponse(url=f"{frontend}/settings?snapchat=error&msg=config_missing")
 
-        data = {
+        # Snapchat token endpoint expects credentials in form body. Some installations
+        # additionally require HTTP Basic Auth — if the first call fails with
+        # invalid_client, we retry with Basic Auth before giving up.
+        form_data = {
             "code": code,
             "client_id": conn["client_id"],
             "client_secret": conn["client_secret"],
             "grant_type": "authorization_code",
             "redirect_uri": conn["redirect_uri"],
         }
+        basic_data = {
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": conn["redirect_uri"],
+        }
         async with httpx.AsyncClient(timeout=20.0) as http:
             try:
-                resp = await http.post(SNAPCHAT_TOKEN_URL, data=data)
+                resp = await http.post(SNAPCHAT_TOKEN_URL, data=form_data)
+                if resp.status_code == 400 and "invalid_client" in (resp.text or "").lower():
+                    # Retry with HTTP Basic Auth (RFC 6749 §2.3.1)
+                    logger.info("Snapchat invalid_client via form body; retrying with Basic Auth")
+                    resp = await http.post(
+                        SNAPCHAT_TOKEN_URL,
+                        data=basic_data,
+                        auth=(conn["client_id"], conn["client_secret"]),
+                    )
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
-                logger.error("Snapchat token exchange failed: %s", exc.response.text)
-                msg = (exc.response.text or "exchange_failed")[:200]
+                logger.error(
+                    "Snapchat token exchange failed (status=%s): %s",
+                    exc.response.status_code, exc.response.text,
+                )
+                msg = (exc.response.text or "exchange_failed")[:300]
                 return RedirectResponse(url=f"{frontend}/settings?snapchat=error&msg={msg}")
             except httpx.HTTPError:
                 return RedirectResponse(url=f"{frontend}/settings?snapchat=error&msg=network_error")
