@@ -39,19 +39,62 @@ class ProductItem(BaseModel):
     quantity: float = 0
     price: float = 0
 
+    class Config:
+        extra = "allow"  # keep product extras like sku, image_url, options…
+
+
+def _to_float(value: Any, default: float = 0.0) -> float:
+    """Make.com may send numbers as strings; coerce safely."""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
 
 class WebhookOrderIn(BaseModel):
-    """Liberal schema — Make.com mappings vary, so most fields are optional."""
-    order_number: Union[str, int] = Field(..., description="رقم الطلب (المفتاح)")
-    order_date: Optional[str] = None  # YYYY-MM-DD or ISO
+    """Liberal schema — accepts every field listed in the user's Make.com mapping.
+
+    Required: at least one of {order_number, order_id} must be present (we use
+    order_number as the dedup key; falls back to order_id if not provided).
+    All numeric fields accept strings (Make.com tends to stringify numbers).
+    """
+    # Identifiers
+    order_id: Optional[Union[str, int]] = ""
+    order_number: Optional[Union[str, int]] = None
+
+    # Dates
+    created_at: Optional[str] = None  # ISO 8601 from Salla via Make
+    order_date: Optional[str] = None  # Legacy alias
+
+    # Status
     status: Optional[str] = ""
+    payment_status: Optional[str] = ""
+
+    # Customer
     customer_name: Optional[str] = ""
-    total_amount: float = 0.0
-    discount: float = 0.0
-    tax: float = 0.0
+    customer_mobile: Optional[str] = ""
+
+    # Payment
     payment_method: Optional[str] = ""
+
+    # Shipping
     shipping_company: Optional[str] = ""
+    shipping_cost: Optional[Union[str, float, int]] = None
+
+    # Amounts
+    subtotal: Optional[Union[str, float, int]] = None
+    discount: Optional[Union[str, float, int]] = None
+    tax: Optional[Union[str, float, int]] = None
+    total: Optional[Union[str, float, int]] = None
+    total_amount: Optional[Union[str, float, int]] = None  # legacy alias for total
+    currency: Optional[str] = ""
+
+    # Items + meta
     products: list[ProductItem] = []
+    tags: list[str] = []
+    source: Optional[str] = ""
 
     class Config:
         extra = "allow"  # keep unknown Make.com fields under .raw
@@ -105,10 +148,11 @@ def _orders_to_parsed(orders: list[dict]) -> dict:
     sample_orders: list[dict] = []
 
     for o in orders:
-        amount = float(o.get("total_amount") or 0)
+        # Prefer `total`; fall back to legacy `total_amount`
+        amount = float(o.get("total") or o.get("total_amount") or 0)
         pay = (o.get("payment_method") or "غير محدد").strip() or "غير محدد"
         ship = (o.get("shipping_company") or "غير محدد").strip() or "غير محدد"
-        src = "Make.com"
+        src = (o.get("source") or "").strip() or "Make.com"
 
         total_sales += amount
         total_orders += 1
@@ -216,23 +260,58 @@ def _build_router(db) -> APIRouter:
             except Exception as exc:
                 errors.append({"data": raw, "error": str(exc)})
                 continue
-            order_number = str(payload.order_number).strip()
+
+            # order_number is dedup key; fall back to order_id when absent
+            order_number = str(payload.order_number or payload.order_id or "").strip()
             if not order_number:
-                errors.append({"data": raw, "error": "missing order_number"})
+                errors.append({"data": raw, "error": "missing order_number/order_id"})
                 continue
+
+            # total: prefer `total`; fall back to legacy `total_amount` only if `total` not provided
+            if payload.total is not None and str(payload.total) != "":
+                total_val = _to_float(payload.total)
+            else:
+                total_val = _to_float(payload.total_amount)
+
+            # normalize date — prefer created_at, then order_date
+            order_date_norm = (
+                _normalize_order_date(payload.created_at)
+                or _normalize_order_date(payload.order_date)
+                or _normalize_order_date(raw.get("created_at"))
+                or _normalize_order_date(raw.get("order_date"))
+            )
 
             doc = {
                 "user_id": user_id,
+                # Identifiers
                 "order_number": order_number,
-                "order_date": _normalize_order_date(payload.order_date) or _normalize_order_date(raw.get("order_date")),
+                "order_id": str(payload.order_id or "").strip(),
+                # Dates
+                "created_at_source": (payload.created_at or "").strip(),
+                "order_date": order_date_norm,
+                # Status
                 "status": (payload.status or "").strip(),
+                "payment_status": (payload.payment_status or "").strip(),
+                # Customer
                 "customer_name": (payload.customer_name or "").strip(),
-                "total_amount": round(float(payload.total_amount or 0), 2),
-                "discount": round(float(payload.discount or 0), 2),
-                "tax": round(float(payload.tax or 0), 2),
+                "customer_mobile": (payload.customer_mobile or "").strip(),
+                # Payment
                 "payment_method": (payload.payment_method or "").strip(),
+                # Shipping
                 "shipping_company": (payload.shipping_company or "").strip(),
+                "shipping_cost": round(_to_float(payload.shipping_cost), 2),
+                # Amounts
+                "subtotal": round(_to_float(payload.subtotal), 2),
+                "discount": round(_to_float(payload.discount), 2),
+                "tax": round(_to_float(payload.tax), 2),
+                "total": round(total_val, 2),
+                "total_amount": round(total_val, 2),  # alias kept for analyses pipeline
+                "currency": (payload.currency or "").strip(),
+                # Items + meta
                 "products": [p.dict() for p in payload.products],
+                "tags": [str(t).strip() for t in (payload.tags or []) if str(t).strip()],
+                "source": (payload.source or "").strip(),
+                # Bookkeeping
                 "raw": raw,
                 "updated_at": _now_iso(),
             }
@@ -272,16 +351,25 @@ def _build_router(db) -> APIRouter:
             "total_received": tok.get("total_received", 0),
             "total_orders_in_db": total_orders,
             "sample_payload": {
+                "order_id": "987654321",
                 "order_number": "12345",
-                "order_date": "2026-02-15",
-                "status": "completed",
-                "customer_name": "Ahmed",
-                "total_amount": 250.0,
-                "discount": 10.0,
-                "tax": 32.5,
+                "created_at": "2026-02-15T14:30:00+03:00",
+                "customer_name": "أحمد محمد",
+                "customer_mobile": "+966500000000",
                 "payment_method": "مدى",
+                "payment_status": "paid",
                 "shipping_company": "سمسا",
-                "products": [{"name": "منتج 1", "quantity": 2, "price": 100.0}],
+                "shipping_cost": 23.0,
+                "subtotal": 240.0,
+                "discount": 10.0,
+                "total": 285.0,
+                "currency": "SAR",
+                "products": [
+                    {"name": "منتج 1", "quantity": 2, "price": 100.0},
+                    {"name": "منتج 2", "quantity": 1, "price": 50.0}
+                ],
+                "tags": ["new-customer", "weekend"],
+                "source": "store"
             },
         }
 
