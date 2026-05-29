@@ -15,6 +15,8 @@ const withRowIds = (arr) => (arr || []).map((it) => ({ _rid: it?._rid || newRowI
 export default function Settings() {
     const [payments, setPayments] = useState([]);
     const [shippings, setShippings] = useState([]);
+    const [shipApproved, setShipApproved] = useState([]);
+    const [codApproved, setCodApproved] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -57,6 +59,8 @@ export default function Settings() {
                 const { data } = await api.get("/settings");
                 setPayments(withRowIds(data.payment_methods));
                 setShippings(withRowIds(data.shipping_companies));
+                setShipApproved(data.shipping_approved_statuses || []);
+                setCodApproved(data.cod_approved_statuses || []);
             } finally { setLoading(false); }
         })();
         loadSnapConfig();
@@ -161,6 +165,8 @@ export default function Settings() {
                     vat_percent: Number(s.vat_percent || 0),
                     is_deferred: !!s.is_deferred,
                 })).filter((s) => s.name),
+                shipping_approved_statuses: shipApproved,
+                cod_approved_statuses: codApproved,
             });
             toast.success("تم حفظ الإعدادات");
         } catch (err) {
@@ -391,6 +397,38 @@ export default function Settings() {
                     ))}
                 </div>
             </div>
+
+            {/* Phase 1: Order Status Approval settings */}
+            <div className="rounded-xl border border-border bg-white p-6" data-testid="status-approval-section">
+                <div className="mb-5">
+                    <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>حالات اعتماد الشحن و COD</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        حدِّد متى يصبح <strong>رصيد الشحن</strong> مستحقاً لشركة الشحن، ومتى يصبح <strong>COD</strong> محصَّلاً.
+                        أي حالة غير محدَّدة هنا تظهر تحت "غير معتمد".
+                    </p>
+                </div>
+
+                <StatusListEditor
+                    title="حالات اعتماد رصيد الشحن"
+                    description='افتراضياً: "تم التوصيل". أضف أي حالة إضافية ترى أنها تعتمد رصيد الشحن.'
+                    values={shipApproved}
+                    onChange={setShipApproved}
+                    suggestions={["تم التوصيل", "delivered", "completed", "تم الاستلام"]}
+                    testIdPrefix="ship-approved"
+                />
+
+                <div className="my-5 border-t border-border" />
+
+                <StatusListEditor
+                    title="حالات اعتماد COD"
+                    description='افتراضياً: "تم التوصيل". المبالغ بهذه الحالات تظهر كمستحقات على شركة الشحن.'
+                    values={codApproved}
+                    onChange={setCodApproved}
+                    suggestions={["تم التوصيل", "delivered", "completed"]}
+                    testIdPrefix="cod-approved"
+                />
+            </div>
+
             {/* Snapchat Ads integration */}
             <div className="rounded-xl border border-border bg-white p-6" data-testid="snapchat-section">
                 <div className="flex items-start justify-between gap-3 mb-5 flex-col md:flex-row">
@@ -545,6 +583,80 @@ export default function Settings() {
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+
+function StatusListEditor({ title, description, values, onChange, suggestions, testIdPrefix }) {
+    const [draft, setDraft] = useState("");
+    const add = () => {
+        const v = draft.trim();
+        if (!v || values.includes(v)) { setDraft(""); return; }
+        onChange([...values, v]);
+        setDraft("");
+    };
+    const remove = (v) => onChange(values.filter((x) => x !== v));
+    const toggleSuggestion = (s) => {
+        if (values.includes(s)) {
+            remove(s);
+        } else {
+            onChange([...values, s]);
+        }
+    };
+    return (
+        <div data-testid={`${testIdPrefix}-editor`}>
+            <h3 className="font-bold text-base mb-1">{title}</h3>
+            <p className="text-xs text-muted-foreground mb-3">{description}</p>
+
+            <div className="flex flex-wrap gap-2 mb-3" data-testid={`${testIdPrefix}-chips`}>
+                {values.length === 0 && <span className="text-xs text-muted-foreground italic">لا توجد حالات معتمدة بعد</span>}
+                {values.map((v) => (
+                    <span key={v} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {v}
+                        <button
+                            type="button"
+                            onClick={() => remove(v)}
+                            className="hover:text-red-600 transition-colors"
+                            title="إزالة"
+                            data-testid={`${testIdPrefix}-remove-${v}`}
+                        >×</button>
+                    </span>
+                ))}
+            </div>
+
+            <div className="flex items-center gap-2 mb-3">
+                <input
+                    type="text"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+                    placeholder='مثلاً: تم التوصيل، delivered…'
+                    className="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                    data-testid={`${testIdPrefix}-input`}
+                />
+                <button
+                    type="button"
+                    onClick={add}
+                    className="px-3 py-2 rounded-lg border border-border text-sm font-semibold hover:bg-accent transition-colors"
+                    data-testid={`${testIdPrefix}-add-btn`}
+                >+ إضافة</button>
+            </div>
+
+            {suggestions.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                    <span className="font-semibold ms-1">اقتراحات سريعة:</span>
+                    {suggestions.map((s) => (
+                        <button
+                            key={s}
+                            type="button"
+                            onClick={() => toggleSuggestion(s)}
+                            className={`mx-1 inline-block px-2 py-1 rounded-md border text-xs font-semibold transition-colors ${values.includes(s) ? "bg-emerald-100 border-emerald-300 text-emerald-800" : "bg-accent/40 border-border hover:bg-accent"}`}
+                            data-testid={`${testIdPrefix}-suggest-${s}`}
+                        >{values.includes(s) ? "✓ " : "+ "}{s}</button>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

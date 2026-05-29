@@ -25,6 +25,7 @@ TRACKED_FIELDS = (
     "order_date",            # ISO date YYYY-MM-DD (normalized)
     "order_date_raw",        # original string from source
     "order_status",
+    "order_status_slug",
     "payment_status",
     "customer_name",
     "customer_mobile",

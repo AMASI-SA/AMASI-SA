@@ -71,6 +71,8 @@ class WebhookOrderIn(BaseModel):
 
     # Status
     status: Optional[str] = ""
+    order_status: Optional[str] = ""
+    order_status_slug: Optional[str] = ""
     payment_status: Optional[str] = ""
 
     # Customer
@@ -226,7 +228,8 @@ def _build_router(db) -> APIRouter:
                 "order_date": order_date_norm,
                 "order_date_raw": (payload.created_at or payload.order_date or "").strip(),
                 # Status
-                "order_status": (payload.status or "").strip(),
+                "order_status": (payload.order_status or payload.status or "").strip(),
+                "order_status_slug": (payload.order_status_slug or "").strip(),
                 "payment_status": (payload.payment_status or "").strip(),
                 # Customer
                 "customer_name": (payload.customer_name or "").strip(),

@@ -37,6 +37,7 @@ from snapchat_routes import attach_snapchat_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
 from orders_db import upsert_order
+from balances import compute_balances
 
 
 def _normalize_date_str(s: str) -> Optional[str]:
@@ -101,6 +102,9 @@ class ShippingCompany(BaseModel):
 class SettingsIn(BaseModel):
     payment_methods: List[PaymentMethod]
     shipping_companies: List[ShippingCompany]
+    # NEW (Phase 1): which order_status values are "approved" for accounting purposes
+    shipping_approved_statuses: Optional[List[str]] = None
+    cod_approved_statuses: Optional[List[str]] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -170,28 +174,62 @@ async def me(user: dict = Depends(current_user)):
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────
+DEFAULT_SHIPPING_APPROVED = ["تم التوصيل", "delivered", "completed", "تم الاستلام"]
+DEFAULT_COD_APPROVED = ["تم التوصيل", "delivered", "completed"]
+
+
 @api.get("/settings")
 async def get_settings(user: dict = Depends(current_user)):
     s = await ensure_user_settings(db, user["id"])
     return {
         "payment_methods": s.get("payment_methods", DEFAULT_PAYMENT_METHODS),
         "shipping_companies": s.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        "shipping_approved_statuses": s.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
+        "cod_approved_statuses": s.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
     }
 
 
 @api.put("/settings")
 async def update_settings(payload: SettingsIn, user: dict = Depends(current_user)):
+    update_doc = {
+        "user_id": user["id"],
+        "payment_methods": [pm.model_dump() for pm in payload.payment_methods],
+        "shipping_companies": [sc.model_dump() for sc in payload.shipping_companies],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if payload.shipping_approved_statuses is not None:
+        update_doc["shipping_approved_statuses"] = [s.strip() for s in payload.shipping_approved_statuses if s.strip()]
+    if payload.cod_approved_statuses is not None:
+        update_doc["cod_approved_statuses"] = [s.strip() for s in payload.cod_approved_statuses if s.strip()]
     await db.settings.update_one(
         {"user_id": user["id"]},
-        {"$set": {
-            "user_id": user["id"],
-            "payment_methods": [pm.model_dump() for pm in payload.payment_methods],
-            "shipping_companies": [sc.model_dump() for sc in payload.shipping_companies],
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }},
+        {"$set": update_doc},
         upsert=True,
     )
     return {"ok": True}
+
+
+@api.get("/balances")
+async def balances_endpoint(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: dict = Depends(current_user),
+):
+    """Shipping & COD balance splits (approved/unapproved) based on order_status."""
+    s = await ensure_user_settings(db, user["id"])
+    shipping_approved = s.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED)
+    cod_approved = s.get("cod_approved_statuses", DEFAULT_COD_APPROVED)
+
+    q = {"user_id": user["id"]}
+    if from_date or to_date:
+        q["order_date"] = {}
+        if from_date:
+            q["order_date"]["$gte"] = from_date
+        if to_date:
+            q["order_date"]["$lte"] = to_date
+
+    orders = await db.unified_orders.find(q, {"_id": 0, "raw_by_source": 0}).to_list(50000)
+    return compute_balances(orders, shipping_approved, cod_approved)
 
 
 # ── Daily Costs ───────────────────────────────────────────────────────────────
@@ -511,6 +549,28 @@ async def dashboard(
         for s in matched_make["shipping_breakdown"]:
             total_vat += float(s.get("vat_amount", 0) or 0)
 
+    # ── Phase 1: shipping/COD balance splits ─────────────────────────────────
+    bal_settings = await ensure_user_settings(db, user["id"])
+    bal_orders_q = {"user_id": user["id"]}
+    if from_date or to_date:
+        bal_orders_q["order_date"] = {}
+        if from_date:
+            bal_orders_q["order_date"]["$gte"] = from_date
+        if to_date:
+            bal_orders_q["order_date"]["$lte"] = to_date
+    bal_orders = await db.unified_orders.find(
+        bal_orders_q, {"_id": 0, "raw_by_source": 0}
+    ).to_list(50000)
+    balances = compute_balances(
+        bal_orders,
+        bal_settings.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
+        bal_settings.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
+    )
+    shipping_balance_approved = balances["shipping"]["total_approved"]
+    shipping_balance_unapproved = balances["shipping"]["total_unapproved"]
+    cod_balance_approved = balances["cod"]["total_approved"]
+    cod_balance_unapproved = balances["cod"]["total_unapproved"]
+
     daily_totals = sum(
         d.get("snapchat_ads", 0) + d.get("snapchat_ads_2", 0)
         + d.get("tiktok_ads", 0) + d.get("instagram_ads", 0)
@@ -579,6 +639,11 @@ async def dashboard(
             "daily_products_total": round(daily_products_total, 2),
             "analyses_count": len(analyses),
             "make_orders_count": int(make_orders_count),
+            # ── Phase 1: shipping & COD balance splits ───────────────────────
+            "shipping_approved": shipping_balance_approved,
+            "shipping_unapproved": shipping_balance_unapproved,
+            "cod_approved": cod_balance_approved,
+            "cod_unapproved": cod_balance_unapproved,
         },
         "monthly": monthly,
         "recent_analyses": [

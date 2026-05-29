@@ -306,7 +306,6 @@ export default function MakeWebhook() {
                                     <th className="text-end py-2 px-2">المجموع</th>
                                     <th className="text-start py-2 px-2">الدفع</th>
                                     <th className="text-start py-2 px-2">حالة الطلب</th>
-                                    <th className="text-start py-2 px-2">حالة الدفع</th>
                                     <th className="text-start py-2 px-2">الشحن</th>
                                     <th className="text-start py-2 px-2">العميل</th>
                                     <th className="text-start py-2 px-2">الجوال</th>

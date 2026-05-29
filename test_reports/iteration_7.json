@@ -1,0 +1,33 @@
+{
+  "summary": "Phase-1 (shipping/COD approved-vs-unapproved split) is fully working end-to-end. 11 new pytest tests added & all 104 backend tests pass (no regressions in the 93 prior tests). Frontend: status-approval-section, StatusListEditor (chips/add/remove/suggest-toggle), saveBtn → PUT /api/settings, and 4 dashboard KPIs all integrate correctly with the backend. Logic verified with 4-order scenario: shipping_approved=50/unapproved=40, cod_approved=300/unapproved=150; electronic orders excluded from COD; case-insensitive matching works; order_status_slug accepted; per-user isolation enforced; PUT settings reflects immediately in /api/balances.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_balances_phase1.py",
+    "/app/test_reports/pytest/balances_phase1_results.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: review-request mentioned data-testid='saveBtn' but the actual save button on Settings uses data-testid='save-settings-btn'. Functionality works; only the testid label differs from the spec wording. Confirm whether to rename or update the spec."
+  ],
+  "critical_code_review_comments": [
+    "balances.py is clean and case-insensitive normalization handles both order_status & order_status_slug correctly.",
+    "COD filter uses substring match on 'cod'/'عند الاستلام' — works as specified; consider documenting allowed COD method tokens to prevent silent mismatches when new providers are added.",
+    "Settings PUT endpoint correctly persists both new optional fields without affecting existing payment_methods/shipping_companies — good backwards compatibility.",
+    "No _id leaks observed in /api/balances or /api/dashboard responses."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_balances_phase1.py (new)"
+  ],
+  "success_rate": {"backend": "100% (104/104, incl. 11 new Phase-1 tests)", "frontend": "100% on tested flows"},
+  "test_credentials": "admin@hesab.app / admin123 (works). For Phase-1 tests, fresh users are auto-registered via /api/auth/register.",
+  "seed_data_creation": "Each pytest run creates 2 ephemeral users (TEST_bal_a_*, TEST_bal_b_*) with 4 webhook-ingested orders on user A for balance scenario coverage. No production data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase-1 balances feature is shipped and tested. Backend pytest suite path: /app/backend/tests/. Run with `REACT_APP_BACKEND_URL=https://salla-analytics.preview.emergentagent.com python -m pytest backend/tests/ -v`. Phase-1 dataset on user A: BAL-1 (تم التوصيل, COD, ship=20, total=300) / BAL-2 (قيد التنفيذ, COD, ship=25, total=150) / BAL-3 (Delivered+slug, مدى, ship=30, total=500) / BAL-4 (جاري التوصيل, Apple Pay, ship=15, total=200). Frontend KPI testids: kpi-shipping-approved/unapproved, kpi-cod-approved/unapproved. Settings editor testids: status-approval-section, ship-approved-{input|add-btn|chips|remove-X|suggest-X}, cod-approved-{...}, save-settings-btn.",
+  "rca of the issue": "N/A — no bugs found."
+}
