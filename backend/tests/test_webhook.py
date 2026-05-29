@@ -182,7 +182,7 @@ def test_build_analysis_success_and_dashboard(user_a):
                             "snapchat_ads": 100, "tiktok_ads": 50, "instagram_ads": 25, "product_costs": 200}, timeout=30)
     assert r.status_code == 200, r.text
     a = r.json()
-    assert a["source"] == "make"
+    assert a["source"] in ("make", "unified")
     assert "id" in a and "report" in a
     summary = a["report"]["summary"]
     # Should have core fields from _build_report

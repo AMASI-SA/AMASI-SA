@@ -144,8 +144,14 @@ export default function MakeWebhook() {
 
             {/* Stats strip */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <StatCard icon={Database} label="إجمالي الطلبات المخزّنة" value={stats?.total_orders_in_db || 0} testid="stat-stored" />
-                <StatCard icon={Lightning} label="إجمالي المستقبَل" value={stats?.total_received_ever || 0} testid="stat-received" />
+                <StatCard icon={Database} label="إجمالي الطلبات الموحَّدة" value={stats?.total_orders_in_db || 0} testid="stat-stored" />
+                <StatCard
+                    icon={Lightning}
+                    label="من Make / Excel"
+                    value={`${stats?.by_source?.make || 0} / ${stats?.by_source?.excel || 0}`}
+                    testid="stat-by-source"
+                    small
+                />
                 <StatCard icon={Calendar} label="آخر مزامنة" value={formatDateTime(stats?.last_sync_at)} testid="stat-last-sync" small />
                 <StatCard
                     icon={Calendar}
@@ -277,7 +283,7 @@ export default function MakeWebhook() {
             {/* Recent orders */}
             <div className="rounded-xl border border-border bg-white p-6" data-testid="recent-orders-section">
                 <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-xl font-bold">آخر الطلبات المستلمة</h2>
+                    <h2 className="text-xl font-bold">آخر الطلبات الموحَّدة (Excel + Make.com)</h2>
                     <Link
                         to="/history"
                         className="text-sm text-brand font-semibold hover:underline inline-flex items-center gap-1"
@@ -286,13 +292,16 @@ export default function MakeWebhook() {
                     </Link>
                 </div>
                 {recent.length === 0 ? (
-                    <p className="text-center py-10 text-sm text-muted-foreground">لم تصلنا أي طلبات بعد. أرسل أول طلب من Make.com وستظهر هنا.</p>
+                    <p className="text-center py-10 text-sm text-muted-foreground">
+                        لم تصلنا أي طلبات بعد. ارفع ملف Excel من القائمة الجانبية أو أرسل أول طلب من Make.com.
+                    </p>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="text-xs font-bold text-muted-foreground uppercase border-b border-border">
                                     <th className="text-start py-2 px-2">رقم الطلب</th>
+                                    <th className="text-start py-2 px-2">المصدر</th>
                                     <th className="text-start py-2 px-2">التاريخ</th>
                                     <th className="text-end py-2 px-2">المجموع</th>
                                     <th className="text-start py-2 px-2">الدفع</th>
@@ -306,9 +315,29 @@ export default function MakeWebhook() {
                                 {recent.map((o) => {
                                     const amount = Number(o.total_amount || o.total || 0);
                                     const displayDate = o.order_date || (o.received_at ? o.received_at.slice(0, 10) : "");
+                                    const ds = o.data_source || "—";
+                                    const dsLabel = ds === "make" ? "Make" : ds === "excel" ? "Excel" : ds;
+                                    const dsColor = ds === "make"
+                                        ? "bg-yellow-100 text-yellow-700"
+                                        : ds === "excel"
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : "bg-gray-100 text-gray-700";
+                                    // Show "merged" indicator if order touched by both sources
+                                    const sourcesSet = new Set((o.data_sources || []).map((s) => s.source));
+                                    const isMerged = sourcesSet.size > 1;
                                     return (
                                         <tr key={o.order_number} className="border-b border-border last:border-0 hover:bg-accent/30">
                                             <td className="py-2 px-2 font-mono font-bold" dir="ltr">{o.order_number || "—"}</td>
+                                            <td className="py-2 px-2">
+                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${dsColor}`}>
+                                                    {dsLabel}
+                                                </span>
+                                                {isMerged && (
+                                                    <span className="ms-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-700" title="بيانات من Excel و Make">
+                                                        مدمج
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="py-2 px-2" dir="ltr">{displayDate || "—"}</td>
                                             <td className="py-2 px-2 text-end font-bold num">
                                                 {amount > 0 ? `${formatMoney(amount)} ${o.currency || "ر.س"}` : "—"}

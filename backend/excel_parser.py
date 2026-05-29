@@ -31,6 +31,12 @@ SOURCE_COLS = [
     "مصدر الزيارة", "مصدر العميل", "نوع المصدر",
     "order source", "source", "channel", "platform", "referrer",
 ]
+CUSTOMER_NAME_COLS = ["اسم العميل", "العميل", "الاسم", "اسم المشتري", "customer", "customer name", "buyer", "buyer name", "name"]
+CUSTOMER_MOBILE_COLS = ["جوال العميل", "رقم الجوال", "الجوال", "الهاتف", "رقم الهاتف", "phone", "mobile", "customer phone", "customer mobile"]
+SUBTOTAL_COLS = ["المجموع الفرعي", "السعر قبل الضريبة", "subtotal", "sub total", "items total"]
+SHIPPING_COST_COLS = ["تكلفة الشحن", "رسوم الشحن", "shipping cost", "shipping fees", "shipping price"]
+DISCOUNT_COLS = ["الخصم", "قيمة الخصم", "discount", "coupon"]
+CURRENCY_COLS = ["العملة", "currency"]
 
 # Salla exports place the order source at column BA (index 52, 0-indexed) by default.
 SALLA_SOURCE_COL_INDEX = 52  # Excel column "BA"
@@ -129,6 +135,12 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
     col_order = _match_col(headers_norm, ORDER_ID_COLS)
     col_status = _match_col(headers_norm, STATUS_COLS)
     col_date = _match_col(headers_norm, DATE_COLS)
+    col_customer = _match_col(headers_norm, CUSTOMER_NAME_COLS)
+    col_mobile = _match_col(headers_norm, CUSTOMER_MOBILE_COLS)
+    col_subtotal = _match_col(headers_norm, SUBTOTAL_COLS)
+    col_ship_cost = _match_col(headers_norm, SHIPPING_COST_COLS)
+    col_discount = _match_col(headers_norm, DISCOUNT_COLS)
+    col_currency = _match_col(headers_norm, CURRENCY_COLS)
 
     # Fallback: Salla exports place order source at column BA (index 52)
     if col_source is None and len(headers) > SALLA_SOURCE_COL_INDEX:
@@ -147,6 +159,12 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
     shippings: dict[str, dict] = {}
     sources: dict[str, dict] = {}
     sample_orders: list[dict] = []
+    individual_orders: list[dict] = []  # NEW: every order row, used by unified-orders pipeline
+
+    def _cell(col, row):
+        if col is None or col >= len(row) or row[col] in (None, ""):
+            return None
+        return row[col]
 
     for row in data_rows:
         # skip totally empty rows
@@ -190,14 +208,40 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
         src["orders_count"] += 1
         src["total_sales"] += amount
 
+        order_id_val = str(_cell(col_order, row) or "").strip()
+        status_val = str(_cell(col_status, row) or "").strip()
+        date_raw = _cell(col_date, row)
+        date_val = str(date_raw).strip() if date_raw is not None else ""
+
         if len(sample_orders) < 10:
             sample_orders.append({
-                "order_id": str(row[col_order]) if col_order is not None and col_order < len(row) and row[col_order] else "",
+                "order_id": order_id_val,
                 "amount": amount,
                 "payment_method": payment_name,
                 "shipping_company": shipping_name,
-                "status": str(row[col_status]) if col_status is not None and col_status < len(row) and row[col_status] else "",
-                "date": str(row[col_date]) if col_date is not None and col_date < len(row) and row[col_date] else "",
+                "status": status_val,
+                "date": date_val,
+            })
+
+        # NEW: store full per-order data for the unified orders pipeline.
+        # order_number is required as the dedup key — fall back to a synthesized
+        # one if not present so we still preserve aggregates.
+        if order_id_val:
+            individual_orders.append({
+                "order_number": order_id_val,
+                "order_id": order_id_val,
+                "order_date_raw": date_val,
+                "order_status": status_val,
+                "customer_name": str(_cell(col_customer, row) or "").strip(),
+                "customer_mobile": str(_cell(col_mobile, row) or "").strip(),
+                "payment_method": payment_name if payment_name != "غير محدد" else "",
+                "shipping_company": shipping_name if shipping_name != "غير محدد" else "",
+                "shipping_cost": _to_float(_cell(col_ship_cost, row) or 0),
+                "subtotal": _to_float(_cell(col_subtotal, row) or 0),
+                "discount": _to_float(_cell(col_discount, row) or 0),
+                "total_amount": amount,
+                "currency": str(_cell(col_currency, row) or "").strip(),
+                "source": source_name if source_name != "غير محدد" else "",
             })
 
     if total_orders == 0:
@@ -218,6 +262,7 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
             for v in sorted(sources.values(), key=lambda x: -x["orders_count"])
         ],
         "orders_sample": sample_orders,
+        "orders_individual": individual_orders,
         "detected_columns": {
             "total": headers[col_total] if col_total is not None else None,
             "payment": headers[col_payment] if col_payment is not None else None,

@@ -36,6 +36,24 @@ from report_builder import build_report as _build_report
 from snapchat_routes import attach_snapchat_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
+from orders_db import upsert_order
+
+
+def _normalize_date_str(s: str) -> Optional[str]:
+    """Salla dates: 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD'. Return YYYY-MM-DD or None."""
+    if not s:
+        return None
+    s = str(s).strip()
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
+                "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(s, fmt).date().isoformat()
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).date().isoformat()
+    except Exception:
+        return None
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -247,14 +265,51 @@ async def create_analysis(
         snapchat_ads, tiktok_ads, instagram_ads, product_costs,
     )
 
+    # Upsert every individual order into the unified orders store so Excel
+    # data joins the same pipeline as Make.com webhook orders. Dedupes by
+    # order_number and merges fields source-by-source.
+    excel_individual = parsed.get("orders_individual") or []
+    orders_imported = 0
+    orders_updated = 0
+    for o in excel_individual:
+        order_number = (o.get("order_number") or "").strip()
+        if not order_number:
+            continue
+        # Normalize Salla date strings (e.g. "2026-02-15 14:30:00") → YYYY-MM-DD
+        order_date = _normalize_date_str(o.get("order_date_raw") or "")
+        incoming = {
+            "order_id": o.get("order_id") or "",
+            "order_date": order_date,
+            "order_date_raw": o.get("order_date_raw") or "",
+            "order_status": o.get("order_status") or "",
+            "customer_name": o.get("customer_name") or "",
+            "customer_mobile": o.get("customer_mobile") or "",
+            "payment_method": o.get("payment_method") or "",
+            "shipping_company": o.get("shipping_company") or "",
+            "shipping_cost": float(o.get("shipping_cost") or 0),
+            "subtotal": float(o.get("subtotal") or 0),
+            "discount": float(o.get("discount") or 0),
+            "total_amount": float(o.get("total_amount") or 0),
+            "currency": o.get("currency") or "",
+            "source": o.get("source") or "",
+        }
+        res = await upsert_order(db, user["id"], order_number, incoming, source="excel", raw=o)
+        if res["created"]:
+            orders_imported += 1
+        else:
+            orders_updated += 1
+
     analysis = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
         "name": name or file.filename,
         "filename": file.filename,
+        "source": "excel",
         "date": date or datetime.now(timezone.utc).date().isoformat(),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "report": report,
+        "orders_imported": orders_imported,
+        "orders_updated": orders_updated,
     }
     await db.analyses.insert_one(analysis)
     analysis.pop("_id", None)
@@ -502,8 +557,26 @@ async def on_startup():
     await db.shipping_payments.create_index([("user_id", 1), ("company_name", 1), ("payment_date", -1)])
     await db.webhook_tokens.create_index("user_id", unique=True)
     await db.webhook_tokens.create_index("token", unique=True)
-    await db.webhook_orders.create_index([("user_id", 1), ("order_number", 1)], unique=True)
-    await db.webhook_orders.create_index([("user_id", 1), ("order_date", -1)])
+    await db.unified_orders.create_index([("user_id", 1), ("order_number", 1)], unique=True)
+    await db.unified_orders.create_index([("user_id", 1), ("order_date", -1)])
+    await db.unified_orders.create_index([("user_id", 1), ("data_source", 1)])
+    # One-time migration: copy any pre-existing webhook_orders into unified_orders
+    # so users who already have Make.com data don't lose it on the cutover.
+    if await db.webhook_orders.count_documents({}) > 0:
+        async for old in db.webhook_orders.find({}):
+            existing = await db.unified_orders.find_one(
+                {"user_id": old["user_id"], "order_number": old.get("order_number")}
+            )
+            if existing:
+                continue
+            old.pop("_id", None)
+            old.setdefault("data_source", "make")
+            old.setdefault("data_sources", [{"source": "make", "at": old.get("received_at") or datetime.now(timezone.utc).isoformat()}])
+            old.setdefault("field_sources", {})
+            # Normalize legacy 'status' -> 'order_status'
+            if "status" in old and "order_status" not in old:
+                old["order_status"] = old.pop("status")
+            await db.unified_orders.insert_one(old)
     await seed_admin(db)
     logger.info("Hesab backend started successfully.")
 

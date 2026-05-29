@@ -1,0 +1,42 @@
+{
+  "summary": "End-to-end verification of unified_orders refactor (Excel + Make.com merge). Backend: created /app/backend/tests/test_unified_orders.py with 9 new test cases covering Excel→unified_orders write path, Make→unified_orders write path, intelligent merge (critical fields newer-wins, non-critical first-writer-wins, never-overwrite-with-empty, field_sources provenance, data_sources history), GET /api/webhook/orders?data_source filter, GET /api/webhook/stats by_source breakdown, POST /api/webhook/build-analysis aggregating across both sources, DELETE /api/webhook/settings preserving Excel rows, and per-user isolation. All 9 new tests pass. Full regression: 80/80 backend tests green (71 existing + 9 new). Frontend Playwright: /make-webhook page displays stat-by-source (Make/Excel counts e.g. '7 / 1'), stat-stored total, Make/Excel badges color-coded per row, and 'مدمج' indicator on orders touched by both sources. Live ingestion via webhook updates UI on reload. No JS errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/make-webhook", "issues": ["Date inputs in 'إنشاء تحليل من بيانات Make.com' form still use native browser <input type=date> rather than the shadcn calendar component used elsewhere in the app — minor visual inconsistency (carried over from iteration_4)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_unified_orders.py",
+    "/app/backend/tests/test_webhook.py",
+    "/app/test_reports/pytest/unified_orders_results.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "orders_db._merge_into correctly enforces all merge rules: empty-incoming never overwrites, empty-existing accepts new, CRITICAL_FIELDS={total_amount, order_status, payment_status} → newer wins, non-critical → first writer wins. Verified with bidirectional merge tests (excel→make and make→excel).",
+    "field_sources dict accurately tags each scalar field with its writing source (verified field_sources.customer_name='excel' & field_sources.total_amount='make' after merge).",
+    "data_sources array correctly accumulates {source,at} history entries from both sources (verified set('excel','make') after merge), capped at 20 entries — good safeguard.",
+    "Unique index on (user_id, order_number) in unified_orders confirmed at server.py:560 — prevents cross-source duplication.",
+    "DELETE /api/webhook/settings correctly filters delete_many by data_source='make' (webhook_routes.py:325) — pure-excel rows are preserved, verified.",
+    "Migration block in server.py copies legacy webhook_orders → unified_orders with data_source='make' and skips if order_number already present in unified — idempotent and safe.",
+    "Upload-excel (POST /api/analyses) extracts orders_individual and calls upsert_order per order, returning orders_imported/orders_updated counts in response — verified.",
+    "build-analysis correctly reads from unified_orders (not webhook_orders) so analytics aggregate across BOTH excel and make sources via orders_to_parsed → build_report pipeline.",
+    "Per-user isolation airtight: queries always include user_id filter; user B cannot read or affect user A's unified_orders."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_unified_orders.py (new — 9 tests covering unified orders merge logic)"
+  ],
+  "success_rate": {"backend": "100% (9/9 new, 80/80 overall)", "frontend": "100% (UI rendering + integration verified)"},
+  "test_credentials": "admin@hesab.app / admin123 (UI). Ephemeral test_unified_<rand>@hesab.app / test12345 users created per-module for backend isolation tests.",
+  "seed_data_creation": "Each test creates its own UO-* / UO-MRG-* / UO-B-* orders, scoped to ephemeral users. No global seed touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app && python -m pytest backend/tests/ -v. Total 80 tests, all green. Key new file: backend/tests/test_unified_orders.py — covers merge scenarios from both directions. UI behaviors verified live at /make-webhook: stat-by-source card shows 'Make / Excel: M / N'; rows show colored Make (yellow) / Excel (green) badges; orders touched by both sources show small sky-blue 'مدمج' chip. Excel upload endpoint is POST /api/analyses (multipart with `file`), NOT /api/upload-excel as stated in the review request — the response now includes orders_imported and orders_updated counters.",
+  "rca of the issue": "N/A — no bugs found. Refactor is functional, well-isolated, and backward-compatible (existing Excel and Make.com flows + Snapchat + shipping accounts all green in regression)."
+}

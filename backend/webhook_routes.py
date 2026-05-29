@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 
 from report_builder import build_report
+from orders_db import upsert_order, orders_to_parsed
 
 logger = logging.getLogger(__name__)
 
@@ -134,69 +135,6 @@ def _normalize_order_date(value: Any) -> Optional[str]:
         return None
 
 
-def _orders_to_parsed(orders: list[dict]) -> dict:
-    """Reduce raw webhook orders → the same dict shape parse_salla_excel produces.
-
-    This is the bridge that lets us reuse match_settings() + _build_report()
-    without ANY change to the existing pipeline.
-    """
-    total_sales = 0.0
-    total_orders = 0
-    payments: dict[str, dict] = {}
-    shippings: dict[str, dict] = {}
-    sources: dict[str, dict] = {}
-    sample_orders: list[dict] = []
-
-    for o in orders:
-        # Prefer `total`; fall back to legacy `total_amount`
-        amount = float(o.get("total") or o.get("total_amount") or 0)
-        pay = (o.get("payment_method") or "غير محدد").strip() or "غير محدد"
-        ship = (o.get("shipping_company") or "غير محدد").strip() or "غير محدد"
-        src = (o.get("source") or "").strip() or "Make.com"
-
-        total_sales += amount
-        total_orders += 1
-
-        p = payments.setdefault(pay, {"name": pay, "orders_count": 0, "total_sales": 0.0})
-        p["orders_count"] += 1
-        p["total_sales"] += amount
-
-        s = shippings.setdefault(ship, {"name": ship, "orders_count": 0})
-        s["orders_count"] += 1
-
-        sr = sources.setdefault(src, {"name": src, "orders_count": 0, "total_sales": 0.0})
-        sr["orders_count"] += 1
-        sr["total_sales"] += amount
-
-        if len(sample_orders) < 10:
-            sample_orders.append({
-                "order_id": str(o.get("order_number", "")),
-                "amount": amount,
-                "payment_method": pay,
-                "shipping_company": ship,
-                "status": o.get("status") or "",
-                "date": o.get("order_date") or "",
-            })
-
-    return {
-        "total_sales": round(total_sales, 2),
-        "total_orders": total_orders,
-        "payment_methods": [
-            {**v, "total_sales": round(v["total_sales"], 2)}
-            for v in sorted(payments.values(), key=lambda x: -x["total_sales"])
-        ],
-        "shipping_companies": [
-            v for v in sorted(shippings.values(), key=lambda x: -x["orders_count"])
-        ],
-        "order_sources": [
-            {**v, "total_sales": round(v["total_sales"], 2)}
-            for v in sorted(sources.values(), key=lambda x: -x["orders_count"])
-        ],
-        "orders_sample": sample_orders,
-        "detected_columns": {"source": "Make.com"},
-    }
-
-
 def _build_router(db) -> APIRouter:
     from auth import get_current_user_from_db, ensure_user_settings, DEFAULT_PAYMENT_METHODS, DEFAULT_SHIPPING_COMPANIES
 
@@ -281,16 +219,14 @@ def _build_router(db) -> APIRouter:
                 or _normalize_order_date(raw.get("order_date"))
             )
 
-            doc = {
-                "user_id": user_id,
+            incoming = {
                 # Identifiers
-                "order_number": order_number,
                 "order_id": str(payload.order_id or "").strip(),
                 # Dates
-                "created_at_source": (payload.created_at or "").strip(),
                 "order_date": order_date_norm,
+                "order_date_raw": (payload.created_at or payload.order_date or "").strip(),
                 # Status
-                "status": (payload.status or "").strip(),
+                "order_status": (payload.status or "").strip(),
                 "payment_status": (payload.payment_status or "").strip(),
                 # Customer
                 "customer_name": (payload.customer_name or "").strip(),
@@ -304,23 +240,22 @@ def _build_router(db) -> APIRouter:
                 "subtotal": round(_to_float(payload.subtotal), 2),
                 "discount": round(_to_float(payload.discount), 2),
                 "tax": round(_to_float(payload.tax), 2),
-                "total": round(total_val, 2),
-                "total_amount": round(total_val, 2),  # alias kept for analyses pipeline
+                "total_amount": round(total_val, 2),
                 "currency": (payload.currency or "").strip(),
-                # Items + meta
+                # Marketing meta
+                "source": (payload.source or "").strip(),
+                "utm_source": str(raw.get("utm_source") or "").strip(),
+                "utm_medium": str(raw.get("utm_medium") or "").strip(),
+                "utm_campaign": str(raw.get("utm_campaign") or "").strip(),
+                "device": str(raw.get("device") or "").strip(),
+                # Items
                 "products": [p.dict() for p in payload.products],
                 "tags": [str(t).strip() for t in (payload.tags or []) if str(t).strip()],
-                "source": (payload.source or "").strip(),
-                # Bookkeeping
-                "raw": raw,
-                "updated_at": _now_iso(),
             }
-            res = await db.webhook_orders.update_one(
-                {"user_id": user_id, "order_number": order_number},
-                {"$set": doc, "$setOnInsert": {"received_at": _now_iso()}},
-                upsert=True,
+            res = await upsert_order(
+                db, user_id, order_number, incoming, source="make", raw=raw,
             )
-            if res.upserted_id is not None:
+            if res["created"]:
                 accepted += 1
             else:
                 updated += 1
@@ -343,7 +278,7 @@ def _build_router(db) -> APIRouter:
     @router.get("/settings")
     async def get_webhook_settings(user: dict = Depends(current_user)):
         tok = await _get_or_create_token_doc(user["id"])
-        total_orders = await db.webhook_orders.count_documents({"user_id": user["id"]})
+        total_orders = await db.unified_orders.count_documents({"user_id": user["id"]})
         return {
             "token": tok["token"],
             "webhook_url": _public_webhook_url(tok["token"]),
@@ -386,39 +321,40 @@ def _build_router(db) -> APIRouter:
     @router.delete("/settings")
     async def disconnect(user: dict = Depends(current_user)):
         await db.webhook_tokens.delete_many({"user_id": user["id"]})
-        deleted = await db.webhook_orders.delete_many({"user_id": user["id"]})
+        # Only delete orders that came from Make (preserve Excel-imported ones)
+        deleted = await db.unified_orders.delete_many({"user_id": user["id"], "data_source": "make"})
         return {"ok": True, "deleted_orders": deleted.deleted_count}
 
     @router.get("/orders")
     async def list_orders(
         date_from: Optional[str] = Query(None),
         date_to: Optional[str] = Query(None),
+        data_source: Optional[str] = Query(None, description="excel | make"),
         limit: int = Query(100, ge=1, le=500),
         user: dict = Depends(current_user),
     ):
         q: dict = {"user_id": user["id"]}
+        if data_source in {"excel", "make"}:
+            q["data_source"] = data_source
         if date_from or date_to:
             q["order_date"] = {}
             if date_from:
                 q["order_date"]["$gte"] = date_from
             if date_to:
                 q["order_date"]["$lte"] = date_to
-        # Sort by received_at (always present); fallback ordering uses upsert insert time.
         cur = (
-            db.webhook_orders.find(q, {"_id": 0, "raw": 0})
+            db.unified_orders.find(q, {"_id": 0, "raw_by_source": 0})
             .sort([("received_at", -1), ("updated_at", -1)])
             .limit(limit)
         )
         items = await cur.to_list(limit)
-        total = await db.webhook_orders.count_documents(q)
+        total = await db.unified_orders.count_documents(q)
         return {"orders": items, "total": total, "limit": limit}
 
     @router.get("/stats")
     async def stats(user: dict = Depends(current_user)):
         tok = await db.webhook_tokens.find_one({"user_id": user["id"]}, {"_id": 0})
-        if not tok:
-            return {"connected": False}
-        total = await db.webhook_orders.count_documents({"user_id": user["id"]})
+        total = await db.unified_orders.count_documents({"user_id": user["id"]})
         # earliest + latest order_date
         pipeline = [
             {"$match": {"user_id": user["id"], "order_date": {"$ne": None}}},
@@ -427,14 +363,23 @@ def _build_router(db) -> APIRouter:
                         "max_date": {"$max": "$order_date"}}},
         ]
         rng = None
-        async for doc in db.webhook_orders.aggregate(pipeline):
+        async for doc in db.unified_orders.aggregate(pipeline):
             rng = {"earliest": doc.get("min_date"), "latest": doc.get("max_date")}
+        # Per-source breakdown
+        per_source: dict = {"excel": 0, "make": 0}
+        async for doc in db.unified_orders.aggregate([
+            {"$match": {"user_id": user["id"]}},
+            {"$group": {"_id": "$data_source", "n": {"$sum": 1}}},
+        ]):
+            key = doc.get("_id") or "unknown"
+            per_source[key] = int(doc.get("n", 0))
         return {
-            "connected": True,
+            "connected": bool(tok),
             "total_orders_in_db": total,
-            "total_received_ever": tok.get("total_received", 0),
-            "last_sync_at": tok.get("last_sync_at"),
+            "total_received_ever": (tok or {}).get("total_received", 0),
+            "last_sync_at": (tok or {}).get("last_sync_at"),
             "date_range": rng,
+            "by_source": per_source,
         }
 
     @router.post("/build-analysis")
@@ -445,21 +390,21 @@ def _build_router(db) -> APIRouter:
         except ValueError:
             raise HTTPException(status_code=400, detail="صيغة التاريخ يجب أن تكون YYYY-MM-DD")
 
-        cur = db.webhook_orders.find(
+        cur = db.unified_orders.find(
             {
                 "user_id": user["id"],
                 "order_date": {"$gte": payload.date_from, "$lte": payload.date_to},
             },
-            {"_id": 0, "raw": 0},
+            {"_id": 0, "raw_by_source": 0},
         )
         orders = await cur.to_list(50000)
         if not orders:
             raise HTTPException(
                 status_code=400,
-                detail=f"لا توجد طلبات من Make.com بين {payload.date_from} و {payload.date_to}",
+                detail=f"لا توجد طلبات بين {payload.date_from} و {payload.date_to}",
             )
 
-        parsed = _orders_to_parsed(orders)
+        parsed = orders_to_parsed(orders)
         settings = await ensure_user_settings(db, user["id"])
         report = build_report(
             parsed,
@@ -468,18 +413,19 @@ def _build_router(db) -> APIRouter:
             payload.snapchat_ads, payload.tiktok_ads, payload.instagram_ads, payload.product_costs,
         )
 
-        name = payload.name or f"Make.com {payload.date_from} → {payload.date_to}"
+        name = payload.name or f"Unified {payload.date_from} → {payload.date_to}"
         analysis = {
             "id": str(uuid.uuid4()),
             "user_id": user["id"],
             "name": name,
-            "filename": f"make_{payload.date_from}_{payload.date_to}.json",
-            "source": "make",
+            "filename": f"unified_{payload.date_from}_{payload.date_to}.json",
+            "source": "unified",
             "date_from": payload.date_from,
             "date_to": payload.date_to,
             "date": payload.date_to,
             "created_at": _now_iso(),
             "report": report,
+            "orders_count": len(orders),
         }
         await db.analyses.insert_one(analysis)
         analysis.pop("_id", None)
