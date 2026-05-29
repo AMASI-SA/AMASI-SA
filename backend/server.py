@@ -444,6 +444,73 @@ async def dashboard(
         for s in a["report"].get("shipping_breakdown", []):
             total_vat += float(s.get("vat_amount", 0) or 0)
 
+    # ── Live Make.com orders (not yet captured by any analysis) ─────────────
+    # These are streamed via webhook in real time. We aggregate them here so
+    # the dashboard reflects them immediately without requiring the user to
+    # manually click "Build analysis".
+    make_orders_q = {"user_id": user["id"], "data_source": "make"}
+    if from_date or to_date:
+        make_orders_q["order_date"] = {}
+        if from_date:
+            make_orders_q["order_date"]["$gte"] = from_date
+        if to_date:
+            make_orders_q["order_date"]["$lte"] = to_date
+    make_orders = await db.unified_orders.find(
+        make_orders_q, {"_id": 0, "raw_by_source": 0}
+    ).to_list(50000)
+
+    make_orders_count = 0
+    if make_orders:
+        from orders_db import orders_to_parsed
+        settings = await ensure_user_settings(db, user["id"])
+        parsed_make = orders_to_parsed(make_orders)
+        matched_make = match_settings(
+            parsed_make,
+            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        )
+
+        # Roll into existing totals
+        total_sales += parsed_make["total_sales"]
+        total_orders += parsed_make["total_orders"]
+        total_fees += matched_make["total_payment_fees"]
+        total_shipping += matched_make["total_shipping_cost"]
+        deferred_shipping += matched_make.get("deferred_shipping_cost", 0)
+        # Pure-orders profit contribution (ads/products are handled separately below)
+        net_profit += (
+            parsed_make["total_sales"]
+            - matched_make["total_payment_fees"]
+            - matched_make["total_shipping_cost"]
+        )
+        make_orders_count = parsed_make["total_orders"]
+
+        # Recompute BNPL / electronic / VAT splits including make data
+        for p in matched_make["payment_breakdown"]:
+            total_vat += float(p.get("vat_amount", 0) or 0)
+            name_lc = (p.get("name", "") or "").strip().lower()
+            fee = float(p.get("fee_amount", 0) or 0)
+            sales = float(p.get("total_sales", 0) or 0)
+            if any(k in name_lc for k in tamara_keywords):
+                tamara_fees += fee
+                bnpl_fees += fee
+                bnpl_sales += sales
+            elif any(k in name_lc for k in tabby_keywords):
+                tabby_fees += fee
+                bnpl_fees += fee
+                bnpl_sales += sales
+            elif any(k in name_lc for k in emkan_keywords):
+                emkan_fees += fee
+                bnpl_fees += fee
+                bnpl_sales += sales
+            elif any(k in name_lc for k in cod_keywords):
+                cod_fees += fee
+                cod_sales += sales
+            else:
+                other_payment_fees += fee
+                other_payment_sales += sales
+        for s in matched_make["shipping_breakdown"]:
+            total_vat += float(s.get("vat_amount", 0) or 0)
+
     daily_totals = sum(
         d.get("snapchat_ads", 0) + d.get("snapchat_ads_2", 0)
         + d.get("tiktok_ads", 0) + d.get("instagram_ads", 0)
@@ -468,6 +535,14 @@ async def dashboard(
         d = (a.get("date") or a["created_at"])[:7]
         monthly_sales[d] += a["report"]["summary"]["total_sales"]
         monthly_profit[d] += a["report"]["summary"]["net_profit"]
+    # Include live Make.com orders in monthly trends (sales line accurate;
+    # profit line still aggregates from analyses only because per-order profit
+    # allocation needs ads/products distribution we don't have at that grain).
+    for o in make_orders:
+        d = (o.get("order_date") or "")[:7]
+        if not d:
+            continue
+        monthly_sales[d] += float(o.get("total_amount") or 0)
     monthly = sorted([
         {"month": k, "sales": round(v, 2), "profit": round(monthly_profit[k], 2)}
         for k, v in monthly_sales.items()
@@ -503,6 +578,7 @@ async def dashboard(
             "daily_ads_total": round(daily_ads_total, 2),
             "daily_products_total": round(daily_products_total, 2),
             "analyses_count": len(analyses),
+            "make_orders_count": int(make_orders_count),
         },
         "monthly": monthly,
         "recent_analyses": [

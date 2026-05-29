@@ -1,0 +1,40 @@
+{
+  "summary": "Backend verification of the dashboard ↔ Make.com live-orders fix. Added /app/backend/tests/test_dashboard_make.py with 13 focused tests covering: baseline empty dashboard, ingest 5 Make orders via webhook, total_sales/total_orders include Make rows, total_payment_fees computed via match_settings (verified per-method: مدى/تمارا/تابي/إمكان/Apple Pay), total_shipping_cost via shipping_companies settings (سمسا/أرامكس/جندل), tamara_fees/tabby_fees/emkan_fees → bnpl_fees aggregate, electronic (مدى+Apple Pay) → other_payment_fees + electronic_net, expected_salla_transfer formula (sales − fees − regular_shipping), monthly trend sales line includes Make orders, from_date/to_date clamp Make orders (single-day window & out-of-range), Excel rows not double-counted (delta-only verification), per-user isolation (user_b sees zeros), and stable totals shape. All 13 new + 80 existing tests pass — 93/93 green in 25.7s. Numeric assertions verified within ±0.5 SAR tolerance against hand-computed VAT-inclusive expectations.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_dashboard_make.py",
+    "/app/test_reports/pytest/dashboard_make_results.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:451-485 — Make.com live aggregation correctly filters by data_source='make' (Excel rows excluded) and applies the same from_date/to_date range used for analyses, but on the unified_orders order_date field. ✔",
+    "server.py:464-471 — Re-uses orders_to_parsed + match_settings with the user's actual settings (fallbacks to DEFAULT_PAYMENT_METHODS/DEFAULT_SHIPPING_COMPANIES) — fees & shipping computed identically to the analysis path; no logic drift.",
+    "server.py:488-512 — BNPL/electronic/COD/VAT splits re-applied to make payment_breakdown — feature parity with the analyses loop, verified numerically (tamara/tabby/emkan/other all match within rounding).",
+    "server.py:480-484 — net_profit only adds order-level contribution (sales − fees − shipping) for Make; ads/products still flow through daily_costs unchanged. Reasonable design given there is no per-order ad/product allocation for live make orders.",
+    "server.py:541-545 — monthly_sales correctly accumulates Make orders by order_date[:7]; monthly_profit intentionally left from analyses only (documented in comment). ✔",
+    "server.py:569-571 — expected_salla_transfer formula confirmed: total_sales − total_payment_fees − regular_shipping_cost ; the Make path correctly grows all three terms before the formula runs.",
+    "server.py:581 — totals.make_orders_count exposed as int(0) when no Make rows; baseline test confirms graceful fallback.",
+    "server.py:458-460 — projection {'_id': 0, 'raw_by_source': 0} keeps payload light and avoids leaking raw webhook payloads; good practice.",
+    "Per-user isolation airtight — query `{'user_id': user['id'], 'data_source': 'make'}` is consistently enforced; user_b dashboard remains zeroed even after user_a posts 6 orders.",
+    "Minor: orders_to_parsed and match_settings are called every dashboard request when there are Make orders — for users with tens of thousands of Make orders this could become a hot path. Consider caching the parsed result keyed by (user_id, count, latest_received_at) if perf becomes an issue. Not a bug, just a scaling note."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_dashboard_make.py (new — 13 tests)"
+  ],
+  "success_rate": {"backend": "100% (13/13 new, 93/93 overall)", "frontend": "n/a (skipped by request)"},
+  "test_credentials": "admin@hesab.app / admin123 (per memory/test_credentials.md). Backend tests register ephemeral test_dashmake_<rand>@hesab.app / test12345 users per module run.",
+  "seed_data_creation": "Each test module creates two ephemeral users; user A posts 5+1=6 Make orders DM-1..DM-5, DM-EX-1 scoped to that user only. No global seed touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app && python -m pytest backend/tests/ -v. Total 93 tests, all green. New file: backend/tests/test_dashboard_make.py covers the Make→dashboard direct-aggregation fix. Expected Make-derived numbers (with 15% VAT) for the canonical 5-order fixture: total_sales=1000, total_orders=5, total_payment_fees≈52.59, total_shipping_cost≈132.25 (3×سمسا + أرامكس + جندل with VAT), bnpl_fees≈41.95 (تمارا+تابي+إمكان), other_payment_fees≈10.64 (مدى+Apple Pay), electronic_net≈339.36 (350 − 10.64). The Excel-vs-Make double-count test uses a delta approach because there is no public API to seed data_source='excel' rows directly without uploading a real Excel file (which would correctly add to analyses as well).",
+  "rca of the issue": "N/A — fix verified to behave per spec. dashboard endpoint now reads unified_orders with data_source='make' filter, applies user's payment/shipping settings via match_settings, and rolls totals + monthly + BNPL splits + VAT into the existing analyses aggregation. Excel data_source rows are excluded (no double count) and isolation/date-filter behavior matches the spec."
+}
