@@ -48,8 +48,8 @@ export default function Settings() {
                 ad_account_id: data.ad_account_id || "",
                 ad_account_name: data.ad_account_name || "",
             });
-        } catch (err) {
-            console.debug("loadSnapConfig failed:", err);
+        } catch {
+            // snapchat config not yet set up — treat as disconnected
         }
     };
 
