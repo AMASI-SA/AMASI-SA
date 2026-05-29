@@ -36,7 +36,7 @@ from report_builder import build_report as _build_report
 from snapchat_routes import attach_snapchat_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
-from orders_db import upsert_order
+from orders_db import upsert_order, orders_to_parsed
 from balances import compute_balances
 
 
@@ -213,12 +213,17 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
 async def balances_endpoint(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    payment_methods: Optional[str] = None,
+    shipping_companies: Optional[str] = None,
     user: dict = Depends(current_user),
 ):
     """Shipping & COD balance splits (approved/unapproved) based on order_status."""
     s = await ensure_user_settings(db, user["id"])
     shipping_approved = s.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED)
     cod_approved = s.get("cod_approved_statuses", DEFAULT_COD_APPROVED)
+
+    pm_list = [x.strip() for x in (payment_methods or "").split(",") if x.strip()]
+    ship_list = [x.strip() for x in (shipping_companies or "").split(",") if x.strip()]
 
     q = {"user_id": user["id"]}
     if from_date or to_date:
@@ -229,6 +234,17 @@ async def balances_endpoint(
             q["order_date"]["$lte"] = to_date
 
     orders = await db.unified_orders.find(q, {"_id": 0, "raw_by_source": 0}).to_list(50000)
+    if pm_list or ship_list:
+        def _any(v, allowed):
+            if not allowed:
+                return True
+            vv = (v or "").strip().lower()
+            return any(a.strip().lower() in vv or vv in a.strip().lower() for a in allowed if a.strip())
+        orders = [
+            o for o in orders
+            if _any(o.get("payment_method", ""), pm_list)
+            and _any(o.get("shipping_company", ""), ship_list)
+        ]
     return compute_balances(orders, shipping_approved, cod_approved)
 
 
@@ -411,12 +427,110 @@ async def dashboard(
     user: dict = Depends(current_user),
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    payment_methods: Optional[str] = None,
+    shipping_companies: Optional[str] = None,
 ):
-    """Return aggregated totals across all saved analyses and daily costs.
+    """Return aggregated totals from unified_orders (single source of truth).
 
-    Optional filters: from_date / to_date (ISO YYYY-MM-DD) inclusive on `date` field.
+    All KPI cards reflect actual order-level data filtered by each order's
+    own `order_date` (i.e. the date the order was created on Salla). Excel
+    uploads and Make.com webhook orders are both included.
+
+    Optional filters:
+      - from_date / to_date (YYYY-MM-DD) on per-order `order_date`
+      - payment_methods: comma-separated names
+      - shipping_companies: comma-separated names
+
+    `daily_costs` are still filtered by the day (`date`) the cost is logged
+    against, and `recent_analyses` returns the 5 most recent uploads as a
+    convenience list.
     """
-    analyses_q = {"user_id": user["id"]}
+    pm_list = [s.strip() for s in (payment_methods or "").split(",") if s.strip()]
+    ship_list = [s.strip() for s in (shipping_companies or "").split(",") if s.strip()]
+
+    def _matches_any(value: str, allowed: list[str]) -> bool:
+        if not allowed:
+            return True
+        v = (value or "").strip().lower()
+        for a in allowed:
+            a_lc = a.strip().lower()
+            if a_lc and (a_lc == v or a_lc in v or v in a_lc):
+                return True
+        return False
+
+    # ── Unified orders aggregation (THE source of truth) ─────────────────────
+    orders_q = {"user_id": user["id"]}
+    if from_date or to_date:
+        orders_q["order_date"] = {}
+        if from_date:
+            orders_q["order_date"]["$gte"] = from_date
+        if to_date:
+            orders_q["order_date"]["$lte"] = to_date
+
+    all_orders = await db.unified_orders.find(
+        orders_q, {"_id": 0, "raw_by_source": 0}
+    ).to_list(100000)
+
+    if pm_list or ship_list:
+        all_orders = [
+            o for o in all_orders
+            if _matches_any(o.get("payment_method", ""), pm_list)
+            and _matches_any(o.get("shipping_company", ""), ship_list)
+        ]
+
+    settings = await ensure_user_settings(db, user["id"])
+    parsed_all = orders_to_parsed(all_orders)
+    matched_all = match_settings(
+        parsed_all,
+        settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+        settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+    )
+
+    total_sales = parsed_all["total_sales"]
+    total_orders = parsed_all["total_orders"]
+    total_fees = matched_all["total_payment_fees"]
+    total_shipping = matched_all["total_shipping_cost"]
+    deferred_shipping = matched_all.get("deferred_shipping_cost", 0.0)
+
+    # BNPL / electronic / COD split
+    total_vat = 0.0
+    bnpl_fees = tamara_fees = tabby_fees = emkan_fees = 0.0
+    other_payment_fees = 0.0
+    bnpl_sales = other_payment_sales = cod_sales = cod_fees = 0.0
+    tamara_keywords = ("تمارا", "tamara")
+    tabby_keywords = ("تابي", "tabby")
+    emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
+    cod_keywords = ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery")
+    for p in matched_all.get("payment_breakdown", []):
+        total_vat += float(p.get("vat_amount", 0) or 0)
+        name_lc = (p.get("name", "") or "").strip().lower()
+        fee = float(p.get("fee_amount", 0) or 0)
+        sales = float(p.get("total_sales", 0) or 0)
+        if any(k in name_lc for k in tamara_keywords):
+            tamara_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+        elif any(k in name_lc for k in tabby_keywords):
+            tabby_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+        elif any(k in name_lc for k in emkan_keywords):
+            emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+        elif any(k in name_lc for k in cod_keywords):
+            cod_fees += fee; cod_sales += sales
+        else:
+            other_payment_fees += fee; other_payment_sales += sales
+    for sh in matched_all.get("shipping_breakdown", []):
+        total_vat += float(sh.get("vat_amount", 0) or 0)
+
+    # ── Shipping & COD balance splits (Phase 1) ──────────────────────────────
+    balances = compute_balances(
+        all_orders,
+        settings.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
+        settings.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
+    )
+    shipping_balance_approved = balances["shipping"]["total_approved"]
+    shipping_balance_unapproved = balances["shipping"]["total_unapproved"]
+    cod_balance_approved = balances["cod"]["total_approved"]
+    cod_balance_unapproved = balances["cod"]["total_unapproved"]
+
+    # ── Daily costs (still keyed by `date` field) ────────────────────────────
     daily_q = {"user_id": user["id"]}
     if from_date or to_date:
         date_filter = {}
@@ -424,189 +538,46 @@ async def dashboard(
             date_filter["$gte"] = from_date
         if to_date:
             date_filter["$lte"] = to_date
-        analyses_q["date"] = date_filter
         daily_q["date"] = date_filter
-
-    analyses = await db.analyses.find(analyses_q, {"_id": 0, "report.orders_sample": 0}).to_list(1000)
     daily = await db.daily_costs.find(daily_q, {"_id": 0}).to_list(1000)
 
-    total_sales = sum(a["report"]["summary"]["total_sales"] for a in analyses)
-    total_orders = sum(a["report"]["summary"]["total_orders"] for a in analyses)
-    total_fees = sum(a["report"]["summary"]["total_payment_fees"] for a in analyses)
-    total_shipping = sum(a["report"]["summary"]["total_shipping_cost"] for a in analyses)
-    deferred_shipping = sum(a["report"]["summary"].get("deferred_shipping_cost", 0) for a in analyses)
-    total_ads = sum(a["report"]["summary"].get("total_ads_cost", 0) for a in analyses)
-    total_products = sum(a["report"]["summary"].get("total_product_cost", 0) for a in analyses)
-    net_profit = sum(a["report"]["summary"]["net_profit"] for a in analyses)
-
-    # Total VAT deducted across all analyses (from payment fees + shipping)
-    total_vat = 0.0
-    bnpl_fees = 0.0
-    tamara_fees = 0.0
-    tabby_fees = 0.0
-    emkan_fees = 0.0
-    other_payment_fees = 0.0
-    # Gross sales per category (used to compute "net after fees")
-    bnpl_sales = 0.0
-    other_payment_sales = 0.0
-    cod_sales = 0.0
-    cod_fees = 0.0
-    tamara_keywords = ("تمارا", "tamara")
-    tabby_keywords = ("تابي", "tabby")
-    emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
-    cod_keywords = ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery")
-    for a in analyses:
-        for p in a["report"].get("payment_breakdown", []):
-            total_vat += float(p.get("vat_amount", 0) or 0)
-            name_lc = (p.get("name", "") or "").strip().lower()
-            fee = float(p.get("fee_amount", 0) or 0)
-            sales = float(p.get("total_sales", 0) or 0)
-            if any(k in name_lc for k in tamara_keywords):
-                tamara_fees += fee
-                bnpl_fees += fee
-                bnpl_sales += sales
-            elif any(k in name_lc for k in tabby_keywords):
-                tabby_fees += fee
-                bnpl_fees += fee
-                bnpl_sales += sales
-            elif any(k in name_lc for k in emkan_keywords):
-                emkan_fees += fee
-                bnpl_fees += fee
-                bnpl_sales += sales
-            elif any(k in name_lc for k in cod_keywords):
-                cod_fees += fee
-                cod_sales += sales
-            else:
-                other_payment_fees += fee
-                other_payment_sales += sales
-        for s in a["report"].get("shipping_breakdown", []):
-            total_vat += float(s.get("vat_amount", 0) or 0)
-
-    # ── Live Make.com orders (not yet captured by any analysis) ─────────────
-    # These are streamed via webhook in real time. We aggregate them here so
-    # the dashboard reflects them immediately without requiring the user to
-    # manually click "Build analysis".
-    make_orders_q = {"user_id": user["id"], "data_source": "make"}
-    if from_date or to_date:
-        make_orders_q["order_date"] = {}
-        if from_date:
-            make_orders_q["order_date"]["$gte"] = from_date
-        if to_date:
-            make_orders_q["order_date"]["$lte"] = to_date
-    make_orders = await db.unified_orders.find(
-        make_orders_q, {"_id": 0, "raw_by_source": 0}
-    ).to_list(50000)
-
-    make_orders_count = 0
-    if make_orders:
-        from orders_db import orders_to_parsed
-        settings = await ensure_user_settings(db, user["id"])
-        parsed_make = orders_to_parsed(make_orders)
-        matched_make = match_settings(
-            parsed_make,
-            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
-            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
-        )
-
-        # Roll into existing totals
-        total_sales += parsed_make["total_sales"]
-        total_orders += parsed_make["total_orders"]
-        total_fees += matched_make["total_payment_fees"]
-        total_shipping += matched_make["total_shipping_cost"]
-        deferred_shipping += matched_make.get("deferred_shipping_cost", 0)
-        # Pure-orders profit contribution (ads/products are handled separately below)
-        net_profit += (
-            parsed_make["total_sales"]
-            - matched_make["total_payment_fees"]
-            - matched_make["total_shipping_cost"]
-        )
-        make_orders_count = parsed_make["total_orders"]
-
-        # Recompute BNPL / electronic / VAT splits including make data
-        for p in matched_make["payment_breakdown"]:
-            total_vat += float(p.get("vat_amount", 0) or 0)
-            name_lc = (p.get("name", "") or "").strip().lower()
-            fee = float(p.get("fee_amount", 0) or 0)
-            sales = float(p.get("total_sales", 0) or 0)
-            if any(k in name_lc for k in tamara_keywords):
-                tamara_fees += fee
-                bnpl_fees += fee
-                bnpl_sales += sales
-            elif any(k in name_lc for k in tabby_keywords):
-                tabby_fees += fee
-                bnpl_fees += fee
-                bnpl_sales += sales
-            elif any(k in name_lc for k in emkan_keywords):
-                emkan_fees += fee
-                bnpl_fees += fee
-                bnpl_sales += sales
-            elif any(k in name_lc for k in cod_keywords):
-                cod_fees += fee
-                cod_sales += sales
-            else:
-                other_payment_fees += fee
-                other_payment_sales += sales
-        for s in matched_make["shipping_breakdown"]:
-            total_vat += float(s.get("vat_amount", 0) or 0)
-
-    # ── Phase 1: shipping/COD balance splits ─────────────────────────────────
-    bal_settings = await ensure_user_settings(db, user["id"])
-    bal_orders_q = {"user_id": user["id"]}
-    if from_date or to_date:
-        bal_orders_q["order_date"] = {}
-        if from_date:
-            bal_orders_q["order_date"]["$gte"] = from_date
-        if to_date:
-            bal_orders_q["order_date"]["$lte"] = to_date
-    bal_orders = await db.unified_orders.find(
-        bal_orders_q, {"_id": 0, "raw_by_source": 0}
-    ).to_list(50000)
-    balances = compute_balances(
-        bal_orders,
-        bal_settings.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
-        bal_settings.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
-    )
-    shipping_balance_approved = balances["shipping"]["total_approved"]
-    shipping_balance_unapproved = balances["shipping"]["total_unapproved"]
-    cod_balance_approved = balances["cod"]["total_approved"]
-    cod_balance_unapproved = balances["cod"]["total_unapproved"]
-
-    daily_totals = sum(
-        d.get("snapchat_ads", 0) + d.get("snapchat_ads_2", 0)
-        + d.get("tiktok_ads", 0) + d.get("instagram_ads", 0)
-        + d.get("google_ads", 0) + d.get("product_costs", 0)
-        for d in daily
-    )
     daily_ads_total = sum(
-        d.get("snapchat_ads", 0) + d.get("snapchat_ads_2", 0)
-        + d.get("tiktok_ads", 0) + d.get("instagram_ads", 0)
-        + d.get("google_ads", 0)
+        (d.get("snapchat_ads", 0) or 0) + (d.get("snapchat_ads_2", 0) or 0)
+        + (d.get("tiktok_ads", 0) or 0) + (d.get("instagram_ads", 0) or 0)
+        + (d.get("google_ads", 0) or 0)
         for d in daily
     )
-    daily_products_total = sum(d.get("product_costs", 0) for d in daily)
-    # Net profit is reduced by daily costs (which aren't captured in per-analysis reports)
-    net_profit_adjusted = net_profit - daily_ads_total - daily_products_total
+    daily_products_total = sum((d.get("product_costs", 0) or 0) for d in daily)
+    daily_totals = daily_ads_total + daily_products_total
 
-    # Monthly trend (sum sales by month)
+    # Net profit (orders P&L − daily ads − daily products)
+    orders_profit = total_sales - total_fees - total_shipping
+    net_profit_adjusted = orders_profit - daily_ads_total - daily_products_total
+
+    # ── Monthly trend from unified orders ────────────────────────────────────
     from collections import defaultdict
     monthly_sales = defaultdict(float)
-    monthly_profit = defaultdict(float)
-    for a in analyses:
-        d = (a.get("date") or a["created_at"])[:7]
-        monthly_sales[d] += a["report"]["summary"]["total_sales"]
-        monthly_profit[d] += a["report"]["summary"]["net_profit"]
-    # Include live Make.com orders in monthly trends (sales line accurate;
-    # profit line still aggregates from analyses only because per-order profit
-    # allocation needs ads/products distribution we don't have at that grain).
-    for o in make_orders:
+    for o in all_orders:
         d = (o.get("order_date") or "")[:7]
         if not d:
             continue
         monthly_sales[d] += float(o.get("total_amount") or 0)
     monthly = sorted([
-        {"month": k, "sales": round(v, 2), "profit": round(monthly_profit[k], 2)}
+        {"month": k, "sales": round(v, 2), "profit": 0}
         for k, v in monthly_sales.items()
     ], key=lambda x: x["month"])
+
+    # Recent analyses (informational only — independent of date filter)
+    recent = await db.analyses.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "report.orders_sample": 0},
+    ).sort("created_at", -1).to_list(5)
+
+    # Source breakdown (excel vs make vs unified)
+    src_counts = {"excel": 0, "make": 0, "unified": 0}
+    for o in all_orders:
+        ds = o.get("data_source") or "unified"
+        src_counts[ds] = src_counts.get(ds, 0) + 1
 
     return {
         "range": {"from_date": from_date, "to_date": to_date},
@@ -619,26 +590,27 @@ async def dashboard(
             "tabby_fees": round(tabby_fees, 2),
             "emkan_fees": round(emkan_fees, 2),
             "other_payment_fees": round(other_payment_fees, 2),
-            # Net after fees deduction
             "electronic_net": round(other_payment_sales - other_payment_fees, 2),
             "bnpl_net": round(bnpl_sales - bnpl_fees, 2),
             "total_shipping_cost": round(total_shipping, 2),
             "deferred_shipping_cost": round(deferred_shipping, 2),
             "regular_shipping_cost": round(total_shipping - deferred_shipping, 2),
-            # المتوقع تحويله من سلة إلى البنك = المبيعات − عمولات الدفع − شحن غير آجل
             "expected_salla_transfer": round(
                 total_sales - total_fees - (total_shipping - deferred_shipping), 2
             ),
-            "total_ads_cost": round(total_ads + daily_ads_total, 2),
-            "total_product_cost": round(total_products, 2),
+            "total_ads_cost": round(daily_ads_total, 2),
+            "total_product_cost": 0.0,
             "daily_expenses_total": round(daily_products_total, 2),
             "net_profit": round(net_profit_adjusted, 2),
             "total_vat": round(total_vat, 2),
             "daily_costs_total": round(daily_totals, 2),
             "daily_ads_total": round(daily_ads_total, 2),
             "daily_products_total": round(daily_products_total, 2),
-            "analyses_count": len(analyses),
-            "make_orders_count": int(make_orders_count),
+            "orders_excel_count": src_counts.get("excel", 0),
+            "orders_make_count": src_counts.get("make", 0),
+            # Backward-compatible aliases used by older UI code
+            "analyses_count": len(recent),
+            "make_orders_count": src_counts.get("make", 0),
             # ── Phase 1: shipping & COD balance splits ───────────────────────
             "shipping_approved": shipping_balance_approved,
             "shipping_unapproved": shipping_balance_unapproved,
@@ -654,7 +626,7 @@ async def dashboard(
                 "total_sales": a["report"]["summary"]["total_sales"],
                 "net_profit": a["report"]["summary"]["net_profit"],
                 "total_orders": a["report"]["summary"]["total_orders"],
-            } for a in sorted(analyses, key=lambda x: x.get("created_at", ""), reverse=True)[:5]
+            } for a in recent
         ],
     }
 
@@ -718,6 +690,24 @@ async def on_startup():
             if "status" in old and "order_status" not in old:
                 old["order_status"] = old.pop("status")
             await db.unified_orders.insert_one(old)
+
+    # Backfill: normalize any order_date_raw to order_date (handles older uploads
+    # made before the date-column auto-detect fix).
+    backfill_cursor = db.unified_orders.find(
+        {"$and": [
+            {"$or": [{"order_date": {"$in": [None, ""]}}, {"order_date": {"$exists": False}}]},
+            {"order_date_raw": {"$exists": True, "$nin": [None, ""]}},
+        ]},
+        {"_id": 1, "order_date_raw": 1},
+    )
+    backfilled = 0
+    async for o in backfill_cursor:
+        norm = _normalize_date_str(o.get("order_date_raw") or "")
+        if norm:
+            await db.unified_orders.update_one({"_id": o["_id"]}, {"$set": {"order_date": norm}})
+            backfilled += 1
+    if backfilled:
+        logger.info(f"Backfilled order_date on {backfilled} unified_orders documents.")
     await seed_admin(db)
     logger.info("Hesab backend started successfully.")
 

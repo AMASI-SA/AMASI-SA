@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import re
+from datetime import date, datetime
 from typing import Optional
 
 import openpyxl
@@ -46,7 +47,15 @@ STATUS_COLS = [
     "وضع الطلب", "وضع",
     "status", "order status", "order_status", "state",
 ]
-DATE_COLS = ["تاريخ الطلب", "التاريخ", "date", "created at"]
+DATE_COLS = [
+    "تاريخ إنشاء الطلب", "تاريخ إنشاء", "تاريخ انشاء الطلب", "تاريخ انشاء",
+    "تاريخ الطلب", "تاريخ الإنشاء", "تاريخ الانشاء",
+    "التاريخ", "تاريخ",
+    "date", "created at", "created_at", "order date", "order_date",
+    "creation date", "order created at",
+]
+# Salla's standard Excel layout places the order creation date at column Q (index 16).
+SALLA_DATE_COL_INDEX = 16  # Excel column "Q"
 
 
 def _norm(s: object) -> str:
@@ -79,13 +88,17 @@ def _find_header_row(rows: list[list]) -> int:
 
 def _match_col(headers_norm: list[str], candidates: list[str]) -> Optional[int]:
     cand_norm = [_norm(c) for c in candidates]
-    # exact-ish first
+    # exact-ish first (require non-empty header to avoid matching blank columns)
     for i, h in enumerate(headers_norm):
+        if not h:
+            continue
         for c in cand_norm:
-            if c == h:
+            if c and c == h:
                 return i
-    # substring
+    # substring (require both sides non-empty so blank headers don't false-match)
     for i, h in enumerate(headers_norm):
+        if not h:
+            continue
         for c in cand_norm:
             if c and (c in h or h in c):
                 return i
@@ -155,6 +168,10 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
     if col_source is None and len(headers) > SALLA_SOURCE_COL_INDEX:
         col_source = SALLA_SOURCE_COL_INDEX
 
+    # Fallback: Salla exports place order creation date at column Q (index 16)
+    if col_date is None and len(headers) > SALLA_DATE_COL_INDEX:
+        col_date = SALLA_DATE_COL_INDEX
+
     if col_total is None:
         raise ValueError(
             "لم نتمكن من العثور على عمود إجمالي المبلغ في الملف. تأكد من أنه ملف طلبات سلة."
@@ -220,7 +237,14 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
         order_id_val = str(_cell(col_order, row) or "").strip()
         status_val = str(_cell(col_status, row) or "").strip()
         date_raw = _cell(col_date, row)
-        date_val = str(date_raw).strip() if date_raw is not None else ""
+        # openpyxl returns datetime/date objects when cell is formatted as Excel date.
+        # Preserve the ISO date so downstream `_normalize_date_str` parses it correctly.
+        if isinstance(date_raw, datetime):
+            date_val = date_raw.date().isoformat()
+        elif isinstance(date_raw, date):
+            date_val = date_raw.isoformat()
+        else:
+            date_val = str(date_raw).strip() if date_raw is not None else ""
 
         if len(sample_orders) < 10:
             sample_orders.append({

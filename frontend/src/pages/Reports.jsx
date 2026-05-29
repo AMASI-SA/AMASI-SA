@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
+import AdvancedFilters, { defaultFilters } from "../components/AdvancedFilters";
 
 const COLORS = ["#0A3622", "#D4AF37", "#16A34A", "#D97706", "#0EA5E9", "#7C3AED", "#DC2626", "#0891B2"];
 
@@ -13,8 +14,9 @@ export default function Reports() {
     const [allAnalyses, setAllAnalyses] = useState([]);
     const [allDaily, setAllDaily] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [fromDate, setFromDate] = useState("");
-    const [toDate, setToDate] = useState("");
+    const [filters, setFilters] = useState(defaultFilters());
+    const fromDate = filters.from;
+    const toDate = filters.to;
 
     useEffect(() => {
         (async () => {
@@ -28,20 +30,6 @@ export default function Reports() {
             } finally { setLoading(false); }
         })();
     }, []);
-
-    const setPreset = (kind) => {
-        const today = new Date();
-        const iso = (d) => d.toISOString().slice(0, 10);
-        let f = "", t = iso(today);
-        if (kind === "today") { f = t; }
-        else if (kind === "7d") { const d = new Date(today); d.setDate(d.getDate() - 6); f = iso(d); }
-        else if (kind === "30d") { const d = new Date(today); d.setDate(d.getDate() - 29); f = iso(d); }
-        else if (kind === "month") { const d = new Date(today.getFullYear(), today.getMonth(), 1); f = iso(d); }
-        else if (kind === "year") { const d = new Date(today.getFullYear(), 0, 1); f = iso(d); }
-        setFromDate(f);
-        setToDate(t);
-    };
-    const resetRange = () => { setFromDate(""); setToDate(""); };
 
     // Apply date filter
     const analyses = useMemo(() => {
@@ -79,37 +67,68 @@ export default function Reports() {
         return { ...totals, totalAds, totalProducts: totals.products };
     }, [daily]);
 
+    // Apply payment/shipping filters via case-insensitive substring match
+    const matchAny = (value, list) => {
+        if (!list?.length) return true;
+        const v = (value || "").toLowerCase();
+        return list.some((x) => {
+            const xl = x.toLowerCase();
+            return xl === v || xl.includes(v) || v.includes(xl);
+        });
+    };
+    const payFilter = filters.payment_methods || [];
+    const shipFilter = filters.shipping_companies || [];
+
     // Aggregate across all analyses
     const agg = (() => {
         let total_sales = 0, total_orders = 0, total_fees = 0, total_ship = 0, total_ads = 0, total_prods = 0, net = 0;
         const paymentMap = {};
         const shipMap = {};
         const sourceMap = {};
+        const hasPaymentFilter = payFilter.length > 0;
+        const hasShipFilter = shipFilter.length > 0;
         for (const a of analyses) {
             const s = a.report.summary;
-            total_sales += s.total_sales;
-            total_orders += s.total_orders;
-            total_fees += s.total_payment_fees;
-            total_ship += s.total_shipping_cost;
-            total_ads += s.total_ads_cost;
-            total_prods += s.total_product_cost;
-            net += s.net_profit;
+            // Only include totals when no payment/shipping filters are applied
+            // (analysis-level totals can't be reliably re-split by partial filters).
+            if (!hasPaymentFilter && !hasShipFilter) {
+                total_sales += s.total_sales;
+                total_orders += s.total_orders;
+                total_fees += s.total_payment_fees;
+                total_ship += s.total_shipping_cost;
+                total_ads += s.total_ads_cost;
+                total_prods += s.total_product_cost;
+                net += s.net_profit;
+            }
             for (const p of a.report.payment_breakdown || []) {
+                if (!matchAny(p.name, payFilter)) continue;
                 if (!paymentMap[p.name]) paymentMap[p.name] = { name: p.name, orders_count: 0, total_sales: 0, fee_amount: 0 };
                 paymentMap[p.name].orders_count += p.orders_count;
                 paymentMap[p.name].total_sales += p.total_sales;
                 paymentMap[p.name].fee_amount += p.fee_amount;
+                if (hasPaymentFilter || hasShipFilter) {
+                    total_sales += p.total_sales;
+                    total_orders += p.orders_count;
+                    total_fees += p.fee_amount;
+                }
             }
             for (const sh of a.report.shipping_breakdown || []) {
+                if (!matchAny(sh.name, shipFilter)) continue;
                 if (!shipMap[sh.name]) shipMap[sh.name] = { name: sh.name, orders_count: 0, total_cost: 0 };
                 shipMap[sh.name].orders_count += sh.orders_count;
                 shipMap[sh.name].total_cost += sh.total_cost;
+                if (hasShipFilter) {
+                    total_ship += sh.total_cost;
+                }
             }
             for (const src of a.report.order_sources || []) {
                 if (!sourceMap[src.name]) sourceMap[src.name] = { name: src.name, orders_count: 0, total_sales: 0 };
                 sourceMap[src.name].orders_count += src.orders_count;
                 sourceMap[src.name].total_sales += src.total_sales || 0;
             }
+        }
+        if (hasPaymentFilter || hasShipFilter) {
+            net = total_sales - total_fees - total_ship;
         }
         return {
             total_sales, total_orders, total_fees, total_ship, total_ads, total_prods, net,
@@ -145,53 +164,8 @@ export default function Reports() {
                 </p>
             </div>
 
-            {/* Date range filter */}
-            <div className="rounded-xl border border-border bg-white p-4 flex flex-col md:flex-row md:items-center gap-3 flex-wrap" data-testid="reports-date-filter">
-                <div className="flex items-center gap-2 text-sm font-semibold text-brand">
-                    <CalendarBlank size={20} weight="duotone" /> الفترة الزمنية:
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <label className="text-xs text-muted-foreground">من</label>
-                    <input
-                        type="date"
-                        value={fromDate}
-                        onChange={(e) => setFromDate(e.target.value)}
-                        className="px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
-                        data-testid="reports-date-from"
-                        dir="ltr"
-                    />
-                    <label className="text-xs text-muted-foreground ms-2">إلى</label>
-                    <input
-                        type="date"
-                        value={toDate}
-                        onChange={(e) => setToDate(e.target.value)}
-                        className="px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
-                        data-testid="reports-date-to"
-                        dir="ltr"
-                    />
-                    {(fromDate || toDate) && (
-                        <button
-                            onClick={resetRange}
-                            className="px-3 py-2 border border-border text-sm font-semibold rounded-lg hover:bg-accent transition-colors"
-                            data-testid="reports-reset-date"
-                        >إعادة تعيين</button>
-                    )}
-                </div>
-                <div className="flex items-center gap-1.5 md:ms-auto flex-wrap">
-                    {[
-                        { k: "today", label: "اليوم" },
-                        { k: "7d", label: "آخر أسبوع" },
-                        { k: "30d", label: "آخر شهر" },
-                        { k: "month", label: "هذا الشهر" },
-                        { k: "year", label: "هذه السنة" },
-                    ].map(p => (
-                        <button key={p.k} onClick={() => setPreset(p.k)}
-                            className="px-3 py-1.5 border border-border rounded-lg text-xs font-semibold hover:bg-brand hover:text-white hover:border-brand transition-colors"
-                            data-testid={`reports-preset-${p.k}`}
-                        >{p.label}</button>
-                    ))}
-                </div>
-            </div>
+            {/* Advanced filters: date preset + payment + shipping */}
+            <AdvancedFilters value={filters} onChange={setFilters} />
 
             {analyses.length === 0 ? (
                 <div className="rounded-xl border border-border bg-white p-12 text-center">

@@ -43,51 +43,26 @@ function Kpi({ icon: Icon, label, value, hint, accent = false, testid }) {
     );
 }
 
+import AdvancedFilters, { filtersToQueryString, defaultFilters } from "../components/AdvancedFilters";
+
 export default function Dashboard() {
     const { user } = useAuth();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [fromDate, setFromDate] = useState("");
-    const [toDate, setToDate] = useState("");
+    const [filters, setFilters] = useState(defaultFilters());
 
-    const fetchDashboard = async (params = {}) => {
+    const fetchDashboard = async (f = filters) => {
         setLoading(true);
         try {
-            const { data } = await api.get("/dashboard", { params });
+            const qs = filtersToQueryString(f);
+            const { data } = await api.get(`/dashboard${qs ? "?" + qs : ""}`);
             setData(data);
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchDashboard();
-    }, []);
-
-    const applyRange = () => {
-        const p = {};
-        if (fromDate) p.from_date = fromDate;
-        if (toDate) p.to_date = toDate;
-        fetchDashboard(p);
-    };
-    const resetRange = () => {
-        setFromDate("");
-        setToDate("");
-        fetchDashboard();
-    };
-    const setPreset = (kind) => {
-        const today = new Date();
-        const iso = (d) => d.toISOString().slice(0, 10);
-        let f = "", t = iso(today);
-        if (kind === "today") { f = t; }
-        else if (kind === "7d") { const d = new Date(today); d.setDate(d.getDate() - 6); f = iso(d); }
-        else if (kind === "30d") { const d = new Date(today); d.setDate(d.getDate() - 29); f = iso(d); }
-        else if (kind === "month") { const d = new Date(today.getFullYear(), today.getMonth(), 1); f = iso(d); }
-        else if (kind === "year") { const d = new Date(today.getFullYear(), 0, 1); f = iso(d); }
-        setFromDate(f);
-        setToDate(t);
-        fetchDashboard({ from_date: f, to_date: t });
-    };
+    useEffect(() => { fetchDashboard(filters); /* eslint-disable-next-line */ }, [filters]);
 
     const totals = data?.totals || {};
     const monthly = data?.monthly || [];
@@ -102,8 +77,8 @@ export default function Dashboard() {
                         لوحة التحكم
                     </h1>
                     <p className="text-muted-foreground mt-2 text-base">
-                        {(fromDate || toDate)
-                            ? `عرض البيانات من ${fromDate || "البداية"} إلى ${toDate || "الآن"}`
+                        {(filters.from || filters.to)
+                            ? `عرض البيانات من ${filters.from || "البداية"} إلى ${filters.to || "الآن"}`
                             : "نظرة شاملة على أدائك المالي عبر جميع التحاليل المحفوظة."}
                     </p>
                 </div>
@@ -117,58 +92,8 @@ export default function Dashboard() {
                 </Link>
             </div>
 
-            {/* Date range filter */}
-            <div className="rounded-xl border border-border bg-white p-4 flex flex-col md:flex-row md:items-center gap-3 flex-wrap" data-testid="date-filter-bar">
-                <div className="flex items-center gap-2 text-sm font-semibold text-brand">
-                    <CalendarBlank size={20} weight="duotone" /> الفترة الزمنية:
-                </div>
-                <div className="flex items-center gap-2">
-                    <label className="text-xs text-muted-foreground">من</label>
-                    <input
-                        type="date"
-                        value={fromDate}
-                        onChange={(e) => setFromDate(e.target.value)}
-                        className="px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
-                        data-testid="date-from-input"
-                        dir="ltr"
-                    />
-                    <label className="text-xs text-muted-foreground ms-2">إلى</label>
-                    <input
-                        type="date"
-                        value={toDate}
-                        onChange={(e) => setToDate(e.target.value)}
-                        className="px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
-                        data-testid="date-to-input"
-                        dir="ltr"
-                    />
-                    <button
-                        onClick={applyRange}
-                        className="px-4 py-2 bg-brand text-white text-sm font-bold rounded-lg bg-brand-hover transition-colors"
-                        data-testid="apply-date-filter-btn"
-                    >تطبيق</button>
-                    {(fromDate || toDate) && (
-                        <button
-                            onClick={resetRange}
-                            className="px-3 py-2 border border-border text-sm font-semibold rounded-lg hover:bg-accent transition-colors"
-                            data-testid="reset-date-filter-btn"
-                        >إعادة تعيين</button>
-                    )}
-                </div>
-                <div className="flex items-center gap-1.5 md:ms-auto flex-wrap">
-                    {[
-                        { k: "today", label: "اليوم" },
-                        { k: "7d", label: "آخر أسبوع" },
-                        { k: "30d", label: "آخر شهر" },
-                        { k: "month", label: "هذا الشهر" },
-                        { k: "year", label: "هذه السنة" },
-                    ].map(p => (
-                        <button key={p.k} onClick={() => setPreset(p.k)}
-                            className="px-3 py-1.5 border border-border rounded-lg text-xs font-semibold hover:bg-brand hover:text-white hover:border-brand transition-colors"
-                            data-testid={`preset-${p.k}`}
-                        >{p.label}</button>
-                    ))}
-                </div>
-            </div>
+            {/* Advanced filters: date preset + payment + shipping */}
+            <AdvancedFilters value={filters} onChange={setFilters} />
 
             {loading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
