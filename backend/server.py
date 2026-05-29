@@ -32,6 +32,7 @@ from auth import (
 )
 from excel_parser import parse_salla_excel, match_settings
 from exports import export_report_excel, export_report_pdf
+from report_builder import build_report as _build_report
 from snapchat_routes import attach_snapchat_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
@@ -212,42 +213,6 @@ async def delete_daily_costs(date: str, user: dict = Depends(current_user)):
 
 
 # ── Analyses (Excel upload) ───────────────────────────────────────────────────
-def _build_report(parsed: dict, payment_settings, shipping_settings,
-                  snapchat_ads=0.0, tiktok_ads=0.0, instagram_ads=0.0, product_costs=0.0) -> dict:
-    matched = match_settings(parsed, payment_settings, shipping_settings)
-    total_ads = round(float(snapchat_ads) + float(tiktok_ads) + float(instagram_ads), 2)
-    net_profit = round(
-        float(parsed["total_sales"])
-        - float(matched["total_payment_fees"])
-        - float(matched["total_shipping_cost"])
-        - total_ads
-        - float(product_costs),
-        2,
-    )
-    return {
-        "summary": {
-            "total_sales": parsed["total_sales"],
-            "total_orders": parsed["total_orders"],
-            "total_payment_fees": matched["total_payment_fees"],
-            "total_shipping_cost": matched["total_shipping_cost"],
-            "deferred_shipping_cost": matched.get("deferred_shipping_cost", 0.0),
-            "total_ads_cost": total_ads,
-            "total_product_cost": float(product_costs),
-            "net_revenue_after_fees": round(parsed["total_sales"] - matched["total_payment_fees"], 2),
-            "net_profit": net_profit,
-        },
-        "payment_breakdown": matched["payment_breakdown"],
-        "shipping_breakdown": matched["shipping_breakdown"],
-        "order_sources": parsed.get("order_sources", []),
-        "daily_costs": {
-            "snapchat_ads": float(snapchat_ads),
-            "tiktok_ads": float(tiktok_ads),
-            "instagram_ads": float(instagram_ads),
-            "product_costs": float(product_costs),
-        },
-        "detected_columns": parsed.get("detected_columns", {}),
-        "orders_sample": parsed.get("orders_sample", []),
-    }
 
 
 @api.post("/analyses")

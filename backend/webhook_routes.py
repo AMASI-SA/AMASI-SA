@@ -22,11 +22,13 @@ Endpoints under /api/webhook:
 import os
 import uuid
 import logging
-from datetime import datetime, timezone, date as date_cls
+from datetime import datetime, timezone
 from typing import Optional, Union, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
+
+from report_builder import build_report
 
 logger = logging.getLogger(__name__)
 
@@ -344,10 +346,6 @@ def _build_router(db) -> APIRouter:
 
     @router.post("/build-analysis")
     async def build_analysis(payload: BuildAnalysisIn, user: dict = Depends(current_user)):
-        # Import inside to avoid circular import at module load
-        from excel_parser import match_settings  # noqa: F401  (sanity check)
-        from server import _build_report  # reuse the exact same pipeline
-
         try:
             datetime.strptime(payload.date_from, "%Y-%m-%d")
             datetime.strptime(payload.date_to, "%Y-%m-%d")
@@ -370,7 +368,7 @@ def _build_router(db) -> APIRouter:
 
         parsed = _orders_to_parsed(orders)
         settings = await ensure_user_settings(db, user["id"])
-        report = _build_report(
+        report = build_report(
             parsed,
             settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
             settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),

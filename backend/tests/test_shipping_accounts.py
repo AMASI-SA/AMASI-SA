@@ -1,5 +1,4 @@
 """Backend tests for the deferred shipping accounts feature."""
-import io
 import os
 import uuid
 import urllib.parse
