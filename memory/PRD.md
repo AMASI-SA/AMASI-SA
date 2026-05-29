@@ -20,6 +20,24 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## Implemented (2026-05 — Make.com Webhook Source)
+- ✅ **Second data source: Make.com webhook integration.** Salla → Make.com → /api/webhook/make/{token} → same DB → same reports.
+- ✅ Backend module `webhook_routes.py`:
+  - `POST /api/webhook/make/{token}` (PUBLIC, token-authed) — accepts single object, array, or `{orders: [...]}`. Upsert by `(user_id, order_number)` ensures no duplicates and supports updates.
+  - `GET /api/webhook/settings` (JWT) — auto-creates token; returns webhook_url + sample payload.
+  - `POST /api/webhook/settings/rotate-token` — invalidates old token immediately.
+  - `DELETE /api/webhook/settings` — disconnect: removes token + all stored orders for the user.
+  - `GET /api/webhook/orders` — list received orders (date_from/date_to/limit), DESC by order_date.
+  - `GET /api/webhook/stats` — total_orders_in_db, total_received_ever, last_sync_at, date_range (earliest/latest).
+  - `POST /api/webhook/build-analysis` — aggregates orders in [date_from, date_to] → `analyses` document with `source: "make"`, using the EXACT same `match_settings()` + `_build_report()` pipeline as Excel.
+- ✅ MongoDB collections: `webhook_tokens` (unique on user_id + token), `webhook_orders` (unique on (user_id, order_number), index on order_date).
+- ✅ `_orders_to_parsed()` bridges raw orders → `parse_salla_excel`-compatible dict, so the rest of the pipeline (dashboard, reports, daily costs, shipping accounts, BNPL fees, KPI cards) works unchanged.
+- ✅ Liberal date parsing: handles YYYY-MM-DD, ISO 8601, DD/MM/YYYY, etc.
+- ✅ Pydantic `Config.extra="allow"` + full `raw` JSON preserved on each order — no data loss from unknown Make.com mapping fields.
+- ✅ Frontend page `/make-webhook` (`MakeWebhook.jsx`): copyable webhook URL, token rotate/disconnect, sample JSON payload, build-analysis form (date range + ads/products costs), recent-orders table, stats KPIs (stored/received/last sync/date range).
+- ✅ Sidebar: new `ربط Make.com` link.
+- ✅ Testing: **71/71 backend tests pass** (16 new webhook tests + 55 prior). Frontend Playwright fully green.
+
 ## Implemented (2026-05 — Deferred Shipping Companies)
 - ✅ **Two-tier shipping**: each shipping company can be marked `is_deferred=true` in Settings.
   - Regular companies: cost deducted directly from sales (default behavior).

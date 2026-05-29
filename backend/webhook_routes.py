@@ -174,8 +174,12 @@ def _build_router(db) -> APIRouter:
         return new_doc
 
     def _public_webhook_url(token: str) -> str:
-        base = os.environ.get("BACKEND_PUBLIC_URL") or os.environ.get("FRONTEND_URL", "").replace(":3000", ":8001") or ""
-        base = base.rstrip("/")
+        # Prefer explicit BACKEND_PUBLIC_URL when set; otherwise fall back to FRONTEND_URL
+        # because in this environment /api is proxied from frontend domain to backend.
+        base = (
+            os.environ.get("BACKEND_PUBLIC_URL")
+            or os.environ.get("FRONTEND_URL", "")
+        ).rstrip("/")
         return f"{base}/api/webhook/make/{token}" if base else f"/api/webhook/make/{token}"
 
     # ── PUBLIC INGESTION ──────────────────────────────────────────────────
