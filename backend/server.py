@@ -519,6 +519,55 @@ async def dashboard(
     for sh in matched_all.get("shipping_breakdown", []):
         total_vat += float(sh.get("vat_amount", 0) or 0)
 
+    # ── Legacy analyses fallback ────────────────────────────────────────────
+    # Older Excel uploads (pre unified_orders migration) wrote ONLY aggregate
+    # summaries into `analyses` without saving the per-order details, so they
+    # don't appear in unified_orders. To prevent the dashboard from showing
+    # less data than the Reports page, we add those legacy summaries here.
+    # Filter is by analysis.date because per-order dates aren't available.
+    legacy_q: dict = {
+        "user_id": user["id"],
+        "$or": [
+            {"orders_imported": {"$exists": False}},
+            {"orders_imported": {"$in": [None, 0]}},
+        ],
+    }
+    if from_date or to_date:
+        legacy_q["date"] = {}
+        if from_date:
+            legacy_q["date"]["$gte"] = from_date
+        if to_date:
+            legacy_q["date"]["$lte"] = to_date
+    legacy_analyses = await db.analyses.find(
+        legacy_q, {"_id": 0, "report.orders_sample": 0}
+    ).to_list(1000)
+
+    for a in legacy_analyses:
+        rep = a.get("report") or {}
+        s = rep.get("summary") or {}
+        total_sales += float(s.get("total_sales") or 0)
+        total_orders += int(s.get("total_orders") or 0)
+        total_fees += float(s.get("total_payment_fees") or 0)
+        total_shipping += float(s.get("total_shipping_cost") or 0)
+        deferred_shipping += float(s.get("deferred_shipping_cost") or 0)
+        for p in rep.get("payment_breakdown", []) or []:
+            total_vat += float(p.get("vat_amount", 0) or 0)
+            name_lc = (p.get("name", "") or "").strip().lower()
+            fee = float(p.get("fee_amount", 0) or 0)
+            sales = float(p.get("total_sales", 0) or 0)
+            if any(k in name_lc for k in tamara_keywords):
+                tamara_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+            elif any(k in name_lc for k in tabby_keywords):
+                tabby_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+            elif any(k in name_lc for k in emkan_keywords):
+                emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+            elif any(k in name_lc for k in cod_keywords):
+                cod_fees += fee; cod_sales += sales
+            else:
+                other_payment_fees += fee; other_payment_sales += sales
+        for sh in rep.get("shipping_breakdown", []) or []:
+            total_vat += float(sh.get("vat_amount", 0) or 0)
+
     # ── Shipping & COD balance splits (Phase 1) ──────────────────────────────
     balances = compute_balances(
         all_orders,
@@ -554,7 +603,7 @@ async def dashboard(
     orders_profit = total_sales - total_fees - total_shipping
     net_profit_adjusted = orders_profit - daily_ads_total - daily_products_total
 
-    # ── Monthly trend from unified orders ────────────────────────────────────
+    # ── Monthly trend from unified orders + legacy analyses ─────────────────
     from collections import defaultdict
     monthly_sales = defaultdict(float)
     for o in all_orders:
@@ -562,6 +611,11 @@ async def dashboard(
         if not d:
             continue
         monthly_sales[d] += float(o.get("total_amount") or 0)
+    for a in legacy_analyses:
+        d = (a.get("date") or a.get("created_at") or "")[:7]
+        if not d:
+            continue
+        monthly_sales[d] += float(((a.get("report") or {}).get("summary") or {}).get("total_sales") or 0)
     monthly = sorted([
         {"month": k, "sales": round(v, 2), "profit": 0}
         for k, v in monthly_sales.items()
@@ -608,6 +662,7 @@ async def dashboard(
             "daily_products_total": round(daily_products_total, 2),
             "orders_excel_count": src_counts.get("excel", 0),
             "orders_make_count": src_counts.get("make", 0),
+            "legacy_analyses_count": len(legacy_analyses),
             # Backward-compatible aliases used by older UI code
             "analyses_count": len(recent),
             "make_orders_count": src_counts.get("make", 0),
