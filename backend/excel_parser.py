@@ -41,7 +41,11 @@ CURRENCY_COLS = ["العملة", "currency"]
 # Salla exports place the order source at column BA (index 52, 0-indexed) by default.
 SALLA_SOURCE_COL_INDEX = 52  # Excel column "BA"
 ORDER_ID_COLS = ["رقم الطلب", "order id", "order number", "id", "#"]
-STATUS_COLS = ["حالة الطلب", "الحالة", "status"]
+STATUS_COLS = [
+    "حالة الطلب", "الحالة", "حالة طلب", "حاله الطلب", "حاله",
+    "وضع الطلب", "وضع",
+    "status", "order status", "order_status", "state",
+]
 DATE_COLS = ["تاريخ الطلب", "التاريخ", "date", "created at"]
 
 
@@ -141,6 +145,11 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
     col_ship_cost = _match_col(headers_norm, SHIPPING_COST_COLS)
     col_discount = _match_col(headers_norm, DISCOUNT_COLS)
     col_currency = _match_col(headers_norm, CURRENCY_COLS)
+
+    # Salla's standard Excel layout: column A = order number, column B = order status.
+    # If no header keyword matched, fall back to column index B (1).
+    if col_status is None and len(headers_norm) > 1:
+        col_status = 1
 
     # Fallback: Salla exports place order source at column BA (index 52)
     if col_source is None and len(headers) > SALLA_SOURCE_COL_INDEX:

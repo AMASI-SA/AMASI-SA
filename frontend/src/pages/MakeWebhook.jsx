@@ -305,6 +305,7 @@ export default function MakeWebhook() {
                                     <th className="text-start py-2 px-2">التاريخ</th>
                                     <th className="text-end py-2 px-2">المجموع</th>
                                     <th className="text-start py-2 px-2">الدفع</th>
+                                    <th className="text-start py-2 px-2">حالة الطلب</th>
                                     <th className="text-start py-2 px-2">حالة الدفع</th>
                                     <th className="text-start py-2 px-2">الشحن</th>
                                     <th className="text-start py-2 px-2">العميل</th>
@@ -343,6 +344,13 @@ export default function MakeWebhook() {
                                                 {amount > 0 ? `${formatMoney(amount)} ${o.currency || "ر.س"}` : "—"}
                                             </td>
                                             <td className="py-2 px-2">{o.payment_method || "—"}</td>
+                                            <td className="py-2 px-2">
+                                                {o.order_status ? (
+                                                    <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-700">
+                                                        {o.order_status}
+                                                    </span>
+                                                ) : "—"}
+                                            </td>
                                             <td className="py-2 px-2">
                                                 {o.payment_status ? (
                                                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${o.payment_status.toLowerCase() === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
