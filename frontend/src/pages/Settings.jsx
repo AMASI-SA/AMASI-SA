@@ -17,6 +17,8 @@ export default function Settings() {
     const [shippings, setShippings] = useState([]);
     const [shipApproved, setShipApproved] = useState([]);
     const [codApproved, setCodApproved] = useState([]);
+    const [reportIncluded, setReportIncluded] = useState([]);
+    const [discoveredStatuses, setDiscoveredStatuses] = useState([]); // [{name,count}]
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -56,14 +58,20 @@ export default function Settings() {
     useEffect(() => {
         (async () => {
             try {
-                const { data } = await api.get("/settings");
-                setPayments(withRowIds(data.payment_methods));
-                setShippings(withRowIds(data.shipping_companies));
-                setShipApproved(data.shipping_approved_statuses || []);
-                setCodApproved(data.cod_approved_statuses || []);
+                const [{ data: settings }, { data: statuses }] = await Promise.all([
+                    api.get("/settings"),
+                    api.get("/order-statuses"),
+                ]);
+                setPayments(withRowIds(settings.payment_methods));
+                setShippings(withRowIds(settings.shipping_companies));
+                setShipApproved(settings.shipping_approved_statuses || []);
+                setCodApproved(settings.cod_approved_statuses || []);
+                setReportIncluded(settings.report_included_statuses || []);
+                setDiscoveredStatuses(statuses.statuses || []);
             } finally { setLoading(false); }
         })();
         loadSnapConfig();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Handle ?snapchat=success|error redirect after OAuth callback
@@ -167,6 +175,7 @@ export default function Settings() {
                 })).filter((s) => s.name),
                 shipping_approved_statuses: shipApproved,
                 cod_approved_statuses: codApproved,
+                report_included_statuses: reportIncluded,
             });
             toast.success("تم حفظ الإعدادات");
         } catch (err) {
@@ -398,6 +407,31 @@ export default function Settings() {
                 </div>
             </div>
 
+            {/* NEW: Report-Included Order Statuses */}
+            <div className="rounded-xl border border-border bg-white p-6" data-testid="report-statuses-section">
+                <div className="mb-5">
+                    <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>حالات الطلب المعتمدة للتقارير</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        حدِّد حالات الطلب التي تُحتسب ضمن لوحة التحكم والتقارير وحسابات الشحن الآجلة.
+                        إذا تركتها فارغة، يتم احتساب <strong>جميع</strong> الطلبات بغضّ النظر عن حالتها (السلوك الافتراضي).
+                    </p>
+                    <p className="text-xs text-amber-700 mt-2">
+                        ملاحظة: التحاليل القديمة (قبل ميزة الطلبات الموحَّدة) لا تحوي حالات للطلبات الفردية،
+                        وستُستبعَد من الحسابات عند تفعيل هذا الفلتر. اضغط "إعادة معالجة" بجانب التحليل القديم لتفعيل الفلتر له.
+                    </p>
+                </div>
+
+                <StatusListEditor
+                    title="الحالات المُحتسَبة"
+                    description="استخدم الاقتراحات أدناه (مأخوذة من طلباتك فعلياً) أو أضف حالة يدوياً."
+                    values={reportIncluded}
+                    onChange={setReportIncluded}
+                    suggestions={discoveredStatuses.map((s) => s.name)}
+                    suggestionMeta={discoveredStatuses.reduce((acc, s) => { acc[s.name] = s.count; return acc; }, {})}
+                    testIdPrefix="report-included"
+                />
+            </div>
+
             {/* Phase 1: Order Status Approval settings */}
             <div className="rounded-xl border border-border bg-white p-6" data-testid="status-approval-section">
                 <div className="mb-5">
@@ -413,7 +447,11 @@ export default function Settings() {
                     description='افتراضياً: "تم التوصيل". أضف أي حالة إضافية ترى أنها تعتمد رصيد الشحن.'
                     values={shipApproved}
                     onChange={setShipApproved}
-                    suggestions={["تم التوصيل", "delivered", "completed", "تم الاستلام"]}
+                    suggestions={Array.from(new Set([
+                        ...(discoveredStatuses.map((s) => s.name)),
+                        "تم التوصيل", "delivered", "completed", "تم الاستلام",
+                    ]))}
+                    suggestionMeta={discoveredStatuses.reduce((acc, s) => { acc[s.name] = s.count; return acc; }, {})}
                     testIdPrefix="ship-approved"
                 />
 
@@ -424,7 +462,11 @@ export default function Settings() {
                     description='افتراضياً: "تم التوصيل". المبالغ بهذه الحالات تظهر كمستحقات على شركة الشحن.'
                     values={codApproved}
                     onChange={setCodApproved}
-                    suggestions={["تم التوصيل", "delivered", "completed"]}
+                    suggestions={Array.from(new Set([
+                        ...(discoveredStatuses.map((s) => s.name)),
+                        "تم التوصيل", "delivered", "completed",
+                    ]))}
+                    suggestionMeta={discoveredStatuses.reduce((acc, s) => { acc[s.name] = s.count; return acc; }, {})}
                     testIdPrefix="cod-approved"
                 />
             </div>
@@ -588,7 +630,7 @@ export default function Settings() {
 }
 
 
-function StatusListEditor({ title, description, values, onChange, suggestions, testIdPrefix }) {
+function StatusListEditor({ title, description, values, onChange, suggestions, suggestionMeta, testIdPrefix }) {
     const [draft, setDraft] = useState("");
     const add = () => {
         const v = draft.trim();
@@ -646,15 +688,18 @@ function StatusListEditor({ title, description, values, onChange, suggestions, t
             {suggestions.length > 0 && (
                 <div className="text-xs text-muted-foreground">
                     <span className="font-semibold ms-1">اقتراحات سريعة:</span>
-                    {suggestions.map((s) => (
-                        <button
-                            key={s}
-                            type="button"
-                            onClick={() => toggleSuggestion(s)}
-                            className={`mx-1 inline-block px-2 py-1 rounded-md border text-xs font-semibold transition-colors ${values.includes(s) ? "bg-emerald-100 border-emerald-300 text-emerald-800" : "bg-accent/40 border-border hover:bg-accent"}`}
-                            data-testid={`${testIdPrefix}-suggest-${s}`}
-                        >{values.includes(s) ? "✓ " : "+ "}{s}</button>
-                    ))}
+                    {suggestions.map((s) => {
+                        const cnt = suggestionMeta?.[s];
+                        return (
+                            <button
+                                key={s}
+                                type="button"
+                                onClick={() => toggleSuggestion(s)}
+                                className={`mx-1 inline-block px-2 py-1 rounded-md border text-xs font-semibold transition-colors ${values.includes(s) ? "bg-emerald-100 border-emerald-300 text-emerald-800" : "bg-accent/40 border-border hover:bg-accent"}`}
+                                data-testid={`${testIdPrefix}-suggest-${s}`}
+                            >{values.includes(s) ? "✓ " : "+ "}{s}{cnt !== undefined && cnt > 0 ? ` (${cnt})` : ""}</button>
+                        );
+                    })}
                 </div>
             )}
         </div>

@@ -6,12 +6,12 @@ import {
 } from "recharts";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
-import AdvancedFilters, { defaultFilters } from "../components/AdvancedFilters";
+import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 
 const COLORS = ["#0A3622", "#D4AF37", "#16A34A", "#D97706", "#0EA5E9", "#7C3AED", "#DC2626", "#0891B2"];
 
 export default function Reports() {
-    const [allAnalyses, setAllAnalyses] = useState([]);
+    const [dashboard, setDashboard] = useState(null);
     const [allDaily, setAllDaily] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(defaultFilters());
@@ -20,28 +20,20 @@ export default function Reports() {
 
     useEffect(() => {
         (async () => {
+            setLoading(true);
             try {
-                const [aRes, dRes] = await Promise.all([
-                    api.get("/analyses"),
+                const qs = filtersToQueryString(filters);
+                const [dashRes, dailyRes] = await Promise.all([
+                    api.get(`/dashboard${qs ? "?" + qs : ""}`),
                     api.get("/daily-costs"),
                 ]);
-                setAllAnalyses(aRes.data || []);
-                setAllDaily(dRes.data || []);
+                setDashboard(dashRes.data || null);
+                setAllDaily(dailyRes.data || []);
             } finally { setLoading(false); }
         })();
-    }, []);
+    }, [filters]);
 
-    // Apply date filter
-    const analyses = useMemo(() => {
-        if (!fromDate && !toDate) return allAnalyses;
-        return allAnalyses.filter((a) => {
-            const d = (a.date || "").slice(0, 10);
-            if (fromDate && d < fromDate) return false;
-            if (toDate && d > toDate) return false;
-            return true;
-        });
-    }, [allAnalyses, fromDate, toDate]);
-
+    // Apply date filter to daily costs (dashboard already filters server-side)
     const daily = useMemo(() => {
         if (!fromDate && !toDate) return allDaily;
         return allDaily.filter((d) => {
@@ -68,88 +60,69 @@ export default function Reports() {
     }, [daily]);
 
     // Apply payment/shipping filters via case-insensitive substring match
-    const matchAny = (value, list) => {
-        if (!list?.length) return true;
-        const v = (value || "").toLowerCase();
-        return list.some((x) => {
-            const xl = x.toLowerCase();
-            return xl === v || xl.includes(v) || v.includes(xl);
-        });
-    };
-    const payFilter = filters.payment_methods || [];
-    const shipFilter = filters.shipping_companies || [];
+    // (kept as a util in case we need client-side adjustments; primary
+    //  filtering happens server-side now in /api/dashboard).
 
-    // Aggregate across all analyses
-    const agg = (() => {
-        let total_sales = 0, total_orders = 0, total_fees = 0, total_ship = 0, total_ads = 0, total_prods = 0, net = 0;
-        const paymentMap = {};
-        const shipMap = {};
-        const sourceMap = {};
-        const hasPaymentFilter = payFilter.length > 0;
-        const hasShipFilter = shipFilter.length > 0;
-        for (const a of analyses) {
-            const s = a.report.summary;
-            // Only include totals when no payment/shipping filters are applied
-            // (analysis-level totals can't be reliably re-split by partial filters).
-            if (!hasPaymentFilter && !hasShipFilter) {
-                total_sales += s.total_sales;
-                total_orders += s.total_orders;
-                total_fees += s.total_payment_fees;
-                total_ship += s.total_shipping_cost;
-                total_ads += s.total_ads_cost;
-                total_prods += s.total_product_cost;
-                net += s.net_profit;
-            }
-            for (const p of a.report.payment_breakdown || []) {
-                if (!matchAny(p.name, payFilter)) continue;
-                if (!paymentMap[p.name]) paymentMap[p.name] = { name: p.name, orders_count: 0, total_sales: 0, fee_amount: 0 };
-                paymentMap[p.name].orders_count += p.orders_count;
-                paymentMap[p.name].total_sales += p.total_sales;
-                paymentMap[p.name].fee_amount += p.fee_amount;
-                if (hasPaymentFilter || hasShipFilter) {
-                    total_sales += p.total_sales;
-                    total_orders += p.orders_count;
-                    total_fees += p.fee_amount;
-                }
-            }
-            for (const sh of a.report.shipping_breakdown || []) {
-                if (!matchAny(sh.name, shipFilter)) continue;
-                if (!shipMap[sh.name]) shipMap[sh.name] = { name: sh.name, orders_count: 0, total_cost: 0 };
-                shipMap[sh.name].orders_count += sh.orders_count;
-                shipMap[sh.name].total_cost += sh.total_cost;
-                if (hasShipFilter) {
-                    total_ship += sh.total_cost;
-                }
-            }
-            for (const src of a.report.order_sources || []) {
-                if (!sourceMap[src.name]) sourceMap[src.name] = { name: src.name, orders_count: 0, total_sales: 0 };
-                sourceMap[src.name].orders_count += src.orders_count;
-                sourceMap[src.name].total_sales += src.total_sales || 0;
-            }
+    // Aggregate from unified dashboard payload (single source of truth)
+    const agg = useMemo(() => {
+        if (!dashboard) {
+            return {
+                total_sales: 0, total_orders: 0, total_fees: 0, total_ship: 0,
+                total_ads: 0, total_prods: 0, net: 0,
+                payments: [], shippings: [], sources: [],
+            };
         }
-        if (hasPaymentFilter || hasShipFilter) {
-            net = total_sales - total_fees - total_ship;
-        }
+        const t = dashboard.totals || {};
+        const payments = (dashboard.payment_breakdown || []).map((p) => ({
+            name: p.name,
+            orders_count: p.orders_count || 0,
+            total_sales: p.total_sales || 0,
+            fee_amount: p.fee_amount || 0,
+        })).sort((a, b) => b.total_sales - a.total_sales);
+        const shippings = (dashboard.shipping_breakdown || []).map((s) => ({
+            name: s.name,
+            orders_count: s.orders_count || 0,
+            total_cost: s.total_cost || 0,
+        })).sort((a, b) => b.orders_count - a.orders_count);
+        const sources = (dashboard.source_breakdown || []).map((s) => ({
+            name: s.name,
+            orders_count: s.count || 0,
+            total_sales: 0,
+        }));
         return {
-            total_sales, total_orders, total_fees, total_ship, total_ads, total_prods, net,
-            payments: Object.values(paymentMap).sort((a, b) => b.total_sales - a.total_sales),
-            shippings: Object.values(shipMap).sort((a, b) => b.orders_count - a.orders_count),
-            sources: Object.values(sourceMap).sort((a, b) => b.orders_count - a.orders_count),
+            total_sales: t.total_sales || 0,
+            total_orders: t.total_orders || 0,
+            total_fees: t.total_payment_fees || 0,
+            total_ship: t.total_shipping_cost || 0,
+            total_ads: t.daily_ads_total || 0,
+            total_prods: t.daily_products_total || 0,
+            net: t.net_profit || 0,
+            payments, shippings, sources,
         };
-    })();
+    }, [dashboard]);
 
     // monthly trend
-    const monthly = (() => {
-        const m = {};
-        for (const a of analyses) {
-            const k = (a.date || "").slice(0, 7);
-            if (!m[k]) m[k] = { month: k, sales: 0, profit: 0, ads: 0 };
-            m[k].sales += a.report.summary.total_sales;
-            m[k].profit += a.report.summary.net_profit;
-            m[k].ads += a.report.summary.total_ads_cost;
+    const monthly = useMemo(() => {
+        const items = (dashboard?.monthly || []).map((m) => ({
+            month: m.month,
+            sales: m.sales || 0,
+            profit: m.profit || 0,
+            ads: 0,
+        }));
+        // Merge daily ads into ads by month
+        const adsMap = {};
+        for (const d of daily) {
+            const k = (d.date || "").slice(0, 7);
+            adsMap[k] = (adsMap[k] || 0) + Number(d.snapchat_ads || 0)
+                + Number(d.snapchat_ads_2 || 0) + Number(d.tiktok_ads || 0)
+                + Number(d.instagram_ads || 0) + Number(d.google_ads || 0);
         }
-        return Object.values(m).sort((x, y) => x.month.localeCompare(y.month));
-    })();
+        for (const it of items) it.ads = adsMap[it.month] || 0;
+        return items;
+    }, [dashboard, daily]);
+
+    const hasData = (dashboard?.totals?.total_orders || 0) > 0
+        || (dashboard?.recent_analyses?.length || 0) > 0;
 
     if (loading) return <div className="p-10 text-center" data-testid="reports-loading">جاري التحميل…</div>;
 
@@ -167,7 +140,7 @@ export default function Reports() {
             {/* Advanced filters: date preset + payment + shipping */}
             <AdvancedFilters value={filters} onChange={setFilters} />
 
-            {analyses.length === 0 ? (
+            {!hasData ? (
                 <div className="rounded-xl border border-border bg-white p-12 text-center">
                     <ChartPieSlice size={48} weight="duotone" className="text-brand mx-auto mb-3" />
                     <p className="text-muted-foreground">
@@ -185,7 +158,7 @@ export default function Reports() {
                             { label: "الشحن", value: agg.total_ship },
                             { label: "الإعلانات (يومي)", value: adsAgg.totalAds },
                             { label: "مصاريف يومية", value: adsAgg.totalProducts },
-                            { label: "عدد التحاليل", value: analyses.length, isInt: true },
+                            { label: "عدد التحاليل", value: dashboard?.recent_analyses?.length || 0, isInt: true },
                             { label: "صافي الربح النهائي", value: agg.net - adsAgg.totalAds - adsAgg.totalProducts, accent: true },
                         ].map((c, idx) => (
                             <div key={idx} className={`rounded-xl border p-5 ${c.accent ? "bg-brand text-white border-brand" : "bg-white border-border"}`} data-testid={`agg-kpi-${idx}`}>

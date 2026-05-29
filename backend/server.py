@@ -105,6 +105,9 @@ class SettingsIn(BaseModel):
     # NEW (Phase 1): which order_status values are "approved" for accounting purposes
     shipping_approved_statuses: Optional[List[str]] = None
     cod_approved_statuses: Optional[List[str]] = None
+    # NEW: which order statuses are counted in dashboard/reports KPIs.
+    # Empty list = include ALL statuses (backwards compatible default).
+    report_included_statuses: Optional[List[str]] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -186,6 +189,7 @@ async def get_settings(user: dict = Depends(current_user)):
         "shipping_companies": s.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
         "shipping_approved_statuses": s.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
         "cod_approved_statuses": s.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
+        "report_included_statuses": s.get("report_included_statuses", []),
     }
 
 
@@ -201,12 +205,44 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["shipping_approved_statuses"] = [s.strip() for s in payload.shipping_approved_statuses if s.strip()]
     if payload.cod_approved_statuses is not None:
         update_doc["cod_approved_statuses"] = [s.strip() for s in payload.cod_approved_statuses if s.strip()]
+    if payload.report_included_statuses is not None:
+        update_doc["report_included_statuses"] = [s.strip() for s in payload.report_included_statuses if s.strip()]
     await db.settings.update_one(
         {"user_id": user["id"]},
         {"$set": update_doc},
         upsert=True,
     )
     return {"ok": True}
+
+
+@api.get("/order-statuses")
+async def list_order_statuses(user: dict = Depends(current_user)):
+    """Return distinct order_status values observed in the user's unified_orders
+    plus their counts. Used by Settings to power the multi-select that decides
+    which statuses are included in dashboard/reports KPIs.
+    """
+    pipeline = [
+        {"$match": {"user_id": user["id"]}},
+        {"$group": {"_id": "$order_status", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    items = []
+    async for doc in db.unified_orders.aggregate(pipeline):
+        name = (doc.get("_id") or "").strip()
+        if not name:
+            continue
+        items.append({"name": name, "count": int(doc.get("count") or 0)})
+
+    # Also surface statuses present only in legacy analyses (orders_sample)
+    # so the user can still configure them.
+    seen = {i["name"] for i in items}
+    async for a in db.analyses.find({"user_id": user["id"]}, {"_id": 0, "report.orders_sample": 1}):
+        for o in (a.get("report", {}) or {}).get("orders_sample", []) or []:
+            st = (o.get("status") or "").strip()
+            if st and st not in seen:
+                items.append({"name": st, "count": 0})
+                seen.add(st)
+    return {"statuses": items}
 
 
 @api.get("/balances")
@@ -245,6 +281,14 @@ async def balances_endpoint(
             if _any(o.get("payment_method", ""), pm_list)
             and _any(o.get("shipping_company", ""), ship_list)
         ]
+    # Honour the user-configured "report_included_statuses" filter so balances
+    # are computed only on the same scope as dashboard/reports.
+    included_statuses = s.get("report_included_statuses") or []
+    if included_statuses:
+        def _any2(v, allowed):
+            vv = (v or "").strip().lower()
+            return any(a.strip().lower() in vv or vv in a.strip().lower() for a in allowed if a.strip())
+        orders = [o for o in orders if _any2(o.get("order_status", ""), included_statuses)]
     return compute_balances(orders, shipping_approved, cod_approved)
 
 
@@ -567,6 +611,17 @@ async def dashboard(
         ]
 
     settings = await ensure_user_settings(db, user["id"])
+
+    # Apply user-configured "report_included_statuses" filter:
+    # if non-empty, only orders whose order_status matches any of the configured
+    # statuses (case-insensitive partial match) are counted in dashboard KPIs.
+    included_statuses = settings.get("report_included_statuses") or []
+    if included_statuses:
+        all_orders = [
+            o for o in all_orders
+            if _matches_any(o.get("order_status", ""), included_statuses)
+        ]
+
     parsed_all = orders_to_parsed(all_orders)
     matched_all = match_settings(
         parsed_all,
@@ -613,48 +668,55 @@ async def dashboard(
     # don't appear in unified_orders. To prevent the dashboard from showing
     # less data than the Reports page, we add those legacy summaries here.
     # Filter is by analysis.date because per-order dates aren't available.
-    legacy_q: dict = {
-        "user_id": user["id"],
-        "$or": [
-            {"orders_imported": {"$exists": False}},
-            {"orders_imported": {"$in": [None, 0]}},
-        ],
-    }
-    if from_date or to_date:
-        legacy_q["date"] = {}
-        if from_date:
-            legacy_q["date"]["$gte"] = from_date
-        if to_date:
-            legacy_q["date"]["$lte"] = to_date
-    legacy_analyses = await db.analyses.find(
-        legacy_q, {"_id": 0, "report.orders_sample": 0}
-    ).to_list(1000)
+    #
+    # IMPORTANT: when `report_included_statuses` is configured, legacy analyses
+    # CANNOT be filtered by per-order status (they lack the data), so we
+    # exclude them entirely to avoid skewing the user-curated totals. Users
+    # who want their old data filtered by status must reprocess those analyses.
+    legacy_analyses: list[dict] = []
+    if not included_statuses:
+        legacy_q: dict = {
+            "user_id": user["id"],
+            "$or": [
+                {"orders_imported": {"$exists": False}},
+                {"orders_imported": {"$in": [None, 0]}},
+            ],
+        }
+        if from_date or to_date:
+            legacy_q["date"] = {}
+            if from_date:
+                legacy_q["date"]["$gte"] = from_date
+            if to_date:
+                legacy_q["date"]["$lte"] = to_date
+        legacy_analyses = await db.analyses.find(
+            legacy_q, {"_id": 0, "report.orders_sample": 0}
+        ).to_list(1000)
 
-    for a in legacy_analyses:
-        rep = a.get("report") or {}
-        s = rep.get("summary") or {}
-        total_sales += float(s.get("total_sales") or 0)
-        total_orders += int(s.get("total_orders") or 0)
-        total_fees += float(s.get("total_payment_fees") or 0)
-        total_shipping += float(s.get("total_shipping_cost") or 0)
-        deferred_shipping += float(s.get("deferred_shipping_cost") or 0)
-        for p in rep.get("payment_breakdown", []) or []:
-            total_vat += float(p.get("vat_amount", 0) or 0)
-            name_lc = (p.get("name", "") or "").strip().lower()
-            fee = float(p.get("fee_amount", 0) or 0)
-            sales = float(p.get("total_sales", 0) or 0)
-            if any(k in name_lc for k in tamara_keywords):
-                tamara_fees += fee; bnpl_fees += fee; bnpl_sales += sales
-            elif any(k in name_lc for k in tabby_keywords):
-                tabby_fees += fee; bnpl_fees += fee; bnpl_sales += sales
-            elif any(k in name_lc for k in emkan_keywords):
-                emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
-            elif any(k in name_lc for k in cod_keywords):
-                cod_fees += fee; cod_sales += sales
-            else:
-                other_payment_fees += fee; other_payment_sales += sales
-        for sh in rep.get("shipping_breakdown", []) or []:
-            total_vat += float(sh.get("vat_amount", 0) or 0)
+        for a in legacy_analyses:
+            rep = a.get("report") or {}
+            s = rep.get("summary") or {}
+            total_sales += float(s.get("total_sales") or 0)
+            total_orders += int(s.get("total_orders") or 0)
+            total_fees += float(s.get("total_payment_fees") or 0)
+            total_shipping += float(s.get("total_shipping_cost") or 0)
+            deferred_shipping += float(s.get("deferred_shipping_cost") or 0)
+            for p in rep.get("payment_breakdown", []) or []:
+                total_vat += float(p.get("vat_amount", 0) or 0)
+                name_lc = (p.get("name", "") or "").strip().lower()
+                fee = float(p.get("fee_amount", 0) or 0)
+                sales = float(p.get("total_sales", 0) or 0)
+                if any(k in name_lc for k in tamara_keywords):
+                    tamara_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+                elif any(k in name_lc for k in tabby_keywords):
+                    tabby_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+                elif any(k in name_lc for k in emkan_keywords):
+                    emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+                elif any(k in name_lc for k in cod_keywords):
+                    cod_fees += fee; cod_sales += sales
+                else:
+                    other_payment_fees += fee; other_payment_sales += sales
+            for sh in rep.get("shipping_breakdown", []) or []:
+                total_vat += float(sh.get("vat_amount", 0) or 0)
 
     # ── Shipping & COD balance splits (Phase 1) ──────────────────────────────
     balances = compute_balances(
@@ -721,6 +783,36 @@ async def dashboard(
         ds = o.get("data_source") or "unified"
         src_counts[ds] = src_counts.get(ds, 0) + 1
 
+    # Merge live + legacy breakdowns into a single payload
+    def _merge_breakdown(live: list[dict], legacy_list: list[dict], key: str) -> list[dict]:
+        m: dict[str, dict] = {}
+        for b in live:
+            n = (b.get("name") or "").strip()
+            if not n:
+                continue
+            cur = m.setdefault(n, {**b, "name": n})
+            # ensure numeric sums (live already aggregated; just copy)
+        for a in legacy_list:
+            for b in (a.get("report") or {}).get(key, []) or []:
+                n = (b.get("name") or "").strip()
+                if not n:
+                    continue
+                if n in m:
+                    cur = m[n]
+                    for f in ("total_sales", "total_cost", "fee_amount", "orders_count", "vat_amount"):
+                        if f in b and isinstance(b.get(f), (int, float)):
+                            cur[f] = float(cur.get(f, 0) or 0) + float(b.get(f) or 0)
+                else:
+                    m[n] = {**b, "name": n}
+        return list(m.values())
+
+    payment_breakdown_merged = _merge_breakdown(
+        matched_all.get("payment_breakdown", []), legacy_analyses, "payment_breakdown",
+    )
+    shipping_breakdown_merged = _merge_breakdown(
+        matched_all.get("shipping_breakdown", []), legacy_analyses, "shipping_breakdown",
+    )
+
     return {
         "range": {"from_date": from_date, "to_date": to_date},
         "totals": {
@@ -751,6 +843,7 @@ async def dashboard(
             "orders_excel_count": src_counts.get("excel", 0),
             "orders_make_count": src_counts.get("make", 0),
             "legacy_analyses_count": len(legacy_analyses),
+            "report_included_statuses_active": bool(included_statuses),
             # Backward-compatible aliases used by older UI code
             "analyses_count": len(recent),
             "make_orders_count": src_counts.get("make", 0),
@@ -761,6 +854,11 @@ async def dashboard(
             "cod_unapproved": cod_balance_unapproved,
         },
         "monthly": monthly,
+        "payment_breakdown": payment_breakdown_merged,
+        "shipping_breakdown": shipping_breakdown_merged,
+        "source_breakdown": [
+            {"name": k, "count": v} for k, v in src_counts.items() if v > 0
+        ],
         "recent_analyses": [
             {
                 "id": a["id"],

@@ -40,6 +40,16 @@ def _build_router(db) -> APIRouter:
     async def current_user(request: Request) -> dict:
         return await get_current_user_from_db(request, db)
 
+    async def _matches_any(value: str, allowed: list[str]) -> bool:
+        if not allowed:
+            return True
+        v = (value or "").strip().lower()
+        for a in allowed:
+            a_lc = a.strip().lower()
+            if a_lc and (a_lc == v or a_lc in v or v in a_lc):
+                return True
+        return False
+
     async def _deferred_company_names(user_id: str) -> list[str]:
         settings = await ensure_user_settings(db, user_id)
         return [
@@ -48,33 +58,101 @@ def _build_router(db) -> APIRouter:
             if s.get("is_deferred") and (s.get("name") or "").strip()
         ]
 
-    async def _owed_per_company(user_id: str) -> dict[str, dict]:
-        """Aggregate {company_name: {owed, orders_count, cost_per_order}} from analyses.
-
-        Only rows flagged is_deferred=True in shipping_breakdown are counted.
-        We sum across ALL analyses (no date filter — this is total accrued).
-        """
-        pipeline = [
-            {"$match": {"user_id": user_id}},
-            {"$unwind": "$report.shipping_breakdown"},
-            {"$match": {"report.shipping_breakdown.is_deferred": True}},
-            {"$group": {
-                "_id": "$report.shipping_breakdown.name",
-                "owed": {"$sum": "$report.shipping_breakdown.total_cost"},
-                "orders_count": {"$sum": "$report.shipping_breakdown.orders_count"},
-                "cost_per_order": {"$last": "$report.shipping_breakdown.cost_per_order"},
-            }},
-        ]
+    async def _shipping_config_map(user_id: str) -> dict[str, dict]:
+        """Map shipping_company_name (lower) → config dict from settings."""
+        settings = await ensure_user_settings(db, user_id)
         out: dict[str, dict] = {}
-        async for doc in db.analyses.aggregate(pipeline):
-            name = (doc.get("_id") or "").strip()
-            if not name:
+        for s in settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES):
+            n = (s.get("name") or "").strip()
+            if not n:
                 continue
-            out[name] = {
-                "owed": round(float(doc.get("owed", 0) or 0), 2),
-                "orders_count": int(doc.get("orders_count", 0) or 0),
-                "cost_per_order": float(doc.get("cost_per_order", 0) or 0),
-            }
+            out[n.lower()] = s
+        return out
+
+    def _resolve_company(name: str, cfg_map: dict[str, dict]) -> tuple[str, dict] | tuple[None, None]:
+        """Resolve a raw order's shipping_company string to a configured deferred
+        company entry (case-insensitive partial match)."""
+        v = (name or "").strip().lower()
+        if not v:
+            return None, None
+        # exact first
+        if v in cfg_map:
+            cfg = cfg_map[v]
+            return cfg.get("name", "").strip(), cfg
+        # substring
+        for k, cfg in cfg_map.items():
+            if k and (k in v or v in k):
+                return cfg.get("name", "").strip(), cfg
+        return None, None
+
+    async def _owed_per_company(user_id: str) -> dict[str, dict]:
+        """Aggregate {company_name: {owed, orders_count, cost_per_order}} from
+        BOTH legacy `analyses.report.shipping_breakdown` AND live `unified_orders`.
+
+        For unified_orders: we look up each order's shipping_company against the
+        user's shipping_companies settings; only deferred companies are counted.
+        The cost per order comes from the settings entry (cost + VAT included).
+
+        Respects `report_included_statuses` if set in settings.
+        """
+        settings = await ensure_user_settings(db, user_id)
+        included_statuses = settings.get("report_included_statuses") or []
+        cfg_map = await _shipping_config_map(user_id)
+        deferred_set = {n for n in (await _deferred_company_names(user_id))}
+
+        out: dict[str, dict] = {}
+
+        # ── Legacy analyses path ────────────────────────────────────────────
+        # Skip when statuses filter is on (legacy lacks per-order data)
+        if not included_statuses:
+            pipeline = [
+                {"$match": {"user_id": user_id}},
+                {"$unwind": "$report.shipping_breakdown"},
+                {"$match": {"report.shipping_breakdown.is_deferred": True}},
+                {"$group": {
+                    "_id": "$report.shipping_breakdown.name",
+                    "owed": {"$sum": "$report.shipping_breakdown.total_cost"},
+                    "orders_count": {"$sum": "$report.shipping_breakdown.orders_count"},
+                    "cost_per_order": {"$last": "$report.shipping_breakdown.cost_per_order"},
+                }},
+            ]
+            async for doc in db.analyses.aggregate(pipeline):
+                name = (doc.get("_id") or "").strip()
+                if not name:
+                    continue
+                out[name] = {
+                    "owed": round(float(doc.get("owed", 0) or 0), 2),
+                    "orders_count": int(doc.get("orders_count", 0) or 0),
+                    "cost_per_order": float(doc.get("cost_per_order", 0) or 0),
+                }
+
+        # ── Live unified_orders path ────────────────────────────────────────
+        async for o in db.unified_orders.find(
+            {"user_id": user_id},
+            {"_id": 0, "order_status": 1, "shipping_company": 1},
+        ):
+            if included_statuses and not await _matches_any(o.get("order_status", ""), included_statuses):
+                continue
+            canonical, cfg = _resolve_company(o.get("shipping_company", ""), cfg_map)
+            if not cfg or not cfg.get("is_deferred"):
+                continue
+            entry = out.setdefault(canonical, {
+                "owed": 0.0,
+                "orders_count": 0,
+                "cost_per_order": float(cfg.get("cost") or 0),
+            })
+            cost = float(cfg.get("cost") or 0)
+            vat = float(cfg.get("vat_rate") or 0)
+            entry["owed"] += round(cost * (1 + vat), 4)
+            entry["orders_count"] += 1
+            entry["cost_per_order"] = cost
+
+        # Round final owed (avoid floating drift)
+        for k in out:
+            out[k]["owed"] = round(out[k]["owed"], 2)
+        # Make sure all configured deferred companies appear even if zero
+        for n in deferred_set:
+            out.setdefault(n, {"owed": 0.0, "orders_count": 0, "cost_per_order": 0.0})
         return out
 
     async def _paid_per_company(user_id: str) -> dict[str, float]:
