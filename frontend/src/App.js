@@ -12,6 +12,7 @@ import DailyCosts from "./pages/DailyCosts";
 import History from "./pages/History";
 import Reports from "./pages/Reports";
 import ShippingAccounts from "./pages/ShippingAccounts";
+import MakeWebhook from "./pages/MakeWebhook";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -34,6 +35,7 @@ function AppRoutes() {
             <Route path="/daily-costs" element={<ProtectedRoute><Layout><DailyCosts /></Layout></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Layout><Reports /></Layout></ProtectedRoute>} />
             <Route path="/shipping-accounts" element={<ProtectedRoute><Layout><ShippingAccounts /></Layout></ProtectedRoute>} />
+            <Route path="/make-webhook" element={<ProtectedRoute><Layout><MakeWebhook /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,0 +1,42 @@
+{
+  "summary": "Tested Make.com webhook integration end-to-end. Backend: 16/16 new pytest cases pass (settings auto-create token, idempotent, public ingest accepts single/array/{orders:[]}, upsert by (user_id, order_number) — no duplicates, normalizes order_date YYYY-MM-DD / ISO / DD/MM/YYYY, extra Make.com fields stored in raw via Pydantic Config.extra='allow', strict per-user isolation, GET /webhook/orders DESC + date filters + limit, GET /webhook/stats with date_range earliest/latest, POST /webhook/build-analysis bad-date → 400 / empty-range → 400 Arabic, success builds analysis with source='make' and report.summary.total_sales matching manual sum (2369.0 across 5 orders) using same _build_report pipeline as Excel, analysis appears in /api/dashboard totals, rotate-token invalidates old token (401), DELETE /webhook/settings deletes token + orders). Full regression: 71/71 backend tests green (existing 55 + new 16). Frontend Playwright: /make-webhook page renders correctly with sidebar nav-make-webhook, displays webhook_url + token + copy/rotate/disconnect buttons, copy-url-btn writes correct URL to clipboard, toggle-sample-btn shows JSON sample, build-analysis-btn correctly disabled when zero orders, recent-orders table renders ingested orders, build-analysis form submits and navigates to /analysis/{id}, rotate-token-btn replaces token in UI and old token returns 401.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/make-webhook", "issues": ["Build button uses native browser date pickers (<input type='date'>) rather than the shadcn calendar component used elsewhere — minor inconsistency."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_webhook.py",
+    "/app/test_reports/pytest/webhook_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Consider using the shadcn calendar component on /make-webhook build form for visual consistency with the rest of the app.",
+    "(Optional) _public_webhook_url in webhook_routes.py uses FRONTEND_URL and replaces ':3000' with ':8001' — fragile heuristic. Add explicit BACKEND_PUBLIC_URL env var to docs/.env or use REACT_APP_BACKEND_URL directly (works in current env because frontend domain proxies /api → backend, but could mislead self-hosted deployments)."
+  ],
+  "critical_code_review_comments": [
+    "webhook_routes.py upsert keyed on (user_id, order_number) — guarantees no duplicates per-user and supports multi-tenant cleanly. Unique index in server.py confirms DB-level protection.",
+    "Token rotation correctly invalidates old token instantly (verified: POST to old token returns 401 after rotate).",
+    "DELETE /webhook/settings deletes BOTH tokens and orders — verified via test_disconnect_deletes_orders (404 on old token, count_documents=0 after).",
+    "WebhookOrderIn uses Pydantic Config.extra='allow' AND the full raw dict is also saved under doc['raw'], so unknown Make.com mapping fields survive end-to-end.",
+    "_orders_to_parsed builds the same dict shape as parse_salla_excel (total_sales, total_orders, payment_methods, shipping_companies, order_sources, orders_sample, detected_columns) → _build_report works without modification. Total sales for 5 test orders matched manual sum 2369.0 to 2 decimals.",
+    "build_analysis correctly inserts source='make' and the new analysis is aggregated in /api/dashboard alongside Excel analyses (verified).",
+    "_normalize_order_date robustly handles YYYY-MM-DD, ISO with time, DD/MM/YYYY — verified by mixing formats in test_ingest_array.",
+    "User isolation airtight: user B's token cannot write to user A's collection, and /webhook/orders strictly filters by user_id."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_webhook.py (new — 16 tests)"
+  ],
+  "success_rate": {"backend": "100% (16/16 webhook, 71/71 overall)", "frontend": "100% (smoke + integration)"},
+  "test_credentials": "admin@hesab.app / admin123. Ephemeral test_wh_<rand>@hesab.app / test12345 users created via /api/auth/register for isolation tests; ephemeral uitest2_<rand>@hesab.app via Playwright registration.",
+  "seed_data_creation": "No new global seed. Each test creates its own ephemeral user + orders prefixed WH-* and UI-* for traceability.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Entrypoint: cd /app && python -m pytest backend/tests/test_webhook.py -v. All 71 backend tests pass. Frontend route /make-webhook fully wired (Sidebar nav-make-webhook). Note: for Playwright ingestion testing, use page.request.post (same origin) instead of urllib.request — urllib hits public URL via 403 in this sandbox. BACKEND_PUBLIC_URL not set in .env; webhook_url is built from FRONTEND_URL — works because /api is proxied to backend.",
+  "rca of the issue": "N/A — no bugs found. Feature complete and production-ready."
+}

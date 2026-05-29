@@ -34,6 +34,7 @@ from excel_parser import parse_salla_excel, match_settings
 from exports import export_report_excel, export_report_pdf
 from snapchat_routes import attach_snapchat_routes
 from shipping_accounts import attach_shipping_accounts_routes
+from webhook_routes import attach_webhook_routes
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -506,6 +507,7 @@ async def root():
 # ── App wiring ────────────────────────────────────────────────────────────────
 attach_snapchat_routes(api, db)
 attach_shipping_accounts_routes(api, db)
+attach_webhook_routes(api, db)
 app.include_router(api)
 
 # CORS
@@ -533,6 +535,10 @@ async def on_startup():
     await db.analyses.create_index([("user_id", 1), ("created_at", -1)])
     await db.snapchat_connections.create_index("user_id", unique=True)
     await db.shipping_payments.create_index([("user_id", 1), ("company_name", 1), ("payment_date", -1)])
+    await db.webhook_tokens.create_index("user_id", unique=True)
+    await db.webhook_tokens.create_index("token", unique=True)
+    await db.webhook_orders.create_index([("user_id", 1), ("order_number", 1)], unique=True)
+    await db.webhook_orders.create_index([("user_id", 1), ("order_date", -1)])
     await seed_admin(db)
     logger.info("Hesab backend started successfully.")
 
