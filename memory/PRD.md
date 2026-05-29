@@ -20,6 +20,26 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## Implemented (2026-05 — Unified Orders Pipeline)
+- ✅ **Single source of truth: `unified_orders` collection.** Both Excel uploads and Make.com webhook write here.
+- ✅ New module `orders_db.py` with intelligent merge logic:
+  - `_merge_into(existing, incoming, source)` — field-level merge.
+  - Empty incoming never overwrites existing; empty existing accepts incoming.
+  - Critical fields (`total_amount`, `order_status`, `payment_status`) → newer source wins.
+  - Non-critical fields → first writer wins (preserve manual data).
+  - `field_sources` dict tags each scalar with its writing source.
+  - `data_sources` array records every source touching the order (capped 20 entries).
+  - `data_source` field = last writer.
+- ✅ **Excel parser extended**: `parse_salla_excel` now returns `orders_individual[]` with full per-row fields (customer_name, customer_mobile, subtotal, shipping_cost, discount, currency, source, status). 6 new column matchers added.
+- ✅ **Upload-excel endpoint**: after report generation, upserts every parsed order to `unified_orders` with `data_source="excel"`. Returns `orders_imported` + `orders_updated` counters.
+- ✅ **Make webhook** rewritten to use `upsert_order()` with `data_source="make"`. UTM fields (utm_source, utm_medium, utm_campaign, device) now persisted.
+- ✅ **Build-analysis** reads from `unified_orders` so analytics aggregate across BOTH sources naturally (no double-counting via order_number dedup).
+- ✅ **Stats endpoint** returns `by_source: {excel: N, make: M}` breakdown.
+- ✅ **DELETE webhook settings** only deletes Make-sourced orders (preserves Excel rows).
+- ✅ **One-time migration** on startup copies legacy `webhook_orders` → `unified_orders` (idempotent).
+- ✅ **Frontend**: `MakeWebhook.jsx` renamed table to "آخر الطلبات الموحَّدة (Excel + Make.com)"; per-row colored Make/Excel badges + sky-blue "مدمج" chip when an order has been touched by both sources; new "Make / Excel" KPI card.
+- ✅ **Testing**: **80/80 backend tests pass** (9 new tests covering bidirectional merge, field provenance, source isolation, build-analysis cross-source aggregation). Frontend Playwright fully green.
+
 ## Implemented (2026-05 — Make.com Webhook Source)
 - ✅ **Second data source: Make.com webhook integration.** Salla → Make.com → /api/webhook/make/{token} → same DB → same reports.
 - ✅ Backend module `webhook_routes.py`:
