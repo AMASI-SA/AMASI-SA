@@ -303,26 +303,30 @@ export default function MakeWebhook() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {recent.map((o) => (
-                                    <tr key={o.order_number} className="border-b border-border last:border-0 hover:bg-accent/30">
-                                        <td className="py-2 px-2 font-mono font-bold" dir="ltr">{o.order_number}</td>
-                                        <td className="py-2 px-2" dir="ltr">{o.order_date || "—"}</td>
-                                        <td className="py-2 px-2 text-end font-bold num">
-                                            {formatMoney(o.total ?? o.total_amount)} {o.currency || "ر.س"}
-                                        </td>
-                                        <td className="py-2 px-2">{o.payment_method || "—"}</td>
-                                        <td className="py-2 px-2">
-                                            {o.payment_status ? (
-                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${o.payment_status.toLowerCase() === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                                                    {o.payment_status}
-                                                </span>
-                                            ) : "—"}
-                                        </td>
-                                        <td className="py-2 px-2">{o.shipping_company || "—"}</td>
-                                        <td className="py-2 px-2 text-muted-foreground">{o.customer_name || "—"}</td>
-                                        <td className="py-2 px-2 text-muted-foreground" dir="ltr">{o.customer_mobile || "—"}</td>
-                                    </tr>
-                                ))}
+                                {recent.map((o) => {
+                                    const amount = Number(o.total_amount || o.total || 0);
+                                    const displayDate = o.order_date || (o.received_at ? o.received_at.slice(0, 10) : "");
+                                    return (
+                                        <tr key={o.order_number} className="border-b border-border last:border-0 hover:bg-accent/30">
+                                            <td className="py-2 px-2 font-mono font-bold" dir="ltr">{o.order_number || "—"}</td>
+                                            <td className="py-2 px-2" dir="ltr">{displayDate || "—"}</td>
+                                            <td className="py-2 px-2 text-end font-bold num">
+                                                {amount > 0 ? `${formatMoney(amount)} ${o.currency || "ر.س"}` : "—"}
+                                            </td>
+                                            <td className="py-2 px-2">{o.payment_method || "—"}</td>
+                                            <td className="py-2 px-2">
+                                                {o.payment_status ? (
+                                                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${o.payment_status.toLowerCase() === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                                        {o.payment_status}
+                                                    </span>
+                                                ) : "—"}
+                                            </td>
+                                            <td className="py-2 px-2">{o.shipping_company || "—"}</td>
+                                            <td className="py-2 px-2 text-muted-foreground">{o.customer_name || "—"}</td>
+                                            <td className="py-2 px-2 text-muted-foreground" dir="ltr">{o.customer_mobile || "—"}</td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

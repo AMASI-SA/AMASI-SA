@@ -403,7 +403,12 @@ def _build_router(db) -> APIRouter:
                 q["order_date"]["$gte"] = date_from
             if date_to:
                 q["order_date"]["$lte"] = date_to
-        cur = db.webhook_orders.find(q, {"_id": 0, "raw": 0}).sort("order_date", -1).limit(limit)
+        # Sort by received_at (always present); fallback ordering uses upsert insert time.
+        cur = (
+            db.webhook_orders.find(q, {"_id": 0, "raw": 0})
+            .sort([("received_at", -1), ("updated_at", -1)])
+            .limit(limit)
+        )
         items = await cur.to_list(limit)
         total = await db.webhook_orders.count_documents(q)
         return {"orders": items, "total": total, "limit": limit}
