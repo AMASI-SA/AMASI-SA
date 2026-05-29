@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Trash, ArrowRight, MagnifyingGlass } from "@phosphor-icons/react";
+import { Trash, ArrowRight, MagnifyingGlass, ArrowsClockwise } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
@@ -9,6 +9,9 @@ export default function History() {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [q, setQ] = useState("");
+    const [reprocessingId, setReprocessingId] = useState(null);
+    const fileInputRef = useRef(null);
+    const pendingReprocessId = useRef(null);
 
     const load = async () => {
         try {
@@ -26,12 +29,50 @@ export default function History() {
         toast.success("تم الحذف");
     };
 
+    const openReprocessPicker = (id) => {
+        pendingReprocessId.current = id;
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+            fileInputRef.current.click();
+        }
+    };
+
+    const handleReprocessFile = async (e) => {
+        const f = e.target.files?.[0];
+        const id = pendingReprocessId.current;
+        pendingReprocessId.current = null;
+        if (!f || !id) return;
+        setReprocessingId(id);
+        try {
+            const fd = new FormData();
+            fd.append("file", f);
+            const { data: res } = await api.post(`/analyses/${id}/reprocess`, fd, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
+            toast.success(`تمت إعادة المعالجة: ${res.orders_imported} جديد، ${res.orders_updated} مُحدَّث`);
+            await load();
+        } catch (err) {
+            const msg = err?.response?.data?.detail || "تعذرت إعادة المعالجة";
+            toast.error(typeof msg === "string" ? msg : "تعذرت إعادة المعالجة");
+        } finally {
+            setReprocessingId(null);
+        }
+    };
+
     const filtered = items.filter((i) =>
         !q || i.name?.toLowerCase().includes(q.toLowerCase()) || i.filename?.toLowerCase().includes(q.toLowerCase())
     );
 
     return (
         <div className="space-y-6 animate-fade-in-up" data-testid="history-page">
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.xlsm"
+                onChange={handleReprocessFile}
+                className="hidden"
+                data-testid="reprocess-file-input"
+            />
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div>
                     <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>سجل التحاليل</h1>
@@ -75,9 +116,17 @@ export default function History() {
                             <tbody>
                                 {filtered.map((a) => {
                                     const s = a.report.summary;
+                                    const isLegacy = !a.orders_imported;
                                     return (
                                         <tr key={a.id} className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors">
-                                            <td className="py-3 font-semibold">{a.name}</td>
+                                            <td className="py-3 font-semibold">
+                                                {a.name}
+                                                {isLegacy && (
+                                                    <span className="ms-2 inline-block px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-100 text-amber-800 align-middle">
+                                                        قديم
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="py-3 num text-muted-foreground">{a.date}</td>
                                             <td className="py-3 num">{formatInt(s.total_orders)}</td>
                                             <td className="py-3 num font-semibold">{formatMoney(s.total_sales)}</td>
@@ -93,6 +142,16 @@ export default function History() {
                                                         data-testid={`open-analysis-${a.id}`}>
                                                         تفاصيل <ArrowRight size={14} />
                                                     </Link>
+                                                    {isLegacy && (
+                                                        <button
+                                                            onClick={() => openReprocessPicker(a.id)}
+                                                            disabled={reprocessingId === a.id}
+                                                            className="p-1.5 rounded-lg hover:bg-amber-50 hover:text-amber-700 transition-colors ms-2 disabled:opacity-50"
+                                                            title="إعادة معالجة: ارفع نفس ملف Excel لتفعيل فلتر تاريخ إنشاء الطلب"
+                                                            data-testid={`reprocess-analysis-${a.id}`}>
+                                                            <ArrowsClockwise size={16} className={reprocessingId === a.id ? "animate-spin" : ""} />
+                                                        </button>
+                                                    )}
                                                     <button onClick={() => remove(a.id)}
                                                         className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors ms-2"
                                                         title="حذف" data-testid={`delete-analysis-${a.id}`}>

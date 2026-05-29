@@ -395,6 +395,94 @@ async def delete_analysis(analysis_id: str, user: dict = Depends(current_user)):
     return {"ok": True}
 
 
+@api.post("/analyses/{analysis_id}/reprocess")
+async def reprocess_analysis(
+    analysis_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(current_user),
+):
+    """Re-upload the original Excel file for a legacy analysis.
+
+    Re-parses the file with the current parser (which captures column Q as the
+    order-creation date) and writes every individual order into
+    `unified_orders`. Replaces the legacy analysis with an updated record that
+    includes `orders_imported > 0` so the dashboard's legacy fallback no
+    longer counts this analysis twice.
+    """
+    existing = await db.analyses.find_one({"id": analysis_id, "user_id": user["id"]}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="التحليل غير موجود")
+
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls", ".xlsm")):
+        raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel بصيغة .xlsx")
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="الملف فارغ")
+    try:
+        parsed = parse_salla_excel(content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.exception("reprocess parse error")
+        raise HTTPException(status_code=400, detail=f"تعذر قراءة الملف: {e}")
+
+    settings = await ensure_user_settings(db, user["id"])
+    report = _build_report(
+        parsed,
+        settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+        settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        0.0, 0.0, 0.0, 0.0,
+    )
+
+    excel_individual = parsed.get("orders_individual") or []
+    orders_imported = 0
+    orders_updated = 0
+    for o in excel_individual:
+        order_number = (o.get("order_number") or "").strip()
+        if not order_number:
+            continue
+        order_date = _normalize_date_str(o.get("order_date_raw") or "")
+        incoming = {
+            "order_id": o.get("order_id") or "",
+            "order_date": order_date,
+            "order_date_raw": o.get("order_date_raw") or "",
+            "order_status": o.get("order_status") or "",
+            "customer_name": o.get("customer_name") or "",
+            "customer_mobile": o.get("customer_mobile") or "",
+            "payment_method": o.get("payment_method") or "",
+            "shipping_company": o.get("shipping_company") or "",
+            "shipping_cost": float(o.get("shipping_cost") or 0),
+            "subtotal": float(o.get("subtotal") or 0),
+            "discount": float(o.get("discount") or 0),
+            "total_amount": float(o.get("total_amount") or 0),
+            "currency": o.get("currency") or "",
+            "source": o.get("source") or "",
+        }
+        res = await upsert_order(db, user["id"], order_number, incoming, source="excel", raw=o)
+        if res["created"]:
+            orders_imported += 1
+        else:
+            orders_updated += 1
+
+    # Replace the analysis in-place (preserve id/name/date for continuity)
+    await db.analyses.update_one(
+        {"id": analysis_id, "user_id": user["id"]},
+        {"$set": {
+            "filename": file.filename,
+            "report": report,
+            "orders_imported": orders_imported,
+            "orders_updated": orders_updated,
+            "reprocessed_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {
+        "ok": True,
+        "orders_imported": orders_imported,
+        "orders_updated": orders_updated,
+        "analysis_id": analysis_id,
+    }
+
+
 @api.get("/analyses/{analysis_id}/export/excel")
 async def export_excel(analysis_id: str, user: dict = Depends(current_user)):
     item = await db.analyses.find_one({"id": analysis_id, "user_id": user["id"]}, {"_id": 0})
@@ -678,9 +766,12 @@ async def dashboard(
                 "id": a["id"],
                 "name": a.get("name"),
                 "date": a.get("date"),
+                "filename": a.get("filename"),
                 "total_sales": a["report"]["summary"]["total_sales"],
                 "net_profit": a["report"]["summary"]["net_profit"],
                 "total_orders": a["report"]["summary"]["total_orders"],
+                "orders_imported": int(a.get("orders_imported") or 0),
+                "is_legacy": not bool(a.get("orders_imported")),
             } for a in recent
         ],
     }

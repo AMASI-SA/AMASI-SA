@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     Coins,
@@ -14,10 +14,10 @@ import {
     CalendarBlank,
     Wallet,
     Bank,
+    ArrowsClockwise,
 } from "@phosphor-icons/react";
-import {
-    LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
-} from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+import { toast } from "sonner";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
@@ -50,6 +50,9 @@ export default function Dashboard() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(defaultFilters());
+    const [reprocessingId, setReprocessingId] = useState(null);
+    const fileInputRef = useRef(null);
+    const pendingReprocessId = useRef(null);
 
     const fetchDashboard = async (f = filters) => {
         setLoading(true);
@@ -64,12 +67,50 @@ export default function Dashboard() {
 
     useEffect(() => { fetchDashboard(filters); /* eslint-disable-next-line */ }, [filters]);
 
+    const openReprocessPicker = (id) => {
+        pendingReprocessId.current = id;
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+            fileInputRef.current.click();
+        }
+    };
+
+    const handleReprocessFile = async (e) => {
+        const f = e.target.files?.[0];
+        const id = pendingReprocessId.current;
+        pendingReprocessId.current = null;
+        if (!f || !id) return;
+        setReprocessingId(id);
+        try {
+            const fd = new FormData();
+            fd.append("file", f);
+            const { data: res } = await api.post(`/analyses/${id}/reprocess`, fd, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
+            toast.success(`تمت إعادة المعالجة: ${res.orders_imported} طلب جديد، ${res.orders_updated} مُحدَّث`);
+            await fetchDashboard(filters);
+        } catch (err) {
+            const msg = err?.response?.data?.detail || "تعذرت إعادة المعالجة";
+            toast.error(typeof msg === "string" ? msg : "تعذرت إعادة المعالجة");
+        } finally {
+            setReprocessingId(null);
+        }
+    };
+
     const totals = data?.totals || {};
     const monthly = data?.monthly || [];
     const recent = data?.recent_analyses || [];
 
     return (
         <div className="space-y-8 animate-fade-in-up" data-testid="dashboard-page">
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.xlsm"
+                onChange={handleReprocessFile}
+                className="hidden"
+                data-testid="reprocess-file-input"
+            />
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div>
                     <div className="text-sm text-muted-foreground mb-1">مرحباً، {user?.name || "ضيف"}</div>
@@ -193,9 +234,24 @@ export default function Dashboard() {
                                                     {formatMoney(a.net_profit)}
                                                 </td>
                                                 <td className="py-3">
-                                                    <Link to={`/analyses/${a.id}`} className="text-brand font-semibold hover:underline" data-testid={`view-analysis-${a.id}`}>
-                                                        تفاصيل
-                                                    </Link>
+                                                    <div className="inline-flex items-center gap-3">
+                                                        <Link to={`/analyses/${a.id}`} className="text-brand font-semibold hover:underline" data-testid={`view-analysis-${a.id}`}>
+                                                            تفاصيل
+                                                        </Link>
+                                                        {a.is_legacy && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openReprocessPicker(a.id)}
+                                                                disabled={reprocessingId === a.id}
+                                                                title="أعد رفع نفس ملف Excel لاستخراج تواريخ الطلبات الفردية وتفعيل فلتر تاريخ إنشاء الطلب"
+                                                                className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 hover:text-amber-900 disabled:opacity-50"
+                                                                data-testid={`reprocess-analysis-${a.id}`}
+                                                            >
+                                                                <ArrowsClockwise size={14} weight="bold" />
+                                                                {reprocessingId === a.id ? "جاري..." : "إعادة معالجة"}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
