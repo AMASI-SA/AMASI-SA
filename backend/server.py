@@ -250,6 +250,141 @@ async def list_order_statuses(user: dict = Depends(current_user)):
     return {"statuses": items}
 
 
+@api.get("/shipping-companies/discover")
+async def discover_shipping_companies(user: dict = Depends(current_user)):
+    """Compare shipping_companies configured in settings vs the company values
+    actually present in `unified_orders`.
+
+    Returns:
+      configured: list of {name, cost, vat_rate, is_deferred, status}
+        status ∈ {"ok", "missing_cost"} — flag for the UI.
+      observed: distinct shipping_company strings in user's orders.
+      unconfigured: observed names that don't match any configured company
+        (case-insensitive partial match). UI can offer "Add to settings".
+    """
+    settings = await ensure_user_settings(db, user["id"])
+    configured_raw = settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES) or []
+
+    # Aggregate distinct shipping companies from orders + their order counts
+    pipeline = [
+        {"$match": {"user_id": user["id"]}},
+        {"$group": {
+            "_id": "$shipping_company",
+            "count": {"$sum": 1},
+            "sum_cost": {"$sum": {"$ifNull": ["$shipping_cost", 0]}},
+        }},
+        {"$sort": {"count": -1}},
+    ]
+    observed_raw: list[dict] = []
+    async for doc in db.unified_orders.aggregate(pipeline):
+        name = (doc.get("_id") or "").strip()
+        if not name:
+            continue
+        observed_raw.append({
+            "name": name,
+            "orders_count": int(doc.get("count") or 0),
+            "sum_shipping_cost": round(float(doc.get("sum_cost") or 0), 2),
+            "avg_shipping_cost": round((doc.get("sum_cost") or 0) / max(int(doc.get("count") or 0), 1), 2),
+        })
+
+    # Build a normalised lookup from settings to match observed names
+    def _norm(s: str) -> str:
+        return (s or "").strip().lower()
+
+    cfg_index = {}
+    for c in configured_raw:
+        n = (c.get("name") or "").strip()
+        if n:
+            cfg_index[_norm(n)] = c
+
+    def _resolve(observed_name: str):
+        n = _norm(observed_name)
+        if n in cfg_index:
+            return cfg_index[n]
+        # substring match
+        for k, c in cfg_index.items():
+            if k and (k in n or n in k):
+                return c
+        return None
+
+    # Configured list with status flag
+    configured = []
+    for c in configured_raw:
+        cost = c.get("cost")
+        # None or 0 → flag as missing_cost
+        try:
+            cost_f = float(cost) if cost is not None else 0.0
+        except (TypeError, ValueError):
+            cost_f = 0.0
+        configured.append({
+            "name": (c.get("name") or "").strip(),
+            "cost": cost_f,
+            "vat_rate": float(c.get("vat_rate") or 0),
+            "is_deferred": bool(c.get("is_deferred")),
+            "status": "ok" if cost_f > 0 else "missing_cost",
+        })
+
+    # Unconfigured = observed but no settings entry matches
+    unconfigured = []
+    for o in observed_raw:
+        if _resolve(o["name"]) is None:
+            unconfigured.append(o)
+
+    return {
+        "configured": configured,
+        "observed": observed_raw,
+        "unconfigured": unconfigured,
+    }
+
+
+class ShippingAutoDiscoverIn(BaseModel):
+    # Optional whitelist of names to add. If omitted, adds ALL unconfigured.
+    names: Optional[List[str]] = None
+
+
+@api.post("/shipping-companies/autodiscover")
+async def autodiscover_shipping_companies(
+    payload: ShippingAutoDiscoverIn,
+    user: dict = Depends(current_user),
+):
+    """Append shipping company entries to settings for every name observed
+    in the user's orders that isn't already configured.
+
+    New entries default to: cost = avg_shipping_cost from orders (rounded),
+    vat_rate = 0.15, is_deferred = False. The user can then fine-tune
+    each row from the Settings UI.
+    """
+    discover = await discover_shipping_companies(user)
+    settings = await ensure_user_settings(db, user["id"])
+    existing = list(settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES) or [])
+
+    target_names = set((payload.names or [])) if payload.names is not None else None
+    added = []
+    for u_item in discover["unconfigured"]:
+        name = u_item["name"]
+        if target_names is not None and name not in target_names:
+            continue
+        cost = float(u_item.get("avg_shipping_cost") or 0)
+        existing.append({
+            "name": name,
+            "cost": round(cost, 2),
+            "vat_rate": 0.15,
+            "is_deferred": False,
+        })
+        added.append({"name": name, "cost": round(cost, 2)})
+
+    if added:
+        await db.settings.update_one(
+            {"user_id": user["id"]},
+            {"$set": {
+                "shipping_companies": existing,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+    return {"added": added, "count": len(added)}
+
+
 @api.get("/balances")
 async def balances_endpoint(
     from_date: Optional[str] = None,

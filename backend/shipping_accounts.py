@@ -127,25 +127,36 @@ def _build_router(db) -> APIRouter:
                 }
 
         # ── Live unified_orders path ────────────────────────────────────────
+        # Pull the order's actual `shipping_cost` so we don't underprice when
+        # the user hasn't filled `cost` in settings. Order data wins, settings
+        # cost is the fallback.
         async for o in db.unified_orders.find(
             {"user_id": user_id},
-            {"_id": 0, "order_status": 1, "shipping_company": 1},
+            {"_id": 0, "order_status": 1, "shipping_company": 1, "shipping_cost": 1},
         ):
             if included_statuses and not await _matches_any(o.get("order_status", ""), included_statuses):
                 continue
             canonical, cfg = _resolve_company(o.get("shipping_company", ""), cfg_map)
             if not cfg or not cfg.get("is_deferred"):
                 continue
+            order_cost = float(o.get("shipping_cost") or 0)
+            cfg_cost = float(cfg.get("cost") or 0)
+            vat = float(cfg.get("vat_rate") or 0)
+            # Prefer the actual shipping cost on the order (most accurate).
+            # When the order has none, fall back to the configured per-order
+            # cost from settings. Anything > 0 wins over 0.
+            cost = order_cost if order_cost > 0 else cfg_cost
             entry = out.setdefault(canonical, {
                 "owed": 0.0,
                 "orders_count": 0,
-                "cost_per_order": float(cfg.get("cost") or 0),
+                "cost_per_order": cost,
             })
-            cost = float(cfg.get("cost") or 0)
-            vat = float(cfg.get("vat_rate") or 0)
             entry["owed"] += round(cost * (1 + vat), 4)
             entry["orders_count"] += 1
-            entry["cost_per_order"] = cost
+            # Show the latest known cost_per_order (running last); UI uses it
+            # only as a hint when there are 0 orders.
+            if cost > 0:
+                entry["cost_per_order"] = cost
 
         # Round final owed (avoid floating drift)
         for k in out:

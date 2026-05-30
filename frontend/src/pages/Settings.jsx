@@ -21,6 +21,8 @@ export default function Settings() {
     const [reportIncluded, setReportIncluded] = useState([]);
     const [hiddenCards, setHiddenCards] = useState([]);
     const [discoveredStatuses, setDiscoveredStatuses] = useState([]); // [{name,count}]
+    const [shippingDiscovery, setShippingDiscovery] = useState(null);
+    const [autoAdding, setAutoAdding] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -60,9 +62,10 @@ export default function Settings() {
     useEffect(() => {
         (async () => {
             try {
-                const [{ data: settings }, { data: statuses }] = await Promise.all([
+                const [{ data: settings }, { data: statuses }, { data: discovery }] = await Promise.all([
                     api.get("/settings"),
                     api.get("/order-statuses"),
+                    api.get("/shipping-companies/discover"),
                 ]);
                 setPayments(withRowIds(settings.payment_methods));
                 setShippings(withRowIds(settings.shipping_companies));
@@ -71,11 +74,41 @@ export default function Settings() {
                 setReportIncluded(settings.report_included_statuses || []);
                 setHiddenCards(settings.dashboard_hidden_cards || []);
                 setDiscoveredStatuses(statuses.statuses || []);
+                setShippingDiscovery(discovery || null);
             } finally { setLoading(false); }
         })();
         loadSnapConfig();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    const reloadShippingDiscovery = async () => {
+        try {
+            const { data } = await api.get("/shipping-companies/discover");
+            setShippingDiscovery(data);
+        } catch { /* swallow */ }
+    };
+
+    const autoAddUnconfigured = async (names = null) => {
+        if (autoAdding) return;
+        setAutoAdding(true);
+        try {
+            const { data } = await api.post("/shipping-companies/autodiscover",
+                names ? { names } : {});
+            if (data?.added?.length) {
+                toast.success(`تمت إضافة ${data.added.length} شركة شحن إلى الإعدادات. عدّل التكلفة/الآجل ثم احفظ.`);
+                // Reload settings to refresh the form
+                const { data: s } = await api.get("/settings");
+                setShippings(withRowIds(s.shipping_companies));
+                await reloadShippingDiscovery();
+            } else {
+                toast.info("لا توجد شركات جديدة لإضافتها.");
+            }
+        } catch (err) {
+            toast.error(formatApiErrorDetail(err.response?.data?.detail));
+        } finally {
+            setAutoAdding(false);
+        }
+    };
 
     // Handle ?snapchat=success|error redirect after OAuth callback
     useEffect(() => {
@@ -327,6 +360,57 @@ export default function Settings() {
                         <Plus size={16} weight="bold" /> إضافة
                     </button>
                 </div>
+
+                {/* Discovery banner: shows mismatches between settings and real orders */}
+                {shippingDiscovery && (shippingDiscovery.unconfigured?.length > 0
+                    || shippingDiscovery.configured?.some((c) => c.status === "missing_cost")) && (
+                    <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4" data-testid="shipping-discovery-banner">
+                        <h3 className="font-bold text-amber-900 mb-2" style={{ fontFamily: "Tajawal" }}>
+                            ⚠ شركات الشحن في الطلبات لا تطابق الإعدادات
+                        </h3>
+
+                        {shippingDiscovery.unconfigured?.length > 0 && (
+                            <div className="mb-3">
+                                <div className="text-sm font-semibold mb-1.5 text-amber-900">
+                                    شركات ظهرت في طلباتك لكن غير معرَّفة:
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                    {shippingDiscovery.unconfigured.map((u) => (
+                                        <div key={u.name} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-amber-200 rounded-md text-xs">
+                                            <span className="font-bold">{u.name}</span>
+                                            <span className="text-muted-foreground">({u.orders_count} طلب • متوسط {u.avg_shipping_cost} ر.س)</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => autoAddUnconfigured()}
+                                    disabled={autoAdding}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                                    data-testid="auto-add-shipping-btn"
+                                >
+                                    {autoAdding ? "جاري الإضافة..." : `+ إضافة الكل تلقائياً (${shippingDiscovery.unconfigured.length})`}
+                                </button>
+                            </div>
+                        )}
+
+                        {shippingDiscovery.configured?.some((c) => c.status === "missing_cost") && (
+                            <div>
+                                <div className="text-sm font-semibold mb-1.5 text-amber-900">
+                                    شركات معرَّفة بتكلفة 0 — تعديلها مطلوب لحساب الشحن الآجل بدقة:
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {shippingDiscovery.configured.filter((c) => c.status === "missing_cost").map((c) => (
+                                        <span key={c.name} className="inline-block px-2.5 py-1 bg-white border border-amber-200 rounded-md text-xs">
+                                            <span className="font-bold">{c.name}</span>
+                                            <span className="text-red-600 ms-1">(cost=0)</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
                 <div className="space-y-3" data-testid="shipping-companies-list">
                     {/* Header row */}
                     <div className="grid grid-cols-14 gap-3 text-xs font-semibold text-muted-foreground px-1 hidden md:grid">
