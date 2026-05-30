@@ -17,13 +17,19 @@ import {
     ArrowsClockwise,
     EyeSlash,
     GearSix,
-} from "@phosphor-icons/react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+} from "@phosphor-icons/react";import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { toast } from "sonner";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { ALL_KPI_CARDS } from "../lib/dashboardCards";
+
+function formatRelative(ms) {
+    if (ms < 5_000) return "الآن";
+    if (ms < 60_000) return `قبل ${Math.floor(ms / 1000)} ثانية`;
+    if (ms < 3_600_000) return `قبل ${Math.floor(ms / 60_000)} دقيقة`;
+    return `قبل ${Math.floor(ms / 3_600_000)} ساعة`;
+}
 
 function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide }) {
     return (
@@ -66,6 +72,8 @@ export default function Dashboard() {
     const [filters, setFilters] = useState(defaultFilters());
     const [reprocessingId, setReprocessingId] = useState(null);
     const [hiddenCards, setHiddenCards] = useState([]);
+    const [lastUpdated, setLastUpdated] = useState(null);
+    const [nowTick, setNowTick] = useState(Date.now());
     const fileInputRef = useRef(null);
     const pendingReprocessId = useRef(null);
 
@@ -75,10 +83,52 @@ export default function Dashboard() {
             const qs = filtersToQueryString(f);
             const { data } = await api.get(`/dashboard${qs ? "?" + qs : ""}`);
             setData(data);
+            setLastUpdated(Date.now());
         } finally {
             setLoading(false);
         }
     };
+
+    // Silent refresh — same fetch but without flicker (no loading state).
+    const refreshSilently = async () => {
+        try {
+            const qs = filtersToQueryString(filters);
+            const { data } = await api.get(`/dashboard${qs ? "?" + qs : ""}`);
+            setData(data);
+            setLastUpdated(Date.now());
+        } catch {
+            /* swallow; next tick will retry */
+        }
+    };
+
+    // Auto-poll every 60 seconds when the tab is active. This keeps the
+    // dashboard in sync with new Make.com webhook orders without requiring
+    // the user to refresh manually.
+    useEffect(() => {
+        const id = setInterval(() => {
+            if (document.visibilityState === "visible") {
+                refreshSilently();
+            }
+        }, 60_000);
+        return () => clearInterval(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filters]);
+
+    // Update the "آخر تحديث: قبل Xث" label once a second.
+    useEffect(() => {
+        const id = setInterval(() => setNowTick(Date.now()), 1000);
+        return () => clearInterval(id);
+    }, []);
+
+    // Also refresh when the user returns to the tab (after switching apps).
+    useEffect(() => {
+        const onVis = () => {
+            if (document.visibilityState === "visible") refreshSilently();
+        };
+        document.addEventListener("visibilitychange", onVis);
+        return () => document.removeEventListener("visibilitychange", onVis);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filters]);
 
     // Load the user's card-visibility preferences once on mount.
     useEffect(() => {
@@ -184,7 +234,27 @@ export default function Dashboard() {
             </div>
 
             {/* Advanced filters: date preset + payment + shipping */}
-            <AdvancedFilters value={filters} onChange={setFilters} />
+            <div className="flex items-stretch gap-2">
+                <div className="flex-1">
+                    <AdvancedFilters value={filters} onChange={setFilters} />
+                </div>
+                <button
+                    type="button"
+                    onClick={() => fetchDashboard(filters)}
+                    disabled={loading}
+                    title="تحديث البيانات الآن (يحدّث تلقائياً كل دقيقة)"
+                    className="px-3 py-2 rounded-lg border border-border bg-white font-bold text-sm hover:bg-accent transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                    data-testid="dashboard-refresh-btn"
+                >
+                    <ArrowsClockwise size={16} weight="bold" className={loading ? "animate-spin" : ""} />
+                    تحديث
+                </button>
+            </div>
+            {lastUpdated && (
+                <div className="text-xs text-muted-foreground -mt-2" data-testid="dashboard-last-updated">
+                    آخر تحديث: {formatRelative(nowTick - lastUpdated)} • يحدِّث تلقائياً كل دقيقة
+                </div>
+            )}
 
             {loading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

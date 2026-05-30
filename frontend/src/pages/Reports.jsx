@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChartPieSlice, CalendarBlank } from "@phosphor-icons/react";
+import { ChartPieSlice, CalendarBlank, ArrowsClockwise } from "@phosphor-icons/react";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
     PieChart, Pie, Cell,
@@ -10,27 +10,64 @@ import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../compon
 
 const COLORS = ["#0A3622", "#D4AF37", "#16A34A", "#D97706", "#0EA5E9", "#7C3AED", "#DC2626", "#0891B2"];
 
+function formatRelative(ms) {
+    if (ms < 5_000) return "الآن";
+    if (ms < 60_000) return `قبل ${Math.floor(ms / 1000)} ثانية`;
+    if (ms < 3_600_000) return `قبل ${Math.floor(ms / 60_000)} دقيقة`;
+    return `قبل ${Math.floor(ms / 3_600_000)} ساعة`;
+}
+
 export default function Reports() {
     const [dashboard, setDashboard] = useState(null);
     const [allDaily, setAllDaily] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(defaultFilters());
+    const [lastUpdated, setLastUpdated] = useState(null);
+    const [nowTick, setNowTick] = useState(Date.now());
     const fromDate = filters.from;
     const toDate = filters.to;
 
+    const fetchAll = async (loud = true) => {
+        if (loud) setLoading(true);
+        try {
+            const qs = filtersToQueryString(filters);
+            const [dashRes, dailyRes] = await Promise.all([
+                api.get(`/dashboard${qs ? "?" + qs : ""}`),
+                api.get("/daily-costs"),
+            ]);
+            setDashboard(dashRes.data || null);
+            setAllDaily(dailyRes.data || []);
+            setLastUpdated(Date.now());
+        } catch {
+            /* silent on background refresh */
+        } finally {
+            if (loud) setLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchAll(true); /* eslint-disable-next-line */ }, [filters]);
+
+    // Auto-poll every 60s while the tab is active.
     useEffect(() => {
-        (async () => {
-            setLoading(true);
-            try {
-                const qs = filtersToQueryString(filters);
-                const [dashRes, dailyRes] = await Promise.all([
-                    api.get(`/dashboard${qs ? "?" + qs : ""}`),
-                    api.get("/daily-costs"),
-                ]);
-                setDashboard(dashRes.data || null);
-                setAllDaily(dailyRes.data || []);
-            } finally { setLoading(false); }
-        })();
+        const id = setInterval(() => {
+            if (document.visibilityState === "visible") fetchAll(false);
+        }, 60_000);
+        return () => clearInterval(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filters]);
+
+    useEffect(() => {
+        const id = setInterval(() => setNowTick(Date.now()), 1000);
+        return () => clearInterval(id);
+    }, []);
+
+    useEffect(() => {
+        const onVis = () => {
+            if (document.visibilityState === "visible") fetchAll(false);
+        };
+        document.addEventListener("visibilitychange", onVis);
+        return () => document.removeEventListener("visibilitychange", onVis);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters]);
 
     // Apply date filter to daily costs (dashboard already filters server-side)
@@ -138,7 +175,27 @@ export default function Reports() {
             </div>
 
             {/* Advanced filters: date preset + payment + shipping */}
-            <AdvancedFilters value={filters} onChange={setFilters} />
+            <div className="flex items-stretch gap-2">
+                <div className="flex-1">
+                    <AdvancedFilters value={filters} onChange={setFilters} />
+                </div>
+                <button
+                    type="button"
+                    onClick={() => fetchAll(true)}
+                    disabled={loading}
+                    title="تحديث البيانات الآن (يحدّث تلقائياً كل دقيقة)"
+                    className="px-3 py-2 rounded-lg border border-border bg-white font-bold text-sm hover:bg-accent transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                    data-testid="reports-refresh-btn"
+                >
+                    <ArrowsClockwise size={16} weight="bold" className={loading ? "animate-spin" : ""} />
+                    تحديث
+                </button>
+            </div>
+            {lastUpdated && (
+                <div className="text-xs text-muted-foreground -mt-2" data-testid="reports-last-updated">
+                    آخر تحديث: {formatRelative(nowTick - lastUpdated)} • يحدِّث تلقائياً كل دقيقة
+                </div>
+            )}
 
             {!hasData ? (
                 <div className="rounded-xl border border-border bg-white p-12 text-center">
