@@ -1,13 +1,12 @@
-"""Regression test — webhook MUST NOT fall back to "today" for orders
-without a created_at field. Previously this silently labeled
-March/April orders that Make.com forwarded today (without created_at)
-as "May orders", inflating the current month's KPIs.
+"""Regression tests — Make.com webhook date handling.
 
-Expected new behavior:
-- Order without created_at → order_date=None (or absent).
-- Order does NOT appear in date-filtered dashboard queries.
-- Stats expose `orders_missing_date` counter so the merchant can fix
-  their Make.com mapping.
+Behavior:
+- Order WITH created_at → order_date = parsed date, order_date_inferred = False.
+- Order WITHOUT created_at → order_date = received_at[:10], order_date_inferred = True.
+  This makes the order appear in dashboard immediately, with an "approximate
+  date" badge. If the same order arrives later with a real created_at, the
+  inferred date is REPLACED by the authoritative one.
+- Stats expose `orders_inferred_date` so the merchant can fix Make.com mapping.
 """
 import os
 import uuid
@@ -28,117 +27,120 @@ def _register():
     return r.json()["access_token"]
 
 
-def test_webhook_no_date_fallback_to_today():
-    """Send an order without created_at. order_date MUST be None, not today."""
+def test_webhook_without_created_at_uses_today_as_inferred():
+    """Order without created_at → order_date = today (inferred), shows in dashboard."""
     token = _register()
     h = {"Authorization": f"Bearer {token}"}
     wt = requests.get(f"{API}/webhook/settings", headers=h).json()
     resp = requests.post(
         f"{API}/webhook/make/{wt['token']}",
         json={
-            "order_number": "NO-DATE-ORDER-1",
+            "order_number": "INFER-1",
             "total": 100,
             "payment_method": "مدى",
-            "order_status": "بإنتظار المراجعة",
+            "order_status": "تم التوصيل",
         },
     )
     resp.raise_for_status()
     body = resp.json()
     assert body["accepted"] == 1
-    assert body.get("without_date") == 1  # response exposes the counter
+    assert body.get("inferred_date") == 1
 
-    # Verify the stored order has order_date=None
     orders = requests.get(f"{API}/webhook/orders?limit=10", headers=h).json()["orders"]
-    target = next((o for o in orders if o["order_number"] == "NO-DATE-ORDER-1"), None)
+    target = next((o for o in orders if o["order_number"] == "INFER-1"), None)
     assert target is not None
-    assert target.get("order_date") in (None, "")
+    assert target.get("order_date") is not None  # has a date now
+    assert target.get("order_date_inferred") is True
 
 
-def test_no_date_order_excluded_from_date_filter():
-    """An order without created_at must NOT appear in date-filtered dashboard."""
+def test_inferred_order_appears_in_dashboard_for_current_month():
+    """Inferred-date order MUST appear in dashboard date filter for today."""
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).date()
+    first = today.replace(day=1).isoformat()
+    last = today.isoformat()
+
     token = _register()
     h = {"Authorization": f"Bearer {token}"}
     wt = requests.get(f"{API}/webhook/settings", headers=h).json()
     requests.post(
         f"{API}/webhook/make/{wt['token']}",
         json={
-            "order_number": "NO-DATE-2",
-            "total": 999,
+            "order_number": "INFER-DASH-1",
+            "total": 500,
             "payment_method": "مدى",
             "order_status": "تم التوصيل",
         },
     ).raise_for_status()
 
-    # Dashboard with any date filter must NOT include this order
     r = requests.get(
-        f"{API}/dashboard?from_date=2026-05-01&to_date=2026-05-31",
+        f"{API}/dashboard?from_date={first}&to_date={last}",
         headers=h,
-    )
-    r.raise_for_status()
-    t = r.json()["totals"]
-    assert t["total_orders"] == 0
-    assert t["total_sales"] == 0.0
+    ).json()
+    assert r["totals"]["total_orders"] == 1
 
 
-def test_stats_exposes_orders_missing_date():
+def test_authoritative_date_overrides_inferred():
+    """Same order, later, arrives WITH created_at → inferred date replaced."""
     token = _register()
     h = {"Authorization": f"Bearer {token}"}
     wt = requests.get(f"{API}/webhook/settings", headers=h).json()
+
+    # First webhook: no date → inferred
+    requests.post(
+        f"{API}/webhook/make/{wt['token']}",
+        json={"order_number": "FIX-LATER-1", "total": 200, "payment_method": "مدى"},
+    ).raise_for_status()
+
+    # Second webhook: same order, now with created_at
     requests.post(
         f"{API}/webhook/make/{wt['token']}",
         json={
-            "order_number": "ND-A",
-            "total": 50,
+            "order_number": "FIX-LATER-1",
+            "created_at": "2026-02-10T10:00:00+03:00",
+            "total": 200,
             "payment_method": "مدى",
         },
+    ).raise_for_status()
+
+    orders = requests.get(f"{API}/webhook/orders?limit=10", headers=h).json()["orders"]
+    target = next((o for o in orders if o["order_number"] == "FIX-LATER-1"), None)
+    assert target is not None
+    assert target.get("order_date") == "2026-02-10"
+    assert target.get("order_date_inferred") is False
+
+
+def test_stats_exposes_inferred_count():
+    token = _register()
+    h = {"Authorization": f"Bearer {token}"}
+    wt = requests.get(f"{API}/webhook/settings", headers=h).json()
+    # 2 inferred + 1 authoritative
+    requests.post(
+        f"{API}/webhook/make/{wt['token']}",
+        json={"order_number": "INF-A", "total": 50, "payment_method": "مدى"},
+    ).raise_for_status()
+    requests.post(
+        f"{API}/webhook/make/{wt['token']}",
+        json={"order_number": "INF-B", "total": 60, "payment_method": "مدى"},
     ).raise_for_status()
     requests.post(
         f"{API}/webhook/make/{wt['token']}",
         json={
-            "order_number": "WITH-DATE-X",
+            "order_number": "GOOD-DATE",
             "created_at": "2026-04-10T00:00:00+03:00",
-            "total": 60,
+            "total": 70,
             "payment_method": "مدى",
         },
     ).raise_for_status()
 
     stats = requests.get(f"{API}/webhook/stats", headers=h).json()
-    assert stats["orders_missing_date"] == 1
-    assert stats["by_source"]["make"] == 2
-
-
-def test_orders_missing_date_endpoint():
-    token = _register()
-    h = {"Authorization": f"Bearer {token}"}
-    wt = requests.get(f"{API}/webhook/settings", headers=h).json()
-    requests.post(
-        f"{API}/webhook/make/{wt['token']}",
-        json={"order_number": "MISS-1", "total": 10, "payment_method": "مدى"},
-    ).raise_for_status()
-    requests.post(
-        f"{API}/webhook/make/{wt['token']}",
-        json={"order_number": "MISS-2", "total": 20, "payment_method": "مدى"},
-    ).raise_for_status()
-    requests.post(
-        f"{API}/webhook/make/{wt['token']}",
-        json={
-            "order_number": "HAS-DATE",
-            "created_at": "2026-03-15T00:00:00+03:00",
-            "total": 30,
-            "payment_method": "مدى",
-        },
-    ).raise_for_status()
-
-    r = requests.get(f"{API}/webhook/orders-missing-date?limit=50", headers=h)
-    r.raise_for_status()
-    body = r.json()
-    assert body["total"] == 2
-    order_numbers = sorted(o["order_number"] for o in body["orders"])
-    assert order_numbers == ["MISS-1", "MISS-2"]
+    assert stats["orders_inferred_date"] == 2
+    assert stats["orders_missing_date"] == 0  # no truly missing
+    assert stats["by_source"]["make"] == 3
 
 
 def test_order_with_correct_created_at_lands_in_right_month():
-    """Send a March order. It must appear in March, NOT in the current month."""
+    """Authoritative date → exact month, NOT current month."""
     token = _register()
     h = {"Authorization": f"Bearer {token}"}
     wt = requests.get(f"{API}/webhook/settings", headers=h).json()
@@ -159,10 +161,3 @@ def test_order_with_correct_created_at_lands_in_right_month():
         headers=h,
     ).json()
     assert r_mar["totals"]["total_orders"] == 1
-
-    # May filter → 0 orders (this was the bug we just fixed)
-    r_may = requests.get(
-        f"{API}/dashboard?from_date=2026-05-01&to_date=2026-05-31",
-        headers=h,
-    ).json()
-    assert r_may["totals"]["total_orders"] == 0

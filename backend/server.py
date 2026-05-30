@@ -1234,8 +1234,38 @@ async def on_startup():
                 {"$set": {"order_date": None, "order_date_missing": True}},
             )
             today_fallback_cleared += 1
-    if today_fallback_cleared:
-        logger.info(f"Cleared spurious order_date=today on {today_fallback_cleared} Make.com orders (missing original created_at).")
+    # 2026-05 corrective migration v2: restore order_date for rows the
+    # previous migration cleared. The user explicitly opted-in to having
+    # Make.com orders auto-appear in the dashboard, so we now refill the
+    # cleared rows with received_at[:10] and mark them as inferred.
+    cleared_cursor = db.unified_orders.find(
+        {
+            "order_date_missing": True,
+            "received_at": {"$exists": True, "$nin": [None, ""]},
+        },
+        {"_id": 1, "received_at": 1},
+    )
+    restored = 0
+    async for o in cleared_cursor:
+        try:
+            recv_day = datetime.fromisoformat(
+                str(o["received_at"]).replace("Z", "+00:00")
+            ).date().isoformat()
+        except Exception:
+            continue
+        await db.unified_orders.update_one(
+            {"_id": o["_id"]},
+            {
+                "$set": {
+                    "order_date": recv_day,
+                    "order_date_inferred": True,
+                },
+                "$unset": {"order_date_missing": ""},
+            },
+        )
+        restored += 1
+    if restored:
+        logger.info(f"Restored order_date=received_at on {restored} previously-cleared Make.com orders (marked as inferred).")
 
     await seed_admin(db)
     logger.info("Hesab backend started successfully.")

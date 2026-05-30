@@ -24,6 +24,7 @@ TRACKED_FIELDS = (
     "order_id",
     "order_date",            # ISO date YYYY-MM-DD (normalized)
     "order_date_raw",        # original string from source
+    "order_date_inferred",   # True if order_date was guessed (no created_at in payload)
     "order_status",
     "order_status_slug",
     "payment_status",
@@ -103,6 +104,25 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                 merged[f] = new_val
                 field_sources[f] = source
             # else: keep existing (first writer wins for non-critical)
+
+        # Special-case: if the stored order_date was an inferred value (Make.com
+        # webhook arrived without created_at and we used today as a guess)
+        # AND the new payload carries an authoritative date (raw value set,
+        # i.e. NOT inferred), let the authoritative date win.
+        if merged.get("order_date_inferred"):
+            incoming_inferred = incoming.get("order_date_inferred")
+            incoming_raw = incoming.get("order_date_raw")
+            new_order_date = incoming.get("order_date")
+            if (
+                incoming_inferred is False
+                and incoming_raw
+                and new_order_date
+                and not _is_empty(new_order_date)
+            ):
+                merged["order_date"] = new_order_date
+                merged["order_date_raw"] = incoming_raw
+                merged["order_date_inferred"] = False
+                field_sources["order_date"] = source
         # Lists: take incoming if richer
         new_prods = incoming.get("products") or []
         if new_prods and len(new_prods) >= len(merged.get("products") or []):

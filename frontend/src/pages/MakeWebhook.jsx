@@ -163,19 +163,35 @@ export default function MakeWebhook() {
                 />
             </div>
 
-            {/* Warning: orders missing creation date */}
-            {(stats?.orders_missing_date || 0) > 0 && (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex items-start gap-3" data-testid="missing-date-banner">
+            {/* Info: orders with inferred date (Make.com missing created_at) */}
+            {(stats?.orders_inferred_date || 0) > 0 && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex items-start gap-3" data-testid="inferred-date-banner">
                     <Warning size={28} weight="fill" className="text-amber-600 shrink-0 mt-0.5" />
                     <div className="flex-1">
                         <div className="font-bold text-amber-900">
-                            ⚠️ يوجد <strong>{stats.orders_missing_date}</strong> طلب بدون تاريخ إنشاء
+                            ℹ️ يوجد <strong>{stats.orders_inferred_date}</strong> طلب بتاريخ تقريبي
                         </div>
                         <div className="text-sm text-amber-800 mt-1 leading-relaxed">
-                            هذه الطلبات وصلت من Make.com بدون حقل <code className="bg-amber-100 px-1 py-0.5 rounded">created_at</code>،
-                            ولن تظهر في لوحة التحكم أو التقارير المُفلترة بالتاريخ.
+                            وصلت هذه الطلبات من Make.com بدون حقل <code className="bg-amber-100 px-1 py-0.5 rounded">created_at</code>،
+                            فاستُخدم تاريخ الاستلام كتاريخ تقريبي لتظهر في لوحة التحكم. <strong>قد لا تكون في شهرها الصحيح.</strong>
                             <br />
-                            <strong>الحل:</strong> في سيناريو Make.com، تأكد من تمرير حقل تاريخ إنشاء الطلب من سلة (مثلاً <code className="bg-amber-100 px-1 py-0.5 rounded">created_at</code> أو <code className="bg-amber-100 px-1 py-0.5 rounded">date</code>) ثم أعد إرسال الطلبات.
+                            <strong>للحصول على التاريخ الدقيق:</strong> في سيناريو Make.com، أضف حقل <code className="bg-amber-100 px-1 py-0.5 rounded">created_at</code> من Salla في الـ JSON body،
+                            ثم أعد إرسال الطلبات — سيتم تصحيح التاريخ تلقائياً.
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Warning: orders that have no date at all (extremely rare now) */}
+            {(stats?.orders_missing_date || 0) > 0 && (
+                <div className="rounded-xl border border-red-300 bg-red-50 p-4 flex items-start gap-3" data-testid="missing-date-banner">
+                    <Warning size={28} weight="fill" className="text-red-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                        <div className="font-bold text-red-900">
+                            ⚠️ يوجد <strong>{stats.orders_missing_date}</strong> طلب بدون تاريخ
+                        </div>
+                        <div className="text-sm text-red-800 mt-1 leading-relaxed">
+                            هذه طلبات قديمة محفوظة بدون أي تاريخ ولن تظهر في لوحة التحكم.
+                            يرجى التواصل مع الدعم لإصلاحها.
                         </div>
                     </div>
                 </div>

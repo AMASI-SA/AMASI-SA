@@ -273,7 +273,7 @@ def _build_router(db) -> APIRouter:
 
         accepted = 0
         updated = 0
-        accepted_without_date = 0
+        accepted_inferred_date = 0
         errors: list[dict] = []
         for raw in items:
             try:
@@ -295,16 +295,18 @@ def _build_router(db) -> APIRouter:
                 total_val = _to_float(payload.total_amount)
 
             # normalize date — prefer created_at, then order_date.
-            # We DO NOT fall back to today when both are missing: doing so
-            # silently labels orders with the wrong month (e.g. a March order
-            # that Make.com forwards today without a created_at field would
-            # land in May, inflating the current month's stats). Leaving
-            # order_date=None makes the missing-date case explicit — the
-            # order is still saved and visible on the Make.com page, but it
-            # won't appear in date-filtered dashboard/reports until the
-            # merchant fixes their Make.com mapping (or re-sends with
-            # created_at).
-            order_date_norm = (
+            # Fallback to received date (today) when Make.com sends a payload
+            # without any date field. We mark such rows with
+            # `order_date_inferred=True` so the UI can highlight them and so
+            # Excel re-imports (which always carry the authoritative
+            # created_at) can later overwrite the inferred value.
+            #
+            # IMPORTANT TRADE-OFF: this restores the convenience of
+            # auto-appearing orders in the dashboard, BUT it means that if
+            # Make.com replays old orders without created_at, those orders
+            # will be tagged with today's date. Fix your Make.com scenario
+            # to pass `created_at` for authoritative dating.
+            authoritative_date = (
                 _normalize_order_date(payload.created_at)
                 or _normalize_order_date(payload.order_date)
                 or _normalize_order_date(raw.get("created_at"))
@@ -312,6 +314,12 @@ def _build_router(db) -> APIRouter:
                 or _normalize_order_date(raw.get("purchase_date"))
                 or _normalize_order_date(raw.get("date"))
             )
+            if authoritative_date:
+                order_date_norm = authoritative_date
+                order_date_inferred = False
+            else:
+                order_date_norm = datetime.now(timezone.utc).date().isoformat()
+                order_date_inferred = True
 
             incoming = {
                 # Identifiers
@@ -319,6 +327,7 @@ def _build_router(db) -> APIRouter:
                 # Dates
                 "order_date": order_date_norm,
                 "order_date_raw": (payload.created_at or payload.order_date or "").strip(),
+                "order_date_inferred": order_date_inferred,
                 # Status
                 "order_status": (payload.order_status or payload.status or "").strip(),
                 "order_status_slug": (payload.order_status_slug or "").strip(),
@@ -354,8 +363,8 @@ def _build_router(db) -> APIRouter:
                 accepted += 1
             else:
                 updated += 1
-            if order_date_norm is None:
-                accepted_without_date += 1
+            if order_date_inferred:
+                accepted_inferred_date += 1
 
         await db.webhook_tokens.update_one(
             {"user_id": user_id},
@@ -367,7 +376,7 @@ def _build_router(db) -> APIRouter:
             "ok": True,
             "accepted": accepted,
             "updated": updated,
-            "without_date": accepted_without_date,
+            "inferred_date": accepted_inferred_date,
             "errors": errors[:20],  # cap response size
             "error_count": len(errors),
         }
@@ -481,6 +490,14 @@ def _build_router(db) -> APIRouter:
                 {"order_date": {"$exists": False}},
             ],
         })
+        # Orders whose date was inferred from received_at (because Make.com
+        # didn't send created_at). These appear in dashboard tagged with
+        # an approximate date — the merchant should fix the Make.com mapping
+        # to send the authoritative date.
+        inferred_date = await db.unified_orders.count_documents({
+            "user_id": user["id"],
+            "order_date_inferred": True,
+        })
         return {
             "connected": bool(tok),
             "total_orders_in_db": total,
@@ -489,6 +506,7 @@ def _build_router(db) -> APIRouter:
             "date_range": rng,
             "by_source": per_source,
             "orders_missing_date": missing_date,
+            "orders_inferred_date": inferred_date,
         }
 
     @router.get("/orders-missing-date")
