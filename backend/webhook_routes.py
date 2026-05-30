@@ -169,6 +169,86 @@ def _build_router(db) -> APIRouter:
         return f"{base}/api/webhook/make/{token}" if base else f"/api/webhook/make/{token}"
 
     # ── PUBLIC INGESTION ──────────────────────────────────────────────────
+
+    # TikTok Ads daily metrics (push from Make.com)
+    class TikTokSpendIn(BaseModel):
+        date: str  # YYYY-MM-DD
+        spend: float = 0.0
+        purchases: int = 0
+        revenue: float = 0.0
+        source: Optional[str] = "tiktok"   # informational only
+
+        class Config:
+            extra = "allow"
+
+    @router.post("/tiktok/{token}")
+    async def ingest_tiktok(token: str, request: Request):
+        """Ingest a single TikTok-Ads daily row pushed by Make.com.
+
+        Body shape (per user spec):
+            {"source":"tiktok","date":"2026-05-30","spend":350.75,
+             "purchases":12,"revenue":2400.00}
+
+        Upserts into `tiktok_ads_daily` keyed by (user_id, date). Posting the
+        same date twice overwrites the previous row, so Make.com can safely
+        re-send a day if it gets refreshed.
+        """
+        tok_doc = await db.webhook_tokens.find_one({"token": token})
+        if not tok_doc:
+            raise HTTPException(status_code=401, detail="Invalid webhook token")
+        user_id = tok_doc["user_id"]
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+
+        # Allow a batch (list) or single object
+        items = body if isinstance(body, list) else [body]
+        accepted = 0
+        errors: list[dict] = []
+        for raw in items:
+            try:
+                payload = TikTokSpendIn(**raw)
+            except Exception as exc:
+                errors.append({"data": raw, "error": str(exc)})
+                continue
+            # Strict date format
+            import re
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", payload.date):
+                errors.append({"data": raw, "error": "date must be YYYY-MM-DD"})
+                continue
+            doc = {
+                "user_id": user_id,
+                "date": payload.date,
+                "spend": round(float(payload.spend or 0), 2),
+                "purchases": int(payload.purchases or 0),
+                "revenue": round(float(payload.revenue or 0), 2),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.tiktok_ads_daily.update_one(
+                {"user_id": user_id, "date": payload.date},
+                {"$set": doc, "$setOnInsert": {"id": str(uuid.uuid4()),
+                                                 "created_at": doc["updated_at"]}},
+                upsert=True,
+            )
+            accepted += 1
+
+        # Update webhook token stats for visibility on the UI
+        await db.webhook_tokens.update_one(
+            {"token": token},
+            {"$set": {"last_sync_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        return {"accepted": accepted, "errors": errors}
+
+    @router.get("/tiktok/recent")
+    async def tiktok_recent(days: int = Query(30, ge=1, le=365), user: dict = Depends(current_user)):
+        from datetime import timedelta, date as _date
+        cutoff = (_date.today() - timedelta(days=days - 1)).isoformat()
+        items = await db.tiktok_ads_daily.find(
+            {"user_id": user["id"], "date": {"$gte": cutoff}}, {"_id": 0}
+        ).sort("date", -1).to_list(days)
+        return {"items": items}
+
     @router.post("/make/{token}")
     async def ingest_orders(token: str, request: Request):
         tok_doc = await db.webhook_tokens.find_one({"token": token})
@@ -285,6 +365,7 @@ def _build_router(db) -> APIRouter:
         return {
             "token": tok["token"],
             "webhook_url": _public_webhook_url(tok["token"]),
+            "tiktok_webhook_url": _public_webhook_url(tok["token"]).replace("/make/", "/tiktok/"),
             "last_sync_at": tok.get("last_sync_at"),
             "total_received": tok.get("total_received", 0),
             "total_orders_in_db": total_orders,

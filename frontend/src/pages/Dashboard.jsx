@@ -302,6 +302,47 @@ export default function Dashboard() {
                         </Link>
                     )}
 
+                    {/* TikTok Ads dedicated section (pushed via Make.com webhook) */}
+                    {(totals.tiktok_spend > 0 || totals.tiktok_revenue > 0 || totals.tiktok_purchases > 0) && (
+                        <div
+                            className="rounded-xl border-2 border-pink-200 p-6"
+                            style={{ background: "linear-gradient(135deg,#fff7fb 0%,#fff 50%,#f0fcff 100%)" }}
+                            data-testid="tiktok-ads-section"
+                        >
+                            <div className="flex items-center gap-3 mb-5">
+                                <div className="w-11 h-11 rounded-xl bg-black text-white flex items-center justify-center font-extrabold text-lg" style={{ fontFamily: "Tajawal" }}>
+                                    TT
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>TikTok Ads</h2>
+                                    <p className="text-xs text-muted-foreground">
+                                        البيانات تأتي من Make.com — تحديث تلقائي كل دقيقة
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-spend-card">
+                                    <div className="text-xs text-muted-foreground mb-1">التكلفة (ر.س)</div>
+                                    <div className="num text-2xl font-extrabold text-pink-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(totals.tiktok_spend)}</div>
+                                </div>
+                                <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-purchases-card">
+                                    <div className="text-xs text-muted-foreground mb-1">عدد الطلبات</div>
+                                    <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(totals.tiktok_purchases)}</div>
+                                </div>
+                                <div className="bg-white border border-cyan-100 rounded-lg p-4" data-testid="tiktok-revenue-card">
+                                    <div className="text-xs text-muted-foreground mb-1">العائد (ر.س)</div>
+                                    <div className="num text-2xl font-extrabold text-cyan-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(totals.tiktok_revenue)}</div>
+                                </div>
+                                <div className={`border-2 rounded-lg p-4 ${totals.tiktok_roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="tiktok-roas-card">
+                                    <div className="text-xs text-muted-foreground mb-1">ROAS (العائد ÷ التكلفة)</div>
+                                    <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: totals.tiktok_roas >= 2 ? "#047857" : "#B45309" }}>
+                                        {totals.tiktok_spend > 0 ? `${totals.tiktok_roas}x` : "—"}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Monthly chart */}
                     <div className="rounded-xl border border-border bg-white p-6">
                         <div className="flex items-center justify-between mb-6">

@@ -193,12 +193,41 @@ export default function MakeWebhook() {
                     </div>
                 </div>
 
+                {/* TikTok Ads webhook (uses same token, different path) */}
+                {settings.tiktok_webhook_url && (
+                    <div className="border-t border-border pt-5">
+                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                            🎵 رابط استقبال TikTok Ads (نفس Token — لإحصائيات الإعلانات اليومية)
+                        </label>
+                        <div className="flex items-center gap-2">
+                            <input
+                                readOnly
+                                value={settings.tiktok_webhook_url}
+                                className="flex-1 px-3 py-2.5 text-sm border border-pink-200 rounded-lg bg-pink-50/40 font-mono"
+                                dir="ltr"
+                                data-testid="tiktok-webhook-url"
+                                onClick={(e) => e.target.select()}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => copy(settings.tiktok_webhook_url, "تم نسخ رابط TikTok")}
+                                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-border text-sm font-semibold hover:bg-accent transition-colors"
+                                data-testid="copy-tiktok-url-btn"
+                            >
+                                <Copy size={16} weight="bold" /> نسخ
+                            </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                            مثال JSON: <code dir="ltr" className="bg-accent/40 px-1 rounded">{'{"source":"tiktok","date":"2026-05-30","spend":350.75,"purchases":12,"revenue":2400}'}</code>
+                        </p>
+                    </div>
+                )}
+
                 <div>
                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">Token (مدمج في الرابط)</label>
                     <div className="flex items-center gap-2">
                         <code className="flex-1 px-3 py-2.5 text-sm border border-border rounded-lg bg-accent/40 font-mono" dir="ltr" data-testid="make-token">
-                            {settings.token}
-                        </code>
+                            {settings.token}                        </code>
                         <button
                             type="button"
                             onClick={rotate}

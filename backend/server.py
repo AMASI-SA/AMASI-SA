@@ -745,6 +745,19 @@ async def dashboard(
         daily_q["date"] = date_filter
     daily = await db.daily_costs.find(daily_q, {"_id": 0}).to_list(1000)
 
+    # ── TikTok Ads daily (pushed by Make.com via /api/webhook/tiktok/...) ────
+    tt_q = {"user_id": user["id"]}
+    if from_date or to_date:
+        df = {}
+        if from_date: df["$gte"] = from_date
+        if to_date: df["$lte"] = to_date
+        tt_q["date"] = df
+    tt_rows = await db.tiktok_ads_daily.find(tt_q, {"_id": 0}).to_list(1000)
+    tiktok_spend = sum(float(r.get("spend") or 0) for r in tt_rows)
+    tiktok_purchases = sum(int(r.get("purchases") or 0) for r in tt_rows)
+    tiktok_revenue = sum(float(r.get("revenue") or 0) for r in tt_rows)
+    tiktok_roas = round(tiktok_revenue / tiktok_spend, 2) if tiktok_spend > 0 else 0.0
+
     daily_ads_total = sum(
         (d.get("snapchat_ads", 0) or 0) + (d.get("snapchat_ads_2", 0) or 0)
         + (d.get("tiktok_ads", 0) or 0) + (d.get("instagram_ads", 0) or 0)
@@ -849,6 +862,11 @@ async def dashboard(
             "orders_make_count": src_counts.get("make", 0),
             "legacy_analyses_count": len(legacy_analyses),
             "report_included_statuses_active": bool(included_statuses),
+            # ── TikTok Ads (pushed via Make.com webhook) ────────────────────
+            "tiktok_spend": round(tiktok_spend, 2),
+            "tiktok_purchases": int(tiktok_purchases),
+            "tiktok_revenue": round(tiktok_revenue, 2),
+            "tiktok_roas": tiktok_roas,
             # Backward-compatible aliases used by older UI code
             "analyses_count": len(recent),
             "make_orders_count": src_counts.get("make", 0),
