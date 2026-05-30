@@ -193,16 +193,23 @@ def _build_router(db) -> APIRouter:
     class SelectAdAccountIn(BaseModel):
         ad_account_id: str
         ad_account_name: Optional[str] = ""
+        timezone: Optional[str] = ""  # IANA name e.g. "Asia/Riyadh" from /adaccounts response
+        currency: Optional[str] = ""
 
     @router.post("/select-adaccount")
     async def select_adaccount(payload: SelectAdAccountIn, user: dict = Depends(current_user)):
+        update: dict = {
+            "ad_account_id": payload.ad_account_id.strip(),
+            "ad_account_name": (payload.ad_account_name or "").strip(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if payload.timezone:
+            update["ad_account_timezone"] = payload.timezone.strip()
+        if payload.currency:
+            update["ad_account_currency"] = payload.currency.strip()
         res = await db.snapchat_connections.update_one(
             {"user_id": user["id"]},
-            {"$set": {
-                "ad_account_id": payload.ad_account_id.strip(),
-                "ad_account_name": (payload.ad_account_name or "").strip(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }},
+            {"$set": update},
         )
         if res.matched_count == 0:
             raise HTTPException(status_code=400, detail="لم يتم العثور على حساب سناب مربوط")
@@ -341,33 +348,98 @@ def _build_router(db) -> APIRouter:
                 })
         return {"adaccounts": out}
 
+    async def _resolve_ad_account_timezone(http: httpx.AsyncClient, access_token: str, ad_id: str, conn: dict) -> str:
+        """Return IANA timezone (e.g. 'Asia/Riyadh') for the ad account.
+        Falls back to UTC if not resolvable.
+        """
+        tz_name = (conn.get("ad_account_timezone") or "").strip()
+        if tz_name:
+            return tz_name
+        try:
+            r = await http.get(
+                f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}",
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            )
+            r.raise_for_status()
+            data = r.json()
+            wrap = (data.get("adaccounts") or [{}])[0]
+            acc = wrap.get("adaccount") if isinstance(wrap, dict) and "adaccount" in wrap else wrap
+            tz_name = (acc or {}).get("timezone") or ""
+            if tz_name:
+                # Cache for future calls
+                await db.snapchat_connections.update_one(
+                    {"user_id": conn["user_id"]},
+                    {"$set": {"ad_account_timezone": tz_name}},
+                )
+                return tz_name
+        except Exception as exc:
+            logger.warning("Could not resolve ad account timezone, falling back to UTC: %s", exc)
+        return "UTC"
+
+    def _validate_iso_date(value: str) -> "date":
+        """Strict YYYY-MM-DD parser. Rejects anything else (date picker output guard)."""
+        import re
+        from datetime import date as _date
+        if not value or not re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+            raise HTTPException(
+                status_code=400,
+                detail=f"صيغة التاريخ يجب أن تكون YYYY-MM-DD (المُرسَل: {value!r})",
+            )
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"تاريخ غير صالح: {value!r}")
+
     @router.get("/daily-spend")
     async def daily_spend(
         date: str = Query(..., description="YYYY-MM-DD"),
         ad_account_id: Optional[str] = Query(None),
         user: dict = Depends(current_user),
     ):
+        # Validate date format FIRST so we fail fast on bad input
+        # without consuming a token refresh.
+        day = _validate_iso_date(date)
+
         access_token, conn = await _ensure_access_token(user["id"])
         ad_id = ad_account_id or conn.get("ad_account_id")
         if not ad_id:
             raise HTTPException(status_code=400, detail="اختر حساب إعلانات سناب أولاً")
+
+        # Resolve the ad account's timezone — Snapchat's DAY granularity stats
+        # REQUIRE start_time and end_time to align with the ad account's local
+        # day boundary (00:00:00 in its own timezone). Sending UTC midnight
+        # when the account is in Asia/Riyadh (UTC+3) triggers the error:
+        # "Timeseries queries with DAY granularity must have a start time that
+        #  is the start of the day."
         try:
-            day = datetime.strptime(date, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="صيغة التاريخ يجب أن تكون YYYY-MM-DD")
+            from zoneinfo import ZoneInfo  # py3.9+
+        except ImportError:  # pragma: no cover
+            ZoneInfo = None  # type: ignore
 
-        # Snapchat stats want start_time inclusive, end_time exclusive (next day midnight UTC).
-        start_iso = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-        end_iso = (datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc) + timedelta(days=1)).isoformat().replace("+00:00", "Z")
-
-        headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
-        params = {
-            "start_time": start_iso,
-            "end_time": end_iso,
-            "granularity": "DAY",
-            "fields": "spend",
-        }
         async with httpx.AsyncClient(timeout=20.0) as http:
+            tz_name = await _resolve_ad_account_timezone(http, access_token, ad_id, conn)
+            try:
+                tzinfo = ZoneInfo(tz_name) if ZoneInfo else timezone.utc
+            except Exception:
+                tzinfo = timezone.utc
+
+            start_local = datetime(day.year, day.month, day.day, 0, 0, 0, tzinfo=tzinfo)
+            end_local = start_local + timedelta(days=1)
+            # Snapchat accepts ISO-8601 with offset; format with explicit offset like "+03:00"
+            def _iso(dt: datetime) -> str:
+                s = dt.isoformat(timespec="seconds")
+                # Python emits "+03:00"; Snapchat handles that. For UTC tz, ensure "+00:00".
+                if s.endswith("+00:00"):
+                    return s
+                return s
+
+            params = {
+                "start_time": _iso(start_local),
+                "end_time": _iso(end_local),
+                "granularity": "DAY",
+                "fields": "spend",
+            }
+            headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
             try:
                 resp = await http.get(
                     f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}/stats",

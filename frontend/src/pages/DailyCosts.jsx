@@ -35,8 +35,16 @@ export default function DailyCosts() {
     }, []);
 
     const fetchFromSnap = async () => {
-        if (!date) {
-            toast.error("اختر التاريخ أولاً");
+        // Strict client-side validation: only YYYY-MM-DD format
+        const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+        if (!date || !ISO_RE.test(date)) {
+            toast.error(`صيغة التاريخ غير صحيحة (المطلوب: YYYY-MM-DD، الحالي: ${date || "فارغ"}). الرجاء استخدام منتقي التاريخ لتعيينه من جديد.`);
+            return;
+        }
+        // Ensure the day is real (not 2026-13-45 etc.)
+        const d = new Date(`${date}T00:00:00Z`);
+        if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== date) {
+            toast.error("تاريخ غير صالح. الرجاء اختيار تاريخ جديد.");
             return;
         }
         setSnapFetching(true);
@@ -139,9 +147,20 @@ export default function DailyCosts() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div>
                         <label className="block text-sm font-semibold mb-1.5">التاريخ</label>
-                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required
+                        <input
+                            type="date"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                            required
+                            min="2020-01-01"
+                            max="2099-12-31"
+                            lang="en-CA"
                             className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
-                            data-testid="daily-date-input" dir="ltr" style={{ textAlign: "right" }} />
+                            data-testid="daily-date-input"
+                            dir="ltr"
+                            style={{ textAlign: "right", direction: "ltr" }}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">صيغة التاريخ: YYYY-MM-DD</p>
                     </div>
                     <div>
                         <label className="block text-sm font-semibold mb-1.5">سناب شات (ر.س)</label>

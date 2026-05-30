@@ -149,6 +149,8 @@ export default function Settings() {
             await api.post("/snapchat/select-adaccount", {
                 ad_account_id: acc.ad_account_id,
                 ad_account_name: acc.name || "",
+                timezone: acc.timezone || "",
+                currency: acc.currency || "",
             });
             toast.success(`تم اختيار حساب: ${acc.name || acc.ad_account_id}`);
             await loadSnapConfig();
