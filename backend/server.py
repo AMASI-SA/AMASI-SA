@@ -131,6 +131,10 @@ class SettingsIn(BaseModel):
     dashboard_hidden_cards: Optional[List[str]] = None
     # NEW (Phase 3): toggles for what gets deducted from "net sales" KPI.
     net_sales_config: Optional[NetSalesConfig] = None
+    # NEW: hide Make.com orders with inferred (approximate) date from dashboard/reports.
+    # When True, only orders with authoritative date (from Excel or Make.com
+    # webhook that included created_at) are counted in dashboard KPIs.
+    hide_inferred_date_orders: Optional[bool] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -215,6 +219,7 @@ async def get_settings(user: dict = Depends(current_user)):
         "report_included_statuses": s.get("report_included_statuses", []),
         "dashboard_hidden_cards": s.get("dashboard_hidden_cards", []),
         "net_sales_config": s.get("net_sales_config", DEFAULT_NET_SALES_CONFIG),
+        "hide_inferred_date_orders": bool(s.get("hide_inferred_date_orders", False)),
     }
 
 
@@ -236,6 +241,8 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["dashboard_hidden_cards"] = [s.strip() for s in payload.dashboard_hidden_cards if s.strip()]
     if payload.net_sales_config is not None:
         update_doc["net_sales_config"] = payload.net_sales_config.model_dump()
+    if payload.hide_inferred_date_orders is not None:
+        update_doc["hide_inferred_date_orders"] = bool(payload.hide_inferred_date_orders)
     await db.settings.update_one(
         {"user_id": user["id"]},
         {"$set": update_doc},
@@ -432,6 +439,8 @@ async def balances_endpoint(
             q["order_date"]["$gte"] = from_date
         if to_date:
             q["order_date"]["$lte"] = to_date
+    if s.get("hide_inferred_date_orders"):
+        q["order_date_inferred"] = {"$ne": True}
 
     orders = await db.unified_orders.find(q, {"_id": 0, "raw_by_source": 0}).to_list(50000)
     if pm_list or ship_list:
@@ -756,6 +765,8 @@ async def dashboard(
                 return True
         return False
 
+    settings = await ensure_user_settings(db, user["id"])
+
     # ── Unified orders aggregation (THE source of truth) ─────────────────────
     orders_q = {"user_id": user["id"]}
     if from_date or to_date:
@@ -764,6 +775,11 @@ async def dashboard(
             orders_q["order_date"]["$gte"] = from_date
         if to_date:
             orders_q["order_date"]["$lte"] = to_date
+    # User opt-in: exclude orders whose date was inferred (Make.com webhook
+    # without created_at). When enabled, only authoritatively-dated orders
+    # are counted in dashboard KPIs.
+    if settings.get("hide_inferred_date_orders"):
+        orders_q["order_date_inferred"] = {"$ne": True}
 
     all_orders = await db.unified_orders.find(
         orders_q, {"_id": 0, "raw_by_source": 0}
@@ -775,8 +791,6 @@ async def dashboard(
             if _matches_any(o.get("payment_method", ""), pm_list)
             and _matches_any(o.get("shipping_company", ""), ship_list)
         ]
-
-    settings = await ensure_user_settings(db, user["id"])
 
     # Apply user-configured "report_included_statuses" filter:
     # if non-empty, only orders whose order_status matches any of the configured
@@ -1063,6 +1077,7 @@ async def dashboard(
             "cod_unapproved": cod_balance_unapproved,
         },
         "net_sales_config": cfg,
+        "hide_inferred_date_orders": bool(settings.get("hide_inferred_date_orders")),
         "monthly": monthly,
         "payment_breakdown": payment_breakdown_merged,
         "shipping_breakdown": shipping_breakdown_merged,

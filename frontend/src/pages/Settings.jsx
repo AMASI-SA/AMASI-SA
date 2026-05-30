@@ -29,6 +29,7 @@ export default function Settings() {
         deduct_vat: false,
         deduct_daily_expenses: false,
     });
+    const [hideInferred, setHideInferred] = useState(false);
     const [discoveredStatuses, setDiscoveredStatuses] = useState([]); // [{name,count}]
     const [shippingDiscovery, setShippingDiscovery] = useState(null);
     const [autoAdding, setAutoAdding] = useState(false);
@@ -83,6 +84,7 @@ export default function Settings() {
                 setReportIncluded(settings.report_included_statuses || []);
                 setHiddenCards(settings.dashboard_hidden_cards || []);
                 if (settings.net_sales_config) setNetSalesConfig(settings.net_sales_config);
+                setHideInferred(!!settings.hide_inferred_date_orders);
                 setDiscoveredStatuses(statuses.statuses || []);
                 setShippingDiscovery(discovery || null);
             } finally { setLoading(false); }
@@ -226,6 +228,7 @@ export default function Settings() {
                 report_included_statuses: reportIncluded,
                 dashboard_hidden_cards: hiddenCards,
                 net_sales_config: netSalesConfig,
+                hide_inferred_date_orders: hideInferred,
             });
             toast.success("تم حفظ الإعدادات");
         } catch (err) {
@@ -566,6 +569,39 @@ export default function Settings() {
                         {netSalesConfig.deduct_vat && <span className="text-red-600"> − VAT</span>}
                     </div>
                 </div>
+            </div>
+
+            {/* NEW: Hide inferred-date orders from dashboard */}
+            <div className="rounded-xl border border-border bg-white p-6" data-testid="hide-inferred-section">
+                <div className="mb-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-brand text-white flex items-center justify-center">
+                        <EyeSlash size={22} weight="duotone" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>الطلبات ذات التاريخ التقريبي</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            تحكَّم في ظهور الطلبات القادمة من Make.com بدون <code className="bg-accent px-1 py-0.5 rounded text-xs">created_at</code> (تاريخ مُقدَّر).
+                        </p>
+                    </div>
+                </div>
+
+                <label
+                    className={`flex items-start gap-3 px-4 py-3 rounded-lg cursor-pointer transition-colors border ${hideInferred ? "border-rose-300 bg-rose-50/60" : "border-border bg-white"}`}
+                    data-testid="toggle-hide-inferred"
+                >
+                    <input
+                        type="checkbox"
+                        className="w-4 h-4 mt-1 accent-brand"
+                        checked={hideInferred}
+                        onChange={(e) => setHideInferred(e.target.checked)}
+                    />
+                    <div className="flex-1">
+                        <div className="text-sm font-semibold">إخفاء الطلبات ذات التاريخ التقريبي من Dashboard و Reports</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                            عند التفعيل، يتم استبعاد هذه الطلبات من جميع حسابات لوحة التحكم والتقارير حتى يتم تصحيح تاريخها (مثلاً برفع ملف Excel من سلة).
+                        </div>
+                    </div>
+                </label>
             </div>
 
             {/* NEW: Dashboard cards visibility (Phase 5) */}
