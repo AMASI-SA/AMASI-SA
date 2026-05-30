@@ -7,6 +7,7 @@ import {
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { formatMoney, todayISO } from "../lib/format";
+import DateInput from "../components/DateInput";
 
 function firstOfMonth() {
     const d = new Date();
@@ -386,6 +387,18 @@ function StatCard({ icon: Icon, label, value, testid, small = false }) {
 }
 
 function Field({ label, value, onChange, type = "text", placeholder = "", testid }) {
+    if (type === "date") {
+        return (
+            <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1.5">{label}</label>
+                <DateInput
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    data-testid={testid}
+                />
+            </div>
+        );
+    }
     return (
         <div>
             <label className="block text-xs font-bold text-muted-foreground mb-1.5">{label}</label>
@@ -396,7 +409,7 @@ function Field({ label, value, onChange, type = "text", placeholder = "", testid
                 placeholder={placeholder}
                 className={`w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand ${type === "number" ? "num" : ""}`}
                 data-testid={testid}
-                dir={type === "number" || type === "date" ? "ltr" : "rtl"}
+                dir={type === "number" ? "ltr" : "rtl"}
             />
         </div>
     );

@@ -3,6 +3,7 @@ import { Truck, Plus, Trash, X, Receipt } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { formatMoney, todayISO } from "../lib/format";
+import DateInput from "../components/DateInput";
 
 export default function ShippingAccounts() {
     const [data, setData] = useState({ accounts: [], totals: { total_owed: 0, total_paid: 0, remaining: 0 } });
@@ -263,11 +264,9 @@ export default function ShippingAccounts() {
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold mb-1.5">تاريخ الدفع</label>
-                                <input
-                                    type="date"
+                                <DateInput
                                     value={form.payment_date}
                                     onChange={(e) => setForm({ ...form, payment_date: e.target.value })}
-                                    className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
                                     data-testid="payment-date"
                                 />
                             </div>

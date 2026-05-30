@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Trash, FloppyDisk, Receipt, PencilSimple, X, Ghost } from "@phosphor-icons/react";
+import { Trash, FloppyDisk, Receipt, PencilSimple, X, Ghost, CalendarBlank } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { formatMoney, todayISO } from "../lib/format";
+import DateInput, { isValidISODate } from "../components/DateInput";
 
 export default function DailyCosts() {
     const [items, setItems] = useState([]);
@@ -21,6 +22,7 @@ export default function DailyCosts() {
     const [notes, setNotes] = useState("");
     const [saving, setSaving] = useState(false);
     const [snapFetching, setSnapFetching] = useState(false);
+    const [bulkFetching, setBulkFetching] = useState(false);
     const [snapConnected, setSnapConnected] = useState(false);
 
     useEffect(() => {
@@ -35,16 +37,8 @@ export default function DailyCosts() {
     }, []);
 
     const fetchFromSnap = async () => {
-        // Strict client-side validation: only YYYY-MM-DD format
-        const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
-        if (!date || !ISO_RE.test(date)) {
+        if (!isValidISODate(date)) {
             toast.error(`صيغة التاريخ غير صحيحة (المطلوب: YYYY-MM-DD، الحالي: ${date || "فارغ"}). الرجاء استخدام منتقي التاريخ لتعيينه من جديد.`);
-            return;
-        }
-        // Ensure the day is real (not 2026-13-45 etc.)
-        const d = new Date(`${date}T00:00:00Z`);
-        if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== date) {
-            toast.error("تاريخ غير صالح. الرجاء اختيار تاريخ جديد.");
             return;
         }
         setSnapFetching(true);
@@ -56,6 +50,24 @@ export default function DailyCosts() {
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail));
         } finally { setSnapFetching(false); }
+    };
+
+    const fetchLast7Days = async () => {
+        if (!snapConnected) {
+            toast.error("اربط حساب سناب من الإعدادات أولاً");
+            return;
+        }
+        if (!window.confirm("سيتم جلب صرف سناب لآخر 7 أيام وحفظها في سجل التكاليف. هل تريد المتابعة؟")) return;
+        setBulkFetching(true);
+        try {
+            const { data } = await api.post("/snapchat/daily-spend/bulk", { days: 7 });
+            const ok = data?.saved || 0;
+            const errs = data?.errors || [];
+            toast.success(`تم جلب وحفظ ${ok} يوم من سناب${errs.length ? ` (${errs.length} يوم تعذّر)` : ""}.`);
+            await load();
+        } catch (err) {
+            toast.error(formatApiErrorDetail(err.response?.data?.detail));
+        } finally { setBulkFetching(false); }
     };
 
     const resetForm = () => {
@@ -126,9 +138,23 @@ export default function DailyCosts() {
 
     return (
         <div className="space-y-8 animate-fade-in-up" data-testid="daily-costs-page">
-            <div>
-                <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>التكاليف اليومية</h1>
-                <p className="text-muted-foreground mt-2 text-base">سجّل مصروفاتك اليومية على منصات الإعلانات والمنتجات.</p>
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                <div>
+                    <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>التكاليف اليومية</h1>
+                    <p className="text-muted-foreground mt-2 text-base">سجّل مصروفاتك اليومية على منصات الإعلانات والمنتجات.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={fetchLast7Days}
+                    disabled={!snapConnected || bulkFetching}
+                    title={snapConnected ? "جلب صرف سناب لآخر 7 أيام وحفظها تلقائياً" : "اربط حساب سناب من الإعدادات لتفعيل هذا الزر"}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-white font-bold transition-colors disabled:opacity-40 enabled:hover:bg-yellow-50"
+                    style={{ background: snapConnected && !bulkFetching ? "#FFFC00" : undefined }}
+                    data-testid="snap-bulk-7-btn"
+                >
+                    <CalendarBlank size={18} weight="bold" />
+                    {bulkFetching ? "جاري الجلب…" : "جلب آخر 7 أيام من سناب"}
+                </button>
             </div>
 
             <form ref={formRef} onSubmit={submit} className="rounded-xl border border-border bg-white p-6" data-testid="daily-costs-form">
@@ -147,18 +173,11 @@ export default function DailyCosts() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div>
                         <label className="block text-sm font-semibold mb-1.5">التاريخ</label>
-                        <input
-                            type="date"
+                        <DateInput
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
                             required
-                            min="2020-01-01"
-                            max="2099-12-31"
-                            lang="en-CA"
-                            className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
                             data-testid="daily-date-input"
-                            dir="ltr"
-                            style={{ textAlign: "right", direction: "ltr" }}
                         />
                         <p className="text-xs text-muted-foreground mt-1">صيغة التاريخ: YYYY-MM-DD</p>
                     </div>

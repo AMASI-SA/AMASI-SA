@@ -101,3 +101,23 @@ def test_unit_iso_format_start_of_day():
     # ISO formatted with offset, NOT with Z (since not UTC)
     assert day.isoformat(timespec="seconds") == "2026-05-30T00:00:00+03:00"
     assert next_day.isoformat(timespec="seconds") == "2026-05-31T00:00:00+03:00"
+
+
+def test_bulk_endpoint_validates_days_range():
+    """The /daily-spend/bulk endpoint enforces 1 <= days <= 31."""
+    token = _register()
+    h = {"Authorization": f"Bearer {token}"}
+    for bad in [0, -1, 32, 100]:
+        r = requests.post(f"{API}/snapchat/daily-spend/bulk",
+                          headers=h, json={"days": bad})
+        assert r.status_code == 422, f"days={bad} should 422 but got {r.status_code}"
+
+
+def test_bulk_endpoint_requires_snap_connection():
+    """No Snapchat connection → 400 with localized message."""
+    token = _register()
+    h = {"Authorization": f"Bearer {token}"}
+    r = requests.post(f"{API}/snapchat/daily-spend/bulk", headers=h, json={"days": 7})
+    assert r.status_code == 400
+    body = r.json()
+    assert "سناب" in body["detail"], body

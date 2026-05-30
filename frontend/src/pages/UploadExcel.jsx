@@ -4,6 +4,7 @@ import { UploadSimple, FileXls, X } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { todayISO } from "../lib/format";
+import DateInput from "../components/DateInput";
 
 const EMPTY_ILL = "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/80b8ed57e8b03ecce86ccb201f79210f057fc21e43eab9fd1aa0648fc95c6bb3.png";
 
@@ -130,14 +131,10 @@ export default function UploadExcel() {
                             </div>
                             <div>
                                 <label className="text-sm font-semibold mb-1.5 block">التاريخ</label>
-                                <input
-                                    type="date"
+                                <DateInput
                                     value={date}
                                     onChange={(e) => setDate(e.target.value)}
-                                    className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
                                     data-testid="analysis-date-input"
-                                    dir="ltr"
-                                    style={{ textAlign: "right" }}
                                 />
                             </div>
                             <div>

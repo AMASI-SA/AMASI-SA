@@ -477,6 +477,115 @@ def _build_router(db) -> APIRouter:
         spend = round(total_micro / 1_000_000, 2)
         return {"date": date, "ad_account_id": ad_id, "spend": spend, "currency": data.get("currency") or "—"}
 
+    class BulkSpendIn(BaseModel):
+        days: int = Field(default=7, ge=1, le=31)
+        ad_account_id: Optional[str] = None
+
+    @router.post("/daily-spend/bulk")
+    async def daily_spend_bulk(payload: BulkSpendIn, user: dict = Depends(current_user)):
+        """Fetch Snapchat spend for the last N days and upsert each into
+        `daily_costs.snapchat_ads` so the dashboard reflects them immediately.
+
+        Returns a summary {saved, errors:[{date, error}]}. Skips days where
+        Snapchat returned 0 (still saves them) unless the API errored.
+        """
+        access_token, conn = await _ensure_access_token(user["id"])
+        ad_id = payload.ad_account_id or conn.get("ad_account_id")
+        if not ad_id:
+            raise HTTPException(status_code=400, detail="اختر حساب إعلانات سناب أولاً")
+
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:  # pragma: no cover
+            ZoneInfo = None  # type: ignore
+
+        from datetime import date as _date
+        saved: list[dict] = []
+        errors: list[dict] = []
+
+        async with httpx.AsyncClient(timeout=20.0) as http:
+            tz_name = await _resolve_ad_account_timezone(http, access_token, ad_id, conn)
+            try:
+                tzinfo = ZoneInfo(tz_name) if ZoneInfo else timezone.utc
+            except Exception:
+                tzinfo = timezone.utc
+
+            # Build list of last N days ending YESTERDAY (today's stats may be
+            # incomplete because the day hasn't closed yet in the ad account TZ).
+            # We do include today as the latest if user asked, so range is
+            # [today - (days-1) .. today].
+            today_local = datetime.now(tzinfo).date()
+            dates: list[_date] = [today_local - timedelta(days=i) for i in range(payload.days)]
+            dates.reverse()  # ascending
+
+            for d in dates:
+                start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=tzinfo)
+                end_local = start_local + timedelta(days=1)
+                params = {
+                    "start_time": start_local.isoformat(timespec="seconds"),
+                    "end_time": end_local.isoformat(timespec="seconds"),
+                    "granularity": "DAY",
+                    "fields": "spend",
+                }
+                try:
+                    resp = await http.get(
+                        f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}/stats",
+                        headers={"Authorization": f"Bearer {access_token}",
+                                 "Accept": "application/json"},
+                        params=params,
+                    )
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    errors.append({"date": d.isoformat(),
+                                   "error": exc.response.text[:200]})
+                    continue
+                except httpx.HTTPError as exc:
+                    errors.append({"date": d.isoformat(), "error": str(exc)[:200]})
+                    continue
+
+                data = resp.json()
+                total_micro = 0
+                for ts in data.get("timeseries_stats", []) or []:
+                    stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
+                    for point in stat.get("timeseries", []) or []:
+                        spend_val = (point.get("stats") or {}).get("spend", 0)
+                        try:
+                            total_micro += int(spend_val)
+                        except (TypeError, ValueError):
+                            pass
+                spend = round(total_micro / 1_000_000, 2)
+
+                # Upsert into daily_costs, preserving other fields (snapchat_ads_2,
+                # tiktok, etc) if the row already exists.
+                date_str = d.isoformat()
+                existing = await db.daily_costs.find_one(
+                    {"user_id": user["id"], "date": date_str}, {"_id": 0}
+                )
+                if existing:
+                    await db.daily_costs.update_one(
+                        {"user_id": user["id"], "date": date_str},
+                        {"$set": {"snapchat_ads": spend,
+                                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+                    )
+                else:
+                    import uuid as _uuid
+                    await db.daily_costs.insert_one({
+                        "id": str(_uuid.uuid4()),
+                        "user_id": user["id"],
+                        "date": date_str,
+                        "snapchat_ads": spend,
+                        "snapchat_ads_2": 0.0,
+                        "tiktok_ads": 0.0,
+                        "instagram_ads": 0.0,
+                        "google_ads": 0.0,
+                        "product_costs": 0.0,
+                        "notes": "auto from Snapchat",
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                saved.append({"date": date_str, "spend": spend})
+
+        return {"saved": len(saved), "items": saved, "errors": errors}
+
     return router
 
 

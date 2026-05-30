@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Funnel, CalendarBlank, CaretDown, X } from "@phosphor-icons/react";
 import api from "../lib/api";
 import { todayISO } from "../lib/format";
+import DateInput from "./DateInput";
 
 /** Compute date range from preset key (returns {from, to} ISO strings) */
 function presetRange(key) {
@@ -144,22 +145,18 @@ export default function AdvancedFilters({
             {/* Custom date inputs (visible only when preset=custom) */}
             {value.preset === "custom" && (
                 <>
-                    <input
-                        type="date"
+                    <DateInput
                         value={value.from || ""}
                         onChange={(e) => onChange({ ...value, from: e.target.value })}
-                        className="px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                        className="px-3 py-2 text-sm"
                         data-testid="filter-custom-from"
-                        dir="ltr"
                     />
                     <span className="text-muted-foreground text-sm">→</span>
-                    <input
-                        type="date"
+                    <DateInput
                         value={value.to || ""}
                         onChange={(e) => onChange({ ...value, to: e.target.value })}
-                        className="px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                        className="px-3 py-2 text-sm"
                         data-testid="filter-custom-to"
-                        dir="ltr"
                     />
                 </>
             )}
