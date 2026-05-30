@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour } from "@phosphor-icons/react";
+import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { KPI_GROUPS } from "../lib/dashboardCards";
@@ -20,6 +20,15 @@ export default function Settings() {
     const [codApproved, setCodApproved] = useState([]);
     const [reportIncluded, setReportIncluded] = useState([]);
     const [hiddenCards, setHiddenCards] = useState([]);
+    const [netSalesConfig, setNetSalesConfig] = useState({
+        deduct_payment_fees: true,
+        deduct_shipping: true,
+        deduct_deferred_shipping: false,
+        deduct_ads: true,
+        deduct_product_costs: true,
+        deduct_vat: false,
+        deduct_daily_expenses: false,
+    });
     const [discoveredStatuses, setDiscoveredStatuses] = useState([]); // [{name,count}]
     const [shippingDiscovery, setShippingDiscovery] = useState(null);
     const [autoAdding, setAutoAdding] = useState(false);
@@ -73,6 +82,7 @@ export default function Settings() {
                 setCodApproved(settings.cod_approved_statuses || []);
                 setReportIncluded(settings.report_included_statuses || []);
                 setHiddenCards(settings.dashboard_hidden_cards || []);
+                if (settings.net_sales_config) setNetSalesConfig(settings.net_sales_config);
                 setDiscoveredStatuses(statuses.statuses || []);
                 setShippingDiscovery(discovery || null);
             } finally { setLoading(false); }
@@ -215,6 +225,7 @@ export default function Settings() {
                 cod_approved_statuses: codApproved,
                 report_included_statuses: reportIncluded,
                 dashboard_hidden_cards: hiddenCards,
+                net_sales_config: netSalesConfig,
             });
             toast.success("تم حفظ الإعدادات");
         } catch (err) {
@@ -494,6 +505,66 @@ export default function Settings() {
                             </button>
                         </div>
                     ))}
+                </div>
+            </div>
+
+            {/* NEW (Phase 3): Net Sales calculation config */}
+            <div className="rounded-xl border border-border bg-white p-6" data-testid="net-sales-config-section">
+                <div className="mb-5 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-brand text-white flex items-center justify-center">
+                        <Calculator size={22} weight="duotone" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>حساب صافي المبيعات</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            حدِّد البنود التي تُخصم من إجمالي المبيعات لاحتساب "صافي المبيعات" في لوحة التحكم.
+                            كل خيار مستقل لتعكس تفضيلك المحاسبي.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                        { key: "deduct_payment_fees", label: "خصم عمولات بوابات الدفع", hint: "بما فيها BNPL (تمارا/تابي/إمكان)" },
+                        { key: "deduct_shipping", label: "خصم تكاليف الشحن الفوري", hint: "شركات الشحن غير الآجلة" },
+                        { key: "deduct_deferred_shipping", label: "خصم تكاليف الشحن الآجل", hint: "مستحقات شركات الشحن الآجلة" },
+                        { key: "deduct_ads", label: "خصم تكاليف الإعلانات", hint: "Snapchat + TikTok + Instagram + Google" },
+                        { key: "deduct_product_costs", label: "خصم تكاليف المنتجات", hint: "من سجل التكاليف اليومية" },
+                        { key: "deduct_vat", label: "خصم ضريبة القيمة المضافة", hint: "VAT على عمولات الدفع والشحن" },
+                    ].map((opt) => {
+                        const checked = !!netSalesConfig[opt.key];
+                        return (
+                            <label
+                                key={opt.key}
+                                className={`flex items-start gap-3 px-4 py-3 rounded-lg cursor-pointer transition-colors border ${checked ? "border-emerald-300 bg-emerald-50/60" : "border-border bg-white"}`}
+                                data-testid={`net-sales-toggle-${opt.key}`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    className="w-4 h-4 mt-1 accent-brand"
+                                    checked={checked}
+                                    onChange={(e) => setNetSalesConfig({ ...netSalesConfig, [opt.key]: e.target.checked })}
+                                />
+                                <div className="flex-1">
+                                    <div className="text-sm font-semibold">{opt.label}</div>
+                                    {opt.hint && <div className="text-xs text-muted-foreground mt-0.5">{opt.hint}</div>}
+                                </div>
+                            </label>
+                        );
+                    })}
+                </div>
+
+                <div className="mt-5 p-4 bg-accent/40 rounded-lg text-xs text-muted-foreground">
+                    <div className="font-bold mb-1 text-foreground">المعادلة:</div>
+                    <div className="font-mono leading-relaxed" dir="ltr">
+                        صافي المبيعات = إجمالي المبيعات
+                        {netSalesConfig.deduct_payment_fees && <span className="text-red-600"> − عمولات الدفع</span>}
+                        {netSalesConfig.deduct_shipping && <span className="text-red-600"> − شحن فوري</span>}
+                        {netSalesConfig.deduct_deferred_shipping && <span className="text-red-600"> − شحن آجل</span>}
+                        {netSalesConfig.deduct_ads && <span className="text-red-600"> − إعلانات</span>}
+                        {netSalesConfig.deduct_product_costs && <span className="text-red-600"> − منتجات</span>}
+                        {netSalesConfig.deduct_vat && <span className="text-red-600"> − VAT</span>}
+                    </div>
                 </div>
             </div>
 

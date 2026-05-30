@@ -17,6 +17,7 @@ export const KPI_GROUPS = [
         title: "المبيعات والطلبات",
         cards: [
             { id: "total_sales", label: "إجمالي المبيعات", icon: Coins, accent: true, money: true, value: (t) => t.total_sales },
+            { id: "net_sales", label: "صافي المبيعات", icon: TrendUp, accent: true, money: true, hint: "حسب إعدادات الخصم", value: (t) => t.net_sales },
             { id: "total_orders", label: "إجمالي الطلبات", icon: ShoppingBag, isInt: true, value: (t) => t.total_orders },
             { id: "expected_salla_transfer", label: "المتوقع من سلة", icon: Bank, accent: true, money: true, hint: "حوالة سلة المتوقعة", value: (t) => t.expected_salla_transfer },
         ],

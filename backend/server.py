@@ -99,6 +99,25 @@ class ShippingCompany(BaseModel):
     is_deferred: bool = False  # if True: cost not deducted from Salla→bank transfer (accounts payable)
 
 
+class NetSalesConfig(BaseModel):
+    """Phase 3 — controls which line items get subtracted from total_sales
+    when computing the "صافي المبيعات" (net sales) KPI shown in dashboard.
+
+    Each flag is independent so the merchant can model their accounting
+    preference (e.g. some count VAT as part of revenue, others don't).
+    Defaults reflect the most common Salla seller workflow."""
+    deduct_payment_fees: bool = True       # عمولات بوابات الدفع
+    deduct_shipping: bool = True           # تكاليف الشحن (الفورية فقط)
+    deduct_deferred_shipping: bool = False  # تكاليف الشحن الآجلة
+    deduct_ads: bool = True                # تكاليف الإعلانات اليومية
+    deduct_product_costs: bool = True      # تكاليف المنتجات
+    deduct_vat: bool = False               # ضريبة القيمة المضافة
+    deduct_daily_expenses: bool = False    # مصاريف يومية أخرى
+
+
+DEFAULT_NET_SALES_CONFIG = NetSalesConfig().model_dump()
+
+
 class SettingsIn(BaseModel):
     payment_methods: List[PaymentMethod]
     shipping_companies: List[ShippingCompany]
@@ -110,6 +129,8 @@ class SettingsIn(BaseModel):
     report_included_statuses: Optional[List[str]] = None
     # NEW (Phase 5): per-user list of dashboard KPI card ids to hide.
     dashboard_hidden_cards: Optional[List[str]] = None
+    # NEW (Phase 3): toggles for what gets deducted from "net sales" KPI.
+    net_sales_config: Optional[NetSalesConfig] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -193,6 +214,7 @@ async def get_settings(user: dict = Depends(current_user)):
         "cod_approved_statuses": s.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
         "report_included_statuses": s.get("report_included_statuses", []),
         "dashboard_hidden_cards": s.get("dashboard_hidden_cards", []),
+        "net_sales_config": s.get("net_sales_config", DEFAULT_NET_SALES_CONFIG),
     }
 
 
@@ -212,6 +234,8 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["report_included_statuses"] = [s.strip() for s in payload.report_included_statuses if s.strip()]
     if payload.dashboard_hidden_cards is not None:
         update_doc["dashboard_hidden_cards"] = [s.strip() for s in payload.dashboard_hidden_cards if s.strip()]
+    if payload.net_sales_config is not None:
+        update_doc["net_sales_config"] = payload.net_sales_config.model_dump()
     await db.settings.update_one(
         {"user_id": user["id"]},
         {"$set": update_doc},
@@ -906,6 +930,30 @@ async def dashboard(
     orders_profit = total_sales - total_fees - total_shipping
     net_profit_adjusted = orders_profit - daily_ads_total - daily_products_total
 
+    # ── Phase 3: configurable "صافي المبيعات" KPI ────────────────────────────
+    # Merchants disagree on what counts as "net sales" — some treat shipping
+    # collected as revenue, others net it out; some deduct VAT, others don't.
+    # Settings.net_sales_config gives them 7 independent toggles.
+    cfg = settings.get("net_sales_config") or DEFAULT_NET_SALES_CONFIG
+    regular_shipping = total_shipping - deferred_shipping
+    net_sales = total_sales
+    if cfg.get("deduct_payment_fees", True):
+        net_sales -= total_fees
+    if cfg.get("deduct_shipping", True):
+        net_sales -= regular_shipping
+    if cfg.get("deduct_deferred_shipping", False):
+        net_sales -= deferred_shipping
+    if cfg.get("deduct_ads", True):
+        net_sales -= daily_ads_total
+    if cfg.get("deduct_product_costs", True):
+        net_sales -= daily_products_total
+    if cfg.get("deduct_vat", False):
+        net_sales -= total_vat
+    if cfg.get("deduct_daily_expenses", False):
+        # daily_expenses_total is currently aliased to daily_products_total;
+        # keep this independent for future expansion.
+        pass
+
     # ── Monthly trend from unified orders + legacy analyses ─────────────────
     from collections import defaultdict
     monthly_sales = defaultdict(float)
@@ -970,6 +1018,7 @@ async def dashboard(
         "range": {"from_date": from_date, "to_date": to_date},
         "totals": {
             "total_sales": round(total_sales, 2),
+            "net_sales": round(net_sales, 2),
             "total_orders": int(total_orders),
             "total_payment_fees": round(total_fees, 2),
             "bnpl_fees": round(bnpl_fees, 2),
@@ -1011,6 +1060,7 @@ async def dashboard(
             "cod_approved": cod_balance_approved,
             "cod_unapproved": cod_balance_unapproved,
         },
+        "net_sales_config": cfg,
         "monthly": monthly,
         "payment_breakdown": payment_breakdown_merged,
         "shipping_breakdown": shipping_breakdown_merged,
