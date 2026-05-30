@@ -390,6 +390,54 @@ def _build_router(db) -> APIRouter:
         except ValueError:
             raise HTTPException(status_code=400, detail=f"تاريخ غير صالح: {value!r}")
 
+    # SAR is pegged to USD at 3.75 by the Saudi Central Bank (SAMA) since 1986.
+    # This is constant and reliable, so we use it directly instead of calling
+    # a third-party FX API (which would add latency and a possible failure mode).
+    USD_TO_SAR = 3.75
+
+    async def _resolve_ad_account_currency(http: httpx.AsyncClient, access_token: str, ad_id: str, conn: dict) -> str:
+        """Return the ISO currency code of the ad account (e.g. 'USD', 'SAR').
+        Cached on conn.ad_account_currency once resolved.
+        """
+        cur = (conn.get("ad_account_currency") or "").strip().upper()
+        if cur:
+            return cur
+        try:
+            r = await http.get(
+                f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}",
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            )
+            r.raise_for_status()
+            data = r.json()
+            wrap = (data.get("adaccounts") or [{}])[0]
+            acc = wrap.get("adaccount") if isinstance(wrap, dict) and "adaccount" in wrap else wrap
+            cur = ((acc or {}).get("currency") or "").upper()
+            if cur:
+                await db.snapchat_connections.update_one(
+                    {"user_id": conn["user_id"]},
+                    {"$set": {"ad_account_currency": cur}},
+                )
+        except Exception as exc:
+            logger.warning("Could not resolve ad account currency, defaulting to SAR: %s", exc)
+            cur = "SAR"
+        return cur or "SAR"
+
+    def _to_sar(amount: float, source_currency: str) -> tuple[float, float]:
+        """Convert an amount in the ad account's currency to SAR.
+        Returns (sar_amount, exchange_rate_applied).
+        For SAR → 1:1. For USD → multiply by 3.75 (SAMA peg). For other
+        currencies we don't recognise, return as-is (rate=1) so the user sees
+        the raw number and can intervene.
+        """
+        cur = (source_currency or "").upper().strip()
+        if cur in ("SAR", "ر.س", ""):
+            return round(amount, 2), 1.0
+        if cur == "USD":
+            return round(amount * USD_TO_SAR, 2), USD_TO_SAR
+        # Unknown currency: pass through with rate=1, but log so we notice.
+        logger.warning("Unknown Snapchat ad account currency %r; leaving amount unchanged.", cur)
+        return round(amount, 2), 1.0
+
     @router.get("/daily-spend")
     async def daily_spend(
         date: str = Query(..., description="YYYY-MM-DD"),
@@ -474,8 +522,20 @@ def _build_router(db) -> APIRouter:
                 except (TypeError, ValueError):
                     pass
 
-        spend = round(total_micro / 1_000_000, 2)
-        return {"date": date, "ad_account_id": ad_id, "spend": spend, "currency": data.get("currency") or "—"}
+        spend_native = round(total_micro / 1_000_000, 2)
+        # Convert to SAR if the ad account is denominated in another currency.
+        async with httpx.AsyncClient(timeout=10.0) as http2:
+            currency = await _resolve_ad_account_currency(http2, access_token, ad_id, conn)
+        spend_sar, fx_rate = _to_sar(spend_native, currency)
+        return {
+            "date": date,
+            "ad_account_id": ad_id,
+            "spend": spend_sar,
+            "spend_native": spend_native,
+            "native_currency": currency,
+            "fx_rate": fx_rate,
+            "currency": "SAR",
+        }
 
     class BulkSpendIn(BaseModel):
         days: int = Field(default=7, ge=1, le=31)
@@ -505,6 +565,9 @@ def _build_router(db) -> APIRouter:
 
         async with httpx.AsyncClient(timeout=20.0) as http:
             tz_name = await _resolve_ad_account_timezone(http, access_token, ad_id, conn)
+            # Resolve currency once for the whole batch (saves N redundant API
+            # calls).
+            ad_currency = await _resolve_ad_account_currency(http, access_token, ad_id, conn)
             try:
                 tzinfo = ZoneInfo(tz_name) if ZoneInfo else timezone.utc
             except Exception:
@@ -553,7 +616,8 @@ def _build_router(db) -> APIRouter:
                             total_micro += int(spend_val)
                         except (TypeError, ValueError):
                             pass
-                spend = round(total_micro / 1_000_000, 2)
+                spend_native = round(total_micro / 1_000_000, 2)
+                spend, fx_rate = _to_sar(spend_native, ad_currency)
 
                 # Upsert into daily_costs, preserving other fields (snapchat_ads_2,
                 # tiktok, etc) if the row already exists.
@@ -579,12 +643,24 @@ def _build_router(db) -> APIRouter:
                         "instagram_ads": 0.0,
                         "google_ads": 0.0,
                         "product_costs": 0.0,
-                        "notes": "auto from Snapchat",
+                        "notes": f"auto from Snapchat ({ad_currency}→SAR ×{fx_rate})" if fx_rate != 1 else "auto from Snapchat",
                         "created_at": datetime.now(timezone.utc).isoformat(),
                     })
-                saved.append({"date": date_str, "spend": spend})
+                saved.append({
+                    "date": date_str,
+                    "spend": spend,
+                    "spend_native": spend_native,
+                    "native_currency": ad_currency,
+                    "fx_rate": fx_rate,
+                })
 
-        return {"saved": len(saved), "items": saved, "errors": errors}
+        return {
+            "saved": len(saved),
+            "items": saved,
+            "errors": errors,
+            "native_currency": ad_currency,
+            "currency": "SAR",
+        }
 
     return router
 

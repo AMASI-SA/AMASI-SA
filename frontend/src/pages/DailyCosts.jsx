@@ -46,7 +46,13 @@ export default function DailyCosts() {
             const { data } = await api.get(`/snapchat/daily-spend?date=${encodeURIComponent(date)}`);
             const amount = Number(data?.spend || 0);
             setSnap(String(amount));
-            toast.success(`تم جلب صرف سناب ليوم ${date}: ${amount} ر.س`);
+            const native = data?.native_currency;
+            const fx = Number(data?.fx_rate || 1);
+            if (native && native !== "SAR" && fx !== 1) {
+                toast.success(`تم جلب صرف سناب ليوم ${date}: ${amount} ر.س (${data.spend_native} ${native} × ${fx})`);
+            } else {
+                toast.success(`تم جلب صرف سناب ليوم ${date}: ${amount} ر.س`);
+            }
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail));
         } finally { setSnapFetching(false); }
@@ -63,7 +69,9 @@ export default function DailyCosts() {
             const { data } = await api.post("/snapchat/daily-spend/bulk", { days: 7 });
             const ok = data?.saved || 0;
             const errs = data?.errors || [];
-            toast.success(`تم جلب وحفظ ${ok} يوم من سناب${errs.length ? ` (${errs.length} يوم تعذّر)` : ""}.`);
+            const native = data?.native_currency;
+            const fxNote = (native && native !== "SAR") ? ` (تم تحويل من ${native} إلى ر.س)` : "";
+            toast.success(`تم جلب وحفظ ${ok} يوم من سناب${fxNote}${errs.length ? ` (${errs.length} يوم تعذّر)` : ""}.`);
             await load();
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail));
