@@ -7,7 +7,16 @@ import DateInput from "./DateInput";
 /** Compute date range from preset key (returns {from, to} ISO strings) */
 function presetRange(key) {
     const t = new Date();
-    const iso = (d) => d.toISOString().slice(0, 10);
+    // IMPORTANT: use the user's LOCAL date, not UTC. `.toISOString()` shifts
+    // by the timezone offset, so at 00:30 local time in Asia/Riyadh (+3) it
+    // would return yesterday's date — making "هذا الشهر" wrongly start in
+    // the previous month on the 1st.
+    const iso = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+    };
     const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
     if (key === "today") {
@@ -15,19 +24,21 @@ function presetRange(key) {
         return { from: d, to: d };
     }
     if (key === "yesterday") {
-        const y = new Date(t.getTime() - 86400000);
-        const d = iso(startOfDay(y));
+        const y = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
+        const d = iso(y);
         return { from: d, to: d };
     }
     if (key === "last7") {
-        const s = new Date(t.getTime() - 6 * 86400000);
-        return { from: iso(startOfDay(s)), to: iso(startOfDay(t)) };
+        const s = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 6);
+        return { from: iso(s), to: iso(startOfDay(t)) };
     }
     if (key === "last30") {
-        const s = new Date(t.getTime() - 29 * 86400000);
-        return { from: iso(startOfDay(s)), to: iso(startOfDay(t)) };
+        const s = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 29);
+        return { from: iso(s), to: iso(startOfDay(t)) };
     }
     if (key === "this_month") {
+        // First day of current local month → today (inclusive). Auto-rolls
+        // forward when a new month begins, exactly as the user requested.
         const s = new Date(t.getFullYear(), t.getMonth(), 1);
         return { from: iso(s), to: iso(startOfDay(t)) };
     }
