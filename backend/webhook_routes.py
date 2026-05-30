@@ -273,6 +273,7 @@ def _build_router(db) -> APIRouter:
 
         accepted = 0
         updated = 0
+        accepted_without_date = 0
         errors: list[dict] = []
         for raw in items:
             try:
@@ -294,10 +295,15 @@ def _build_router(db) -> APIRouter:
                 total_val = _to_float(payload.total_amount)
 
             # normalize date — prefer created_at, then order_date.
-            # If none can be parsed, fall back to TODAY (the day we received
-            # the webhook). This prevents new orders from ending up with
-            # order_date=None which would silently exclude them from every
-            # date-filtered query (e.g. dashboard "this month" filter).
+            # We DO NOT fall back to today when both are missing: doing so
+            # silently labels orders with the wrong month (e.g. a March order
+            # that Make.com forwards today without a created_at field would
+            # land in May, inflating the current month's stats). Leaving
+            # order_date=None makes the missing-date case explicit — the
+            # order is still saved and visible on the Make.com page, but it
+            # won't appear in date-filtered dashboard/reports until the
+            # merchant fixes their Make.com mapping (or re-sends with
+            # created_at).
             order_date_norm = (
                 _normalize_order_date(payload.created_at)
                 or _normalize_order_date(payload.order_date)
@@ -305,7 +311,6 @@ def _build_router(db) -> APIRouter:
                 or _normalize_order_date(raw.get("order_date"))
                 or _normalize_order_date(raw.get("purchase_date"))
                 or _normalize_order_date(raw.get("date"))
-                or datetime.now(timezone.utc).date().isoformat()
             )
 
             incoming = {
@@ -349,6 +354,8 @@ def _build_router(db) -> APIRouter:
                 accepted += 1
             else:
                 updated += 1
+            if order_date_norm is None:
+                accepted_without_date += 1
 
         await db.webhook_tokens.update_one(
             {"user_id": user_id},
@@ -360,6 +367,7 @@ def _build_router(db) -> APIRouter:
             "ok": True,
             "accepted": accepted,
             "updated": updated,
+            "without_date": accepted_without_date,
             "errors": errors[:20],  # cap response size
             "error_count": len(errors),
         }
@@ -464,6 +472,15 @@ def _build_router(db) -> APIRouter:
         ]):
             key = doc.get("_id") or "unknown"
             per_source[key] = int(doc.get("n", 0))
+        # Orders missing creation date (data quality signal)
+        missing_date = await db.unified_orders.count_documents({
+            "user_id": user["id"],
+            "$or": [
+                {"order_date": None},
+                {"order_date": ""},
+                {"order_date": {"$exists": False}},
+            ],
+        })
         return {
             "connected": bool(tok),
             "total_orders_in_db": total,
@@ -471,7 +488,34 @@ def _build_router(db) -> APIRouter:
             "last_sync_at": (tok or {}).get("last_sync_at"),
             "date_range": rng,
             "by_source": per_source,
+            "orders_missing_date": missing_date,
         }
+
+    @router.get("/orders-missing-date")
+    async def orders_missing_date(
+        limit: int = Query(100, ge=1, le=500),
+        user: dict = Depends(current_user),
+    ):
+        """List orders that have no order_date — usually because Make.com
+        sent the webhook without `created_at`. The merchant should fix
+        their Make.com scenario to include the order creation date.
+        """
+        q: dict = {
+            "user_id": user["id"],
+            "$or": [
+                {"order_date": None},
+                {"order_date": ""},
+                {"order_date": {"$exists": False}},
+            ],
+        }
+        cur = (
+            db.unified_orders.find(q, {"_id": 0, "raw_by_source": 0})
+            .sort("received_at", -1)
+            .limit(limit)
+        )
+        items = await cur.to_list(limit)
+        total = await db.unified_orders.count_documents(q)
+        return {"orders": items, "total": total, "limit": limit}
 
     @router.post("/build-analysis")
     async def build_analysis(payload: BuildAnalysisIn, user: dict = Depends(current_user)):

@@ -1162,15 +1162,22 @@ async def on_startup():
         logger.info(f"Backfilled order_date on {backfilled} unified_orders documents.")
 
     # ALSO backfill order_date when raw is missing entirely (Make.com payload
-    # without created_at/order_date). Use the row's received_at, otherwise
-    # the current UTC date. Without this, those orders sit invisibly with
-    # order_date=None and never appear in any date-filtered query.
+    # without created_at/order_date). Use the row's received_at when available.
+    # IMPORTANT (2026-05 fix): previously we fell back to "today" as the last
+    # resort, but that silently labels March/April orders that Make.com
+    # forwards today (without their original created_at) as "May orders",
+    # inflating the current month's KPIs. New behavior:
+    #   - If received_at is available → use received_at[:10] (still
+    #     approximate, but at least bounded to when we first saw the order).
+    #   - Otherwise → leave order_date NULL so the missing-date case is
+    #     explicit and reviewable from the Make.com page.
     nulldate_cursor = db.unified_orders.find(
         {"$or": [{"order_date": None}, {"order_date": ""},
                  {"order_date": {"$exists": False}}]},
         {"_id": 1, "received_at": 1, "created_at": 1},
     )
     nulldate_fixed = 0
+    nulldate_skipped = 0
     async for o in nulldate_cursor:
         recv = o.get("received_at") or o.get("created_at")
         date_str: Optional[str] = None
@@ -1180,11 +1187,56 @@ async def on_startup():
             except Exception:
                 date_str = None
         if not date_str:
-            date_str = datetime.now(timezone.utc).date().isoformat()
+            # No received_at metadata → cannot safely guess. Skip.
+            nulldate_skipped += 1
+            continue
         await db.unified_orders.update_one({"_id": o["_id"]}, {"$set": {"order_date": date_str}})
         nulldate_fixed += 1
     if nulldate_fixed:
-        logger.info(f"Backfilled order_date=received_at on {nulldate_fixed} unified_orders documents.")
+        logger.info(f"Backfilled order_date=received_at on {nulldate_fixed} unified_orders documents (skipped {nulldate_skipped}).")
+
+    # 2026-05 corrective migration: undo the previous "fallback to today"
+    # logic for Make.com orders that arrived without created_at. Those
+    # rows are identifiable because they have:
+    #   - data_source = 'make'
+    #   - order_date_raw is empty (Make.com never sent a date string)
+    #   - order_date is currently set, but matches received_at[:10] AND
+    #     differs from the actual creation date the merchant expected.
+    # We CANNOT recover the true creation date — but we can at least clear
+    # the spurious "today" value so the orders don't inflate the wrong
+    # month's KPIs. The merchant can then either re-import them via Excel
+    # (which has the correct date) or fix their Make.com scenario to push
+    # `created_at` correctly going forward.
+    fake_today_cursor = db.unified_orders.find(
+        {
+            "data_source": "make",
+            "$or": [
+                {"order_date_raw": {"$in": ["", None]}},
+                {"order_date_raw": {"$exists": False}},
+            ],
+            "order_date": {"$exists": True, "$nin": [None, ""]},
+            "received_at": {"$exists": True, "$nin": [None, ""]},
+        },
+        {"_id": 1, "order_date": 1, "received_at": 1},
+    )
+    today_fallback_cleared = 0
+    async for o in fake_today_cursor:
+        # The fallback set order_date to the day the webhook arrived (UTC).
+        try:
+            recv_day = datetime.fromisoformat(
+                str(o["received_at"]).replace("Z", "+00:00")
+            ).date().isoformat()
+        except Exception:
+            continue
+        if o.get("order_date") == recv_day:
+            await db.unified_orders.update_one(
+                {"_id": o["_id"]},
+                {"$set": {"order_date": None, "order_date_missing": True}},
+            )
+            today_fallback_cleared += 1
+    if today_fallback_cleared:
+        logger.info(f"Cleared spurious order_date=today on {today_fallback_cleared} Make.com orders (missing original created_at).")
+
     await seed_admin(db)
     logger.info("Hesab backend started successfully.")
 

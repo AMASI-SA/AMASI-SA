@@ -163,6 +163,24 @@ export default function MakeWebhook() {
                 />
             </div>
 
+            {/* Warning: orders missing creation date */}
+            {(stats?.orders_missing_date || 0) > 0 && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex items-start gap-3" data-testid="missing-date-banner">
+                    <Warning size={28} weight="fill" className="text-amber-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                        <div className="font-bold text-amber-900">
+                            ⚠️ يوجد <strong>{stats.orders_missing_date}</strong> طلب بدون تاريخ إنشاء
+                        </div>
+                        <div className="text-sm text-amber-800 mt-1 leading-relaxed">
+                            هذه الطلبات وصلت من Make.com بدون حقل <code className="bg-amber-100 px-1 py-0.5 rounded">created_at</code>،
+                            ولن تظهر في لوحة التحكم أو التقارير المُفلترة بالتاريخ.
+                            <br />
+                            <strong>الحل:</strong> في سيناريو Make.com، تأكد من تمرير حقل تاريخ إنشاء الطلب من سلة (مثلاً <code className="bg-amber-100 px-1 py-0.5 rounded">created_at</code> أو <code className="bg-amber-100 px-1 py-0.5 rounded">date</code>) ثم أعد إرسال الطلبات.
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Webhook URL */}
             <div className="rounded-xl border border-border bg-white p-6 space-y-4">
                 <h2 className="text-xl font-bold flex items-center gap-2">
