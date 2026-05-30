@@ -1110,6 +1110,31 @@ async def on_startup():
             backfilled += 1
     if backfilled:
         logger.info(f"Backfilled order_date on {backfilled} unified_orders documents.")
+
+    # ALSO backfill order_date when raw is missing entirely (Make.com payload
+    # without created_at/order_date). Use the row's received_at, otherwise
+    # the current UTC date. Without this, those orders sit invisibly with
+    # order_date=None and never appear in any date-filtered query.
+    nulldate_cursor = db.unified_orders.find(
+        {"$or": [{"order_date": None}, {"order_date": ""},
+                 {"order_date": {"$exists": False}}]},
+        {"_id": 1, "received_at": 1, "created_at": 1},
+    )
+    nulldate_fixed = 0
+    async for o in nulldate_cursor:
+        recv = o.get("received_at") or o.get("created_at")
+        date_str: Optional[str] = None
+        if recv:
+            try:
+                date_str = datetime.fromisoformat(str(recv).replace("Z", "+00:00")).date().isoformat()
+            except Exception:
+                date_str = None
+        if not date_str:
+            date_str = datetime.now(timezone.utc).date().isoformat()
+        await db.unified_orders.update_one({"_id": o["_id"]}, {"$set": {"order_date": date_str}})
+        nulldate_fixed += 1
+    if nulldate_fixed:
+        logger.info(f"Backfilled order_date=received_at on {nulldate_fixed} unified_orders documents.")
     await seed_admin(db)
     logger.info("Hesab backend started successfully.")
 

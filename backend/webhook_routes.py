@@ -293,12 +293,19 @@ def _build_router(db) -> APIRouter:
             else:
                 total_val = _to_float(payload.total_amount)
 
-            # normalize date — prefer created_at, then order_date
+            # normalize date — prefer created_at, then order_date.
+            # If none can be parsed, fall back to TODAY (the day we received
+            # the webhook). This prevents new orders from ending up with
+            # order_date=None which would silently exclude them from every
+            # date-filtered query (e.g. dashboard "this month" filter).
             order_date_norm = (
                 _normalize_order_date(payload.created_at)
                 or _normalize_order_date(payload.order_date)
                 or _normalize_order_date(raw.get("created_at"))
                 or _normalize_order_date(raw.get("order_date"))
+                or _normalize_order_date(raw.get("purchase_date"))
+                or _normalize_order_date(raw.get("date"))
+                or datetime.now(timezone.utc).date().isoformat()
             )
 
             incoming = {
