@@ -543,6 +543,7 @@ async def create_analysis(
             "order_id": o.get("order_id") or "",
             "order_date": order_date,
             "order_date_raw": o.get("order_date_raw") or "",
+            "order_date_inferred": False,  # Excel = authoritative Salla export
             "order_status": o.get("order_status") or "",
             "customer_name": o.get("customer_name") or "",
             "customer_mobile": o.get("customer_mobile") or "",
@@ -654,6 +655,7 @@ async def reprocess_analysis(
             "order_id": o.get("order_id") or "",
             "order_date": order_date,
             "order_date_raw": o.get("order_date_raw") or "",
+            "order_date_inferred": False,  # Excel = authoritative Salla export
             "order_status": o.get("order_status") or "",
             "customer_name": o.get("customer_name") or "",
             "customer_mobile": o.get("customer_mobile") or "",
