@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise } from "@phosphor-icons/react";
+import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { KPI_GROUPS } from "../lib/dashboardCards";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const DEFAULT_SNAP_REDIRECT = `${BACKEND_URL}/api/snapchat/oauth/callback`;
@@ -18,6 +19,7 @@ export default function Settings() {
     const [shipApproved, setShipApproved] = useState([]);
     const [codApproved, setCodApproved] = useState([]);
     const [reportIncluded, setReportIncluded] = useState([]);
+    const [hiddenCards, setHiddenCards] = useState([]);
     const [discoveredStatuses, setDiscoveredStatuses] = useState([]); // [{name,count}]
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -67,6 +69,7 @@ export default function Settings() {
                 setShipApproved(settings.shipping_approved_statuses || []);
                 setCodApproved(settings.cod_approved_statuses || []);
                 setReportIncluded(settings.report_included_statuses || []);
+                setHiddenCards(settings.dashboard_hidden_cards || []);
                 setDiscoveredStatuses(statuses.statuses || []);
             } finally { setLoading(false); }
         })();
@@ -178,6 +181,7 @@ export default function Settings() {
                 shipping_approved_statuses: shipApproved,
                 cod_approved_statuses: codApproved,
                 report_included_statuses: reportIncluded,
+                dashboard_hidden_cards: hiddenCards,
             });
             toast.success("تم حفظ الإعدادات");
         } catch (err) {
@@ -404,6 +408,81 @@ export default function Settings() {
                             >
                                 <Trash size={18} />
                             </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* NEW: Dashboard cards visibility (Phase 5) */}
+            <div className="rounded-xl border border-border bg-white p-6" data-testid="dashboard-cards-section">
+                <div className="mb-5 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-brand text-white flex items-center justify-center">
+                        <SquaresFour size={22} weight="duotone" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>تخصيص بطاقات لوحة التحكم</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            أخفِ البطاقات التي لا تحتاجها من لوحة التحكم. التغييرات تنطبق فوراً عند الحفظ.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between mb-4 text-sm">
+                    <div className="text-muted-foreground">
+                        مفعَّلة: <strong className="text-foreground">{KPI_GROUPS.flatMap((g) => g.cards).length - hiddenCards.length}</strong>
+                        {" "}/ {KPI_GROUPS.flatMap((g) => g.cards).length}
+                    </div>
+                    <div className="flex gap-2">
+                        <button type="button"
+                            onClick={() => setHiddenCards([])}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-border hover:bg-accent font-bold"
+                            data-testid="show-all-cards-btn">
+                            <Eye size={14} className="inline" /> إظهار الكل
+                        </button>
+                        <button type="button"
+                            onClick={() => setHiddenCards(KPI_GROUPS.flatMap((g) => g.cards.map((c) => c.id)))}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-border hover:bg-accent font-bold"
+                            data-testid="hide-all-cards-btn">
+                            <EyeSlash size={14} className="inline" /> إخفاء الكل
+                        </button>
+                    </div>
+                </div>
+
+                <div className="space-y-5">
+                    {KPI_GROUPS.map((group) => (
+                        <div key={group.id} className="border border-border rounded-lg p-4">
+                            <h3 className="font-bold text-foreground mb-3" style={{ fontFamily: "Tajawal" }}>{group.title}</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {group.cards.map((c) => {
+                                    const Icon = c.icon;
+                                    const isHidden = hiddenCards.includes(c.id);
+                                    return (
+                                        <label
+                                            key={c.id}
+                                            className={`flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer transition-colors border ${isHidden ? "border-border bg-accent/40 text-muted-foreground" : "border-emerald-200 bg-emerald-50/40"}`}
+                                            data-testid={`card-toggle-${c.id}`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="w-4 h-4 accent-brand"
+                                                checked={!isHidden}
+                                                onChange={() => {
+                                                    setHiddenCards((prev) => (
+                                                        prev.includes(c.id)
+                                                            ? prev.filter((x) => x !== c.id)
+                                                            : [...prev, c.id]
+                                                    ));
+                                                }}
+                                            />
+                                            <Icon size={18} weight="duotone" className={isHidden ? "text-muted-foreground" : "text-brand"} />
+                                            <div className="flex-1">
+                                                <div className="text-sm font-semibold">{c.label}</div>
+                                                {c.hint && <div className="text-xs text-muted-foreground">{c.hint}</div>}
+                                            </div>
+                                        </label>
+                                    );
+                                })}
+                            </div>
                         </div>
                     ))}
                 </div>

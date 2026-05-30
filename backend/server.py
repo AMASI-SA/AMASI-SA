@@ -108,6 +108,8 @@ class SettingsIn(BaseModel):
     # NEW: which order statuses are counted in dashboard/reports KPIs.
     # Empty list = include ALL statuses (backwards compatible default).
     report_included_statuses: Optional[List[str]] = None
+    # NEW (Phase 5): per-user list of dashboard KPI card ids to hide.
+    dashboard_hidden_cards: Optional[List[str]] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -190,6 +192,7 @@ async def get_settings(user: dict = Depends(current_user)):
         "shipping_approved_statuses": s.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
         "cod_approved_statuses": s.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
         "report_included_statuses": s.get("report_included_statuses", []),
+        "dashboard_hidden_cards": s.get("dashboard_hidden_cards", []),
     }
 
 
@@ -207,6 +210,8 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["cod_approved_statuses"] = [s.strip() for s in payload.cod_approved_statuses if s.strip()]
     if payload.report_included_statuses is not None:
         update_doc["report_included_statuses"] = [s.strip() for s in payload.report_included_statuses if s.strip()]
+    if payload.dashboard_hidden_cards is not None:
+        update_doc["dashboard_hidden_cards"] = [s.strip() for s in payload.dashboard_hidden_cards if s.strip()]
     await db.settings.update_one(
         {"user_id": user["id"]},
         {"$set": update_doc},

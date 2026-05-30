@@ -15,22 +15,36 @@ import {
     Wallet,
     Bank,
     ArrowsClockwise,
+    EyeSlash,
+    GearSix,
 } from "@phosphor-icons/react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { toast } from "sonner";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
+import { ALL_KPI_CARDS } from "../lib/dashboardCards";
 
-function Kpi({ icon: Icon, label, value, hint, accent = false, testid }) {
+function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide }) {
     return (
         <div
             className={[
-                "rounded-xl border border-border p-5 bg-white transition-shadow hover:shadow-sm",
+                "group relative rounded-xl border border-border p-5 bg-white transition-shadow hover:shadow-sm",
                 accent ? "border-brand/40 bg-accent" : "",
             ].join(" ")}
             data-testid={testid}
         >
+            {onHide && (
+                <button
+                    type="button"
+                    onClick={onHide}
+                    className="absolute top-2 start-2 p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="إخفاء هذه البطاقة (يمكن إعادتها من الإعدادات)"
+                    data-testid={`${testid}-hide-btn`}
+                >
+                    <EyeSlash size={16} weight="bold" />
+                </button>
+            )}
             <div className="flex items-center justify-between mb-3">
                 <div className={`w-10 h-10 rounded-lg ${accent ? "bg-brand text-white" : "bg-accent text-brand"} flex items-center justify-center`}>
                     <Icon size={22} weight="duotone" />
@@ -51,6 +65,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(defaultFilters());
     const [reprocessingId, setReprocessingId] = useState(null);
+    const [hiddenCards, setHiddenCards] = useState([]);
     const fileInputRef = useRef(null);
     const pendingReprocessId = useRef(null);
 
@@ -62,6 +77,41 @@ export default function Dashboard() {
             setData(data);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Load the user's card-visibility preferences once on mount.
+    useEffect(() => {
+        (async () => {
+            try {
+                const { data } = await api.get("/settings");
+                setHiddenCards(data.dashboard_hidden_cards || []);
+            } catch {
+                /* fall back to all-visible if settings unreachable */
+            }
+        })();
+    }, []);
+
+    const hideCard = async (id) => {
+        const next = Array.from(new Set([...hiddenCards, id]));
+        setHiddenCards(next);  // optimistic
+        try {
+            // Read current settings, merge hidden cards, write back. We have
+            // to send payment_methods/shipping_companies because the PUT model
+            // requires them.
+            const { data: s } = await api.get("/settings");
+            await api.put("/settings", {
+                payment_methods: s.payment_methods,
+                shipping_companies: s.shipping_companies,
+                shipping_approved_statuses: s.shipping_approved_statuses,
+                cod_approved_statuses: s.cod_approved_statuses,
+                report_included_statuses: s.report_included_statuses,
+                dashboard_hidden_cards: next,
+            });
+            toast.success("تم إخفاء البطاقة. يمكنك إعادتها من الإعدادات.");
+        } catch {
+            setHiddenCards(hiddenCards);  // revert on failure
+            toast.error("تعذّر حفظ التفضيل");
         }
     };
 
@@ -144,29 +194,43 @@ export default function Dashboard() {
                 </div>
             ) : (
                 <>
-                    {/* KPI grid */}
+                    {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Kpi icon={Coins} label="إجمالي المبيعات (ر.س)" value={formatMoney(totals.total_sales)} accent testid="kpi-total-sales" />
-                        <Kpi icon={ShoppingBag} label="إجمالي الطلبات" value={formatInt(totals.total_orders)} testid="kpi-total-orders" />
-                        <Kpi icon={Receipt} label="رسوم بوابات الدفع (ر.س)" value={formatMoney(totals.other_payment_fees)} hint="عدا تمارا وتابي وإمكان" testid="kpi-payment-fees" />
-                        <Kpi icon={Wallet} label="صافي المدفوعات الإلكترونية (ر.س)" value={formatMoney(totals.electronic_net)} hint="المبيعات − العمولات" testid="kpi-electronic-net" />
-                        <Kpi icon={Receipt} label="رسوم تمارا (ر.س)" value={formatMoney(totals.tamara_fees)} hint="BNPL" testid="kpi-tamara-fees" />
-                        <Kpi icon={Receipt} label="رسوم تابي (ر.س)" value={formatMoney(totals.tabby_fees)} hint="BNPL" testid="kpi-tabby-fees" />
-                        <Kpi icon={Receipt} label="رسوم إمكان (ر.س)" value={formatMoney(totals.emkan_fees)} hint="BNPL" testid="kpi-emkan-fees" />
-                        <Kpi icon={Wallet} label="صافي تمارا وتابي وإمكان (ر.س)" value={formatMoney(totals.bnpl_net)} hint="بعد خصم العمولات" testid="kpi-bnpl-net" />
-                        <Kpi icon={Truck} label="تكاليف الشحن (ر.س)" value={formatMoney(totals.total_shipping_cost)} testid="kpi-shipping-cost" />
-                        <Kpi icon={Truck} label="مستحقات الشحن الآجل (ر.س)" value={formatMoney(totals.deferred_shipping_cost)} hint="ذمم للشركات الآجلة" testid="kpi-deferred-shipping" />
-                        <Kpi icon={Truck} label="رصيد شحن معتمد (ر.س)" value={formatMoney(totals.shipping_approved)} hint="طلبات (تم التوصيل)" testid="kpi-shipping-approved" />
-                        <Kpi icon={Truck} label="رصيد شحن غير معتمد (ر.س)" value={formatMoney(totals.shipping_unapproved)} hint="طلبات قيد التنفيذ/الشحن" testid="kpi-shipping-unapproved" />
-                        <Kpi icon={Wallet} label="COD معتمد (ر.س)" value={formatMoney(totals.cod_approved)} hint="مستحق على شركة الشحن" accent testid="kpi-cod-approved" />
-                        <Kpi icon={Wallet} label="COD غير معتمد (ر.س)" value={formatMoney(totals.cod_unapproved)} hint="لم يصل بعد" testid="kpi-cod-unapproved" />
-                        <Kpi icon={Bank} label="المتوقع من سلة (ر.س)" value={formatMoney(totals.expected_salla_transfer)} hint="حوالة سلة المتوقعة" accent testid="kpi-expected-salla" />
-                        <Kpi icon={Percent} label="إجمالي الضريبة المخصومة (ر.س)" value={formatMoney(totals.total_vat)} hint="ضريبة الدفع + الشحن" testid="kpi-total-vat" />
-                        <Kpi icon={Megaphone} label="تكاليف الإعلانات (ر.س)" value={formatMoney(totals.total_ads_cost)} testid="kpi-ads" />
-                        <Kpi icon={Package} label="تكاليف المنتجات (ر.س)" value={formatMoney(totals.total_product_cost)} hint="من ملفات Excel" testid="kpi-products" />
-                        <Kpi icon={Receipt} label="مصاريف يومية (ر.س)" value={formatMoney(totals.daily_expenses_total)} hint="من سجل التكاليف" testid="kpi-daily-expenses" />
-                        <Kpi icon={TrendUp} label="صافي الربح النهائي (ر.س)" value={formatMoney(totals.net_profit)} hint="بعد التكاليف اليومية" accent testid="kpi-net-profit" />
+                        {ALL_KPI_CARDS
+                            .filter((c) => !hiddenCards.includes(c.id))
+                            .map((c) => {
+                                const rawVal = c.value(totals);
+                                const display = c.money ? formatMoney(rawVal) : (c.isInt ? formatInt(rawVal) : String(rawVal));
+                                const label = c.money ? `${c.label} (ر.س)` : c.label;
+                                return (
+                                    <Kpi
+                                        key={c.id}
+                                        icon={c.icon}
+                                        label={label}
+                                        value={display}
+                                        hint={c.hint}
+                                        accent={c.accent}
+                                        testid={`kpi-${c.id}`}
+                                        onHide={() => hideCard(c.id)}
+                                    />
+                                );
+                            })}
+                        {ALL_KPI_CARDS.length === hiddenCards.length && (
+                            <div className="col-span-full text-center py-10 text-muted-foreground border border-dashed border-border rounded-xl">
+                                لقد أخفيت كل البطاقات. <Link to="/settings" className="text-brand font-bold hover:underline">أعدها من الإعدادات</Link>.
+                            </div>
+                        )}
                     </div>
+                    {hiddenCards.length > 0 && (
+                        <Link
+                            to="/settings"
+                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-brand"
+                            data-testid="dashboard-customize-link"
+                        >
+                            <GearSix size={14} />
+                            عدد البطاقات المخفية: {hiddenCards.length} — إدارة من الإعدادات
+                        </Link>
+                    )}
 
                     {/* Monthly chart */}
                     <div className="rounded-xl border border-border bg-white p-6">
