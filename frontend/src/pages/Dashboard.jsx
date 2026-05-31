@@ -331,7 +331,9 @@ export default function Dashboard() {
                                     <div>
                                         <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Snapchat Ads</h2>
                                         <p className="text-xs text-muted-foreground">
-                                            تحديث تلقائي من Snapchat Marketing API و التكاليف اليومية — آخر 30 يوم
+                                            {snapSummary.source === "snapchat_pixel"
+                                                ? "الطلبات والعائد من Snapchat Pixel — تحديث تلقائي مع زر التحديث"
+                                                : "الطلبات والعائد من المتجر (لا يوجد Pixel نشط بعد) — اضغط تحديث لجلب بيانات Snapchat"}
                                             {snapSummary.last_fetched_at && (
                                                 <span className="ms-2 text-yellow-700">• آخر جلب: {new Date(snapSummary.last_fetched_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
                                             )}

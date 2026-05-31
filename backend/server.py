@@ -1143,32 +1143,54 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     def _to_usd(sar: float) -> float:
         return round(sar / USD_RATE, 2) if sar else 0.0
 
-    # 2) Orders + revenue from unified_orders.
+    # 2) Orders + revenue — prefer Snapchat's own Pixel-reported conversions
+    #    (stored in snapchat_daily_stats by the bulk fetch). Fall back to
+    #    unified_orders only when the Snapchat-side numbers are completely
+    #    absent (legacy users who haven't fetched yet).
     settings = await ensure_user_settings(db, uid)
-    base_q = {"user_id": uid}
-    if settings.get("hide_inferred_date_orders"):
-        base_q["order_date_inferred"] = {"$ne": True}
+    snap_stats_rows = await db.snapchat_daily_stats.find(
+        {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
+        {"_id": 0, "date": 1, "purchases": 1, "revenue": 1},
+    ).to_list(60)
+    snap_by_date: dict = {r["date"]: r for r in snap_stats_rows}
 
-    today_q = {**base_q, "order_date": today_str}
-    month_q = {**base_q, "order_date": {"$gte": month_start_str, "$lte": today_str}}
-    d30_q = {**base_q, "order_date": {"$gte": d30_start_str, "$lte": today_str}}
+    def _snap_agg(start: str, end: str):
+        rows = [r for k, r in snap_by_date.items() if start <= k <= end]
+        orders = sum(int(r.get("purchases") or 0) for r in rows)
+        revenue = round(sum(float(r.get("revenue") or 0) for r in rows), 2)
+        return orders, revenue, len(rows) > 0
 
-    async def _summarize(q):
-        pipeline = [
-            {"$match": q},
-            {"$group": {
-                "_id": None,
-                "orders": {"$sum": 1},
-                "revenue": {"$sum": {"$ifNull": ["$total_amount", 0]}},
-            }},
-        ]
-        async for d in db.unified_orders.aggregate(pipeline):
-            return int(d.get("orders", 0)), round(float(d.get("revenue", 0)), 2)
-        return 0, 0.0
+    orders_today, revenue_today, has_today = _snap_agg(today_str, today_str)
+    orders_month, revenue_month, has_month = _snap_agg(month_start_str, today_str)
+    orders_30d, revenue_30d, has_30d = _snap_agg(d30_start_str, today_str)
+    snap_pixel_active = has_30d  # any data within 30d → snap pixel is reporting
 
-    orders_today, revenue_today = await _summarize(today_q)
-    orders_month, revenue_month = await _summarize(month_q)
-    orders_30d, revenue_30d = await _summarize(d30_q)
+    # Fallback: if user hasn't fetched yet, show store-side numbers so the
+    # card isn't empty. UI will flag the source so the user knows the
+    # difference.
+    if not has_30d:
+        base_q = {"user_id": uid}
+        if settings.get("hide_inferred_date_orders"):
+            base_q["order_date_inferred"] = {"$ne": True}
+
+        async def _summarize(q):
+            pipeline = [
+                {"$match": q},
+                {"$group": {"_id": None,
+                            "orders": {"$sum": 1},
+                            "revenue": {"$sum": {"$ifNull": ["$total_amount", 0]}}}},
+            ]
+            async for d in db.unified_orders.aggregate(pipeline):
+                return int(d.get("orders", 0)), round(float(d.get("revenue", 0)), 2)
+            return 0, 0.0
+
+        if not has_today:
+            orders_today, revenue_today = await _summarize({**base_q, "order_date": today_str})
+        if not has_month:
+            orders_month, revenue_month = await _summarize({**base_q,
+                "order_date": {"$gte": month_start_str, "$lte": today_str}})
+        orders_30d, revenue_30d = await _summarize({**base_q,
+            "order_date": {"$gte": d30_start_str, "$lte": today_str}})
 
     # Build 30-day spend history (filled with zeros for missing days)
     history: list = []
@@ -1217,6 +1239,7 @@ async def snapchat_summary(user: dict = Depends(current_user)):
         },
         "usd_rate": USD_RATE,
         "last_fetched_at": last_fetched_at,
+        "source": "snapchat_pixel" if snap_pixel_active else "store_orders",
         "history": history,
     }
 

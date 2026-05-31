@@ -107,7 +107,8 @@ def test_bulk_endpoint_validates_days_range():
     """The /daily-spend/bulk endpoint enforces 1 <= days <= 31."""
     token = _register()
     h = {"Authorization": f"Bearer {token}"}
-    for bad in [0, -1, 32, 100]:
+    # Validation limits: days must be 1..62 (62 supports the new "fetch month" range)
+    for bad in [0, -1, 63, 100]:
         r = requests.post(f"{API}/snapchat/daily-spend/bulk",
                           headers=h, json={"days": bad})
         assert r.status_code == 422, f"days={bad} should 422 but got {r.status_code}"

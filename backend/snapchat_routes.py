@@ -606,7 +606,10 @@ def _build_router(db) -> APIRouter:
                     "start_time": start_local.isoformat(timespec="seconds"),
                     "end_time": end_local.isoformat(timespec="seconds"),
                     "granularity": "DAY",
-                    "fields": "spend",
+                    # Pull spend + Pixel-attributed conversions/revenue. Snapchat
+                    # exposes these only when the ad-account has a working Snap
+                    # Pixel reporting conversion events.
+                    "fields": "spend,conversion_purchases,conversion_purchases_value",
                 }
                 try:
                     resp = await http.get(
@@ -626,16 +629,28 @@ def _build_router(db) -> APIRouter:
 
                 data = resp.json()
                 total_micro = 0
+                total_purchases = 0
+                total_purchases_value_micro = 0
                 for ts in data.get("timeseries_stats", []) or []:
                     stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
                     for point in stat.get("timeseries", []) or []:
-                        spend_val = (point.get("stats") or {}).get("spend", 0)
+                        s = point.get("stats") or {}
                         try:
-                            total_micro += int(spend_val)
+                            total_micro += int(s.get("spend", 0) or 0)
+                        except (TypeError, ValueError):
+                            pass
+                        try:
+                            total_purchases += int(s.get("conversion_purchases", 0) or 0)
+                        except (TypeError, ValueError):
+                            pass
+                        try:
+                            total_purchases_value_micro += int(s.get("conversion_purchases_value", 0) or 0)
                         except (TypeError, ValueError):
                             pass
                 spend_native = round(total_micro / 1_000_000, 2)
+                revenue_native = round(total_purchases_value_micro / 1_000_000, 2)
                 spend, fx_rate = _to_sar(spend_native, ad_currency)
+                revenue, _ = _to_sar(revenue_native, ad_currency)
 
                 # Upsert into daily_costs, preserving other fields (snapchat_ads_2,
                 # tiktok, etc) if the row already exists.
@@ -664,10 +679,33 @@ def _build_router(db) -> APIRouter:
                         "notes": f"auto from Snapchat ({ad_currency}→SAR ×{fx_rate})" if fx_rate != 1 else "auto from Snapchat",
                         "created_at": datetime.now(timezone.utc).isoformat(),
                     })
+
+                # Separately persist Snapchat-reported conversions (Pixel data)
+                # so the dashboard can read attributed orders + revenue from
+                # the ad platform itself rather than from unified_orders.
+                await db.snapchat_daily_stats.update_one(
+                    {"user_id": user["id"], "date": date_str},
+                    {"$set": {
+                        "user_id": user["id"],
+                        "date": date_str,
+                        "spend": spend,
+                        "spend_native": spend_native,
+                        "revenue": revenue,
+                        "revenue_native": revenue_native,
+                        "purchases": total_purchases,
+                        "currency_native": ad_currency,
+                        "fx_rate": fx_rate,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }},
+                    upsert=True,
+                )
+
                 saved.append({
                     "date": date_str,
                     "spend": spend,
                     "spend_native": spend_native,
+                    "revenue": revenue,
+                    "purchases": total_purchases,
                     "native_currency": ad_currency,
                     "fx_rate": fx_rate,
                 })
