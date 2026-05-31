@@ -723,6 +723,7 @@ def _build_router(db) -> APIRouter:
             "errors": errors,
             "native_currency": ad_currency,
             "currency": "SAR",
+            "ad_account_timezone": tz_name,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
 

@@ -970,12 +970,24 @@ async def dashboard(
     tiktok_revenue = sum(float(r.get("revenue") or 0) for r in tt_rows)
     tiktok_roas = round(tiktok_revenue / tiktok_spend, 2) if tiktok_spend > 0 else 0.0
 
+    # ── Meta Ads daily (pulled via /api/meta/sync from Meta Marketing API) ──
+    meta_q = {"user_id": user["id"]}
+    if from_date or to_date:
+        df = {}
+        if from_date: df["$gte"] = from_date
+        if to_date: df["$lte"] = to_date
+        meta_q["date"] = df
+    meta_rows = await db.meta_ads_daily.find(meta_q, {"_id": 0}).to_list(2000)
+    meta_spend_total = sum(float(r.get("spend") or 0) for r in meta_rows)
+    meta_purchases_total = sum(int(r.get("purchases") or 0) for r in meta_rows)
+    meta_revenue_total = sum(float(r.get("revenue") or 0) for r in meta_rows)
+
     daily_ads_total = sum(
         (d.get("snapchat_ads", 0) or 0) + (d.get("snapchat_ads_2", 0) or 0)
         + (d.get("tiktok_ads", 0) or 0) + (d.get("instagram_ads", 0) or 0)
         + (d.get("google_ads", 0) or 0)
         for d in daily
-    )
+    ) + meta_spend_total
     daily_products_total = sum((d.get("product_costs", 0) or 0) for d in daily)
     daily_totals = daily_ads_total + daily_products_total
 
@@ -1137,6 +1149,11 @@ async def dashboard(
             "tiktok_purchases": int(tiktok_purchases),
             "tiktok_revenue": round(tiktok_revenue, 2),
             "tiktok_roas": tiktok_roas,
+            # ── Meta Ads aggregated total (over the active date range) ──────
+            "meta_spend": round(meta_spend_total, 2),
+            "meta_purchases": int(meta_purchases_total),
+            "meta_revenue": round(meta_revenue_total, 2),
+            "meta_roas": round(meta_revenue_total / meta_spend_total, 2) if meta_spend_total > 0 else 0.0,
             # Backward-compatible aliases used by older UI code
             "analyses_count": len(recent),
             "make_orders_count": src_counts.get("make", 0),
@@ -1434,6 +1451,92 @@ async def meta_summary(user: dict = Depends(current_user)):
         "connection_status": connection_status,
         "last_error_message": last_error_message,
         "last_error_at": last_error_at,
+    }
+
+
+# ── TikTok Ads dashboard summary ──────────────────────────────────────────────
+@api.get("/dashboard/tiktok-summary")
+async def tiktok_summary(user: dict = Depends(current_user)):
+    """Auto-computed TikTok Ads card data: today + this-month + last 30d.
+
+    Aggregates from `tiktok_ads_daily` (currently populated by Make.com
+    webhook — direct TikTok Marketing API integration is on the roadmap)
+    plus the local `daily_costs.tiktok_ads` field as a fallback for legacy
+    manually-entered spend.
+
+    All dates use Asia/Riyadh timezone (matches Snapchat/Meta cards)."""
+    uid = user["id"]
+    today_d = _local_today_date()
+    today_str = today_d.isoformat()
+    month_start_str = today_str[:8] + "01"
+    d30_start_str = (today_d - timedelta(days=29)).isoformat()
+
+    # tiktok_ads_daily: rich per-day rows (spend, purchases, revenue, +
+    # optional CPC/CPM/CTR fields from TikTok native fields).
+    tt_rows = await db.tiktok_ads_daily.find(
+        {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
+        {"_id": 0},
+    ).to_list(60)
+    tt_by_date: dict = {r["date"]: r for r in tt_rows}
+
+    # daily_costs fallback (rare — most users will have webhook data)
+    daily_rows = await db.daily_costs.find(
+        {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
+        {"_id": 0, "date": 1, "tiktok_ads": 1},
+    ).to_list(60)
+    dc_spend_by_date: dict = {r["date"]: float(r.get("tiktok_ads") or 0)
+                              for r in daily_rows if r.get("date")}
+
+    def _row_spend(date_key: str) -> float:
+        r = tt_by_date.get(date_key) or {}
+        s = float(r.get("spend") or 0)
+        # Use the bigger of webhook vs manual (avoids double-counting when both
+        # paths populated the same day historically).
+        return max(s, dc_spend_by_date.get(date_key, 0.0))
+
+    def _agg(start: str, end: str):
+        spend = 0.0
+        purchases = 0
+        revenue = 0.0
+        for k in tt_by_date:
+            if start <= k <= end:
+                purchases += int((tt_by_date[k] or {}).get("purchases") or 0)
+                revenue += float((tt_by_date[k] or {}).get("revenue") or 0)
+        for k, v in dc_spend_by_date.items():
+            if start <= k <= end:
+                spend += _row_spend(k)
+        # When dc_spend_by_date doesn't cover the range, sum from tt_by_date directly
+        if spend == 0.0:
+            spend = sum(float((tt_by_date[k] or {}).get("spend") or 0)
+                        for k in tt_by_date if start <= k <= end)
+        roas = round(revenue / spend, 2) if spend > 0 else 0.0
+        cpa = round(spend / purchases, 2) if purchases > 0 else 0.0
+        return {"spend": round(spend, 2), "orders": int(purchases),
+                "revenue": round(revenue, 2), "roas": roas, "cpa": cpa}
+
+    # 30-day spend history (for the sparkline)
+    history: list = []
+    for i in range(29, -1, -1):
+        d = (today_d - timedelta(days=i)).isoformat()
+        history.append({"date": d, "spend": round(_row_spend(d), 2)})
+
+    # Last update timestamp from tiktok_ads_daily
+    last_doc = await db.tiktok_ads_daily.find_one(
+        {"user_id": uid}, {"_id": 0, "updated_at": 1, "received_at": 1},
+        sort=[("updated_at", -1)],
+    )
+    last_fetched_at = None
+    if last_doc:
+        last_fetched_at = last_doc.get("updated_at") or last_doc.get("received_at")
+
+    return {
+        "today": {"date": today_str, **_agg(today_str, today_str)},
+        "month": {"start": month_start_str, **_agg(month_start_str, today_str)},
+        "last_30d": {"start": d30_start_str, **_agg(d30_start_str, today_str)},
+        "history": history,
+        "last_fetched_at": last_fetched_at,
+        "source": "make_webhook",
+        "has_data": len(tt_by_date) > 0 or any(v > 0 for v in dc_spend_by_date.values()),
     }
 
 

@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 13 — verified TikTok dashboard card, refresh-all-ads orchestrator, Meta-spend rolled into total_ads_cost, and new /dashboard/tiktok-summary endpoint. Backend: 6/6 new tests PASS (meta_* fields present in /dashboard totals; SEED test confirms +300 SAR meta_ads_daily row increases meta_spend AND total_ads_cost AND daily_ads_total by 300; tiktok-summary endpoint returns full contract today/month/last_30d/history(30)/source='make_webhook'/has_data/last_fetched_at with correct types; today date matches Asia/Riyadh; snapchat bulk endpoint returns ad_account_timezone on success path / friendly Arabic on error path with no traceback leak). Regression: 37/37 PASS (test_unified_ads_report + test_operating_expenses + test_no_date_fallback + test_net_sales_config + test_meta_friendly_errors). Frontend Playwright @1280x800: ALL acceptance checks PASS — (a) refresh-all-ads-btn at top with EXACT label 'تحديث جميع الإعلانات' and gradient class; (b) tiktok-ads-section visible at all times (state populated via /dashboard/tiktok-summary even when has_data=false); (c) all 10 expected tiktok testids present (tiktok-refresh-btn, spend/orders/revenue/roas × today+month, card-details-link); tiktok-refresh-btn click hits GET /dashboard/tiktok-summary and shows toast 'تم تحديث بيانات TikTok'; refresh-all-ads-btn click fires 3 endpoints in parallel (POST /snapchat/daily-spend/bulk + POST /meta/sync + GET /dashboard/tiktok-summary captured simultaneously in network log) and produces the consolidated partial-success toast 'تحديث جزئي (1/3) • ✗ Snapchat: حساب سناب غير مربوط. اربطه من الإعدادات. • ✗ Meta: Meta Ads غير مربوط — افتح الإعدادات وأضف بيانات الحساب أولاً • ✓ TikTok: تم تحديث البيانات المحلية' — no [object Object], no raw JSON, all 3 platforms named. Snap 'تحديث فوري' button shows clean Arabic toast 'حساب سناب غير مربوط. اربطه من الإعدادات.' (no JSON).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard top bar", "issues": ["Filter row at /dashboard wraps oddly at 1280px when the new gradient refresh-all-ads-btn is added beside the existing 'تحديث' button and AdvancedFilters — works but the date-preset / payment / shipping selects squeeze on a single row. Consider a separate row for the platform-refresh CTA or use icon-only buttons below xl."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_13.py",
+    "/app/test_reports/pytest/iteration_13.xml",
+    "/app/test_reports/pytest/iteration_13_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Dashboard.jsx refreshAllAds() reads `snapSummary?.today?.date` to derive todayStr for the Snap bulk call — but when snapSummary is null (admin path) it falls back to `new Date().toISOString().slice(0,10)` which is UTC, not Riyadh. After 21:00 UTC (00:00 Riyadh next day) this would request the WRONG date for non-connected accounts. Fix: derive from tiktokSummary.today.date or a backend-provided 'today_riyadh' field instead of `new Date().toISOString()`.",
+    "Dashboard.jsx line 169: after Promise.all of the 3 runners, you await another Promise.all of fetchSnapSummary+fetchMetaSummary+fetchTiktokSummary+refreshSilently — fine — but the order does NOT guarantee `totals.meta_spend` (computed in /dashboard) reflects the just-synced spend if the meta-sync POST hasn't fully committed in the DB by the time /dashboard runs. In practice this is fine because /meta/sync awaits the upsert, but worth keeping in mind if you ever switch to fire-and-forget.",
+    "server.py /dashboard/tiktok-summary _agg(): the `if spend == 0.0: spend = sum(tt_by_date)` fallback works but is brittle — if daily_costs.tiktok_ads exists but is 0 for all days while tiktok_ads_daily has spend > 0, the function still picks up tt_by_date. However if BOTH are populated AND daily_costs.tiktok_ads is 0 for the day, max(0, 0) is used for spend in _row_spend but tt_by_date.spend is missed. Edge-case only — not blocking.",
+    "snapchat_routes bulk: response now includes ad_account_timezone — verified. The field is only populated on the success path; on 400 (no connection / bad token) the frontend can't show the TZ. Consider attaching ad_account_timezone (when known from a previous successful call cached in snapchat_connections) to the error detail too.",
+    "tiktok-empty-state JSX renders only when has_data=false. In our test env admin has 3 days of seeded TikTok data so empty-state never appeared — this is correct behavior, not a bug. For users with no webhook data the empty-state will display the linked Make.com onboarding text."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration_13.py"],
+  "success_rate": {
+    "backend": "100% (6/6 new + 37/37 regression = 43/43)",
+    "frontend": "100% (10/10 Playwright checks: refresh-all-ads-btn label+gradient, tiktok-ads-section visible, 10 tiktok testids, tiktok-refresh-btn API call + toast, refresh-all-ads-btn 3-platform parallel calls + consolidated toast with no JSON/object leaks, snap refresh friendly Arabic error)"
+  },
+  "test_credentials": "admin@hesab.app / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Inserted ONE meta_ads_daily row {user_id=admin, date=2026-05-31, spend=300, _test_marker=iteration_13} during test_total_ads_cost_includes_meta_spend, cleaned up in finally. No other persistent test data created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All iteration-13 acceptance criteria verified. Notes: (1) admin currently has tiktok_ads_daily rows already seeded (has_data=true, today.spend=0 but 3 historical days with spend>0) — that is why the tiktok-empty-state JSX did not render during this Playwright run; it IS present in source and renders for users with no data. (2) Meta SPEND aggregation into total_ads_cost confirmed via SEED test — 300 SAR Meta row → +300 SAR on both meta_spend and total_ads_cost and daily_ads_total. (3) The new refresh-all-ads-btn is a CLIENT-SIDE orchestrator (Promise.all over 3 endpoints) — backend has no /refresh-all endpoint. (4) Toast library is `sonner` (not react-hot-toast) — `toast.warning` is supported. (5) The dashboard URL is `/` not `/dashboard` (no client-side route by that name) — use `wait_for_selector('[data-testid=\"refresh-all-ads-btn\"]')` instead of wait_for_url. (6) Potential UTC-vs-Riyadh date bug noted in refreshAllAds fallback when snapSummary is null — see critical_code_review_comments item 1.",
+  "rca of the issue": "N/A — feature addition + Meta-spend aggregation enhancement, not a bug fix. All acceptance criteria from the request met."
+}

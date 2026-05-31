@@ -76,6 +76,8 @@ export default function Dashboard() {
     const [nowTick, setNowTick] = useState(Date.now());
     const [snapSummary, setSnapSummary] = useState(null);
     const [metaSummary, setMetaSummary] = useState(null);
+    const [tiktokSummary, setTiktokSummary] = useState(null);
+    const [refreshingAll, setRefreshingAll] = useState(false);
     const fileInputRef = useRef(null);
     const pendingReprocessId = useRef(null);
 
@@ -95,6 +97,91 @@ export default function Dashboard() {
         } catch {
             /* non-critical */
         }
+    };
+
+    const fetchTiktokSummary = async () => {
+        try {
+            const { data } = await api.get("/dashboard/tiktok-summary");
+            setTiktokSummary(data);
+        } catch {
+            /* non-critical */
+        }
+    };
+
+    // ── One-button refresh for ALL ad platforms ───────────────────────────
+    // Fans out to Snap / Meta / TikTok in parallel, reports per-platform
+    // success/failure, NEVER clears existing data on failure. Each platform
+    // is independent so a Meta token expiry doesn't block a successful
+    // Snap sync.
+    const refreshAllAds = async () => {
+        if (refreshingAll) return;
+        setRefreshingAll(true);
+        toast.loading("جاري تحديث جميع منصات الإعلانات…", { id: "refresh-all" });
+        const todayStr = snapSummary?.today?.date
+            || metaSummary?.today?.date
+            || new Date().toISOString().slice(0, 10);
+
+        // Each task returns {platform, ok, msg} so the consolidated toast
+        // can show exactly what worked.
+        const runSnap = async () => {
+            if (!snapSummary) return { platform: "Snapchat", ok: false, msg: "غير مفعّل" };
+            try {
+                const { data } = await api.post("/snapchat/daily-spend/bulk", {
+                    from_date: todayStr, to_date: todayStr,
+                });
+                const total = (data.items || []).reduce((s, i) => s + (i.spend || 0), 0);
+                const note = data.saved > 0 && total === 0
+                    ? "تم الجلب لكن صرف اليوم = 0 (تحقق من TZ أو لا توجد حملات نشطة)"
+                    : `${data.saved || 0} سجل / ${total.toFixed(2)} ر.س`;
+                return { platform: "Snapchat", ok: true, msg: note };
+            } catch (e) {
+                const d = e?.response?.data?.detail;
+                return { platform: "Snapchat", ok: false,
+                    msg: (typeof d === "object" ? d.message : d) || "غير مربوط" };
+            }
+        };
+
+        const runMeta = async () => {
+            if (!metaSummary) return { platform: "Meta", ok: false, msg: "غير مفعّل" };
+            try {
+                const { data } = await api.post("/meta/sync", { days: 1 });
+                return { platform: "Meta", ok: true, msg: `${data.upserted || 0} صف` };
+            } catch (e) {
+                const d = e?.response?.data?.detail;
+                return { platform: "Meta", ok: false,
+                    msg: (typeof d === "object" ? d.message : d) || "غير مربوط" };
+            }
+        };
+
+        const runTiktok = async () => {
+            // No external API yet — re-aggregate local webhook data.
+            try {
+                await api.get("/dashboard/tiktok-summary");
+                return { platform: "TikTok", ok: true, msg: "تم تحديث البيانات المحلية" };
+            } catch (e) {
+                return { platform: "TikTok", ok: false, msg: "فشل" };
+            }
+        };
+
+        const results = await Promise.all([runSnap(), runMeta(), runTiktok()]);
+        // Re-read everything so totals + cards reflect new spend.
+        await Promise.all([fetchSnapSummary(), fetchMetaSummary(),
+                           fetchTiktokSummary(), refreshSilently()]);
+
+        const okCount = results.filter(r => r.ok).length;
+        const summary = results.map(r =>
+            `${r.ok ? "✓" : "✗"} ${r.platform}: ${r.msg}`).join("  •  ");
+        if (okCount === results.length) {
+            toast.success(`تم تحديث جميع المنصات (${okCount}/${results.length})  •  ${summary}`,
+                { id: "refresh-all", duration: 7000 });
+        } else if (okCount === 0) {
+            toast.error(`فشل التحديث  •  ${summary}`,
+                { id: "refresh-all", duration: 9000 });
+        } else {
+            toast.warning(`تحديث جزئي (${okCount}/${results.length})  •  ${summary}`,
+                { id: "refresh-all", duration: 9000 });
+        }
+        setRefreshingAll(false);
     };
 
     // Best-effort daily auto-sync — fires once on dashboard mount.
@@ -119,6 +206,7 @@ export default function Dashboard() {
             setLastUpdated(Date.now());
             fetchSnapSummary();  // refresh Snapchat card alongside
             fetchMetaSummary();
+            fetchTiktokSummary();
         } finally {
             setLoading(false);
         }
@@ -133,6 +221,7 @@ export default function Dashboard() {
             setLastUpdated(Date.now());
             fetchSnapSummary();
             fetchMetaSummary();
+            fetchTiktokSummary();
         } catch {
             /* swallow; next tick will retry */
         }
@@ -273,10 +362,21 @@ export default function Dashboard() {
             </div>
 
             {/* Advanced filters: date preset + payment + shipping */}
-            <div className="flex items-stretch gap-2">
-                <div className="flex-1">
+            <div className="flex items-stretch gap-2 flex-wrap">
+                <div className="flex-1 min-w-0">
                     <AdvancedFilters value={filters} onChange={setFilters} />
                 </div>
+                <button
+                    type="button"
+                    onClick={refreshAllAds}
+                    disabled={refreshingAll}
+                    title="تحديث صرف اليوم من جميع منصات الإعلانات (Snapchat + Meta + TikTok) في خطوة واحدة"
+                    className="px-3 py-2 rounded-lg bg-gradient-to-r from-yellow-400 via-pink-500 to-blue-600 text-white font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center gap-1.5"
+                    data-testid="refresh-all-ads-btn"
+                >
+                    <ArrowsClockwise size={16} weight="bold" className={refreshingAll ? "animate-spin" : ""} />
+                    {refreshingAll ? "جاري التحديث…" : "تحديث جميع الإعلانات"}
+                </button>
                 <button
                     type="button"
                     onClick={() => fetchDashboard(filters)}
@@ -379,12 +479,26 @@ export default function Dashboard() {
                                                 from_date: todayStr,
                                                 to_date: todayStr,
                                             });
-                                            toast.success(`تم تحديث صرف اليوم (${data.saved || 0} سجل)`, { id: "snap-fetch" });
+                                            // Diagnostic: distinguish "fetched successfully but spend=0"
+                                            // (TZ mismatch / no active campaigns) from "fetched and saved".
+                                            const totalSpend = (data.items || []).reduce((s, i) => s + (i.spend || 0), 0);
+                                            if ((data.errors || []).length > 0) {
+                                                const firstErr = String(data.errors[0]?.error || "").slice(0, 120);
+                                                toast.error(`Snapchat رفض الطلب: ${firstErr}`, { id: "snap-fetch", duration: 9000 });
+                                            } else if (data.saved > 0 && totalSpend === 0) {
+                                                toast(`تم الجلب لكن صرف اليوم = 0 — تحقق من TZ حساب الإعلانات (${data.ad_account_timezone || "?"}) أو من وجود حملات نشطة`,
+                                                    { id: "snap-fetch", duration: 9000, icon: "ℹ️" });
+                                            } else {
+                                                toast.success(`تم تحديث صرف اليوم (${data.saved || 0} سجل / ${totalSpend.toFixed(2)} ر.س)`,
+                                                    { id: "snap-fetch" });
+                                            }
                                             fetchSnapSummary();
                                             refreshSilently();
                                         } catch (e) {
-                                            const msg = e?.response?.data?.detail || e.message || "فشل الجلب";
-                                            toast.error(msg, { id: "snap-fetch" });
+                                            const detail = e?.response?.data?.detail;
+                                            const msg = (typeof detail === "object" ? detail.message : detail)
+                                                || e.message || "فشل الجلب";
+                                            toast.error(msg, { id: "snap-fetch", duration: 8000 });
                                         }
                                     }}
                                     className="flex items-center justify-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-black rounded-lg font-bold text-sm transition-colors w-full sm:w-auto"
@@ -490,43 +604,140 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* TikTok Ads dedicated section (pushed via Make.com webhook) */}
-                    {(totals.tiktok_spend > 0 || totals.tiktok_revenue > 0 || totals.tiktok_purchases > 0) && (
+                    {/* TikTok Ads dedicated section (pushed via Make.com webhook).
+                        Card is ALWAYS visible (matches Snap/Meta UX) — empty state
+                        is informative rather than hidden. */}
+                    {tiktokSummary && (
                         <div
                             className="rounded-xl border-2 border-pink-200 p-4 sm:p-6"
                             style={{ background: "linear-gradient(135deg,#fff7fb 0%,#fff 50%,#f0fcff 100%)" }}
                             data-testid="tiktok-ads-section"
                         >
-                            <div className="flex items-center gap-3 mb-5">
-                                <div className="w-11 h-11 rounded-xl bg-black text-white flex items-center justify-center font-extrabold text-lg flex-shrink-0" style={{ fontFamily: "Tajawal" }}>
-                                    TT
-                                </div>
-                                <div className="min-w-0">
-                                    <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>TikTok Ads</h2>
-                                    <p className="text-xs text-muted-foreground">
-                                        البيانات تأتي من Make.com — تحديث تلقائي كل دقيقة
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-spend-card">
-                                    <div className="text-xs text-muted-foreground mb-1">التكلفة (ر.س)</div>
-                                    <div className="num text-2xl font-extrabold text-pink-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(totals.tiktok_spend)}</div>
-                                </div>
-                                <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-purchases-card">
-                                    <div className="text-xs text-muted-foreground mb-1">عدد الطلبات</div>
-                                    <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(totals.tiktok_purchases)}</div>
-                                </div>
-                                <div className="bg-white border border-cyan-100 rounded-lg p-4" data-testid="tiktok-revenue-card">
-                                    <div className="text-xs text-muted-foreground mb-1">العائد (ر.س)</div>
-                                    <div className="num text-2xl font-extrabold text-cyan-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(totals.tiktok_revenue)}</div>
-                                </div>
-                                <div className={`border-2 rounded-lg p-4 ${totals.tiktok_roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="tiktok-roas-card">
-                                    <div className="text-xs text-muted-foreground mb-1">ROAS (العائد ÷ التكلفة)</div>
-                                    <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: totals.tiktok_roas >= 2 ? "#047857" : "#B45309" }}>
-                                        {totals.tiktok_spend > 0 ? `${totals.tiktok_roas}x` : "—"}
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-11 h-11 rounded-xl bg-black text-white flex items-center justify-center font-extrabold text-lg flex-shrink-0" style={{ fontFamily: "Tajawal" }}>
+                                        TT
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>TikTok Ads</h2>
+                                        <p className="text-xs text-muted-foreground">
+                                            البيانات تأتي من Make.com webhook (ربط مباشر مع TikTok API قادم لاحقاً)
+                                            {tiktokSummary.last_fetched_at && (
+                                                <span className="ms-2 text-pink-700">• آخر تحديث: {new Date(tiktokSummary.last_fetched_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
+                                            )}
+                                        </p>
                                     </div>
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        toast.loading("جاري تحديث TikTok…", { id: "tt-refresh" });
+                                        await fetchTiktokSummary();
+                                        await refreshSilently();
+                                        toast.success("تم تحديث بيانات TikTok", { id: "tt-refresh" });
+                                    }}
+                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-black hover:bg-gray-800 text-white rounded-lg font-bold text-sm transition-colors w-full sm:w-auto"
+                                    style={{ fontFamily: "Tajawal" }}
+                                    data-testid="tiktok-refresh-btn"
+                                >
+                                    <ArrowsClockwise size={16} weight="bold" />
+                                    تحديث TikTok
+                                </button>
+                            </div>
+
+                            {!tiktokSummary.has_data && (
+                                <div className="bg-pink-50 border border-pink-200 rounded-lg p-4 text-sm text-pink-900 leading-relaxed mb-4" data-testid="tiktok-empty-state">
+                                    لا توجد بيانات TikTok بعد. اربط TikTok Ads مع Make.com webhook من صفحة <Link to="/make-webhook" className="font-bold underline">ربط Make.com</Link> ليتم تدفّق صرف الإعلانات تلقائياً.
+                                </div>
+                            )}
+
+                            {/* TODAY block */}
+                            <div className="mb-4">
+                                <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
+                                    اليوم ({tiktokSummary.today.date})
+                                </div>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                    <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-spend-today">
+                                        <div className="text-xs text-muted-foreground mb-1">صرف اليوم (ر.س)</div>
+                                        <div className="num text-2xl font-extrabold text-pink-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(tiktokSummary.today.spend)}</div>
+                                    </div>
+                                    <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-orders-today">
+                                        <div className="text-xs text-muted-foreground mb-1">طلبات اليوم</div>
+                                        <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(tiktokSummary.today.orders)}</div>
+                                    </div>
+                                    <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-revenue-today">
+                                        <div className="text-xs text-muted-foreground mb-1">مبيعات اليوم (ر.س)</div>
+                                        <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(tiktokSummary.today.revenue)}</div>
+                                    </div>
+                                    <div className={`border-2 rounded-lg p-4 ${tiktokSummary.today.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="tiktok-roas-today">
+                                        <div className="text-xs text-muted-foreground mb-1">ROAS اليوم</div>
+                                        <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: tiktokSummary.today.roas >= 2 ? "#047857" : "#B45309" }}>
+                                            {tiktokSummary.today.spend > 0 ? `${tiktokSummary.today.roas}x` : "—"}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* MONTH block */}
+                            <div>
+                                <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
+                                    هذا الشهر (منذ {tiktokSummary.month.start})
+                                </div>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                    <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-spend-month">
+                                        <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
+                                        <div className="num text-2xl font-extrabold text-pink-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(tiktokSummary.month.spend)}</div>
+                                    </div>
+                                    <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-orders-month">
+                                        <div className="text-xs text-muted-foreground mb-1">طلبات الشهر</div>
+                                        <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(tiktokSummary.month.orders)}</div>
+                                    </div>
+                                    <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-revenue-month">
+                                        <div className="text-xs text-muted-foreground mb-1">مبيعات الشهر (ر.س)</div>
+                                        <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(tiktokSummary.month.revenue)}</div>
+                                    </div>
+                                    <div className={`border-2 rounded-lg p-4 ${tiktokSummary.month.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="tiktok-roas-month">
+                                        <div className="text-xs text-muted-foreground mb-1">ROAS الشهر</div>
+                                        <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: tiktokSummary.month.roas >= 2 ? "#047857" : "#B45309" }}>
+                                            {tiktokSummary.month.spend > 0 ? `${tiktokSummary.month.roas}x` : "—"}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 30-day sparkline */}
+                            {tiktokSummary.history && tiktokSummary.history.some(h => h.spend > 0) && (
+                                <div className="mt-5 pt-4 border-t border-pink-200">
+                                    <div className="text-xs text-muted-foreground mb-2" style={{ fontFamily: "Tajawal" }}>
+                                        صرف آخر 30 يوم — الإجمالي: {formatMoney(tiktokSummary.last_30d.spend)} ر.س
+                                    </div>
+                                    <div className="h-12 flex items-end gap-0.5">
+                                        {tiktokSummary.history.map((d, i) => {
+                                            const maxSpend = Math.max(1, ...tiktokSummary.history.map(h => h.spend));
+                                            const height = Math.max(2, (d.spend / maxSpend) * 100);
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    className="flex-1 bg-pink-400 rounded-sm hover:bg-pink-500 transition-colors cursor-help"
+                                                    style={{ height: `${height}%` }}
+                                                    title={`${d.date}: ${formatMoney(d.spend)} ر.س`}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Footer: link to detailed report */}
+                            <div className="mt-4 flex justify-end">
+                                <Link
+                                    to="/reports/ads"
+                                    className="text-xs font-semibold text-pink-800 hover:text-pink-900 hover:underline inline-flex items-center gap-1"
+                                    data-testid="tiktok-card-details-link"
+                                    style={{ fontFamily: "Tajawal" }}
+                                >
+                                    التفاصيل (CPC / CPM / CTR / الحملات) في تقرير الإعلانات الموحَّد ←
+                                </Link>
                             </div>
                         </div>
                     )}
