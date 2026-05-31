@@ -1170,11 +1170,22 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     orders_month, revenue_month = await _summarize(month_q)
     orders_30d, revenue_30d = await _summarize(d30_q)
 
-    # 3) Build 30-day spend history (filled with zeros for missing days)
+    # Build 30-day spend history (filled with zeros for missing days)
     history: list = []
     for i in range(29, -1, -1):
         d = (datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat()
         history.append({"date": d, "spend": round(by_date_spend.get(d, 0.0), 2)})
+
+    # Pick the most recent update_at across this month's daily_costs rows for
+    # the "آخر تحديث" line on the dashboard.
+    last_fetched_doc = await db.daily_costs.find_one(
+        {"user_id": uid, "snapchat_ads": {"$gt": 0}},
+        {"_id": 0, "updated_at": 1, "created_at": 1},
+        sort=[("updated_at", -1)],
+    )
+    last_fetched_at = None
+    if last_fetched_doc:
+        last_fetched_at = last_fetched_doc.get("updated_at") or last_fetched_doc.get("created_at")
 
     def _roas(rev: float, spend: float) -> float:
         return round(rev / spend, 2) if spend > 0 else 0.0
@@ -1205,6 +1216,7 @@ async def snapchat_summary(user: dict = Depends(current_user)):
             "roas": _roas(revenue_30d, spend_30d),
         },
         "usd_rate": USD_RATE,
+        "last_fetched_at": last_fetched_at,
         "history": history,
     }
 

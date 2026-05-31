@@ -538,16 +538,22 @@ def _build_router(db) -> APIRouter:
         }
 
     class BulkSpendIn(BaseModel):
-        days: int = Field(default=7, ge=1, le=31)
+        days: int = Field(default=7, ge=1, le=62)
         ad_account_id: Optional[str] = None
+        from_date: Optional[str] = None  # YYYY-MM-DD (overrides `days`)
+        to_date: Optional[str] = None    # YYYY-MM-DD (defaults to today)
 
     @router.post("/daily-spend/bulk")
     async def daily_spend_bulk(payload: BulkSpendIn, user: dict = Depends(current_user)):
-        """Fetch Snapchat spend for the last N days and upsert each into
+        """Fetch Snapchat spend for a date range and upsert each into
         `daily_costs.snapchat_ads` so the dashboard reflects them immediately.
 
-        Returns a summary {saved, errors:[{date, error}]}. Skips days where
-        Snapchat returned 0 (still saves them) unless the API errored.
+        Two modes:
+          - Default: last N days ending today (payload.days)
+          - Range: payload.from_date → payload.to_date (inclusive). Used by
+            the "تحديث الشهر الحالي" button on the dashboard.
+
+        Returns {saved, items:[...], errors:[{date, error}]}.
         """
         access_token, conn = await _ensure_access_token(user["id"])
         ad_id = payload.ad_account_id or conn.get("ad_account_id")
@@ -573,13 +579,25 @@ def _build_router(db) -> APIRouter:
             except Exception:
                 tzinfo = timezone.utc
 
-            # Build list of last N days ending YESTERDAY (today's stats may be
-            # incomplete because the day hasn't closed yet in the ad account TZ).
-            # We do include today as the latest if user asked, so range is
-            # [today - (days-1) .. today].
+            # Build the list of dates to fetch. If the user passed explicit
+            # from_date/to_date (range mode), honor those bounds; otherwise
+            # use the last N days ending today.
             today_local = datetime.now(tzinfo).date()
-            dates: list[_date] = [today_local - timedelta(days=i) for i in range(payload.days)]
-            dates.reverse()  # ascending
+            if payload.from_date or payload.to_date:
+                try:
+                    start_d = _date.fromisoformat(payload.from_date) if payload.from_date else today_local
+                    end_d = _date.fromisoformat(payload.to_date) if payload.to_date else today_local
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Invalid date format; use YYYY-MM-DD")
+                if end_d < start_d:
+                    raise HTTPException(status_code=400, detail="to_date < from_date")
+                span = (end_d - start_d).days + 1
+                if span > 62:
+                    raise HTTPException(status_code=400, detail="Range too wide (max 62 days)")
+                dates: list[_date] = [start_d + timedelta(days=i) for i in range(span)]
+            else:
+                dates = [today_local - timedelta(days=i) for i in range(payload.days)]
+                dates.reverse()  # ascending
 
             for d in dates:
                 start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=tzinfo)
@@ -660,6 +678,7 @@ def _build_router(db) -> APIRouter:
             "errors": errors,
             "native_currency": ad_currency,
             "currency": "SAR",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
 
     return router

@@ -314,23 +314,57 @@ export default function Dashboard() {
                         </Link>
                     )}
 
-                    {/* Snapchat Ads dedicated section (auto-refresh from snapchat_ads in daily_costs) */}
-                    {snapSummary && (snapSummary.last_30d.spend > 0 || snapSummary.today.spend > 0) && (
+                    {/* Snapchat Ads dedicated section — always visible so the
+                        "تحديث صرف الشهر" button is reachable even when daily_costs
+                        are empty (e.g. before the first Snapchat fetch). */}
+                    {snapSummary && (
                         <div
                             className="rounded-xl border-2 border-yellow-300 p-6"
                             style={{ background: "linear-gradient(135deg,#FFFCEA 0%,#fff 60%,#FFFAE0 100%)" }}
                             data-testid="snapchat-ads-section"
                         >
-                            <div className="flex items-center gap-3 mb-5">
-                                <div className="w-11 h-11 rounded-xl bg-yellow-400 text-black flex items-center justify-center font-extrabold text-lg" style={{ fontFamily: "Tajawal" }}>
-                                    👻
+                            <div className="flex items-center justify-between gap-3 mb-5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-11 h-11 rounded-xl bg-yellow-400 text-black flex items-center justify-center font-extrabold text-lg" style={{ fontFamily: "Tajawal" }}>
+                                        👻
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Snapchat Ads</h2>
+                                        <p className="text-xs text-muted-foreground">
+                                            تحديث تلقائي من Snapchat Marketing API و التكاليف اليومية — آخر 30 يوم
+                                            {snapSummary.last_fetched_at && (
+                                                <span className="ms-2 text-yellow-700">• آخر جلب: {new Date(snapSummary.last_fetched_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
+                                            )}
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Snapchat Ads</h2>
-                                    <p className="text-xs text-muted-foreground">
-                                        تحديث تلقائي من Snapchat Marketing API و التكاليف اليومية — آخر 30 يوم
-                                    </p>
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        try {
+                                            const today = new Date();
+                                            const first = new Date(today.getFullYear(), today.getMonth(), 1);
+                                            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                                            toast.loading("جاري جلب صرف Snapchat لكامل الشهر…", { id: "snap-fetch" });
+                                            const { data } = await api.post("/snapchat/daily-spend/bulk", {
+                                                from_date: fmt(first),
+                                                to_date: fmt(today),
+                                            });
+                                            toast.success(`تم حفظ ${data.saved} يوم في قاعدة البيانات`, { id: "snap-fetch" });
+                                            fetchSnapSummary();
+                                            refreshSilently();
+                                        } catch (e) {
+                                            const msg = e?.response?.data?.detail || e.message || "فشل الجلب";
+                                            toast.error(msg, { id: "snap-fetch" });
+                                        }
+                                    }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-black rounded-lg font-bold text-sm transition-colors"
+                                    style={{ fontFamily: "Tajawal" }}
+                                    data-testid="snap-refresh-month-btn"
+                                >
+                                    <ArrowsClockwise size={16} weight="bold" />
+                                    تحديث صرف الشهر
+                                </button>
                             </div>
 
                             {/* Today + Month sections */}
