@@ -119,6 +119,7 @@ export default function Dashboard() {
         toast.loading("جاري تحديث جميع منصات الإعلانات…", { id: "refresh-all" });
         const todayStr = snapSummary?.today?.date
             || metaSummary?.today?.date
+            || tiktokSummary?.today?.date
             || new Date().toISOString().slice(0, 10);
 
         // Each task returns {platform, ok, msg} so the consolidated toast

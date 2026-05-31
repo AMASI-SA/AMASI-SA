@@ -20,7 +20,20 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Meta Friendly-Error Handling + Test Connection Flow)
+## Implemented (2026-05 — Unified Ads Refresh: TikTok always-visible + Refresh-All button + Meta-spend in totals)
+- 🐛 **Issue 1 — Snapchat refresh = 0**: Investigation revealed the refresh path was correct (Riyadh date), but the UI gave no diagnostic when Snapchat API legitimately returned `spend=0` (TZ mismatch on ad account, no active campaigns, etc). Fix: backend response now includes `ad_account_timezone`; frontend distinguishes 3 outcomes — success with spend, fetched-but-zero (info toast with TZ hint), and hard error (friendly Arabic).
+- ✅ **TikTok card always visible** — removed `if (totals.tiktok_spend > 0 || ...)` gating. Now mirrors Snap/Meta layout exactly: Today (spend/orders/revenue/ROAS) + Month (same 4) + 30-day sparkline + "آخر تحديث" + footer link to `/reports/ads`.
+- ✅ **`tiktok-refresh-btn`** — calls new `GET /api/dashboard/tiktok-summary` and re-renders the card (TikTok Marketing API direct integration deferred to a future iteration; for now it re-aggregates the existing Make.com webhook data).
+- ✅ **`tiktok-empty-state`** — friendly Arabic prompt with link to `/make-webhook` when `has_data=false`.
+- ✅ **New backend endpoint `GET /api/dashboard/tiktok-summary`** — mirrors snap/meta contracts: `{today, month, last_30d, history[30], last_fetched_at, source, has_data}` all in Riyadh time.
+- ✅ **Total Ads Cost now includes Meta** — `daily_ads_total` and `total_ads_cost` aggregate over `daily_costs.{snapchat_ads, snapchat_ads_2, tiktok_ads, instagram_ads, google_ads}` **PLUS** `meta_ads_daily.spend` (was missing). Verified via SEED test: +300 SAR Meta row increases both fields by exactly 300.
+- ✅ **New `meta_spend / meta_purchases / meta_revenue / meta_roas`** in `/api/dashboard` totals.
+- ✅ **`refresh-all-ads-btn`** (gradient yellow→pink→blue) at top of Dashboard — orchestrates Snap + Meta + TikTok in parallel via `Promise.all`. Each platform fails independently (NEVER blocks others, NEVER clears data). Consolidated toast: `"تحديث جزئي (1/3) • ✓ Snapchat: 5 سجل • ✗ Meta: انتهت صلاحية… • ✓ TikTok: تم تحديث البيانات المحلية"` — no JSON / `[object Object]` leaks.
+- ✅ **All cards show `آخر تحديث`** with Riyadh-formatted timestamp.
+- ✅ **Code review fix** (from testing-agent): `refreshAllAds` fallback now falls through to `tiktokSummary?.today?.date` before resorting to `new Date()` (UTC) — guarantees Riyadh-aligned dates even when only one summary loaded.
+- ✅ **Testing**: testing_agent_v3_fork → **43/43 backend pass** (6 new + 37 regression) + **10/10 Playwright frontend pass**. Report: `/app/test_reports/iteration_13.json`.
+
+
 - 🐛 **Issue**: clicking the "تحديث فوري للصرف اليوم" button on the Meta card surfaced a raw JSON `OAuthException code 190 Session has expired` to the merchant when their Access Token was no longer valid. No clear path to fix it.
 - ✅ **Backend (`meta_routes.py`)**:
   - New `_classify_meta_error(text) → (status, friendly_arabic_msg)` covering: expired-token (code 190 / "session expired" / "access token invalid"), permission denied (code 200 / ads_read), invalid ad account (code 100), rate-limited (code 17), network/timeout, and generic fallback. Each returns a hand-translated Arabic message.
