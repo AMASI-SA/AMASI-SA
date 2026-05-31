@@ -75,6 +75,7 @@ export default function Dashboard() {
     const [lastUpdated, setLastUpdated] = useState(null);
     const [nowTick, setNowTick] = useState(Date.now());
     const [snapSummary, setSnapSummary] = useState(null);
+    const [metaSummary, setMetaSummary] = useState(null);
     const fileInputRef = useRef(null);
     const pendingReprocessId = useRef(null);
 
@@ -82,6 +83,15 @@ export default function Dashboard() {
         try {
             const { data } = await api.get("/dashboard/snapchat-summary");
             setSnapSummary(data);
+        } catch {
+            /* non-critical */
+        }
+    };
+
+    const fetchMetaSummary = async () => {
+        try {
+            const { data } = await api.get("/dashboard/meta-summary");
+            setMetaSummary(data);
         } catch {
             /* non-critical */
         }
@@ -95,6 +105,7 @@ export default function Dashboard() {
             setData(data);
             setLastUpdated(Date.now());
             fetchSnapSummary();  // refresh Snapchat card alongside
+            fetchMetaSummary();
         } finally {
             setLoading(false);
         }
@@ -108,6 +119,7 @@ export default function Dashboard() {
             setData(data);
             setLastUpdated(Date.now());
             fetchSnapSummary();
+            fetchMetaSummary();
         } catch {
             /* swallow; next tick will retry */
         }
@@ -492,6 +504,160 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Meta Ads (Facebook + Instagram) dedicated section — pushed via Make.com webhook */}
+                    {metaSummary && (
+                        <div
+                            className="rounded-xl border-2 border-blue-300 p-6"
+                            style={{ background: "linear-gradient(135deg,#EFF6FF 0%,#fff 60%,#F3E8FF 100%)" }}
+                            data-testid="meta-ads-section"
+                        >
+                            <div className="flex items-center justify-between gap-3 mb-5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center font-extrabold text-lg" style={{ fontFamily: "Tajawal" }}>
+                                        f
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Meta Ads (Facebook + Instagram)</h2>
+                                        <p className="text-xs text-muted-foreground">
+                                            البيانات تصل من Make.com يومياً عبر Facebook Marketing API
+                                            {metaSummary.last_sync_at && (
+                                                <span className="ms-2 text-blue-700">• آخر مزامنة: {new Date(metaSummary.last_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {metaSummary.last_30d.spend === 0 && metaSummary.last_30d.orders === 0 ? (
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 leading-relaxed">
+                                    لا توجد بيانات Meta Ads بعد. أنشئ Scenario في Make.com يجلب من Facebook Marketing API يومياً ويُرسل إلى:
+                                    <div className="font-mono mt-2 p-2 bg-white rounded text-xs select-all" dir="ltr">
+                                        {window.location.origin}/api/webhook/meta/&lt;token&gt;
+                                    </div>
+                                    <div className="mt-1 text-xs text-blue-700">احصل على الـ token من صفحة "ربط Make.com"</div>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Today */}
+                                    <div className="space-y-4">
+                                        <div>
+                                            <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
+                                                اليوم ({metaSummary.today.date})
+                                            </div>
+                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-spend-today">
+                                                    <div className="text-xs text-muted-foreground mb-1">صرف اليوم (ر.س)</div>
+                                                    <div className="num text-2xl font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(metaSummary.today.spend)}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-orders-today">
+                                                    <div className="text-xs text-muted-foreground mb-1">طلبات اليوم</div>
+                                                    <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(metaSummary.today.orders)}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-revenue-today">
+                                                    <div className="text-xs text-muted-foreground mb-1">عائد اليوم (ر.س)</div>
+                                                    <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(metaSummary.today.revenue)}</div>
+                                                </div>
+                                                <div className={`border-2 rounded-lg p-4 ${metaSummary.today.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="meta-roas-today">
+                                                    <div className="text-xs text-muted-foreground mb-1">ROAS اليوم</div>
+                                                    <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: metaSummary.today.roas >= 2 ? "#047857" : "#B45309" }}>
+                                                        {metaSummary.today.spend > 0 ? `${metaSummary.today.roas}x` : "—"}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Month */}
+                                        <div>
+                                            <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
+                                                هذا الشهر (منذ {metaSummary.month.start})
+                                            </div>
+                                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-spend-month">
+                                                    <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
+                                                    <div className="num text-2xl font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(metaSummary.month.spend)}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-orders-month">
+                                                    <div className="text-xs text-muted-foreground mb-1">طلبات الشهر</div>
+                                                    <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(metaSummary.month.orders)}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-revenue-month">
+                                                    <div className="text-xs text-muted-foreground mb-1">العائد الشهري (ر.س)</div>
+                                                    <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(metaSummary.month.revenue)}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-cpa-month">
+                                                    <div className="text-xs text-muted-foreground mb-1">CPA (تكلفة الشراء)</div>
+                                                    <div className="num text-2xl font-extrabold text-pink-700" style={{ fontFamily: "Tajawal" }}>{metaSummary.month.cpa > 0 ? `${formatMoney(metaSummary.month.cpa)} ر.س` : "—"}</div>
+                                                </div>
+                                                <div className={`border-2 rounded-lg p-4 ${metaSummary.month.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="meta-roas-month">
+                                                    <div className="text-xs text-muted-foreground mb-1">ROAS الشهر</div>
+                                                    <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: metaSummary.month.roas >= 2 ? "#047857" : "#B45309" }}>
+                                                        {metaSummary.month.spend > 0 ? `${metaSummary.month.roas}x` : "—"}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Campaigns breakdown */}
+                                        {metaSummary.campaigns.length > 0 && (
+                                            <div>
+                                                <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
+                                                    تكلفة الحملات (هذا الشهر)
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg overflow-hidden">
+                                                    <table className="w-full text-sm" data-testid="meta-campaigns-table">
+                                                        <thead>
+                                                            <tr className="bg-blue-50 text-blue-900">
+                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>الحملة</th>
+                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>الصرف (ر.س)</th>
+                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>طلبات</th>
+                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>عائد (ر.س)</th>
+                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>ROAS</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {metaSummary.campaigns.slice(0, 10).map((c, i) => (
+                                                                <tr key={i} className="border-t border-blue-100 hover:bg-blue-50/40">
+                                                                    <td className="py-2 px-3" style={{ fontFamily: "Tajawal" }}>{c.campaign_name}</td>
+                                                                    <td className="py-2 px-3 num font-semibold">{formatMoney(c.spend)}</td>
+                                                                    <td className="py-2 px-3 num">{formatInt(c.purchases)}</td>
+                                                                    <td className="py-2 px-3 num text-emerald-700">{formatMoney(c.revenue)}</td>
+                                                                    <td className={`py-2 px-3 num font-bold ${c.roas >= 2 ? "text-emerald-700" : "text-amber-700"}`}>{c.spend > 0 ? `${c.roas}x` : "—"}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* 30-day sparkline */}
+                                        {metaSummary.history && metaSummary.history.some(h => h.spend > 0) && (
+                                            <div className="pt-3 border-t border-blue-200">
+                                                <div className="text-xs text-muted-foreground mb-2" style={{ fontFamily: "Tajawal" }}>
+                                                    صرف آخر 30 يوم — الإجمالي: {formatMoney(metaSummary.last_30d.spend)} ر.س
+                                                </div>
+                                                <div className="h-12 flex items-end gap-0.5">
+                                                    {metaSummary.history.map((d, i) => {
+                                                        const maxSpend = Math.max(1, ...metaSummary.history.map(h => h.spend));
+                                                        const height = Math.max(2, (d.spend / maxSpend) * 100);
+                                                        return (
+                                                            <div
+                                                                key={i}
+                                                                className="flex-1 bg-blue-500 rounded-sm hover:bg-blue-600 transition-colors cursor-help"
+                                                                style={{ height: `${height}%` }}
+                                                                title={`${d.date}: ${formatMoney(d.spend)} ر.س`}
+                                                            />
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
 

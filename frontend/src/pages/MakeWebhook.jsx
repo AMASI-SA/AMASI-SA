@@ -257,6 +257,39 @@ export default function MakeWebhook() {
                     </div>
                 )}
 
+                {/* Meta Ads webhook (Facebook + Instagram) — same token, different path */}
+                {settings.token && (
+                    <div className="border-t border-border pt-5">
+                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                            📘 رابط استقبال Meta Ads (Facebook + Instagram — نفس Token)
+                        </label>
+                        <div className="flex items-center gap-2">
+                            <input
+                                readOnly
+                                value={`${window.location.origin}/api/webhook/meta/${settings.token}`}
+                                className="flex-1 px-3 py-2.5 text-sm border border-blue-200 rounded-lg bg-blue-50/40 font-mono"
+                                dir="ltr"
+                                data-testid="meta-webhook-url"
+                                onClick={(e) => e.target.select()}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => copy(`${window.location.origin}/api/webhook/meta/${settings.token}`, "تم نسخ رابط Meta")}
+                                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-border text-sm font-semibold hover:bg-accent transition-colors"
+                                data-testid="copy-meta-url-btn"
+                            >
+                                <Copy size={16} weight="bold" /> نسخ
+                            </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                            في Make.com: أنشئ سيناريو "Facebook Ads → Get Insights" يومياً 01:00 صباحاً، وأرسل لكل حملة بصيغة:
+                        </p>
+                        <code dir="ltr" className="block mt-1 text-[10px] bg-accent/40 px-2 py-1.5 rounded leading-relaxed">
+                            {'{"platform":"meta","date":"2026-05-31","account_id":"act_XXX","campaign_id":"cmp_XXX","campaign_name":"...","spend":350.75,"impressions":12000,"clicks":250,"cpc":1.40,"cpm":29.20,"ctr":2.08,"purchases":8,"purchase_value":1200.50}'}
+                        </code>
+                    </div>
+                )}
+
                 <div>
                     <label className="block text-xs font-bold text-muted-foreground mb-1.5">Token (مدمج في الرابط)</label>
                     <div className="flex items-center gap-2">

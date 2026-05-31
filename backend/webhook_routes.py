@@ -281,6 +281,117 @@ def _build_router(db) -> APIRouter:
         ).sort("date", -1).to_list(days)
         return {"items": items}
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Meta (Facebook + Instagram) Ads — push from Make.com once a day
+    # ─────────────────────────────────────────────────────────────────────────
+
+    class MetaSpendIn(BaseModel):
+        """Meta Ads insights row pushed daily by Make.com (Facebook
+        Marketing API). One POST per (date, campaign_id) — the endpoint
+        upserts so re-runs of the Make scenario are safe."""
+        platform: Optional[str] = "meta"
+        date: str                                  # YYYY-MM-DD
+        account_id: Optional[str] = None
+        campaign_id: Optional[str] = None
+        campaign_name: Optional[str] = None
+        adset_id: Optional[str] = None
+        adset_name: Optional[str] = None
+        ad_id: Optional[str] = None
+        ad_name: Optional[str] = None
+        spend: float = 0.0
+        impressions: int = 0
+        clicks: int = 0
+        cpc: float = 0.0
+        cpm: float = 0.0
+        ctr: float = 0.0
+        purchases: int = 0
+        purchase_value: float = 0.0
+
+        class Config:
+            extra = "allow"
+
+    @router.post("/meta/{token}")
+    async def ingest_meta(token: str, request: Request):
+        """Ingest a Meta-Ads daily row pushed by Make.com.
+
+        Body example (per user spec):
+            {"platform":"meta","date":"2026-05-31","account_id":"...",
+             "campaign_id":"...","campaign_name":"...",
+             "spend":350.75,"impressions":12000,"clicks":250,
+             "cpc":1.40,"cpm":29.20,"ctr":2.08,
+             "purchases":8,"purchase_value":1200.50}
+
+        Upserts into `meta_ads_daily` keyed by (user_id, date, campaign_id).
+        Re-posting the same key overwrites the row (so Make.com can safely
+        replay a day if needed)."""
+        tok_doc = await db.webhook_tokens.find_one({"token": token})
+        if not tok_doc:
+            raise HTTPException(status_code=401, detail="Invalid webhook token")
+        user_id = tok_doc["user_id"]
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+
+        items = body if isinstance(body, list) else [body]
+        accepted = 0
+        errors: list[dict] = []
+        import re
+        for raw in items:
+            try:
+                payload = MetaSpendIn(**raw)
+            except Exception as exc:
+                errors.append({"data": raw, "error": str(exc)})
+                continue
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", payload.date):
+                errors.append({"data": raw, "error": "date must be YYYY-MM-DD"})
+                continue
+            base = {
+                "user_id": user_id,
+                "date": payload.date,
+                "account_id": payload.account_id or "",
+                "campaign_id": payload.campaign_id or "_default",
+                "campaign_name": payload.campaign_name or "",
+                "adset_id": payload.adset_id or "",
+                "adset_name": payload.adset_name or "",
+                "ad_id": payload.ad_id or "",
+                "ad_name": payload.ad_name or "",
+                "spend": round(float(payload.spend or 0), 2),
+                "impressions": int(payload.impressions or 0),
+                "clicks": int(payload.clicks or 0),
+                "cpc": round(float(payload.cpc or 0), 2),
+                "cpm": round(float(payload.cpm or 0), 2),
+                "ctr": round(float(payload.ctr or 0), 4),
+                "purchases": int(payload.purchases or 0),
+                "purchase_value": round(float(payload.purchase_value or 0), 2),
+                "platform": payload.platform or "meta",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.meta_ads_daily.update_one(
+                {"user_id": user_id, "date": payload.date,
+                 "campaign_id": base["campaign_id"]},
+                {"$set": base,
+                 "$setOnInsert": {"id": str(uuid.uuid4()),
+                                  "created_at": base["updated_at"]}},
+                upsert=True,
+            )
+            accepted += 1
+
+        await db.webhook_tokens.update_one(
+            {"token": token},
+            {"$set": {"last_sync_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        return {"accepted": accepted, "errors": errors}
+
+    @router.get("/meta/recent")
+    async def meta_recent(days: int = Query(30, ge=1, le=365), user: dict = Depends(current_user)):
+        from datetime import timedelta, date as _date
+        cutoff = (_date.today() - timedelta(days=days - 1)).isoformat()
+        items = await db.meta_ads_daily.find(
+            {"user_id": user["id"], "date": {"$gte": cutoff}}, {"_id": 0}
+        ).sort("date", -1).to_list(days * 50)
+        return {"items": items}
+
     @router.post("/make/{token}")
     async def ingest_orders(token: str, request: Request):
         tok_doc = await db.webhook_tokens.find_one({"token": token})

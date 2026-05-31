@@ -1244,6 +1244,98 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     }
 
 
+# ── Meta Ads dashboard summary ────────────────────────────────────────────────
+@api.get("/dashboard/meta-summary")
+async def meta_summary(user: dict = Depends(current_user)):
+    """Auto-computed Meta Ads card data: today + this-month + last 30d.
+    Pulled directly from meta_ads_daily (populated by the Make.com webhook
+    at `/api/webhook/meta/{token}`). Also returns a per-campaign breakdown
+    for the dedicated Meta report page."""
+    uid = user["id"]
+    today_str = datetime.now(timezone.utc).date().isoformat()
+    month_start_str = today_str[:8] + "01"
+    d30_start_str = (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
+
+    rows = await db.meta_ads_daily.find(
+        {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
+        {"_id": 0},
+    ).to_list(2000)
+
+    def _agg(start: str, end: str):
+        bucket = {"spend": 0.0, "purchases": 0, "purchase_value": 0.0,
+                  "impressions": 0, "clicks": 0}
+        for r in rows:
+            if start <= r["date"] <= end:
+                bucket["spend"] += float(r.get("spend") or 0)
+                bucket["purchases"] += int(r.get("purchases") or 0)
+                bucket["purchase_value"] += float(r.get("purchase_value") or 0)
+                bucket["impressions"] += int(r.get("impressions") or 0)
+                bucket["clicks"] += int(r.get("clicks") or 0)
+        spend = round(bucket["spend"], 2)
+        purchases = bucket["purchases"]
+        revenue = round(bucket["purchase_value"], 2)
+        return {
+            "spend": spend,
+            "orders": purchases,
+            "revenue": revenue,
+            "impressions": bucket["impressions"],
+            "clicks": bucket["clicks"],
+            "roas": round(revenue / spend, 2) if spend > 0 else 0.0,
+            "cpa": round(spend / purchases, 2) if purchases > 0 else 0.0,
+        }
+
+    # 30-day spend history for sparkline
+    by_date_spend: dict = {}
+    for r in rows:
+        d = r["date"]
+        by_date_spend[d] = by_date_spend.get(d, 0.0) + float(r.get("spend") or 0)
+    history: list = []
+    for i in range(29, -1, -1):
+        d = (datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat()
+        history.append({"date": d, "spend": round(by_date_spend.get(d, 0.0), 2)})
+
+    # Per-campaign breakdown (current month)
+    campaigns_map: dict = {}
+    for r in rows:
+        if r["date"] >= month_start_str:
+            key = (r.get("campaign_id") or "_default", r.get("campaign_name") or "بدون اسم")
+            c = campaigns_map.setdefault(key, {
+                "campaign_id": key[0], "campaign_name": key[1],
+                "spend": 0.0, "purchases": 0, "revenue": 0.0,
+                "impressions": 0, "clicks": 0,
+            })
+            c["spend"] += float(r.get("spend") or 0)
+            c["purchases"] += int(r.get("purchases") or 0)
+            c["revenue"] += float(r.get("purchase_value") or 0)
+            c["impressions"] += int(r.get("impressions") or 0)
+            c["clicks"] += int(r.get("clicks") or 0)
+    campaigns = []
+    for c in campaigns_map.values():
+        c["spend"] = round(c["spend"], 2)
+        c["revenue"] = round(c["revenue"], 2)
+        c["roas"] = round(c["revenue"] / c["spend"], 2) if c["spend"] > 0 else 0.0
+        campaigns.append(c)
+    campaigns.sort(key=lambda x: x["spend"], reverse=True)
+
+    # Last sync timestamp
+    last_sync = None
+    latest = await db.meta_ads_daily.find_one(
+        {"user_id": uid}, {"_id": 0, "updated_at": 1},
+        sort=[("updated_at", -1)],
+    )
+    if latest:
+        last_sync = latest.get("updated_at")
+
+    return {
+        "today": {"date": today_str, **_agg(today_str, today_str)},
+        "month": {"start": month_start_str, **_agg(month_start_str, today_str)},
+        "last_30d": {"start": d30_start_str, **_agg(d30_start_str, today_str)},
+        "history": history,
+        "campaigns": campaigns,
+        "last_sync_at": last_sync,
+    }
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 @api.get("/")
 async def root():
