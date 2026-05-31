@@ -20,7 +20,16 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Snap Dashboard refresh now mirrors the proven DailyCosts flow)
+## Implemented (2026-05 — Snap-day TZ awareness: show ad-account TZ boundary)
+- 💡 **User insight**: merchant reported that Snapchat's "today" doesn't align with Riyadh midnight — for their account, the day appears to start at ~12:00 PM Riyadh time. This is because Snapchat's DAY granularity uses the **ad account's own timezone** (often Pacific or UTC), not Riyadh's.
+- ✅ **Backend (`snapchat_routes.py`)**:
+  - `GET /api/snapchat/daily-spend?date=` response now includes 3 new diagnostic fields: `ad_account_timezone` (e.g. `"America/Los_Angeles"`), `snap_day_start_riyadh` (e.g. `"2026-06-01 11:00"`), `snap_day_end_riyadh` (e.g. `"2026-06-02 11:00"`).
+- ✅ **Frontend (`Dashboard.jsx`)**:
+  - **New `snapDayInfo` state** cached after each refresh. Renders a persistent yellow info banner inside the Snap card: `"ℹ️ TZ حساب الإعلانات: America/Los_Angeles • "يوم Snap" يبدأ 2026-06-01 11:00 وينتهي 2026-06-02 11:00 بتوقيت الرياض."`
+  - Zero-spend toast also surfaces the same TZ boundary so the merchant immediately understands why today=0 ("التزال بداية اليوم لم تبدأ بعد بتوقيت Snap").
+  - `data-testid="snap-day-info-banner"` for testability.
+
+
 - 🐛 **Issue**: even after the two-phase bulk fix, the Dashboard refresh button still used `POST /snapchat/daily-spend/bulk` which involves more moving parts than necessary for a single-day refresh.
 - 💡 **User insight**: the DailyCosts page already has a working "جلب من سناب" button that has been reliable in production. Just port that exact flow to Dashboard.
 - ✅ **Fix in `Dashboard.jsx`**:

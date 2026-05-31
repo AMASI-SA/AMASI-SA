@@ -527,6 +527,19 @@ def _build_router(db) -> APIRouter:
         async with httpx.AsyncClient(timeout=10.0) as http2:
             currency = await _resolve_ad_account_currency(http2, access_token, ad_id, conn)
         spend_sar, fx_rate = _to_sar(spend_native, currency)
+
+        # Compute when "today" actually starts/ends according to the ad
+        # account's timezone, expressed in Riyadh time. Helps the merchant
+        # understand why Snap-day boundary differs from their local clock
+        # (e.g. accounts in Pacific Time start their day at ~11:00 AM Riyadh).
+        try:
+            riyadh_tz = ZoneInfo("Asia/Riyadh") if ZoneInfo else timezone(timedelta(hours=3))
+            snap_day_start_riyadh = start_local.astimezone(riyadh_tz).strftime("%Y-%m-%d %H:%M")
+            snap_day_end_riyadh = end_local.astimezone(riyadh_tz).strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            snap_day_start_riyadh = start_local.isoformat()
+            snap_day_end_riyadh = end_local.isoformat()
+
         return {
             "date": date,
             "ad_account_id": ad_id,
@@ -535,6 +548,11 @@ def _build_router(db) -> APIRouter:
             "native_currency": currency,
             "fx_rate": fx_rate,
             "currency": "SAR",
+            # Timezone diagnostics — the merchant uses these to understand
+            # why "today" on Snap may not align with their local clock.
+            "ad_account_timezone": tz_name,
+            "snap_day_start_riyadh": snap_day_start_riyadh,
+            "snap_day_end_riyadh": snap_day_end_riyadh,
         }
 
     class BulkSpendIn(BaseModel):

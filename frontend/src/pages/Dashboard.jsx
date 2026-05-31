@@ -75,6 +75,7 @@ export default function Dashboard() {
     const [lastUpdated, setLastUpdated] = useState(null);
     const [nowTick, setNowTick] = useState(Date.now());
     const [snapSummary, setSnapSummary] = useState(null);
+    const [snapDayInfo, setSnapDayInfo] = useState(null); // {tz, startRiyadh, endRiyadh}
     const [metaSummary, setMetaSummary] = useState(null);
     const [tiktokSummary, setTiktokSummary] = useState(null);
     const [refreshingAll, setRefreshingAll] = useState(false);
@@ -497,6 +498,15 @@ export default function Dashboard() {
                                             const native = data?.native_currency;
                                             const fx = Number(data?.fx_rate || 1);
 
+                                            // Cache TZ info for the persistent banner.
+                                            if (data?.ad_account_timezone) {
+                                                setSnapDayInfo({
+                                                    tz: data.ad_account_timezone,
+                                                    startRiyadh: data.snap_day_start_riyadh,
+                                                    endRiyadh: data.snap_day_end_riyadh,
+                                                });
+                                            }
+
                                             // Persist into daily_costs so the dashboard totals + cards
                                             // pick it up. We preserve any other fields on the existing
                                             // row (snapchat_ads_2, tiktok, etc.) by reading-then-merging.
@@ -522,8 +532,17 @@ export default function Dashboard() {
                                             // "fetched, spend > 0", "fetched but zero" (no campaigns
                                             // or TZ-edge), and includes FX info when relevant.
                                             if (amount === 0) {
-                                                toast(`تم الجلب — صرف اليوم ${todayStr} = 0.00 ر.س (لا توجد حملات نشطة أو لم يبدأ الصرف بعد)`,
-                                                    { id: "snap-fetch", duration: 8000, icon: "ℹ️" });
+                                                // Show the Snap-day boundary in Riyadh time so the
+                                                // merchant can understand WHY today=0 (e.g. account
+                                                // in Pacific TZ — "today" starts at 11:00 AM Riyadh).
+                                                const tz = data?.ad_account_timezone || "?";
+                                                const startR = data?.snap_day_start_riyadh;
+                                                const endR = data?.snap_day_end_riyadh;
+                                                const boundary = startR && endR
+                                                    ? `يوم Snap حسب TZ الحساب (${tz}) يبدأ ${startR} وينتهي ${endR} بتوقيت الرياض`
+                                                    : `TZ حساب الإعلانات: ${tz}`;
+                                                toast(`تم الجلب — صرف اليوم ${todayStr} = 0.00 ر.س. ${boundary}. تأكد من وجود حملات نشطة أو انتظر بدء صرف اليوم.`,
+                                                    { id: "snap-fetch", duration: 12000, icon: "ℹ️" });
                                             } else if (native && native !== "SAR" && fx !== 1) {
                                                 toast.success(`تم تحديث صرف اليوم: ${amount.toFixed(2)} ر.س (${data.spend_native} ${native} × ${fx})`,
                                                     { id: "snap-fetch" });
@@ -562,6 +581,20 @@ export default function Dashboard() {
                                     تحديث فوري للصرف اليوم
                                 </button>
                             </div>
+
+                            {/* Snap-day boundary info banner — shown after the first refresh
+                                so the merchant understands the ad-account TZ behavior.
+                                Example: account in Pacific TZ → "اليوم" starts at 11:00 AM Riyadh. */}
+                            {snapDayInfo && snapDayInfo.tz && snapDayInfo.startRiyadh && (
+                                <div
+                                    className="mb-4 bg-yellow-50/60 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-900 leading-relaxed"
+                                    data-testid="snap-day-info-banner"
+                                >
+                                    <strong>ℹ️ TZ حساب الإعلانات:</strong> <code className="bg-white/60 px-1.5 py-0.5 rounded text-[11px]" dir="ltr">{snapDayInfo.tz}</code>
+                                    <span className="mx-2">•</span>
+                                    <span>"يوم Snap" يبدأ <strong>{snapDayInfo.startRiyadh}</strong> وينتهي <strong>{snapDayInfo.endRiyadh}</strong> بتوقيت الرياض.</span>
+                                </div>
+                            )}
 
                             {/* Today + Month sections */}
                             <div className="space-y-4">
