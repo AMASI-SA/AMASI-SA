@@ -1135,6 +1135,14 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     spend_month = round(sum(v for k, v in by_date_spend.items() if k >= month_start_str), 2)
     spend_30d = round(sum(by_date_spend.values()), 2)
 
+    # Display Snapchat spend in BOTH currencies. Stored values are SAR
+    # (already converted at ingest), USD is derived using the user-visible
+    # exchange rate of 3.752 SAR/USD.
+    USD_RATE = 3.752
+
+    def _to_usd(sar: float) -> float:
+        return round(sar / USD_RATE, 2) if sar else 0.0
+
     # 2) Orders + revenue from unified_orders.
     settings = await ensure_user_settings(db, uid)
     base_q = {"user_id": uid}
@@ -1175,6 +1183,7 @@ async def snapchat_summary(user: dict = Depends(current_user)):
         "today": {
             "date": today_str,
             "spend": spend_today,
+            "spend_usd": _to_usd(spend_today),
             "orders": orders_today,
             "revenue": revenue_today,
             "roas": _roas(revenue_today, spend_today),
@@ -1182,6 +1191,7 @@ async def snapchat_summary(user: dict = Depends(current_user)):
         "month": {
             "start": month_start_str,
             "spend": spend_month,
+            "spend_usd": _to_usd(spend_month),
             "orders": orders_month,
             "revenue": revenue_month,
             "roas": _roas(revenue_month, spend_month),
@@ -1189,10 +1199,12 @@ async def snapchat_summary(user: dict = Depends(current_user)):
         "last_30d": {
             "start": d30_start_str,
             "spend": spend_30d,
+            "spend_usd": _to_usd(spend_30d),
             "orders": orders_30d,
             "revenue": revenue_30d,
             "roas": _roas(revenue_30d, spend_30d),
         },
+        "usd_rate": USD_RATE,
         "history": history,
     }
 

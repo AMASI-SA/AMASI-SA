@@ -68,6 +68,8 @@ def test_summary_includes_snapchat_spend_and_orders():
 
     r = requests.get(f"{API}/dashboard/snapchat-summary", headers=h).json()
     assert r["today"]["spend"] == 75.0  # 50 + 25
+    assert r["today"]["spend_usd"] == round(75.0 / 3.752, 2)
+    assert r["usd_rate"] == 3.752
     assert r["today"]["orders"] == 1
     assert r["today"]["revenue"] == 300.0
     assert r["today"]["roas"] == 4.0  # 300/75

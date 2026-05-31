@@ -342,8 +342,9 @@ export default function Dashboard() {
                                     </div>
                                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-today">
-                                            <div className="text-xs text-muted-foreground mb-1">صرف اليوم (ر.س)</div>
-                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.today.spend)}</div>
+                                            <div className="text-xs text-muted-foreground mb-1">صرف اليوم</div>
+                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.today.spend)} <span className="text-xs font-bold">ر.س</span></div>
+                                            <div className="num text-xs font-semibold text-muted-foreground mt-0.5" style={{ fontFamily: "Tajawal" }} dir="ltr">≈ ${formatMoney(snapSummary.today.spend_usd)}</div>
                                         </div>
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-orders-today">
                                             <div className="text-xs text-muted-foreground mb-1">طلبات اليوم</div>
@@ -369,8 +370,9 @@ export default function Dashboard() {
                                     </div>
                                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-month">
-                                            <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
-                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.spend)}</div>
+                                            <div className="text-xs text-muted-foreground mb-1">الصرف الشهري</div>
+                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.spend)} <span className="text-xs font-bold">ر.س</span></div>
+                                            <div className="num text-xs font-semibold text-muted-foreground mt-0.5" style={{ fontFamily: "Tajawal" }} dir="ltr">≈ ${formatMoney(snapSummary.month.spend_usd)}</div>
                                         </div>
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-orders-month">
                                             <div className="text-xs text-muted-foreground mb-1">طلبات الشهر</div>
@@ -395,6 +397,7 @@ export default function Dashboard() {
                                 <div className="mt-5 pt-4 border-t border-yellow-200">
                                     <div className="text-xs text-muted-foreground mb-2" style={{ fontFamily: "Tajawal" }}>
                                         صرف آخر 30 يوم — الإجمالي: {formatMoney(snapSummary.last_30d.spend)} ر.س
+                                        <span dir="ltr" className="ms-2">(≈ ${formatMoney(snapSummary.last_30d.spend_usd)})</span>
                                     </div>
                                     <div className="h-12 flex items-end gap-0.5">
                                         {snapSummary.history.map((d, i) => {
