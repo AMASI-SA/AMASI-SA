@@ -20,7 +20,20 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Full Mobile Responsive Overhaul)
+## Implemented (2026-05 — Bug fix: Snapchat/Meta "today spend = 0" due to UTC vs Riyadh timezone mismatch)
+- 🐛 **Root cause**: The dashboard refresh button correctly **upserted** Snapchat spend with `$set` (overwrite, NOT increment), but the `date` used as the upsert key disagreed with the date the dashboard read:
+  - **Writer** (refresh button → `/snapchat/daily-spend/bulk`): used the browser's *local* date or the *Snapchat ad account TZ* (typically Asia/Riyadh = UTC+3).
+  - **Reader** (`/dashboard/snapchat-summary`): used `datetime.now(timezone.utc).date()`.
+  - **Effect**: Between 21:00 UTC (00:00 Riyadh) and 23:59 UTC (02:59 Riyadh) every day, the writer saved under tomorrow's date (Riyadh's new day) while the reader still queried yesterday's date (UTC's not-yet-rolled-over day) → `today.spend = 0` for ~3 hours each night.
+- ✅ **Fix in `server.py`**: introduced module-level `RIYADH_TZ = ZoneInfo("Asia/Riyadh")` (with UTC+3 fallback) plus helpers `_local_today_iso()` and `_local_today_date()`. Replaced all `datetime.now(timezone.utc).date()` calls in `/dashboard/snapchat-summary` and `/dashboard/meta-summary` (today_str, month_start, d30_start_str, and the 30-day history loop) with the Riyadh-based variant.
+- ✅ **Fix in `meta_routes.py`**: same approach — `_today_riyadh()` helper, used by `POST /api/meta/sync` and `POST /api/meta/auto-sync-if-stale` so "days=1" actually fetches today's Riyadh date (was UTC).
+- ✅ **Fix in `Dashboard.jsx`**: Snapchat refresh button now reads `todayStr = snapSummary.today.date` (the canonical Riyadh date from the backend) instead of computing it from `new Date()`. Guarantees writer and reader agree even when the merchant's browser is in a different timezone (e.g. team member abroad).
+- ✅ **Note on `snapchat_routes.py`**: when explicit `from_date/to_date` are sent (the typical case from the dashboard refresh button), they are honored verbatim — `$set` overwrites the row instead of inserting a duplicate. Added a clarifying comment block. The "days" fallback still uses ad-account TZ (Snapchat API requires it for DAY granularity).
+- ✅ **Verification**:
+  - Curl regression test: POST daily-costs `{snapchat_ads: 100}` → GET dashboard.today.spend = 100; POST again with `{snapchat_ads: 250}` → dashboard.today.spend = **250 (overwrite confirmed, not 350)**.
+  - Pytest regression: **206/206 backend tests pass** (no regressions on any existing test).
+
+
 - ✅ **Sidebar transformed into a slide-in drawer on mobile** (<1024px) while remaining fixed on desktop (≥1024px). Uses `translate-x-full` ↔ `translate-x-0` transition with `lg:translate-x-0` always winning on desktop.
 - ✅ **New mobile top header** (`data-testid="mobile-header"`) — hidden on desktop (`lg:hidden`) — contains compact logo + `data-testid="mobile-menu-btn"` hamburger button on the left side.
 - ✅ **`Layout.jsx` rewritten**: manages `mobileOpen` state; `useEffect` on `location.pathname` auto-closes the drawer on route changes; another `useEffect` locks `document.body.overflow="hidden"` while drawer is open (with cleanup); replaced fixed `ps-64` with `lg:ps-64` (zero padding on mobile).

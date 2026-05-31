@@ -39,6 +39,20 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+try:
+    from zoneinfo import ZoneInfo
+    _RIYADH_TZ = ZoneInfo("Asia/Riyadh")
+except ImportError:  # pragma: no cover
+    _RIYADH_TZ = timezone(timedelta(hours=3))
+
+
+def _today_riyadh():
+    """Saudi merchants — 'today' should mean today's date in Riyadh, NOT
+    UTC. Otherwise a sync triggered at 02:00 AM Riyadh time would pull
+    yesterday's data and the dashboard (which also reads Riyadh date)
+    would show empty."""
+    return datetime.now(_RIYADH_TZ).date()
+
 
 META_API_BASE = "https://graph.facebook.com/v23.0"
 INSIGHT_FIELDS = (
@@ -232,7 +246,7 @@ def attach_meta_routes(parent_router, db):
             raise HTTPException(status_code=400,
                                 detail="Meta Ads غير مربوط — افتح الإعدادات وأضف بيانات الحساب أولاً")
 
-        today = datetime.now(timezone.utc).date()
+        today = _today_riyadh()
         if payload.from_date or payload.to_date:
             try:
                 start_d = _date.fromisoformat(payload.from_date) if payload.from_date else today
@@ -323,7 +337,7 @@ def attach_meta_routes(parent_router, db):
 
         # Trigger a 7-day sync silently. Reuse the sync logic by calling
         # _fetch_meta_insights directly (avoids HTTP roundtrip).
-        today = datetime.now(timezone.utc).date()
+        today = _today_riyadh()
         start_d = today - timedelta(days=6)
         rows, errors = await _fetch_meta_insights(
             ad_account_id=conn["ad_account_id"],

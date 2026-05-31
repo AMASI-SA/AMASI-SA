@@ -582,6 +582,13 @@ def _build_router(db) -> APIRouter:
             # Build the list of dates to fetch. If the user passed explicit
             # from_date/to_date (range mode), honor those bounds; otherwise
             # use the last N days ending today.
+            # NOTE: we use the ad-account's local TZ here as the boundary
+            # for Snapchat's DAY-granularity stats (Snapchat enforces this).
+            # For the `days` mode fallback when no explicit dates are sent,
+            # this still produces the merchant's "today" correctly because
+            # Saudi accounts almost always have Asia/Riyadh TZ. When the
+            # frontend sends from_date/to_date (the typical case for the
+            # dashboard refresh button), those are honored verbatim.
             today_local = datetime.now(tzinfo).date()
             if payload.from_date or payload.to_date:
                 try:

@@ -11,6 +11,27 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
+try:
+    from zoneinfo import ZoneInfo
+    RIYADH_TZ = ZoneInfo("Asia/Riyadh")
+except ImportError:  # pragma: no cover
+    RIYADH_TZ = timezone(timedelta(hours=3))  # fallback to fixed UTC+3
+
+
+def _local_today_iso() -> str:
+    """Return today's date in Asia/Riyadh timezone as YYYY-MM-DD.
+    Saudi merchants operate in Riyadh time; the Snapchat/Meta bulk fetchers
+    and the browser save dates in this local timezone, so all dashboard
+    aggregations must read from it too (otherwise a refresh at 02:00 AM
+    Riyadh time saves under the next-day's UTC date and the dashboard
+    shows 0 until 03:00 UTC = 06:00 Riyadh)."""
+    return datetime.now(RIYADH_TZ).date().isoformat()
+
+
+def _local_today_date():
+    """Same as _local_today_iso but returns a date object."""
+    return datetime.now(RIYADH_TZ).date()
+
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
@@ -1156,11 +1177,17 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     (from daily_costs.snapchat_ads + snapchat_ads_2) and the matching
     store performance (orders + revenue from unified_orders). Plus a
     30-day history strip so the UI can render a sparkline. Mirrors the
-    TikTok card behavior — auto-refreshes when the dashboard polls."""
+    TikTok card behavior — auto-refreshes when the dashboard polls.
+
+    All dates use Asia/Riyadh timezone (matches the merchant's locale and
+    the date used by both the Snapchat bulk fetch and the browser refresh
+    button — so a 02:00 AM Riyadh refresh updates the card immediately
+    instead of writing to tomorrow's UTC date)."""
     uid = user["id"]
-    today_str = datetime.now(timezone.utc).date().isoformat()
+    today_d = _local_today_date()
+    today_str = today_d.isoformat()
     month_start_str = today_str[:8] + "01"
-    d30_start_str = (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
+    d30_start_str = (today_d - timedelta(days=29)).isoformat()
 
     # 1) Snapchat spend — from manually-logged daily_costs.
     #    (Snapchat Marketing API pulls also drop into this collection.)
@@ -1244,7 +1271,7 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     # Build 30-day spend history (filled with zeros for missing days)
     history: list = []
     for i in range(29, -1, -1):
-        d = (datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat()
+        d = (today_d - timedelta(days=i)).isoformat()
         history.append({"date": d, "spend": round(by_date_spend.get(d, 0.0), 2)})
 
     # Pick the most recent update_at across this month's daily_costs rows for
@@ -1297,13 +1324,18 @@ async def snapchat_summary(user: dict = Depends(current_user)):
 @api.get("/dashboard/meta-summary")
 async def meta_summary(user: dict = Depends(current_user)):
     """Auto-computed Meta Ads card data: today + this-month + last 30d.
-    Pulled directly from meta_ads_daily (populated by the Make.com webhook
-    at `/api/webhook/meta/{token}`). Also returns a per-campaign breakdown
-    for the dedicated Meta report page."""
+    Pulled directly from meta_ads_daily (populated by the Meta Marketing
+    API direct integration). Also returns a per-campaign breakdown for
+    the dedicated Meta report page.
+
+    All dates use Asia/Riyadh timezone — same rationale as snapchat-summary:
+    matches the merchant's locale and the date written by the meta /sync
+    endpoint, so "today" lines up across browser, fetch, and aggregation."""
     uid = user["id"]
-    today_str = datetime.now(timezone.utc).date().isoformat()
+    today_d = _local_today_date()
+    today_str = today_d.isoformat()
     month_start_str = today_str[:8] + "01"
-    d30_start_str = (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
+    d30_start_str = (today_d - timedelta(days=29)).isoformat()
 
     rows = await db.meta_ads_daily.find(
         {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
@@ -1348,7 +1380,7 @@ async def meta_summary(user: dict = Depends(current_user)):
         by_date_spend[d] = by_date_spend.get(d, 0.0) + float(r.get("spend") or 0)
     history: list = []
     for i in range(29, -1, -1):
-        d = (datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat()
+        d = (today_d - timedelta(days=i)).isoformat()
         history.append({"date": d, "spend": round(by_date_spend.get(d, 0.0), 2)})
 
     # Per-campaign breakdown (current month)

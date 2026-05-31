@@ -371,9 +371,9 @@ export default function Dashboard() {
                                     type="button"
                                     onClick={async () => {
                                         try {
-                                            const today = new Date();
-                                            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                                            const todayStr = fmt(today);
+                                            // Use Riyadh-based today from backend summary so the
+                                            // refresh always targets the same date the dashboard reads.
+                                            const todayStr = snapSummary.today.date;
                                             toast.loading("جاري جلب صرف Snapchat لليوم…", { id: "snap-fetch" });
                                             const { data } = await api.post("/snapchat/daily-spend/bulk", {
                                                 from_date: todayStr,
