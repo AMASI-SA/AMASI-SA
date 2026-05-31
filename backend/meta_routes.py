@@ -133,20 +133,23 @@ def _classify_meta_error(error_text: str) -> tuple[str, str]:
     failure modes so the UI never has to show raw JSON to the merchant.
     """
     s = (error_text or "").lower()
-    # Code 190 = expired/invalid access token (most common)
-    if ("code\":190" in s or "code\": 190" in s
+    # Code 190 = expired/invalid access token (most common). Group the
+    # `access token + (expired|invalid)` substring check explicitly so the
+    # operator-precedence reads unambiguously.
+    if ("code\":190" in s
+            or "code\": 190" in s
             or "session has expired" in s
             or "session expired" in s
-            or "access token" in s and ("expired" in s or "invalid" in s)
-            or "oauthexception" in s and "190" in s):
+            or ("access token" in s and ("expired" in s or "invalid" in s))
+            or ("oauthexception" in s and "190" in s)):
         return ("expired",
                 "انتهت صلاحية ربط Meta Ads، يرجى تحديث Access Token من الإعدادات.")
     # Code 200 = permission / capability issue
-    if "code\":200" in s or "code\": 200" in s or "permission" in s and "ads_read" in s:
+    if "code\":200" in s or "code\": 200" in s or ("permission" in s and "ads_read" in s):
         return ("permission_denied",
                 "الـ Access Token لا يملك صلاحيات قراءة الإعلانات (ads_read). يرجى إعادة إنشاء التوكن بالصلاحيات الصحيحة.")
     # Ad account not found / invalid
-    if "code\":100" in s or "code\": 100" in s or "act_" in s and "not exist" in s:
+    if "code\":100" in s or "code\": 100" in s or ("act_" in s and "not exist" in s):
         return ("invalid_account",
                 "معرّف حساب الإعلانات (Ad Account ID) غير صحيح أو لا يملك التوكن صلاحية الوصول إليه.")
     # Rate limited

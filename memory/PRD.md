@@ -20,7 +20,31 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Bug fix: Snapchat/Meta "today spend = 0" due to UTC vs Riyadh timezone mismatch)
+## Implemented (2026-05 — Meta Friendly-Error Handling + Test Connection Flow)
+- 🐛 **Issue**: clicking the "تحديث فوري للصرف اليوم" button on the Meta card surfaced a raw JSON `OAuthException code 190 Session has expired` to the merchant when their Access Token was no longer valid. No clear path to fix it.
+- ✅ **Backend (`meta_routes.py`)**:
+  - New `_classify_meta_error(text) → (status, friendly_arabic_msg)` covering: expired-token (code 190 / "session expired" / "access token invalid"), permission denied (code 200 / ads_read), invalid ad account (code 100), rate-limited (code 17), network/timeout, and generic fallback. Each returns a hand-translated Arabic message.
+  - New `_verify_meta_credentials(ad_account, token)` — lightweight ping (calls `/act_X?fields=id,name,...`) to test creds without burning the heavier `/insights` quota.
+  - New `_set_status(user_id, status, last_error)` — persists `connection_status`, `last_error_message`, `last_error_at` in `meta_connections`.
+  - `POST /api/meta/sync` — on Meta error, raises HTTP **401** when status="expired" (else 400) with `detail = {message, status, raw}` so the frontend can branch. **CRITICAL**: existing `meta_ads_daily` rows are NEVER cleared on token failure — historical spend stays visible behind the banner.
+  - `POST /api/meta/auto-sync-if-stale` — same classification path but silent (background job, no exception raise).
+  - **New endpoint `POST /api/meta/test-connection`** — accepts the same body shape as `PUT /meta/config`, verifies against Meta API, and persists the credentials **ONLY IF the test passes**. Returns `{ok, message, account: {id, name, currency, timezone}, saved: true}` on success; 400 with the friendly Arabic on failure.
+  - `GET /api/meta/config` now exposes `connection_status`, `last_error_message`, `last_error_at`.
+  - `GET /api/dashboard/meta-summary` now exposes the same 3 fields so the Dashboard banner can render reactively.
+- ✅ **Frontend (`Dashboard.jsx`)**:
+  - Meta card refresh button now handles **both** detail shapes (object with `{message, status}` and legacy plain string) via a typeof guard. Raw JSON / `[object Object]` can no longer leak.
+  - New **expired banner** `data-testid="meta-expired-banner"` (red, prominent) above the KPI grid — shown only when `connection_status === "expired"`. Contains the Arabic warning + **`meta-update-link-btn`** linking to `/settings`.
+  - Secondary `data-testid="meta-warn-banner"` (amber, softer) for other non-ok statuses (rate-limit, permission, etc).
+  - After a failed sync, `fetchMetaSummary()` is called so the banner appears immediately without a page refresh.
+- ✅ **Frontend (`Settings.jsx`)**:
+  - Central error formatter `fmtMetaErr(e, fallback)` used in every Meta catch block — handles both detail shapes uniformly.
+  - **New button `data-testid="meta-test-connection-btn"`** ("اختبار الاتصال", amber) — calls `/test-connection`; success toast shows account name, failure toast shows the friendly Arabic message. Save button relabeled to **"حفظ بدون اختبار"** so the merchant understands the distinction.
+  - **New banner `data-testid="meta-settings-expired-banner"`** (red, with timestamp) when `connection_status === "expired"`, plus secondary amber warn-banner for other errors.
+  - Token input placeholder + helper text now coach the merchant: "ألصق التوكن الجديد ثم اضغط اختبار الاتصال".
+  - Token + secret inputs are auto-cleared after a successful save/test (avoids accidental resubmission).
+- ✅ **Testing**: testing_agent_v3_fork → **37/37 pytest pass** (7 new in `test_meta_friendly_errors.py` + 30 regression) + **7/7 Playwright frontend checks pass**. Exact Arabic string `"انتهت صلاحية ربط Meta Ads، يرجى تحديث Access Token من الإعدادات."` verified to render from both `/test-connection` and the Dashboard refresh flow. Zero raw-JSON / `[object Object]` leaks. Report: `/app/test_reports/iteration_12.json`.
+
+
 - 🐛 **Root cause**: The dashboard refresh button correctly **upserted** Snapchat spend with `$set` (overwrite, NOT increment), but the `date` used as the upsert key disagreed with the date the dashboard read:
   - **Writer** (refresh button → `/snapchat/daily-spend/bulk`): used the browser's *local* date or the *Snapchat ad account TZ* (typically Asia/Riyadh = UTC+3).
   - **Reader** (`/dashboard/snapchat-summary`): used `datetime.now(timezone.utc).date()`.
