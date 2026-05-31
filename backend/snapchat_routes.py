@@ -451,40 +451,47 @@ def _build_router(db) -> APIRouter:
         access_token, conn = await _ensure_access_token(user["id"])
         ad_id = ad_account_id or conn.get("ad_account_id")
         if not ad_id:
-            raise HTTPException(status_code=400, detail="اختر حساب إعلانات سناب أولاً")
+            raise HTTPException(status_code=400, detail="حساب سناب غير مربوط. اربطه من الإعدادات.")
 
-        # Resolve the ad account's timezone — Snapchat's DAY granularity stats
-        # REQUIRE start_time and end_time to align with the ad account's local
-        # day boundary (00:00:00 in its own timezone). Sending UTC midnight
-        # when the account is in Asia/Riyadh (UTC+3) triggers the error:
-        # "Timeseries queries with DAY granularity must have a start time that
-        #  is the start of the day."
+        # ── Riyadh-day boundary ──────────────────────────────────────────────
+        # Per merchant requirement: "business day" is ALWAYS 00:00-23:59 Asia/Riyadh,
+        # NOT the ad account's native timezone (which is often Pacific/PST).
+        # Snapchat's DAY granularity REQUIRES start_time to be midnight in the
+        # ad account's TZ — so we instead use HOUR granularity (which has no
+        # such constraint) and sum the 24 hourly points overlapping the
+        # Riyadh day. This guarantees the merchant sees "today's spend"
+        # exactly as Riyadh experiences it, regardless of Snap's internal TZ.
         try:
             from zoneinfo import ZoneInfo  # py3.9+
         except ImportError:  # pragma: no cover
             ZoneInfo = None  # type: ignore
 
-        async with httpx.AsyncClient(timeout=20.0) as http:
-            tz_name = await _resolve_ad_account_timezone(http, access_token, ad_id, conn)
-            try:
-                tzinfo = ZoneInfo(tz_name) if ZoneInfo else timezone.utc
-            except Exception:
-                tzinfo = timezone.utc
+        riyadh_tz = ZoneInfo("Asia/Riyadh") if ZoneInfo else timezone(timedelta(hours=3))
+        # Use the existing strict YYYY-MM-DD validator declared earlier in
+        # this closure — guarantees the date passed by the caller is a real
+        # ISO date and rejects free-text input.
+        day = _validate_iso_date(date)
+        start_riyadh = datetime(day.year, day.month, day.day, 0, 0, 0, tzinfo=riyadh_tz)
+        end_riyadh = start_riyadh + timedelta(days=1)
 
-            start_local = datetime(day.year, day.month, day.day, 0, 0, 0, tzinfo=tzinfo)
-            end_local = start_local + timedelta(days=1)
-            # Snapchat accepts ISO-8601 with offset; format with explicit offset like "+03:00"
+        # Snapchat HOUR granularity still wants start/end aligned to the hour
+        # in the ad-account TZ. Riyadh midnight is always on an hour boundary
+        # in any IANA tz, so the conversion is safe. We pass the ISO strings
+        # in Riyadh offset (e.g. "+03:00"); Snapchat accepts ISO-8601 with any
+        # offset for HOUR granularity.
+        async with httpx.AsyncClient(timeout=20.0) as http:
+            # Still resolve the ad-account TZ so we can show it in the UI
+            # for diagnostic purposes (the banner says "yes we know Snap is
+            # in PT, but we're aggregating in Riyadh time anyway").
+            tz_name = await _resolve_ad_account_timezone(http, access_token, ad_id, conn)
+
             def _iso(dt: datetime) -> str:
-                s = dt.isoformat(timespec="seconds")
-                # Python emits "+03:00"; Snapchat handles that. For UTC tz, ensure "+00:00".
-                if s.endswith("+00:00"):
-                    return s
-                return s
+                return dt.isoformat(timespec="seconds")
 
             params = {
-                "start_time": _iso(start_local),
-                "end_time": _iso(end_local),
-                "granularity": "DAY",
+                "start_time": _iso(start_riyadh),
+                "end_time": _iso(end_riyadh),
+                "granularity": "HOUR",
                 "fields": "spend",
             }
             headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
@@ -502,10 +509,10 @@ def _build_router(db) -> APIRouter:
                 raise HTTPException(status_code=502, detail=f"خطأ شبكة مع سناب: {exc}")
 
         data = resp.json()
-        # Snapchat returns spend in micro-currency (1/1,000,000 of currency unit).
+        # Sum spend across all 24 hourly points falling inside the Riyadh day.
+        # Snapchat returns each hourly bucket with start_time/end_time already
+        # in the requested timezone, so we just sum all spend values.
         total_micro = 0
-        # Response shape: { "timeseries_stats": [ { "timeseries_stat": { "id":..., "type":"AD_ACCOUNT",
-        #   "granularity":"DAY", "start_time":..., "end_time":..., "timeseries":[{"start_time":..,"end_time":..,"stats":{"spend":N}}]}}]}
         for ts in data.get("timeseries_stats", []) or []:
             stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
             for point in stat.get("timeseries", []) or []:
@@ -523,36 +530,25 @@ def _build_router(db) -> APIRouter:
                     pass
 
         spend_native = round(total_micro / 1_000_000, 2)
-        # Convert to SAR if the ad account is denominated in another currency.
         async with httpx.AsyncClient(timeout=10.0) as http2:
             currency = await _resolve_ad_account_currency(http2, access_token, ad_id, conn)
         spend_sar, fx_rate = _to_sar(spend_native, currency)
 
-        # Compute when "today" actually starts/ends according to the ad
-        # account's timezone, expressed in Riyadh time. Helps the merchant
-        # understand why Snap-day boundary differs from their local clock
-        # (e.g. accounts in Pacific Time start their day at ~11:00 AM Riyadh).
-        try:
-            riyadh_tz = ZoneInfo("Asia/Riyadh") if ZoneInfo else timezone(timedelta(hours=3))
-            snap_day_start_riyadh = start_local.astimezone(riyadh_tz).strftime("%Y-%m-%d %H:%M")
-            snap_day_end_riyadh = end_local.astimezone(riyadh_tz).strftime("%Y-%m-%d %H:%M")
-        except Exception:
-            snap_day_start_riyadh = start_local.isoformat()
-            snap_day_end_riyadh = end_local.isoformat()
-
         return {
-            "date": date,
+            "date": date,  # Always the Riyadh business date the merchant requested.
             "ad_account_id": ad_id,
             "spend": spend_sar,
             "spend_native": spend_native,
             "native_currency": currency,
             "fx_rate": fx_rate,
             "currency": "SAR",
-            # Timezone diagnostics — the merchant uses these to understand
-            # why "today" on Snap may not align with their local clock.
+            # Diagnostics — let the UI show "we aggregated in Riyadh time"
+            # while also revealing the ad-account's native TZ.
             "ad_account_timezone": tz_name,
-            "snap_day_start_riyadh": snap_day_start_riyadh,
-            "snap_day_end_riyadh": snap_day_end_riyadh,
+            "business_timezone": "Asia/Riyadh",
+            "snap_day_start_riyadh": start_riyadh.strftime("%Y-%m-%d %H:%M"),
+            "snap_day_end_riyadh": end_riyadh.strftime("%Y-%m-%d %H:%M"),
+            "aggregation_method": "hourly_riyadh",
         }
 
     class BulkSpendIn(BaseModel):
@@ -597,17 +593,18 @@ def _build_router(db) -> APIRouter:
             except Exception:
                 tzinfo = timezone.utc
 
-            # Build the list of dates to fetch. If the user passed explicit
-            # from_date/to_date (range mode), honor those bounds; otherwise
-            # use the last N days ending today.
-            # NOTE: we use the ad-account's local TZ here as the boundary
-            # for Snapchat's DAY-granularity stats (Snapchat enforces this).
-            # For the `days` mode fallback when no explicit dates are sent,
-            # this still produces the merchant's "today" correctly because
-            # Saudi accounts almost always have Asia/Riyadh TZ. When the
-            # frontend sends from_date/to_date (the typical case for the
-            # dashboard refresh button), those are honored verbatim.
-            today_local = datetime.now(tzinfo).date()
+            # Riyadh-based business day boundary (per merchant requirement:
+            # "today" is ALWAYS 00:00-23:59 Asia/Riyadh, never the ad-account's
+            # native TZ). Used to enumerate dates AND to compute start/end of
+            # each day. Snapchat HOUR granularity has no TZ alignment
+            # requirement (unlike DAY), so we can request 24 hourly buckets
+            # starting at Riyadh midnight verbatim.
+            try:
+                from zoneinfo import ZoneInfo as _ZI
+                riyadh_tz = _ZI("Asia/Riyadh")
+            except ImportError:  # pragma: no cover
+                riyadh_tz = timezone(timedelta(hours=3))
+            today_local = datetime.now(riyadh_tz).date()
             if payload.from_date or payload.to_date:
                 try:
                     start_d = _date.fromisoformat(payload.from_date) if payload.from_date else today_local
@@ -625,23 +622,21 @@ def _build_router(db) -> APIRouter:
                 dates.reverse()  # ascending
 
             for d in dates:
-                start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=tzinfo)
+                # Riyadh business-day window: 00:00 → 24:00 Asia/Riyadh
+                start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=riyadh_tz)
                 end_local = start_local + timedelta(days=1)
                 base_headers = {"Authorization": f"Bearer {access_token}",
                                 "Accept": "application/json"}
                 stats_url = f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}/stats"
 
-                # ── 1. SPEND ────────────────────────────────────────────────
-                # The ad-account stats endpoint reliably supports `spend` alone.
-                # Conversion metrics (purchases/value) require attribution
-                # windows AND are sometimes not exposed at ad_account level
-                # depending on the account's Pixel setup — so we split into
-                # two requests and let conversions fail silently when not
-                # available.
+                # ── 1. SPEND (hourly, summed over the Riyadh day) ───────────
+                # Using granularity=HOUR (instead of DAY) frees us from
+                # Snapchat's "start_time must be midnight of ad-account TZ"
+                # constraint, so we can request the Riyadh day directly.
                 spend_params = {
                     "start_time": start_local.isoformat(timespec="seconds"),
                     "end_time": end_local.isoformat(timespec="seconds"),
-                    "granularity": "DAY",
+                    "granularity": "HOUR",
                     "fields": "spend",
                 }
                 try:
@@ -684,7 +679,7 @@ def _build_router(db) -> APIRouter:
                 conv_params = {
                     "start_time": start_local.isoformat(timespec="seconds"),
                     "end_time": end_local.isoformat(timespec="seconds"),
-                    "granularity": "DAY",
+                    "granularity": "HOUR",
                     "fields": "conversion_purchases,conversion_purchases_value",
                     "swipe_up_attribution_window": "28_DAY",
                     "view_attribution_window": "1_DAY",

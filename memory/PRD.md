@@ -20,7 +20,26 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Snap-day TZ awareness: show ad-account TZ boundary)
+## Implemented (2026-05 — Snapchat: Riyadh business-day enforcement via HOUR granularity)
+- 🐛 **Issue**: Snapchat's `DAY` granularity stats require `start_time` to be midnight in the **ad-account's native TZ** (usually Pacific). For Saudi merchants this meant "today" on Snapchat ran from 11:00 AM → 11:00 AM Riyadh time — not 00:00 → 23:59 like every other Saudi business measures their day.
+- 💡 **Merchant requirement**: "اعتماد توقيت السعودية Asia/Riyadh في احتساب اليوم الإعلاني." Even if Snapchat internally tracks the day in PT, our dashboard must show the Riyadh business day.
+- ✅ **Backend technique**: switched from `granularity=DAY` to `granularity=HOUR`. HOUR has NO TZ alignment constraint — we can request `start_time = 2026-06-01T00:00:00+03:00` and `end_time = 2026-06-02T00:00:00+03:00`, and Snapchat returns 24 hourly buckets which we sum. The resulting total is the EXACT Riyadh-day spend regardless of where the ad account is hosted.
+- ✅ **Both endpoints updated**:
+  - `GET /api/snapchat/daily-spend?date=` (single-date, used by DailyCosts page and Dashboard refresh button).
+  - `POST /api/snapchat/daily-spend/bulk` (range mode, used by "تحديث آخر 7 أيام" etc).
+  - Both now use `granularity=HOUR` for `spend` AND for conversion metrics (Phase 2).
+- ✅ **Response diagnostics**:
+  - `business_timezone: "Asia/Riyadh"` (always)
+  - `aggregation_method: "hourly_riyadh"`
+  - `ad_account_timezone` (informational, e.g. `"America/Los_Angeles"`)
+  - `snap_day_start_riyadh` / `snap_day_end_riyadh` (always 00:00 → 24:00 Riyadh strings).
+- ✅ **Frontend (`Dashboard.jsx`)**:
+  - Banner color/text refreshed from amber (warning) to **green (confirmation)**: `"✓ يتم احتساب اليوم حسب توقيت السعودية (2026-06-01 00:00 → 2026-06-02 00:00) • TZ حساب الإعلانات على Snap: America/Los_Angeles — لكننا نجمع الصرف ساعةً بساعة لتغطية يوم الرياض كاملاً (00:00 → 23:59)."`
+  - Zero-spend toast now says: `"تم الجلب — صرف يوم 2026-06-01 بتوقيت الرياض (00:00 → 24:00) = 0.00 ر.س. تأكد من وجود حملات نشطة أو انتظر بدء صرف اليوم."` — no longer references Pacific/PT.
+- ✅ **DB schema**: `daily_costs.date` continues to be the Riyadh business date (no schema change). Reports/`/reports/ads` automatically show Riyadh-aligned data.
+- ✅ **Tested**: 28/28 backend regression pass. Curl admin (no creds) returns the friendly Arabic error.
+
+
 - 💡 **User insight**: merchant reported that Snapchat's "today" doesn't align with Riyadh midnight — for their account, the day appears to start at ~12:00 PM Riyadh time. This is because Snapchat's DAY granularity uses the **ad account's own timezone** (often Pacific or UTC), not Riyadh's.
 - ✅ **Backend (`snapchat_routes.py`)**:
   - `GET /api/snapchat/daily-spend?date=` response now includes 3 new diagnostic fields: `ad_account_timezone` (e.g. `"America/Los_Angeles"`), `snap_day_start_riyadh` (e.g. `"2026-06-01 11:00"`), `snap_day_end_riyadh` (e.g. `"2026-06-02 11:00"`).

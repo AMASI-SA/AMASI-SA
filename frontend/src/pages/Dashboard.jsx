@@ -532,17 +532,13 @@ export default function Dashboard() {
                                             // "fetched, spend > 0", "fetched but zero" (no campaigns
                                             // or TZ-edge), and includes FX info when relevant.
                                             if (amount === 0) {
-                                                // Show the Snap-day boundary in Riyadh time so the
-                                                // merchant can understand WHY today=0 (e.g. account
-                                                // in Pacific TZ — "today" starts at 11:00 AM Riyadh).
-                                                const tz = data?.ad_account_timezone || "?";
                                                 const startR = data?.snap_day_start_riyadh;
                                                 const endR = data?.snap_day_end_riyadh;
                                                 const boundary = startR && endR
-                                                    ? `يوم Snap حسب TZ الحساب (${tz}) يبدأ ${startR} وينتهي ${endR} بتوقيت الرياض`
-                                                    : `TZ حساب الإعلانات: ${tz}`;
-                                                toast(`تم الجلب — صرف اليوم ${todayStr} = 0.00 ر.س. ${boundary}. تأكد من وجود حملات نشطة أو انتظر بدء صرف اليوم.`,
-                                                    { id: "snap-fetch", duration: 12000, icon: "ℹ️" });
+                                                    ? `يوم ${todayStr} بتوقيت الرياض (${startR} → ${endR})`
+                                                    : `يوم ${todayStr} بتوقيت الرياض`;
+                                                toast(`تم الجلب — صرف ${boundary} = 0.00 ر.س. تأكد من وجود حملات نشطة أو انتظر بدء صرف اليوم.`,
+                                                    { id: "snap-fetch", duration: 10000, icon: "ℹ️" });
                                             } else if (native && native !== "SAR" && fx !== 1) {
                                                 toast.success(`تم تحديث صرف اليوم: ${amount.toFixed(2)} ر.س (${data.spend_native} ${native} × ${fx})`,
                                                     { id: "snap-fetch" });
@@ -582,17 +578,19 @@ export default function Dashboard() {
                                 </button>
                             </div>
 
-                            {/* Snap-day boundary info banner — shown after the first refresh
-                                so the merchant understands the ad-account TZ behavior.
-                                Example: account in Pacific TZ → "اليوم" starts at 11:00 AM Riyadh. */}
+                            {/* Snap-day boundary info banner — shown after the first refresh.
+                                We ALWAYS aggregate in Riyadh time (per merchant requirement),
+                                regardless of the ad-account's native TZ. This banner just
+                                confirms that fact so the merchant doesn't wonder why our
+                                "today" might differ from Snapchat's UI (which uses PT). */}
                             {snapDayInfo && snapDayInfo.tz && snapDayInfo.startRiyadh && (
                                 <div
-                                    className="mb-4 bg-yellow-50/60 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-900 leading-relaxed"
+                                    className="mb-4 bg-emerald-50/70 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-900 leading-relaxed"
                                     data-testid="snap-day-info-banner"
                                 >
-                                    <strong>ℹ️ TZ حساب الإعلانات:</strong> <code className="bg-white/60 px-1.5 py-0.5 rounded text-[11px]" dir="ltr">{snapDayInfo.tz}</code>
+                                    <strong>✓ يتم احتساب اليوم حسب توقيت السعودية</strong> ({snapDayInfo.startRiyadh} → {snapDayInfo.endRiyadh})
                                     <span className="mx-2">•</span>
-                                    <span>"يوم Snap" يبدأ <strong>{snapDayInfo.startRiyadh}</strong> وينتهي <strong>{snapDayInfo.endRiyadh}</strong> بتوقيت الرياض.</span>
+                                    <span className="text-emerald-800/80">TZ حساب الإعلانات على Snap: <code className="bg-white/60 px-1.5 py-0.5 rounded text-[11px]" dir="ltr">{snapDayInfo.tz}</code> — لكننا نجمع الصرف ساعةً بساعة لتغطية يوم الرياض كاملاً (00:00 → 23:59).</span>
                                 </div>
                             )}
 
