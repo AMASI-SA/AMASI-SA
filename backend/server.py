@@ -1437,6 +1437,13 @@ async def on_startup():
     await db.operating_salaries.create_index([("user_id", 1), ("status", 1)])
     await db.operating_rentals.create_index([("user_id", 1), ("status", 1)])
     await db.operating_daily_expenses.create_index([("user_id", 1), ("date", -1)])
+    # Backfill: older salaries created before the country column existed are
+    # treated as Saudi by default (most common merchant home country).
+    legacy_country = await db.operating_salaries.update_many(
+        {"country": {"$exists": False}}, {"$set": {"country": "saudi"}}
+    )
+    if legacy_country.modified_count:
+        logger.info(f"Backfilled country=saudi on {legacy_country.modified_count} legacy operating_salaries.")
     # One-time migration: copy any pre-existing webhook_orders into unified_orders
     # so users who already have Make.com data don't lose it on the cutover.
     if await db.webhook_orders.count_documents({}) > 0:

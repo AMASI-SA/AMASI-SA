@@ -28,14 +28,21 @@
   - **Daily Variable Expenses** (`operating_daily_expenses` collection) — free-form date+type+description+amount+payment_method.
 - ✅ **CRUD endpoints**: `GET/POST/PUT/DELETE /api/operating-expenses/{salaries|rentals|daily}[/{id}]`.
 - ✅ **Aggregation endpoints**:
-  - `GET /api/operating-expenses/summary` — KPI cards data (per-category monthly totals, today's per-day breakdown).
+  - `GET /api/operating-expenses/summary` — KPI cards data (per-category monthly totals, today's per-day breakdown, **per-country breakdown**).
   - `GET /api/operating-expenses/report` — daily / monthly / yearly aggregates + custom range.
 - ✅ **Stopped/expired records correctly excluded** from all computations.
 - ✅ **Dashboard integration**: `GET /api/dashboard` now exposes `operating_expenses_total`, `operating_salaries_total`, `operating_salaries_employee/household/charity`, `operating_rentals_total`, `operating_daily_other_total`. `net_profit` is reduced by `operating_expenses_total`.
 - ✅ **Net Sales toggle**: new `net_sales_config.deduct_operating_expenses` flag (default `True`) in Settings → "خصم المصروفات التشغيلية" — controls whether operating expenses are deducted from `net_sales` KPI.
 - ✅ **3 new dashboard KPI cards**: `operating_expenses_total`, `operating_salaries_total`, `operating_rentals_total` (in costs group).
-- ✅ **10 new pytest tests** covering full CRUD, math correctness (per-calendar-month days), category aggregation, status filtering, dashboard integration, and settings persistence. **195/195 backend tests pass.**
-- ✅ **Testing agent verified**: 100% pass on backend curl tests + frontend E2E (sidebar nav, tabs, CRUD modals, report tab, settings toggle, dashboard markers).
+- ✅ **Salary editing**: full record edit (name/category/country/amount/start_date/status/notes) via PUT — verified by `test_salary_edit_full_record_persists`.
+
+## Implemented (2026-05 — Salary Country Classification)
+- ✅ **New `country` field on salaries** with three values: `saudi` 🇸🇦 / `yemen` 🇾🇪 / `other` 🌍 (default `saudi` for backward compatibility).
+- ✅ **Backend validation**: invalid country values rejected with HTTP 400.
+- ✅ **Idempotent startup backfill**: pre-existing salaries without `country` get `country=saudi` set automatically.
+- ✅ **Summary endpoint** now returns `by_country: {<country>: {monthly_total, count}}` so the dashboard can show per-country totals.
+- ✅ **Frontend**: country dropdown (with flag) in salary add/edit modal (`data-testid="oe-salary-country"`), new "الدولة" column in salaries table, and two new summary cards "رواتب السعودية 🇸🇦" and "رواتب اليمن 🇾🇪" at the top of the page.
+- ✅ **2 additional pytest tests** covering country persistence, `by_country` aggregation math, invalid-country rejection, and full-record edit persistence. **197/197 backend tests pass.**
 
 ## Implemented (2026-05 — Per-Order Date Filtering Across Dashboard)
 - ✅ **Excel parser:** picks up the order-creation date column even when the header reads "تاريخ إنشاء الطلب" (now in `DATE_COLS`). Falls back to **column Q (index 16)** when no header matches, matching Salla's standard layout.

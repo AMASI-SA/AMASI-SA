@@ -40,6 +40,7 @@ from auth import get_current_user_from_db
 
 
 SALARY_CATEGORIES = {"employee", "household", "charity"}
+SALARY_COUNTRIES = {"saudi", "yemen", "other"}
 RENTAL_PROPERTY_TYPES = {"office", "warehouse", "shop", "employee_housing", "other"}
 
 
@@ -47,6 +48,7 @@ RENTAL_PROPERTY_TYPES = {"office", "warehouse", "shop", "employee_housing", "oth
 class SalaryIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     category: str  # employee | household | charity
+    country: str = "saudi"  # saudi | yemen | other
     monthly_amount: float = Field(gt=0)
     start_date: str = Field(min_length=10, max_length=10)  # YYYY-MM-DD
     status: str = "active"  # active | stopped
@@ -56,6 +58,7 @@ class SalaryIn(BaseModel):
 class SalaryUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
+    country: Optional[str] = None
     monthly_amount: Optional[float] = None
     start_date: Optional[str] = None
     status: Optional[str] = None
@@ -284,6 +287,8 @@ def _build_router(db) -> APIRouter:
     async def create_salary(payload: SalaryIn, user: dict = Depends(current_user)):
         if payload.category not in SALARY_CATEGORIES:
             raise HTTPException(status_code=400, detail="نوع الراتب غير صحيح")
+        if payload.country not in SALARY_COUNTRIES:
+            raise HTTPException(status_code=400, detail="الدولة غير صحيحة")
         if _parse_iso(payload.start_date) is None:
             raise HTTPException(status_code=400, detail="صيغة تاريخ البداية يجب أن تكون YYYY-MM-DD")
         if payload.status not in {"active", "stopped"}:
@@ -293,6 +298,7 @@ def _build_router(db) -> APIRouter:
             "user_id": user["id"],
             "name": payload.name.strip(),
             "category": payload.category,
+            "country": payload.country,
             "monthly_amount": round(float(payload.monthly_amount), 2),
             "start_date": payload.start_date,
             "status": payload.status,
@@ -320,6 +326,10 @@ def _build_router(db) -> APIRouter:
             if payload.category not in SALARY_CATEGORIES:
                 raise HTTPException(status_code=400, detail="نوع الراتب غير صحيح")
             update["category"] = payload.category
+        if payload.country is not None:
+            if payload.country not in SALARY_COUNTRIES:
+                raise HTTPException(status_code=400, detail="الدولة غير صحيحة")
+            update["country"] = payload.country
         if payload.monthly_amount is not None:
             if payload.monthly_amount <= 0:
                 raise HTTPException(status_code=400, detail="المبلغ يجب أن يكون أكبر من صفر")
@@ -543,16 +553,23 @@ def _build_router(db) -> APIRouter:
             {"user_id": uid, "status": "active"}, {"_id": 0}
         ).to_list(5000)
         emp = house = char = 0.0
+        country_breakdown: dict = {}
         for s in salaries:
             amt = float(s.get("monthly_amount") or 0)
             cat = (s.get("category") or "").strip()
+            country = (s.get("country") or "saudi").strip() or "saudi"
             if cat == "employee":
                 emp += amt
             elif cat == "household":
                 house += amt
             elif cat == "charity":
                 char += amt
+            cb = country_breakdown.setdefault(country, {"monthly_total": 0.0, "count": 0})
+            cb["monthly_total"] += amt
+            cb["count"] += 1
         salaries_total_monthly = emp + house + char
+        for v in country_breakdown.values():
+            v["monthly_total"] = round(v["monthly_total"], 2)
 
         rentals = await db.operating_rentals.find(
             {"user_id": uid, "status": "active"}, {"_id": 0}
@@ -571,6 +588,7 @@ def _build_router(db) -> APIRouter:
                 "charity_monthly": round(char, 2),
                 "total_monthly": round(salaries_total_monthly, 2),
                 "active_count": len(salaries),
+                "by_country": country_breakdown,
             },
             "rentals": {
                 "annual_total": round(annual_total, 2),

@@ -14,6 +14,12 @@ const SALARY_CATEGORIES = [
     { value: "charity",    label: "الصدقات والمساهمات",  icon: HandHeart, hint: "صدقات دورية، تبرعات، كفالات، مساهمات خيرية" },
 ];
 
+const SALARY_COUNTRIES = [
+    { value: "saudi", label: "السعودية", flag: "🇸🇦" },
+    { value: "yemen", label: "اليمن",     flag: "🇾🇪" },
+    { value: "other", label: "أخرى",     flag: "🌍" },
+];
+
 const RENTAL_TYPES = [
     { value: "office",            label: "مكتب" },
     { value: "warehouse",         label: "مستودع" },
@@ -23,6 +29,7 @@ const RENTAL_TYPES = [
 ];
 
 const SALARY_CATEGORY_LABEL = Object.fromEntries(SALARY_CATEGORIES.map((c) => [c.value, c.label]));
+const SALARY_COUNTRY        = Object.fromEntries(SALARY_COUNTRIES.map((c) => [c.value, c]));
 const RENTAL_TYPE_LABEL     = Object.fromEntries(RENTAL_TYPES.map((c) => [c.value, c.label]));
 
 const TAB_BUTTONS = [
@@ -180,12 +187,18 @@ function SummaryCards({ summary }) {
     const today = summary.today || {};
     const salaries = summary.salaries || {};
     const rentals = summary.rentals || {};
+    const byCountry = salaries.by_country || {};
+    const saMonthly = byCountry.saudi?.monthly_total || 0;
+    const yeMonthly = byCountry.yemen?.monthly_total || 0;
 
     const cards = [
-        // Salaries
+        // Salaries by category
         { id: "sal-emp",   group: "الرواتب",     label: "رواتب الموظفين (شهري)",         icon: Users,     value: salaries.employee_monthly,  testid: "oe-card-sal-employee" },
         { id: "sal-home",  group: "الرواتب",     label: "مصروف البيت (شهري)",            icon: House,     value: salaries.household_monthly, testid: "oe-card-sal-household" },
         { id: "sal-char",  group: "الرواتب",     label: "الصدقات (شهري)",                icon: HandHeart, value: salaries.charity_monthly,   testid: "oe-card-sal-charity" },
+        // Salaries by country
+        { id: "sal-sa",    group: "حسب الدولة",  label: "رواتب السعودية 🇸🇦 (شهري)",   icon: Users,     value: saMonthly, testid: "oe-card-sal-saudi" },
+        { id: "sal-ye",    group: "حسب الدولة",  label: "رواتب اليمن 🇾🇪 (شهري)",       icon: Users,     value: yeMonthly, testid: "oe-card-sal-yemen" },
         // Rentals
         { id: "rent-ann",  group: "الإيجارات",   label: "إجمالي الإيجارات (سنوي)",       icon: Buildings, value: rentals.annual_total,       testid: "oe-card-rent-annual" },
         { id: "rent-day",  group: "الإيجارات",   label: "إيجارات اليوم",                 icon: Bank,      value: rentals.daily_total,        testid: "oe-card-rent-daily" },
@@ -236,6 +249,7 @@ function SalariesPanel({ items, onAdd, onEdit, onDelete }) {
                         <tr>
                             <Th>الاسم</Th>
                             <Th>نوع الراتب</Th>
+                            <Th>الدولة</Th>
                             <Th>المبلغ الشهري</Th>
                             <Th>التكلفة اليومية (تقريبية)</Th>
                             <Th>تاريخ البداية</Th>
@@ -247,10 +261,17 @@ function SalariesPanel({ items, onAdd, onEdit, onDelete }) {
                     <tbody>
                         {items.map((r) => {
                             const daily = r.status === "active" ? (Number(r.monthly_amount) / 30) : 0;
+                            const country = SALARY_COUNTRY[r.country || "saudi"] || SALARY_COUNTRY.saudi;
                             return (
                                 <tr key={r.id} className="hover:bg-accent/30 transition-colors" data-testid={`oe-salary-row-${r.id}`}>
                                     <Td className="font-semibold">{r.name}</Td>
                                     <Td>{SALARY_CATEGORY_LABEL[r.category] || r.category}</Td>
+                                    <Td>
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span aria-hidden="true">{country.flag}</span>
+                                            <span>{country.label}</span>
+                                        </span>
+                                    </Td>
                                     <Td className="num">{formatMoney(r.monthly_amount)}</Td>
                                     <Td className="num text-muted-foreground">{formatMoney(daily)}</Td>
                                     <Td>{r.start_date}</Td>
@@ -425,6 +446,7 @@ function Modal({ state, onClose, onSaved }) {
             return {
                 name: row.name || "",
                 category: row.category || "employee",
+                country: row.country || "saudi",
                 monthly_amount: row.monthly_amount ?? "",
                 start_date: row.start_date || todayISO(),
                 status: row.status || "active",
@@ -542,6 +564,13 @@ function SalaryFormFields({ form, setForm }) {
                 <div className="text-xs text-muted-foreground mt-1">
                     {SALARY_CATEGORIES.find((c) => c.value === form.category)?.hint}
                 </div>
+            </Field>
+            <Field label="الدولة">
+                <select required value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className="oe-input" data-testid="oe-salary-country">
+                    {SALARY_COUNTRIES.map((c) => (
+                        <option key={c.value} value={c.value}>{c.flag} {c.label}</option>
+                    ))}
+                </select>
             </Field>
             <Field label="المبلغ الشهري (ر.س)">
                 <input type="number" required min="0" step="0.01" value={form.monthly_amount} onChange={(e) => setForm({ ...form, monthly_amount: e.target.value })} className="oe-input num" data-testid="oe-salary-amount" />

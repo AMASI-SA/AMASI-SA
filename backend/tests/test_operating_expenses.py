@@ -122,6 +122,90 @@ def test_salary_invalid_category_rejected(clean_user_token):
     assert r.status_code == 400
 
 
+def test_salary_country_field_persists_and_breakdown(clean_user_token):
+    """Country field (saudi/yemen/other) is stored on creation, can be edited,
+    and appears in the summary `by_country` aggregation."""
+    tok = clean_user_token
+
+    # Create one Saudi + one Yemen salary
+    r1 = requests.post(
+        f"{API}/operating-expenses/salaries", headers=_hdr(tok),
+        json={"name": "محمد", "category": "employee", "country": "saudi",
+              "monthly_amount": 3000, "start_date": "2026-01-01"},
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["country"] == "saudi"
+
+    r2 = requests.post(
+        f"{API}/operating-expenses/salaries", headers=_hdr(tok),
+        json={"name": "علي", "category": "employee", "country": "yemen",
+              "monthly_amount": 800, "start_date": "2026-01-01"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["country"] == "yemen"
+
+    # Default country (omitted) -> 'saudi'
+    r3 = requests.post(
+        f"{API}/operating-expenses/salaries", headers=_hdr(tok),
+        json={"name": "افتراضي", "category": "household", "monthly_amount": 500,
+              "start_date": "2026-01-01"},
+    )
+    assert r3.status_code == 200
+    assert r3.json()["country"] == "saudi"
+
+    # Invalid country rejected
+    bad = requests.post(
+        f"{API}/operating-expenses/salaries", headers=_hdr(tok),
+        json={"name": "x", "category": "employee", "country": "iran",
+              "monthly_amount": 100, "start_date": "2026-01-01"},
+    )
+    assert bad.status_code == 400
+
+    # Summary by_country aggregates correctly
+    s = requests.get(
+        f"{API}/operating-expenses/summary", headers=_hdr(tok)
+    ).json()
+    by_country = s["salaries"]["by_country"]
+    assert by_country["saudi"]["monthly_total"] == 3500  # 3000 + 500
+    assert by_country["saudi"]["count"] == 2
+    assert by_country["yemen"]["monthly_total"] == 800
+    assert by_country["yemen"]["count"] == 1
+
+
+def test_salary_edit_full_record_persists(clean_user_token):
+    """All editable salary fields (name/category/country/amount/start/status/notes)
+    persist correctly via PUT."""
+    tok = clean_user_token
+    created = requests.post(
+        f"{API}/operating-expenses/salaries", headers=_hdr(tok),
+        json={"name": "old", "category": "employee", "country": "saudi",
+              "monthly_amount": 1000, "start_date": "2026-01-01",
+              "status": "active", "notes": "old note"},
+    ).json()
+
+    r = requests.put(
+        f"{API}/operating-expenses/salaries/{created['id']}", headers=_hdr(tok),
+        json={
+            "name": "new",
+            "category": "household",
+            "country": "yemen",
+            "monthly_amount": 2500,
+            "start_date": "2026-02-15",
+            "status": "stopped",
+            "notes": "new note",
+        },
+    )
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["name"] == "new"
+    assert out["category"] == "household"
+    assert out["country"] == "yemen"
+    assert out["monthly_amount"] == 2500
+    assert out["start_date"] == "2026-02-15"
+    assert out["status"] == "stopped"
+    assert out["notes"] == "new note"
+
+
 # ── 2. Rentals CRUD ───────────────────────────────────────────────────────
 def test_rental_create_and_validation(clean_user_token):
     tok = clean_user_token
