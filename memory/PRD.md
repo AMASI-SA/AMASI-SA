@@ -20,7 +20,17 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Unified Ads Refresh: TikTok always-visible + Refresh-All button + Meta-spend in totals)
+## Implemented (2026-05 — Bug fix: Snapchat "Unsupported Stats Query" error)
+- 🐛 **Issue**: `POST /api/snapchat/daily-spend/bulk` returned raw JSON error `{"request_status":"ERROR","debug_message":"Unsupported Stats Query"…}` to the merchant on every refresh attempt.
+- 🔍 **Root cause**: We were requesting `spend + conversion_purchases + conversion_purchases_value` in a single `/adaccounts/{id}/stats` call. Snapchat Marketing API rejects this combo because conversion metrics (a) require explicit `swipe_up_attribution_window` + `view_attribution_window` parameters, AND (b) are sometimes unavailable at ad-account level depending on the Pixel setup. Result: the entire request fails (including spend), so even the `spend` value never reached `daily_costs`.
+- ✅ **Fix in `snapchat_routes.py`**:
+  - **Two-phase request strategy**: Phase 1 fetches `fields=spend` only (always supported on `/adaccounts/{id}/stats`). Phase 2 attempts to fetch `conversion_purchases + conversion_purchases_value` with the required attribution windows (`swipe_up=28_DAY`, `view=1_DAY`). If Phase 2 fails (Pixel inactive, account-level metrics blocked, etc), we silently log and continue with `purchases=0` and `revenue=0` — spend still saves correctly.
+  - **Error parsing**: when Phase 1 fails, we now extract Snapchat's `debug_message` field from the JSON response instead of returning the whole body verbatim (no JSON leak).
+- ✅ **Fix in `Dashboard.jsx`**:
+  - Toast now translates well-known Snapchat error patterns into Arabic: `Unsupported Stats Query`, `invalid_token / 401`, `permission / 403`, `granularity / start time` — each gets a tailored Arabic message with a remediation hint. Generic errors get a truncated friendly wrapper. No raw JSON / `request_id` strings leak to the user.
+- ✅ **Tested**: 28/28 backend regression pass (`test_unified_ads_report.py` + `test_operating_expenses.py` + `test_meta_friendly_errors.py`). Snapchat-specific tests passing.
+
+
 - 🐛 **Issue 1 — Snapchat refresh = 0**: Investigation revealed the refresh path was correct (Riyadh date), but the UI gave no diagnostic when Snapchat API legitimately returned `spend=0` (TZ mismatch on ad account, no active campaigns, etc). Fix: backend response now includes `ad_account_timezone`; frontend distinguishes 3 outcomes — success with spend, fetched-but-zero (info toast with TZ hint), and hard error (friendly Arabic).
 - ✅ **TikTok card always visible** — removed `if (totals.tiktok_spend > 0 || ...)` gating. Now mirrors Snap/Meta layout exactly: Today (spend/orders/revenue/ROAS) + Month (same 4) + 30-day sparkline + "آخر تحديث" + footer link to `/reports/ads`.
 - ✅ **`tiktok-refresh-btn`** — calls new `GET /api/dashboard/tiktok-summary` and re-renders the card (TikTok Marketing API direct integration deferred to a future iteration; for now it re-aggregates the existing Make.com webhook data).

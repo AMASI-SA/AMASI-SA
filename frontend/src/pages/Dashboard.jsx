@@ -484,8 +484,25 @@ export default function Dashboard() {
                                             // (TZ mismatch / no active campaigns) from "fetched and saved".
                                             const totalSpend = (data.items || []).reduce((s, i) => s + (i.spend || 0), 0);
                                             if ((data.errors || []).length > 0) {
-                                                const firstErr = String(data.errors[0]?.error || "").slice(0, 120);
-                                                toast.error(`Snapchat رفض الطلب: ${firstErr}`, { id: "snap-fetch", duration: 9000 });
+                                                const errRaw = String(data.errors[0]?.error || "").trim();
+                                                // Translate well-known Snapchat error patterns into Arabic
+                                                // so the merchant never sees raw JSON / debug_message.
+                                                let friendly;
+                                                const lower = errRaw.toLowerCase();
+                                                if (lower.includes("unsupported stats query")) {
+                                                    friendly = "هذا الاستعلام غير مدعوم على مستوى حساب الإعلانات (قد يكون السبب: Pixel غير مفعّل أو نوع المقياس غير متاح). الصرف قد يكون تم حفظه — أعد التحميل.";
+                                                } else if (lower.includes("invalid_token") || lower.includes("authorization") || lower.includes("401")) {
+                                                    friendly = "انتهت صلاحية ربط Snapchat — أعد الربط من الإعدادات.";
+                                                } else if (lower.includes("permission") || lower.includes("403")) {
+                                                    friendly = "التوكن لا يملك صلاحيات قراءة الحساب الإعلاني المختار.";
+                                                } else if (lower.includes("granularity") || lower.includes("start time")) {
+                                                    friendly = "خطأ في حدود التاريخ — أعد المحاولة بعد دقيقة، أو راجع timezone حساب الإعلانات.";
+                                                } else if (errRaw.length > 120) {
+                                                    friendly = `تعذّر جلب الصرف من Snapchat (راجع الإعدادات أو حاول لاحقاً): ${errRaw.slice(0, 100)}…`;
+                                                } else {
+                                                    friendly = `تعذّر جلب الصرف من Snapchat: ${errRaw}`;
+                                                }
+                                                toast.error(friendly, { id: "snap-fetch", duration: 10000 });
                                             } else if (data.saved > 0 && totalSpend === 0) {
                                                 toast(`تم الجلب لكن صرف اليوم = 0 — تحقق من TZ حساب الإعلانات (${data.ad_account_timezone || "?"}) أو من وجود حملات نشطة`,
                                                     { id: "snap-fetch", duration: 9000, icon: "ℹ️" });

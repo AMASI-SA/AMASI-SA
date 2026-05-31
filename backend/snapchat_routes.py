@@ -609,26 +609,37 @@ def _build_router(db) -> APIRouter:
             for d in dates:
                 start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=tzinfo)
                 end_local = start_local + timedelta(days=1)
-                params = {
+                base_headers = {"Authorization": f"Bearer {access_token}",
+                                "Accept": "application/json"}
+                stats_url = f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}/stats"
+
+                # ── 1. SPEND ────────────────────────────────────────────────
+                # The ad-account stats endpoint reliably supports `spend` alone.
+                # Conversion metrics (purchases/value) require attribution
+                # windows AND are sometimes not exposed at ad_account level
+                # depending on the account's Pixel setup — so we split into
+                # two requests and let conversions fail silently when not
+                # available.
+                spend_params = {
                     "start_time": start_local.isoformat(timespec="seconds"),
                     "end_time": end_local.isoformat(timespec="seconds"),
                     "granularity": "DAY",
-                    # Pull spend + Pixel-attributed conversions/revenue. Snapchat
-                    # exposes these only when the ad-account has a working Snap
-                    # Pixel reporting conversion events.
-                    "fields": "spend,conversion_purchases,conversion_purchases_value",
+                    "fields": "spend",
                 }
                 try:
-                    resp = await http.get(
-                        f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}/stats",
-                        headers={"Authorization": f"Bearer {access_token}",
-                                 "Accept": "application/json"},
-                        params=params,
-                    )
+                    resp = await http.get(stats_url, headers=base_headers, params=spend_params)
                     resp.raise_for_status()
                 except httpx.HTTPStatusError as exc:
+                    # Parse Snapchat's friendly debug_message if present.
+                    body = exc.response.text or ""
+                    try:
+                        import json as _json
+                        j = _json.loads(body)
+                        snap_msg = j.get("debug_message") or j.get("request_status") or body
+                    except Exception:
+                        snap_msg = body
                     errors.append({"date": d.isoformat(),
-                                   "error": exc.response.text[:200]})
+                                   "error": str(snap_msg)[:240]})
                     continue
                 except httpx.HTTPError as exc:
                     errors.append({"date": d.isoformat(), "error": str(exc)[:200]})
@@ -636,8 +647,6 @@ def _build_router(db) -> APIRouter:
 
                 data = resp.json()
                 total_micro = 0
-                total_purchases = 0
-                total_purchases_value_micro = 0
                 for ts in data.get("timeseries_stats", []) or []:
                     stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
                     for point in stat.get("timeseries", []) or []:
@@ -646,14 +655,47 @@ def _build_router(db) -> APIRouter:
                             total_micro += int(s.get("spend", 0) or 0)
                         except (TypeError, ValueError):
                             pass
-                        try:
-                            total_purchases += int(s.get("conversion_purchases", 0) or 0)
-                        except (TypeError, ValueError):
-                            pass
-                        try:
-                            total_purchases_value_micro += int(s.get("conversion_purchases_value", 0) or 0)
-                        except (TypeError, ValueError):
-                            pass
+
+                # ── 2. CONVERSIONS (best-effort) ────────────────────────────
+                # These require attribution windows; if Snapchat rejects the
+                # query (Unsupported Stats Query for accounts without active
+                # Pixel events), we silently fall back to purchases=0 and let
+                # the dashboard read store-side orders instead.
+                total_purchases = 0
+                total_purchases_value_micro = 0
+                conv_params = {
+                    "start_time": start_local.isoformat(timespec="seconds"),
+                    "end_time": end_local.isoformat(timespec="seconds"),
+                    "granularity": "DAY",
+                    "fields": "conversion_purchases,conversion_purchases_value",
+                    "swipe_up_attribution_window": "28_DAY",
+                    "view_attribution_window": "1_DAY",
+                }
+                try:
+                    conv_resp = await http.get(stats_url, headers=base_headers, params=conv_params)
+                    if conv_resp.status_code < 400:
+                        cdata = conv_resp.json()
+                        for ts in cdata.get("timeseries_stats", []) or []:
+                            stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
+                            for point in stat.get("timeseries", []) or []:
+                                s = point.get("stats") or {}
+                                try:
+                                    total_purchases += int(s.get("conversion_purchases", 0) or 0)
+                                except (TypeError, ValueError):
+                                    pass
+                                try:
+                                    total_purchases_value_micro += int(s.get("conversion_purchases_value", 0) or 0)
+                                except (TypeError, ValueError):
+                                    pass
+                    else:
+                        # Conversions not available → log once at debug level
+                        # and move on. Spend (the must-have) is already saved.
+                        logger.info("Snap conversions skipped for %s: HTTP %s",
+                                    d.isoformat(), conv_resp.status_code)
+                except httpx.HTTPError as exc:
+                    logger.info("Snap conversions skipped for %s: %s",
+                                d.isoformat(), exc)
+
                 spend_native = round(total_micro / 1_000_000, 2)
                 revenue_native = round(total_purchases_value_micro / 1_000_000, 2)
                 spend, fx_rate = _to_sar(spend_native, ad_currency)
