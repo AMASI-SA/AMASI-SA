@@ -57,17 +57,17 @@ export default function AdsReport() {
                             <ArrowLeft size={14} className="inline" /> العودة للتقارير
                         </Link>
                     </div>
-                    <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>
+                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>
                         تقرير الإعلانات الموحَّد
                     </h1>
-                    <p className="text-muted-foreground mt-2 text-base">
+                    <p className="text-muted-foreground mt-2 text-sm sm:text-base">
                         مقارنة أداء Snapchat و TikTok و Meta عبر فترة زمنية واحدة — الصرف، ROAS، CPC، CPM، CTR، الطلبات والعائد.
                     </p>
                 </div>
                 <button
                     type="button"
                     onClick={fetch}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand text-white font-bold rounded-lg bg-brand-hover transition-colors disabled:opacity-60"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-brand text-white font-bold rounded-lg bg-brand-hover transition-colors disabled:opacity-60 w-full md:w-auto"
                     disabled={loading}
                     data-testid="ads-report-refresh-btn"
                 >

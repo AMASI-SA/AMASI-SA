@@ -168,8 +168,8 @@ export default function Reports() {
         <div className="space-y-8 animate-fade-in-up" data-testid="reports-page">
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div>
-                    <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>التقارير</h1>
-                    <p className="text-muted-foreground mt-2 text-base">
+                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>التقارير</h1>
+                    <p className="text-muted-foreground mt-2 text-sm sm:text-base">
                         {(fromDate || toDate)
                             ? `عرض البيانات من ${fromDate || "البداية"} إلى ${toDate || "الآن"}`
                             : "تقارير مجمَّعة عبر جميع التحاليل المحفوظة لديك."}
@@ -437,10 +437,11 @@ export default function Reports() {
 
                     {/* Aggregate tables */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="rounded-xl border border-border bg-white p-6">
+                        <div className="rounded-xl border border-border bg-white p-4 sm:p-6">
                             <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>إجمالي طرق الدفع</h3>
+                            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
                             <table
-                                className="w-full text-right text-sm border-collapse
+                                className="w-full text-right text-sm border-collapse min-w-[480px]
                                     [&_th]:px-3 [&_th]:border-s [&_th]:border-border
                                     [&_td]:px-3 [&_td]:border-s [&_td]:border-border
                                     [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
@@ -465,12 +466,14 @@ export default function Reports() {
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         </div>
 
-                        <div className="rounded-xl border border-border bg-white p-6">
+                        <div className="rounded-xl border border-border bg-white p-4 sm:p-6">
                             <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>إجمالي شركات الشحن</h3>
+                            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
                             <table
-                                className="w-full text-right text-sm border-collapse
+                                className="w-full text-right text-sm border-collapse min-w-[400px]
                                     [&_th]:px-3 [&_th]:border-s [&_th]:border-border
                                     [&_td]:px-3 [&_td]:border-s [&_td]:border-border
                                     [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
@@ -493,6 +496,7 @@ export default function Reports() {
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     </div>
                 </>

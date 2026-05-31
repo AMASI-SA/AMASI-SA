@@ -1,0 +1,31 @@
+{
+  "summary": "Mobile responsiveness overhaul verified end-to-end at both 390x844 (iPhone-12) and 1280x800 (desktop) viewports + backend regression on the 3 listed pytest files. ALL 11 acceptance criteria PASS. Mobile @390x844: Login page fits without horizontal scroll, email input rendered, login succeeds. Authenticated pages render mobile-header with logo + data-testid='mobile-menu-btn' (hamburger). Sidebar carries translate-x-full when closed and no sidebar-backdrop in DOM; clicking mobile-menu-btn flips it to translate-x-0, sidebar-backdrop appears, document.body.style.overflow becomes 'hidden' (scroll lock confirmed). Clicking sidebar-backdrop AND sidebar-close-btn both close the drawer. Clicking nav-reports inside the drawer navigates AND auto-closes (translate-x-full restored on /reports). NO horizontal page scroll detected on /(Dashboard), /reports/ads, /operating-expenses, /reports, /settings (all body.scrollWidth==390==window.innerWidth). /reports/ads refresh-btn has w-full class on mobile. /operating-expenses oe-tabs has overflow-x-auto. /settings save-settings-btn has w-full on mobile. Desktop @1280x800: mobile-header and mobile-menu-btn both not visible (display:none lg:hidden); sidebar visible with lg:translate-x-0 class; no horizontal scroll on any of the 4 tested pages. Backend regression: test_unified_ads_report.py (5/5) + test_operating_expenses.py (16/16) + test_no_date_fallback.py (5/5) = 26/26 PASS in ~20s.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/iteration_11_regression.xml",
+    "/app/backend/tests/test_unified_ads_report.py",
+    "/app/backend/tests/test_operating_expenses.py",
+    "/app/backend/tests/test_no_date_fallback.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Layout.jsx is clean and idiomatic: useEffect on location.pathname auto-closes drawer on route changes (verified), and a second useEffect locks document.body.style.overflow='hidden' while drawer is open with proper cleanup in return() to restore on unmount.",
+    "Sidebar.jsx slide animation uses transition-transform with translate-x-full <-> translate-x-0, lg:translate-x-0 always wins on desktop (verified at 1280px). z-50 for sidebar and z-40 for backdrop is correct stacking order.",
+    "Settings.jsx payment-methods-list/shipping-companies-list have an overflow-x-auto wrapper at the immediate parent of the inner grid, not at the testid element itself — but body.scrollWidth==window.innerWidth on /settings@390 confirms the layout does NOT overflow the page, which is the user-facing acceptance criterion. No action needed.",
+    "Dashboard.jsx is 785 lines (carried over from iteration 10) — at the upper end of the recommended size. Future refactor opportunity to extract <SnapchatAdsCard/> and <MetaAdsCard/> but NOT blocking for this responsiveness work.",
+    "Pytest file test_no_date_fallback.py uses os.environ.get('REACT_APP_BACKEND_URL','') and raises MissingSchema if the env var isn't exported to the shell — passes cleanly when REACT_APP_BACKEND_URL is exported (which is how CI/test agents should run it). Consider sourcing /app/frontend/.env or using conftest.py to inject it for parity with other test files. Not a regression caused by this iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (26/26 pytest regression)", "frontend": "100% (all 11 mobile/desktop acceptance criteria verified)"},
+  "test_credentials": "admin@hesab.app / admin123 — works.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Mobile responsiveness contract is locked. CRITICAL testids on any authenticated page <1024px: mobile-header (visible), mobile-menu-btn (hamburger inside header), sidebar (always present but translate-x-full when closed, translate-x-0 when open), sidebar-backdrop (only in DOM when mobileOpen=true), sidebar-close-btn (X inside drawer). On desktop >=1024px: mobile-header and mobile-menu-btn are display:none, sidebar always visible via lg:translate-x-0. Drawer must auto-close on every route change (useLocation pathname effect) and body scroll must lock while open. The user-facing assertion to use for any future regression: body.scrollWidth <= window.innerWidth on /(Dashboard), /reports/ads, /operating-expenses, /reports, /settings at 390x844. To run backend regression: export REACT_APP_BACKEND_URL=https://salla-analytics.preview.emergentagent.com && pytest backend/tests/test_unified_ads_report.py backend/tests/test_operating_expenses.py backend/tests/test_no_date_fallback.py — expect 26/26 PASS.",
+  "rca of the issue": "N/A — no bugs found. All mobile responsive changes work as designed."
+}

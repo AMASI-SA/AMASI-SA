@@ -346,17 +346,17 @@ export default function Dashboard() {
                         are empty (e.g. before the first Snapchat fetch). */}
                     {snapSummary && (
                         <div
-                            className="rounded-xl border-2 border-yellow-300 p-6"
+                            className="rounded-xl border-2 border-yellow-300 p-4 sm:p-6"
                             style={{ background: "linear-gradient(135deg,#FFFCEA 0%,#fff 60%,#FFFAE0 100%)" }}
                             data-testid="snapchat-ads-section"
                         >
-                            <div className="flex items-center justify-between gap-3 mb-5">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-11 h-11 rounded-xl bg-yellow-400 text-black flex items-center justify-center font-extrabold text-lg" style={{ fontFamily: "Tajawal" }}>
+                                    <div className="w-11 h-11 rounded-xl bg-yellow-400 text-black flex items-center justify-center font-extrabold text-lg flex-shrink-0" style={{ fontFamily: "Tajawal" }}>
                                         👻
                                     </div>
-                                    <div>
-                                        <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Snapchat Ads</h2>
+                                    <div className="min-w-0">
+                                        <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Snapchat Ads</h2>
                                         <p className="text-xs text-muted-foreground">
                                             {snapSummary.source === "snapchat_pixel"
                                                 ? "الطلبات والعائد من Snapchat Pixel — تحديث تلقائي مع زر التحديث"
@@ -387,7 +387,7 @@ export default function Dashboard() {
                                             toast.error(msg, { id: "snap-fetch" });
                                         }
                                     }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-black rounded-lg font-bold text-sm transition-colors"
+                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-black rounded-lg font-bold text-sm transition-colors w-full sm:w-auto"
                                     style={{ fontFamily: "Tajawal" }}
                                     data-testid="snap-refresh-today-btn"
                                 >
@@ -493,16 +493,16 @@ export default function Dashboard() {
                     {/* TikTok Ads dedicated section (pushed via Make.com webhook) */}
                     {(totals.tiktok_spend > 0 || totals.tiktok_revenue > 0 || totals.tiktok_purchases > 0) && (
                         <div
-                            className="rounded-xl border-2 border-pink-200 p-6"
+                            className="rounded-xl border-2 border-pink-200 p-4 sm:p-6"
                             style={{ background: "linear-gradient(135deg,#fff7fb 0%,#fff 50%,#f0fcff 100%)" }}
                             data-testid="tiktok-ads-section"
                         >
                             <div className="flex items-center gap-3 mb-5">
-                                <div className="w-11 h-11 rounded-xl bg-black text-white flex items-center justify-center font-extrabold text-lg" style={{ fontFamily: "Tajawal" }}>
+                                <div className="w-11 h-11 rounded-xl bg-black text-white flex items-center justify-center font-extrabold text-lg flex-shrink-0" style={{ fontFamily: "Tajawal" }}>
                                     TT
                                 </div>
-                                <div>
-                                    <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>TikTok Ads</h2>
+                                <div className="min-w-0">
+                                    <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>TikTok Ads</h2>
                                     <p className="text-xs text-muted-foreground">
                                         البيانات تأتي من Make.com — تحديث تلقائي كل دقيقة
                                     </p>
@@ -534,17 +534,17 @@ export default function Dashboard() {
                     {/* Meta Ads (Facebook + Instagram) dedicated section — Direct Marketing API integration */}
                     {metaSummary && (
                         <div
-                            className="rounded-xl border-2 border-blue-300 p-6"
+                            className="rounded-xl border-2 border-blue-300 p-4 sm:p-6"
                             style={{ background: "linear-gradient(135deg,#EFF6FF 0%,#fff 60%,#F3E8FF 100%)" }}
                             data-testid="meta-ads-section"
                         >
-                            <div className="flex items-center justify-between gap-3 mb-5">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center font-extrabold text-lg" style={{ fontFamily: "Tajawal" }}>
+                                    <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center font-extrabold text-lg flex-shrink-0" style={{ fontFamily: "Tajawal" }}>
                                         f
                                     </div>
-                                    <div>
-                                        <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Meta Ads (Facebook + Instagram)</h2>
+                                    <div className="min-w-0">
+                                        <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Meta Ads (Facebook + Instagram)</h2>
                                         <p className="text-xs text-muted-foreground">
                                             ربط مباشر مع Meta Marketing API — اضغط الزر للتحديث الفوري لصرف اليوم
                                             {metaSummary.last_sync_at && (
@@ -570,7 +570,7 @@ export default function Dashboard() {
                                             toast.error(msg, { id: "meta-sync" });
                                         }
                                     }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors"
+                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors w-full sm:w-auto"
                                     style={{ fontFamily: "Tajawal" }}
                                     data-testid="meta-sync-now-btn"
                                 >
@@ -686,10 +686,10 @@ export default function Dashboard() {
                     )}
 
                     {/* Monthly chart */}
-                    <div className="rounded-xl border border-border bg-white p-6">
+                    <div className="rounded-xl border border-border bg-white p-4 sm:p-6">
                         <div className="flex items-center justify-between mb-6">
                             <div>
-                                <h2 className="text-2xl font-bold text-foreground" style={{ fontFamily: "Tajawal" }}>الأداء الشهري</h2>
+                                <h2 className="text-xl sm:text-2xl font-bold text-foreground" style={{ fontFamily: "Tajawal" }}>الأداء الشهري</h2>
                                 <p className="text-sm text-muted-foreground mt-1">المبيعات والأرباح الصافية عبر الأشهر</p>
                             </div>
                         </div>
@@ -715,9 +715,9 @@ export default function Dashboard() {
                     </div>
 
                     {/* Recent analyses */}
-                    <div className="rounded-xl border border-border bg-white p-6">
+                    <div className="rounded-xl border border-border bg-white p-4 sm:p-6">
                         <div className="flex items-center justify-between mb-2">
-                            <h2 className="text-2xl font-bold text-foreground" style={{ fontFamily: "Tajawal" }}>آخر التحاليل</h2>
+                            <h2 className="text-xl sm:text-2xl font-bold text-foreground" style={{ fontFamily: "Tajawal" }}>آخر التحاليل</h2>
                             <Link to="/history" className="text-brand text-sm font-semibold hover:underline inline-flex items-center gap-1" data-testid="see-all-history">
                                 عرض الكل <CaretLeft size={16} />
                             </Link>
@@ -728,8 +728,8 @@ export default function Dashboard() {
                         {recent.length === 0 ? (
                             <div className="text-center py-10 text-muted-foreground">لم تقم بإجراء أي تحليل بعد.</div>
                         ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-right" data-testid="recent-analyses-table">
+                            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                                <table className="w-full text-right min-w-[640px]" data-testid="recent-analyses-table">
                                     <thead>
                                         <tr className="text-sm text-muted-foreground border-b border-border">
                                             <th className="pb-3 font-semibold">الاسم</th>

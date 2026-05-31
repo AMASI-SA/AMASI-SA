@@ -333,15 +333,15 @@ export default function Settings() {
         <div className="space-y-8 animate-fade-in-up" data-testid="settings-page">
             <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
                 <div>
-                    <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>الإعدادات</h1>
-                    <p className="text-muted-foreground mt-2 text-base">
+                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>الإعدادات</h1>
+                    <p className="text-muted-foreground mt-2 text-sm sm:text-base">
                         اضبط نسب عمولات بوابات الدفع وتكاليف شركات الشحن. ستُستخدم تلقائياً في حساب الأرباح.
                     </p>
                 </div>
                 <button
                     onClick={save}
                     disabled={saving}
-                    className="inline-flex items-center gap-2 px-5 py-3 bg-brand text-white font-bold rounded-lg bg-brand-hover transition-colors disabled:opacity-60"
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-brand text-white font-bold rounded-lg bg-brand-hover transition-colors disabled:opacity-60 w-full md:w-auto"
                     data-testid="save-settings-btn"
                 >
                     <FloppyDisk size={20} weight="bold" />
@@ -364,9 +364,9 @@ export default function Settings() {
                         <Plus size={16} weight="bold" /> إضافة
                     </button>
                 </div>
-                <div className="space-y-3" data-testid="payment-methods-list">
+                <div className="space-y-3 overflow-x-auto -mx-6 sm:mx-0 px-6 sm:px-0" data-testid="payment-methods-list">
                     {/* Header row */}
-                    <div className="grid grid-cols-12 gap-3 text-xs font-semibold text-muted-foreground px-1 hidden md:grid">
+                    <div className="grid grid-cols-12 gap-3 text-xs font-semibold text-muted-foreground px-1 hidden md:grid min-w-[640px]">
                         <div className="col-span-4">اسم بوابة الدفع</div>
                         <div className="col-span-2 text-center">النسبة %</div>
                         <div className="col-span-2 text-center">مبلغ ثابت (ر.س)</div>
@@ -374,7 +374,7 @@ export default function Settings() {
                         <div className="col-span-1"></div>
                     </div>
                     {payments.map((p, i) => (
-                        <div key={p._rid || `p-${i}`} className="grid grid-cols-12 gap-3 items-center">
+                        <div key={p._rid || `p-${i}`} className="grid grid-cols-12 gap-3 items-center min-w-[640px]">
                             <input
                                 type="text"
                                 value={p.name}
@@ -516,9 +516,9 @@ export default function Settings() {
                         )}
                     </div>
                 )}
-                <div className="space-y-3" data-testid="shipping-companies-list">
+                <div className="space-y-3 overflow-x-auto -mx-6 sm:mx-0 px-6 sm:px-0" data-testid="shipping-companies-list">
                     {/* Header row */}
-                    <div className="grid grid-cols-14 gap-3 text-xs font-semibold text-muted-foreground px-1 hidden md:grid">
+                    <div className="grid grid-cols-14 gap-3 text-xs font-semibold text-muted-foreground px-1 hidden md:grid min-w-[700px]">
                         <div className="col-span-5">اسم شركة الشحن</div>
                         <div className="col-span-3 text-center">تكلفة الشحنة (ر.س)</div>
                         <div className="col-span-3 text-center">نسبة الضريبة على الشحن %</div>
@@ -526,7 +526,7 @@ export default function Settings() {
                         <div className="col-span-1"></div>
                     </div>
                     {shippings.map((s, i) => (
-                        <div key={s._rid || `s-${i}`} className="grid grid-cols-14 gap-3 items-center">
+                        <div key={s._rid || `s-${i}`} className="grid grid-cols-14 gap-3 items-center min-w-[700px]">
                             <input
                                 type="text"
                                 value={s.name}

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="26" time="15.827" timestamp="2026-05-31T20:09:12.503429+00:00" hostname="agent-env-f5e6b93a-68a2-4155-84ad-e55b4fa936d3"><testcase classname="backend.tests.test_unified_ads_report" name="test_unified_ads_empty_shape" time="0.632" /><testcase classname="backend.tests.test_unified_ads_report" name="test_unified_ads_picks_up_snapchat_daily_costs" time="0.654" /><testcase classname="backend.tests.test_unified_ads_report" name="test_unified_ads_picks_up_tiktok_webhook" time="0.791" /><testcase classname="backend.tests.test_unified_ads_report" name="test_unified_ads_date_range_filtering" time="0.751" /><testcase classname="backend.tests.test_unified_ads_report" name="test_unified_ads_combined_math" time="0.901" /><testcase classname="backend.tests.test_operating_expenses" name="test_salary_create_list_get" time="0.551" /><testcase classname="backend.tests.test_operating_expenses" name="test_salary_update_and_delete" time="0.780" /><testcase classname="backend.tests.test_operating_expenses" name="test_salary_invalid_category_rejected" time="0.482" /><testcase classname="backend.tests.test_operating_expenses" name="test_salary_country_field_persists_and_breakdown" time="0.954" /><testcase classname="backend.tests.test_operating_expenses" name="test_salary_edit_full_record_persists" time="0.549" /><testcase classname="backend.tests.test_operating_expenses" name="test_rental_create_and_validation" time="0.872" /><testcase classname="backend.tests.test_operating_expenses" name="test_daily_expense_crud" time="0.684" /><testcase classname="backend.tests.test_operating_expenses" name="test_summary_aggregates_categories" time="1.231" /><testcase classname="backend.tests.test_operating_expenses" name="test_report_daily_monthly_yearly" time="0.712" /><testcase classname="backend.tests.test_operating_expenses" name="test_stopped_salary_not_in_daily" time="0.541" /><testcase classname="backend.tests.test_operating_expenses" name="test_dashboard_includes_operating_expenses" time="0.580" /><testcase classname="backend.tests.test_operating_expenses" name="test_net_sales_config_deduct_operating_expenses" time="0.687" /><testcase classname="backend.tests.test_operating_expenses" name="test_prepaid_crud_and_math" time="1.034" /><testcase classname="backend.tests.test_operating_expenses" name="test_prepaid_summary_and_by_type" time="0.927" /><testcase classname="backend.tests.test_operating_expenses" name="test_prepaid_in_dashboard_and_report" time="0.694" /><testcase classname="backend.tests.test_operating_expenses" name="test_prepaid_expired_status_excluded" time="0.569" /><testcase classname="backend.tests.test_no_date_fallback" name="test_webhook_without_created_at_uses_today_as_inferred" time="0.001"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?">backend/tests/test_no_date_fallback.py:32: in test_webhook_without_created_at_uses_today_as_inferred
+    token = _register()
+            ^^^^^^^^^^^
+backend/tests/test_no_date_fallback.py:22: in _register
+    r = requests.post(
+/root/.venv/lib/python3.11/site-packages/requests/api.py:134: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:71: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?</failure></testcase><testcase classname="backend.tests.test_no_date_fallback" name="test_inferred_order_appears_in_dashboard_for_current_month" time="0.000"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?">backend/tests/test_no_date_fallback.py:63: in test_inferred_order_appears_in_dashboard_for_current_month
+    token = _register()
+            ^^^^^^^^^^^
+backend/tests/test_no_date_fallback.py:22: in _register
+    r = requests.post(
+/root/.venv/lib/python3.11/site-packages/requests/api.py:134: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:71: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?</failure></testcase><testcase classname="backend.tests.test_no_date_fallback" name="test_authoritative_date_overrides_inferred" time="0.000"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?">backend/tests/test_no_date_fallback.py:85: in test_authoritative_date_overrides_inferred
+    token = _register()
+            ^^^^^^^^^^^
+backend/tests/test_no_date_fallback.py:22: in _register
+    r = requests.post(
+/root/.venv/lib/python3.11/site-packages/requests/api.py:134: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:71: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?</failure></testcase><testcase classname="backend.tests.test_no_date_fallback" name="test_stats_exposes_inferred_count" time="0.000"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?">backend/tests/test_no_date_fallback.py:114: in test_stats_exposes_inferred_count
+    token = _register()
+            ^^^^^^^^^^^
+backend/tests/test_no_date_fallback.py:22: in _register
+    r = requests.post(
+/root/.venv/lib/python3.11/site-packages/requests/api.py:134: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:71: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?</failure></testcase><testcase classname="backend.tests.test_no_date_fallback" name="test_order_with_correct_created_at_lands_in_right_month" time="0.001"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?">backend/tests/test_no_date_fallback.py:144: in test_order_with_correct_created_at_lands_in_right_month
+    token = _register()
+            ^^^^^^^^^^^
+backend/tests/test_no_date_fallback.py:22: in _register
+    r = requests.post(
+/root/.venv/lib/python3.11/site-packages/requests/api.py:134: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:71: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/auth/register': No scheme supplied. Perhaps you meant https:///api/auth/register?</failure></testcase></testsuite></testsuites>
