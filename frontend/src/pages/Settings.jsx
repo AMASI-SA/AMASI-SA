@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator } from "@phosphor-icons/react";
+import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator, LockKey } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { KPI_GROUPS } from "../lib/dashboardCards";
+import SecretField, { StatusBadge } from "../components/SecretField";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const DEFAULT_SNAP_REDIRECT = `${BACKEND_URL}/api/snapchat/oauth/callback`;
@@ -886,8 +887,41 @@ export default function Settings() {
                 />
             </div>
 
+            {/* 🔐 Sensitive integration credentials — Snapchat + Meta inside a
+                collapsible accordion so the long tokens don't dominate the
+                page on first load. */}
+            <div className="rounded-xl border-2 border-border bg-white p-4 sm:p-6 overflow-hidden" data-testid="sensitive-credentials-section">
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-lg bg-slate-900 text-white flex items-center justify-center">
+                        <LockKey size={22} weight="duotone" />
+                    </div>
+                    <div>
+                        <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>
+                            🔐 بيانات الربط الحساسة
+                        </h2>
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                            App IDs و Secrets و Access Tokens لمنصات الإعلانات — تظهر مختصرة افتراضياً. اضغط القسم لفتحه.
+                        </p>
+                    </div>
+                </div>
+
+                <details className="mt-4 group" data-testid="snap-credentials-details">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-3 py-3 px-4 rounded-lg bg-accent/40 hover:bg-accent/60 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: "#FFFC00" }}>
+                                <Ghost size={18} weight="fill" className="text-black" />
+                            </div>
+                            <span className="font-bold text-sm sm:text-base" style={{ fontFamily: "Tajawal" }}>Snapchat Ads — البيانات والاتصال</span>
+                            {snapConfig.connected && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex-shrink-0">🟢 مربوط</span>
+                            )}
+                        </div>
+                        <span className="text-muted-foreground text-xs transition-transform group-open:rotate-180">▼</span>
+                    </summary>
+                    <div className="mt-2">
+
             {/* Snapchat Ads integration */}
-            <div className="rounded-xl border border-border bg-white p-6" data-testid="snapchat-section">
+            <div className="rounded-xl border border-border bg-white p-4 sm:p-6 overflow-hidden" data-testid="snapchat-section">
                 <div className="flex items-start justify-between gap-3 mb-5 flex-col md:flex-row">
                     <div className="flex items-start gap-3">
                         <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: "#FFFC00" }}>
@@ -913,38 +947,38 @@ export default function Settings() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
+                    <div className="min-w-0">
                         <label className="block text-sm font-semibold mb-1.5">App ID (Client ID)</label>
                         <input
                             type="text"
                             value={snapConfig.client_id}
                             onChange={(e) => setSnapConfig({ ...snapConfig, client_id: e.target.value })}
                             placeholder="من Snap Business Manager → Business Details"
-                            className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                            className="w-full max-w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
                             data-testid="snap-client-id"
                             dir="ltr"
                         />
                     </div>
-                    <div>
-                        <label className="block text-sm font-semibold mb-1.5">App Secret (Client Secret)</label>
-                        <input
-                            type="password"
+                    <div className="min-w-0">
+                        <SecretField
+                            label="App Secret (Client Secret)"
                             value={snapClientSecret}
-                            onChange={(e) => setSnapClientSecret(e.target.value)}
-                            placeholder={snapConfig.has_credentials ? "•••••••• (محفوظ — اتركه فارغاً لعدم التغيير)" : "Secret يظهر مرة واحدة فقط من سناب"}
-                            className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
-                            data-testid="snap-client-secret"
-                            dir="ltr"
+                            onChange={(v) => setSnapClientSecret(v)}
+                            existingMask={snapConfig.has_credentials ? "•••••••• (محفوظ)" : null}
+                            placeholder="Secret يظهر مرة واحدة فقط من سناب"
+                            testidPrefix="snap-client-secret"
+                            rows={2}
                         />
                     </div>
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-2 min-w-0">
                         <label className="block text-sm font-semibold mb-1.5">Redirect URI</label>
                         <input
                             type="text"
                             value={snapConfig.redirect_uri}
                             onChange={(e) => setSnapConfig({ ...snapConfig, redirect_uri: e.target.value })}
-                            className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                            className="w-full max-w-full px-3 py-2.5 text-sm sm:text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand font-mono"
+                            style={{ overflowWrap: "anywhere", wordBreak: "break-all" }}
                             data-testid="snap-redirect-uri"
                             dir="ltr"
                         />
@@ -1042,7 +1076,28 @@ export default function Settings() {
             </div>
 
             {/* Meta Ads (Facebook + Instagram) integration */}
-            <div className="rounded-xl border border-border bg-white p-6" data-testid="meta-config-section">
+                    </div>
+                </details>
+
+                <details className="mt-3 group" data-testid="meta-credentials-details">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-3 py-3 px-4 rounded-lg bg-accent/40 hover:bg-accent/60 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 bg-blue-600 text-white font-extrabold text-sm">
+                                f
+                            </div>
+                            <span className="font-bold text-sm sm:text-base" style={{ fontFamily: "Tajawal" }}>Meta Ads (Facebook + Instagram) — البيانات والاتصال</span>
+                            {metaConfig.connected && metaConfig.connection_status && (
+                                <StatusBadge status={metaConfig.connection_status} />
+                            )}
+                            {metaConfig.connected && !metaConfig.connection_status && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex-shrink-0">🟢 مربوط</span>
+                            )}
+                        </div>
+                        <span className="text-muted-foreground text-xs transition-transform group-open:rotate-180">▼</span>
+                    </summary>
+                    <div className="mt-2">
+
+            <div className="rounded-xl border border-border bg-white p-4 sm:p-6 overflow-hidden" data-testid="meta-config-section">
                 <div className="mb-5 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-extrabold">
                         f
@@ -1098,50 +1153,49 @@ export default function Settings() {
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
+                    <div className="min-w-0">
                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">Meta App ID</label>
                         <input
                             type="text"
                             value={metaForm.app_id}
                             onChange={(e) => setMetaForm({ ...metaForm, app_id: e.target.value })}
                             placeholder="1234567890123456"
-                            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg font-mono"
+                            className="w-full max-w-full px-3 py-2.5 text-sm border border-border rounded-lg font-mono"
                             dir="ltr"
                             data-testid="meta-app-id-input"
                         />
                     </div>
-                    <div>
-                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">
-                            Meta App Secret {metaConfig.connected && <span className="text-emerald-600">({metaConfig.app_secret_masked})</span>}
-                        </label>
-                        <input
-                            type="password"
+                    <div className="min-w-0">
+                        <SecretField
+                            label="Meta App Secret"
                             value={metaForm.app_secret}
-                            onChange={(e) => setMetaForm({ ...metaForm, app_secret: e.target.value })}
-                            placeholder={metaConfig.connected ? "اتركه فارغاً للإبقاء على القيمة الحالية… أو أدخل قيمة جديدة" : "abc123xyz…"}
-                            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg font-mono"
-                            dir="ltr"
-                            data-testid="meta-app-secret-input"
+                            onChange={(v) => setMetaForm({ ...metaForm, app_secret: v })}
+                            existingMask={metaConfig.connected ? metaConfig.app_secret_masked : null}
+                            placeholder="abc123xyz…"
+                            testidPrefix="meta-app-secret"
+                            rows={2}
                         />
                     </div>
-                    <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">
-                            Access Token (Long-lived) {metaConfig.connected && <span className="text-emerald-600">({metaConfig.access_token_masked})</span>}
-                        </label>
-                        <input
-                            type="password"
+                    <div className="md:col-span-2 min-w-0">
+                        <SecretField
+                            label="Access Token (Long-lived)"
                             value={metaForm.access_token}
-                            onChange={(e) => setMetaForm({ ...metaForm, access_token: e.target.value })}
-                            placeholder={metaConfig.connected ? "ألصق التوكن الجديد هنا لتحديث الربط…" : "EAAxxxxxxxxxxxxxxxxxxx"}
-                            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg font-mono"
-                            dir="ltr"
-                            data-testid="meta-access-token-input"
+                            onChange={(v) => setMetaForm({ ...metaForm, access_token: v })}
+                            existingMask={metaConfig.connected ? metaConfig.access_token_masked : null}
+                            placeholder="EAAxxxxxxxxxxxxxxxxxxx"
+                            testidPrefix="meta-access-token"
+                            rows={4}
+                            statusBadge={metaConfig.connected && metaConfig.connection_status
+                                ? <StatusBadge status={metaConfig.connection_status} />
+                                : null}
+                            helper={
+                                <>
+                                    احصل عليه من <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" className="text-blue-600 underline">Graph API Explorer</a> مع صلاحيات <code>ads_read</code> + <code>business_management</code>.
+                                    {metaConfig.connected && <span className="block mt-0.5 text-amber-700">💡 لتحديث الربط بعد انتهاء الصلاحية: اضغط 👁 عرض ثم ألصق التوكن الجديد ثم اضغط <strong>اختبار الاتصال</strong>.</span>}
+                                </>
+                            }
                         />
-                        <p className="text-xs text-muted-foreground mt-1">
-                            احصل عليه من <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" className="text-blue-600 underline">Graph API Explorer</a> مع صلاحيات <code>ads_read</code> + <code>business_management</code>.
-                            {metaConfig.connected && <span className="block mt-0.5 text-amber-700">💡 لتحديث الربط بعد انتهاء الصلاحية: ألصق التوكن الجديد ثم اضغط <strong>اختبار الاتصال</strong>.</span>}
-                        </p>
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">Ad Account ID</label>
@@ -1212,6 +1266,9 @@ export default function Settings() {
                         <pre dir="ltr" className="mt-2 p-3 bg-accent/40 rounded text-[10px] overflow-x-auto">{JSON.stringify(metaConfig.last_sync_summary, null, 2)}</pre>
                     </details>
                 )}
+            </div>
+                    </div>
+                </details>
             </div>
         </div>
     );

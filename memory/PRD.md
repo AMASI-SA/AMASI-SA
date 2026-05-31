@@ -20,7 +20,32 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Snapchat: Riyadh business-day enforcement via HOUR granularity)
+## Implemented (2026-05 — Settings UI overhaul: long tokens never break layout again)
+- 🐛 **Issue**: Long Meta access tokens (200+ chars) and Snap client secrets caused horizontal page scroll on mobile + overflowed cards + made the Settings page feel cluttered.
+- ✅ **New component `SecretField.jsx`** (`/app/frontend/src/components/SecretField.jsx`):
+  - **Masked preview** by default: shows first 10 chars + bullets + last 6 chars (max ~22 chars on screen).
+  - **👁 عرض / 🙈 إخفاء** toggle: expands the field into a wrappable `<textarea>` for editing.
+  - **📋 نسخ** button (clipboard API) + **🗑 مسح** button (clears field, doesn't touch server).
+  - CSS `overflow-wrap: anywhere; word-break: break-all;` ensures no horizontal scroll even with extreme-length tokens.
+  - Fully responsive — buttons flex-wrap under field on phones.
+  - Accepts `existingMask` prop so backend-returned masks ("EAA****ABC") are shown as placeholder hints.
+  - Optional `statusBadge` prop for inline status pills.
+- ✅ **New `<StatusBadge/>`** component (also exported from SecretField.jsx):
+  - 🟢 صالح / 🟡 يحتاج تجديد قريباً / 🔴 منتهي الصلاحية / صلاحيات ناقصة / حساب غير صالح / تم تجاوز الحد / خطأ شبكة.
+  - Driven by Meta's `connection_status` already returned by `/api/dashboard/meta-summary` & `/api/meta/config`.
+  - Rendered inline next to "Access Token (Long-lived)" label.
+- ✅ **New top-level Settings section "🔐 بيانات الربط الحساسة"** wraps both Snapchat AND Meta integration cards inside two collapsible `<details>` accordions (`data-testid="snap-credentials-details"` and `meta-credentials-details`). Each accordion summary shows the platform badge + connection-status pill so the merchant sees state at a glance without expanding.
+- ✅ **Settings.jsx hardening**:
+  - All `grid` containers got `min-w-0` (prevents flex/grid blowout from long children).
+  - Both card wrappers got `overflow-hidden` + `p-4 sm:p-6` (smaller padding on phones).
+  - Meta App Secret + Meta Access Token + Snap Client Secret → ALL converted to `<SecretField>` (testids: `meta-app-secret-*`, `meta-access-token-*`, `snap-client-secret-*`).
+  - Redirect URI input got `overflowWrap: anywhere` + `wordBreak: break-all` (long URLs no longer push the card width).
+- ✅ **Tested** @ 390x844 mobile viewport:
+  - `document.documentElement.scrollWidth === clientWidth === 390` → **zero horizontal scroll**.
+  - All new testids present and functional (toggle, copy, clear).
+  - Snap accordion (closed) + Meta accordion (open) render correctly together.
+
+
 - 🐛 **Issue**: Snapchat's `DAY` granularity stats require `start_time` to be midnight in the **ad-account's native TZ** (usually Pacific). For Saudi merchants this meant "today" on Snapchat ran from 11:00 AM → 11:00 AM Riyadh time — not 00:00 → 23:59 like every other Saudi business measures their day.
 - 💡 **Merchant requirement**: "اعتماد توقيت السعودية Asia/Riyadh في احتساب اليوم الإعلاني." Even if Snapchat internally tracks the day in PT, our dashboard must show the Riyadh business day.
 - ✅ **Backend technique**: switched from `granularity=DAY` to `granularity=HOUR`. HOUR has NO TZ alignment constraint — we can request `start_time = 2026-06-01T00:00:00+03:00` and `end_time = 2026-06-02T00:00:00+03:00`, and Snapchat returns 24 hourly buckets which we sum. The resulting total is the EXACT Riyadh-day spend regardless of where the ad account is hosted.
