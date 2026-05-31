@@ -9,6 +9,7 @@ import {
     ChartPieSlice,
     Truck,
     Plug,
+    Wallet,
 } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
 
@@ -18,6 +19,7 @@ const links = [
     { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
     { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },
     { to: "/daily-costs", label: "التكاليف اليومية", icon: Receipt, testid: "nav-daily-costs" },
+    { to: "/operating-expenses", label: "المصروفات التشغيلية", icon: Wallet, testid: "nav-operating-expenses" },
     { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
     { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
     { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" },

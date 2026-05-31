@@ -60,7 +60,10 @@ export const KPI_GROUPS = [
             { id: "total_ads_cost", label: "تكاليف الإعلانات", icon: Megaphone, money: true, value: (t) => t.total_ads_cost },
             { id: "total_product_cost", label: "تكاليف المنتجات", icon: Package, money: true, hint: "من ملفات Excel", value: (t) => t.total_product_cost },
             { id: "daily_expenses_total", label: "مصاريف يومية", icon: Receipt, money: true, hint: "من سجل التكاليف", value: (t) => t.daily_expenses_total },
-            { id: "net_profit", label: "صافي الربح النهائي", icon: TrendUp, accent: true, money: true, hint: "بعد التكاليف اليومية", value: (t) => t.net_profit },
+            { id: "operating_expenses_total", label: "المصروفات التشغيلية", icon: Receipt, money: true, hint: "رواتب + إيجارات + يومية أخرى", value: (t) => t.operating_expenses_total },
+            { id: "operating_salaries_total", label: "إجمالي الرواتب", icon: Coins, money: true, hint: "موظفين + بيت + صدقات", value: (t) => t.operating_salaries_total },
+            { id: "operating_rentals_total", label: "إيجارات الفترة", icon: Bank, money: true, hint: "بالتوزيع اليومي", value: (t) => t.operating_rentals_total },
+            { id: "net_profit", label: "صافي الربح النهائي", icon: TrendUp, accent: true, money: true, hint: "بعد التكاليف اليومية والمصروفات التشغيلية", value: (t) => t.net_profit },
         ],
     },
 ];

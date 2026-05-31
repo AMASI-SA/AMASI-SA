@@ -1,0 +1,29 @@
+{
+  "summary": "Operating Expenses (المصروفات التشغيلية اليومية) feature is fully working end-to-end. Backend: 10/10 new pytest tests pass — CRUD for salaries/rentals/daily, summary aggregates by category (employee/household/charity), report endpoint daily/monthly/yearly, dashboard integration (operating_expenses_total + 3 sub-totals, net_profit deduction), stopped salaries & expired rentals correctly excluded, net_sales_config.deduct_operating_expenses toggle persists (default True). Frontend: sidebar nav-operating-expenses link present and navigates to /operating-expenses; page shows 4 tabs (salaries/rentals/daily/report) and 7 summary cards; full Create/Edit/Delete cycle on Salaries, Rental Create, Daily expense Create all work end-to-end; Report tab renders 4 sub-cards; Settings page exposes the new toggle and saves successfully; Dashboard markup contains the 3 new operating KPI markers.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_operating_expenses.py",
+    "/app/test_reports/pytest/operating_expenses_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "expenses_routes.py: clean module, async DB usage, _id excluded everywhere via {'_id': 0}, Pydantic input validation, proper 400/404 error codes — no issues found.",
+    "_daily_from_monthly rounds each per-record per-day cost to 4 decimals before summation; expected behavior, matches test math within ±0.05 SAR.",
+    "Rental update: PUT correctly re-validates start/end coherence when either field is changed — good.",
+    "compute_operating_expenses_for_range iterates day-by-day; OK for current ranges but if a user ever requests a multi-year range it could become slow. Optional future optimization: closed-form monthly aggregation. Not a blocker now.",
+    "Frontend OperatingExpenses.jsx: all interactive elements have data-testid (oe-* prefix), modal CRUD works, status badges render correctly. The Salaries-row delete uses window.confirm — acceptable but consider a styled modal for consistency with the rest of the app."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (10/10 new tests pass)", "frontend": "100% on tested flows (sidebar nav, page tabs, summary cards, salary CRUD, rental create, daily create, report tab, settings toggle, dashboard markers)"},
+  "test_credentials": "admin@hesab.app / admin123 works. UI test auto-registered fresh user test_oe_<rand>@hesab.app / test12345.",
+  "seed_data_creation": "Each pytest test registers an ephemeral user TEST_op_<uuid>@hesab.app. UI test created and cleaned up one salary, then created one rental and one daily-expense for that throwaway user. No production data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Operating Expenses feature is shipped and verified. Pytest path: /app/backend/tests/test_operating_expenses.py. Frontend testid contract: nav-operating-expenses (sidebar), operating-expenses-page, oe-tabs / oe-tab-{salaries|rentals|daily|report}, oe-summary with 7 child cards, oe-{salary|rental|daily}-row-{id} for rows, oe-edit-btn / oe-delete-btn for row actions, oe-modal-{salary|rental|daily} for modals, oe-modal-submit / oe-modal-close, oe-{salary|rental|daily}-* for form fields, net-sales-toggle-deduct_operating_expenses on Settings. Dashboard exposes operating_expenses_total, operating_salaries_total, operating_rentals_total, operating_daily_other_total in /api/dashboard.totals and net_profit is reduced by operating_expenses_total. Salary categories: employee/household/charity. Rental property_types: office/warehouse/shop/employee_housing/other. Salary status: active/stopped. Rental status: active/expired. Daily cost math: salary monthly/days_in_month, rental annual/365.",
+  "rca of the issue": "N/A — no bugs found."
+}

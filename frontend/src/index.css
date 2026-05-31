@@ -112,5 +112,21 @@ code, pre {
 /* Numbers should remain LTR for readability */
 .num { direction: ltr; unicode-bidi: embed; display: inline-block; }
 
+/* Reusable input style for forms (Operating Expenses modal etc.) */
+.oe-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.95rem;
+    background-color: #fff;
+    border: 1px solid hsl(214 14% 91%);
+    border-radius: 0.5rem;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.oe-input:focus {
+    border-color: #0A3622;
+    box-shadow: 0 0 0 3px rgba(10, 54, 34, 0.12);
+}
+
 /* Sidebar scroll override */
 aside { scrollbar-width: thin; }

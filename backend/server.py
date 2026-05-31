@@ -37,6 +37,10 @@ from snapchat_routes import attach_snapchat_routes
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
+from expenses_routes import (
+    attach_operating_expenses_routes,
+    compute_operating_expenses_for_range,
+)
 from orders_db import upsert_order, orders_to_parsed
 from balances import compute_balances
 
@@ -56,6 +60,16 @@ def _normalize_date_str(s: str) -> Optional[str]:
         return datetime.fromisoformat(s.replace("Z", "+00:00")).date().isoformat()
     except Exception:
         return None
+
+
+def _parse_date_or(s: Optional[str], fallback):
+    """Parse YYYY-MM-DD to a date object, falling back when invalid/empty."""
+    if not s:
+        return fallback
+    try:
+        return datetime.strptime(str(s).strip(), "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return fallback
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -114,6 +128,7 @@ class NetSalesConfig(BaseModel):
     deduct_product_costs: bool = True      # تكاليف المنتجات
     deduct_vat: bool = False               # ضريبة القيمة المضافة
     deduct_daily_expenses: bool = False    # مصاريف يومية أخرى
+    deduct_operating_expenses: bool = True  # المصروفات التشغيلية (رواتب + إيجارات + يومية أخرى)
 
 
 DEFAULT_NET_SALES_CONFIG = NetSalesConfig().model_dump()
@@ -943,9 +958,29 @@ async def dashboard(
     daily_products_total = sum((d.get("product_costs", 0) or 0) for d in daily)
     daily_totals = daily_ads_total + daily_products_total
 
-    # Net profit (orders P&L − daily ads − daily products)
+    # ── Operating Expenses (المصروفات التشغيلية) ─────────────────────────────
+    # Aggregate the per-day salary + rental + variable-expense costs over the
+    # active date range. When no range is supplied we still aggregate so the
+    # dashboard reflects month-to-date operating cost.
+    today_d = datetime.now(timezone.utc).date()
+    fd = _parse_date_or(from_date, today_d.replace(day=1))
+    td = _parse_date_or(to_date, today_d)
+    if td < fd:
+        fd, td = td, fd
+    op_range = await compute_operating_expenses_for_range(db, user["id"], fd, td)
+    operating_expenses_total = float(op_range.get("operating_total") or 0)
+    operating_salaries_total = float(op_range.get("salaries_total") or 0)
+    operating_rentals_total = float(op_range.get("rentals_total") or 0)
+    operating_daily_other_total = float(op_range.get("daily_other_total") or 0)
+
+    # Net profit (orders P&L − daily ads − daily products − operating expenses)
     orders_profit = total_sales - total_fees - total_shipping
-    net_profit_adjusted = orders_profit - daily_ads_total - daily_products_total
+    net_profit_adjusted = (
+        orders_profit
+        - daily_ads_total
+        - daily_products_total
+        - operating_expenses_total
+    )
 
     # ── Phase 3: configurable "صافي المبيعات" KPI ────────────────────────────
     # Merchants disagree on what counts as "net sales" — some treat shipping
@@ -970,6 +1005,8 @@ async def dashboard(
         # daily_expenses_total is currently aliased to daily_products_total;
         # keep this independent for future expansion.
         pass
+    if cfg.get("deduct_operating_expenses", True):
+        net_sales -= operating_expenses_total
 
     # ── Monthly trend from unified orders + legacy analyses ─────────────────
     from collections import defaultdict
@@ -1059,6 +1096,14 @@ async def dashboard(
             "daily_costs_total": round(daily_totals, 2),
             "daily_ads_total": round(daily_ads_total, 2),
             "daily_products_total": round(daily_products_total, 2),
+            # ── Operating Expenses (المصروفات التشغيلية اليومية) ──────────────
+            "operating_expenses_total": round(operating_expenses_total, 2),
+            "operating_salaries_total": round(operating_salaries_total, 2),
+            "operating_salaries_employee": float(op_range.get("salaries_employee") or 0),
+            "operating_salaries_household": float(op_range.get("salaries_household") or 0),
+            "operating_salaries_charity": float(op_range.get("salaries_charity") or 0),
+            "operating_rentals_total": round(operating_rentals_total, 2),
+            "operating_daily_other_total": round(operating_daily_other_total, 2),
             "orders_excel_count": src_counts.get("excel", 0),
             "orders_make_count": src_counts.get("make", 0),
             "legacy_analyses_count": len(legacy_analyses),
@@ -1356,6 +1401,7 @@ attach_snapchat_routes(api, db)
 attach_meta_routes(api, db)
 attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
+attach_operating_expenses_routes(api, db)
 app.include_router(api)
 
 # CORS
@@ -1388,6 +1434,9 @@ async def on_startup():
     await db.unified_orders.create_index([("user_id", 1), ("order_number", 1)], unique=True)
     await db.unified_orders.create_index([("user_id", 1), ("order_date", -1)])
     await db.unified_orders.create_index([("user_id", 1), ("data_source", 1)])
+    await db.operating_salaries.create_index([("user_id", 1), ("status", 1)])
+    await db.operating_rentals.create_index([("user_id", 1), ("status", 1)])
+    await db.operating_daily_expenses.create_index([("user_id", 1), ("date", -1)])
     # One-time migration: copy any pre-existing webhook_orders into unified_orders
     # so users who already have Make.com data don't lose it on the cutover.
     if await db.webhook_orders.count_documents({}) > 0:

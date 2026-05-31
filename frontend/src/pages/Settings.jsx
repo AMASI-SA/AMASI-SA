@@ -28,6 +28,7 @@ export default function Settings() {
         deduct_product_costs: true,
         deduct_vat: false,
         deduct_daily_expenses: false,
+        deduct_operating_expenses: true,
     });
     const [hideInferred, setHideInferred] = useState(false);
     const [discoveredStatuses, setDiscoveredStatuses] = useState([]); // [{name,count}]
@@ -624,6 +625,7 @@ export default function Settings() {
                         { key: "deduct_ads", label: "خصم تكاليف الإعلانات", hint: "Snapchat + TikTok + Instagram + Google" },
                         { key: "deduct_product_costs", label: "خصم تكاليف المنتجات", hint: "من سجل التكاليف اليومية" },
                         { key: "deduct_vat", label: "خصم ضريبة القيمة المضافة", hint: "VAT على عمولات الدفع والشحن" },
+                        { key: "deduct_operating_expenses", label: "خصم المصروفات التشغيلية", hint: "الرواتب + الإيجارات + المصروفات اليومية الأخرى" },
                     ].map((opt) => {
                         const checked = !!netSalesConfig[opt.key];
                         return (
@@ -657,6 +659,7 @@ export default function Settings() {
                         {netSalesConfig.deduct_ads && <span className="text-red-600"> − إعلانات</span>}
                         {netSalesConfig.deduct_product_costs && <span className="text-red-600"> − منتجات</span>}
                         {netSalesConfig.deduct_vat && <span className="text-red-600"> − VAT</span>}
+                        {netSalesConfig.deduct_operating_expenses && <span className="text-red-600"> − مصروفات تشغيلية</span>}
                     </div>
                 </div>
             </div>
