@@ -20,7 +20,20 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Dashboard Snap+Meta Cards Unified Simplification)
+## Implemented (2026-05 — Full Mobile Responsive Overhaul)
+- ✅ **Sidebar transformed into a slide-in drawer on mobile** (<1024px) while remaining fixed on desktop (≥1024px). Uses `translate-x-full` ↔ `translate-x-0` transition with `lg:translate-x-0` always winning on desktop.
+- ✅ **New mobile top header** (`data-testid="mobile-header"`) — hidden on desktop (`lg:hidden`) — contains compact logo + `data-testid="mobile-menu-btn"` hamburger button on the left side.
+- ✅ **`Layout.jsx` rewritten**: manages `mobileOpen` state; `useEffect` on `location.pathname` auto-closes the drawer on route changes; another `useEffect` locks `document.body.overflow="hidden"` while drawer is open (with cleanup); replaced fixed `ps-64` with `lg:ps-64` (zero padding on mobile).
+- ✅ **Sidebar drawer features**: full-screen `bg-black/50` backdrop (`data-testid="sidebar-backdrop"`) closes drawer on tap; in-drawer X close button (`data-testid="sidebar-close-btn"`); clicking any nav link auto-closes drawer; proper z-index layering (sidebar=z-50, backdrop=z-40).
+- ✅ **Dashboard cards adapted**: Snap/Meta/TikTok section headers use `flex-col sm:flex-row`; refresh buttons are `w-full sm:w-auto`; container padding `p-4 sm:p-6`; recent-analyses table wrapped in `overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0` with `min-w-[640px]`.
+- ✅ **AdsReport** (`/reports/ads`): h1 scales `text-3xl sm:text-4xl lg:text-5xl`; refresh button `w-full md:w-auto`; combined KPIs `grid-cols-2 sm:grid-cols-3 lg:grid-cols-6`; platform cards stack on mobile; comparison table already had `overflow-x-auto`.
+- ✅ **Reports** (`/reports`): h1 mobile-friendly; payments/shipping tables wrapped in `overflow-x-auto` with `min-w-[480px]`/`min-w-[400px]`.
+- ✅ **OperatingExpenses**: h1 mobile-friendly; `oe-tabs` now `overflow-x-auto` with `whitespace-nowrap` buttons (horizontal scroll instead of wrap); `TableWrap` adds `min-w-[640px]` + edge-to-edge `-mx-4 sm:mx-0 px-4 sm:px-0`; section `Card` add-button `w-full sm:w-auto`.
+- ✅ **Settings**: payment-methods-list and shipping-companies-list wrap their 12/14-column grid in `overflow-x-auto -mx-6 sm:mx-0 px-6 sm:px-0` with `min-w-[640px]`/`min-w-[700px]` on inner rows; save-settings-btn `w-full md:w-auto`.
+- ✅ **Login/Register**: already responsive (`w-full lg:w-1/2`) with hero panel `hidden lg:flex` — verified.
+- ✅ **Testing**: testing_agent_v3_fork verified 100% at BOTH 390x844 (iPhone-12) AND 1280x800 (desktop) — zero horizontal page scroll on any tested route; drawer slide/backdrop/auto-close/scroll-lock all confirmed; **26/26 backend pytest regression pass**. Report: `/app/test_reports/iteration_11.json`.
+
+
 - ✅ **Snapchat & Meta cards on dashboard simplified to a unified 4+4 layout** per merchant request: "الكرت في Dashboard يكون سريع وواضح — كم صرفنا اليوم؟ كم طلب جاء؟ كم مبيعات؟ كم العائد؟".
   - **Today section** (4 cards on each): صرف اليوم (ر.س) · طلبات اليوم · مبيعات اليوم (ر.س) · ROAS اليوم.
   - **Month section** (4 cards on each): الصرف الشهري (ر.س) · طلبات الشهر · مبيعات الشهر (ر.س) · ROAS الشهر.
@@ -246,7 +259,6 @@ After v1 left 147 orders without date (which annoyed the user since new Make.com
 ### P2
 - Compare two analyses side-by-side.
 - Profit per product analysis (requires line-items in Excel).
-- Mobile responsive sidebar (currently hidden on small screens).
 - Server-side refresh token revocation/blacklist (defense-in-depth on logout).
 
 ## Test Credentials
