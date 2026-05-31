@@ -20,7 +20,18 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Bug fix: Snapchat "Unsupported Stats Query" error)
+## Implemented (2026-05 — Snap Dashboard refresh now mirrors the proven DailyCosts flow)
+- 🐛 **Issue**: even after the two-phase bulk fix, the Dashboard refresh button still used `POST /snapchat/daily-spend/bulk` which involves more moving parts than necessary for a single-day refresh.
+- 💡 **User insight**: the DailyCosts page already has a working "جلب من سناب" button that has been reliable in production. Just port that exact flow to Dashboard.
+- ✅ **Fix in `Dashboard.jsx`**:
+  - **`snap-refresh-today-btn`** now calls `GET /snapchat/daily-spend?date=YYYY-MM-DD` (single-date, spend-only, proven reliable) then manually upserts the value into `daily_costs` via `POST /daily-costs` — preserving any other fields on the same date (snapchat_ads_2, tiktok_ads, instagram_ads, google_ads, product_costs, notes).
+  - **`refresh-all-ads-btn`** (Snap branch) also switched to the same single-date flow for consistency.
+  - Friendly Arabic error toasts retained: covers `Unsupported Stats Query`, `invalid_token / 401`, `permission / 403`, "اربط Snapchat" empty-state. Never shows raw JSON.
+  - Distinguishes zero-spend (info toast: "لا توجد حملات نشطة أو لم يبدأ الصرف بعد") from non-zero success.
+  - FX-conversion note shown when the ad-account currency ≠ SAR (matches DailyCosts UX).
+- ✅ **Verified**: smoke screenshot confirms toast for admin-without-creds shows clean Arabic: "حساب سناب غير مربوط. اربطه من الإعدادات.". Backend unchanged (two-phase bulk fix from previous iteration still in place for legacy callers).
+
+
 - 🐛 **Issue**: `POST /api/snapchat/daily-spend/bulk` returned raw JSON error `{"request_status":"ERROR","debug_message":"Unsupported Stats Query"…}` to the merchant on every refresh attempt.
 - 🔍 **Root cause**: We were requesting `spend + conversion_purchases + conversion_purchases_value` in a single `/adaccounts/{id}/stats` call. Snapchat Marketing API rejects this combo because conversion metrics (a) require explicit `swipe_up_attribution_window` + `view_attribution_window` parameters, AND (b) are sometimes unavailable at ad-account level depending on the Pixel setup. Result: the entire request fails (including spend), so even the `spend` value never reached `daily_costs`.
 - ✅ **Fix in `snapchat_routes.py`**:

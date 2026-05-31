@@ -127,14 +127,26 @@ export default function Dashboard() {
         const runSnap = async () => {
             if (!snapSummary) return { platform: "Snapchat", ok: false, msg: "غير مفعّل" };
             try {
-                const { data } = await api.post("/snapchat/daily-spend/bulk", {
-                    from_date: todayStr, to_date: todayStr,
+                // Mirror the proven DailyCosts flow: single-date GET + manual upsert.
+                const { data } = await api.get(
+                    `/snapchat/daily-spend?date=${encodeURIComponent(todayStr)}`);
+                const amount = Number(data?.spend || 0);
+                let existing = {};
+                try {
+                    const list = await api.get("/daily-costs");
+                    existing = (list.data || []).find(r => r.date === todayStr) || {};
+                } catch { /* row may not exist */ }
+                await api.post("/daily-costs", {
+                    date: todayStr,
+                    snapchat_ads: amount,
+                    snapchat_ads_2: Number(existing.snapchat_ads_2 || 0),
+                    tiktok_ads: Number(existing.tiktok_ads || 0),
+                    instagram_ads: Number(existing.instagram_ads || 0),
+                    google_ads: Number(existing.google_ads || 0),
+                    product_costs: Number(existing.product_costs || 0),
+                    notes: existing.notes || "auto from Snapchat",
                 });
-                const total = (data.items || []).reduce((s, i) => s + (i.spend || 0), 0);
-                const note = data.saved > 0 && total === 0
-                    ? "تم الجلب لكن صرف اليوم = 0 (تحقق من TZ أو لا توجد حملات نشطة)"
-                    : `${data.saved || 0} سجل / ${total.toFixed(2)} ر.س`;
-                return { platform: "Snapchat", ok: true, msg: note };
+                return { platform: "Snapchat", ok: true, msg: `${amount.toFixed(2)} ر.س` };
             } catch (e) {
                 const d = e?.response?.data?.detail;
                 return { platform: "Snapchat", ok: false,
@@ -472,51 +484,74 @@ export default function Dashboard() {
                                     type="button"
                                     onClick={async () => {
                                         try {
-                                            // Use Riyadh-based today from backend summary so the
-                                            // refresh always targets the same date the dashboard reads.
+                                            // Use the EXACT same flow as DailyCosts page's
+                                            // working "جلب من سناب" button: hit the single-date
+                                            // GET endpoint (proven reliable — returns spend only,
+                                            // no conversion-metric attribution-window pitfalls).
                                             const todayStr = snapSummary.today.date;
                                             toast.loading("جاري جلب صرف Snapchat لليوم…", { id: "snap-fetch" });
-                                            const { data } = await api.post("/snapchat/daily-spend/bulk", {
-                                                from_date: todayStr,
-                                                to_date: todayStr,
+                                            const { data } = await api.get(
+                                                `/snapchat/daily-spend?date=${encodeURIComponent(todayStr)}`
+                                            );
+                                            const amount = Number(data?.spend || 0);
+                                            const native = data?.native_currency;
+                                            const fx = Number(data?.fx_rate || 1);
+
+                                            // Persist into daily_costs so the dashboard totals + cards
+                                            // pick it up. We preserve any other fields on the existing
+                                            // row (snapchat_ads_2, tiktok, etc.) by reading-then-merging.
+                                            let existing = {};
+                                            try {
+                                                const list = await api.get("/daily-costs");
+                                                existing = (list.data || []).find(r => r.date === todayStr) || {};
+                                            } catch { /* row may not exist yet */ }
+                                            await api.post("/daily-costs", {
+                                                date: todayStr,
+                                                snapchat_ads: amount,
+                                                snapchat_ads_2: Number(existing.snapchat_ads_2 || 0),
+                                                tiktok_ads: Number(existing.tiktok_ads || 0),
+                                                instagram_ads: Number(existing.instagram_ads || 0),
+                                                google_ads: Number(existing.google_ads || 0),
+                                                product_costs: Number(existing.product_costs || 0),
+                                                notes: native && native !== "SAR"
+                                                    ? `auto from Snapchat (${native}→SAR ×${fx})`
+                                                    : "auto from Snapchat",
                                             });
-                                            // Diagnostic: distinguish "fetched successfully but spend=0"
-                                            // (TZ mismatch / no active campaigns) from "fetched and saved".
-                                            const totalSpend = (data.items || []).reduce((s, i) => s + (i.spend || 0), 0);
-                                            if ((data.errors || []).length > 0) {
-                                                const errRaw = String(data.errors[0]?.error || "").trim();
-                                                // Translate well-known Snapchat error patterns into Arabic
-                                                // so the merchant never sees raw JSON / debug_message.
-                                                let friendly;
-                                                const lower = errRaw.toLowerCase();
-                                                if (lower.includes("unsupported stats query")) {
-                                                    friendly = "هذا الاستعلام غير مدعوم على مستوى حساب الإعلانات (قد يكون السبب: Pixel غير مفعّل أو نوع المقياس غير متاح). الصرف قد يكون تم حفظه — أعد التحميل.";
-                                                } else if (lower.includes("invalid_token") || lower.includes("authorization") || lower.includes("401")) {
-                                                    friendly = "انتهت صلاحية ربط Snapchat — أعد الربط من الإعدادات.";
-                                                } else if (lower.includes("permission") || lower.includes("403")) {
-                                                    friendly = "التوكن لا يملك صلاحيات قراءة الحساب الإعلاني المختار.";
-                                                } else if (lower.includes("granularity") || lower.includes("start time")) {
-                                                    friendly = "خطأ في حدود التاريخ — أعد المحاولة بعد دقيقة، أو راجع timezone حساب الإعلانات.";
-                                                } else if (errRaw.length > 120) {
-                                                    friendly = `تعذّر جلب الصرف من Snapchat (راجع الإعدادات أو حاول لاحقاً): ${errRaw.slice(0, 100)}…`;
-                                                } else {
-                                                    friendly = `تعذّر جلب الصرف من Snapchat: ${errRaw}`;
-                                                }
-                                                toast.error(friendly, { id: "snap-fetch", duration: 10000 });
-                                            } else if (data.saved > 0 && totalSpend === 0) {
-                                                toast(`تم الجلب لكن صرف اليوم = 0 — تحقق من TZ حساب الإعلانات (${data.ad_account_timezone || "?"}) أو من وجود حملات نشطة`,
-                                                    { id: "snap-fetch", duration: 9000, icon: "ℹ️" });
+
+                                            // Friendly success message — distinguishes between
+                                            // "fetched, spend > 0", "fetched but zero" (no campaigns
+                                            // or TZ-edge), and includes FX info when relevant.
+                                            if (amount === 0) {
+                                                toast(`تم الجلب — صرف اليوم ${todayStr} = 0.00 ر.س (لا توجد حملات نشطة أو لم يبدأ الصرف بعد)`,
+                                                    { id: "snap-fetch", duration: 8000, icon: "ℹ️" });
+                                            } else if (native && native !== "SAR" && fx !== 1) {
+                                                toast.success(`تم تحديث صرف اليوم: ${amount.toFixed(2)} ر.س (${data.spend_native} ${native} × ${fx})`,
+                                                    { id: "snap-fetch" });
                                             } else {
-                                                toast.success(`تم تحديث صرف اليوم (${data.saved || 0} سجل / ${totalSpend.toFixed(2)} ر.س)`,
+                                                toast.success(`تم تحديث صرف اليوم: ${amount.toFixed(2)} ر.س`,
                                                     { id: "snap-fetch" });
                                             }
                                             fetchSnapSummary();
                                             refreshSilently();
                                         } catch (e) {
+                                            // Friendly Arabic translation for known Snap errors
+                                            // (mirrors the bulk-button error handling).
                                             const detail = e?.response?.data?.detail;
-                                            const msg = (typeof detail === "object" ? detail.message : detail)
-                                                || e.message || "فشل الجلب";
-                                            toast.error(msg, { id: "snap-fetch", duration: 8000 });
+                                            const raw = (typeof detail === "object" ? detail.message : detail) || e.message || "";
+                                            const lower = String(raw).toLowerCase();
+                                            let friendly;
+                                            if (lower.includes("unsupported stats query")) {
+                                                friendly = "هذا الاستعلام غير مدعوم — قد يكون Snap Pixel غير مفعّل أو المقياس غير متاح لحساب الإعلانات.";
+                                            } else if (lower.includes("invalid_token") || lower.includes("401") || lower.includes("authorization")) {
+                                                friendly = "انتهت صلاحية ربط Snapchat — أعد الربط من الإعدادات.";
+                                            } else if (lower.includes("permission") || lower.includes("403")) {
+                                                friendly = "التوكن لا يملك صلاحيات قراءة الحساب الإعلاني.";
+                                            } else if (lower.includes("اختر حساب") || lower.includes("سناب أولاً")) {
+                                                friendly = "اربط Snapchat من الإعدادات أولاً.";
+                                            } else {
+                                                friendly = String(raw).slice(0, 200) || "تعذّر جلب صرف Snapchat";
+                                            }
+                                            toast.error(friendly, { id: "snap-fetch", duration: 9000 });
                                         }
                                     }}
                                     className="flex items-center justify-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-black rounded-lg font-bold text-sm transition-colors w-full sm:w-auto"
