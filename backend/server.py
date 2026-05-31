@@ -34,6 +34,7 @@ from excel_parser import parse_salla_excel, match_settings
 from exports import export_report_excel, export_report_pdf
 from report_builder import build_report as _build_report
 from snapchat_routes import attach_snapchat_routes
+from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
 from orders_db import upsert_order, orders_to_parsed
@@ -1274,14 +1275,22 @@ async def meta_summary(user: dict = Depends(current_user)):
         spend = round(bucket["spend"], 2)
         purchases = bucket["purchases"]
         revenue = round(bucket["purchase_value"], 2)
+        impressions = bucket["impressions"]
+        clicks = bucket["clicks"]
         return {
             "spend": spend,
             "orders": purchases,
             "revenue": revenue,
-            "impressions": bucket["impressions"],
-            "clicks": bucket["clicks"],
+            "impressions": impressions,
+            "clicks": clicks,
             "roas": round(revenue / spend, 2) if spend > 0 else 0.0,
             "cpa": round(spend / purchases, 2) if purchases > 0 else 0.0,
+            # CPC = spend / clicks
+            "cpc": round(spend / clicks, 2) if clicks > 0 else 0.0,
+            # CPM = (spend / impressions) * 1000
+            "cpm": round((spend / impressions) * 1000, 2) if impressions > 0 else 0.0,
+            # CTR = (clicks / impressions) * 100
+            "ctr": round((clicks / impressions) * 100, 2) if impressions > 0 else 0.0,
         }
 
     # 30-day spend history for sparkline
@@ -1344,6 +1353,7 @@ async def root():
 
 # ── App wiring ────────────────────────────────────────────────────────────────
 attach_snapchat_routes(api, db)
+attach_meta_routes(api, db)
 attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
 app.include_router(api)

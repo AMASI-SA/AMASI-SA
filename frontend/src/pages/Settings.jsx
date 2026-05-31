@@ -53,6 +53,42 @@ export default function Settings() {
     const [snapAccounts, setSnapAccounts] = useState([]);
     const [snapLoadingAccounts, setSnapLoadingAccounts] = useState(false);
 
+    // ── Meta Ads state ─────────────────────────────────────────────────
+    const [metaConfig, setMetaConfig] = useState({
+        connected: false,
+        app_id: "",
+        app_secret_masked: "",
+        access_token_masked: "",
+        ad_account_id: "",
+        last_sync_at: null,
+        last_sync_summary: null,
+    });
+    const [metaForm, setMetaForm] = useState({
+        app_id: "",
+        app_secret: "",
+        access_token: "",
+        ad_account_id: "",
+    });
+    const [metaSaving, setMetaSaving] = useState(false);
+    const [metaSyncing, setMetaSyncing] = useState(false);
+
+    const loadMetaConfig = async () => {
+        try {
+            const { data } = await api.get("/meta/config");
+            setMetaConfig(data);
+            if (data.connected) {
+                setMetaForm({
+                    app_id: data.app_id || "",
+                    app_secret: "",
+                    access_token: "",
+                    ad_account_id: data.ad_account_id || "",
+                });
+            }
+        } catch {
+            /* no config yet */
+        }
+    };
+
     const loadSnapConfig = async () => {
         try {
             const { data } = await api.get("/snapchat/config");
@@ -90,8 +126,62 @@ export default function Settings() {
             } finally { setLoading(false); }
         })();
         loadSnapConfig();
+        loadMetaConfig();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // ── Meta Ads handlers ──────────────────────────────────────────────
+    const saveMetaConfig = async () => {
+        if (!metaForm.app_id.trim() || !metaForm.app_secret.trim()
+            || !metaForm.access_token.trim() || !metaForm.ad_account_id.trim()) {
+            toast.error("جميع الحقول مطلوبة");
+            return;
+        }
+        setMetaSaving(true);
+        try {
+            await api.put("/meta/config", {
+                app_id: metaForm.app_id.trim(),
+                app_secret: metaForm.app_secret.trim(),
+                access_token: metaForm.access_token.trim(),
+                ad_account_id: metaForm.ad_account_id.trim(),
+            });
+            toast.success("تم حفظ إعدادات Meta Ads");
+            await loadMetaConfig();
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل الحفظ");
+        } finally {
+            setMetaSaving(false);
+        }
+    };
+
+    const syncMetaNow = async () => {
+        setMetaSyncing(true);
+        try {
+            const { data } = await api.post("/meta/sync", { days: 30 });
+            if (data.errors && data.errors.length > 0) {
+                toast.error(`خطأ من Meta: ${data.errors[0]}`, { duration: 8000 });
+            } else {
+                toast.success(`تمت المزامنة: ${data.upserted} صف لـ ${data.rows} حملة`);
+            }
+            await loadMetaConfig();
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل المزامنة");
+        } finally {
+            setMetaSyncing(false);
+        }
+    };
+
+    const disconnectMeta = async () => {
+        if (!window.confirm("هل تريد فصل ربط Meta Ads؟ ستحتاج لإدخال البيانات من جديد.")) return;
+        try {
+            await api.delete("/meta/config");
+            setMetaForm({ app_id: "", app_secret: "", access_token: "", ad_account_id: "" });
+            await loadMetaConfig();
+            toast.success("تم فصل ربط Meta");
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل");
+        }
+    };
 
     const reloadShippingDiscovery = async () => {
         try {
@@ -895,6 +985,137 @@ export default function Settings() {
                             ))}
                         </div>
                     </div>
+                )}
+            </div>
+
+            {/* Meta Ads (Facebook + Instagram) integration */}
+            <div className="rounded-xl border border-border bg-white p-6" data-testid="meta-config-section">
+                <div className="mb-5 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-extrabold">
+                        f
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>ربط Meta Ads</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            اجلب تكاليف إعلانات Facebook و Instagram تلقائياً عبر Marketing API. يومياً، يتم جلب بيانات آخر 7 أيام تلقائياً عند فتح Dashboard.
+                        </p>
+                    </div>
+                </div>
+
+                {metaConfig.connected && (
+                    <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm" data-testid="meta-connected-badge">
+                        <span className="font-bold text-emerald-700">✓ مربوط</span>
+                        <span className="text-muted-foreground mx-2">•</span>
+                        <span dir="ltr">{metaConfig.ad_account_id}</span>
+                        {metaConfig.last_sync_at && (
+                            <span className="ms-3 text-xs text-muted-foreground">
+                                آخر مزامنة: {new Date(metaConfig.last_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}
+                            </span>
+                        )}
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">Meta App ID</label>
+                        <input
+                            type="text"
+                            value={metaForm.app_id}
+                            onChange={(e) => setMetaForm({ ...metaForm, app_id: e.target.value })}
+                            placeholder="1234567890123456"
+                            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg font-mono"
+                            dir="ltr"
+                            data-testid="meta-app-id-input"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                            Meta App Secret {metaConfig.connected && <span className="text-emerald-600">({metaConfig.app_secret_masked})</span>}
+                        </label>
+                        <input
+                            type="password"
+                            value={metaForm.app_secret}
+                            onChange={(e) => setMetaForm({ ...metaForm, app_secret: e.target.value })}
+                            placeholder={metaConfig.connected ? "اتركه فارغاً للإبقاء على القيمة الحالية… أو أدخل قيمة جديدة" : "abc123xyz…"}
+                            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg font-mono"
+                            dir="ltr"
+                            data-testid="meta-app-secret-input"
+                        />
+                    </div>
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                            Access Token (Long-lived) {metaConfig.connected && <span className="text-emerald-600">({metaConfig.access_token_masked})</span>}
+                        </label>
+                        <input
+                            type="password"
+                            value={metaForm.access_token}
+                            onChange={(e) => setMetaForm({ ...metaForm, access_token: e.target.value })}
+                            placeholder={metaConfig.connected ? "اتركه فارغاً للإبقاء على القيمة الحالية…" : "EAAxxxxxxxxxxxxxxxxxxx"}
+                            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg font-mono"
+                            dir="ltr"
+                            data-testid="meta-access-token-input"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                            احصل عليه من <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" className="text-blue-600 underline">Graph API Explorer</a> مع صلاحيات <code>ads_read</code> + <code>business_management</code>.
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-muted-foreground mb-1.5">Ad Account ID</label>
+                        <input
+                            type="text"
+                            value={metaForm.ad_account_id}
+                            onChange={(e) => setMetaForm({ ...metaForm, ad_account_id: e.target.value })}
+                            placeholder="act_123456789 أو 123456789"
+                            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg font-mono"
+                            dir="ltr"
+                            data-testid="meta-ad-account-input"
+                        />
+                    </div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        onClick={saveMetaConfig}
+                        disabled={metaSaving}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-bold text-sm"
+                        data-testid="meta-save-btn"
+                    >
+                        <FloppyDisk size={16} weight="bold" />
+                        {metaSaving ? "جاري الحفظ…" : "حفظ"}
+                    </button>
+                    {metaConfig.connected && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={syncMetaNow}
+                                disabled={metaSyncing}
+                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-lg font-bold text-sm"
+                                data-testid="meta-sync-btn"
+                            >
+                                <ArrowsClockwise size={16} weight="bold" />
+                                {metaSyncing ? "جاري المزامنة…" : "مزامنة Meta الآن (30 يوم)"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={disconnectMeta}
+                                className="inline-flex items-center gap-2 px-4 py-2.5 border border-red-300 text-red-700 hover:bg-red-50 rounded-lg font-bold text-sm"
+                                data-testid="meta-disconnect-btn"
+                            >
+                                <LinkBreak size={16} weight="bold" />
+                                فصل الحساب
+                            </button>
+                        </>
+                    )}
+                </div>
+
+                {metaConfig.last_sync_summary && (
+                    <details className="mt-4 text-xs">
+                        <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-bold">
+                            تفاصيل آخر مزامنة ({metaConfig.last_sync_summary.upserted} صف)
+                        </summary>
+                        <pre dir="ltr" className="mt-2 p-3 bg-accent/40 rounded text-[10px] overflow-x-auto">{JSON.stringify(metaConfig.last_sync_summary, null, 2)}</pre>
+                    </details>
                 )}
             </div>
         </div>

@@ -97,6 +97,19 @@ export default function Dashboard() {
         }
     };
 
+    // Best-effort daily auto-sync — fires once on dashboard mount.
+    // Idempotent: the backend skips if the last sync was within 23h.
+    const autoSyncMetaIfStale = async () => {
+        try {
+            const { data } = await api.post("/meta/auto-sync-if-stale");
+            if (data?.synced && data?.upserted) {
+                fetchMetaSummary();  // pull the freshly-synced data
+            }
+        } catch {
+            /* not connected → silently skip */
+        }
+    };
+
     const fetchDashboard = async (f = filters) => {
         setLoading(true);
         try {
@@ -190,6 +203,8 @@ export default function Dashboard() {
     };
 
     useEffect(() => { fetchDashboard(filters); /* eslint-disable-next-line */ }, [filters]);
+    // Trigger Meta auto-sync once on mount (idempotent — backend skips if recent)
+    useEffect(() => { autoSyncMetaIfStale(); /* eslint-disable-next-line */ }, []);
 
     const openReprocessPicker = (id) => {
         pendingReprocessId.current = id;
@@ -522,13 +537,37 @@ export default function Dashboard() {
                                     <div>
                                         <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Meta Ads (Facebook + Instagram)</h2>
                                         <p className="text-xs text-muted-foreground">
-                                            البيانات تصل من Make.com يومياً عبر Facebook Marketing API
+                                            تتم المزامنة يومياً عبر Marketing API — اضغط الزر للتحديث الفوري
                                             {metaSummary.last_sync_at && (
                                                 <span className="ms-2 text-blue-700">• آخر مزامنة: {new Date(metaSummary.last_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
                                             )}
                                         </p>
                                     </div>
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        try {
+                                            toast.loading("جاري مزامنة Meta…", { id: "meta-sync" });
+                                            const { data } = await api.post("/meta/sync", { days: 30 });
+                                            if (data.errors?.length) {
+                                                toast.error(`خطأ: ${data.errors[0]}`, { id: "meta-sync", duration: 8000 });
+                                            } else {
+                                                toast.success(`تم: ${data.upserted} صف`, { id: "meta-sync" });
+                                            }
+                                            fetchMetaSummary();
+                                        } catch (e) {
+                                            const msg = e?.response?.data?.detail || "فشل";
+                                            toast.error(msg, { id: "meta-sync" });
+                                        }
+                                    }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors"
+                                    style={{ fontFamily: "Tajawal" }}
+                                    data-testid="meta-sync-now-btn"
+                                >
+                                    <ArrowsClockwise size={16} weight="bold" />
+                                    مزامنة Meta الآن
+                                </button>
                             </div>
 
                             {metaSummary.last_30d.spend === 0 && metaSummary.last_30d.orders === 0 ? (
@@ -596,6 +635,26 @@ export default function Dashboard() {
                                                     <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: metaSummary.month.roas >= 2 ? "#047857" : "#B45309" }}>
                                                         {metaSummary.month.spend > 0 ? `${metaSummary.month.roas}x` : "—"}
                                                     </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Performance metrics row */}
+                                            <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="meta-performance-row">
+                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
+                                                    <div className="text-xs text-muted-foreground mb-1">مرات الظهور (Impressions)</div>
+                                                    <div className="num text-lg font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(metaSummary.month.impressions)}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
+                                                    <div className="text-xs text-muted-foreground mb-1">النقرات (Clicks)</div>
+                                                    <div className="num text-lg font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(metaSummary.month.clicks)}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
+                                                    <div className="text-xs text-muted-foreground mb-1">CPC (متوسط ر.س/نقرة)</div>
+                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }}>{metaSummary.month.cpc > 0 ? `${formatMoney(metaSummary.month.cpc)}` : "—"}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
+                                                    <div className="text-xs text-muted-foreground mb-1">CTR (% نقر)</div>
+                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }}>{metaSummary.month.ctr > 0 ? `${metaSummary.month.ctr}%` : "—"}</div>
                                                 </div>
                                             </div>
                                         </div>
