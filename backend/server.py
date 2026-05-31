@@ -1393,6 +1393,153 @@ async def meta_summary(user: dict = Depends(current_user)):
     }
 
 
+# ── Unified Ads Report (Snap + TikTok + Meta) ────────────────────────────────
+@api.get("/reports/ads")
+async def unified_ads_report(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: dict = Depends(current_user),
+):
+    """Unified daily/comparison report for all three ad platforms.
+
+    Returns per-platform aggregates over [from_date, to_date] (defaults to
+    current month-to-date) plus a per-day series so the UI can chart
+    spend/ROAS comparisons. Each platform reports the same metric shape:
+      spend, impressions, clicks, purchases, revenue,
+      cpc, cpm, ctr, cpa, roas.
+
+    Snapchat numbers come from `daily_costs.snapchat_ads(+_2)` (spend) and
+    `snapchat_daily_stats` (purchases/revenue from Pixel). Performance
+    metrics (CPC/CPM/CTR/CPA) for Snap aren't fetched yet — they default
+    to 0 until we hit the Marketing API stats endpoint. TikTok and Meta
+    expose the full metric set from their daily collections.
+    """
+    uid = user["id"]
+    today_d = datetime.now(timezone.utc).date()
+    month_start = today_d.replace(day=1)
+
+    fd = _parse_date_or(from_date, month_start)
+    td = _parse_date_or(to_date, today_d)
+    if td < fd:
+        fd, td = td, fd
+    fd_str, td_str = fd.isoformat(), td.isoformat()
+
+    def _metrics(spend, impressions, clicks, purchases, revenue):
+        spend = float(spend or 0)
+        impressions = int(impressions or 0)
+        clicks = int(clicks or 0)
+        purchases = int(purchases or 0)
+        revenue = float(revenue or 0)
+        return {
+            "spend": round(spend, 2),
+            "impressions": impressions,
+            "clicks": clicks,
+            "purchases": purchases,
+            "revenue": round(revenue, 2),
+            "cpc": round(spend / clicks, 2) if clicks > 0 else 0.0,
+            "cpm": round((spend / impressions) * 1000, 2) if impressions > 0 else 0.0,
+            "ctr": round((clicks / impressions) * 100, 2) if impressions > 0 else 0.0,
+            "cpa": round(spend / purchases, 2) if purchases > 0 else 0.0,
+            "roas": round(revenue / spend, 2) if spend > 0 else 0.0,
+        }
+
+    # ── Snapchat ─────────────────────────────────────────────────────────
+    snap_spend_by_date: dict = {}
+    async for r in db.daily_costs.find(
+        {"user_id": uid, "date": {"$gte": fd_str, "$lte": td_str}},
+        {"_id": 0, "date": 1, "snapchat_ads": 1, "snapchat_ads_2": 1},
+    ):
+        d = r.get("date")
+        if not d:
+            continue
+        snap_spend_by_date[d] = snap_spend_by_date.get(d, 0.0) \
+            + float(r.get("snapchat_ads") or 0) + float(r.get("snapchat_ads_2") or 0)
+    snap_stats_by_date: dict = {}
+    async for r in db.snapchat_daily_stats.find(
+        {"user_id": uid, "date": {"$gte": fd_str, "$lte": td_str}},
+        {"_id": 0, "date": 1, "purchases": 1, "revenue": 1},
+    ):
+        snap_stats_by_date[r["date"]] = r
+    snap_spend = round(sum(snap_spend_by_date.values()), 2)
+    snap_purchases = sum(int(r.get("purchases") or 0) for r in snap_stats_by_date.values())
+    snap_revenue = round(sum(float(r.get("revenue") or 0) for r in snap_stats_by_date.values()), 2)
+    snap = {
+        "platform": "snapchat",
+        "label": "Snapchat",
+        **_metrics(snap_spend, 0, 0, snap_purchases, snap_revenue),
+    }
+
+    # ── TikTok ───────────────────────────────────────────────────────────
+    tt_rows = await db.tiktok_ads_daily.find(
+        {"user_id": uid, "date": {"$gte": fd_str, "$lte": td_str}},
+        {"_id": 0},
+    ).to_list(5000)
+    tt_spend = sum(float(r.get("spend") or 0) for r in tt_rows)
+    tt_imp = sum(int(r.get("impressions") or 0) for r in tt_rows)
+    tt_clicks = sum(int(r.get("clicks") or 0) for r in tt_rows)
+    tt_purchases = sum(int(r.get("purchases") or 0) for r in tt_rows)
+    tt_revenue = sum(float(r.get("revenue") or 0) for r in tt_rows)
+    tiktok = {
+        "platform": "tiktok",
+        "label": "TikTok",
+        **_metrics(tt_spend, tt_imp, tt_clicks, tt_purchases, tt_revenue),
+    }
+    tt_spend_by_date: dict = {}
+    for r in tt_rows:
+        tt_spend_by_date[r["date"]] = tt_spend_by_date.get(r["date"], 0.0) + float(r.get("spend") or 0)
+
+    # ── Meta ─────────────────────────────────────────────────────────────
+    meta_rows = await db.meta_ads_daily.find(
+        {"user_id": uid, "date": {"$gte": fd_str, "$lte": td_str}},
+        {"_id": 0},
+    ).to_list(5000)
+    m_spend = sum(float(r.get("spend") or 0) for r in meta_rows)
+    m_imp = sum(int(r.get("impressions") or 0) for r in meta_rows)
+    m_clicks = sum(int(r.get("clicks") or 0) for r in meta_rows)
+    m_purchases = sum(int(r.get("purchases") or 0) for r in meta_rows)
+    m_revenue = sum(float(r.get("purchase_value") or 0) for r in meta_rows)
+    meta_p = {
+        "platform": "meta",
+        "label": "Meta",
+        **_metrics(m_spend, m_imp, m_clicks, m_purchases, m_revenue),
+    }
+    meta_spend_by_date: dict = {}
+    for r in meta_rows:
+        meta_spend_by_date[r["date"]] = meta_spend_by_date.get(r["date"], 0.0) + float(r.get("spend") or 0)
+
+    # ── Daily series (one row per date in range) ─────────────────────────
+    series = []
+    cur = fd
+    while cur <= td:
+        ds = cur.isoformat()
+        series.append({
+            "date": ds,
+            "snapchat": round(snap_spend_by_date.get(ds, 0.0), 2),
+            "tiktok": round(tt_spend_by_date.get(ds, 0.0), 2),
+            "meta": round(meta_spend_by_date.get(ds, 0.0), 2),
+        })
+        cur = cur + timedelta(days=1)
+
+    # ── Combined totals ──────────────────────────────────────────────────
+    combined_spend = snap["spend"] + tiktok["spend"] + meta_p["spend"]
+    combined_revenue = snap["revenue"] + tiktok["revenue"] + meta_p["revenue"]
+    combined_purchases = snap["purchases"] + tiktok["purchases"] + meta_p["purchases"]
+    combined_clicks = tiktok["clicks"] + meta_p["clicks"]  # Snap not available
+    combined_impressions = tiktok["impressions"] + meta_p["impressions"]
+    combined = {
+        "label": "الإجمالي",
+        **_metrics(combined_spend, combined_impressions, combined_clicks,
+                   combined_purchases, combined_revenue),
+    }
+
+    return {
+        "range": {"from_date": fd_str, "to_date": td_str},
+        "platforms": [snap, tiktok, meta_p],
+        "combined": combined,
+        "series": series,
+    }
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 @api.get("/")
 async def root():

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChartPieSlice, CalendarBlank, ArrowsClockwise } from "@phosphor-icons/react";
+import { ChartPieSlice, CalendarBlank, ArrowsClockwise, Megaphone } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
     PieChart, Pie, Cell,
@@ -165,13 +166,23 @@ export default function Reports() {
 
     return (
         <div className="space-y-8 animate-fade-in-up" data-testid="reports-page">
-            <div>
-                <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>التقارير</h1>
-                <p className="text-muted-foreground mt-2 text-base">
-                    {(fromDate || toDate)
-                        ? `عرض البيانات من ${fromDate || "البداية"} إلى ${toDate || "الآن"}`
-                        : "تقارير مجمَّعة عبر جميع التحاليل المحفوظة لديك."}
-                </p>
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                <div>
+                    <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>التقارير</h1>
+                    <p className="text-muted-foreground mt-2 text-base">
+                        {(fromDate || toDate)
+                            ? `عرض البيانات من ${fromDate || "البداية"} إلى ${toDate || "الآن"}`
+                            : "تقارير مجمَّعة عبر جميع التحاليل المحفوظة لديك."}
+                    </p>
+                </div>
+                <Link
+                    to="/reports/ads"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand text-white font-bold rounded-lg bg-brand-hover transition-colors shrink-0"
+                    data-testid="reports-ads-link"
+                >
+                    <Megaphone size={18} weight="duotone" />
+                    تقرير الإعلانات الموحَّد
+                </Link>
             </div>
 
             {/* Advanced filters: date preset + payment + shipping */}

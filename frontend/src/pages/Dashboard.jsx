@@ -522,7 +522,7 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* Meta Ads (Facebook + Instagram) dedicated section — pushed via Make.com webhook */}
+                    {/* Meta Ads (Facebook + Instagram) dedicated section — Direct Marketing API integration */}
                     {metaSummary && (
                         <div
                             className="rounded-xl border-2 border-blue-300 p-6"
@@ -537,7 +537,7 @@ export default function Dashboard() {
                                     <div>
                                         <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Meta Ads (Facebook + Instagram)</h2>
                                         <p className="text-xs text-muted-foreground">
-                                            تتم المزامنة يومياً عبر Marketing API — اضغط الزر للتحديث الفوري
+                                            ربط مباشر مع Meta Marketing API — اضغط الزر للتحديث الفوري
                                             {metaSummary.last_sync_at && (
                                                 <span className="ms-2 text-blue-700">• آخر مزامنة: {new Date(metaSummary.last_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
                                             )}
@@ -571,12 +571,13 @@ export default function Dashboard() {
                             </div>
 
                             {metaSummary.last_30d.spend === 0 && metaSummary.last_30d.orders === 0 ? (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 leading-relaxed">
-                                    لا توجد بيانات Meta Ads بعد. أنشئ Scenario في Make.com يجلب من Facebook Marketing API يومياً ويُرسل إلى:
-                                    <div className="font-mono mt-2 p-2 bg-white rounded text-xs select-all" dir="ltr">
-                                        {window.location.origin}/api/webhook/meta/&lt;token&gt;
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 leading-relaxed" data-testid="meta-empty-state">
+                                    لا توجد بيانات Meta Ads بعد. اربط حسابك مع Meta Marketing API مباشرةً من صفحة الإعدادات (App ID + App Secret + Access Token) ثم اضغط <strong>"مزامنة Meta الآن"</strong> لجلب بيانات آخر 30 يوم.
+                                    <div className="mt-3">
+                                        <Link to="/settings" className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-md font-bold text-xs hover:bg-blue-700 transition-colors" data-testid="meta-go-settings-btn">
+                                            الذهاب إلى الإعدادات ←
+                                        </Link>
                                     </div>
-                                    <div className="mt-1 text-xs text-blue-700">احصل على الـ token من صفحة "ربط Make.com"</div>
                                 </div>
                             ) : (
                                 <>
@@ -638,23 +639,27 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
 
-                                            {/* Performance metrics row */}
-                                            <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="meta-performance-row">
-                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
-                                                    <div className="text-xs text-muted-foreground mb-1">مرات الظهور (Impressions)</div>
-                                                    <div className="num text-lg font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(metaSummary.month.impressions)}</div>
-                                                </div>
-                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
-                                                    <div className="text-xs text-muted-foreground mb-1">النقرات (Clicks)</div>
-                                                    <div className="num text-lg font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(metaSummary.month.clicks)}</div>
-                                                </div>
+                                            {/* Performance metrics row (Snap-style) — Spend·CPC·CPM·CTR·Purchases breakdown */}
+                                            <div className="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-3" data-testid="meta-performance-row">
                                                 <div className="bg-white border border-blue-200 rounded-lg p-3">
                                                     <div className="text-xs text-muted-foreground mb-1">CPC (متوسط ر.س/نقرة)</div>
-                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }}>{metaSummary.month.cpc > 0 ? `${formatMoney(metaSummary.month.cpc)}` : "—"}</div>
+                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }} data-testid="meta-cpc-month">{metaSummary.month.cpc > 0 ? `${formatMoney(metaSummary.month.cpc)}` : "—"}</div>
                                                 </div>
                                                 <div className="bg-white border border-blue-200 rounded-lg p-3">
-                                                    <div className="text-xs text-muted-foreground mb-1">CTR (% نقر)</div>
-                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }}>{metaSummary.month.ctr > 0 ? `${metaSummary.month.ctr}%` : "—"}</div>
+                                                    <div className="text-xs text-muted-foreground mb-1">CPM (ر.س / 1000 ظهور)</div>
+                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }} data-testid="meta-cpm-month">{metaSummary.month.cpm > 0 ? `${formatMoney(metaSummary.month.cpm)}` : "—"}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
+                                                    <div className="text-xs text-muted-foreground mb-1">CTR (نسبة النقر)</div>
+                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }} data-testid="meta-ctr-month">{metaSummary.month.ctr > 0 ? `${metaSummary.month.ctr}%` : "—"}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
+                                                    <div className="text-xs text-muted-foreground mb-1">مرات الظهور</div>
+                                                    <div className="num text-lg font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }} data-testid="meta-impressions-month">{formatInt(metaSummary.month.impressions)}</div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
+                                                    <div className="text-xs text-muted-foreground mb-1">النقرات</div>
+                                                    <div className="num text-lg font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }} data-testid="meta-clicks-month">{formatInt(metaSummary.month.clicks)}</div>
                                                 </div>
                                             </div>
                                         </div>

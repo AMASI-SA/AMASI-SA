@@ -1,0 +1,29 @@
+{
+  "summary": "P0 Meta-card refresh + P1 Unified Ads Report (/reports/ads) verified end-to-end. Backend: 5/5 pytest tests in test_unified_ads_report.py pass (empty shape, snapchat daily_costs ingestion, tiktok webhook with derived metric math cpc=1.5/cpm=30/ctr=2.0/cpa=30/roas=5.0, date-range filtering, 3-platform combined math roas=4.86/ctr=1.69). Frontend P0: Dashboard meta-ads-section header reads 'Meta Ads (Facebook + Instagram)' with the subtitle 'ربط مباشر مع Meta Marketing API' and contains zero 'Make.com' mentions; meta-sync-now-btn click triggers POST /api/meta/sync which (since admin has no Meta credentials configured) returns the expected Arabic error toast 'Meta Ads غير مربوط — افتح الإعدادات وأضف بيانات الحساب أولاً'; meta-empty-state renders for admin (no spend/orders), mentions الإعدادات, has no Make.com text, and meta-go-settings-btn href=/settings. Frontend P1: /reports route shows reports-ads-link → /reports/ads; the new AdsReport page loads with ads-report-page test-id; ads-report-filters, ads-report-from-date, ads-report-to-date and ads-report-refresh-btn function correctly (date change → refresh refetches); ads-report-combined card exposes all 6 metric test-ids (combined-spend/revenue/purchases/roas/impressions/clicks); 3 per-platform cards rendered (ads-report-platform-snapchat/tiktok/meta); ads-report-daily-chart and ads-report-roas-chart render; ads-report-comparison-table has exactly 10 metric rows (spend/revenue/purchases/roas/cpc/cpm/ctr/cpa/impressions/clicks). No critical or minor backend/frontend issues found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_unified_ads_report.py",
+    "/app/test_reports/pytest/unified_ads_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py /api/reports/ads endpoint: clean aggregation across snapchat_daily_stats + daily_costs (snapchat_ads + snapchat_ads_2) + tiktok_ads_daily + meta_ads_daily; derived metrics (cpc, cpm, ctr, cpa, roas) all computed server-side with safe zero-guards and rounded to 2 dp — matches the contract verified by the 5 unit tests.",
+    "AdsReport.jsx: well-structured page with PlatformCard / Combined / DailySpendChart / ComparisonTable / RoasComparison sub-components; uses recharts properly with ResponsiveContainer; conditionally renders ROAS chart only when ≥1 platform has positive ROAS; uses formatMoney/Number helpers consistently.",
+    "Dashboard.jsx Meta section: empty-state now correctly directs users to /settings with a primary CTA (meta-go-settings-btn) and contains no Make.com references; performance row has all 5 cards including meta-cpm-month; subtitle says 'ربط مباشر مع Meta Marketing API' (Meta-only flow, no Make.com).",
+    "Minor cosmetic note (NOT blocking): the sidebar still shows a 'ربط Make.com' nav link — this is the global Make.com integration page (not the Meta section), so it is unrelated to this PR scope.",
+    "Reports.jsx reports-ads-link is a real <Link to='/reports/ads'> with the data-testid attached — clicking navigates correctly."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (5/5 unified-ads pytest tests pass)", "frontend": "100% on tested flows (Dashboard Meta card P0 + AdsReport P1 all test-ids present and functional)"},
+  "test_credentials": "admin@hesab.app / admin123 (works). Pytest tests auto-register fresh TEST_ads_<uuid>@hesab.app users.",
+  "seed_data_creation": "None on admin account beyond what tests created (each pytest test uses ephemeral registered user; UI test only browsed admin views and clicked the Meta sync button which failed gracefully because admin has no Meta credentials).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Unified Ads Report endpoint: GET /api/reports/ads (JWT-protected, accepts from_date/to_date YYYY-MM-DD, defaults to current month-to-date). Returns {range:{from,to}, platforms:[{platform:'snapchat'|'tiktok'|'meta', spend, impressions, clicks, purchases, revenue, cpc, cpm, ctr, cpa, roas}], combined:{...same shape}, series:[{date, snapchat, tiktok, meta}]}. Snapchat has no impressions/clicks data (Pixel-only) so its cpc/cpm/ctr/cpa stay 0 — expected. Page testid contract: ads-report-page, ads-report-from-date, ads-report-to-date, ads-report-refresh-btn, ads-report-combined, combined-{spend|revenue|purchases|roas|impressions|clicks}, ads-report-platform-{snapchat|tiktok|meta}, ads-report-daily-chart, ads-report-comparison-table (exactly 10 rows), ads-report-roas-chart (renders only when any platform.roas>0). Reports list has reports-ads-link → /reports/ads. Dashboard Meta card: header has 'Meta Ads (Facebook + Instagram)' + subtitle 'ربط مباشر مع Meta Marketing API', meta-sync-now-btn POSTs /api/meta/sync (returns Arabic error toast when account not connected — expected), meta-empty-state appears when last_30d.spend==0 AND orders==0, meta-go-settings-btn → /settings, performance row has 5 cards including the new meta-cpm-month. No Make.com text in the Meta card.",
+  "rca of the issue": "N/A — no bugs found, all 5 backend tests pass and all P0/P1 frontend test-ids and flows verified."
+}
