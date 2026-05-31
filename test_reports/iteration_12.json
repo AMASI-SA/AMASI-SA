@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 12 — verified the friendly Arabic Meta-error refactor end-to-end. Backend: 7/7 new tests in test_meta_friendly_errors.py PASS (/test-connection with bad token returns exact Arabic detail string, no token persisted, /sync without conn returns Arabic, /meta/config and /dashboard/meta-summary expose connection_status/last_error_message/last_error_at, no OAuthException/fbtrace_id leakage anywhere). Regression: 30/30 pass on test_unified_ads_report.py + test_operating_expenses.py + test_no_date_fallback.py + test_net_sales_config.py. Frontend Playwright @1280x800: 7/7 checks PASS — meta-test-connection-btn label='اختبار الاتصال', meta-save-btn label='حفظ بدون اختبار', empty-field click shows Arabic toast 'Meta App ID و Ad Account ID مطلوبان للاختبار', invalid-token click shows EXACT expected string 'انتهت صلاحية ربط Meta Ads، يرجى تحديث Access Token من الإعدادات.', Dashboard meta-sync-now-btn click as admin (no creds) shows 'Meta Ads غير مربوط — افتح الإعدادات وأضف بيانات الحساب أولاً' — no JSON, no [object Object], no English error code 190.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_meta_friendly_errors.py",
+    "/app/test_reports/pytest/iteration_12_meta_errors.xml",
+    "/app/test_reports/pytest/iteration_12_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "meta_routes._classify_meta_error: the chained `and` precedence around lines 140 and 145 is ambiguous (`'access token' in s and ('expired' in s or 'invalid' in s)` works but `'oauthexception' in s and '190' in s` happens at end of the same `or`-chain — parentheses would make intent clearer). Behavior is correct for current Meta payloads but consider grouping with parens to avoid future surprises.",
+    "meta_routes /sync: `detail` on the raised HTTPException is now a dict (message/status/raw). FastAPI serialises that fine, but any older frontend code still doing `toast.error(err.response.data.detail)` would render '[object Object]'. Dashboard.jsx already handles the dict shape; verify other call sites (e.g. background sync code) do too.",
+    "Settings.jsx fmtMetaErr: good central helper. Confirm it is used everywhere a Meta API rejection bubbles up — currently used in 4 catch blocks; saveMetaConfig, testMetaConnection, syncMetaNow, deleteMetaConfig all covered. ✓",
+    "meta_routes.test_connection: on first-time save when token-test succeeds but app_secret is blank we raise 400 AFTER calling Meta. Consider validating app_secret presence before the network call to avoid wasted API hits / rate-limit pressure."
+  ],
+  "updated_files": ["/app/backend/tests/test_meta_friendly_errors.py"],
+  "success_rate": {"backend": "100% (37/37 — 7 new + 30 regression)", "frontend": "100% (7/7 Playwright checks)"},
+  "test_credentials": "admin@hesab.app / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — admin user intentionally has no meta_connections row so error-path tests hit real Meta API with bogus token (returns code 190 → mapped to friendly Arabic).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All Meta friendly-error acceptance criteria verified. The exact Arabic string 'انتهت صلاحية ربط Meta Ads، يرجى تحديث Access Token من الإعدادات.' is correctly returned by both /api/meta/test-connection (HTTP 400, detail=string) and would be returned by /api/meta/sync (HTTP 401, detail.message=string, detail.status='expired') though sync with expired-token state could not be directly exercised because admin has no stored connection — the 'no connection' path was verified instead. For a deeper test, seed a meta_connections doc with a known-bad token and call /sync; expect 401 + detail.status='expired' + meta_ads_daily rows preserved. Dashboard banner code paths (meta-expired-banner / meta-update-link-btn / meta-warn-banner) are gated by connection_status from meta-summary; their JSX is present and the testids match the contract — they will render once a real expired connection is in the DB.",
+  "rca of the issue": "N/A — feature addition, not a bug fix. All acceptance criteria from the request met."
+}

@@ -1406,7 +1406,8 @@ async def meta_summary(user: dict = Depends(current_user)):
         campaigns.append(c)
     campaigns.sort(key=lambda x: x["spend"], reverse=True)
 
-    # Last sync timestamp
+    # Last sync timestamp + connection health (so the dashboard can show
+    # an "expired link" banner instead of a confusing 0.00 figure).
     last_sync = None
     latest = await db.meta_ads_daily.find_one(
         {"user_id": uid}, {"_id": 0, "updated_at": 1},
@@ -1415,6 +1416,14 @@ async def meta_summary(user: dict = Depends(current_user)):
     if latest:
         last_sync = latest.get("updated_at")
 
+    meta_conn = await db.meta_connections.find_one(
+        {"user_id": uid},
+        {"_id": 0, "connection_status": 1, "last_error_message": 1, "last_error_at": 1},
+    )
+    connection_status = (meta_conn or {}).get("connection_status") or "ok"
+    last_error_message = (meta_conn or {}).get("last_error_message")
+    last_error_at = (meta_conn or {}).get("last_error_at")
+
     return {
         "today": {"date": today_str, **_agg(today_str, today_str)},
         "month": {"start": month_start_str, **_agg(month_start_str, today_str)},
@@ -1422,6 +1431,9 @@ async def meta_summary(user: dict = Depends(current_user)):
         "history": history,
         "campaigns": campaigns,
         "last_sync_at": last_sync,
+        "connection_status": connection_status,
+        "last_error_message": last_error_message,
+        "last_error_at": last_error_at,
     }
 
 

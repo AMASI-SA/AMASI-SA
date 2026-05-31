@@ -125,6 +125,42 @@ def _extract_purchase_value(action_values: Optional[list]) -> float:
     return total
 
 
+def _classify_meta_error(error_text: str) -> tuple[str, str]:
+    """Inspect a Meta API error string and return (status, friendly_arabic_message).
+
+    Meta returns errors as JSON: {"error":{"code":190,"message":"Error validating access token: Session has expired..."}}
+    or sometimes wrapped in HTTP 400/401 bodies. We pattern-match the most common
+    failure modes so the UI never has to show raw JSON to the merchant.
+    """
+    s = (error_text or "").lower()
+    # Code 190 = expired/invalid access token (most common)
+    if ("code\":190" in s or "code\": 190" in s
+            or "session has expired" in s
+            or "session expired" in s
+            or "access token" in s and ("expired" in s or "invalid" in s)
+            or "oauthexception" in s and "190" in s):
+        return ("expired",
+                "انتهت صلاحية ربط Meta Ads، يرجى تحديث Access Token من الإعدادات.")
+    # Code 200 = permission / capability issue
+    if "code\":200" in s or "code\": 200" in s or "permission" in s and "ads_read" in s:
+        return ("permission_denied",
+                "الـ Access Token لا يملك صلاحيات قراءة الإعلانات (ads_read). يرجى إعادة إنشاء التوكن بالصلاحيات الصحيحة.")
+    # Ad account not found / invalid
+    if "code\":100" in s or "code\": 100" in s or "act_" in s and "not exist" in s:
+        return ("invalid_account",
+                "معرّف حساب الإعلانات (Ad Account ID) غير صحيح أو لا يملك التوكن صلاحية الوصول إليه.")
+    # Rate limited
+    if "code\":17" in s or "code\": 17" in s or "rate limit" in s or "too many" in s:
+        return ("rate_limited",
+                "تم تجاوز حد الطلبات لـ Meta API مؤقتاً. يرجى المحاولة بعد دقائق.")
+    # Network/timeout
+    if "network error" in s or "timeout" in s or "connection" in s:
+        return ("network_error",
+                "تعذّر الاتصال بـ Meta API. تحقق من اتصال الإنترنت ثم حاول مرة أخرى.")
+    # Generic
+    return ("error", "تعذّرت المزامنة مع Meta. تواصل مع الدعم إذا استمرت المشكلة.")
+
+
 async def _fetch_meta_insights(
     ad_account_id: str,
     access_token: str,
@@ -168,6 +204,31 @@ async def _fetch_meta_insights(
     return rows, errors
 
 
+async def _verify_meta_credentials(
+    ad_account_id: str,
+    access_token: str,
+) -> tuple[bool, str, dict]:
+    """Lightweight credential check used by /meta/test-connection.
+
+    Calls the ad account endpoint (NOT /insights — that requires time_range
+    and is slower). Returns (ok, message, account_info_or_empty).
+    """
+    url = f"{META_API_BASE}/{ad_account_id}"
+    params = {"fields": "id,name,account_status,currency,timezone_name",
+              "access_token": access_token}
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as http:
+            resp = await http.get(url, params=params)
+            if resp.status_code >= 400:
+                _, msg = _classify_meta_error(resp.text)
+                return (False, msg, {})
+            data = resp.json()
+            return (True, "تم الاتصال بنجاح ✓", data)
+    except httpx.HTTPError as exc:
+        _, msg = _classify_meta_error(f"network error: {exc}")
+        return (False, msg, {})
+
+
 # ── Router ────────────────────────────────────────────────────────────────────
 def attach_meta_routes(parent_router, db):
     """Mount /meta/* routes onto the given parent router."""
@@ -180,6 +241,20 @@ def attach_meta_routes(parent_router, db):
 
     async def _get_conn(user_id: str) -> Optional[dict]:
         return await db.meta_connections.find_one({"user_id": user_id}, {"_id": 0})
+
+    async def _set_status(user_id: str, status: str, last_error: Optional[str] = None) -> None:
+        """Persist the latest connection status (ok/expired/error) + a friendly
+        Arabic error so the dashboard can render a clear banner without ever
+        showing raw JSON to the user."""
+        update_doc = {
+            "connection_status": status,
+            "last_error_message": last_error if last_error else None,
+            "last_error_at": datetime.now(timezone.utc).isoformat() if status != "ok" else None,
+        }
+        await db.meta_connections.update_one(
+            {"user_id": user_id},
+            {"$set": update_doc},
+        )
 
     @router.get("/config")
     async def get_config(user: dict = Depends(current_user)):
@@ -194,6 +269,9 @@ def attach_meta_routes(parent_router, db):
             "ad_account_id": conn.get("ad_account_id", ""),
             "last_sync_at": conn.get("last_sync_at"),
             "last_sync_summary": conn.get("last_sync_summary"),
+            "connection_status": conn.get("connection_status", "ok"),
+            "last_error_message": conn.get("last_error_message"),
+            "last_error_at": conn.get("last_error_at"),
         }
 
     @router.put("/config")
@@ -231,6 +309,70 @@ def attach_meta_routes(parent_router, db):
         )
         return {"ok": True}
 
+    @router.post("/test-connection")
+    async def test_connection(payload: MetaConfigIn, user: dict = Depends(current_user)):
+        """Verify the supplied credentials against Meta API WITHOUT committing
+        them unless the test passes. UI uses this from a dedicated "اختبار الاتصال"
+        button so the merchant can validate a freshly-pasted token before
+        clicking Save."""
+        normalized = _normalize_ad_account_id(payload.ad_account_id)
+        if not re.match(r"^act_\d+$", normalized):
+            raise HTTPException(status_code=400,
+                                detail="Ad Account ID يجب أن يكون رقماً (مع/بدون act_)")
+        existing = await _get_conn(user["id"])
+        new_token = (payload.access_token or "").strip()
+        # If the merchant left the token blank in the test form, fall back to
+        # the stored token (lets them validate an existing connection without
+        # re-typing 200+ characters).
+        token_to_test = new_token or (existing or {}).get("access_token", "")
+        if not token_to_test:
+            raise HTTPException(status_code=400,
+                                detail="الرجاء إدخال Access Token للاختبار")
+
+        ok, msg, account_info = await _verify_meta_credentials(normalized, token_to_test)
+        if not ok:
+            # Test failed → do NOT save the new token. Surface the friendly
+            # Arabic message returned by _classify_meta_error.
+            raise HTTPException(status_code=400, detail=msg)
+
+        # Test passed → persist (replaces only the fields the user provided;
+        # blank app_secret/app_id keep the existing values).
+        new_secret = (payload.app_secret or "").strip()
+        final_secret = new_secret or (existing or {}).get("app_secret", "")
+        final_token = new_token or token_to_test
+        if not existing and not new_secret:
+            # First-time save still requires app_secret (we can't test-only-save).
+            raise HTTPException(status_code=400,
+                                detail="App Secret مطلوب عند الربط لأول مرة")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.meta_connections.update_one(
+            {"user_id": user["id"]},
+            {"$set": {
+                "user_id": user["id"],
+                "app_id": payload.app_id.strip(),
+                "app_secret": final_secret,
+                "access_token": final_token,
+                "ad_account_id": normalized,
+                "updated_at": now_iso,
+                "connection_status": "ok",
+                "last_error_message": None,
+                "last_error_at": None,
+            },
+             "$setOnInsert": {"created_at": now_iso}},
+            upsert=True,
+        )
+        return {
+            "ok": True,
+            "message": msg,
+            "saved": True,
+            "account": {
+                "id": account_info.get("id"),
+                "name": account_info.get("name"),
+                "currency": account_info.get("currency"),
+                "timezone": account_info.get("timezone_name"),
+            },
+        }
+
     @router.delete("/config")
     async def delete_config(user: dict = Depends(current_user)):
         await db.meta_connections.delete_one({"user_id": user["id"]})
@@ -267,6 +409,29 @@ def attach_meta_routes(parent_router, db):
             since=start_d.isoformat(),
             until=end_d.isoformat(),
         )
+
+        # If Meta returned any error, classify and persist the status so the
+        # dashboard can show a friendly banner. CRITICAL: do NOT clear or
+        # overwrite existing spend rows when token expires — user keeps seeing
+        # historical data while we surface the expired-link warning.
+        if errors:
+            err_text = " | ".join(errors)
+            status, friendly_msg = _classify_meta_error(err_text)
+            await _set_status(user["id"], status, friendly_msg)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            await db.meta_connections.update_one(
+                {"user_id": user["id"]},
+                {"$set": {"last_sync_at": now_iso}},
+            )
+            # Map to HTTP status: 401 for expired so frontend can route to settings
+            http_status = 401 if status == "expired" else 400
+            raise HTTPException(status_code=http_status,
+                                detail={"message": friendly_msg,
+                                        "status": status,
+                                        "raw": err_text[:200]})
+
+        # No errors → mark connection healthy.
+        await _set_status(user["id"], "ok", None)
 
         upserted = 0
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -346,6 +511,19 @@ def attach_meta_routes(parent_router, db):
             until=today.isoformat(),
         )
         now_iso = datetime.now(timezone.utc).isoformat()
+        # Silent failure: persist status for the dashboard banner but don't
+        # raise (background job — never alarm the user mid-page-load).
+        if errors:
+            status, friendly_msg = _classify_meta_error(" | ".join(errors))
+            await _set_status(user["id"], status, friendly_msg)
+            await db.meta_connections.update_one(
+                {"user_id": user["id"]},
+                {"$set": {"last_sync_at": now_iso}},
+            )
+            return {"connected": True, "synced": False,
+                    "connection_status": status,
+                    "error": friendly_msg}
+        await _set_status(user["id"], "ok", None)
         upserted = 0
         for row in rows:
             date_str = row.get("date_start") or row.get("date_stop")

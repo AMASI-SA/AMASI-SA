@@ -559,15 +559,29 @@ export default function Dashboard() {
                                         try {
                                             toast.loading("جاري تحديث صرف Meta لليوم…", { id: "meta-sync" });
                                             const { data } = await api.post("/meta/sync", { days: 1 });
-                                            if (data.errors?.length) {
-                                                toast.error(`خطأ: ${data.errors[0]}`, { id: "meta-sync", duration: 8000 });
-                                            } else {
-                                                toast.success(`تم تحديث صرف اليوم (${data.upserted || 0} صف)`, { id: "meta-sync" });
-                                            }
+                                            toast.success(`تم تحديث صرف اليوم (${data.upserted || 0} صف)`, { id: "meta-sync" });
                                             fetchMetaSummary();
                                         } catch (e) {
-                                            const msg = e?.response?.data?.detail || "فشل";
-                                            toast.error(msg, { id: "meta-sync" });
+                                            // Backend now returns detail as a structured object:
+                                            // { message: "<friendly Arabic>", status: "expired"|"error"|..., raw: "..." }
+                                            // Older paths return detail as a plain string. Handle both
+                                            // and NEVER show raw JSON to the user.
+                                            const detail = e?.response?.data?.detail;
+                                            let msg;
+                                            let isExpired = false;
+                                            if (detail && typeof detail === "object") {
+                                                msg = detail.message || "تعذّرت المزامنة مع Meta.";
+                                                isExpired = detail.status === "expired";
+                                            } else if (typeof detail === "string") {
+                                                msg = detail;
+                                            } else {
+                                                msg = "تعذّرت المزامنة مع Meta. تواصل مع الدعم إذا استمرت المشكلة.";
+                                            }
+                                            toast.error(msg, { id: "meta-sync", duration: 8000 });
+                                            // Refresh card so the expired banner appears immediately.
+                                            if (isExpired || e?.response?.status === 401) {
+                                                fetchMetaSummary();
+                                            }
                                         }
                                     }}
                                     className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors w-full sm:w-auto"
@@ -578,6 +592,41 @@ export default function Dashboard() {
                                     تحديث فوري للصرف اليوم
                                 </button>
                             </div>
+
+                            {/* Expired-token banner — shown above content so the merchant
+                                can fix the link without losing visibility of historical data. */}
+                            {metaSummary.connection_status === "expired" && (
+                                <div
+                                    className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-4 flex flex-col sm:flex-row sm:items-center gap-3"
+                                    data-testid="meta-expired-banner"
+                                >
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-bold text-red-900 mb-1" style={{ fontFamily: "Tajawal" }}>
+                                            ⚠️ الربط منتهي الصلاحية
+                                        </div>
+                                        <div className="text-xs text-red-800 leading-relaxed">
+                                            {metaSummary.last_error_message || "انتهت صلاحية ربط Meta Ads، يرجى تحديث Access Token من الإعدادات."}
+                                        </div>
+                                    </div>
+                                    <Link
+                                        to="/settings"
+                                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-bold text-xs transition-colors flex-shrink-0"
+                                        data-testid="meta-update-link-btn"
+                                    >
+                                        تحديث الربط ←
+                                    </Link>
+                                </div>
+                            )}
+
+                            {/* Non-expired errors (rate-limit, permission, etc) — softer banner */}
+                            {metaSummary.connection_status && metaSummary.connection_status !== "expired" && metaSummary.connection_status !== "ok" && metaSummary.last_error_message && (
+                                <div
+                                    className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4 text-xs text-amber-900 leading-relaxed"
+                                    data-testid="meta-warn-banner"
+                                >
+                                    ⚠️ {metaSummary.last_error_message}
+                                </div>
+                            )}
 
                             {metaSummary.last_30d.spend === 0 && metaSummary.last_30d.orders === 0 ? (
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 leading-relaxed" data-testid="meta-empty-state">

@@ -63,6 +63,9 @@ export default function Settings() {
         ad_account_id: "",
         last_sync_at: null,
         last_sync_summary: null,
+        connection_status: "ok",
+        last_error_message: null,
+        last_error_at: null,
     });
     const [metaForm, setMetaForm] = useState({
         app_id: "",
@@ -72,6 +75,16 @@ export default function Settings() {
     });
     const [metaSaving, setMetaSaving] = useState(false);
     const [metaSyncing, setMetaSyncing] = useState(false);
+    const [metaTesting, setMetaTesting] = useState(false);
+
+    /** Robust error-detail formatter: handles both string and object
+     * `detail` payloads from the backend without ever exposing raw JSON. */
+    const fmtMetaErr = (e, fallback = "تعذّرت العملية") => {
+        const d = e?.response?.data?.detail;
+        if (d && typeof d === "object") return d.message || fallback;
+        if (typeof d === "string") return d;
+        return fallback;
+    };
 
     const loadMetaConfig = async () => {
         try {
@@ -133,9 +146,16 @@ export default function Settings() {
 
     // ── Meta Ads handlers ──────────────────────────────────────────────
     const saveMetaConfig = async () => {
-        if (!metaForm.app_id.trim() || !metaForm.app_secret.trim()
-            || !metaForm.access_token.trim() || !metaForm.ad_account_id.trim()) {
-            toast.error("جميع الحقول مطلوبة");
+        // On first save, all 4 fields are required. On update, blanks mean
+        // "keep existing" — only require fields the merchant hasn't connected yet.
+        const first = !metaConfig.connected;
+        if (first && (!metaForm.app_id.trim() || !metaForm.app_secret.trim()
+                || !metaForm.access_token.trim() || !metaForm.ad_account_id.trim())) {
+            toast.error("جميع الحقول مطلوبة عند الربط لأول مرة");
+            return;
+        }
+        if (!metaForm.app_id.trim() || !metaForm.ad_account_id.trim()) {
+            toast.error("Meta App ID و Ad Account ID مطلوبان");
             return;
         }
         setMetaSaving(true);
@@ -147,11 +167,43 @@ export default function Settings() {
                 ad_account_id: metaForm.ad_account_id.trim(),
             });
             toast.success("تم حفظ إعدادات Meta Ads");
+            // Clear the secret/token inputs after a successful save so they don't
+            // get re-submitted on accident.
+            setMetaForm((f) => ({ ...f, app_secret: "", access_token: "" }));
             await loadMetaConfig();
         } catch (e) {
-            toast.error(e?.response?.data?.detail || "فشل الحفظ");
+            toast.error(fmtMetaErr(e, "فشل الحفظ"));
         } finally {
             setMetaSaving(false);
+        }
+    };
+
+    const testMetaConnection = async () => {
+        // Test against either a freshly-pasted token or the stored one. The
+        // backend only persists the new values if the test passes.
+        if (!metaForm.app_id.trim() || !metaForm.ad_account_id.trim()) {
+            toast.error("Meta App ID و Ad Account ID مطلوبان للاختبار");
+            return;
+        }
+        setMetaTesting(true);
+        toast.loading("جاري اختبار الاتصال مع Meta…", { id: "meta-test" });
+        try {
+            const { data } = await api.post("/meta/test-connection", {
+                app_id: metaForm.app_id.trim(),
+                app_secret: metaForm.app_secret.trim(),
+                access_token: metaForm.access_token.trim(),
+                ad_account_id: metaForm.ad_account_id.trim(),
+            });
+            const accName = data.account?.name || data.account?.id || "حساب الإعلانات";
+            toast.success(`تم الاتصال بنجاح ✓ (${accName}) — التوكن تم حفظه`,
+                { id: "meta-test", duration: 6000 });
+            setMetaForm((f) => ({ ...f, app_secret: "", access_token: "" }));
+            await loadMetaConfig();
+        } catch (e) {
+            toast.error(fmtMetaErr(e, "فشل اختبار الاتصال — لم يتم حفظ التوكن"),
+                { id: "meta-test", duration: 9000 });
+        } finally {
+            setMetaTesting(false);
         }
     };
 
@@ -159,14 +211,12 @@ export default function Settings() {
         setMetaSyncing(true);
         try {
             const { data } = await api.post("/meta/sync", { days: 30 });
-            if (data.errors && data.errors.length > 0) {
-                toast.error(`خطأ من Meta: ${data.errors[0]}`, { duration: 8000 });
-            } else {
-                toast.success(`تمت المزامنة: ${data.upserted} صف لـ ${data.rows} حملة`);
-            }
+            toast.success(`تمت المزامنة: ${data.upserted} صف لـ ${data.rows} حملة`);
             await loadMetaConfig();
         } catch (e) {
-            toast.error(e?.response?.data?.detail || "فشل المزامنة");
+            toast.error(fmtMetaErr(e, "فشل المزامنة"), { duration: 8000 });
+            // Refresh config so the new connection_status reflects on UI.
+            await loadMetaConfig();
         } finally {
             setMetaSyncing(false);
         }
@@ -180,7 +230,7 @@ export default function Settings() {
             await loadMetaConfig();
             toast.success("تم فصل ربط Meta");
         } catch (e) {
-            toast.error(e?.response?.data?.detail || "فشل");
+            toast.error(fmtMetaErr(e, "فشل"));
         }
     };
 
@@ -1018,6 +1068,36 @@ export default function Settings() {
                     </div>
                 )}
 
+                {metaConfig.connected && metaConfig.connection_status === "expired" && (
+                    <div
+                        className="mb-4 p-4 rounded-lg bg-red-50 border-2 border-red-300"
+                        data-testid="meta-settings-expired-banner"
+                    >
+                        <div className="flex items-start gap-3">
+                            <div className="text-2xl flex-shrink-0">⚠️</div>
+                            <div className="flex-1 min-w-0">
+                                <div className="font-bold text-red-900 mb-1" style={{ fontFamily: "Tajawal" }}>
+                                    الربط منتهي الصلاحية
+                                </div>
+                                <div className="text-sm text-red-800 leading-relaxed">
+                                    {metaConfig.last_error_message || "انتهت صلاحية ربط Meta Ads، يرجى تحديث Access Token من الحقل أدناه ثم اضغط اختبار الاتصال."}
+                                </div>
+                                {metaConfig.last_error_at && (
+                                    <div className="text-xs text-red-700/80 mt-1">
+                                        منذ: {new Date(metaConfig.last_error_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {metaConfig.connected && metaConfig.connection_status && !["ok", "expired"].includes(metaConfig.connection_status) && metaConfig.last_error_message && (
+                    <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900" data-testid="meta-settings-warn-banner">
+                        ⚠️ {metaConfig.last_error_message}
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">Meta App ID</label>
@@ -1053,13 +1133,14 @@ export default function Settings() {
                             type="password"
                             value={metaForm.access_token}
                             onChange={(e) => setMetaForm({ ...metaForm, access_token: e.target.value })}
-                            placeholder={metaConfig.connected ? "اتركه فارغاً للإبقاء على القيمة الحالية…" : "EAAxxxxxxxxxxxxxxxxxxx"}
+                            placeholder={metaConfig.connected ? "ألصق التوكن الجديد هنا لتحديث الربط…" : "EAAxxxxxxxxxxxxxxxxxxx"}
                             className="w-full px-3 py-2.5 text-sm border border-border rounded-lg font-mono"
                             dir="ltr"
                             data-testid="meta-access-token-input"
                         />
                         <p className="text-xs text-muted-foreground mt-1">
                             احصل عليه من <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" className="text-blue-600 underline">Graph API Explorer</a> مع صلاحيات <code>ads_read</code> + <code>business_management</code>.
+                            {metaConfig.connected && <span className="block mt-0.5 text-amber-700">💡 لتحديث الربط بعد انتهاء الصلاحية: ألصق التوكن الجديد ثم اضغط <strong>اختبار الاتصال</strong>.</span>}
                         </p>
                     </div>
                     <div>
@@ -1079,13 +1160,24 @@ export default function Settings() {
                 <div className="mt-5 flex flex-wrap gap-2">
                     <button
                         type="button"
+                        onClick={testMetaConnection}
+                        disabled={metaTesting || metaSaving}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-lg font-bold text-sm"
+                        data-testid="meta-test-connection-btn"
+                        title="يتحقق من Meta API ويحفظ التوكن الجديد فقط إذا نجح الاختبار"
+                    >
+                        <ArrowsClockwise size={16} weight="bold" className={metaTesting ? "animate-spin" : ""} />
+                        {metaTesting ? "جاري الاختبار…" : "اختبار الاتصال"}
+                    </button>
+                    <button
+                        type="button"
                         onClick={saveMetaConfig}
                         disabled={metaSaving}
                         className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-bold text-sm"
                         data-testid="meta-save-btn"
                     >
                         <FloppyDisk size={16} weight="bold" />
-                        {metaSaving ? "جاري الحفظ…" : "حفظ"}
+                        {metaSaving ? "جاري الحفظ…" : "حفظ بدون اختبار"}
                     </button>
                     {metaConfig.connected && (
                         <>
