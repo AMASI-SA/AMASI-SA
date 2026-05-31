@@ -461,3 +461,168 @@ def test_net_sales_config_deduct_operating_expenses(clean_user_token):
 
     s2 = requests.get(f"{API}/settings", headers=_hdr(tok)).json()
     assert s2["net_sales_config"]["deduct_operating_expenses"] is False
+
+
+# ── 9. Prepaid expenses ───────────────────────────────────────────────────
+def test_prepaid_crud_and_math(clean_user_token):
+    """Full CRUD + daily-cost math for prepaid expenses."""
+    tok = clean_user_token
+
+    # Create — 1825 SAR over 365 days = 5 SAR/day exactly
+    r = requests.post(
+        f"{API}/operating-expenses/prepaid", headers=_hdr(tok),
+        json={"expense_type": "vehicle_insurance", "beneficiary": "ABC-1234",
+              "amount": 1825, "start_date": "2026-01-01",
+              "end_date": "2026-12-31", "status": "active"},
+    )
+    assert r.status_code == 200, r.text
+    created = r.json()
+    assert created["period_days"] == 365  # inclusive
+    assert created["daily_cost"] == 5.0
+
+    # List returns derived fields
+    rl = requests.get(f"{API}/operating-expenses/prepaid", headers=_hdr(tok))
+    items = rl.json()["items"]
+    assert any(i["id"] == created["id"] and i["daily_cost"] == 5.0 for i in items)
+
+    # Update — change amount; daily_cost should recompute
+    upd = requests.put(
+        f"{API}/operating-expenses/prepaid/{created['id']}", headers=_hdr(tok),
+        json={"amount": 3650},
+    )
+    assert upd.status_code == 200
+    assert upd.json()["daily_cost"] == 10.0
+
+    # Invalid type rejected
+    bad = requests.post(
+        f"{API}/operating-expenses/prepaid", headers=_hdr(tok),
+        json={"expense_type": "house_party", "beneficiary": "x",
+              "amount": 100, "start_date": "2026-01-01",
+              "end_date": "2026-12-31"},
+    )
+    assert bad.status_code == 400
+
+    # End < start rejected
+    bad2 = requests.post(
+        f"{API}/operating-expenses/prepaid", headers=_hdr(tok),
+        json={"expense_type": "other", "beneficiary": "x",
+              "amount": 100, "start_date": "2026-06-01",
+              "end_date": "2026-01-01"},
+    )
+    assert bad2.status_code == 400
+
+    # Delete
+    rd = requests.delete(
+        f"{API}/operating-expenses/prepaid/{created['id']}", headers=_hdr(tok)
+    )
+    assert rd.status_code == 200
+
+
+def test_prepaid_summary_and_by_type(clean_user_token):
+    """Summary endpoint exposes prepaid.total_paid, prepaid.daily_total,
+    prepaid.by_type with correctly amortized daily_cost per type."""
+    tok = clean_user_token
+
+    today = datetime.now(timezone.utc).date()
+    far_past = (today - timedelta(days=30)).isoformat()
+    far_future = (today + timedelta(days=335)).isoformat()  # ~1 year window
+
+    # vehicle insurance: 3650 over 366 days ≈ 9.97 SAR/day
+    requests.post(
+        f"{API}/operating-expenses/prepaid", headers=_hdr(tok),
+        json={"expense_type": "vehicle_insurance", "beneficiary": "9999 ABC",
+              "amount": 3650, "start_date": far_past,
+              "end_date": far_future, "status": "active"},
+    ).raise_for_status()
+
+    # iqama: 1100 over the same window
+    requests.post(
+        f"{API}/operating-expenses/prepaid", headers=_hdr(tok),
+        json={"expense_type": "iqama_visa", "beneficiary": "علي",
+              "amount": 1100, "start_date": far_past,
+              "end_date": far_future, "status": "active"},
+    ).raise_for_status()
+
+    # expired one — should NOT count
+    requests.post(
+        f"{API}/operating-expenses/prepaid", headers=_hdr(tok),
+        json={"expense_type": "annual_subscription", "beneficiary": "Old",
+              "amount": 999999, "start_date": "2020-01-01",
+              "end_date": "2021-01-01", "status": "expired"},
+    ).raise_for_status()
+
+    s = requests.get(
+        f"{API}/operating-expenses/summary", headers=_hdr(tok)
+    ).json()
+
+    p = s["prepaid"]
+    assert p["active_count"] == 2
+    assert p["total_paid"] == 4750.0  # 3650 + 1100
+    assert "vehicle_insurance" in p["by_type"]
+    assert "iqama_visa" in p["by_type"]
+    assert "annual_subscription" not in p["by_type"]  # expired excluded
+    assert p["by_type"]["vehicle_insurance"]["count"] == 1
+    assert p["by_type"]["iqama_visa"]["count"] == 1
+
+    # today's prepaid_daily ≈ 9.97 + 3.005 ≈ 12.97 (within rounding)
+    today_b = s["today"]
+    assert today_b["prepaid_daily"] > 0
+    # Should be approximately (3650 + 1100) / 366 = 12.978
+    assert abs(today_b["prepaid_daily"] - 4750 / 366) < 0.05
+
+
+def test_prepaid_in_dashboard_and_report(clean_user_token):
+    """Prepaid expenses contribute to dashboard.operating_expenses_total,
+    operating_prepaid_total, and to /report's prepaid_total per period."""
+    tok = clean_user_token
+
+    today_d = datetime.now(timezone.utc).date()
+    today_iso = today_d.isoformat()
+    # Single-day window so daily_cost == amount and we know exact value
+    requests.post(
+        f"{API}/operating-expenses/prepaid", headers=_hdr(tok),
+        json={"expense_type": "iqama_visa", "beneficiary": "أحمد",
+              "amount": 100, "start_date": today_iso,
+              "end_date": today_iso, "status": "active"},
+    ).raise_for_status()
+
+    # Dashboard
+    r = requests.get(
+        f"{API}/dashboard", headers=_hdr(tok),
+        params={"from_date": today_iso, "to_date": today_iso},
+    )
+    assert r.status_code == 200
+    totals = r.json()["totals"]
+    assert "operating_prepaid_total" in totals
+    assert totals["operating_prepaid_total"] == 100.0
+    # operating_expenses_total >= operating_prepaid_total
+    assert totals["operating_expenses_total"] >= 100.0
+
+    # Report endpoint exposes prepaid_total + prepaid_by_type
+    rep = requests.get(f"{API}/operating-expenses/report", headers=_hdr(tok)).json()
+    assert rep["daily"]["prepaid_daily"] == 100.0
+    assert rep["daily"]["prepaid_by_type"]["iqama_visa"] == 100.0
+
+
+def test_prepaid_expired_status_excluded(clean_user_token):
+    """A prepaid with status=expired is excluded from per-day cost even if
+    today is inside [start_date, end_date]."""
+    tok = clean_user_token
+
+    today_d = datetime.now(timezone.utc).date()
+    week_ago = (today_d - timedelta(days=7)).isoformat()
+    week_ahead = (today_d + timedelta(days=7)).isoformat()
+
+    # Status=expired but date range covers today
+    requests.post(
+        f"{API}/operating-expenses/prepaid", headers=_hdr(tok),
+        json={"expense_type": "vehicle_insurance", "beneficiary": "ZZZ",
+              "amount": 14000, "start_date": week_ago,
+              "end_date": week_ahead, "status": "expired"},
+    ).raise_for_status()
+
+    s = requests.get(
+        f"{API}/operating-expenses/summary", headers=_hdr(tok)
+    ).json()
+    assert s["today"]["prepaid_daily"] == 0.0
+    assert s["prepaid"]["active_count"] == 0

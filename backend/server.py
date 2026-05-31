@@ -971,6 +971,7 @@ async def dashboard(
     operating_expenses_total = float(op_range.get("operating_total") or 0)
     operating_salaries_total = float(op_range.get("salaries_total") or 0)
     operating_rentals_total = float(op_range.get("rentals_total") or 0)
+    operating_prepaid_total = float(op_range.get("prepaid_total") or 0)
     operating_daily_other_total = float(op_range.get("daily_other_total") or 0)
 
     # Net profit (orders P&L − daily ads − daily products − operating expenses)
@@ -1103,6 +1104,8 @@ async def dashboard(
             "operating_salaries_household": float(op_range.get("salaries_household") or 0),
             "operating_salaries_charity": float(op_range.get("salaries_charity") or 0),
             "operating_rentals_total": round(operating_rentals_total, 2),
+            "operating_prepaid_total": round(operating_prepaid_total, 2),
+            "operating_prepaid_by_type": op_range.get("prepaid_by_type") or {},
             "operating_daily_other_total": round(operating_daily_other_total, 2),
             "orders_excel_count": src_counts.get("excel", 0),
             "orders_make_count": src_counts.get("make", 0),
@@ -1437,6 +1440,8 @@ async def on_startup():
     await db.operating_salaries.create_index([("user_id", 1), ("status", 1)])
     await db.operating_rentals.create_index([("user_id", 1), ("status", 1)])
     await db.operating_daily_expenses.create_index([("user_id", 1), ("date", -1)])
+    await db.operating_prepaid_expenses.create_index([("user_id", 1), ("status", 1)])
+    await db.operating_prepaid_expenses.create_index([("user_id", 1), ("expense_type", 1)])
     # Backfill: older salaries created before the country column existed are
     # treated as Saudi by default (most common merchant home country).
     legacy_country = await db.operating_salaries.update_many(

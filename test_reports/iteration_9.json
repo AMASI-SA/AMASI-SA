@@ -1,0 +1,29 @@
+{
+  "summary": "Prepaid Expenses (المصروفات المدفوعة مقدماً) new section is fully working end-to-end. Backend: 16/16 pytest tests pass (4 new prepaid tests + 12 previous OE tests, all green) including CRUD, daily-cost math (1825/365 = 5.0 SAR/day exactly), inclusive period_days, status=expired exclusion, summary.prepaid block with by_type breakdown, /report prepaid_daily/monthly/yearly + prepaid_by_type, dashboard.operating_prepaid_total and net_profit deduction. Frontend: /operating-expenses page now shows 5 tabs (salaries → rentals → prepaid → daily → report) all with correct test-ids. Prepaid tab opens PrepaidPanel; add-prepaid modal exposes type/beneficiary/amount/status/start/end/notes + live preview ('1,825.00 ÷ 365 يوم = 5.00 ر.س / يوم'). Create→Edit→Delete cycle verified: create a vehicle_insurance entry (1825 SAR, 2026-01-01..12-31) → table row shows period_days=365 and daily_cost=5.00 ✓, edit changes amount to 730 → daily_cost recomputes to 2.00 ✓, delete removes row and shows 'تم الحذف' toast ✓. Two summary cards present: oe-card-prepaid-paid (1,825.00 ر.س) and oe-card-prepaid-daily (5.00 ر.س). Report tab oe-report-grid renders the bold 'المدفوعة مقدماً' line + sub-rows for all 6 prepaid types. Dashboard markup contains operating_prepaid_total and the Arabic label.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_operating_expenses.py",
+    "/app/test_reports/pytest/operating_expenses_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "expenses_routes.py: prepaid block is clean — PREPAID_TYPES whitelist enforced, _prepaid_period_days uses inclusive math ((end-start).days + 1) which matches the requested contract, _prepaid_active_on properly checks status != 'expired' AND date∈[start,end], and _id is excluded everywhere. Pydantic validators reject invalid expense_type and end<start with 400.",
+    "Summary endpoint correctly excludes expired records from both active_count and by_type aggregation — verified by test_prepaid_expired_status_excluded and observed in UI.",
+    "Dashboard /api/dashboard.totals correctly exposes operating_prepaid_total and operating_prepaid_by_type; net_profit is reduced by operating_expenses_total which includes prepaid — proven via assert totals['net_profit'] == -totals['operating_expenses_total'] for fresh users with no sales.",
+    "Frontend OperatingExpenses.jsx: all new testids exist (oe-tab-prepaid, oe-add-prepaid-btn, oe-prepaid-{type|beneficiary|amount|status|start|end|notes|preview|table|row-{id}}, oe-card-prepaid-{paid|daily}). Live preview computes amount ÷ N days inline using same inclusive logic as the backend. RTL Arabic labels render correctly.",
+    "Minor (not blocking): the prepaid row delete uses window.confirm just like salary/rental — consistent with existing app pattern. Toast 'تم الحذف' shows after delete, good UX feedback."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (16/16 pytest tests pass)", "frontend": "100% on tested flows (all 5 tabs visible, prepaid CRUD via UI, modal preview, table values, summary cards, report sub-rows, dashboard KPI markup)"},
+  "test_credentials": "admin@hesab.app / admin123 works. UI tests auto-registered fresh users test_oe_prepaid_<rand>@hesab.app & test_oe_pre2_<rand>@hesab.app / test12345.",
+  "seed_data_creation": "Each pytest test registers an ephemeral user TEST_op_<uuid>@hesab.app. UI tests created and cleaned up one prepaid record. No production data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Prepaid section is shipped. Pytest path: /app/backend/tests/test_operating_expenses.py (16 tests). Frontend testid contract for prepaid: oe-tab-prepaid (5th of 5 tabs in order salaries/rentals/prepaid/daily/report), oe-add-prepaid-btn, oe-prepaid-table, oe-prepaid-row-{id}, oe-prepaid-{type|beneficiary|amount|status|start|end|notes|preview}, oe-card-prepaid-paid, oe-card-prepaid-daily. PREPAID type values: vehicle_insurance / worker_insurance / iqama_visa / government_license / annual_subscription / other. Math: period_days = (end-start).days + 1 (inclusive), daily_cost = amount / period_days. Expired status excludes the record from per-day cost, active_count, and by_type aggregation. Dashboard exposes operating_prepaid_total + operating_prepaid_by_type and feeds operating_expenses_total which reduces net_profit.",
+  "rca of the issue": "N/A — no bugs found."
+}

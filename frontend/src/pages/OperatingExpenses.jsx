@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
     Users, House, HandHeart, Buildings, Receipt, Plus, Trash, PencilSimple, X,
-    ChartBar, Wallet, Bank,
+    ChartBar, Wallet, Bank, ShieldCheck,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
@@ -28,15 +28,26 @@ const RENTAL_TYPES = [
     { value: "other",             label: "أخرى" },
 ];
 
+const PREPAID_TYPES = [
+    { value: "vehicle_insurance",   label: "تأمين السيارات",        icon: "🚗" },
+    { value: "worker_insurance",    label: "تأمين الموظفين",        icon: "👷" },
+    { value: "iqama_visa",          label: "الإقامات والتأشيرات",   icon: "🪪" },
+    { value: "government_license",  label: "الرخص والتصاريح",       icon: "📜" },
+    { value: "annual_subscription", label: "الاشتراكات السنوية",    icon: "🔁" },
+    { value: "other",               label: "أخرى",                  icon: "📦" },
+];
+
 const SALARY_CATEGORY_LABEL = Object.fromEntries(SALARY_CATEGORIES.map((c) => [c.value, c.label]));
 const SALARY_COUNTRY        = Object.fromEntries(SALARY_COUNTRIES.map((c) => [c.value, c]));
 const RENTAL_TYPE_LABEL     = Object.fromEntries(RENTAL_TYPES.map((c) => [c.value, c.label]));
+const PREPAID_TYPE          = Object.fromEntries(PREPAID_TYPES.map((c) => [c.value, c]));
 
 const TAB_BUTTONS = [
-    { id: "salaries",  label: "الرواتب الشهرية",       icon: Users },
-    { id: "rentals",   label: "الإيجارات السنوية",     icon: Buildings },
+    { id: "salaries",  label: "الرواتب الشهرية",          icon: Users },
+    { id: "rentals",   label: "الإيجارات السنوية",        icon: Buildings },
+    { id: "prepaid",   label: "المصروفات المدفوعة مقدماً", icon: ShieldCheck },
     { id: "daily",     label: "المصروفات اليومية الأخرى", icon: Receipt },
-    { id: "report",    label: "التقارير والاحتساب",   icon: ChartBar },
+    { id: "report",    label: "التقارير والاحتساب",       icon: ChartBar },
 ];
 
 export default function OperatingExpenses() {
@@ -44,26 +55,29 @@ export default function OperatingExpenses() {
     const [summary, setSummary] = useState(null);
     const [salaries, setSalaries] = useState([]);
     const [rentals, setRentals] = useState([]);
+    const [prepaids, setPrepaids] = useState([]);
     const [dailyItems, setDailyItems] = useState([]);
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null);
     // modal shape:
-    //   { kind: "salary"|"rental"|"daily", mode: "create"|"edit", row: {...} }
+    //   { kind: "salary"|"rental"|"prepaid"|"daily", mode: "create"|"edit", row: {...} }
 
     const refresh = async () => {
         setLoading(true);
         try {
-            const [sumRes, salRes, rentRes, dailyRes, reportRes] = await Promise.all([
+            const [sumRes, salRes, rentRes, prepRes, dailyRes, reportRes] = await Promise.all([
                 api.get("/operating-expenses/summary"),
                 api.get("/operating-expenses/salaries"),
                 api.get("/operating-expenses/rentals"),
+                api.get("/operating-expenses/prepaid"),
                 api.get("/operating-expenses/daily"),
                 api.get("/operating-expenses/report"),
             ]);
             setSummary(sumRes.data);
             setSalaries(salRes.data.items || []);
             setRentals(rentRes.data.items || []);
+            setPrepaids(prepRes.data.items || []);
             setDailyItems(dailyRes.data.items || []);
             setReport(reportRes.data);
         } catch (err) {
@@ -144,6 +158,22 @@ export default function OperatingExpenses() {
                 />
             )}
 
+            {!loading && tab === "prepaid" && (
+                <PrepaidPanel
+                    items={prepaids}
+                    onAdd={() => setModal({ kind: "prepaid", mode: "create", row: { start_date: todayISO() } })}
+                    onEdit={(r) => setModal({ kind: "prepaid", mode: "edit", row: r })}
+                    onDelete={async (r) => {
+                        if (!window.confirm(`حذف هذا السجل (${PREPAID_TYPE[r.expense_type]?.label || r.expense_type})؟`)) return;
+                        try {
+                            await api.delete(`/operating-expenses/prepaid/${r.id}`);
+                            toast.success("تم الحذف");
+                            await refresh();
+                        } catch (e) { toast.error(formatApiErrorDetail(e.response?.data?.detail)); }
+                    }}
+                />
+            )}
+
             {!loading && tab === "daily" && (
                 <DailyPanel
                     items={dailyItems}
@@ -187,6 +217,7 @@ function SummaryCards({ summary }) {
     const today = summary.today || {};
     const salaries = summary.salaries || {};
     const rentals = summary.rentals || {};
+    const prepaid = summary.prepaid || {};
     const byCountry = salaries.by_country || {};
     const saMonthly = byCountry.saudi?.monthly_total || 0;
     const yeMonthly = byCountry.yemen?.monthly_total || 0;
@@ -202,6 +233,9 @@ function SummaryCards({ summary }) {
         // Rentals
         { id: "rent-ann",  group: "الإيجارات",   label: "إجمالي الإيجارات (سنوي)",       icon: Buildings, value: rentals.annual_total,       testid: "oe-card-rent-annual" },
         { id: "rent-day",  group: "الإيجارات",   label: "إيجارات اليوم",                 icon: Bank,      value: rentals.daily_total,        testid: "oe-card-rent-daily" },
+        // Prepaid
+        { id: "prep-tot",  group: "المدفوعة مقدماً", label: "إجمالي المبالغ المدفوعة",   icon: ShieldCheck, value: prepaid.total_paid,        testid: "oe-card-prepaid-paid" },
+        { id: "prep-day",  group: "المدفوعة مقدماً", label: "المدفوعة مقدماً اليومية",  icon: ShieldCheck, value: prepaid.daily_total,       testid: "oe-card-prepaid-daily" },
         // Daily
         { id: "day-other", group: "المصروفات",   label: "مصروفات أخرى (اليوم)",          icon: Receipt,   value: today.daily_other_total,    testid: "oe-card-day-other" },
         { id: "day-tot",   group: "المصروفات",   label: "إجمالي المصروفات التشغيلية اليوم", icon: Wallet, value: today.operating_total, accent: true, testid: "oe-card-operating-total" },
@@ -338,6 +372,63 @@ function RentalsPanel({ items, onAdd, onEdit, onDelete }) {
     );
 }
 
+// ── Prepaid expenses panel ──────────────────────────────────────────────────
+function PrepaidPanel({ items, onAdd, onEdit, onDelete }) {
+    return (
+        <Section
+            title="المصروفات المدفوعة مقدماً"
+            description="تأمين السيارات / تأمين الموظفين / الإقامات والتأشيرات / الرخص والتصاريح / الاشتراكات السنوية. التكلفة اليومية = المبلغ ÷ عدد أيام الفترة."
+            onAdd={onAdd}
+            addTestId="oe-add-prepaid-btn"
+        >
+            {items.length === 0 ? (
+                <EmptyState text="لا توجد مصروفات مدفوعة مقدماً بعد." />
+            ) : (
+                <TableWrap testid="oe-prepaid-table">
+                    <thead>
+                        <tr>
+                            <Th>النوع</Th>
+                            <Th>المستفيد / الأصل</Th>
+                            <Th>المبلغ المدفوع</Th>
+                            <Th>عدد الأيام</Th>
+                            <Th>التكلفة اليومية</Th>
+                            <Th>بداية الفترة</Th>
+                            <Th>نهاية الفترة</Th>
+                            <Th>الحالة</Th>
+                            <Th>ملاحظات</Th>
+                            <Th />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.map((r) => {
+                            const t = PREPAID_TYPE[r.expense_type] || { label: r.expense_type, icon: "📦" };
+                            return (
+                                <tr key={r.id} className="hover:bg-accent/30 transition-colors" data-testid={`oe-prepaid-row-${r.id}`}>
+                                    <Td>
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span aria-hidden="true">{t.icon}</span>
+                                            <span>{t.label}</span>
+                                        </span>
+                                    </Td>
+                                    <Td className="font-semibold">{r.beneficiary}</Td>
+                                    <Td className="num">{formatMoney(r.amount)}</Td>
+                                    <Td className="num">{r.period_days}</Td>
+                                    <Td className="num text-brand font-bold">{formatMoney(r.daily_cost)}</Td>
+                                    <Td>{r.start_date}</Td>
+                                    <Td>{r.end_date}</Td>
+                                    <Td><StatusBadge status={r.status} /></Td>
+                                    <Td className="text-muted-foreground">{r.notes || "—"}</Td>
+                                    <Td><RowActions onEdit={() => onEdit(r)} onDelete={() => onDelete(r)} /></Td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </TableWrap>
+            )}
+        </Section>
+    );
+}
+
 // ── Daily expenses panel ────────────────────────────────────────────────────
 function DailyPanel({ items, onAdd, onEdit, onDelete }) {
     return (
@@ -387,6 +478,13 @@ function ReportPanel({ report }) {
         if (!report) return [];
         const mk = (title, key, dataKey) => {
             const d = report[dataKey] || {};
+            const prepaidByType = d.prepaid_by_type || {};
+            const ptRow = (type) => ({
+                label: PREPAID_TYPE[type]?.label || type,
+                value: prepaidByType[type] || 0,
+                muted: !(prepaidByType[type] > 0),
+                indent: true,
+            });
             return {
                 title,
                 rows: [
@@ -395,6 +493,13 @@ function ReportPanel({ report }) {
                     { label: "الصدقات والمساهمات", value: d.salaries_charity },
                     { label: "إجمالي الرواتب",     value: d.salaries_total ?? d.salaries_total_daily, bold: true },
                     { label: "الإيجارات",          value: d.rentals_total ?? d.rentals_daily },
+                    { label: "المصروفات المدفوعة مقدماً", value: d.prepaid_total ?? d.prepaid_daily, bold: true },
+                    ptRow("vehicle_insurance"),
+                    ptRow("worker_insurance"),
+                    ptRow("iqama_visa"),
+                    ptRow("government_license"),
+                    ptRow("annual_subscription"),
+                    ptRow("other"),
                     { label: "المصروفات الأخرى",   value: d.daily_other_total },
                     { label: "الإجمالي التشغيلي",  value: d.operating_total, accent: true },
                 ],
@@ -421,8 +526,16 @@ function ReportPanel({ report }) {
                         <tbody>
                             {b.rows.map((r) => (
                                 <tr key={r.label} className="border-t border-border first:border-t-0">
-                                    <td className={"py-2 " + (r.bold ? "font-bold" : "")}>{r.label}</td>
-                                    <td className={"py-2 text-left num " + (r.accent ? "text-brand font-extrabold" : (r.bold ? "font-bold" : ""))}>
+                                    <td className={
+                                        "py-2 "
+                                        + (r.bold ? "font-bold " : "")
+                                        + (r.indent ? "pr-4 text-muted-foreground text-xs " : "")
+                                        + (r.muted && r.indent ? "opacity-60" : "")
+                                    }>
+                                        {r.indent && <span className="opacity-50 ml-1">└</span>}
+                                        {r.label}
+                                    </td>
+                                    <td className={"py-2 text-left num " + (r.accent ? "text-brand font-extrabold" : (r.bold ? "font-bold" : (r.indent ? "text-xs text-muted-foreground" : "")))}>
                                         {formatMoney(r.value || 0)}
                                     </td>
                                 </tr>
@@ -464,6 +577,17 @@ function Modal({ state, onClose, onSaved }) {
                 notes: row.notes || "",
             };
         }
+        if (state.kind === "prepaid") {
+            return {
+                expense_type: row.expense_type || "vehicle_insurance",
+                beneficiary: row.beneficiary || "",
+                amount: row.amount ?? "",
+                start_date: row.start_date || todayISO(),
+                end_date: row.end_date || todayISO(),
+                status: row.status || "active",
+                notes: row.notes || "",
+            };
+        }
         return {
             date: row.date || todayISO(),
             expense_type: row.expense_type || "",
@@ -482,13 +606,16 @@ function Modal({ state, onClose, onSaved }) {
             // Coerce amount fields
             if (state.kind === "salary")    body.monthly_amount = Number(body.monthly_amount);
             if (state.kind === "rental")    body.annual_amount  = Number(body.annual_amount);
+            if (state.kind === "prepaid")   body.amount         = Number(body.amount);
             if (state.kind === "daily")     body.amount         = Number(body.amount);
 
             const base = state.kind === "salary"
                 ? "/operating-expenses/salaries"
                 : state.kind === "rental"
                     ? "/operating-expenses/rentals"
-                    : "/operating-expenses/daily";
+                    : state.kind === "prepaid"
+                        ? "/operating-expenses/prepaid"
+                        : "/operating-expenses/daily";
 
             if (isEdit) {
                 await api.put(`${base}/${row.id}`, body);
@@ -509,7 +636,9 @@ function Modal({ state, onClose, onSaved }) {
         ? (isEdit ? "تعديل سجل راتب" : "إضافة راتب جديد")
         : state.kind === "rental"
             ? (isEdit ? "تعديل سجل إيجار" : "إضافة إيجار جديد")
-            : (isEdit ? "تعديل مصروف يومي" : "إضافة مصروف يومي");
+            : state.kind === "prepaid"
+                ? (isEdit ? "تعديل سجل مصروف مدفوع مقدماً" : "إضافة مصروف مدفوع مقدماً")
+                : (isEdit ? "تعديل مصروف يومي" : "إضافة مصروف يومي");
 
     return (
         <div
@@ -535,6 +664,9 @@ function Modal({ state, onClose, onSaved }) {
                 )}
                 {state.kind === "rental" && (
                     <RentalFormFields form={form} setForm={setForm} />
+                )}
+                {state.kind === "prepaid" && (
+                    <PrepaidFormFields form={form} setForm={setForm} />
                 )}
                 {state.kind === "daily" && (
                     <DailyFormFields form={form} setForm={setForm} />
@@ -620,6 +752,69 @@ function RentalFormFields({ form, setForm }) {
             <Field label="ملاحظات" full>
                 <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="oe-input" data-testid="oe-rental-notes" />
             </Field>
+        </div>
+    );
+}
+
+function PrepaidFormFields({ form, setForm }) {
+    // Compute live preview of period and daily cost
+    const periodDays = (() => {
+        const s = form.start_date && new Date(form.start_date);
+        const e = form.end_date && new Date(form.end_date);
+        if (!s || !e || isNaN(s) || isNaN(e)) return 0;
+        return Math.max(Math.floor((e - s) / 86400000) + 1, 1);
+    })();
+    const dailyCost = (() => {
+        const amt = Number(form.amount || 0);
+        if (!amt || !periodDays) return 0;
+        return amt / periodDays;
+    })();
+
+    return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="نوع المصروف">
+                <select required value={form.expense_type} onChange={(e) => setForm({ ...form, expense_type: e.target.value })} className="oe-input" data-testid="oe-prepaid-type">
+                    {PREPAID_TYPES.map((c) => (
+                        <option key={c.value} value={c.value}>{c.icon} {c.label}</option>
+                    ))}
+                </select>
+            </Field>
+            <Field label="المستفيد / الأصل">
+                <input
+                    type="text" required value={form.beneficiary}
+                    onChange={(e) => setForm({ ...form, beneficiary: e.target.value })}
+                    placeholder="اسم العامل، لوحة السيارة، رقم الاشتراك…"
+                    className="oe-input" data-testid="oe-prepaid-beneficiary"
+                />
+            </Field>
+            <Field label="المبلغ المدفوع (ر.س)">
+                <input type="number" required min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="oe-input num" data-testid="oe-prepaid-amount" />
+            </Field>
+            <Field label="الحالة">
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="oe-input" data-testid="oe-prepaid-status">
+                    <option value="active">نشط</option>
+                    <option value="expired">منتهي</option>
+                </select>
+            </Field>
+            <Field label="تاريخ بداية الفترة">
+                <DateInput value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} data-testid="oe-prepaid-start" />
+            </Field>
+            <Field label="تاريخ نهاية الفترة">
+                <DateInput value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} data-testid="oe-prepaid-end" />
+            </Field>
+            <Field label="ملاحظات" full>
+                <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="oe-input" data-testid="oe-prepaid-notes" />
+            </Field>
+            <div className="sm:col-span-2 mt-1 p-3 rounded-lg bg-accent/40 text-xs" data-testid="oe-prepaid-preview">
+                <div className="font-bold text-foreground mb-1">معاينة الاحتساب التلقائي:</div>
+                <div className="font-mono leading-relaxed" dir="ltr">
+                    <span>{formatMoney(Number(form.amount || 0))}</span>
+                    <span className="text-muted-foreground"> ÷ </span>
+                    <span>{periodDays} يوم</span>
+                    <span className="text-muted-foreground"> = </span>
+                    <span className="text-brand font-bold">{formatMoney(dailyCost)} ر.س / يوم</span>
+                </div>
+            </div>
         </div>
     );
 }

@@ -42,6 +42,14 @@ from auth import get_current_user_from_db
 SALARY_CATEGORIES = {"employee", "household", "charity"}
 SALARY_COUNTRIES = {"saudi", "yemen", "other"}
 RENTAL_PROPERTY_TYPES = {"office", "warehouse", "shop", "employee_housing", "other"}
+PREPAID_TYPES = {
+    "vehicle_insurance",     # تأمين السيارات
+    "worker_insurance",      # تأمين الموظفين
+    "iqama_visa",            # الإقامات والتأشيرات
+    "government_license",    # الرخص والتصاريح الحكومية
+    "annual_subscription",   # الاشتراكات السنوية
+    "other",                 # أخرى
+}
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -103,6 +111,26 @@ class DailyExpenseUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class PrepaidExpenseIn(BaseModel):
+    expense_type: str  # vehicle_insurance | worker_insurance | iqama_visa | government_license | annual_subscription | other
+    beneficiary: str = Field(min_length=1, max_length=160)  # اسم المستفيد / الأصل (لوحة السيارة، اسم العامل…)
+    amount: float = Field(gt=0)
+    start_date: str = Field(min_length=10, max_length=10)  # YYYY-MM-DD
+    end_date: str = Field(min_length=10, max_length=10)    # YYYY-MM-DD
+    status: str = "active"  # active | expired
+    notes: Optional[str] = ""
+
+
+class PrepaidExpenseUpdate(BaseModel):
+    expense_type: Optional[str] = None
+    beneficiary: Optional[str] = None
+    amount: Optional[float] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _parse_iso(s: str) -> Optional[date]:
     try:
@@ -152,6 +180,39 @@ def _rental_active_on(r: dict, day: date) -> bool:
     return True
 
 
+def _prepaid_active_on(p: dict, day: date) -> bool:
+    """A prepaid expense is active on `day` iff status=active AND day is within
+    [start_date, end_date]. Same rule as rentals."""
+    if (p.get("status") or "active") != "active":
+        return False
+    start = _parse_iso(p.get("start_date") or "")
+    end = _parse_iso(p.get("end_date") or "")
+    if start and day < start:
+        return False
+    if end and day > end:
+        return False
+    return True
+
+
+def _prepaid_period_days(p: dict) -> int:
+    """Inclusive day count between start_date and end_date.
+    Returns 1 if either is missing or the range is degenerate."""
+    start = _parse_iso(p.get("start_date") or "")
+    end = _parse_iso(p.get("end_date") or "")
+    if not start or not end:
+        return 1
+    days = (end - start).days + 1
+    return max(days, 1)
+
+
+def _daily_from_prepaid(p: dict) -> float:
+    """Per-day amortized cost of a prepaid expense across its period."""
+    amount = float(p.get("amount") or 0)
+    if amount <= 0:
+        return 0.0
+    return round(amount / _prepaid_period_days(p), 4)
+
+
 async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dict:
     """Return a breakdown of the daily operating cost for one day.
 
@@ -161,6 +222,8 @@ async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dic
       - salaries_charity
       - salaries_total_daily      ( = employee + household + charity )
       - rentals_daily
+      - prepaid_daily             (total of all active prepaid expenses on this day)
+      - prepaid_by_type           (dict of type → daily amortized cost)
       - daily_other_total         (sum of `daily_expenses` rows on that exact date)
       - operating_total           (grand total of all above)
     """
@@ -168,6 +231,9 @@ async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dic
         {"user_id": user_id}, {"_id": 0}
     ).to_list(5000)
     rentals = await db.operating_rentals.find(
+        {"user_id": user_id}, {"_id": 0}
+    ).to_list(5000)
+    prepaids = await db.operating_prepaid_expenses.find(
         {"user_id": user_id}, {"_id": 0}
     ).to_list(5000)
 
@@ -189,6 +255,16 @@ async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dic
             continue
         rent += _daily_from_annual(float(r.get("annual_amount") or 0))
 
+    prepaid_total = 0.0
+    prepaid_by_type: dict = {}
+    for p in prepaids:
+        if not _prepaid_active_on(p, day):
+            continue
+        d = _daily_from_prepaid(p)
+        prepaid_total += d
+        t = (p.get("expense_type") or "other").strip() or "other"
+        prepaid_by_type[t] = round(prepaid_by_type.get(t, 0.0) + d, 4)
+
     iso_day = day.isoformat()
     other_total = 0.0
     async for ex in db.operating_daily_expenses.find(
@@ -197,7 +273,7 @@ async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dic
         other_total += float(ex.get("amount") or 0)
 
     salaries_total = emp + house + char
-    operating_total = salaries_total + rent + other_total
+    operating_total = salaries_total + rent + prepaid_total + other_total
 
     return {
         "date": iso_day,
@@ -206,6 +282,8 @@ async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dic
         "salaries_charity": round(char, 2),
         "salaries_total_daily": round(salaries_total, 2),
         "rentals_daily": round(rent, 2),
+        "prepaid_daily": round(prepaid_total, 2),
+        "prepaid_by_type": {k: round(v, 2) for k, v in prepaid_by_type.items()},
         "daily_other_total": round(other_total, 2),
         "operating_total": round(operating_total, 2),
     }
@@ -224,8 +302,12 @@ async def compute_operating_expenses_for_range(
     rentals = await db.operating_rentals.find(
         {"user_id": user_id}, {"_id": 0}
     ).to_list(5000)
+    prepaids = await db.operating_prepaid_expenses.find(
+        {"user_id": user_id}, {"_id": 0}
+    ).to_list(5000)
 
-    emp_sum = house_sum = char_sum = rent_sum = 0.0
+    emp_sum = house_sum = char_sum = rent_sum = prepaid_sum = 0.0
+    prepaid_by_type: dict = {}
     cur = from_day
     while cur <= to_day:
         for s in salaries:
@@ -242,6 +324,13 @@ async def compute_operating_expenses_for_range(
         for r in rentals:
             if _rental_active_on(r, cur):
                 rent_sum += _daily_from_annual(float(r.get("annual_amount") or 0))
+        for p in prepaids:
+            if not _prepaid_active_on(p, cur):
+                continue
+            d = _daily_from_prepaid(p)
+            prepaid_sum += d
+            t = (p.get("expense_type") or "other").strip() or "other"
+            prepaid_by_type[t] = prepaid_by_type.get(t, 0.0) + d
         cur = cur + timedelta(days=1)
 
     other_sum = 0.0
@@ -263,8 +352,12 @@ async def compute_operating_expenses_for_range(
         "salaries_charity": round(char_sum, 2),
         "salaries_total": round(salaries_total, 2),
         "rentals_total": round(rent_sum, 2),
+        "prepaid_total": round(prepaid_sum, 2),
+        "prepaid_by_type": {k: round(v, 2) for k, v in prepaid_by_type.items()},
         "daily_other_total": round(other_sum, 2),
-        "operating_total": round(salaries_total + rent_sum + other_sum, 2),
+        "operating_total": round(
+            salaries_total + rent_sum + prepaid_sum + other_sum, 2
+        ),
     }
 
 
@@ -534,6 +627,111 @@ def _build_router(db) -> APIRouter:
             raise HTTPException(status_code=404, detail="سجل المصروف غير موجود")
         return {"ok": True}
 
+    # ─── Prepaid expenses CRUD (المصروفات المدفوعة مقدماً) ────────────────────
+    @router.get("/prepaid")
+    async def list_prepaid(user: dict = Depends(current_user)):
+        items = await db.operating_prepaid_expenses.find(
+            {"user_id": user["id"]}, {"_id": 0}
+        ).sort("created_at", -1).to_list(2000)
+        # Enrich with derived fields so the UI shows them without recomputing
+        for it in items:
+            it["period_days"] = _prepaid_period_days(it)
+            it["daily_cost"] = round(_daily_from_prepaid(it), 2)
+        return {"items": items}
+
+    @router.post("/prepaid")
+    async def create_prepaid(
+        payload: PrepaidExpenseIn, user: dict = Depends(current_user)
+    ):
+        if payload.expense_type not in PREPAID_TYPES:
+            raise HTTPException(status_code=400, detail="نوع المصروف غير صحيح")
+        sd = _parse_iso(payload.start_date)
+        ed = _parse_iso(payload.end_date)
+        if sd is None or ed is None:
+            raise HTTPException(status_code=400, detail="صيغة التاريخ يجب أن تكون YYYY-MM-DD")
+        if ed < sd:
+            raise HTTPException(status_code=400, detail="تاريخ النهاية يجب أن يكون بعد تاريخ البداية")
+        if payload.status not in {"active", "expired"}:
+            raise HTTPException(status_code=400, detail="الحالة غير صحيحة")
+        doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "expense_type": payload.expense_type,
+            "beneficiary": payload.beneficiary.strip(),
+            "amount": round(float(payload.amount), 2),
+            "start_date": payload.start_date,
+            "end_date": payload.end_date,
+            "status": payload.status,
+            "notes": (payload.notes or "").strip(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.operating_prepaid_expenses.insert_one(doc)
+        doc.pop("_id", None)
+        doc["period_days"] = _prepaid_period_days(doc)
+        doc["daily_cost"] = round(_daily_from_prepaid(doc), 2)
+        return doc
+
+    @router.put("/prepaid/{prepaid_id}")
+    async def update_prepaid(
+        prepaid_id: str,
+        payload: PrepaidExpenseUpdate,
+        user: dict = Depends(current_user),
+    ):
+        existing = await db.operating_prepaid_expenses.find_one(
+            {"id": prepaid_id, "user_id": user["id"]}, {"_id": 0}
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="السجل غير موجود")
+        update: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+        if payload.expense_type is not None:
+            if payload.expense_type not in PREPAID_TYPES:
+                raise HTTPException(status_code=400, detail="نوع المصروف غير صحيح")
+            update["expense_type"] = payload.expense_type
+        if payload.beneficiary is not None:
+            update["beneficiary"] = payload.beneficiary.strip()
+        if payload.amount is not None:
+            if payload.amount <= 0:
+                raise HTTPException(status_code=400, detail="المبلغ يجب أن يكون أكبر من صفر")
+            update["amount"] = round(float(payload.amount), 2)
+        sd_str = payload.start_date if payload.start_date is not None else existing.get("start_date")
+        ed_str = payload.end_date if payload.end_date is not None else existing.get("end_date")
+        if payload.start_date is not None or payload.end_date is not None:
+            sd = _parse_iso(sd_str or "")
+            ed = _parse_iso(ed_str or "")
+            if sd is None or ed is None:
+                raise HTTPException(status_code=400, detail="صيغة التاريخ يجب أن تكون YYYY-MM-DD")
+            if ed < sd:
+                raise HTTPException(status_code=400, detail="تاريخ النهاية يجب أن يكون بعد تاريخ البداية")
+            if payload.start_date is not None:
+                update["start_date"] = payload.start_date
+            if payload.end_date is not None:
+                update["end_date"] = payload.end_date
+        if payload.status is not None:
+            if payload.status not in {"active", "expired"}:
+                raise HTTPException(status_code=400, detail="الحالة غير صحيحة")
+            update["status"] = payload.status
+        if payload.notes is not None:
+            update["notes"] = payload.notes.strip()
+        await db.operating_prepaid_expenses.update_one(
+            {"id": prepaid_id, "user_id": user["id"]}, {"$set": update}
+        )
+        out = await db.operating_prepaid_expenses.find_one(
+            {"id": prepaid_id, "user_id": user["id"]}, {"_id": 0}
+        )
+        out["period_days"] = _prepaid_period_days(out)
+        out["daily_cost"] = round(_daily_from_prepaid(out), 2)
+        return out
+
+    @router.delete("/prepaid/{prepaid_id}")
+    async def delete_prepaid(prepaid_id: str, user: dict = Depends(current_user)):
+        res = await db.operating_prepaid_expenses.delete_one(
+            {"id": prepaid_id, "user_id": user["id"]}
+        )
+        if res.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="السجل غير موجود")
+        return {"ok": True}
+
     # ─── Summary (KPI cards data) ────────────────────────────────────────────
     @router.get("/summary")
     async def summary(user: dict = Depends(current_user)):
@@ -580,6 +778,29 @@ def _build_router(db) -> APIRouter:
                 annual_total += float(r.get("annual_amount") or 0)
         rentals_daily = round(annual_total / 365.0, 2) if annual_total else 0.0
 
+        # Prepaid expenses (المصروفات المدفوعة مقدماً) — only currently-active.
+        prepaids = await db.operating_prepaid_expenses.find(
+            {"user_id": uid, "status": "active"}, {"_id": 0}
+        ).to_list(5000)
+        prepaid_total_paid = 0.0
+        prepaid_active_count = 0
+        prepaid_by_type_monthly: dict = {}
+        for p in prepaids:
+            if not _prepaid_active_on(p, today):
+                continue
+            prepaid_active_count += 1
+            prepaid_total_paid += float(p.get("amount") or 0)
+            t = (p.get("expense_type") or "other").strip() or "other"
+            cb = prepaid_by_type_monthly.setdefault(
+                t, {"total_paid": 0.0, "daily_cost": 0.0, "count": 0}
+            )
+            cb["total_paid"] += float(p.get("amount") or 0)
+            cb["daily_cost"] += _daily_from_prepaid(p)
+            cb["count"] += 1
+        for v in prepaid_by_type_monthly.values():
+            v["total_paid"] = round(v["total_paid"], 2)
+            v["daily_cost"] = round(v["daily_cost"], 2)
+
         today_breakdown = await compute_operating_expenses_for_day(db, uid, today)
         return {
             "salaries": {
@@ -594,6 +815,12 @@ def _build_router(db) -> APIRouter:
                 "annual_total": round(annual_total, 2),
                 "daily_total": rentals_daily,
                 "active_count": sum(1 for r in rentals if _rental_active_on(r, today)),
+            },
+            "prepaid": {
+                "total_paid": round(prepaid_total_paid, 2),
+                "daily_total": today_breakdown.get("prepaid_daily", 0.0),
+                "active_count": prepaid_active_count,
+                "by_type": prepaid_by_type_monthly,
             },
             "today": today_breakdown,
         }
