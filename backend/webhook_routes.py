@@ -177,6 +177,16 @@ def _build_router(db) -> APIRouter:
         purchases: int = 0
         revenue: float = 0.0
         source: Optional[str] = "tiktok"   # informational only
+        # Extended metrics (optional — Make.com TikTok scenarios usually send these)
+        platform: Optional[str] = "tiktok"
+        campaign_name: Optional[str] = None
+        campaign_id: Optional[str] = None
+        clicks: int = 0
+        impressions: int = 0
+        reach: int = 0
+        video_views: int = 0
+        conversions: int = 0     # alias for purchases when present
+        cpa: float = 0.0
 
         class Config:
             extra = "allow"
@@ -188,10 +198,15 @@ def _build_router(db) -> APIRouter:
         Body shape (per user spec):
             {"source":"tiktok","date":"2026-05-30","spend":350.75,
              "purchases":12,"revenue":2400.00}
+        Or with full TikTok metrics:
+            {"platform":"tiktok","date":"2026-05-20","campaign_name":"...",
+             "campaign_id":"...","spend":59.83,"clicks":195,"impressions":12762,
+             "reach":11315,"video_views":12573,"conversions":8,"cpa":7.48}
 
-        Upserts into `tiktok_ads_daily` keyed by (user_id, date). Posting the
-        same date twice overwrites the previous row, so Make.com can safely
-        re-send a day if it gets refreshed.
+        Upserts into `tiktok_ads_daily` keyed by (user_id, date). When the
+        same date arrives with multiple campaigns, the values ACCUMULATE
+        (sum) so the daily totals reflect cross-campaign performance.
+        Posting an identical (date, campaign_id) twice overwrites.
         """
         tok_doc = await db.webhook_tokens.find_one({"token": token})
         if not tok_doc:
@@ -217,18 +232,35 @@ def _build_router(db) -> APIRouter:
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", payload.date):
                 errors.append({"data": raw, "error": "date must be YYYY-MM-DD"})
                 continue
-            doc = {
+            # When `conversions` is set but `purchases` isn't, treat them as
+            # the same metric (Make.com TikTok scenarios use "conversions").
+            effective_purchases = (
+                int(payload.purchases) if payload.purchases else int(payload.conversions or 0)
+            )
+            base = {
                 "user_id": user_id,
                 "date": payload.date,
                 "spend": round(float(payload.spend or 0), 2),
-                "purchases": int(payload.purchases or 0),
+                "purchases": effective_purchases,
                 "revenue": round(float(payload.revenue or 0), 2),
+                "clicks": int(payload.clicks or 0),
+                "impressions": int(payload.impressions or 0),
+                "reach": int(payload.reach or 0),
+                "video_views": int(payload.video_views or 0),
+                "conversions": int(payload.conversions or 0),
+                "cpa": round(float(payload.cpa or 0), 2),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
+            campaign_id = payload.campaign_id or "_default"
+            campaign_key = {"user_id": user_id, "date": payload.date, "campaign_id": campaign_id}
+            # Per-campaign upsert (overwrite same campaign+date with latest values)
             await db.tiktok_ads_daily.update_one(
-                {"user_id": user_id, "date": payload.date},
-                {"$set": doc, "$setOnInsert": {"id": str(uuid.uuid4()),
-                                                 "created_at": doc["updated_at"]}},
+                campaign_key,
+                {"$set": {**base,
+                          "campaign_id": campaign_id,
+                          "campaign_name": payload.campaign_name or "",
+                          "platform": payload.platform or "tiktok"},
+                 "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": base["updated_at"]}},
                 upsert=True,
             )
             accepted += 1

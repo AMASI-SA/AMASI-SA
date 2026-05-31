@@ -8,7 +8,7 @@ load_dotenv(ROOT_DIR / ".env")
 import os
 import uuid
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File
@@ -1100,6 +1100,103 @@ async def dashboard(
     }
 
 
+# ── Snapchat Ads dashboard summary ────────────────────────────────────────────
+@api.get("/dashboard/snapchat-summary")
+async def snapchat_summary(user: dict = Depends(current_user)):
+    """Auto-computed Snapchat Ads card data: today + this-month spend
+    (from daily_costs.snapchat_ads + snapchat_ads_2) and the matching
+    store performance (orders + revenue from unified_orders). Plus a
+    30-day history strip so the UI can render a sparkline. Mirrors the
+    TikTok card behavior — auto-refreshes when the dashboard polls."""
+    uid = user["id"]
+    today_str = datetime.now(timezone.utc).date().isoformat()
+    month_start_str = today_str[:8] + "01"
+    d30_start_str = (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
+
+    # 1) Snapchat spend — from manually-logged daily_costs.
+    #    (Snapchat Marketing API pulls also drop into this collection.)
+    daily_rows = await db.daily_costs.find(
+        {
+            "user_id": uid,
+            "date": {"$gte": d30_start_str, "$lte": today_str},
+        },
+        {"_id": 0, "date": 1, "snapchat_ads": 1, "snapchat_ads_2": 1},
+    ).to_list(60)
+
+    by_date_spend: dict = {}
+    for r in daily_rows:
+        d = r.get("date")
+        if not d:
+            continue
+        s = float(r.get("snapchat_ads") or 0) + float(r.get("snapchat_ads_2") or 0)
+        by_date_spend[d] = by_date_spend.get(d, 0.0) + s
+
+    spend_today = round(by_date_spend.get(today_str, 0.0), 2)
+    spend_month = round(sum(v for k, v in by_date_spend.items() if k >= month_start_str), 2)
+    spend_30d = round(sum(by_date_spend.values()), 2)
+
+    # 2) Orders + revenue from unified_orders.
+    settings = await ensure_user_settings(db, uid)
+    base_q = {"user_id": uid}
+    if settings.get("hide_inferred_date_orders"):
+        base_q["order_date_inferred"] = {"$ne": True}
+
+    today_q = {**base_q, "order_date": today_str}
+    month_q = {**base_q, "order_date": {"$gte": month_start_str, "$lte": today_str}}
+    d30_q = {**base_q, "order_date": {"$gte": d30_start_str, "$lte": today_str}}
+
+    async def _summarize(q):
+        pipeline = [
+            {"$match": q},
+            {"$group": {
+                "_id": None,
+                "orders": {"$sum": 1},
+                "revenue": {"$sum": {"$ifNull": ["$total_amount", 0]}},
+            }},
+        ]
+        async for d in db.unified_orders.aggregate(pipeline):
+            return int(d.get("orders", 0)), round(float(d.get("revenue", 0)), 2)
+        return 0, 0.0
+
+    orders_today, revenue_today = await _summarize(today_q)
+    orders_month, revenue_month = await _summarize(month_q)
+    orders_30d, revenue_30d = await _summarize(d30_q)
+
+    # 3) Build 30-day spend history (filled with zeros for missing days)
+    history: list = []
+    for i in range(29, -1, -1):
+        d = (datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat()
+        history.append({"date": d, "spend": round(by_date_spend.get(d, 0.0), 2)})
+
+    def _roas(rev: float, spend: float) -> float:
+        return round(rev / spend, 2) if spend > 0 else 0.0
+
+    return {
+        "today": {
+            "date": today_str,
+            "spend": spend_today,
+            "orders": orders_today,
+            "revenue": revenue_today,
+            "roas": _roas(revenue_today, spend_today),
+        },
+        "month": {
+            "start": month_start_str,
+            "spend": spend_month,
+            "orders": orders_month,
+            "revenue": revenue_month,
+            "roas": _roas(revenue_month, spend_month),
+        },
+        "last_30d": {
+            "start": d30_start_str,
+            "spend": spend_30d,
+            "orders": orders_30d,
+            "revenue": revenue_30d,
+            "roas": _roas(revenue_30d, spend_30d),
+        },
+        "history": history,
+    }
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 @api.get("/")
 async def root():
@@ -1283,6 +1380,16 @@ async def on_startup():
         restored += 1
     if restored:
         logger.info(f"Restored order_date=received_at on {restored} previously-cleared Make.com orders (marked as inferred).")
+
+    # Tag legacy tiktok_ads_daily rows with campaign_id="_default" so the
+    # new schema (which uses (user_id, date, campaign_id) as upsert key)
+    # treats them as the single-campaign default and doesn't duplicate.
+    tt_legacy = await db.tiktok_ads_daily.update_many(
+        {"campaign_id": {"$exists": False}},
+        {"$set": {"campaign_id": "_default"}},
+    )
+    if tt_legacy.modified_count:
+        logger.info(f"Tagged {tt_legacy.modified_count} legacy tiktok_ads_daily rows with campaign_id='_default'.")
 
     await seed_admin(db)
     logger.info("Hesab backend started successfully.")

@@ -74,8 +74,18 @@ export default function Dashboard() {
     const [hiddenCards, setHiddenCards] = useState([]);
     const [lastUpdated, setLastUpdated] = useState(null);
     const [nowTick, setNowTick] = useState(Date.now());
+    const [snapSummary, setSnapSummary] = useState(null);
     const fileInputRef = useRef(null);
     const pendingReprocessId = useRef(null);
+
+    const fetchSnapSummary = async () => {
+        try {
+            const { data } = await api.get("/dashboard/snapchat-summary");
+            setSnapSummary(data);
+        } catch {
+            /* non-critical */
+        }
+    };
 
     const fetchDashboard = async (f = filters) => {
         setLoading(true);
@@ -84,6 +94,7 @@ export default function Dashboard() {
             const { data } = await api.get(`/dashboard${qs ? "?" + qs : ""}`);
             setData(data);
             setLastUpdated(Date.now());
+            fetchSnapSummary();  // refresh Snapchat card alongside
         } finally {
             setLoading(false);
         }
@@ -96,6 +107,7 @@ export default function Dashboard() {
             const { data } = await api.get(`/dashboard${qs ? "?" + qs : ""}`);
             setData(data);
             setLastUpdated(Date.now());
+            fetchSnapSummary();
         } catch {
             /* swallow; next tick will retry */
         }
@@ -300,6 +312,107 @@ export default function Dashboard() {
                             <GearSix size={14} />
                             عدد البطاقات المخفية: {hiddenCards.length} — إدارة من الإعدادات
                         </Link>
+                    )}
+
+                    {/* Snapchat Ads dedicated section (auto-refresh from snapchat_ads in daily_costs) */}
+                    {snapSummary && (snapSummary.last_30d.spend > 0 || snapSummary.today.spend > 0) && (
+                        <div
+                            className="rounded-xl border-2 border-yellow-300 p-6"
+                            style={{ background: "linear-gradient(135deg,#FFFCEA 0%,#fff 60%,#FFFAE0 100%)" }}
+                            data-testid="snapchat-ads-section"
+                        >
+                            <div className="flex items-center gap-3 mb-5">
+                                <div className="w-11 h-11 rounded-xl bg-yellow-400 text-black flex items-center justify-center font-extrabold text-lg" style={{ fontFamily: "Tajawal" }}>
+                                    👻
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Snapchat Ads</h2>
+                                    <p className="text-xs text-muted-foreground">
+                                        تحديث تلقائي من Snapchat Marketing API و التكاليف اليومية — آخر 30 يوم
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Today + Month sections */}
+                            <div className="space-y-4">
+                                {/* Today */}
+                                <div>
+                                    <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
+                                        اليوم ({snapSummary.today.date})
+                                    </div>
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-today">
+                                            <div className="text-xs text-muted-foreground mb-1">صرف اليوم (ر.س)</div>
+                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.today.spend)}</div>
+                                        </div>
+                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-orders-today">
+                                            <div className="text-xs text-muted-foreground mb-1">طلبات اليوم</div>
+                                            <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(snapSummary.today.orders)}</div>
+                                        </div>
+                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-revenue-today">
+                                            <div className="text-xs text-muted-foreground mb-1">عائد اليوم (ر.س)</div>
+                                            <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.today.revenue)}</div>
+                                        </div>
+                                        <div className={`border-2 rounded-lg p-4 ${snapSummary.today.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="snap-roas-today">
+                                            <div className="text-xs text-muted-foreground mb-1">ROAS اليوم</div>
+                                            <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: snapSummary.today.roas >= 2 ? "#047857" : "#B45309" }}>
+                                                {snapSummary.today.spend > 0 ? `${snapSummary.today.roas}x` : "—"}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Month */}
+                                <div>
+                                    <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
+                                        هذا الشهر (منذ {snapSummary.month.start})
+                                    </div>
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-month">
+                                            <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
+                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.spend)}</div>
+                                        </div>
+                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-orders-month">
+                                            <div className="text-xs text-muted-foreground mb-1">طلبات الشهر</div>
+                                            <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(snapSummary.month.orders)}</div>
+                                        </div>
+                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-revenue-month">
+                                            <div className="text-xs text-muted-foreground mb-1">العائد الشهري (ر.س)</div>
+                                            <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.revenue)}</div>
+                                        </div>
+                                        <div className={`border-2 rounded-lg p-4 ${snapSummary.month.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="snap-roas-month">
+                                            <div className="text-xs text-muted-foreground mb-1">ROAS الشهر</div>
+                                            <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: snapSummary.month.roas >= 2 ? "#047857" : "#B45309" }}>
+                                                {snapSummary.month.spend > 0 ? `${snapSummary.month.roas}x` : "—"}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tiny 30-day spend trend */}
+                            {snapSummary.history && snapSummary.history.some(h => h.spend > 0) && (
+                                <div className="mt-5 pt-4 border-t border-yellow-200">
+                                    <div className="text-xs text-muted-foreground mb-2" style={{ fontFamily: "Tajawal" }}>
+                                        صرف آخر 30 يوم — الإجمالي: {formatMoney(snapSummary.last_30d.spend)} ر.س
+                                    </div>
+                                    <div className="h-12 flex items-end gap-0.5">
+                                        {snapSummary.history.map((d, i) => {
+                                            const maxSpend = Math.max(1, ...snapSummary.history.map(h => h.spend));
+                                            const height = Math.max(2, (d.spend / maxSpend) * 100);
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    className="flex-1 bg-yellow-400 rounded-sm hover:bg-yellow-500 transition-colors cursor-help"
+                                                    style={{ height: `${height}%` }}
+                                                    title={`${d.date}: ${formatMoney(d.spend)} ر.س`}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     )}
 
                     {/* TikTok Ads dedicated section (pushed via Make.com webhook) */}
