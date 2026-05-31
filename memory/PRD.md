@@ -20,6 +20,23 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## Implemented (2026-05 — Operating Expenses / المصروفات التشغيلية اليومية)
+- ✅ **New page `/operating-expenses`** — the formal source of all fixed and variable operating costs used in P&L calculations. Sidebar link "المصروفات التشغيلية" (Wallet icon).
+- ✅ **Backend module `expenses_routes.py`** with three independent expense types:
+  - **Monthly Salaries** (`operating_salaries` collection) — 3 categories: `employee` (موظفين/إداريين/محاسبين/مسوقين), `household` (مصروف البيت/المنزل/الشخصي), `charity` (الصدقات/التبرعات/الكفالات). Daily cost = `monthly_amount / days_in_month` (calendar-aware).
+  - **Annual Rentals** (`operating_rentals` collection) — types: office/warehouse/shop/employee_housing/other. Daily cost = `annual_amount / 365`. Status active/expired (date-bounded).
+  - **Daily Variable Expenses** (`operating_daily_expenses` collection) — free-form date+type+description+amount+payment_method.
+- ✅ **CRUD endpoints**: `GET/POST/PUT/DELETE /api/operating-expenses/{salaries|rentals|daily}[/{id}]`.
+- ✅ **Aggregation endpoints**:
+  - `GET /api/operating-expenses/summary` — KPI cards data (per-category monthly totals, today's per-day breakdown).
+  - `GET /api/operating-expenses/report` — daily / monthly / yearly aggregates + custom range.
+- ✅ **Stopped/expired records correctly excluded** from all computations.
+- ✅ **Dashboard integration**: `GET /api/dashboard` now exposes `operating_expenses_total`, `operating_salaries_total`, `operating_salaries_employee/household/charity`, `operating_rentals_total`, `operating_daily_other_total`. `net_profit` is reduced by `operating_expenses_total`.
+- ✅ **Net Sales toggle**: new `net_sales_config.deduct_operating_expenses` flag (default `True`) in Settings → "خصم المصروفات التشغيلية" — controls whether operating expenses are deducted from `net_sales` KPI.
+- ✅ **3 new dashboard KPI cards**: `operating_expenses_total`, `operating_salaries_total`, `operating_rentals_total` (in costs group).
+- ✅ **10 new pytest tests** covering full CRUD, math correctness (per-calendar-month days), category aggregation, status filtering, dashboard integration, and settings persistence. **195/195 backend tests pass.**
+- ✅ **Testing agent verified**: 100% pass on backend curl tests + frontend E2E (sidebar nav, tabs, CRUD modals, report tab, settings toggle, dashboard markers).
+
 ## Implemented (2026-05 — Per-Order Date Filtering Across Dashboard)
 - ✅ **Excel parser:** picks up the order-creation date column even when the header reads "تاريخ إنشاء الطلب" (now in `DATE_COLS`). Falls back to **column Q (index 16)** when no header matches, matching Salla's standard layout.
 - ✅ **Parser bug fix:** `_match_col` no longer false-matches empty header cells (an empty string is no longer treated as a substring of every candidate).
