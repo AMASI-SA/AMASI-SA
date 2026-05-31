@@ -405,16 +405,15 @@ export default function Dashboard() {
                                     </div>
                                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-today">
-                                            <div className="text-xs text-muted-foreground mb-1">صرف اليوم</div>
-                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.today.spend)} <span className="text-xs font-bold">ر.س</span></div>
-                                            <div className="num text-xs font-semibold text-muted-foreground mt-0.5" style={{ fontFamily: "Tajawal" }} dir="ltr">≈ ${formatMoney(snapSummary.today.spend_usd)}</div>
+                                            <div className="text-xs text-muted-foreground mb-1">صرف اليوم (ر.س)</div>
+                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.today.spend)}</div>
                                         </div>
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-orders-today">
                                             <div className="text-xs text-muted-foreground mb-1">طلبات اليوم</div>
                                             <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(snapSummary.today.orders)}</div>
                                         </div>
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-revenue-today">
-                                            <div className="text-xs text-muted-foreground mb-1">عائد اليوم (ر.س)</div>
+                                            <div className="text-xs text-muted-foreground mb-1">مبيعات اليوم (ر.س)</div>
                                             <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.today.revenue)}</div>
                                         </div>
                                         <div className={`border-2 rounded-lg p-4 ${snapSummary.today.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="snap-roas-today">
@@ -433,16 +432,15 @@ export default function Dashboard() {
                                     </div>
                                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-month">
-                                            <div className="text-xs text-muted-foreground mb-1">الصرف الشهري</div>
-                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.spend)} <span className="text-xs font-bold">ر.س</span></div>
-                                            <div className="num text-xs font-semibold text-muted-foreground mt-0.5" style={{ fontFamily: "Tajawal" }} dir="ltr">≈ ${formatMoney(snapSummary.month.spend_usd)}</div>
+                                            <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
+                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.spend)}</div>
                                         </div>
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-orders-month">
                                             <div className="text-xs text-muted-foreground mb-1">طلبات الشهر</div>
                                             <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(snapSummary.month.orders)}</div>
                                         </div>
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-revenue-month">
-                                            <div className="text-xs text-muted-foreground mb-1">العائد الشهري (ر.س)</div>
+                                            <div className="text-xs text-muted-foreground mb-1">مبيعات الشهر (ر.س)</div>
                                             <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.revenue)}</div>
                                         </div>
                                         <div className={`border-2 rounded-lg p-4 ${snapSummary.month.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="snap-roas-month">
@@ -460,7 +458,6 @@ export default function Dashboard() {
                                 <div className="mt-5 pt-4 border-t border-yellow-200">
                                     <div className="text-xs text-muted-foreground mb-2" style={{ fontFamily: "Tajawal" }}>
                                         صرف آخر 30 يوم — الإجمالي: {formatMoney(snapSummary.last_30d.spend)} ر.س
-                                        <span dir="ltr" className="ms-2">(≈ ${formatMoney(snapSummary.last_30d.spend_usd)})</span>
                                     </div>
                                     <div className="h-12 flex items-end gap-0.5">
                                         {snapSummary.history.map((d, i) => {
@@ -478,6 +475,18 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Footer: link to detailed report */}
+                            <div className="mt-4 flex justify-end">
+                                <Link
+                                    to="/reports/ads"
+                                    className="text-xs font-semibold text-yellow-800 hover:text-yellow-900 hover:underline inline-flex items-center gap-1"
+                                    data-testid="snap-card-details-link"
+                                    style={{ fontFamily: "Tajawal" }}
+                                >
+                                    التفاصيل (CPC / CPM / CTR / الحملات) في تقرير الإعلانات الموحَّد ←
+                                </Link>
+                            </div>
                         </div>
                     )}
 
@@ -537,7 +546,7 @@ export default function Dashboard() {
                                     <div>
                                         <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Meta Ads (Facebook + Instagram)</h2>
                                         <p className="text-xs text-muted-foreground">
-                                            ربط مباشر مع Meta Marketing API — اضغط الزر للتحديث الفوري
+                                            ربط مباشر مع Meta Marketing API — اضغط الزر للتحديث الفوري لصرف اليوم
                                             {metaSummary.last_sync_at && (
                                                 <span className="ms-2 text-blue-700">• آخر مزامنة: {new Date(metaSummary.last_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
                                             )}
@@ -548,12 +557,12 @@ export default function Dashboard() {
                                     type="button"
                                     onClick={async () => {
                                         try {
-                                            toast.loading("جاري مزامنة Meta…", { id: "meta-sync" });
-                                            const { data } = await api.post("/meta/sync", { days: 30 });
+                                            toast.loading("جاري تحديث صرف Meta لليوم…", { id: "meta-sync" });
+                                            const { data } = await api.post("/meta/sync", { days: 1 });
                                             if (data.errors?.length) {
                                                 toast.error(`خطأ: ${data.errors[0]}`, { id: "meta-sync", duration: 8000 });
                                             } else {
-                                                toast.success(`تم: ${data.upserted} صف`, { id: "meta-sync" });
+                                                toast.success(`تم تحديث صرف اليوم (${data.upserted || 0} صف)`, { id: "meta-sync" });
                                             }
                                             fetchMetaSummary();
                                         } catch (e) {
@@ -566,13 +575,13 @@ export default function Dashboard() {
                                     data-testid="meta-sync-now-btn"
                                 >
                                     <ArrowsClockwise size={16} weight="bold" />
-                                    مزامنة Meta الآن
+                                    تحديث فوري للصرف اليوم
                                 </button>
                             </div>
 
                             {metaSummary.last_30d.spend === 0 && metaSummary.last_30d.orders === 0 ? (
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 leading-relaxed" data-testid="meta-empty-state">
-                                    لا توجد بيانات Meta Ads بعد. اربط حسابك مع Meta Marketing API مباشرةً من صفحة الإعدادات (App ID + App Secret + Access Token) ثم اضغط <strong>"مزامنة Meta الآن"</strong> لجلب بيانات آخر 30 يوم.
+                                    لا توجد بيانات Meta Ads بعد. اربط حسابك مع Meta Marketing API مباشرةً من صفحة الإعدادات (App ID + App Secret + Access Token) ثم اضغط <strong>"تحديث فوري للصرف اليوم"</strong> لجلب البيانات.
                                     <div className="mt-3">
                                         <Link to="/settings" className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-md font-bold text-xs hover:bg-blue-700 transition-colors" data-testid="meta-go-settings-btn">
                                             الذهاب إلى الإعدادات ←
@@ -597,7 +606,7 @@ export default function Dashboard() {
                                                     <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(metaSummary.today.orders)}</div>
                                                 </div>
                                                 <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-revenue-today">
-                                                    <div className="text-xs text-muted-foreground mb-1">عائد اليوم (ر.س)</div>
+                                                    <div className="text-xs text-muted-foreground mb-1">مبيعات اليوم (ر.س)</div>
                                                     <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(metaSummary.today.revenue)}</div>
                                                 </div>
                                                 <div className={`border-2 rounded-lg p-4 ${metaSummary.today.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="meta-roas-today">
@@ -614,7 +623,7 @@ export default function Dashboard() {
                                             <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
                                                 هذا الشهر (منذ {metaSummary.month.start})
                                             </div>
-                                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                                 <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-spend-month">
                                                     <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
                                                     <div className="num text-2xl font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(metaSummary.month.spend)}</div>
@@ -624,12 +633,8 @@ export default function Dashboard() {
                                                     <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(metaSummary.month.orders)}</div>
                                                 </div>
                                                 <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-revenue-month">
-                                                    <div className="text-xs text-muted-foreground mb-1">العائد الشهري (ر.س)</div>
+                                                    <div className="text-xs text-muted-foreground mb-1">مبيعات الشهر (ر.س)</div>
                                                     <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(metaSummary.month.revenue)}</div>
-                                                </div>
-                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-cpa-month">
-                                                    <div className="text-xs text-muted-foreground mb-1">CPA (تكلفة الشراء)</div>
-                                                    <div className="num text-2xl font-extrabold text-pink-700" style={{ fontFamily: "Tajawal" }}>{metaSummary.month.cpa > 0 ? `${formatMoney(metaSummary.month.cpa)} ر.س` : "—"}</div>
                                                 </div>
                                                 <div className={`border-2 rounded-lg p-4 ${metaSummary.month.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="meta-roas-month">
                                                     <div className="text-xs text-muted-foreground mb-1">ROAS الشهر</div>
@@ -638,64 +643,7 @@ export default function Dashboard() {
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            {/* Performance metrics row (Snap-style) — Spend·CPC·CPM·CTR·Purchases breakdown */}
-                                            <div className="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-3" data-testid="meta-performance-row">
-                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
-                                                    <div className="text-xs text-muted-foreground mb-1">CPC (متوسط ر.س/نقرة)</div>
-                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }} data-testid="meta-cpc-month">{metaSummary.month.cpc > 0 ? `${formatMoney(metaSummary.month.cpc)}` : "—"}</div>
-                                                </div>
-                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
-                                                    <div className="text-xs text-muted-foreground mb-1">CPM (ر.س / 1000 ظهور)</div>
-                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }} data-testid="meta-cpm-month">{metaSummary.month.cpm > 0 ? `${formatMoney(metaSummary.month.cpm)}` : "—"}</div>
-                                                </div>
-                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
-                                                    <div className="text-xs text-muted-foreground mb-1">CTR (نسبة النقر)</div>
-                                                    <div className="num text-lg font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }} data-testid="meta-ctr-month">{metaSummary.month.ctr > 0 ? `${metaSummary.month.ctr}%` : "—"}</div>
-                                                </div>
-                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
-                                                    <div className="text-xs text-muted-foreground mb-1">مرات الظهور</div>
-                                                    <div className="num text-lg font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }} data-testid="meta-impressions-month">{formatInt(metaSummary.month.impressions)}</div>
-                                                </div>
-                                                <div className="bg-white border border-blue-200 rounded-lg p-3">
-                                                    <div className="text-xs text-muted-foreground mb-1">النقرات</div>
-                                                    <div className="num text-lg font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }} data-testid="meta-clicks-month">{formatInt(metaSummary.month.clicks)}</div>
-                                                </div>
-                                            </div>
                                         </div>
-
-                                        {/* Campaigns breakdown */}
-                                        {metaSummary.campaigns.length > 0 && (
-                                            <div>
-                                                <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
-                                                    تكلفة الحملات (هذا الشهر)
-                                                </div>
-                                                <div className="bg-white border border-blue-200 rounded-lg overflow-hidden">
-                                                    <table className="w-full text-sm" data-testid="meta-campaigns-table">
-                                                        <thead>
-                                                            <tr className="bg-blue-50 text-blue-900">
-                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>الحملة</th>
-                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>الصرف (ر.س)</th>
-                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>طلبات</th>
-                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>عائد (ر.س)</th>
-                                                                <th className="py-2 px-3 text-right font-bold" style={{ fontFamily: "Tajawal" }}>ROAS</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {metaSummary.campaigns.slice(0, 10).map((c, i) => (
-                                                                <tr key={i} className="border-t border-blue-100 hover:bg-blue-50/40">
-                                                                    <td className="py-2 px-3" style={{ fontFamily: "Tajawal" }}>{c.campaign_name}</td>
-                                                                    <td className="py-2 px-3 num font-semibold">{formatMoney(c.spend)}</td>
-                                                                    <td className="py-2 px-3 num">{formatInt(c.purchases)}</td>
-                                                                    <td className="py-2 px-3 num text-emerald-700">{formatMoney(c.revenue)}</td>
-                                                                    <td className={`py-2 px-3 num font-bold ${c.roas >= 2 ? "text-emerald-700" : "text-amber-700"}`}>{c.spend > 0 ? `${c.roas}x` : "—"}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                        )}
 
                                         {/* 30-day sparkline */}
                                         {metaSummary.history && metaSummary.history.some(h => h.spend > 0) && (
@@ -719,6 +667,18 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
                                         )}
+
+                                        {/* Footer: link to detailed report */}
+                                        <div className="flex justify-end">
+                                            <Link
+                                                to="/reports/ads"
+                                                className="text-xs font-semibold text-blue-800 hover:text-blue-900 hover:underline inline-flex items-center gap-1"
+                                                data-testid="meta-card-details-link"
+                                                style={{ fontFamily: "Tajawal" }}
+                                            >
+                                                التفاصيل (CPC / CPM / CTR / الحملات) في تقرير الإعلانات الموحَّد ←
+                                            </Link>
+                                        </div>
                                     </div>
                                 </>
                             )}
