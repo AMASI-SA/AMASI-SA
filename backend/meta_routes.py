@@ -95,6 +95,16 @@ class MetaSyncIn(BaseModel):
     to_date: Optional[str] = None
 
 
+class MetaTokenExchangeIn(BaseModel):
+    """Inputs for converting a short-lived Graph API Explorer token (1-2h)
+    into a long-lived token (60 days). App ID + Secret can be blank if the
+    user already saved them via `/meta/config` — we fall back to those."""
+    short_lived_token: str = Field(default="")
+    app_id: str = Field(default="")
+    app_secret: str = Field(default="")
+    ad_account_id: str = Field(default="")
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _extract_purchases(actions: Optional[list]) -> int:
     """Sum Facebook 'purchase' actions across types (web, omni, offsite_conversion)."""
@@ -232,6 +242,58 @@ async def _verify_meta_credentials(
         return (False, msg, {})
 
 
+async def _exchange_short_for_long_lived(
+    app_id: str,
+    app_secret: str,
+    short_lived_token: str,
+) -> tuple[bool, str, dict]:
+    """Call Meta's fb_exchange_token grant. Per the official docs
+    (https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived/):
+
+        GET /oauth/access_token?
+            grant_type=fb_exchange_token
+            &client_id={app-id}
+            &client_secret={app-secret}
+            &fb_exchange_token={short-lived-token}
+
+    Returns (ok, friendly_arabic_msg, payload). On success payload contains:
+        access_token, token_type ("bearer"), expires_in (seconds, ~5184000 = 60d).
+
+    Long-lived user tokens last 60 days. If the input is already a long-lived
+    or system-user token, Meta still returns a fresh token (re-extending it
+    by 60d if eligible) — so calling this on a "valid" token is a no-op
+    refresh, not an error.
+    """
+    if not app_id or not app_secret:
+        return (False,
+                "Meta App ID و App Secret مطلوبان للتحويل. احفظهما أولاً ثم أعد المحاولة.",
+                {})
+    url = f"{META_API_BASE}/oauth/access_token"
+    params = {
+        "grant_type": "fb_exchange_token",
+        "client_id": app_id,
+        "client_secret": app_secret,
+        "fb_exchange_token": short_lived_token,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as http:
+            resp = await http.get(url, params=params)
+            if resp.status_code >= 400:
+                _, friendly = _classify_meta_error(resp.text)
+                logger.warning("Meta token exchange failed (%s): %s",
+                               resp.status_code, resp.text[:240])
+                return (False, friendly, {})
+            data = resp.json() or {}
+            if "access_token" not in data:
+                return (False,
+                        "استجابة غير متوقعة من Meta — لم يصل التوكن الجديد.",
+                        {})
+            return (True, "تم تحويل التوكن بنجاح ✓", data)
+    except httpx.HTTPError as exc:
+        _, friendly = _classify_meta_error(f"network error: {exc}")
+        return (False, friendly, {})
+
+
 # ── Router ────────────────────────────────────────────────────────────────────
 def attach_meta_routes(parent_router, db):
     """Mount /meta/* routes onto the given parent router."""
@@ -275,6 +337,8 @@ def attach_meta_routes(parent_router, db):
             "connection_status": conn.get("connection_status", "ok"),
             "last_error_message": conn.get("last_error_message"),
             "last_error_at": conn.get("last_error_at"),
+            "token_expires_at": conn.get("token_expires_at"),
+            "token_exchanged_at": conn.get("token_exchanged_at"),
         }
 
     @router.put("/config")
@@ -380,6 +444,105 @@ def attach_meta_routes(parent_router, db):
     async def delete_config(user: dict = Depends(current_user)):
         await db.meta_connections.delete_one({"user_id": user["id"]})
         return {"ok": True}
+
+    @router.post("/exchange-token")
+    async def exchange_token(payload: MetaTokenExchangeIn, user: dict = Depends(current_user)):
+        """Convert a short-lived Graph API Explorer token (1-2h lifetime)
+        into a long-lived token (60 days) and persist it. Workflow:
+
+          1. Merchant opens https://developers.facebook.com/tools/explorer/
+          2. Selects ads_read + business_management permissions
+          3. Copies the short-lived token
+          4. Pastes it into Settings → presses "تحويل إلى Long-lived"
+          5. We call Meta's fb_exchange_token grant with the stored app
+             id/secret and save the new token + expires_at.
+
+        App ID/Secret/Ad Account ID can be omitted if already stored
+        (typical update flow). If first-time setup, all 4 are required.
+        """
+        existing = await _get_conn(user["id"])
+
+        # Validate short-lived token presence/length manually so we return
+        # a friendly Arabic message instead of Pydantic's raw English JSON.
+        sl_token = (payload.short_lived_token or "").strip()
+        if len(sl_token) < 20:
+            raise HTTPException(
+                status_code=400,
+                detail="Short-lived token قصير جداً أو فارغ — انسخ التوكن كاملاً من Graph API Explorer.",
+            )
+
+        # Resolve final credentials — prefer payload, fall back to existing.
+        new_app_id = payload.app_id.strip() or (existing or {}).get("app_id", "")
+        new_secret = payload.app_secret.strip() or (existing or {}).get("app_secret", "")
+        new_ad_account = payload.ad_account_id.strip() or (existing or {}).get("ad_account_id", "")
+        if not new_app_id or not new_secret:
+            raise HTTPException(
+                status_code=400,
+                detail="Meta App ID و App Secret مطلوبان للتحويل. احفظهما أولاً (أو ضمّنهما في هذا الطلب).",
+            )
+        if not new_ad_account:
+            raise HTTPException(
+                status_code=400,
+                detail="Ad Account ID مطلوب للتحويل.",
+            )
+        normalized = _normalize_ad_account_id(new_ad_account)
+        if not re.match(r"^act_\d+$", normalized):
+            raise HTTPException(
+                status_code=400,
+                detail="Ad Account ID يجب أن يكون رقماً (مع/بدون act_).",
+            )
+
+        ok, msg, data = await _exchange_short_for_long_lived(
+            app_id=new_app_id,
+            app_secret=new_secret,
+            short_lived_token=sl_token,
+        )
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+
+        long_lived_token = data["access_token"]
+        # Meta returns expires_in in seconds. Long-lived tokens are ~60 days.
+        # Some token types (system user) come back without expires_in → null.
+        expires_in = data.get("expires_in")
+        token_expires_at = None
+        token_expires_in_days = None
+        if expires_in and isinstance(expires_in, (int, float)):
+            expires_at_dt = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+            token_expires_at = expires_at_dt.isoformat()
+            token_expires_in_days = round(int(expires_in) / 86400, 1)
+
+        # Persist — replaces token + clears any prior expired status.
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.meta_connections.update_one(
+            {"user_id": user["id"]},
+            {"$set": {
+                "user_id": user["id"],
+                "app_id": new_app_id,
+                "app_secret": new_secret,
+                "access_token": long_lived_token,
+                "ad_account_id": normalized,
+                "token_expires_at": token_expires_at,
+                "token_exchanged_at": now_iso,
+                "updated_at": now_iso,
+                "connection_status": "ok",
+                "last_error_message": None,
+                "last_error_at": None,
+            },
+             "$setOnInsert": {"created_at": now_iso}},
+            upsert=True,
+        )
+
+        # Mask the long-lived token for the response (we NEVER return the
+        # full token to the browser; it's already saved server-side).
+        masked = _mask(long_lived_token)
+        return {
+            "ok": True,
+            "message": msg,
+            "access_token_masked": masked,
+            "token_expires_at": token_expires_at,
+            "token_expires_in_days": token_expires_in_days,
+            "token_type": data.get("token_type", "bearer"),
+        }
 
     @router.post("/sync")
     async def sync(payload: MetaSyncIn, user: dict = Depends(current_user)):

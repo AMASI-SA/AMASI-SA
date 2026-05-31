@@ -67,6 +67,8 @@ export default function Settings() {
         connection_status: "ok",
         last_error_message: null,
         last_error_at: null,
+        token_expires_at: null,
+        token_exchanged_at: null,
     });
     const [metaForm, setMetaForm] = useState({
         app_id: "",
@@ -77,6 +79,9 @@ export default function Settings() {
     const [metaSaving, setMetaSaving] = useState(false);
     const [metaSyncing, setMetaSyncing] = useState(false);
     const [metaTesting, setMetaTesting] = useState(false);
+    // Short-lived token exchange flow (Graph API Explorer → 60-day token)
+    const [shortLivedToken, setShortLivedToken] = useState("");
+    const [exchangingToken, setExchangingToken] = useState(false);
 
     /** Robust error-detail formatter: handles both string and object
      * `detail` payloads from the backend without ever exposing raw JSON. */
@@ -205,6 +210,63 @@ export default function Settings() {
                 { id: "meta-test", duration: 9000 });
         } finally {
             setMetaTesting(false);
+        }
+    };
+
+    /**
+     * Exchange a short-lived Graph API Explorer token (1-2h) for a 60-day
+     * long-lived token. Workflow:
+     *   1. Merchant ensures App ID + App Secret + Ad Account ID are filled
+     *      (typically already saved — left blank means "use stored").
+     *   2. Merchant pastes a short-lived token from
+     *      https://developers.facebook.com/tools/explorer/
+     *   3. Click → backend hits Meta's /oauth/access_token endpoint with
+     *      grant_type=fb_exchange_token, gets the long-lived token, saves it
+     *      with token_expires_at = now + 60 days.
+     *   4. Frontend re-loads config so the new mask + StatusBadge + expiry
+     *      reflect immediately. The short-lived input is cleared.
+     */
+    const exchangeShortToLongLived = async () => {
+        if (!shortLivedToken.trim()) {
+            toast.error("الرجاء لصق Short-lived token من Graph API Explorer");
+            return;
+        }
+        const haveStoredCreds = metaConfig.connected && metaConfig.app_id;
+        if (!haveStoredCreds && (!metaForm.app_id.trim() || !metaForm.app_secret.trim() || !metaForm.ad_account_id.trim())) {
+            toast.error("Meta App ID و App Secret و Ad Account ID مطلوبة (احفظهم أولاً أو املأهم في النموذج).");
+            return;
+        }
+        setExchangingToken(true);
+        toast.loading("جاري تحويل التوكن إلى Long-lived (60 يوم)…", { id: "meta-exchange" });
+        try {
+            const { data } = await api.post("/meta/exchange-token", {
+                short_lived_token: shortLivedToken.trim(),
+                app_id: metaForm.app_id.trim(),
+                app_secret: metaForm.app_secret.trim(),
+                ad_account_id: metaForm.ad_account_id.trim(),
+            });
+            const days = data.token_expires_in_days != null
+                ? `${data.token_expires_in_days} يوم`
+                : "غير محدد";
+            const expiresAt = data.token_expires_at
+                ? new Date(data.token_expires_at).toLocaleDateString("ar-SA", {
+                    year: "numeric", month: "short", day: "numeric",
+                })
+                : "—";
+            toast.success(
+                `✓ تم التحويل وحفظ التوكن الجديد (${data.access_token_masked}). صالح حتى ${expiresAt} (~${days})`,
+                { id: "meta-exchange", duration: 10000 },
+            );
+            setShortLivedToken("");
+            // Clear the manual token field too — the new long-lived one is
+            // already saved server-side; the form input is no longer needed.
+            setMetaForm((f) => ({ ...f, access_token: "" }));
+            await loadMetaConfig();
+        } catch (e) {
+            toast.error(fmtMetaErr(e, "فشل تحويل التوكن"),
+                { id: "meta-exchange", duration: 9000 });
+        } finally {
+            setExchangingToken(false);
         }
     };
 
@@ -1178,8 +1240,65 @@ export default function Settings() {
                         />
                     </div>
                     <div className="md:col-span-2 min-w-0">
+                        {/* ── Short-lived → Long-lived token exchange ──────
+                            Lets the merchant paste a 1-hour token from Graph API
+                            Explorer and convert it to 60 days with one click.
+                            The result is saved server-side immediately; no need
+                            to also press "Save".                                  */}
+                        <div className="rounded-lg border-2 border-dashed border-blue-300 bg-blue-50/40 p-3 sm:p-4 mb-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <ArrowsClockwise size={18} weight="bold" className="text-blue-700" />
+                                <h3 className="text-sm sm:text-base font-bold text-blue-900" style={{ fontFamily: "Tajawal" }}>
+                                    تحويل تلقائي إلى Long-lived Token (60 يوم)
+                                </h3>
+                            </div>
+                            <p className="text-xs text-blue-900/80 leading-relaxed mb-3">
+                                ألصق Short-lived Token (1-2 ساعة) من <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" className="font-bold underline">Graph API Explorer</a> — مع تفعيل صلاحيات <code className="bg-white/60 px-1 rounded text-[10px]">ads_read</code> + <code className="bg-white/60 px-1 rounded text-[10px]">business_management</code>. سنحوّله ونحفظه تلقائياً لمدة 60 يوم.
+                            </p>
+                            <SecretField
+                                label="Short-lived Token من Graph API Explorer"
+                                value={shortLivedToken}
+                                onChange={setShortLivedToken}
+                                placeholder="EAAxxxx… (1-hour token)"
+                                testidPrefix="meta-short-lived-token"
+                                rows={3}
+                                helper="بمجرد التحويل، يتم استبدال Access Token المحفوظ بالنسخة طويلة العمر تلقائياً."
+                            />
+                            <button
+                                type="button"
+                                onClick={exchangeShortToLongLived}
+                                disabled={exchangingToken || !shortLivedToken.trim()}
+                                className="mt-3 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-bold text-sm transition-colors w-full sm:w-auto"
+                                data-testid="meta-exchange-token-btn"
+                                title="يحوّل التوكن القصير عبر Meta API ويحفظه تلقائياً بدلاً من Access Token الحالي"
+                            >
+                                <ArrowsClockwise size={16} weight="bold" className={exchangingToken ? "animate-spin" : ""} />
+                                {exchangingToken ? "جاري التحويل…" : "تحويل إلى Long-lived Token"}
+                            </button>
+
+                            {/* Token expiry hint — only when we have the timestamp */}
+                            {metaConfig.token_expires_at && (
+                                <div
+                                    className="mt-3 text-xs text-blue-900/80"
+                                    data-testid="meta-token-expiry-info"
+                                >
+                                    <span className="font-bold">⏰ ينتهي التوكن الحالي:</span>{" "}
+                                    {new Date(metaConfig.token_expires_at).toLocaleString("ar-SA", {
+                                        dateStyle: "medium", timeStyle: "short",
+                                    })}
+                                    {(() => {
+                                        const ms = new Date(metaConfig.token_expires_at).getTime() - Date.now();
+                                        const days = Math.round(ms / 86400000);
+                                        if (days > 7) return <span className="ms-2 text-emerald-700 font-bold">(صالح {days} يوم)</span>;
+                                        if (days > 0) return <span className="ms-2 text-amber-700 font-bold">⚠️ متبقي {days} يوم فقط — جدّد الآن</span>;
+                                        return <span className="ms-2 text-red-700 font-bold">❌ منتهي</span>;
+                                    })()}
+                                </div>
+                            )}
+                        </div>
+
                         <SecretField
-                            label="Access Token (Long-lived)"
+                            label="Access Token (Long-lived) — أو الصق توكن جاهز يدوياً"
                             value={metaForm.access_token}
                             onChange={(v) => setMetaForm({ ...metaForm, access_token: v })}
                             existingMask={metaConfig.connected ? metaConfig.access_token_masked : null}
@@ -1191,8 +1310,7 @@ export default function Settings() {
                                 : null}
                             helper={
                                 <>
-                                    احصل عليه من <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" className="text-blue-600 underline">Graph API Explorer</a> مع صلاحيات <code>ads_read</code> + <code>business_management</code>.
-                                    {metaConfig.connected && <span className="block mt-0.5 text-amber-700">💡 لتحديث الربط بعد انتهاء الصلاحية: اضغط 👁 عرض ثم ألصق التوكن الجديد ثم اضغط <strong>اختبار الاتصال</strong>.</span>}
+                                    استخدم الزر أعلاه للتحويل التلقائي، أو ألصق Long-lived token جاهز هنا واضغط <strong>اختبار الاتصال</strong>.
                                 </>
                             }
                         />

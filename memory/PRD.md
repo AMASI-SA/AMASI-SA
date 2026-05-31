@@ -20,7 +20,26 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-05 — Settings UI overhaul: long tokens never break layout again)
+## Implemented (2026-05 — Meta Token Exchange: Short-lived → Long-lived auto-conversion)
+- 💡 **Merchant request**: Avoid having to re-paste a fresh 60-day Long-lived token every 2 months. Allow the merchant to paste any Short-lived token (1-2 hour, easier to obtain from Graph API Explorer) and have us convert it automatically.
+- ✅ **Backend**:
+  - **New helper `_exchange_short_for_long_lived(app_id, app_secret, short_token)`** in `meta_routes.py`: calls Meta's official `GET /v18.0/oauth/access_token?grant_type=fb_exchange_token` endpoint. Returns the new 60-day token + `expires_in` (in seconds).
+  - **New `POST /api/meta/exchange-token`** endpoint accepting `{short_lived_token, app_id?, app_secret?, ad_account_id?}` (last 3 fall back to the stored config when blank — typical update flow). Validates: minimum 20-char short token + required app credentials (with friendly Arabic errors). On success: saves the new `access_token` + computes `token_expires_at = now + expires_in seconds` + clears any prior `expired` status.
+  - **Response** includes: `access_token_masked` (first 10 + bullets + last 6), `token_expires_at` (ISO), `token_expires_in_days` (≈60). We **never** return the full token to the browser.
+  - **`/meta/config`** now exposes `token_expires_at` + `token_exchanged_at` so the UI can render countdowns.
+- ✅ **Frontend (Settings.jsx)**:
+  - **New visually-distinct blue dashed-border section** "تحويل تلقائي إلى Long-lived Token (60 يوم)" right above the manual token field.
+  - **`<SecretField>` for the short-lived input** (paste long token without breaking layout) + helper text linking to Graph API Explorer + permission list.
+  - **`data-testid="meta-exchange-token-btn"`** button. Disabled while input empty (UX guard). Spin icon while loading. On success, toast shows: `"✓ تم التحويل وحفظ التوكن الجديد (EAA****ABC). صالح حتى 7 يوليو 2026 (~60.0 يوم)"`.
+  - **Expiry countdown** (`data-testid="meta-token-expiry-info"`): live calculation from `token_expires_at`. Color-coded — green when >7 days, amber 1-7 days ("⚠️ متبقي N يوم فقط — جدّد الآن"), red when expired.
+  - Manual access-token field label updated to "Access Token (Long-lived) — أو الصق توكن جاهز يدوياً" + helper updated to point at the new auto-flow.
+- ✅ **Error handling**: All edge cases return friendly Arabic — never raw Pydantic JSON or Meta error bodies. Tested:
+  - `short_lived_token=""` → "Short-lived token قصير جداً أو فارغ — انسخ التوكن كاملاً من Graph API Explorer."
+  - No stored app_id/secret → "Meta App ID و App Secret مطلوبان للتحويل. احفظهما أولاً..."
+  - Bogus token + creds → Friendly Meta classification (typically "تعذّرت المزامنة...").
+- ✅ **Tested**: smoke screenshot confirms section renders cleanly, button is reactive (disabled-when-empty), no horizontal scroll, all testids present. 28/28 backend pytest regression pass.
+
+
 - 🐛 **Issue**: Long Meta access tokens (200+ chars) and Snap client secrets caused horizontal page scroll on mobile + overflowed cards + made the Settings page feel cluttered.
 - ✅ **New component `SecretField.jsx`** (`/app/frontend/src/components/SecretField.jsx`):
   - **Masked preview** by default: shows first 10 chars + bullets + last 6 chars (max ~22 chars on screen).
