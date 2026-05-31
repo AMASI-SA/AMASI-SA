@@ -372,14 +372,14 @@ export default function Dashboard() {
                                     onClick={async () => {
                                         try {
                                             const today = new Date();
-                                            const first = new Date(today.getFullYear(), today.getMonth(), 1);
                                             const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                                            toast.loading("جاري جلب صرف Snapchat لكامل الشهر…", { id: "snap-fetch" });
+                                            const todayStr = fmt(today);
+                                            toast.loading("جاري جلب صرف Snapchat لليوم…", { id: "snap-fetch" });
                                             const { data } = await api.post("/snapchat/daily-spend/bulk", {
-                                                from_date: fmt(first),
-                                                to_date: fmt(today),
+                                                from_date: todayStr,
+                                                to_date: todayStr,
                                             });
-                                            toast.success(`تم حفظ ${data.saved} يوم في قاعدة البيانات`, { id: "snap-fetch" });
+                                            toast.success(`تم تحديث صرف اليوم (${data.saved || 0} سجل)`, { id: "snap-fetch" });
                                             fetchSnapSummary();
                                             refreshSilently();
                                         } catch (e) {
@@ -389,10 +389,10 @@ export default function Dashboard() {
                                     }}
                                     className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-black rounded-lg font-bold text-sm transition-colors"
                                     style={{ fontFamily: "Tajawal" }}
-                                    data-testid="snap-refresh-month-btn"
+                                    data-testid="snap-refresh-today-btn"
                                 >
                                     <ArrowsClockwise size={16} weight="bold" />
-                                    تحديث صرف الشهر
+                                    تحديث فوري للصرف اليوم
                                 </button>
                             </div>
 
