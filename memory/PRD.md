@@ -20,11 +20,23 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
-## Implemented (2026-06 — Meta Token Exchange E2E verification — Iteration 14)
-- ✅ **testing_agent_v3_fork ran full E2E**: 13/13 backend tests pass (6 new in `test_meta_token_exchange.py` + 7 in `test_meta_friendly_errors.py`) + 6/6 iteration-13 regression. Frontend Playwright @ 390x844 AND 1280x800: zero horizontal overflow, all testids present, exchange button correctly disabled-when-empty, toast always friendly Arabic (no raw OAuthException / English / `{"detail":` leaks).
-- ✅ **All acceptance criteria PASS**: empty/short token → friendly Arabic, missing creds → friendly Arabic, bad ad_account_id → friendly Arabic, fake creds → classified Meta error in Arabic, `token_expires_at` + `token_exchanged_at` exposed on `/meta/config`, SecretField masking works on `meta-access-token`, `meta-test-connection-btn` still functional, `meta-token-expiry-info` renders only when token_expires_at exists.
-- ✅ **New regression test file**: `/app/backend/tests/test_meta_token_exchange.py` (6 tests). Report: `/app/test_reports/iteration_14.json`.
-- 📝 **Doc note for next iteration**: SecretField testids are `{prefix}-input-masked` (hidden) and `{prefix}-textarea` (revealed) — NOT `{prefix}-input`. Update wiki/specs accordingly.
+## ✅ COMPLETED & VERIFIED (2026-06 — Iteration 14) — **خيار A: Meta Token Exchange**
+**Status**: 🟢 Production-ready. Tested end-to-end by `testing_agent_v3_fork`. Awaiting merchant green-light before starting **خيار B (Full OAuth flow)**.
+
+**Acceptance — 100% PASS:**
+- ✅ Backend `POST /api/meta/exchange-token` — converts a Short-lived Graph API Explorer token (1-2h) into a 60-day Long-lived token via Meta's `fb_exchange_token` grant, persists the new token + `token_expires_at`, clears any prior expired status.
+- ✅ Settings UI — blue dashed-border section "تحويل تلقائي إلى Long-lived Token (60 يوم)" inside the `meta-credentials-details` accordion. Button correctly disabled when input is empty. SecretField masking on the short-lived input (no layout break at 390 or 1280 widths).
+- ✅ Friendly Arabic errors on every edge case (empty, short, missing app creds, bad ad_account_id, fake creds rejected by Meta) — verified ZERO raw JSON / `OAuthException` / `[object Object]` leaks.
+- ✅ Expiry countdown banner (`meta-token-expiry-info`) — colour-coded emerald/amber/red based on days remaining.
+- ✅ Backend regression: **13/13 pass** (6 new in `test_meta_token_exchange.py` + 7 in `test_meta_friendly_errors.py`) + **6/6 iteration-13 regression pass** — no regressions.
+- ✅ Mobile (390x844) and desktop (1280x800) — zero horizontal page scroll.
+
+**Reports**: `/app/test_reports/iteration_14.json` + pytest XML at `/app/test_reports/pytest/iteration_14_meta_exchange.xml`.
+
+**Pending (NOT started — awaiting merchant approval):**
+- ⏸️ **خيار B — Full OAuth "اربط مع Facebook"**: one-click Meta login flow that eliminates the need for the merchant to copy ANY token (even short-lived). Will reuse `meta_connections` schema and add `redirect_uri` + state JWT exactly like the Snapchat OAuth flow.
+
+**Doc note**: SecretField testids are `{prefix}-input-masked` (hidden) and `{prefix}-textarea` (revealed) — NOT `{prefix}-input`. Update spec for future test agents.
 
 ## Implemented (2026-05 — Meta Token Exchange: Short-lived → Long-lived auto-conversion)
 - 💡 **Merchant request**: Avoid having to re-paste a fresh 60-day Long-lived token every 2 months. Allow the merchant to paste any Short-lived token (1-2 hour, easier to obtain from Graph API Explorer) and have us convert it automatically.
@@ -397,6 +409,9 @@ After v1 left 147 orders without date (which annoyed the user since new Make.com
 - ✅ **Bug fix — Recharts width(-1) warnings**: ResponsiveContainer now uses `width="99%" minWidth={0} minHeight={0}` across Dashboard / Reports / AnalysisResult.
 
 ## Backlog / Next
+### ⏸️ Awaiting merchant approval
+- **Meta OAuth Flow — خيار B ("اربط مع Facebook")**: one-click Meta login that eliminates manual token copying entirely. Mirrors the Snapchat OAuth flow (Configure App ID + Secret + Redirect URI → click "اربط" → Meta consent screen → callback persists 60-day token + permissions). Will reuse the existing `meta_connections` schema and add `redirect_uri` + signed-JWT state. **NOT to be started until merchant explicitly approves.**
+
 ### P1
 - Snapchat campaign creation (P1 from user; user explicitly deferred this).
 - TikTok / Instagram Ads API direct integration (mirror Snapchat flow).
