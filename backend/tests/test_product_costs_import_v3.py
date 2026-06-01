@@ -120,16 +120,22 @@ class TestImportWithoutSku:
         assert len(items) == 1
         assert items[0]["cost_price"] == 22.0
 
-    def test_no_cost_column_returns_friendly_arabic(self):
+    def test_no_cost_column_imports_as_pending(self):
+        """Iteration 25: cost is OPTIONAL. Rows without a cost column
+        import successfully with cost_pending=True so the merchant can
+        fill prices later via the UI."""
         token, _ = _register()
         xlsx = _xlsx(headers=["رقم المنتج", "الاسم"],
                      rows=[["X", "Y"]])
         r = _import(token, xlsx)
-        assert r.status_code == 400
-        d = r.json()["detail"]
-        assert "التكلفة" in d
-        assert "SKU" in d  # mentioned in the error
-        assert "رقم المنتج" in d
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["created"] == 1
+        assert body["pending_count"] == 1
+        items = requests.get(f"{API}/product-costs/", headers=_headers(token),
+                             timeout=10).json()["items"]
+        assert items[0]["cost_pending"] is True
+        assert items[0]["cost_price"] == 0.0
 
     def test_no_identifier_column_returns_friendly_arabic(self):
         token, _ = _register()
@@ -141,7 +147,11 @@ class TestImportWithoutSku:
 
 # ── Both SKU and product_id present ───────────────────────────────────────
 class TestBothColumnsPresent:
-    def test_sku_takes_precedence_product_id_preserved_for_lookup(self):
+    def test_product_id_is_primary_when_present(self):
+        """Iteration 25: product_id is the primary identifier when present.
+        Both SKU and product_id are kept on the doc, but sku_normalized
+        derives from product_id (so re-imports stay idempotent even when
+        the merchant adds/removes SKU later)."""
         token, _ = _register()
         xlsx = _xlsx(headers=["SKU", "رقم المنتج", "الاسم", "التكلفة"],
                      rows=[["MY-SKU", "9999", "Item", 50.0]])
@@ -151,10 +161,11 @@ class TestBothColumnsPresent:
         items = requests.get(f"{API}/product-costs/", headers=_headers(token),
                              timeout=10).json()["items"]
         it = items[0]
-        # SKU is the primary identifier, product_id is preserved for fallback lookup
+        # Both stored; product_id is the upsert key (sku_normalized
+        # derived from it for unique-index stability).
         assert it["sku"] == "MY-SKU"
-        assert it["sku_normalized"] == "MY-SKU"
         assert it["product_id"] == "9999"
+        assert it["sku_normalized"] == "9999"
 
 
 # ── Order-cost lookup matches by product_id when SKU empty ────────────────

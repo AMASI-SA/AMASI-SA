@@ -44,19 +44,32 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
     const submit = async () => {
-        if (!form.sku?.trim() || !form.product_name?.trim()) {
-            toast.error("SKU واسم المنتج مطلوبان");
+        const hasSku = !!form.sku?.trim();
+        const hasPid = !!form.product_id?.trim();
+        if (!hasSku && !hasPid) {
+            toast.error("يجب توفير رقم المنتج (Product ID) أو SKU — أحدهما على الأقل");
             return;
         }
-        if (!form.cost_price || isNaN(Number(form.cost_price)) || Number(form.cost_price) < 0) {
-            toast.error("تكلفة المنتج يجب أن تكون رقماً موجباً");
+        if (!form.product_name?.trim()) {
+            toast.error("اسم المنتج مطلوب");
+            return;
+        }
+        // Iteration 25: cost_price is OPTIONAL. Empty cost is saved as
+        // "pending" (cost_pending=True). Only validate when a value WAS
+        // entered — it must be a non-negative number.
+        const costStr = String(form.cost_price ?? "").trim();
+        const costProvided = costStr !== "";
+        if (costProvided && (isNaN(Number(costStr)) || Number(costStr) < 0)) {
+            toast.error("سعر التكلفة يجب أن يكون رقماً موجباً (أو اتركه فارغاً)");
             return;
         }
         setSaving(true);
         try {
             const payload = {
                 ...form,
-                cost_price: Number(form.cost_price),
+                // Iteration 25: only send cost_price when actually provided
+                // — empty string → null so the backend marks it pending.
+                cost_price: costProvided ? Number(costStr) : null,
                 currency: form.currency || "SAR",
             };
             let resp;
@@ -65,10 +78,16 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
             } else {
                 resp = await api.post("/product-costs/", payload);
             }
-            // Iteration 24: surface how many past orders were re-linked
-            // and flipped from "incomplete_missing_cost" → "complete".
             const reprocessed = resp?.data?.reprocessed_orders;
-            const baseMsg = isEdit ? "تم تحديث المنتج" : "تمت إضافة المنتج";
+            const isPending = resp?.data?.cost_pending;
+            let baseMsg;
+            if (isEdit) {
+                baseMsg = "تم تحديث المنتج";
+            } else if (isPending) {
+                baseMsg = "تمت إضافة المنتج • التكلفة في انتظار التحديد";
+            } else {
+                baseMsg = "تمت إضافة المنتج";
+            }
             if (reprocessed && reprocessed > 0) {
                 toast.success(`${baseMsg} • أُعيد ربط ${reprocessed} طلب سابق`, { duration: 6000 });
             } else {
@@ -146,7 +165,25 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
                     </div>
                     <div>
                         <label className="text-xs font-bold text-muted-foreground mb-1 block">
-                            SKU <span className="text-red-500">*</span>
+                            رقم المنتج (Product ID — Salla)
+                        </label>
+                        <input
+                            type="text"
+                            value={form.product_id}
+                            onChange={set("product_id")}
+                            disabled={isEdit}
+                            dir="ltr"
+                            placeholder="123456789"
+                            className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand disabled:bg-accent/30 disabled:cursor-not-allowed"
+                            data-testid="product-cost-product-id-input"
+                        />
+                        <div className="text-[10px] text-muted-foreground mt-1">
+                            المعرّف الأساسي لمنتجات سلة (مستقر عبر تصديرات Excel). {!isEdit && "إما هذا الحقل أو SKU مطلوب."}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-muted-foreground mb-1 block">
+                            SKU <span className="text-[10px] font-normal text-muted-foreground">(اختياري)</span>
                         </label>
                         <input
                             type="text"
@@ -158,11 +195,9 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
                             className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand disabled:bg-accent/30 disabled:cursor-not-allowed"
                             data-testid="product-cost-sku-input"
                         />
-                        {isEdit && (
-                            <div className="text-[10px] text-muted-foreground mt-1">
-                                لا يمكن تعديل SKU بعد الإضافة (مفتاح الربط).
-                            </div>
-                        )}
+                        <div className="text-[10px] text-muted-foreground mt-1">
+                            {isEdit ? "لا يمكن تعديل SKU بعد الإضافة." : "يستخدم كاحتياطي إذا لم يكن رقم المنتج موجوداً."}
+                        </div>
                     </div>
                     <div>
                         <label className="text-xs font-bold text-muted-foreground mb-1 block">
@@ -180,7 +215,7 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="text-xs font-bold text-muted-foreground mb-1 block">
-                                تكلفة الشراء <span className="text-red-500">*</span>
+                                تكلفة الشراء <span className="text-[10px] font-normal text-muted-foreground">(اختياري — اتركه فارغاً لإدخاله لاحقاً)</span>
                             </label>
                             <input
                                 type="number"
@@ -207,23 +242,6 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
                                 <option value="USD">USD</option>
                                 <option value="AED">AED</option>
                             </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-muted-foreground mb-1 block">
-                            Product ID (Salla — اختياري)
-                        </label>
-                        <input
-                            type="text"
-                            value={form.product_id}
-                            onChange={set("product_id")}
-                            dir="ltr"
-                            placeholder="123456789"
-                            className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand"
-                            data-testid="product-cost-product-id-input"
-                        />
-                        <div className="text-[10px] text-muted-foreground mt-1">
-                            احتياطي للحالات النادرة التي تأتي فيها الطلبات بدون SKU.
                         </div>
                     </div>
 
@@ -395,7 +413,20 @@ function CatalogueTab({ items, total, search, setSearch, onEdit, onDelete, loadi
                                             )}
                                         </div>
                                     </td>
-                                    <td className="px-3 py-3 font-semibold">{it.product_name}</td>
+                                    <td className="px-3 py-3 font-semibold">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span>{it.product_name}</span>
+                                            {it.cost_pending && (
+                                                <span
+                                                    className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full font-bold whitespace-nowrap"
+                                                    data-testid={`catalogue-pending-badge-${it.sku || it.product_id || it.id}`}
+                                                    title="منتج بدون تكلفة — اضغط تعديل لإضافة السعر"
+                                                >
+                                                    ⚠️ بدون تكلفة
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
                                     <td className="px-3 py-3 text-xs tabular-nums" dir="ltr">
                                         {it.sku || (
                                             <span className="text-muted-foreground italic">
@@ -405,7 +436,13 @@ function CatalogueTab({ items, total, search, setSearch, onEdit, onDelete, loadi
                                     </td>
                                     <td className="px-3 py-3 text-xs text-muted-foreground">{it.supplier_name || "—"}</td>
                                     <td className="px-3 py-3 text-end font-bold tabular-nums">
-                                        {fmtMoney(it.cost_price)} <span className="text-xs text-muted-foreground">{it.currency || "SAR"}</span>
+                                        {it.cost_pending ? (
+                                            <span className="text-amber-700 text-xs italic">في الانتظار</span>
+                                        ) : (
+                                            <>
+                                                {fmtMoney(it.cost_price)} <span className="text-xs text-muted-foreground">{it.currency || "SAR"}</span>
+                                            </>
+                                        )}
                                     </td>
                                     <td className="px-3 py-3">
                                         <div className="flex items-center justify-center gap-1">
@@ -654,6 +691,8 @@ export default function ProductCosts() {
             const skipped = data.skipped || 0;
             const metaCols = (data.meta_columns_preserved || []).length;
             const imagesImported = data.images_imported || 0;
+            const pendingCount = data.pending_count || 0;
+            const reprocessed = data.reprocessed_orders || 0;
             const parts = [
                 `${data.created} جديد`,
                 `${data.updated} محدّث`,
@@ -661,11 +700,17 @@ export default function ProductCosts() {
             if (skipped) parts.push(`${skipped} مُتخطى`);
             if (errs) parts.push(`${errs} خطأ`);
             const imgHint = imagesImported > 0 ? ` • ${imagesImported} صورة` : "";
+            // Iteration 25: surface pending-cost rows + auto-reprocess count.
+            const pendingHint = pendingCount > 0
+                ? ` • ${pendingCount} بدون تكلفة (في الانتظار)` : "";
+            const reprocessHint = reprocessed > 0
+                ? ` • أُعيد ربط ${reprocessed} طلب سابق` : "";
             const metaHint = metaCols > 0
                 ? ` (تم حفظ ${metaCols} عمود إضافي في meta للمستقبل)`
                 : "";
-            toast.success(`تم الاستيراد: ${parts.join(" • ")}${imgHint}${metaHint}`,
-                { duration: 8000 });
+            toast.success(
+                `تم الاستيراد: ${parts.join(" • ")}${imgHint}${pendingHint}${reprocessHint}${metaHint}`,
+                { duration: 9000 });
             await loadCatalogue();
             await loadSummary();
             if (missing) loadMissing();
@@ -822,16 +867,19 @@ export default function ProductCosts() {
                         </div>
                         <div className="p-6 space-y-4 text-sm">
                             <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-blue-900 leading-relaxed">
-                                <strong>الأعمدة المُستخدَمة في الحساب:</strong>
+                                <strong>الأعمدة المستخرَجة من ملف Excel:</strong>
                                 <ul className="list-disc list-inside mt-1 space-y-0.5">
-                                    <li><strong>SKU</strong> <span className="text-xs opacity-80">(SKU / كود المنتج / Reference / Product Code…)</span></li>
-                                    <li><strong>رقم المنتج</strong> <span className="text-xs opacity-80">(رقم المنتج / Product ID / id) — يُستخدم بديلاً إذا لم يوجد SKU</span></li>
-                                    <li><strong>التكلفة</strong> <span className="text-xs opacity-80">(Cost / تكلفة المنتج / سعر التكلفة / الكلفة…)</span></li>
-                                    <li><strong>اسم المنتج</strong> <span className="text-xs opacity-80">(اختياري — لو غير موجود، يُستخدم SKU/رقم المنتج كاسم مؤقت)</span></li>
+                                    <li><strong>رقم المنتج (Product ID)</strong> <span className="text-xs opacity-80">— المعرّف الأساسي لمنتجات سلة (مستقر بين التصديرات)</span></li>
+                                    <li><strong>اسم المنتج</strong> <span className="text-xs opacity-80">(اختياري — لو غير موجود، يُستخدم رقم المنتج كاسم مؤقت)</span></li>
+                                    <li><strong>سعر التكلفة</strong> <span className="text-xs opacity-80">(اختياري — لو فارغ، يُحفظ المنتج في "بدون تكلفة" ولا يُحسب كـ 0)</span></li>
                                     <li><strong>صورة المنتج</strong> <span className="text-xs opacity-80">(العمود F افتراضياً — أو header: صورة / image / image_url)</span></li>
+                                    <li><strong>SKU</strong> <span className="text-xs opacity-80">(اختياري — يُحفظ إذا وجد، ولكن رقم المنتج هو المفتاح الأساسي)</span></li>
                                 </ul>
                                 <div className="mt-2 text-xs text-blue-800/80">
-                                    💡 يكفي وجود <strong>التكلفة + (SKU أو رقم المنتج)</strong>. كل الأعمدة الأخرى تُحفظ تلقائياً في حقل <code>meta</code> للاستخدام المستقبلي ولا تؤثر على احتساب الربح.
+                                    💡 يكفي وجود <strong>رقم المنتج أو SKU</strong>. السعر والاسم اختياريان. كل الأعمدة الأخرى تُحفظ تلقائياً في حقل <code>meta</code> للاستخدام المستقبلي.
+                                </div>
+                                <div className="mt-2 text-xs text-blue-800/80">
+                                    🔄 بعد الاستيراد: يُعاد ربط الطلبات السابقة التي تحوي هذه المنتجات تلقائياً.
                                 </div>
                             </div>
 

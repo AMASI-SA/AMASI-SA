@@ -41,7 +41,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,13 @@ async def compute_order_cost(
     cost_docs: list[dict] = []
     if or_clauses:
         cost_docs = await db.product_costs.find(
-            {"user_id": user_id, "is_active": True, "$or": or_clauses},
+            # Iteration 25: skip rows whose cost is still pending (set
+            # only by import when cost_price was empty). They must NOT
+            # be treated as a match — the order should land in the
+            # missing-cost list until the merchant fills in the price.
+            {"user_id": user_id, "is_active": True,
+             "$or": or_clauses,
+             "cost_pending": {"$ne": True}},
             {"_id": 0},
         ).to_list(500)
     by_sku = {_norm_sku(d.get("sku")): d for d in cost_docs if d.get("sku")}
@@ -254,18 +260,34 @@ async def _reprocess_orders_for_keys(
 
 # ── Pydantic models ────────────────────────────────────────────────────────
 class ProductCostIn(BaseModel):
-    sku: str = Field(min_length=1, max_length=80)
-    product_id: Optional[str] = ""
+    # Iteration 25: SKU is now OPTIONAL (Salla product Excel exports
+    # frequently omit it). product_id is the primary identifier when
+    # SKU is absent. At least one of {sku, product_id} MUST be present.
+    sku: Optional[str] = Field(default="", max_length=80)
+    product_id: Optional[str] = Field(default="", max_length=80)
     product_name: str = Field(min_length=1, max_length=200)
     supplier_name: Optional[str] = ""
     supplier_country: Optional[str] = ""
     supplier_notes: Optional[str] = ""
-    cost_price: float = Field(ge=0)
+    # Iteration 25: cost_price is also optional now. When empty, the row
+    # is saved as "pending cost" (cost_pending=True) and appears in the
+    # `/missing` list — never assumed = 0 for profit calculations.
+    cost_price: Optional[float] = Field(default=None, ge=0)
     currency: str = Field(default="SAR", max_length=8)
     image_url: Optional[str] = ""
 
+    @model_validator(mode="after")
+    def _require_identifier(self):
+        if not (self.sku and self.sku.strip()) and not (
+                self.product_id and self.product_id.strip()):
+            raise ValueError(
+                "يجب توفير SKU أو رقم المنتج (product_id) — أحدهما على الأقل."
+            )
+        return self
+
 
 class ProductCostUpdate(BaseModel):
+    sku: Optional[str] = None
     product_id: Optional[str] = None
     product_name: Optional[str] = None
     supplier_name: Optional[str] = None
@@ -275,6 +297,7 @@ class ProductCostUpdate(BaseModel):
     currency: Optional[str] = None
     is_active: Optional[bool] = None
     image_url: Optional[str] = None
+    cost_pending: Optional[bool] = None
 
 
 # ── Router factory ─────────────────────────────────────────────────────────
@@ -312,16 +335,35 @@ def _build_router(db, current_user_dep) -> APIRouter:
     @router.post("/")
     async def create_cost(payload: ProductCostIn, user: dict = Depends(current_user_dep)):
         uid = user["id"]
-        sku = payload.sku.strip()
-        sku_norm = _norm_sku(sku)
-        # Check uniqueness on sku_normalized per user
-        existing = await db.product_costs.find_one(
-            {"user_id": uid, "sku_normalized": sku_norm}, {"_id": 0, "id": 1, "is_active": 1},
-        )
+        # Iteration 25: SKU is optional. When absent, product_id is the
+        # primary identifier and the row gets a synthetic sku_normalized
+        # so the unique index still holds.
+        sku = (payload.sku or "").strip()
+        product_id = _norm_product_id(payload.product_id)
+        effective_key = sku or product_id  # at least one is present (validator)
+        sku_norm = _norm_sku(effective_key)
+        # Iteration 25: cost_pending = True iff cost_price was not supplied.
+        cost_pending = (payload.cost_price is None)
+        cost_price = round(float(payload.cost_price or 0), 2)
+        # Iteration 25: lookup order is product_id FIRST, then sku_normalized.
+        # This preserves identity across re-imports where SKU may flip from
+        # empty → real, since the product_id remains stable.
+        existing = None
+        if product_id:
+            existing = await db.product_costs.find_one(
+                {"user_id": uid, "product_id": product_id},
+                {"_id": 0, "id": 1, "is_active": 1, "sku_normalized": 1},
+            )
+        if not existing:
+            existing = await db.product_costs.find_one(
+                {"user_id": uid, "sku_normalized": sku_norm},
+                {"_id": 0, "id": 1, "is_active": 1, "sku_normalized": 1},
+            )
         if existing and existing.get("is_active", True):
             raise HTTPException(
                 status_code=409,
-                detail=f"المنتج بهذا SKU ({sku}) موجود مسبقاً. عدّل القائمة الموجودة بدلاً من إضافة جديد.",
+                detail=(f"المنتج موجود مسبقاً ({sku or product_id}). "
+                        "عدّل القائمة الموجودة بدلاً من إضافة جديد."),
             )
         now = _now_iso()
         doc = {
@@ -329,12 +371,13 @@ def _build_router(db, current_user_dep) -> APIRouter:
             "user_id": uid,
             "sku": sku,
             "sku_normalized": sku_norm,
-            "product_id": _norm_product_id(payload.product_id),
+            "product_id": product_id,
             "product_name": payload.product_name.strip(),
             "supplier_name": (payload.supplier_name or "").strip(),
             "supplier_country": (payload.supplier_country or "").strip(),
             "supplier_notes": (payload.supplier_notes or "").strip(),
-            "cost_price": round(float(payload.cost_price), 2),
+            "cost_price": cost_price,
+            "cost_pending": cost_pending,
             "currency": (payload.currency or "SAR").upper(),
             "image_url": (payload.image_url or "").strip(),
             "is_active": True,
@@ -345,27 +388,29 @@ def _build_router(db, current_user_dep) -> APIRouter:
         if existing:
             # Re-activate the soft-deleted row instead of creating a duplicate
             await db.product_costs.update_one(
-                {"user_id": uid, "sku_normalized": sku_norm},
-                {"$set": {**{k: v for k, v in doc.items() if k != "id" and k != "created_at"},
+                {"user_id": uid, "id": existing["id"]},
+                {"$set": {**{k: v for k, v in doc.items()
+                             if k not in ("id", "created_at")},
                           "is_active": True}},
             )
             doc = await db.product_costs.find_one(
-                {"user_id": uid, "sku_normalized": sku_norm}, {"_id": 0},
+                {"user_id": uid, "id": existing["id"]}, {"_id": 0},
             )
-            # Iteration 24: any past orders that referenced this SKU/pid
-            # as a missing-cost line now have a price — re-link them.
             doc["reprocessed_orders"] = await _reprocess_orders_for_keys(
-                db, uid, {sku_norm}, {_norm_product_id(payload.product_id)},
+                db, uid, {sku_norm}, {product_id},
             )
             return doc
         await db.product_costs.insert_one(doc)
-        # Strip the BSON _id that pymongo silently added before returning.
         doc.pop("_id", None)
-        # Iteration 24: targeted reprocess so past orders flip from
-        # "incomplete_missing_cost" → "complete" immediately.
-        doc["reprocessed_orders"] = await _reprocess_orders_for_keys(
-            db, uid, {sku_norm}, {_norm_product_id(payload.product_id)},
-        )
+        # Iteration 24/25: targeted reprocess so past orders flip from
+        # "incomplete_missing_cost" → "complete" immediately — only when
+        # a REAL cost was provided (cost_pending entries don't match).
+        if not cost_pending:
+            doc["reprocessed_orders"] = await _reprocess_orders_for_keys(
+                db, uid, {sku_norm}, {product_id},
+            )
+        else:
+            doc["reprocessed_orders"] = 0
         return doc
 
     @router.put("/{item_id}")
@@ -384,6 +429,13 @@ def _build_router(db, current_user_dep) -> APIRouter:
             patch["currency"] = str(patch["currency"]).upper()
         if "cost_price" in patch:
             patch["cost_price"] = round(float(patch["cost_price"]), 2)
+            # Iteration 25: editing cost_price automatically clears the
+            # cost_pending flag — the merchant has set a real price.
+            patch["cost_pending"] = False
+        if "sku" in patch:
+            patch["sku"] = str(patch["sku"] or "").strip()
+            patch["sku_normalized"] = _norm_sku(
+                patch["sku"] or patch.get("product_id") or "")
         if "product_id" in patch:
             patch["product_id"] = _norm_product_id(patch["product_id"])
         if "image_url" in patch:
@@ -397,12 +449,15 @@ def _build_router(db, current_user_dep) -> APIRouter:
         doc = await db.product_costs.find_one(
             {"user_id": user["id"], "id": item_id}, {"_id": 0},
         )
-        # Iteration 24: targeted reprocess — only when fields that affect
-        # cost calculations changed (price / product_id / is_active).
-        if any(k in patch for k in ("cost_price", "product_id", "is_active")):
+        # Iteration 24/25: targeted reprocess — only when fields that affect
+        # cost calculations changed (price / product_id / is_active /
+        # cost_pending flip). Touching cost_pending=False is identical
+        # to "cost just became available" so we ALWAYS reprocess in that case.
+        if any(k in patch for k in ("cost_price", "product_id",
+                                     "is_active", "cost_pending", "sku")):
             doc["reprocessed_orders"] = await _reprocess_orders_for_keys(
                 db, user["id"],
-                {_norm_sku(doc.get("sku"))},
+                {_norm_sku(doc.get("sku") or doc.get("product_id") or "")},
                 {_norm_product_id(doc.get("product_id"))},
             )
         return doc
@@ -547,15 +602,16 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     if len(row) > 5 and _looks_like_url(row[5]):
                         idx_image = 5  # column F → image
                         break
-        # Iteration 22: accept files where SKU is missing if product_id IS
-        # present. (Salla exports often have only `رقم المنتج` + `تكلفة المنتج`
-        # when the merchant didn't fill SKUs.) name is also optional —
-        # we substitute the identifier as a placeholder name.
-        if idx_cost is None or (idx_sku is None and idx_product_id is None):
+        # Iteration 22+25: only SKU OR product_id is mandatory. Cost is
+        # also OPTIONAL — rows with empty cost are saved as "pending
+        # cost" (cost_pending=True) so the merchant can see them in the
+        # catalogue immediately and fill prices later. We NEVER treat
+        # missing cost as 0.
+        if idx_sku is None and idx_product_id is None:
             raise HTTPException(
                 status_code=400,
-                detail="الأعمدة المطلوبة: التكلفة + (SKU أو رقم المنتج). "
-                       "اسم المنتج اختياري. باقي الأعمدة تُحفظ في meta.",
+                detail="الأعمدة المطلوبة: SKU أو رقم المنتج (أحدهما على الأقل). "
+                       "التكلفة واسم المنتج اختياريان. باقي الأعمدة تُحفظ في meta.",
             )
 
         # Compute meta-column indices (every header that's NOT one of our
@@ -574,6 +630,13 @@ def _build_router(db, current_user_dep) -> APIRouter:
         updated = 0
         skipped = 0
         images_imported = 0
+        pending_count = 0  # iteration 25: rows imported without cost
+        # Iteration 25: collect every (sku_norm, product_id) that landed
+        # with a REAL cost so we can fire a single targeted reprocess
+        # after the loop ends. Pending rows are excluded — they don't
+        # contribute any cost yet, so reprocessing them is a no-op.
+        reprocess_skus: set = set()
+        reprocess_pids: set = set()
         errors: list[dict] = []
         for row_num, r in enumerate(rows[1:], start=2):
             try:
@@ -585,22 +648,26 @@ def _build_router(db, current_user_dep) -> APIRouter:
                 # Iteration 22: require ONE of sku OR product_id per row.
                 if not sku and not product_id:
                     continue
-                # If SKU is missing, USE product_id as the unique key so
-                # the catalogue stays uniquely-indexed. The actual
-                # `product_id` field is also populated so the order-cost
-                # lookup matches incoming Salla orders by product_id.
-                effective_sku = sku or product_id
+                # Iteration 25: PRODUCT_ID is the primary identifier when
+                # present (Salla product Excel exports almost always have
+                # `رقم المنتج` but not always SKU). SKU acts as fallback.
+                product_id_norm = _norm_product_id(product_id)
+                effective_key = product_id_norm or sku
                 name = (str(r[idx_name] or "").strip()
                         if (idx_name is not None and idx_name < len(r)) else "")
                 if not name:
-                    # No name in the file → use the identifier as a
-                    # placeholder so the merchant sees SOMETHING in the
-                    # catalogue (they can edit it later in the UI).
-                    name = effective_sku
-                cost = _to_float(r[idx_cost]) if idx_cost < len(r) else 0.0
+                    name = effective_key
+                # Iteration 25: cost is OPTIONAL per row. Empty/None cost
+                # cells are saved with cost_pending=True, NOT treated as 0.
+                raw_cost = (r[idx_cost] if (idx_cost is not None and idx_cost < len(r))
+                            else None)
+                cost_provided = (raw_cost is not None
+                                 and str(raw_cost).strip() != "")
+                cost = _to_float(raw_cost) if cost_provided else 0.0
                 if cost < 0:
                     errors.append({"row": row_num, "error": "التكلفة سالبة"})
                     continue
+                cost_pending = not cost_provided
                 currency = ((str(r[idx_currency] or "SAR").strip().upper() or "SAR")
                             if (idx_currency is not None and idx_currency < len(r))
                             else "SAR")
@@ -608,9 +675,6 @@ def _build_router(db, current_user_dep) -> APIRouter:
                 image_url = ""
                 if idx_image is not None and idx_image < len(r):
                     raw_img = str(r[idx_image] or "").strip()
-                    # Only accept values that look like a real URL or
-                    # image path (avoid storing random text from column F
-                    # when the column isn't actually images).
                     if raw_img and (
                         raw_img.startswith(("http://", "https://", "//", "/"))
                         or any(raw_img.lower().endswith(ext) for ext in (
@@ -618,28 +682,30 @@ def _build_router(db, current_user_dep) -> APIRouter:
                         ))
                     ):
                         image_url = raw_img
-                # Capture every UNMAPPED column verbatim into meta (skip
-                # empty cells so the dict stays clean). Imports a 30-col
-                # Salla export → only sku/name/cost go into the cost
-                # logic; the other 27 cols live in `meta` for future use.
                 meta: dict = {}
                 for col_idx, col_label in meta_cols:
                     if col_idx < len(r):
                         cell = r[col_idx]
                         if cell is not None and str(cell).strip() != "":
                             meta[col_label] = cell
-                # The unique key is sku_normalized — when SKU is missing
-                # we use product_id (uppercased) as the key. The actual
-                # `sku` field stays empty so the UI can show "—" instead
-                # of pretending product_id is a SKU.
-                sku_norm = _norm_sku(effective_sku)
+                sku_norm = _norm_sku(effective_key)
 
-                # Apply update_existing flag — skip rows whose SKU is
-                # already present when the merchant un-checked the box.
+                # Iteration 25: prefer PRODUCT_ID as the upsert key when
+                # available — keeps merchant's catalogue de-duplicated
+                # across re-imports where SKU may flip from empty → real
+                # (or vice-versa). Falls back to sku_normalized only for
+                # legacy/non-Salla rows that have ONLY SKU.
+                find_query: dict
+                if product_id_norm:
+                    find_query = {"user_id": uid, "product_id": product_id_norm}
+                else:
+                    find_query = {"user_id": uid, "sku_normalized": sku_norm}
+
+                # Apply update_existing flag — skip rows whose identity
+                # is already present when the merchant un-checked the box.
                 if not update_existing:
                     existing = await db.product_costs.find_one(
-                        {"user_id": uid, "sku_normalized": sku_norm},
-                        {"_id": 0, "id": 1},
+                        find_query, {"_id": 0, "id": 1},
                     )
                     if existing:
                         skipped += 1
@@ -649,11 +715,12 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     "user_id": uid,
                     "sku": sku,  # may be empty when only product_id was provided
                     "sku_normalized": sku_norm,
-                    "product_id": _norm_product_id(product_id),
+                    "product_id": product_id_norm,
                     "product_name": name,
                     # NOTE: supplier_* fields are PRESERVED — we never
                     # touch them on import (manual UI management only).
                     "cost_price": round(cost, 2),
+                    "cost_pending": cost_pending,
                     "currency": currency,
                     "is_active": True,
                     "meta": meta,
@@ -665,7 +732,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
                 if image_url:
                     doc["image_url"] = image_url
                 res = await db.product_costs.update_one(
-                    {"user_id": uid, "sku_normalized": sku_norm},
+                    find_query,
                     {"$set": doc,
                      "$setOnInsert": {
                          "id": str(uuid.uuid4()),
@@ -685,13 +752,30 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     updated += 1
                 if image_url:
                     images_imported += 1
+                if cost_pending:
+                    pending_count += 1
+                else:
+                    # Track keys to reprocess once at the end of the loop.
+                    if sku_norm:
+                        reprocess_skus.add(sku_norm)
+                    if product_id_norm:
+                        reprocess_pids.add(product_id_norm)
             except Exception as exc:
                 errors.append({"row": row_num, "error": str(exc)[:200]})
+
+        # Iteration 25: ONE targeted reprocess pass for all keys with real
+        # cost — flips affected past orders from incomplete → complete.
+        reprocessed_orders = 0
+        if reprocess_skus or reprocess_pids:
+            reprocessed_orders = await _reprocess_orders_for_keys(
+                db, uid, reprocess_skus, reprocess_pids,
+            )
 
         return {
             "created": created,
             "updated": updated,
             "skipped": skipped,
+            "pending_count": pending_count,
             "errors": errors,
             "total_processed": created + updated,
             "update_existing": update_existing,
@@ -701,6 +785,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
                 "header" if _find_col(headers_raw, "image_url") is not None
                 else ("column_F" if idx_image == 5 else None)
             ),
+            "reprocessed_orders": reprocessed_orders,
         }
 
     # ── Missing costs (orders with unmatched products) ───────────────────
@@ -769,6 +854,36 @@ def _build_router(db, current_user_dep) -> APIRouter:
                 # Fill image_url lazily from any order line that has one.
                 if not cur["image_url"] and ln.get("image_url"):
                     cur["image_url"] = ln["image_url"]
+
+        # Iteration 25: also include catalogue rows with cost_pending=True
+        # (imported via Excel without a cost_price). Marked source="catalogue"
+        # so the UI can show them even if no order arrived yet.
+        async for cat in db.product_costs.find(
+            {"user_id": uid, "is_active": True, "cost_pending": True},
+            {"_id": 0, "sku": 1, "product_id": 1, "product_name": 1,
+             "image_url": 1, "id": 1},
+        ):
+            key = (_norm_sku(cat.get("sku")) or
+                   _norm_product_id(cat.get("product_id")) or
+                   (cat.get("product_name") or "").strip())
+            if not key:
+                continue
+            cur = agg.setdefault(key, {
+                "sku": cat.get("sku") or "",
+                "product_id": cat.get("product_id") or "",
+                "name": cat.get("product_name") or "",
+                "image_url": cat.get("image_url") or "",
+                "occurrences": 0,
+                "total_quantity": 0.0,
+                "last_order_number": "",
+                "last_order_date": "",
+            })
+            cur["pending_in_catalogue"] = True
+            cur["catalogue_id"] = cat.get("id")
+            # If catalogue has an image but the order didn't, fill it in.
+            if not cur["image_url"] and cat.get("image_url"):
+                cur["image_url"] = cat["image_url"]
+
         rows = sorted(agg.values(), key=lambda r: r["occurrences"], reverse=True)
         return {
             "items": rows,

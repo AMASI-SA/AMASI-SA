@@ -12,6 +12,46 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## ✨ ENHANCEMENT (2026-06 — Iteration 25) — **Product ID كمفتاح أساسي + تكلفة اختيارية + Auto-reprocess بعد الاستيراد**
+
+**Merchant requirement**: ملف منتجات سلة لا يحوي SKU. اجعل Product ID المفتاح الأساسي، SKU اختياري، التكلفة اختيارية (وعند الفراغ → "بدون تكلفة" لا = 0)، وشغّل Auto-reprocess بعد كل استيراد لإعادة ربط الطلبات السابقة.
+
+**Backend** (`product_costs.py`):
+- ✅ **`ProductCostIn`**: SKU صار `Optional`، `cost_price` صار `Optional[float]`، وتم إضافة `@model_validator` يفرض وجود `sku أو product_id` على الأقل.
+- ✅ **`create_cost` (`POST /product-costs/`)**: يبحث عن الـ existing **بـ `product_id` أولاً**، ثم بـ `sku_normalized` كاحتياطي. SKU فارغ مقبول. لو التكلفة لم تُرسل → `cost_pending=True`.
+- ✅ **`update_cost` (`PUT /product-costs/{id}`)**: تعديل `cost_price` يمسح `cost_pending` تلقائياً (التاجر حدّد سعراً). يدعم تعديل SKU أيضاً.
+- ✅ **Bulk import (`POST /product-costs/import`)**:
+  - عمود التكلفة أصبح **اختيارياً**. الصفوف بدون تكلفة تُستورد مع `cost_pending=True, cost_price=0`.
+  - مفتاح الـ upsert: `product_id` أولاً (مستقر بين التصديرات)، `sku_normalized` ثانياً.
+  - إعادة استيراد نفس `product_id` بـ SKU جديد → **لا duplicate** (يُحدّث الصف الموجود).
+  - بعد انتهاء اللوب: استدعاء `_reprocess_orders_for_keys` مرة واحدة لكل المفاتيح التي وصلت بتكلفة فعلية → الطلبات السابقة تتحول من incomplete → complete تلقائياً.
+  - الـ response يحوي: `pending_count` (عدد الصفوف بدون تكلفة) + `reprocessed_orders` (عدد الطلبات التي أُعيد ربطها).
+- ✅ **`compute_order_cost`**: يستثني صفوف `cost_pending=True` (لا يُعتبر السعر 0 — الطلب يظل في حالة incomplete).
+- ✅ **`/missing`**: يضم الآن المنتجات من الكاتالوج التي `cost_pending=True` (يظهر `pending_in_catalogue=True` على كل صف) حتى لو لم يصل طلب لها بعد.
+
+**Frontend** (`ProductCosts.jsx`):
+- ✅ **مودال إضافة/تعديل**:
+  - **رقم المنتج (Product ID)** صار الحقل الأساسي في الأعلى.
+  - **SKU** صار اختيارياً مع label واضح "(اختياري)".
+  - **تكلفة الشراء** صارت اختيارية ("اتركه فارغاً لإدخاله لاحقاً").
+  - Validation: يكفي رقم المنتج أو SKU. التكلفة الفارغة مقبولة.
+  - Toast بعد الحفظ: "تمت إضافة المنتج • التكلفة في انتظار التحديد" لو cost فارغة.
+- ✅ **جدول الكاتالوج**: badge أصفر "⚠️ بدون تكلفة" بجانب اسم المنتج لكل صف `cost_pending=True`، وعمود التكلفة يعرض "في الانتظار" بدلاً من 0.
+- ✅ **Toast الاستيراد** يعرض: `N جديد • M محدّث • K بدون تكلفة (في الانتظار) • L صورة • أُعيد ربط P طلب سابق`.
+- ✅ **مودال الاستيراد** أُعيدت كتابته: يوضح أن **رقم المنتج هو المفتاح الأساسي**، SKU/التكلفة/الاسم كلها اختيارية، ويذكر صراحةً أن "بعد الاستيراد يُعاد ربط الطلبات السابقة تلقائياً".
+
+**Tests** (`test_product_costs_iteration25.py`): 13 جديدة + 38 regression = **51/51 PASS**. التغطية:
+- Salla Excel بدون SKU (فقط Product ID) يُستورد بنجاح.
+- إعادة استيراد بنفس Product ID مع SKU جديد → لا duplicate.
+- صفوف بدون تكلفة → cost_pending=True, cost_price=0.
+- الطلبات على منتج cost_pending → incomplete_missing_cost (ليس match).
+- تعديل cost_price يمسح cost_pending.
+- Bulk import يطلق reprocess مرة واحدة لكل المفاتيح ذات التكلفة الفعلية.
+- /missing يضم cost_pending من الكاتالوج.
+- Manual create: product_id فقط ✓ / SKU فقط ✓ / كلاهما فارغ → 422.
+
+---
+
 ## ✨ ENHANCEMENT (2026-06 — Iteration 24) — **حالة الربح + إعادة الربط التلقائي + تنبيه طلبات Excel**
 
 **Merchant requirement** (Option C — Make.com كمصدر أساسي للمنتجات): لا تُحسب تكلفة المنتج المفقودة كـ 0، اجعل الطلب في حالة "ربح غير مكتمل" حتى تتم إضافة التكلفة، وأعد ربط الطلبات السابقة فور إضافة التكلفة، وأضف تنبيه واضح لطلبات Excel بدون products[].

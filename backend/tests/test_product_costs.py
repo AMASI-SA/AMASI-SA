@@ -190,18 +190,21 @@ class TestExcelImport:
         assert items[0]["product_name"] == "Widget A v2"
 
     def test_import_missing_required_column(self):
+        """Iteration 25: only SKU OR product_id is required.
+        With neither present, import must fail with friendly Arabic."""
         token, _ = _register()
         xlsx = self._build_xlsx(
-            headers=["sku", "supplier"],  # missing product_name AND cost
-            rows=[["X1", "Sup"]],
+            headers=["اسم المنتج", "supplier"],  # NO sku, NO product_id
+            rows=[["Product A", "Sup"]],
         )
         files = {"file": ("bad.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
         r = requests.post(f"{API}/product-costs/import",
                           headers={"Authorization": f"Bearer {token}"},
                           files=files, timeout=15)
         assert r.status_code == 400
-        # Friendly Arabic message
-        assert "SKU" in r.json()["detail"] or "التكلفة" in r.json()["detail"]
+        # Friendly Arabic message mentions SKU/product_id requirement.
+        assert ("SKU" in r.json()["detail"]
+                or "رقم المنتج" in r.json()["detail"])
 
 
 # ── Cost lookup (compute_order_cost helper, tested via /missing endpoint) ──
