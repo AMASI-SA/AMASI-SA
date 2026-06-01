@@ -20,6 +20,32 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## 🐛 BUG FIX (2026-06 — Iteration 21) — **بطاقات Snap/TikTok/Meta لا تعرض الطلبات والإيرادات**
+
+**Reported by merchant**: "بطاقة تيك تك / سناب / انستقرام تعرض الصرف صحيح، لكن عدد الطلبات وباقي البيانات لا تظهر."
+
+**Root cause**: الـ Pixel data من المنصات الثلاث (`snapchat_daily_stats.purchases`, `tiktok_ads_daily.purchases`, `meta_ads_daily.purchases`) قد تكون **0** بشكل مشروع — لأسباب متعددة:
+- Pixel غير مُفعّل أو غير مربوط بسلة.
+- المنصة لم تُسلّم بيانات التحويلات لذلك اليوم بعد (تأخّر typical).
+- إعداد UTM مختلف يمنع الـ attribution.
+
+النتيجة قبل الإصلاح: الكرت يعرض `orders=0` رغم وجود **صرف > 0** ووجود طلبات حقيقية في Salla بـ `utm_source` يطابق المنصة.
+
+**Fix applied** (`/app/backend/server.py`):
+- ✅ helper مشترك جديد `_attributed_orders_from_store(db, uid, source_aliases, start, end)` — يبحث في `unified_orders` عن طلبات `utm_source` يطابق aliases المنصة (case-insensitive, regex partial-match).
+- ✅ تطبيق fallback في الـ 3 endpoints:
+  - **Snap**: aliases = `("snapchat", "snap")` — يُفعَّل عند `orders=0 AND revenue=0`.
+  - **TikTok**: aliases = `("tiktok", "tik_tok", "tik-tok")` — نفس الشرط.
+  - **Meta** (Facebook + Instagram): aliases = `("facebook", "fb", "instagram", "ig", "meta")` — نفس الشرط.
+- ✅ Pixel data تأخذ الأولوية: إن كان Pixel يُرجع `purchases > 0`، يُحتفظ بقيمته (لا نتجاوز البيانات الموثوقة).
+- ✅ ROAS و CPA يُعاد احتسابهما تلقائياً بعد الـ fallback.
+
+**Verification**:
+- ✅ `tests/test_dashboard_orders_fallback.py` (5/5 pass): يغطي السيناريوهات الأربعة — Snap/TikTok/Meta fallback + اختبار "Pixel-precedence" + اختبار "no false positives".
+- ✅ Full regression: 49/49 pass.
+
+---
+
 ## ✨ ENHANCEMENT (2026-06 — Iteration 20) — **Product Cost Import v2 — Salla-friendly + manual-supplier**
 
 **Merchant request**: ملف Excel من سلة فيه أعمدة كثيرة (وصف، صور، مخزون، باركود، فئات…)؛ النظام يأخذ فقط الأعمدة المطلوبة لاحتساب الربح ويحفظ الباقي للمستقبل. المورد إدارة يدوية حصراً — لا يُستورد من Excel.

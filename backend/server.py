@@ -1221,6 +1221,42 @@ async def dashboard(
     }
 
 
+# ── Shared attribution helper ─────────────────────────────────────────────
+# Used by snapchat-summary / tiktok-summary / meta-summary to backfill
+# orders + revenue from `unified_orders` when the platform's Pixel
+# numbers come back zero (very common for fresh accounts, accounts
+# without Pixel setup, or specific date ranges where attribution is
+# missing). Without this fallback the merchant sees `0 orders` on the
+# card despite spend > 0 and real attributed orders in the store
+# (iteration 21 bug fix).
+async def _attributed_orders_from_store(
+    db, uid: str, source_aliases: tuple, start: str, end: str,
+) -> tuple[int, float]:
+    """Count orders + revenue in `unified_orders` whose `utm_source`
+    matches any of `source_aliases` (case-insensitive, partial-match).
+    Date filter uses `order_date` BETWEEN start and end (inclusive).
+
+    Returns (orders, revenue).
+    """
+    if not source_aliases:
+        return 0, 0.0
+    # Build case-insensitive regex matching ANY alias substring.
+    pattern = "|".join(source_aliases)
+    pipeline = [
+        {"$match": {
+            "user_id": uid,
+            "order_date": {"$gte": start, "$lte": end},
+            "utm_source": {"$regex": pattern, "$options": "i"},
+        }},
+        {"$group": {"_id": None,
+                    "orders": {"$sum": 1},
+                    "revenue": {"$sum": {"$ifNull": ["$total_amount", 0]}}}},
+    ]
+    async for d in db.unified_orders.aggregate(pipeline):
+        return int(d.get("orders", 0)), round(float(d.get("revenue", 0)), 2)
+    return 0, 0.0
+
+
 # ── Snapchat Ads dashboard summary ────────────────────────────────────────────
 @api.get("/dashboard/snapchat-summary")
 async def snapchat_summary(user: dict = Depends(current_user)):
@@ -1292,9 +1328,27 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     orders_30d, revenue_30d, has_30d = _snap_agg(d30_start_str, today_str)
     snap_pixel_active = has_30d  # any data within 30d → snap pixel is reporting
 
-    # Fallback: if user hasn't fetched yet, show store-side numbers so the
-    # card isn't empty. UI will flag the source so the user knows the
-    # difference.
+    # Backfill from unified_orders when Pixel returned 0 (iteration 21 fix).
+    # We backfill PER-WINDOW so a window with real Pixel data is preserved,
+    # while a window where Pixel returned 0 falls back to store attribution.
+    SNAP_ALIASES = ("snapchat", "snap")
+    if orders_today == 0 and revenue_today == 0:
+        orders_today, revenue_today = await _attributed_orders_from_store(
+            db, uid, SNAP_ALIASES, today_str, today_str,
+        )
+    if orders_month == 0 and revenue_month == 0:
+        orders_month, revenue_month = await _attributed_orders_from_store(
+            db, uid, SNAP_ALIASES, month_start_str, today_str,
+        )
+    if orders_30d == 0 and revenue_30d == 0:
+        orders_30d, revenue_30d = await _attributed_orders_from_store(
+            db, uid, SNAP_ALIASES, d30_start_str, today_str,
+        )
+
+    # Legacy fallback: ONLY if there's no Pixel data AT ALL anywhere in
+    # the last 30d AND the utm-based attribution above didn't yield
+    # anything either, fall back to ALL store orders (un-attributed). This
+    # is the original behaviour for users with no Pixel setup and no UTMs.
     if not has_30d:
         base_q = {"user_id": uid}
         if settings.get("hide_inferred_date_orders"):
@@ -1475,10 +1529,28 @@ async def meta_summary(user: dict = Depends(current_user)):
     last_error_message = (meta_conn or {}).get("last_error_message")
     last_error_at = (meta_conn or {}).get("last_error_at")
 
+    # utm-source attribution fallback (iteration 21 fix) — applied when
+    # Meta API returns 0 purchases for a window despite spend > 0. Meta
+    # bundles Facebook + Instagram, so we match both source aliases.
+    META_ALIASES = ("facebook", "fb", "instagram", "ig", "meta")
+
+    async def _agg_with_fallback(start: str, end: str) -> dict:
+        b = _agg(start, end)
+        if b["orders"] == 0 and b["revenue"] == 0:
+            attr_orders, attr_rev = await _attributed_orders_from_store(
+                db, uid, META_ALIASES, start, end,
+            )
+            if attr_orders or attr_rev:
+                b["orders"] = attr_orders
+                b["revenue"] = attr_rev
+                b["roas"] = round(attr_rev / b["spend"], 2) if b["spend"] > 0 else 0.0
+                b["cpa"] = round(b["spend"] / attr_orders, 2) if attr_orders > 0 else 0.0
+        return b
+
     return {
-        "today": {"date": today_str, **_agg(today_str, today_str)},
-        "month": {"start": month_start_str, **_agg(month_start_str, today_str)},
-        "last_30d": {"start": d30_start_str, **_agg(d30_start_str, today_str)},
+        "today": {"date": today_str, **(await _agg_with_fallback(today_str, today_str))},
+        "month": {"start": month_start_str, **(await _agg_with_fallback(month_start_str, today_str))},
+        "last_30d": {"start": d30_start_str, **(await _agg_with_fallback(d30_start_str, today_str))},
         "history": history,
         "campaigns": campaigns,
         "last_sync_at": last_sync,
@@ -1575,10 +1647,29 @@ async def tiktok_summary(user: dict = Depends(current_user)):
     if last_doc:
         last_fetched_at = last_doc.get("updated_at") or last_doc.get("received_at")
 
+    # Apply utm-source attribution fallback when webhook reports 0 orders
+    # for a window despite spend > 0 (iteration 21 fix — same root cause
+    # as the Snap card: TikTok webhook from Make.com often omits
+    # `purchases`/`revenue` even when Salla has attributed orders).
+    TIKTOK_ALIASES = ("tiktok", "tik_tok", "tik-tok")
+
+    async def _agg_with_fallback(start: str, end: str) -> dict:
+        b = _agg(start, end)
+        if b["orders"] == 0 and b["revenue"] == 0:
+            attr_orders, attr_rev = await _attributed_orders_from_store(
+                db, uid, TIKTOK_ALIASES, start, end,
+            )
+            if attr_orders or attr_rev:
+                b["orders"] = attr_orders
+                b["revenue"] = attr_rev
+                b["roas"] = round(attr_rev / b["spend"], 2) if b["spend"] > 0 else 0.0
+                b["cpa"] = round(b["spend"] / attr_orders, 2) if attr_orders > 0 else 0.0
+        return b
+
     return {
-        "today": {"date": today_str, **_agg(today_str, today_str)},
-        "month": {"start": month_start_str, **_agg(month_start_str, today_str)},
-        "last_30d": {"start": d30_start_str, **_agg(d30_start_str, today_str)},
+        "today": {"date": today_str, **(await _agg_with_fallback(today_str, today_str))},
+        "month": {"start": month_start_str, **(await _agg_with_fallback(month_start_str, today_str))},
+        "last_30d": {"start": d30_start_str, **(await _agg_with_fallback(d30_start_str, today_str))},
         "history": history,
         "last_fetched_at": last_fetched_at,
         "source": "make_webhook",
