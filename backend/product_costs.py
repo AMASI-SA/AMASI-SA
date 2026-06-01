@@ -169,6 +169,8 @@ class ProductCostIn(BaseModel):
     product_id: Optional[str] = ""
     product_name: str = Field(min_length=1, max_length=200)
     supplier_name: Optional[str] = ""
+    supplier_country: Optional[str] = ""
+    supplier_notes: Optional[str] = ""
     cost_price: float = Field(ge=0)
     currency: str = Field(default="SAR", max_length=8)
 
@@ -177,6 +179,8 @@ class ProductCostUpdate(BaseModel):
     product_id: Optional[str] = None
     product_name: Optional[str] = None
     supplier_name: Optional[str] = None
+    supplier_country: Optional[str] = None
+    supplier_notes: Optional[str] = None
     cost_price: Optional[float] = Field(default=None, ge=0)
     currency: Optional[str] = None
     is_active: Optional[bool] = None
@@ -237,9 +241,12 @@ def _build_router(db, current_user_dep) -> APIRouter:
             "product_id": _norm_product_id(payload.product_id),
             "product_name": payload.product_name.strip(),
             "supplier_name": (payload.supplier_name or "").strip(),
+            "supplier_country": (payload.supplier_country or "").strip(),
+            "supplier_notes": (payload.supplier_notes or "").strip(),
             "cost_price": round(float(payload.cost_price), 2),
             "currency": (payload.currency or "SAR").upper(),
             "is_active": True,
+            "meta": {},
             "created_at": now,
             "updated_at": now,
         }
@@ -267,6 +274,10 @@ def _build_router(db, current_user_dep) -> APIRouter:
             patch["product_name"] = str(patch["product_name"]).strip()
         if "supplier_name" in patch:
             patch["supplier_name"] = str(patch["supplier_name"]).strip()
+        if "supplier_country" in patch:
+            patch["supplier_country"] = str(patch["supplier_country"]).strip()
+        if "supplier_notes" in patch:
+            patch["supplier_notes"] = str(patch["supplier_notes"]).strip()
         if "currency" in patch:
             patch["currency"] = str(patch["currency"]).upper()
         if "cost_price" in patch:
@@ -295,15 +306,47 @@ def _build_router(db, current_user_dep) -> APIRouter:
         return {"ok": True}
 
     # ── Excel import ─────────────────────────────────────────────────────
-    # Accept Arabic OR English column headers. Required: SKU, name, cost.
+    # Per merchant decision (iteration 20):
+    #   • Excel imports ONLY 3 columns into the cost calculation:
+    #       SKU, product_name, cost_price.
+    #   • EVERY OTHER COLUMN in the merchant's Salla export is preserved
+    #     in `meta` (a free-form dict) so we don't lose data and can
+    #     surface it later (filters, profitability reports, etc) — but
+    #     `meta` MUST NEVER influence financial calculations.
+    #   • Supplier (name/country/notes) is EXCLUSIVELY managed inside the
+    #     UI (Add/Edit modal) — NOT imported, NOT inferred from Excel.
     HEADER_ALIASES = {
-        "sku": {"sku", "كود المنتج", "كود", "SKU", "الرمز", "رقم المنتج"},
-        "product_name": {"product_name", "name", "اسم المنتج", "الاسم", "المنتج"},
-        "cost_price": {"cost", "cost_price", "التكلفة", "تكلفة الشراء", "سعر التكلفة", "سعر الشراء"},
-        "supplier_name": {"supplier", "supplier_name", "المورد", "اسم المورد"},
+        # SKU — every variant Salla / Zid / WooCommerce / Shopify might export.
+        "sku": {
+            "sku", "كود المنتج", "كود", "الرمز", "رقم المنتج",
+            "reference", "product code", "code", "product_code",
+            "item code", "item_code", "barcode-sku", "merchant_sku",
+        },
+        # product name
+        "product_name": {
+            "product_name", "name", "اسم المنتج", "الاسم", "المنتج",
+            "title", "product title", "product",
+        },
+        # cost — every Arabic / English variant
+        "cost_price": {
+            "cost", "cost_price", "purchase_price", "purchase price",
+            "buy price", "buy_price", "price_cost",
+            "التكلفة", "تكلفة الشراء", "سعر التكلفة", "سعر الشراء",
+            "الكلفة", "كلفة المنتج",
+        },
+        # product_id (Salla-specific, very rare)
         "product_id": {"product_id", "id", "معرف المنتج"},
+        # currency (rarely present, defaults SAR)
         "currency": {"currency", "العملة"},
     }
+    # Mapped header keys we KNOW about — every other header is preserved in meta.
+    _MAPPED_HEADERS = (
+        HEADER_ALIASES["sku"]
+        | HEADER_ALIASES["product_name"]
+        | HEADER_ALIASES["cost_price"]
+        | HEADER_ALIASES["product_id"]
+        | HEADER_ALIASES["currency"]
+    )
 
     def _find_col(headers: list, target: str) -> Optional[int]:
         targets = {h.lower() for h in HEADER_ALIASES[target]}
@@ -313,8 +356,18 @@ def _build_router(db, current_user_dep) -> APIRouter:
         return None
 
     @router.post("/import")
-    async def import_excel(file: UploadFile = File(...),
-                           user: dict = Depends(current_user_dep)):
+    async def import_excel(
+        file: UploadFile = File(...),
+        update_existing: bool = Query(
+            True,
+            description="If True (default), rows with an existing SKU are "
+                        "UPDATED (price / name overwritten). If False, "
+                        "duplicate SKUs are SKIPPED and reported under "
+                        "`skipped`. Maps to the UI checkbox 'تحديث "
+                        "المنتجات الموجودة بنفس SKU'.",
+        ),
+        user: dict = Depends(current_user_dep),
+    ):
         if not (file.filename or "").lower().endswith((".xlsx", ".xls")):
             raise HTTPException(status_code=400,
                                 detail="الملف يجب أن يكون Excel (.xlsx أو .xls)")
@@ -333,60 +386,99 @@ def _build_router(db, current_user_dep) -> APIRouter:
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
             raise HTTPException(status_code=400, detail="الملف فارغ")
-        headers = [str(c or "").strip() for c in rows[0]]
-        idx_sku = _find_col(headers, "sku")
-        idx_name = _find_col(headers, "product_name")
-        idx_cost = _find_col(headers, "cost_price")
-        idx_supplier = _find_col(headers, "supplier_name")
-        idx_product_id = _find_col(headers, "product_id")
-        idx_currency = _find_col(headers, "currency")
+        headers_raw = [str(c or "").strip() for c in rows[0]]
+        headers_lc = [h.lower() for h in headers_raw]
+        idx_sku = _find_col(headers_raw, "sku")
+        idx_name = _find_col(headers_raw, "product_name")
+        idx_cost = _find_col(headers_raw, "cost_price")
+        idx_product_id = _find_col(headers_raw, "product_id")
+        idx_currency = _find_col(headers_raw, "currency")
         if idx_sku is None or idx_name is None or idx_cost is None:
             raise HTTPException(
                 status_code=400,
-                detail="الأعمدة المطلوبة: SKU، اسم المنتج، التكلفة. (المورد اختياري)",
+                detail="الأعمدة المطلوبة: SKU، اسم المنتج، التكلفة. "
+                       "(باقي الأعمدة تُحفظ تلقائياً للمستقبل ولا تُستخدم في الحسابات)",
             )
+
+        # Compute meta-column indices (every header that's NOT one of our
+        # mapped headers). These get saved into doc.meta verbatim.
+        meta_cols: list[tuple[int, str]] = []
+        for i, h in enumerate(headers_lc):
+            if h and h not in _MAPPED_HEADERS:
+                meta_cols.append((i, headers_raw[i]))
 
         uid = user["id"]
         now = _now_iso()
         created = 0
         updated = 0
+        skipped = 0
         errors: list[dict] = []
         for row_num, r in enumerate(rows[1:], start=2):
             try:
-                sku = str(r[idx_sku] or "").strip()
+                sku = str(r[idx_sku] or "").strip() if idx_sku < len(r) else ""
                 if not sku:
                     continue
-                name = str(r[idx_name] or "").strip()
+                name = str(r[idx_name] or "").strip() if idx_name < len(r) else ""
                 if not name:
                     errors.append({"row": row_num, "error": "اسم المنتج فارغ"})
                     continue
-                cost = _to_float(r[idx_cost])
+                cost = _to_float(r[idx_cost]) if idx_cost < len(r) else 0.0
                 if cost < 0:
                     errors.append({"row": row_num, "error": "التكلفة سالبة"})
                     continue
-                supplier = (str(r[idx_supplier] or "").strip()
-                            if idx_supplier is not None else "")
                 product_id = (str(r[idx_product_id] or "").strip()
-                              if idx_product_id is not None else "")
+                              if (idx_product_id is not None and idx_product_id < len(r))
+                              else "")
                 currency = ((str(r[idx_currency] or "SAR").strip().upper() or "SAR")
-                            if idx_currency is not None else "SAR")
+                            if (idx_currency is not None and idx_currency < len(r))
+                            else "SAR")
+                # Capture every UNMAPPED column verbatim into meta (skip
+                # empty cells so the dict stays clean). Imports a 30-col
+                # Salla export → only sku/name/cost go into the cost
+                # logic; the other 27 cols live in `meta` for future use.
+                meta: dict = {}
+                for col_idx, col_label in meta_cols:
+                    if col_idx < len(r):
+                        cell = r[col_idx]
+                        if cell is not None and str(cell).strip() != "":
+                            meta[col_label] = cell
                 sku_norm = _norm_sku(sku)
+
+                # Apply update_existing flag — skip rows whose SKU is
+                # already present when the merchant un-checked the box.
+                if not update_existing:
+                    existing = await db.product_costs.find_one(
+                        {"user_id": uid, "sku_normalized": sku_norm},
+                        {"_id": 0, "id": 1},
+                    )
+                    if existing:
+                        skipped += 1
+                        continue
+
                 doc = {
                     "user_id": uid,
                     "sku": sku,
                     "sku_normalized": sku_norm,
                     "product_id": _norm_product_id(product_id),
                     "product_name": name,
-                    "supplier_name": supplier,
+                    # NOTE: supplier_* fields are PRESERVED — we never
+                    # touch them on import (manual UI management only).
                     "cost_price": round(cost, 2),
                     "currency": currency,
                     "is_active": True,
+                    "meta": meta,
                     "updated_at": now,
                 }
                 res = await db.product_costs.update_one(
                     {"user_id": uid, "sku_normalized": sku_norm},
                     {"$set": doc,
-                     "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": now}},
+                     "$setOnInsert": {
+                         "id": str(uuid.uuid4()),
+                         "supplier_name": "",
+                         "supplier_country": "",
+                         "supplier_notes": "",
+                         "created_at": now,
+                     }},
                     upsert=True,
                 )
                 if res.upserted_id:
@@ -396,8 +488,15 @@ def _build_router(db, current_user_dep) -> APIRouter:
             except Exception as exc:
                 errors.append({"row": row_num, "error": str(exc)[:200]})
 
-        return {"created": created, "updated": updated, "errors": errors,
-                "total_processed": created + updated}
+        return {
+            "created": created,
+            "updated": updated,
+            "skipped": skipped,
+            "errors": errors,
+            "total_processed": created + updated,
+            "update_existing": update_existing,
+            "meta_columns_preserved": [c[1] for c in meta_cols],
+        }
 
     # ── Missing costs (orders with unmatched products) ───────────────────
     @router.get("/missing")

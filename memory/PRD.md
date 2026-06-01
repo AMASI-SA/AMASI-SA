@@ -20,6 +20,30 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## ✨ ENHANCEMENT (2026-06 — Iteration 20) — **Product Cost Import v2 — Salla-friendly + manual-supplier**
+
+**Merchant request**: ملف Excel من سلة فيه أعمدة كثيرة (وصف، صور، مخزون، باركود، فئات…)؛ النظام يأخذ فقط الأعمدة المطلوبة لاحتساب الربح ويحفظ الباقي للمستقبل. المورد إدارة يدوية حصراً — لا يُستورد من Excel.
+
+**Backend changes** (`product_costs.py`):
+- ✅ **Expanded HEADER_ALIASES** — every common Salla/Zid/Woo/Shopify variant for SKU and cost is recognised:
+  - SKU: `sku`, `كود المنتج`, `كود`, `الرمز`, `رقم المنتج`, `Reference`, `Product Code`, `code`, `item code`, `merchant_sku`.
+  - Cost: `cost`, `cost_price`, `purchase_price`, `buy_price`, `التكلفة`, `تكلفة الشراء`, `سعر التكلفة`, `سعر الشراء`, `الكلفة`, `كلفة المنتج`.
+- ✅ **`meta` dict** captures every UNMAPPED column verbatim — non-empty cells only. The response now returns `meta_columns_preserved: [...]` so the merchant sees what was kept. Meta is NEVER used in any financial calculation.
+- ✅ **Supplier columns are NEVER imported** — even if Excel contains `supplier`/`المورد`, the row's `supplier_name` stays untouched (manual UI value preserved across re-imports).
+- ✅ **New `update_existing` query param** on `/import` (default `True`): when `False`, duplicate SKUs are **SKIPPED** and reported under `skipped` count. Maps to the UI checkbox.
+- ✅ **New fields**: `supplier_country`, `supplier_notes` on `ProductCostIn`/`ProductCostUpdate` — manual-only.
+
+**Frontend changes** (`ProductCosts.jsx`):
+- ✅ **New Import modal** (`product-costs-import-modal`): explains exactly what gets imported (3 columns) vs. what gets preserved in meta, plus a yellow warning that supplier is manual-only. Includes a checkbox `product-costs-update-existing-checkbox` (default checked) for the new flag.
+- ✅ **Modal toast** now reports `created` + `updated` + `skipped` + `errors` + `meta_columns_preserved` count.
+- ✅ **Add/Edit modal** has a dedicated "بيانات المورد (إدارة يدوية)" section with `supplier_name`, `supplier_country`, `supplier_notes` inputs, decorated with a blue badge "لا تؤثر على احتساب الربح" so the merchant knows these fields are purely catalog metadata.
+
+**Tests**:
+- ✅ `tests/test_product_costs_import_v2.py` (8/8 pass): expanded aliases (Arabic + English variants), supplier never imported, manual supplier preserved across re-imports, meta dict preservation, `update_existing=False` skip behaviour.
+- ✅ **Full regression**: 20/20 pass (combined v1+v2 + snap-no-overwrite + tiktok-agg).
+
+---
+
 ## ✨ FEATURE (2026-06 — Iteration 19) — **Product Cost Management — احتساب الربح الحقيقي**
 
 **Merchant request**: نظام إدارة تكلفة المنتجات — صفحة `/product-costs`، حقل `cost_price` لكل SKU، استيراد Excel، الربط مع طلبات سلة (SKU أولاً ثم product_id)، تنبيه على Dashboard للمنتجات الناقصة، صافي الربح الحقيقي = المبيعات − تكلفة المنتجات − رسوم الدفع − الشحن − الإعلانات.

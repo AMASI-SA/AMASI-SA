@@ -28,7 +28,8 @@ const fmtMoney = (v) =>
 
 const blankForm = {
     sku: "", product_id: "", product_name: "",
-    supplier_name: "", cost_price: "", currency: "SAR",
+    supplier_name: "", supplier_country: "", supplier_notes: "",
+    cost_price: "", currency: "SAR",
 };
 
 function AddEditModal({ open, initial, onClose, onSaved }) {
@@ -159,19 +160,6 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
                     </div>
                     <div>
                         <label className="text-xs font-bold text-muted-foreground mb-1 block">
-                            اسم المورد (اختياري)
-                        </label>
-                        <input
-                            type="text"
-                            value={form.supplier_name}
-                            onChange={set("supplier_name")}
-                            placeholder="مورد سلسال"
-                            className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand"
-                            data-testid="product-cost-supplier-input"
-                        />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-muted-foreground mb-1 block">
                             Product ID (Salla — اختياري)
                         </label>
                         <input
@@ -185,6 +173,60 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
                         />
                         <div className="text-[10px] text-muted-foreground mt-1">
                             احتياطي للحالات النادرة التي تأتي فيها الطلبات بدون SKU.
+                        </div>
+                    </div>
+
+                    {/* ── Supplier block (iteration 20) — manual-only ────────
+                        Per merchant decision: supplier data is NEVER imported
+                        from Excel. The accounting (profit) logic ignores
+                        these fields entirely — they're for catalog management
+                        only. */}
+                    <div className="border-t border-border pt-4 space-y-3">
+                        <div className="text-xs font-bold text-muted-foreground flex items-center gap-2 flex-wrap">
+                            <Storefront size={14} weight="fill" className="text-amber-600" />
+                            <span>بيانات المورد (إدارة يدوية)</span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded-full font-bold">
+                                لا تؤثر على احتساب الربح
+                            </span>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-muted-foreground mb-1 block">
+                                اسم المورد (اختياري)
+                            </label>
+                            <input
+                                type="text"
+                                value={form.supplier_name}
+                                onChange={set("supplier_name")}
+                                placeholder="مورد سلسال"
+                                className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand"
+                                data-testid="product-cost-supplier-input"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-muted-foreground mb-1 block">
+                                بلد المورد (اختياري)
+                            </label>
+                            <input
+                                type="text"
+                                value={form.supplier_country}
+                                onChange={set("supplier_country")}
+                                placeholder="الصين / تركيا / السعودية…"
+                                className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand"
+                                data-testid="product-cost-supplier-country-input"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-muted-foreground mb-1 block">
+                                ملاحظات المورد (اختياري)
+                            </label>
+                            <textarea
+                                rows={2}
+                                value={form.supplier_notes}
+                                onChange={set("supplier_notes")}
+                                placeholder="مدة التوريد، شروط الدفع، أو أي ملاحظات…"
+                                className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand resize-y"
+                                data-testid="product-cost-supplier-notes-input"
+                            />
                         </div>
                     </div>
                 </div>
@@ -393,6 +435,8 @@ export default function ProductCosts() {
     const [modalInitial, setModalInitial] = useState(null);
     const fileRef = useRef(null);
     const [importing, setImporting] = useState(false);
+    const [updateExisting, setUpdateExisting] = useState(true);
+    const [importModalOpen, setImportModalOpen] = useState(false);
     const [recomputing, setRecomputing] = useState(false);
 
     const loadCatalogue = async (q = search) => {
@@ -470,17 +514,28 @@ export default function ProductCosts() {
         if (!file) return;
         e.target.value = "";
         setImporting(true);
+        setImportModalOpen(false);
         try {
             const fd = new FormData();
             fd.append("file", file);
-            const { data } = await api.post("/product-costs/import", fd, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
-            const errs = (data.errors || []).length;
-            toast.success(
-                `تم الاستيراد: ${data.created} جديد، ${data.updated} محدّث${errs ? `، ${errs} خطأ` : ""}`,
-                { duration: 7000 },
+            const { data } = await api.post(
+                `/product-costs/import?update_existing=${updateExisting ? "true" : "false"}`,
+                fd, { headers: { "Content-Type": "multipart/form-data" } },
             );
+            const errs = (data.errors || []).length;
+            const skipped = data.skipped || 0;
+            const metaCols = (data.meta_columns_preserved || []).length;
+            const parts = [
+                `${data.created} جديد`,
+                `${data.updated} محدّث`,
+            ];
+            if (skipped) parts.push(`${skipped} مُتخطى`);
+            if (errs) parts.push(`${errs} خطأ`);
+            const metaHint = metaCols > 0
+                ? ` (تم حفظ ${metaCols} عمود إضافي في meta للمستقبل)`
+                : "";
+            toast.success(`تم الاستيراد: ${parts.join(" • ")}${metaHint}`,
+                { duration: 8000 });
             await loadCatalogue();
             await loadSummary();
             if (missing) loadMissing();
@@ -525,7 +580,7 @@ export default function ProductCosts() {
                     />
                     <button
                         type="button"
-                        onClick={() => fileRef.current?.click()}
+                        onClick={() => setImportModalOpen(true)}
                         disabled={importing}
                         className="px-3 py-2 border border-border rounded-lg font-bold text-sm inline-flex items-center gap-2 hover:bg-accent disabled:opacity-50"
                         data-testid="product-costs-import-btn"
@@ -609,6 +664,90 @@ export default function ProductCosts() {
                 onClose={() => setModalOpen(false)}
                 onSaved={onSaved}
             />
+
+            {/* Import options modal (iteration 20) — collects the
+                update_existing flag BEFORE opening the OS file picker,
+                so the merchant can choose whether duplicate SKUs are
+                updated or skipped. */}
+            {importModalOpen && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+                    data-testid="product-costs-import-modal"
+                    onClick={(e) => e.target === e.currentTarget && setImportModalOpen(false)}
+                >
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                        <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-3">
+                            <h2 className="text-xl font-extrabold flex items-center gap-2" style={{ fontFamily: "Tajawal" }}>
+                                <UploadSimple size={22} weight="fill" className="text-brand" />
+                                استيراد ملف Excel من سلة
+                            </h2>
+                            <button
+                                onClick={() => setImportModalOpen(false)}
+                                className="p-1 hover:bg-accent rounded-lg"
+                                data-testid="product-costs-import-modal-close"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4 text-sm">
+                            <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-blue-900 leading-relaxed">
+                                <strong>الأعمدة المُستوردة فقط:</strong>
+                                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                                    <li><strong>SKU</strong> (كود المنتج / Reference / Product Code…)</li>
+                                    <li><strong>اسم المنتج</strong></li>
+                                    <li><strong>التكلفة</strong> (Cost / سعر التكلفة / الكلفة…)</li>
+                                </ul>
+                                <div className="mt-2 text-xs text-blue-800/80">
+                                    💡 كل الأعمدة الأخرى تُحفظ تلقائياً في حقل <code>meta</code> للاستخدام المستقبلي ولا تؤثر على احتساب الربح.
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-amber-900 leading-relaxed">
+                                <strong>المورد لا يُستورد من Excel.</strong>
+                                <div className="text-xs text-amber-800/80 mt-1">
+                                    أضف بيانات المورد (اسم، بلد، ملاحظات) يدوياً من زر "تعديل" لكل منتج.
+                                </div>
+                            </div>
+
+                            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-border hover:bg-accent/30">
+                                <input
+                                    type="checkbox"
+                                    checked={updateExisting}
+                                    onChange={(e) => setUpdateExisting(e.target.checked)}
+                                    className="w-5 h-5 rounded border-border accent-brand mt-0.5 flex-shrink-0"
+                                    data-testid="product-costs-update-existing-checkbox"
+                                />
+                                <div>
+                                    <div className="font-bold">
+                                        تحديث المنتجات الموجودة بنفس SKU
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                                        {updateExisting
+                                            ? "✓ إذا وُجد منتج بنفس SKU، سيتم تحديث الاسم والتكلفة."
+                                            : "✗ إذا وُجد منتج بنفس SKU، سيتم تجاهله (يظهر في عدد \"المُتخطى\")."}
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                        <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-2">
+                            <button
+                                onClick={() => setImportModalOpen(false)}
+                                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-accent"
+                            >
+                                إلغاء
+                            </button>
+                            <button
+                                onClick={() => fileRef.current?.click()}
+                                className="px-4 py-2 bg-brand text-white rounded-lg font-bold text-sm hover:opacity-90 inline-flex items-center gap-2"
+                                data-testid="product-costs-import-pick-file-btn"
+                            >
+                                <UploadSimple size={16} weight="bold" />
+                                اختيار الملف…
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
