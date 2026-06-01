@@ -1,0 +1,49 @@
+{
+  "summary": "Iteration 14 — Verified Meta Ads Token Exchange feature (POST /api/meta/exchange-token + Settings UI). All 6 new backend tests + 7 pre-existing friendly-error tests pass (13/13). Settings UI renders blue dashed-border 'تحويل تلقائي إلى Long-lived Token (60 يوم)' section correctly. Exchange button correctly disabled when input empty, enabled after typing. Toast on submit shows friendly Arabic message (no raw JSON / OAuthException / English leak). All required testids present. Mobile (390x844) and desktop (1280x800) have NO horizontal overflow. Iteration 13 regression suite (6/6) still passes — no regression introduced.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_meta_token_exchange.py",
+    "/app/backend/tests/test_meta_friendly_errors.py",
+    "/app/backend/tests/test_iteration_13.py",
+    "/app/test_reports/pytest/iteration_14_meta_exchange.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor doc/testid mismatch in review request: spec mentioned 'meta-short-lived-token-input' and 'meta-access-token-input' testids, but actual SecretField component emits '-input-masked' (when hidden) or '-textarea' (when revealed). Not a bug — main agent should update docs/spec for future testers. All masking/toggle/copy/clear testids work correctly.",
+    "Frontend exchange flow pre-validates required form fields (App ID + Secret + Ad Account ID) before POSTing. This is good UX but means UI never actually hits backend friendly-error path when all 3 fields are unset. Backend friendly-error path is fully covered by pytest (13/13 passing), so this is acceptable."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (13/13 new+friendly, 6/6 iter13 regression)", "frontend": "100% (all acceptance criteria met)"},
+  "test_credentials": "admin@hesab.app / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used existing admin user.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "SecretField uses testidPrefix; actual rendered testids are '{prefix}-input-masked' (when hidden) and '{prefix}-textarea' (when revealed) — NOT '{prefix}-input'. To type in a SecretField, click the '-toggle' first then fill '-textarea'. Exchange button is disabled-by-empty-input — gate works correctly. Toast (sonner) text can be polled via querySelectorAll('[role=status], [data-sonner-toast]'). When config not stored, clicking exchange triggers a client-side validation toast 'Meta App ID و App Secret و Ad Account ID مطلوبة (احفظهم أولاً أو املأهم في النموذج).' BEFORE POSTing — friendly Arabic, no JSON leak. backend regression test_iteration_13.py needs MongoDB env vars (source /app/backend/.env before pytest). The 3 pre-existing failures in test_meta_integration.py mentioned by main agent were NOT re-run and remain out of scope.",
+  "acceptance_results": {
+    "POST /api/meta/exchange-token empty token (Arabic 400)": "PASS (pytest)",
+    "POST /api/meta/exchange-token short<20 (Arabic 400)": "PASS (pytest)",
+    "POST /api/meta/exchange-token missing creds (Arabic 400)": "PASS (pytest)",
+    "POST /api/meta/exchange-token bad ad_account_id (Arabic 400)": "PASS (pytest)",
+    "POST /api/meta/exchange-token full fake creds → classified Arabic": "PASS (pytest)",
+    "GET /api/meta/config exposes token_expires_at + token_exchanged_at": "PASS (pytest)",
+    "Settings UI exchange section renders + testids correct": "PASS",
+    "Exchange btn disabled when input empty": "PASS",
+    "Exchange btn enabled after typing": "PASS",
+    "Toast on click — friendly Arabic, no JSON leak": "PASS",
+    "SecretField masking on meta-access-token": "PASS (toggle, copy, input-masked all present)",
+    "meta-test-connection-btn still present": "PASS",
+    "meta-token-expiry-info shown only when token_expires_at exists": "PASS (count=0 when never exchanged)",
+    "No horizontal overflow @1280x800": "PASS (sw=1280 cw=1280)",
+    "No horizontal overflow @390x844": "PASS (sw=390 cw=390)",
+    "Iteration 13 regression (dashboard/meta/tiktok)": "PASS 6/6"
+  },
+  "rca of the issue": "N/A — feature works end-to-end."
+}
