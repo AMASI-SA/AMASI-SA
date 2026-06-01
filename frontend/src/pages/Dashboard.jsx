@@ -437,6 +437,23 @@ export default function Dashboard() {
                 </div>
             ) : (
                 <>
+                    {/* Missing product costs alert (iteration 19) — surface
+                        any unmatched SKUs from the current dashboard window
+                        so the merchant knows real profit may be off. */}
+                    {totals.missing_product_cost_count > 0 && (
+                        <Link
+                            to="/product-costs"
+                            className="block rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-sm hover:bg-amber-100 transition-colors"
+                            data-testid="dashboard-missing-product-costs-alert"
+                        >
+                            <div className="flex items-center gap-2 flex-wrap text-amber-900">
+                                <span className="text-base">⚠️</span>
+                                <strong>{totals.missing_product_cost_count} منتج بدون تكلفة</strong>
+                                <span className="text-amber-800/80">— صافي الربح غير دقيق حتى تُحدِّد تكلفة هذه المنتجات.</span>
+                                <span className="ms-auto text-xs font-bold text-amber-800 underline">إدارة التكاليف ←</span>
+                            </div>
+                        </Link>
+                    )}
                     {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {ALL_KPI_CARDS

@@ -1,0 +1,38 @@
+{
+  "summary": "Full E2E verification of new Product Cost Management feature on PREVIEW. Backend: 6/6 new pytest cases pass + 26/26 regression (total 32/32). Added 2 extra E2E tests (webhook enrichment + SKU-first precedence) — both pass. Frontend: /product-costs page renders fully for a new user with all required testids; full add → edit → delete → tab-switch → recompute flow works; SKU input is disabled in edit mode; dashboard alert banner appears when missing_product_cost_count > 0 with correct Arabic text and link to /product-costs. No horizontal overflow at 1280 or 390. All merchant acceptance criteria met — safe to deploy.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "tests_executed": {
+    "new_product_costs_pytest": "tests/test_product_costs.py — 6/6 PASS (CRUD, soft-delete reactivation, filters, Excel Arabic+English headers, missing endpoint, summary, recompute)",
+    "regression_pytest": "test_snap_aggregation_no_overwrite.py, test_tiktok_dashboard_aggregation.py, test_snapchat_multi_account.py, test_meta_token_exchange.py, test_meta_friendly_errors.py — 26/26 PASS",
+    "additional_e2e": "tests/test_product_costs_webhook.py — 2/2 PASS (webhook attaches total_product_cost=25 + cost_items[matched_by='sku']; SKU-first precedence: line1 matched by sku, line2 by product_id, total=50)",
+    "frontend_flow": "register → /product-costs renders page+grid+empty-state+sidebar nav; ADD modal saves new SKU, row appears; EDIT modal pre-fills, SKU disabled, price update reflected in row; tab-missing → missing-empty-state; tab-catalogue → DELETE w/ confirm removes row; RECOMPUTE button triggers POST; no horizontal overflow @1280 and @390",
+    "dashboard_banner": "Seeded order via webhook with unmatched SKU 'NOCOST_ALERT' → /api/dashboard returned missing_product_cost_count=1, computed_product_cost=0; UI dashboard rendered testid='dashboard-missing-product-costs-alert' with Arabic '1 منتج بدون تكلفة — صافي الربح غير دقيق…' and link 'إدارة التكاليف ←' to /product-costs",
+    "missing_endpoint": "GET /api/product-costs/missing returned count=1 with sku='NOCOST_ALERT'",
+    "webhook_settings_lookup": "Correct endpoint is /api/webhook/settings (not /api/webhook-token)"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_product_costs.py",
+    "/app/backend/tests/test_product_costs_webhook.py",
+    "/app/test_reports/pytest/iteration_19_product_costs.xml",
+    "/app/test_reports/pytest/iteration_19_regression.xml",
+    "/app/test_reports/pytest/iteration_19_webhook_enrich.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "product_costs.py is ~530 lines — borderline acceptable but consider splitting compute_order_cost helper into a dedicated cost_lookup module if the matcher logic grows (more match strategies, fuzzy match, etc).",
+    "Consider returning a stronger validation error (422 with Arabic detail) instead of generic 400 on Excel imports with malformed numeric values (currently relies on pandas coercion).",
+    "The dashboard banner correctly links to /product-costs; ensure the wording 'صافي الربح غير دقيق' remains consistent if/when localisation strings are extracted to i18n.",
+    "Webhook ingestion enrichment runs synchronously inside the request — fine for current volume but consider background task / queue for high-throughput merchants."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_product_costs_webhook.py (new E2E test file: webhook enrichment + SKU-first precedence)"
+  ],
+  "success_rate": {"backend": "100% (34/34)", "frontend": "100%"},
+  "test_credentials": "Admin: admin@hesab.app / admin123. For UI flow we registered fresh users via POST /api/auth/register.",
+  "seed_data_creation": "Created ephemeral test users with TEST_ / pcui- / pcalert- email prefixes; seeded one unified_order via /api/webhook/make/{token} with unmatched SKU 'NOCOST_ALERT' to trigger the missing-cost dashboard alert. Test product_costs for SKU 'WHTEST', 'X1', 'X2'+'PID2', and UI-* prefixes were created and then either deleted (UI flow) or left as soft-deleted on isolated test users.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 19 fully verified the Product Cost Management feature end-to-end. 34/34 pytest cases passing (6 new + 26 regression + 2 added webhook E2E). The new test file /app/backend/tests/test_product_costs_webhook.py covers (a) Salla webhook ingestion enriching unified_orders.total_product_cost and cost_items via attach_cost_to_order_doc, and (b) SKU-first precedence over product_id when both could match. Use /api/webhook/settings (NOT /api/webhook-token) to obtain a user's webhook token. Dashboard banner testid is 'dashboard-missing-product-costs-alert'. /product-costs page testid 'product-costs-page' with sub-testids: product-cost-summary-grid, catalogue-empty-state, catalogue-row-{SKU}, catalogue-edit-btn-{SKU}, catalogue-delete-btn-{SKU}, product-costs-add-btn, product-costs-import-btn, product-costs-import-input, product-costs-recompute-btn, tab-catalogue, tab-missing, missing-empty-state, missing-warning-banner, missing-table, missing-quickadd-btn-{SKU}, product-cost-modal (with sku/name/price/currency/supplier/product-id inputs + save-btn).",
+  "rca of the issue": "N/A — no defects found."
+}

@@ -11,6 +11,7 @@ import {
     Plug,
     Wallet,
     Ghost,
+    Package,
     X,
 } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
@@ -24,6 +25,7 @@ const links = [
     { to: "/operating-expenses", label: "المصروفات التشغيلية", icon: Wallet, testid: "nav-operating-expenses" },
     { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
     { to: "/snapchat-accounts", label: "حسابات Snapchat", icon: Ghost, testid: "nav-snapchat-accounts" },
+    { to: "/product-costs", label: "تكاليف المنتجات", icon: Package, testid: "nav-product-costs" },
     { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
     { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" },
 ];

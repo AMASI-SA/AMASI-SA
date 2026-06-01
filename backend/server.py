@@ -58,6 +58,7 @@ from snapchat_routes import attach_snapchat_routes
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
+from product_costs import attach_product_costs_routes, attach_cost_to_order_doc
 from expenses_routes import (
     attach_operating_expenses_routes,
     compute_operating_expenses_for_range,
@@ -999,7 +1000,27 @@ async def dashboard(
         for d in daily
     ) + tiktok_total_for_dashboard + meta_spend_total
     daily_products_total = sum((d.get("product_costs", 0) or 0) for d in daily)
-    daily_totals = daily_ads_total + daily_products_total
+
+    # ── Computed product cost from order line-items (iteration 19) ─────────
+    # When `unified_orders.total_product_cost` is populated (via webhook
+    # ingestion → product_costs.attach_cost_to_order_doc), prefer THAT as
+    # the source of truth for product cost — it reflects real SKU-level
+    # costs. The legacy `daily_costs.product_costs` (manual entry) stays
+    # as a fallback so single-merchant flows without per-SKU costs still
+    # work. We take max() per the same dedupe-via-bigger pattern used for
+    # TikTok webhook vs daily_costs.
+    computed_product_cost = round(sum(
+        float(o.get("total_product_cost") or 0) for o in all_orders
+    ), 2)
+    # Distinct missing-cost lines across the filtered orders (UI badge).
+    missing_cost_skus: set = set()
+    for o in all_orders:
+        for ln in (o.get("missing_product_cost_lines") or []):
+            key = (ln.get("sku") or ln.get("product_id") or ln.get("name") or "").strip().upper()
+            if key:
+                missing_cost_skus.add(key)
+    product_cost_effective = max(computed_product_cost, daily_products_total)
+    daily_totals = daily_ads_total + product_cost_effective
 
     # ── Operating Expenses (المصروفات التشغيلية) ─────────────────────────────
     # Aggregate the per-day salary + rental + variable-expense costs over the
@@ -1017,12 +1038,12 @@ async def dashboard(
     operating_prepaid_total = float(op_range.get("prepaid_total") or 0)
     operating_daily_other_total = float(op_range.get("daily_other_total") or 0)
 
-    # Net profit (orders P&L − daily ads − daily products − operating expenses)
+    # Net profit (orders P&L − daily ads − product cost (computed or manual) − operating expenses)
     orders_profit = total_sales - total_fees - total_shipping
     net_profit_adjusted = (
         orders_profit
         - daily_ads_total
-        - daily_products_total
+        - product_cost_effective
         - operating_expenses_total
     )
 
@@ -1042,7 +1063,7 @@ async def dashboard(
     if cfg.get("deduct_ads", True):
         net_sales -= daily_ads_total
     if cfg.get("deduct_product_costs", True):
-        net_sales -= daily_products_total
+        net_sales -= product_cost_effective
     if cfg.get("deduct_vat", False):
         net_sales -= total_vat
     if cfg.get("deduct_daily_expenses", False):
@@ -1133,7 +1154,10 @@ async def dashboard(
                 total_sales - total_fees - (total_shipping - deferred_shipping), 2
             ),
             "total_ads_cost": round(daily_ads_total, 2),
-            "total_product_cost": 0.0,
+            "total_product_cost": round(product_cost_effective, 2),
+            "computed_product_cost": round(computed_product_cost, 2),
+            "manual_product_cost": round(daily_products_total, 2),
+            "missing_product_cost_count": len(missing_cost_skus),
             "daily_expenses_total": round(daily_products_total, 2),
             "net_profit": round(net_profit_adjusted, 2),
             "total_vat": round(total_vat, 2),
@@ -1721,6 +1745,7 @@ attach_meta_routes(api, db)
 attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
 attach_operating_expenses_routes(api, db)
+attach_product_costs_routes(api, db, current_user)
 app.include_router(api)
 
 # CORS
@@ -1760,6 +1785,18 @@ async def on_startup():
     )
     await db.snapchat_account_daily.create_index(
         [("user_id", 1), ("date", -1)],
+    )
+    # ── Product cost catalogue (iteration 19) ──────────────────────────────
+    # One doc per (user_id, sku_normalized). Provides the cost lookup table
+    # used by webhook ingestion + dashboard's total_product_cost field.
+    await db.product_costs.create_index(
+        [("user_id", 1), ("sku_normalized", 1)], unique=True,
+    )
+    await db.product_costs.create_index(
+        [("user_id", 1), ("is_active", 1)],
+    )
+    await db.product_costs.create_index(
+        [("user_id", 1), ("product_id", 1)],
     )
     await db.shipping_payments.create_index([("user_id", 1), ("company_name", 1), ("payment_date", -1)])
     await db.webhook_tokens.create_index("user_id", unique=True)

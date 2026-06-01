@@ -16,6 +16,7 @@ import MakeWebhook from "./pages/MakeWebhook";
 import OperatingExpenses from "./pages/OperatingExpenses";
 import AdsReport from "./pages/AdsReport";
 import SnapchatAccounts from "./pages/SnapchatAccounts";
+import ProductCosts from "./pages/ProductCosts";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -40,6 +41,7 @@ function AppRoutes() {
             <Route path="/reports" element={<ProtectedRoute><Layout><Reports /></Layout></ProtectedRoute>} />
             <Route path="/reports/ads" element={<ProtectedRoute><Layout><AdsReport /></Layout></ProtectedRoute>} />
             <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatAccounts /></Layout></ProtectedRoute>} />
+            <Route path="/product-costs" element={<ProtectedRoute><Layout><ProductCosts /></Layout></ProtectedRoute>} />
             <Route path="/shipping-accounts" element={<ProtectedRoute><Layout><ShippingAccounts /></Layout></ProtectedRoute>} />
             <Route path="/make-webhook" element={<ProtectedRoute><Layout><MakeWebhook /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />

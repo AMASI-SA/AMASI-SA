@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from report_builder import build_report
 from orders_db import upsert_order, orders_to_parsed
+from product_costs import attach_cost_to_order_doc
 
 logger = logging.getLogger(__name__)
 
@@ -508,6 +509,22 @@ def _build_router(db) -> APIRouter:
                 updated += 1
             if order_date_inferred:
                 accepted_inferred_date += 1
+
+            # ── Attach product cost (iteration 19) ─────────────────────────
+            # After the order is persisted, look up per-SKU cost and write
+            # the computed cost back to the order doc. Best-effort — a
+            # missing cost on a single product never fails the ingestion.
+            try:
+                cost_patch = await attach_cost_to_order_doc(
+                    db, user_id, {"products": incoming.get("products") or []},
+                )
+                await db.unified_orders.update_one(
+                    {"user_id": user_id, "order_number": order_number},
+                    {"$set": cost_patch},
+                )
+            except Exception as exc:
+                logger.warning("Product-cost attach failed for order %s: %s",
+                               order_number, exc)
 
         await db.webhook_tokens.update_one(
             {"user_id": user_id},
