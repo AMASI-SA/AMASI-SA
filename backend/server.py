@@ -823,6 +823,30 @@ async def dashboard(
         orders_q, {"_id": 0, "raw_by_source": 0}
     ).to_list(100000)
 
+    # Iteration 27: lazy self-heal. Any order in the filtered range
+    # whose `total_product_cost` is still null/missing → re-run
+    # attach_cost_to_order_doc. This guarantees the Dashboard always
+    # reflects the latest cost data, even for orders that arrived
+    # before a cost was added (or on environments without the
+    # iteration-26 auto-recompute hooks). Idempotent + only touches
+    # stale rows so it's effectively free when data is healthy.
+    try:
+        from product_costs import attach_cost_to_order_doc as _attach_pc
+        stale_indexes: list[int] = []
+        for i, o in enumerate(all_orders):
+            if o.get("total_product_cost") is None:
+                stale_indexes.append(i)
+        for i in stale_indexes[:500]:  # cap heal-per-request for safety
+            o = all_orders[i]
+            patch = await _attach_pc(db, user["id"], o)
+            await db.unified_orders.update_one(
+                {"user_id": user["id"], "order_number": o["order_number"]},
+                {"$set": patch},
+            )
+            o.update(patch)  # refresh in-memory copy so totals use new values
+    except Exception as _exc:
+        logger.warning("Dashboard cost self-heal skipped: %s", _exc)
+
     if pm_list or ship_list:
         all_orders = [
             o for o in all_orders

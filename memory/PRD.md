@@ -12,6 +12,79 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🐛 BUGFIX (2026-06 — Iteration 27) — **Self-heal لتكلفة طلبات اليوم + زر "تحديث التكلفة الآن"**
+
+**Merchant report**: "تكلفة منتجات الطلبات حق تاريخ اليوم كامله لم يتم احتسبها".
+
+**Root cause analysis**: على الإنتاج (والذي يسبق iteration 26)، إذا كان أي طلب من اليوم وصل قبل إضافة تكلفة المنتج في الكاتالوج، فإن `total_product_cost` يظل `null` ولا يُعاد حسابه تلقائياً، فيظهر "اليوم: 0.00" في Dashboard بشكل خاطئ.
+
+**Backend** (`product_costs.py` + `server.py`):
+- ✅ **`/summary` self-heal**: قبل احتساب `today_total`/`month_total`، يُمسح صف بصف على طلبات اليوم التي `total_product_cost = null` ويُستدعى `attach_cost_to_order_doc`. يرجع `stale_today_healed` في الـ response.
+- ✅ **`/api/dashboard` self-heal**: نفس المنطق على الطلبات في النطاق المفلتر (cap = 500 طلب/طلب واحد لمنع التباطؤ). تحديث in-memory + DB في نفس الوقت ليعكس الإجماليات الجديدة فوراً.
+- ✅ Idempotent + try/except → لو فشل heal على صف واحد، باقي العملية تكمل.
+- ✅ `/recompute?days=N` المنطقي القديم (موجود منذ iter 19) — مازال يعمل كـ manual fallback.
+
+**Frontend** (`ProductCostCard.jsx`):
+- ✅ **زر "⚡ تحديث التكلفة الآن"** بارز (أخضر، أعلى البطاقة) — يستدعي `POST /product-costs/recompute?days=2` ويعرض toast بعدد الطلبات التي تم تحديثها.
+- ✅ يعمل على كل البيئات (الإنتاج والمعاينة) لأن `/recompute` موجود منذ iteration 19.
+
+**Tests** (`test_self_heal_iteration27.py`): 4 جديدة + 59 regression = **63/63 PASS**. التغطية:
+- `/summary` ينفّذ heal تلقائياً لطلبات اليوم بدون TPC → `today_total` صحيح + `stale_today_healed >= 1`.
+- بيانات صحية → `stale_today_healed = 0` (لا عمل إضافي).
+- `/api/dashboard` ينفّذ heal كذلك → الطلب المُحدّث ينعكس في DB بعد الـ request.
+- `/recompute` endpoint لم يتغير ومازال يعمل.
+
+**ملاحظة للنشر**: التاجر يحتاج **إعادة نشر (redeploy)** ليصل الـ self-heal للإنتاج. لكن حتى بدون النشر، يمكنه الضغط على زر "تحديث التكلفة الآن" في Dashboard المنشور — هذا الزر يستدعي endpoint موجود منذ iteration 19 ويحل المشكلة فوراً.
+
+---
+
+## ✨ ENHANCEMENT (2026-06 — Iteration 26) — **تقرير مبيعات المنتجات + بطاقة Dashboard + Auto-recompute آخر يومين**
+
+**Merchant requirement**: تقرير مبيعات منتجات تفصيلي + بطاقة "📦 تكلفة المنتجات" في Dashboard (اليوم/الشهر/مرتبط/بدون) + إعادة احتساب آخر يومين تلقائياً بعد كل تعديل تكلفة.
+
+**Backend** (`product_costs.py` + `server.py`):
+- ✅ **`GET /api/product-costs/product-sales`** — تقرير مبيعات تفصيلي:
+  - الأعمدة: image_url, name, product_id, sku, units_sold, total_sales, total_cost, total_profit, profit_margin_pct, cost_status
+  - النطاق الافتراضي: آخر يومين (today + yesterday) كما طلب التاجر
+  - `cost_status = "incomplete"` لأي منتج بعض/كل وحداته بدون تكلفة → `total_profit` و `profit_margin_pct` تصبح `null` (لا 0)
+  - الإجماليات `totals.*_complete` تستبعد الصفوف غير المكتملة تماماً (ربح فعلي فقط)
+  - الفرز: غير المكتملة أولاً (لينتبه التاجر) ثم حسب المبيعات تنازلياً
+- ✅ **`/product-costs/summary` المحسّن** يرجع الآن:
+  - `linked_products_count` — المنتجات في الكاتالوج بـ `cost_pending=False`
+  - `missing_products_count` — مجموع: catalogue pending + SKUs من طلبات بدون كاتالوج (بدون double-counting)
+  - بالإضافة لـ `today_total`, `month_total`, `avg_cost`, `top_products_last_30d` السابقة
+- ✅ **`_recompute_recent_orders(db, uid, days=2)`** helper جديد — يستدعى تلقائياً بعد كل:
+  - `POST /product-costs/` (create)
+  - `PUT /product-costs/{id}` (update)
+  - `POST /product-costs/import` (bulk import)
+  - يُرجع `recent_orders_recomputed` count في الـ response
+
+**Frontend**:
+- ✅ **`ProductCostCard.jsx` جديد** — يُعرض أعلى Dashboard:
+  - 4 خلايا: اليوم (ر.س) / الشهر (ر.س) / مرتبط (منتج) / بدون تكلفة (منتج)
+  - زر تحديث + آخر تحديث (timestamp)
+  - خلية "بدون تكلفة" تتحول لون كهرماني وتصبح link لـ `/product-costs?tab=missing` عندما العدد > 0
+  - Refresh تلقائي عند تغيير filters
+- ✅ **`ProductSalesReport.jsx` جديد** — مدمج في `Reports.jsx` (نهاية الصفحة):
+  - 4 summary boxes: مبيعات (الكل) / مبيعات (مكتملة) / إجمالي التكلفة / صافي الربح + هامش
+  - جدول كامل: صورة + اسم + Product ID + SKU + الوحدات + المبيعات + التكلفة + الربح + الهامش
+  - Badge "⚠️ تكلفة غير مكتملة" بجانب اسم المنتجات الناقصة
+  - الصفوف غير المكتملة: خلفية ميلانية، التكلفة "—"، الربح "غير محسوب"، الهامش "—"
+  - Banner أصفر للـ incomplete products → link مباشر لـ `/product-costs?tab=missing`
+
+**Tests** (`test_product_sales_report_iteration26.py`): 8 جديدة + 51 regression = **59/59 PASS**. التغطية:
+- Default range = آخر يومين تماماً (yesterday + today)
+- منتج كامل التكلفة: KPIs كاملة (units, sales, cost, profit, margin)
+- منتج بدون تكلفة: `cost_status=incomplete`, `total_profit=null`, `profit_margin_pct=null`
+- الإجماليات تستبعد incomplete rows
+- `/summary` يكشف `linked_products_count` و `missing_products_count`
+- بعد POST cost → `recent_orders_recomputed >= 2`
+- بعد PUT cost → `recent_orders_recomputed >= 1`
+
+**ملاحظة عن Net Profit في Dashboard**: صيغة `net_profit` في `/api/dashboard` كانت بالفعل تحسم `total_product_cost` (من iteration 19) قبل الحساب. Iteration 26 يضمن أن هذا الرقم محدث آخر يومين دائماً بعد أي تعديل تكلفة.
+
+---
+
 ## ✨ ENHANCEMENT (2026-06 — Iteration 25) — **Product ID كمفتاح أساسي + تكلفة اختيارية + Auto-reprocess بعد الاستيراد**
 
 **Merchant requirement**: ملف منتجات سلة لا يحوي SKU. اجعل Product ID المفتاح الأساسي، SKU اختياري، التكلفة اختيارية (وعند الفراغ → "بدون تكلفة" لا = 0)، وشغّل Auto-reprocess بعد كل استيراد لإعادة ربط الطلبات السابقة.

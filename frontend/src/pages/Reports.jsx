@@ -8,6 +8,7 @@ import {
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
+import ProductSalesReport from "../components/ProductSalesReport";
 
 const COLORS = ["#0A3622", "#D4AF37", "#16A34A", "#D97706", "#0EA5E9", "#7C3AED", "#DC2626", "#0891B2"];
 
@@ -501,6 +502,10 @@ export default function Reports() {
                     </div>
                 </>
             )}
+
+            {/* Iteration 26: Product Sales Report — per-product KPIs with
+                cost-completeness flags and totals over only complete rows. */}
+            <ProductSalesReport fromDate={fromDate} toDate={toDate} />
         </div>
     );
 }

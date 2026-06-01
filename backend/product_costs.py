@@ -258,6 +258,35 @@ async def _reprocess_orders_for_keys(
     return affected
 
 
+async def _recompute_recent_orders(db, user_id: str, days: int = 2) -> int:
+    """Iteration 26: unconditional recompute of EVERY order in the last
+    `days` days, regardless of SKU. Called after every cost mutation
+    (create/update/bulk-import) so the dashboard + reports immediately
+    reflect updated costs without waiting for a manual `/recompute`.
+
+    Idempotent — safe to call repeatedly. Complements the targeted
+    `_reprocess_orders_for_keys` pass by also catching:
+      • orders whose cost_items array was somehow inconsistent
+      • freshly-ingested orders that arrived between two cost edits
+    """
+    if days <= 0:
+        return 0
+    cutoff = (datetime.now(timezone.utc).date()
+              - timedelta(days=days - 1)).isoformat()
+    updated = 0
+    async for o in db.unified_orders.find(
+        {"user_id": user_id, "order_date": {"$gte": cutoff}},
+        {"_id": 0, "order_number": 1, "products": 1},
+    ):
+        patch = await attach_cost_to_order_doc(db, user_id, o)
+        await db.unified_orders.update_one(
+            {"user_id": user_id, "order_number": o["order_number"]},
+            {"$set": patch},
+        )
+        updated += 1
+    return updated
+
+
 # ── Pydantic models ────────────────────────────────────────────────────────
 class ProductCostIn(BaseModel):
     # Iteration 25: SKU is now OPTIONAL (Salla product Excel exports
@@ -399,18 +428,25 @@ def _build_router(db, current_user_dep) -> APIRouter:
             doc["reprocessed_orders"] = await _reprocess_orders_for_keys(
                 db, uid, {sku_norm}, {product_id},
             )
+            # Iteration 26: also recompute last 2 days unconditionally
+            # so the dashboard/reports refresh immediately.
+            doc["recent_orders_recomputed"] = await _recompute_recent_orders(
+                db, uid, days=2,
+            )
             return doc
         await db.product_costs.insert_one(doc)
         doc.pop("_id", None)
-        # Iteration 24/25: targeted reprocess so past orders flip from
-        # "incomplete_missing_cost" → "complete" immediately — only when
-        # a REAL cost was provided (cost_pending entries don't match).
+        # Iteration 24/25/26: targeted reprocess (all-time for this SKU)
+        # + recompute last 2 days (catches freshly-ingested orders).
         if not cost_pending:
             doc["reprocessed_orders"] = await _reprocess_orders_for_keys(
                 db, uid, {sku_norm}, {product_id},
             )
         else:
             doc["reprocessed_orders"] = 0
+        doc["recent_orders_recomputed"] = await _recompute_recent_orders(
+            db, uid, days=2,
+        )
         return doc
 
     @router.put("/{item_id}")
@@ -459,6 +495,10 @@ def _build_router(db, current_user_dep) -> APIRouter:
                 db, user["id"],
                 {_norm_sku(doc.get("sku") or doc.get("product_id") or "")},
                 {_norm_product_id(doc.get("product_id"))},
+            )
+            # Iteration 26: also recompute last 2 days unconditionally.
+            doc["recent_orders_recomputed"] = await _recompute_recent_orders(
+                db, user["id"], days=2,
             )
         return doc
 
@@ -770,6 +810,9 @@ def _build_router(db, current_user_dep) -> APIRouter:
             reprocessed_orders = await _reprocess_orders_for_keys(
                 db, uid, reprocess_skus, reprocess_pids,
             )
+        # Iteration 26: unconditional recompute of last 2 days so the
+        # dashboard/reports reflect the latest costs immediately.
+        recent_recomputed = await _recompute_recent_orders(db, uid, days=2)
 
         return {
             "created": created,
@@ -786,6 +829,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
                 else ("column_F" if idx_image == 5 else None)
             ),
             "reprocessed_orders": reprocessed_orders,
+            "recent_orders_recomputed": recent_recomputed,
         }
 
     # ── Missing costs (orders with unmatched products) ───────────────────
@@ -899,6 +943,31 @@ def _build_router(db, current_user_dep) -> APIRouter:
         today_d = datetime.now(timezone.utc).date()
         today_str = today_d.isoformat()
         month_start = today_str[:8] + "01"
+        # Iteration 27: lazy self-heal — before computing today/month
+        # totals, re-attach cost on every TODAY order whose
+        # total_product_cost is still null (i.e. never enriched, or
+        # enriched before the catalogue had its cost). This is cheap
+        # (only touches stale rows) and idempotent, and ensures the
+        # Dashboard card always reflects reality even on environments
+        # that don't have the iteration-26 auto-recompute hooks.
+        stale_today_healed = 0
+        async for o in db.unified_orders.find(
+            {"user_id": uid, "order_date": today_str,
+             "$or": [
+                 {"total_product_cost": None},
+                 {"total_product_cost": {"$exists": False}},
+             ]},
+            {"_id": 0, "order_number": 1, "products": 1},
+        ):
+            try:
+                patch = await attach_cost_to_order_doc(db, uid, o)
+                await db.unified_orders.update_one(
+                    {"user_id": uid, "order_number": o["order_number"]},
+                    {"$set": patch},
+                )
+                stale_today_healed += 1
+            except Exception:
+                pass  # never fail summary if heal fails on one row
         # Today / month: sum total_product_cost on orders in that range.
         today_total = 0.0
         month_total = 0.0
@@ -914,9 +983,53 @@ def _build_router(db, current_user_dep) -> APIRouter:
         active = await db.product_costs.count_documents(
             {"user_id": uid, "is_active": True},
         )
+        # Iteration 26: split active count into "linked" (cost set) and
+        # "missing" (cost_pending). Surfaces directly on the Dashboard
+        # product-cost card.
+        linked_products_count = await db.product_costs.count_documents(
+            {"user_id": uid, "is_active": True, "cost_pending": {"$ne": True}},
+        )
+        catalogue_pending_count = await db.product_costs.count_documents(
+            {"user_id": uid, "is_active": True, "cost_pending": True},
+        )
+        # Also count distinct missing-cost SKUs across recent orders that
+        # aren't in the catalogue yet → "products ordered but never seeded".
+        cutoff_60 = (today_d - timedelta(days=59)).isoformat()
+        order_missing_keys: set = set()
+        async for o in db.unified_orders.find(
+            {"user_id": uid, "order_date": {"$gte": cutoff_60}},
+            {"_id": 0, "missing_product_cost_lines": 1},
+        ):
+            for ln in (o.get("missing_product_cost_lines") or []):
+                k = (_norm_sku(ln.get("sku")) or
+                     _norm_product_id(ln.get("product_id")))
+                if k:
+                    order_missing_keys.add(k)
+        # Some of those keys ARE in the catalogue as cost_pending → already
+        # counted. Subtract the overlap so we don't double-count.
+        if order_missing_keys:
+            existing_keys = set()
+            async for c in db.product_costs.find(
+                {"user_id": uid, "is_active": True, "cost_pending": True,
+                 "$or": [
+                     {"sku_normalized": {"$in": list(order_missing_keys)}},
+                     {"product_id": {"$in": list(order_missing_keys)}},
+                 ]},
+                {"_id": 0, "sku_normalized": 1, "product_id": 1},
+            ):
+                if c.get("sku_normalized"):
+                    existing_keys.add(c["sku_normalized"])
+                if c.get("product_id"):
+                    existing_keys.add(c["product_id"])
+            order_only_missing = order_missing_keys - existing_keys
+        else:
+            order_only_missing = set()
+        missing_products_count = catalogue_pending_count + len(order_only_missing)
+
         if active:
             agg = db.product_costs.aggregate([
-                {"$match": {"user_id": uid, "is_active": True}},
+                {"$match": {"user_id": uid, "is_active": True,
+                            "cost_pending": {"$ne": True}}},
                 {"$group": {"_id": None, "avg": {"$avg": "$cost_price"}}},
             ])
             r = await agg.to_list(1)
@@ -950,8 +1063,153 @@ def _build_router(db, current_user_dep) -> APIRouter:
             "month_total": round(month_total, 2),
             "month_start": month_start,
             "active_products": active,
+            "linked_products_count": int(linked_products_count),
+            "missing_products_count": int(missing_products_count),
             "avg_cost": avg_cost,
             "top_products_last_30d": top,
+            "stale_today_healed": int(stale_today_healed),
+            "currency": "SAR",
+        }
+
+    # ── Product Sales Report (iteration 26) ──────────────────────────────
+    @router.get("/product-sales")
+    async def product_sales_report(
+        from_date: Optional[str] = Query(None),
+        to_date: Optional[str] = Query(None),
+        user: dict = Depends(current_user_dep),
+    ):
+        """Aggregate orders by product → return per-product breakdown for
+        the merchant's "Product Sales Report".
+
+        Returns: image_url, name, product_id, sku, units_sold,
+        total_sales, total_cost, total_profit, profit_margin_pct,
+        cost_status ('complete' or 'incomplete').
+
+        Defaults to the last 2 days when no date range is supplied, per
+        merchant requirement: "أعتمد على بيانات آخر يومين على الأقل".
+        """
+        uid = user["id"]
+        today_d = datetime.now(timezone.utc).date()
+        if not to_date:
+            to_date = today_d.isoformat()
+        if not from_date:
+            from_date = (today_d - timedelta(days=1)).isoformat()
+
+        # Pre-load catalogue (for image_url + cost_pending lookup).
+        cat_by_sku: dict[str, dict] = {}
+        cat_by_pid: dict[str, dict] = {}
+        async for c in db.product_costs.find(
+            {"user_id": uid, "is_active": True},
+            {"_id": 0, "sku_normalized": 1, "product_id": 1,
+             "image_url": 1, "product_name": 1, "cost_pending": 1,
+             "cost_price": 1, "sku": 1},
+        ):
+            if c.get("sku_normalized"):
+                cat_by_sku[c["sku_normalized"]] = c
+            if c.get("product_id"):
+                cat_by_pid[c["product_id"]] = c
+
+        agg: dict[str, dict] = {}
+        async for o in db.unified_orders.find(
+            {"user_id": uid,
+             "order_date": {"$gte": from_date, "$lte": to_date}},
+            {"_id": 0, "products": 1, "cost_items": 1,
+             "missing_product_cost_lines": 1, "total_amount": 1,
+             "total": 1, "order_date": 1, "order_number": 1,
+             "profit_status": 1},
+        ):
+            products = o.get("products") or []
+            cost_items = {((_norm_sku(it.get("sku")) or
+                            _norm_product_id(it.get("product_id")))
+                           or (it.get("name") or "")): it
+                          for it in (o.get("cost_items") or [])}
+            for p in products:
+                sku = _norm_sku(p.get("sku"))
+                pid = _norm_product_id(p.get("product_id") or p.get("id"))
+                name = (p.get("name") or "").strip()
+                key = sku or pid or name
+                if not key:
+                    continue
+                qty = _to_float(p.get("quantity"), 1.0)
+                price = _to_float(p.get("price"), 0.0)
+                line_sales = round(price * qty, 2)
+                # Match cost.
+                ci = cost_items.get(sku) or cost_items.get(pid) or cost_items.get(name)
+                line_cost = _to_float(ci.get("line_cost") if ci else 0, 0.0)
+                matched = bool(ci and ci.get("matched_by"))
+                # Image: cost_items > catalogue > webhook.
+                image_url = ""
+                cat = (cat_by_sku.get(sku) if sku else None) or \
+                      (cat_by_pid.get(pid) if pid else None)
+                if cat and cat.get("image_url"):
+                    image_url = cat["image_url"]
+                if not image_url:
+                    image_url = (p.get("image_url") or p.get("image") or "").strip()
+                cur = agg.setdefault(key, {
+                    "product_id": pid or "",
+                    "sku": p.get("sku") or "",  # original casing for display
+                    "name": name,
+                    "image_url": image_url,
+                    "units_sold": 0.0,
+                    "total_sales": 0.0,
+                    "total_cost": 0.0,
+                    "matched_units": 0.0,
+                    "currency": (cat or {}).get("currency", "SAR"),
+                })
+                cur["units_sold"] += qty
+                cur["total_sales"] += line_sales
+                cur["total_cost"] += line_cost
+                if matched:
+                    cur["matched_units"] += qty
+                if not cur["image_url"] and image_url:
+                    cur["image_url"] = image_url
+
+        rows: list[dict] = []
+        for r in agg.values():
+            sold = r["units_sold"]
+            matched = r["matched_units"]
+            complete = sold > 0 and matched >= sold - 0.0001
+            profit = round(r["total_sales"] - r["total_cost"], 2) if complete else None
+            margin = (round((profit / r["total_sales"]) * 100, 2)
+                      if (complete and r["total_sales"] > 0) else None)
+            rows.append({
+                "product_id": r["product_id"],
+                "sku": r["sku"],
+                "name": r["name"],
+                "image_url": r["image_url"],
+                "units_sold": round(sold, 2),
+                "total_sales": round(r["total_sales"], 2),
+                "total_cost": round(r["total_cost"], 2),
+                "total_profit": profit,
+                "profit_margin_pct": margin,
+                "cost_status": "complete" if complete else "incomplete",
+                "currency": r["currency"],
+            })
+
+        # Totals (only over rows with COMPLETE cost data — per merchant rule).
+        total_sales_all = round(sum(r["total_sales"] for r in rows), 2)
+        complete_rows = [r for r in rows if r["cost_status"] == "complete"]
+        incomplete_rows = [r for r in rows if r["cost_status"] != "complete"]
+        total_sales_complete = round(sum(r["total_sales"] for r in complete_rows), 2)
+        total_cost_complete = round(sum(r["total_cost"] for r in complete_rows), 2)
+        total_profit_complete = round(total_sales_complete - total_cost_complete, 2)
+        margin_complete = (round((total_profit_complete / total_sales_complete) * 100, 2)
+                           if total_sales_complete > 0 else 0.0)
+        # Sort: incomplete first (so merchant notices them), then by sales desc.
+        rows.sort(key=lambda r: (r["cost_status"] == "complete",
+                                 -r["total_sales"]))
+        return {
+            "range": {"from_date": from_date, "to_date": to_date},
+            "items": rows,
+            "count": len(rows),
+            "incomplete_count": len(incomplete_rows),
+            "totals": {
+                "total_sales_all": total_sales_all,
+                "total_sales_complete": total_sales_complete,
+                "total_cost_complete": total_cost_complete,
+                "total_profit_complete": total_profit_complete,
+                "margin_complete_pct": margin_complete,
+            },
             "currency": "SAR",
         }
 

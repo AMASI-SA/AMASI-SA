@@ -23,6 +23,7 @@ import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { ALL_KPI_CARDS } from "../lib/dashboardCards";
+import ProductCostCard from "../components/ProductCostCard";
 
 function formatRelative(ms) {
     if (ms < 5_000) return "الآن";
@@ -471,6 +472,11 @@ export default function Dashboard() {
                             </div>
                         </div>
                     )}
+                    {/* Iteration 26: Product Cost Card — visible at the
+                        top of the KPI region so the merchant always sees
+                        today/month product cost + linked vs missing counts.
+                        Refreshes whenever filter range changes. */}
+                    <ProductCostCard refreshKey={`${filters.from || ""}-${filters.to || ""}`} />
                     {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {ALL_KPI_CARDS
