@@ -76,6 +76,10 @@ export default function Dashboard() {
     const [nowTick, setNowTick] = useState(Date.now());
     const [snapSummary, setSnapSummary] = useState(null);
     const [snapDayInfo, setSnapDayInfo] = useState(null); // {tz, startRiyadh, endRiyadh}
+    // Per-account today-spend breakdown (iteration 18). Lets the dashboard
+    // Snapchat card display each enabled ad account's TODAY spend on its
+    // own card, replacing the previous "this-month" summary block.
+    const [snapAccountsBreakdown, setSnapAccountsBreakdown] = useState(null);
     const [metaSummary, setMetaSummary] = useState(null);
     const [tiktokSummary, setTiktokSummary] = useState(null);
     const [refreshingAll, setRefreshingAll] = useState(false);
@@ -88,6 +92,19 @@ export default function Dashboard() {
             setSnapSummary(data);
         } catch {
             /* non-critical */
+        }
+    };
+
+    // Per-account today-spend (iteration 18). Loaded in parallel with the
+    // cross-account snapchat-summary so the card can render one cell per
+    // enabled ad account (replacing the "monthly" block per merchant
+    // request).
+    const fetchSnapAccountsBreakdown = async () => {
+        try {
+            const { data } = await api.get("/snapchat/accounts-summary");
+            setSnapAccountsBreakdown(data);
+        } catch {
+            /* non-critical — card falls back gracefully */
         }
     };
 
@@ -179,7 +196,8 @@ export default function Dashboard() {
 
         const results = await Promise.all([runSnap(), runMeta(), runTiktok()]);
         // Re-read everything so totals + cards reflect new spend.
-        await Promise.all([fetchSnapSummary(), fetchMetaSummary(),
+        await Promise.all([fetchSnapSummary(), fetchSnapAccountsBreakdown(),
+                           fetchMetaSummary(),
                            fetchTiktokSummary(), refreshSilently()]);
 
         const okCount = results.filter(r => r.ok).length;
@@ -219,6 +237,7 @@ export default function Dashboard() {
             setData(data);
             setLastUpdated(Date.now());
             fetchSnapSummary();  // refresh Snapchat card alongside
+            fetchSnapAccountsBreakdown();
             fetchMetaSummary();
             fetchTiktokSummary();
         } finally {
@@ -234,6 +253,7 @@ export default function Dashboard() {
             setData(data);
             setLastUpdated(Date.now());
             fetchSnapSummary();
+            fetchSnapAccountsBreakdown();
             fetchMetaSummary();
             fetchTiktokSummary();
         } catch {
@@ -623,32 +643,79 @@ export default function Dashboard() {
                                     </div>
                                 </div>
 
-                                {/* Month */}
-                                <div>
-                                    <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
-                                        هذا الشهر (منذ {snapSummary.month.start})
+                                {/* Per-account TODAY breakdown (iteration 18 — replaced the
+                                    "Monthly" block per merchant request to surface each
+                                    connected ad account's today spend). Shows one card per
+                                    enabled Snapchat ad account; falls back to the monthly
+                                    block when only 0/1 account is connected. */}
+                                {snapAccountsBreakdown && snapAccountsBreakdown.count >= 2 ? (
+                                    <div data-testid="snap-per-account-breakdown">
+                                        <div className="text-xs text-muted-foreground font-bold mb-2 flex items-center gap-2 flex-wrap" style={{ fontFamily: "Tajawal" }}>
+                                            <span>صرف اليوم — لكل حساب إعلاني</span>
+                                            <span className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded-full font-bold">
+                                                {snapAccountsBreakdown.count} حسابات
+                                            </span>
+                                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded-full font-bold">
+                                                Asia/Riyadh
+                                            </span>
+                                        </div>
+                                        <div className={`grid grid-cols-1 sm:grid-cols-2 ${snapAccountsBreakdown.count >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"} gap-3`}>
+                                            {snapAccountsBreakdown.accounts.map((acc) => (
+                                                <div
+                                                    key={acc.ad_account_id}
+                                                    className="bg-white border border-yellow-200 rounded-lg p-4"
+                                                    data-testid={`snap-account-today-card-${acc.ad_account_id}`}
+                                                >
+                                                    <div className="text-xs text-muted-foreground mb-1 truncate flex items-center gap-2 flex-wrap" style={{ fontFamily: "Tajawal" }}>
+                                                        <span className="font-semibold text-foreground truncate" title={acc.name}>{acc.name || acc.ad_account_id}</span>
+                                                        {acc.currency_native && acc.currency_native !== "SAR" && (
+                                                            <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full font-bold whitespace-nowrap">
+                                                                {acc.currency_native}→SAR
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="num text-2xl font-extrabold text-yellow-700 tabular-nums" style={{ fontFamily: "Tajawal" }}>
+                                                        {formatMoney(acc.today?.spend_sar || 0)} <span className="text-sm font-bold text-muted-foreground">ر.س</span>
+                                                    </div>
+                                                    {acc.currency_native && acc.currency_native !== "SAR" && acc.today?.spend_native > 0 && (
+                                                        <div className="text-[11px] text-amber-700 mt-0.5 tabular-nums">
+                                                            ≈ {formatMoney(acc.today.spend_native)} {acc.currency_native}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-month">
-                                            <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
-                                            <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.spend)}</div>
+                                ) : (
+                                    /* Fallback: original "Month" block when only 0/1 account
+                                       is connected — preserves prior UX for single-account
+                                       merchants. */
+                                    <div>
+                                        <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
+                                            هذا الشهر (منذ {snapSummary.month.start})
                                         </div>
-                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-orders-month">
-                                            <div className="text-xs text-muted-foreground mb-1">طلبات الشهر</div>
-                                            <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(snapSummary.month.orders)}</div>
-                                        </div>
-                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-revenue-month">
-                                            <div className="text-xs text-muted-foreground mb-1">مبيعات الشهر (ر.س)</div>
-                                            <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.revenue)}</div>
-                                        </div>
-                                        <div className={`border-2 rounded-lg p-4 ${snapSummary.month.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="snap-roas-month">
-                                            <div className="text-xs text-muted-foreground mb-1">ROAS الشهر</div>
-                                            <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: snapSummary.month.roas >= 2 ? "#047857" : "#B45309" }}>
-                                                {snapSummary.month.spend > 0 ? `${snapSummary.month.roas}x` : "—"}
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                            <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-month">
+                                                <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
+                                                <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.spend)}</div>
+                                            </div>
+                                            <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-orders-month">
+                                                <div className="text-xs text-muted-foreground mb-1">طلبات الشهر</div>
+                                                <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{formatInt(snapSummary.month.orders)}</div>
+                                            </div>
+                                            <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-revenue-month">
+                                                <div className="text-xs text-muted-foreground mb-1">مبيعات الشهر (ر.س)</div>
+                                                <div className="num text-2xl font-extrabold text-emerald-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.revenue)}</div>
+                                            </div>
+                                            <div className={`border-2 rounded-lg p-4 ${snapSummary.month.roas >= 2 ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`} data-testid="snap-roas-month">
+                                                <div className="text-xs text-muted-foreground mb-1">ROAS الشهر</div>
+                                                <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: snapSummary.month.roas >= 2 ? "#047857" : "#B45309" }}>
+                                                    {snapSummary.month.spend > 0 ? `${snapSummary.month.roas}x` : "—"}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
 
                             {/* Tiny 30-day spend trend */}

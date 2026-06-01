@@ -20,6 +20,22 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## ✨ FEATURE (2026-06 — Iteration 18) — **Dashboard Snapchat card: per-account TODAY breakdown**
+
+**Merchant request**: "بدّل الصرف الشهري بكرت السناب لوحة التحكم إلى الصرف اليومي للسناب الثاني، مع تحديث إجمالي تكلفة الإعلانات بكرت لوحة التحكم بصرف جميع الحسابات الإعلانية."
+
+**Implemented**:
+- ✅ **Dashboard Snapchat card**: when 2+ Snapchat ad accounts are enabled, the "هذا الشهر" block is replaced by **"صرف اليوم — لكل حساب إعلاني"** with one cell per enabled account showing today's spend in SAR (and native currency if different). The header carries an account-count badge and an "Asia/Riyadh" timezone badge.
+- ✅ When only 0/1 account is enabled, the **original Monthly block is preserved** as a graceful fallback (single-account merchants see no UX regression).
+- ✅ **Total Ads Cost card** (`card-total_ads_cost` in `dashboardCards.js`) now correctly reflects ALL ad accounts — Snapchat (sum of every enabled account via `daily_costs.snapchat_ads` after iteration 17), TikTok (webhook + manual via iteration 16 fix), Meta. Verified live with seeded data: `total_ads_cost = 400.0` when Brand A=150 + Brand B=250.
+- ✅ **Visual verification**: screenshot @ 1280x900 with 2 seeded accounts shows the per-account cards rendering correctly, zero horizontal overflow.
+
+**New testids**: `snap-per-account-breakdown`, `snap-account-today-card-{ad_account_id}`.
+
+**Data flow**: Dashboard now polls `/api/snapchat/accounts-summary` (added in iteration 15) in parallel with the existing summary endpoints — no new backend code needed.
+
+---
+
 ## 🐛 BUG FIX (2026-06 — Iteration 17) — **Snapchat card dropping the 2nd account after legacy refresh**
 
 **Reported by merchant**: "بطاقة اعلانات السناب في لوحة التحكم تعرض تكلفة الإعلانات من حساب [user_id] فقط ... بالبداية كان يعرض بشكل صحيح التكلفة من الحسابين الإعلانيين ولكن بعد التحديث مرتين نقصه صرف الحساب الثاني."
