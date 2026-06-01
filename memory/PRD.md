@@ -20,6 +20,38 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## ✨ FEATURE (2026-06 — Iteration 19) — **Product Cost Management — احتساب الربح الحقيقي**
+
+**Merchant request**: نظام إدارة تكلفة المنتجات — صفحة `/product-costs`، حقل `cost_price` لكل SKU، استيراد Excel، الربط مع طلبات سلة (SKU أولاً ثم product_id)، تنبيه على Dashboard للمنتجات الناقصة، صافي الربح الحقيقي = المبيعات − تكلفة المنتجات − رسوم الدفع − الشحن − الإعلانات.
+
+**Backend** (`/app/backend/product_costs.py`):
+- ✅ `product_costs` collection (unique `(user_id, sku_normalized)` + `(user_id, product_id)` index).
+- ✅ CRUD endpoints `GET/POST/PUT/DELETE /api/product-costs/` with case-insensitive SKU dedup, soft-delete + auto-reactivation on re-create.
+- ✅ `POST /api/product-costs/import` — Excel uploader accepting Arabic OR English headers (SKU/اسم المنتج/التكلفة/المورد), upsert by SKU.
+- ✅ `GET /api/product-costs/missing` — aggregated SKUs without cost across recent orders.
+- ✅ `GET /api/product-costs/summary` — today/month/avg/top-10 profitable.
+- ✅ `POST /api/product-costs/recompute` — re-enriches existing orders after import.
+- ✅ `compute_order_cost(db, uid, products)` helper — SKU first, product_id fallback (per merchant requirement: SKU more stable in Salla).
+- ✅ Webhook ingestion enriched: every Salla order via `/api/webhook/make/{token}` gets `unified_orders.total_product_cost` + `cost_items[]` + `missing_product_cost_lines[]` automatically.
+- ✅ Dashboard `/api/dashboard` totals exposes `computed_product_cost`, `manual_product_cost`, `total_product_cost` (effective max), `missing_product_cost_count`. Net profit and net_sales (when `deduct_product_costs` is on) use `product_cost_effective`.
+
+**Frontend**:
+- ✅ New page `/product-costs` (`ProductCosts.jsx`) — search + add modal + edit + soft-delete + Excel import + recompute.
+- ✅ Tabs: "كل المنتجات" / "بدون تكلفة" (with count badge).
+- ✅ Summary grid: 4 cards (today/month/avg/count).
+- ✅ Sidebar nav "تكاليف المنتجات" (`nav-product-costs`).
+- ✅ Dashboard alert banner `dashboard-missing-product-costs-alert` shown when `missing_product_cost_count > 0`, linking to `/product-costs`.
+
+**Tests**:
+- ✅ `tests/test_product_costs.py` (6/6 pass): CRUD, soft-delete + reactivation, Excel import (Arabic/English headers), missing endpoint, summary, recompute.
+- ✅ `tests/test_product_costs_webhook.py` (2/2 pass, created by testing agent): webhook enrichment + SKU-first precedence over product_id.
+- ✅ Full regression suite: **34/34 pass**.
+- ✅ Frontend E2E flow verified by `testing_agent_v3_fork`: all add/edit/delete/import/tab-switch/recompute work; modal SKU input correctly disabled in edit mode; mobile-responsive @ 390.
+
+**Test report**: `/app/test_reports/iteration_19.json`.
+
+---
+
 ## ✨ FEATURE (2026-06 — Iteration 18) — **Dashboard Snapchat card: per-account TODAY breakdown**
 
 **Merchant request**: "بدّل الصرف الشهري بكرت السناب لوحة التحكم إلى الصرف اليومي للسناب الثاني، مع تحديث إجمالي تكلفة الإعلانات بكرت لوحة التحكم بصرف جميع الحسابات الإعلانية."
