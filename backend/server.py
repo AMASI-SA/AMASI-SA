@@ -1019,6 +1019,34 @@ async def dashboard(
             key = (ln.get("sku") or ln.get("product_id") or ln.get("name") or "").strip().upper()
             if key:
                 missing_cost_skus.add(key)
+    # ── Profit-status counts (iteration 24) ───────────────────────────────
+    # `profit_status` is set per-order by attach_cost_to_order_doc. It
+    # tells the dashboard whether the order's REAL profit can be trusted:
+    #   - complete                : every product matched a cost entry
+    #   - incomplete_missing_cost : ≥1 product has no cost (UI prompts add)
+    #   - incomplete_no_products  : no products[] (typically Excel orders)
+    incomplete_profit_orders_count = 0
+    no_products_orders_count = 0
+    excel_no_products_count = 0
+    for o in all_orders:
+        ps = (o.get("profit_status") or "").strip()
+        ds = (o.get("data_source") or "").strip().lower()
+        # Fallback: if profit_status was never written (legacy orders),
+        # infer it from products[] presence so the UI still works for
+        # pre-iteration-24 data without forcing a backfill.
+        if not ps:
+            if not (o.get("products") or []):
+                ps = "incomplete_no_products"
+            elif (o.get("missing_product_cost_lines") or []):
+                ps = "incomplete_missing_cost"
+            else:
+                ps = "complete"
+        if ps != "complete":
+            incomplete_profit_orders_count += 1
+        if ps == "incomplete_no_products":
+            no_products_orders_count += 1
+            if ds in ("excel", ""):
+                excel_no_products_count += 1
     product_cost_effective = max(computed_product_cost, daily_products_total)
     daily_totals = daily_ads_total + product_cost_effective
 
@@ -1158,6 +1186,10 @@ async def dashboard(
             "computed_product_cost": round(computed_product_cost, 2),
             "manual_product_cost": round(daily_products_total, 2),
             "missing_product_cost_count": len(missing_cost_skus),
+            # ── Iteration 24: profit-completeness flags ───────────────────
+            "incomplete_profit_orders_count": int(incomplete_profit_orders_count),
+            "no_products_orders_count": int(no_products_orders_count),
+            "excel_no_products_count": int(excel_no_products_count),
             "daily_expenses_total": round(daily_products_total, 2),
             "net_profit": round(net_profit_adjusted, 2),
             "total_vat": round(total_vat, 2),

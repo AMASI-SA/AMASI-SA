@@ -76,12 +76,15 @@ async def compute_order_cost(
     """Look up cost for every product line in an order.
 
     Returns:
-        total_cost   — sum of (cost_price * quantity) across matched lines, in SAR.
+        total_cost   — sum of (cost_price * quantity) across MATCHED lines, in SAR.
+                       Note: this is the PARTIAL sum — unmatched lines are
+                       NOT counted (per merchant rule: never assume 0 cost
+                       for a missing product, flag the order instead).
         items        — per-line breakdown:
                        [{sku, product_id, name, quantity, unit_cost,
                          line_cost, matched_by: 'sku'|'product_id'|None}]
         missing      — lines with no cost match:
-                       [{sku, product_id, name, quantity}]
+                       [{sku, product_id, name, quantity, image_url}]
     """
     total = 0.0
     items: list[dict] = []
@@ -113,6 +116,10 @@ async def compute_order_cost(
         sku = _norm_sku(p.get("sku"))
         pid = _norm_product_id(p.get("product_id") or p.get("id"))
         name = (p.get("name") or "").strip()
+        # Iteration 24: also pull the product's image_url from the
+        # webhook payload so the "missing products" UI can render a
+        # thumbnail for each unmatched product.
+        image_url = str(p.get("image_url") or p.get("image") or "").strip()
         cost_doc = None
         matched_by = None
         if sku and sku in by_sku:
@@ -143,24 +150,106 @@ async def compute_order_cost(
             missing.append({
                 "sku": sku or "", "product_id": pid or "",
                 "name": name, "quantity": qty,
+                "image_url": image_url,
             })
     return round(total, 2), items, missing
 
 
+def _classify_profit_status(products: list, missing: list) -> str:
+    """Iteration 24: classify an order's profit completeness.
+
+    Returns one of:
+      - "complete"               : has products[] AND all matched cost.
+      - "incomplete_missing_cost": has products[] but ≥1 line has no cost.
+      - "incomplete_no_products" : products[] is empty (typical Excel order
+                                   or Make.com payload missing the array).
+    """
+    if not products:
+        return "incomplete_no_products"
+    if missing:
+        return "incomplete_missing_cost"
+    return "complete"
+
+
 async def attach_cost_to_order_doc(db, user_id: str, order_doc: dict) -> dict:
-    """Enrich an order doc with `cost_items`, `total_product_cost`, and
-    `missing_product_cost_lines` (idempotent — safe to call on every
-    upsert). Returns a $set patch dict so the caller can merge it into
-    its update query.
+    """Enrich an order doc with `cost_items`, `total_product_cost`,
+    `missing_product_cost_lines`, and `profit_status` (iteration 24 —
+    idempotent — safe to call on every upsert). Returns a $set patch
+    dict so the caller can merge it into its update query.
+
+    `total_product_cost` is the PARTIAL sum of matched lines only — we
+    never assume 0 for a missing product. The merchant adds the cost
+    via the "Missing Products" UI, then `attach_cost_to_order_doc` is
+    re-run on all affected orders (see `_reprocess_orders_for_keys`).
     """
     products = order_doc.get("products") or []
     total, items, missing = await compute_order_cost(db, user_id, products)
+    status = _classify_profit_status(products, missing)
     return {
         "total_product_cost": total,
         "cost_items": items,
         "missing_product_cost_lines": missing,
+        "profit_status": status,
+        "products_total_lines": len(products),
+        "products_matched_lines": len(products) - len(missing),
         "cost_computed_at": _now_iso(),
     }
+
+
+async def _reprocess_orders_for_keys(
+    db, user_id: str, skus: set, pids: set,
+) -> int:
+    """Iteration 24: targeted re-run of `attach_cost_to_order_doc` for
+    every order that currently has at least one missing line matching
+    one of the supplied SKUs or product_ids. Used after the merchant
+    creates/updates a `product_costs` entry from the "Missing Products"
+    UI so prior orders flip from `incomplete_missing_cost` → `complete`
+    without waiting for a full bulk recompute.
+
+    Returns the number of orders re-enriched.
+    """
+    if not skus and not pids:
+        return 0
+    or_clauses: list[dict] = []
+    if skus:
+        # Both `missing_product_cost_lines.sku` AND `cost_items.sku` are
+        # stored already-normalised (upper-case) by compute_order_cost.
+        # We query BOTH because:
+        #   - "missing" matches orders currently unmatched (covers POST
+        #     /product-costs/ — merchant just added the cost).
+        #   - "cost_items" matches orders ALREADY matched (covers PUT
+        #     /product-costs/{id} — merchant edited the price).
+        sku_list = [s for s in skus if s]
+        if sku_list:
+            or_clauses.append(
+                {"missing_product_cost_lines.sku": {"$in": sku_list}}
+            )
+            or_clauses.append(
+                {"cost_items.sku": {"$in": sku_list}}
+            )
+    if pids:
+        pid_list = [p for p in pids if p]
+        if pid_list:
+            or_clauses.append(
+                {"missing_product_cost_lines.product_id": {"$in": pid_list}}
+            )
+            or_clauses.append(
+                {"cost_items.product_id": {"$in": pid_list}}
+            )
+    if not or_clauses:
+        return 0
+    affected = 0
+    async for o in db.unified_orders.find(
+        {"user_id": user_id, "$or": or_clauses},
+        {"_id": 0, "order_number": 1, "products": 1},
+    ):
+        patch = await attach_cost_to_order_doc(db, user_id, o)
+        await db.unified_orders.update_one(
+            {"user_id": user_id, "order_number": o["order_number"]},
+            {"$set": patch},
+        )
+        affected += 1
+    return affected
 
 
 # ── Pydantic models ────────────────────────────────────────────────────────
@@ -263,10 +352,20 @@ def _build_router(db, current_user_dep) -> APIRouter:
             doc = await db.product_costs.find_one(
                 {"user_id": uid, "sku_normalized": sku_norm}, {"_id": 0},
             )
+            # Iteration 24: any past orders that referenced this SKU/pid
+            # as a missing-cost line now have a price — re-link them.
+            doc["reprocessed_orders"] = await _reprocess_orders_for_keys(
+                db, uid, {sku_norm}, {_norm_product_id(payload.product_id)},
+            )
             return doc
         await db.product_costs.insert_one(doc)
         # Strip the BSON _id that pymongo silently added before returning.
         doc.pop("_id", None)
+        # Iteration 24: targeted reprocess so past orders flip from
+        # "incomplete_missing_cost" → "complete" immediately.
+        doc["reprocessed_orders"] = await _reprocess_orders_for_keys(
+            db, uid, {sku_norm}, {_norm_product_id(payload.product_id)},
+        )
         return doc
 
     @router.put("/{item_id}")
@@ -298,6 +397,14 @@ def _build_router(db, current_user_dep) -> APIRouter:
         doc = await db.product_costs.find_one(
             {"user_id": user["id"], "id": item_id}, {"_id": 0},
         )
+        # Iteration 24: targeted reprocess — only when fields that affect
+        # cost calculations changed (price / product_id / is_active).
+        if any(k in patch for k in ("cost_price", "product_id", "is_active")):
+            doc["reprocessed_orders"] = await _reprocess_orders_for_keys(
+                db, user["id"],
+                {_norm_sku(doc.get("sku"))},
+                {_norm_product_id(doc.get("product_id"))},
+            )
         return doc
 
     @router.delete("/{item_id}")
@@ -603,17 +710,26 @@ def _build_router(db, current_user_dep) -> APIRouter:
         user: dict = Depends(current_user_dep),
     ):
         """Aggregate every order line in the last `days` whose SKU/product_id
-        has NO matching active product_costs entry. Returns counts so the
-        merchant knows which products to add cost for first (top-occurring
-        first)."""
+        has NO matching active product_costs entry. Returns counts + image
+        + last-order info so the merchant can quickly add the missing
+        cost from the "Missing Products" UI (iteration 24).
+
+        Also returns a side-channel `excel_no_products_count` — the number
+        of orders that came in WITHOUT a `products[]` array at all (most
+        commonly Excel-imported orders). Those orders cannot be auto-cost
+        matched until the merchant edits them manually.
+        """
         uid = user["id"]
         cutoff = (datetime.now(timezone.utc).date() - timedelta(days=days)).isoformat()
         # Fetch recent orders' products + their missing-lines arrays.
         cursor = db.unified_orders.find(
             {"user_id": uid, "order_date": {"$gte": cutoff}},
-            {"_id": 0, "missing_product_cost_lines": 1, "products": 1, "order_number": 1},
+            {"_id": 0, "missing_product_cost_lines": 1, "products": 1,
+             "order_number": 1, "order_date": 1, "data_source": 1,
+             "profit_status": 1},
         )
         agg: dict[str, dict] = {}
+        excel_no_products = 0
         async for o in cursor:
             lines = o.get("missing_product_cost_lines")
             if lines is None:
@@ -622,6 +738,11 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     db, uid, o.get("products") or [],
                 )
                 lines = missing
+            # Track Excel-without-products orders (iteration 24).
+            if (o.get("profit_status") == "incomplete_no_products" or
+                    not o.get("products")):
+                if (o.get("data_source") or "").lower() in ("excel", ""):
+                    excel_no_products += 1
             for ln in (lines or []):
                 key = (_norm_sku(ln.get("sku")) or
                        _norm_product_id(ln.get("product_id")) or
@@ -632,13 +753,29 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     "sku": ln.get("sku") or "",
                     "product_id": ln.get("product_id") or "",
                     "name": ln.get("name") or "",
+                    "image_url": ln.get("image_url") or "",
                     "occurrences": 0,
                     "total_quantity": 0.0,
+                    "last_order_number": "",
+                    "last_order_date": "",
                 })
                 cur["occurrences"] += 1
                 cur["total_quantity"] += _to_float(ln.get("quantity"), 1.0)
+                # Track most recent order this missing line appeared in.
+                od = o.get("order_date") or ""
+                if od >= cur["last_order_date"]:
+                    cur["last_order_date"] = od
+                    cur["last_order_number"] = o.get("order_number") or ""
+                # Fill image_url lazily from any order line that has one.
+                if not cur["image_url"] and ln.get("image_url"):
+                    cur["image_url"] = ln["image_url"]
         rows = sorted(agg.values(), key=lambda r: r["occurrences"], reverse=True)
-        return {"items": rows, "count": len(rows), "window_days": days}
+        return {
+            "items": rows,
+            "count": len(rows),
+            "window_days": days,
+            "excel_no_products_count": excel_no_products,
+        }
 
     # ── Summary stats ────────────────────────────────────────────────────
     @router.get("/summary")

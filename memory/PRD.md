@@ -6,7 +6,44 @@
 ## Architecture
 - **Backend**: FastAPI + Motor (MongoDB async) — JWT auth (cookies + bearer), openpyxl Excel parsing, xlsxwriter Excel export, reportlab + arabic-reshaper for PDF export, httpx for Snapchat Marketing API.
 - **Frontend**: React 19 + React Router 7 + TailwindCSS + Shadcn/UI + Recharts + @phosphor-icons/react.
-- **Database**: MongoDB collections: `users`, `settings`, `daily_costs`, `analyses`, `snapchat_connections`, `snapchat_ad_accounts` (multi-account selection — iteration 15), `snapchat_account_daily` (per-account, per-day spend with native + SAR + FX rate — iteration 15), `meta_connections`, `meta_daily_stats`.
+- **Database**: MongoDB collections: `users`, `settings`, `daily_costs`, `analyses`, `snapchat_connections`, `snapchat_ad_accounts` (multi-account selection — iteration 15), `snapchat_account_daily` (per-account, per-day spend with native + SAR + FX rate — iteration 15), `meta_connections`, `meta_daily_stats`, `product_costs` (iteration 19 — supports `image_url` from iteration 23).
+- **`unified_orders` schema additions (iteration 24)**:
+  - `profit_status` ∈ {`complete`, `incomplete_missing_cost`, `incomplete_no_products`}
+  - `products_total_lines`, `products_matched_lines`
+  - `missing_product_cost_lines[]` now stores `image_url` per line.
+
+## ✨ ENHANCEMENT (2026-06 — Iteration 24) — **حالة الربح + إعادة الربط التلقائي + تنبيه طلبات Excel**
+
+**Merchant requirement** (Option C — Make.com كمصدر أساسي للمنتجات): لا تُحسب تكلفة المنتج المفقودة كـ 0، اجعل الطلب في حالة "ربح غير مكتمل" حتى تتم إضافة التكلفة، وأعد ربط الطلبات السابقة فور إضافة التكلفة، وأضف تنبيه واضح لطلبات Excel بدون products[].
+
+**Backend** (`product_costs.py` + `server.py`):
+- ✅ **`profit_status` على كل طلب** — `complete` (كل المنتجات مطابقة) / `incomplete_missing_cost` (≥1 منتج بدون تكلفة) / `incomplete_no_products` (لا توجد قائمة products، عادةً Excel).
+- ✅ **`products_total_lines` + `products_matched_lines`** عدّادات على مستوى الطلب.
+- ✅ **التكلفة المفقودة لا تُفترض = 0** — `total_product_cost` يحوي المجموع **الجزئي** (المطابق فقط) وعدّاد الطلبات غير المكتملة الربح يُعرض في Dashboard كي يعرف التاجر أن الربح المعروض تقريبي.
+- ✅ **Auto-reprocess targeted** — بعد POST/PUT على `product_costs/`، يبحث النظام عن كل الطلبات التي تحوي ذلك SKU/product_id (سواء في `missing_product_cost_lines` أو `cost_items`) ويعيد حساب التكلفة + يحدّث `profit_status` تلقائياً. الـ response يحوي `reprocessed_orders` count.
+- ✅ **`missing_product_cost_lines` يحوي `image_url`** الآن — مأخوذة من webhook payload الأصلي.
+- ✅ **`/api/product-costs/missing` المحسّن** — يرجع: `image_url`, `product_id`, `last_order_number`, `last_order_date`, `occurrences`, إضافةً إلى `excel_no_products_count` (عدد طلبات Excel بدون products[]).
+- ✅ **Dashboard** يرجع 3 عدّادات جديدة: `incomplete_profit_orders_count`, `no_products_orders_count`, `excel_no_products_count`.
+
+**Frontend** (`Dashboard.jsx` + `ProductCosts.jsx`):
+- ✅ **تنبيه Dashboard جديد (برتقالي)** — "X طلب من Excel بدون تفاصيل منتجات — تكلفة المنتجات غير محسوبة، يُنصح بربط Make.com".
+- ✅ **التنبيه الأصفر القديم** يفتح الآن `/product-costs?tab=missing` بدل صفحة الكاتالوج.
+- ✅ **تاب "بدون تكلفة" المحسّن** — جدول جديد بأعمدة: الصورة (thumbnail) / اسم المنتج / SKU / Product&nbsp;ID / عدد الطلبات / آخر طلب (رقم + تاريخ) / زر "إضافة تكلفة".
+- ✅ **زر "إضافة تكلفة"** يفتح المودال مُعبَّأ مسبقاً بـ SKU + product_id + name + image_url.
+- ✅ **بعد الحفظ** يظهر toast: "تمت إضافة المنتج • أُعيد ربط N طلب سابق" (يظهر فقط حين N>0).
+- ✅ **Deep-link** `?tab=missing` يفتح التاب الصحيح مباشرة.
+
+**Tests** (`test_profit_status_iteration24.py`): 9/9 جديدة + 58/58 regression = **67/67 PASS**. التغطية:
+- 3 حالات `profit_status` كاملة (complete / incomplete_missing_cost / incomplete_no_products).
+- partial match (1 من 2) يحفظ حالة incomplete + المجموع الجزئي صحيح.
+- POST cost → إعادة ربط الطلبات + الـ status يتحول تلقائياً إلى complete.
+- PUT cost_price → إعادة الحساب لكل الطلبات المطابقة.
+- `/missing` يرجع image_url + last_order + excel_no_products_count.
+- Dashboard يكشف 3 عدّادات iteration-24 الجديدة.
+
+---
+
+## ✨ ENHANCEMENT (2026-06 — Iteration 23) — **صورة المنتج من العمود F**
 
 ## User Personas
 1. **تاجر إلكتروني** يدير متجر على منصة سلة ويحتاج لتحليل الأرباح الحقيقية.

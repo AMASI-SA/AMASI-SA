@@ -59,12 +59,20 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
                 cost_price: Number(form.cost_price),
                 currency: form.currency || "SAR",
             };
+            let resp;
             if (isEdit) {
-                await api.put(`/product-costs/${initial.id}`, payload);
-                toast.success("تم تحديث المنتج");
+                resp = await api.put(`/product-costs/${initial.id}`, payload);
             } else {
-                await api.post("/product-costs/", payload);
-                toast.success("تمت إضافة المنتج");
+                resp = await api.post("/product-costs/", payload);
+            }
+            // Iteration 24: surface how many past orders were re-linked
+            // and flipped from "incomplete_missing_cost" → "complete".
+            const reprocessed = resp?.data?.reprocessed_orders;
+            const baseMsg = isEdit ? "تم تحديث المنتج" : "تمت إضافة المنتج";
+            if (reprocessed && reprocessed > 0) {
+                toast.success(`${baseMsg} • أُعيد ربط ${reprocessed} طلب سابق`, { duration: 6000 });
+            } else {
+                toast.success(baseMsg);
             }
             onSaved();
             onClose();
@@ -435,13 +443,26 @@ function MissingTab({ missing, onQuickAdd, loading }) {
             جاري التحميل…
         </div>
     );
+    const excelNoProducts = (missing && missing.excel_no_products_count) || 0;
     if (!missing || missing.count === 0) return (
-        <div className="rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-8 text-center" data-testid="missing-empty-state">
-            <CheckCircle size={48} weight="duotone" className="text-emerald-600 mx-auto mb-3" />
-            <h3 className="text-lg font-bold mb-1 text-emerald-900">كل المنتجات لها تكلفة ✓</h3>
-            <p className="text-sm text-emerald-800/80">
-                لا توجد منتجات بدون تكلفة في آخر 60 يوم.
-            </p>
+        <div className="space-y-3">
+            {excelNoProducts > 0 && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 flex items-start gap-2"
+                     data-testid="missing-excel-no-products-banner">
+                    <Warning size={18} weight="fill" className="text-orange-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <strong>{excelNoProducts} طلب من Excel بدون تفاصيل منتجات</strong>
+                        <span className="opacity-80"> — هذه الطلبات لا تحتوي قائمة products[] لذا لا يمكن حساب تكلفة منتجاتها تلقائياً. استخدم Make.com كمصدر أساسي لأنه يرسل تفاصيل المنتجات.</span>
+                    </div>
+                </div>
+            )}
+            <div className="rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-8 text-center" data-testid="missing-empty-state">
+                <CheckCircle size={48} weight="duotone" className="text-emerald-600 mx-auto mb-3" />
+                <h3 className="text-lg font-bold mb-1 text-emerald-900">كل المنتجات لها تكلفة ✓</h3>
+                <p className="text-sm text-emerald-800/80">
+                    لا توجد منتجات بدون تكلفة في آخر {missing?.window_days || 60} يوم.
+                </p>
+            </div>
         </div>
     );
     return (
@@ -450,27 +471,61 @@ function MissingTab({ missing, onQuickAdd, loading }) {
                 <Warning size={18} weight="fill" className="text-amber-600 flex-shrink-0 mt-0.5" />
                 <div>
                     <strong>{missing.count} منتج بدون تكلفة</strong> في الطلبات الأخيرة (آخر {missing.window_days} يوم).
-                    صافي الربح لن يكون دقيقاً حتى تُحدِّد تكلفة هذه المنتجات.
+                    الطلبات التي تحتوي هذه المنتجات في حالة "ربح غير مكتمل" حتى تُحدِّد تكلفتها.
                 </div>
             </div>
+            {excelNoProducts > 0 && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 flex items-start gap-2"
+                     data-testid="missing-excel-no-products-banner">
+                    <Warning size={18} weight="fill" className="text-orange-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <strong>{excelNoProducts} طلب من Excel بدون تفاصيل منتجات</strong>
+                        <span className="opacity-80"> — هذه الطلبات لا تحتوي قائمة products[] لذا تكلفة منتجاتها غير محسوبة. ينصح باستخدام Make.com لأنه يرسل تفاصيل المنتجات منظَّمة.</span>
+                    </div>
+                </div>
+            )}
             <div className="overflow-x-auto rounded-xl border border-border bg-white">
                 <table className="w-full text-sm" data-testid="missing-table">
                     <thead className="bg-accent/40 text-xs">
                         <tr>
+                            <th className="px-3 py-2 text-center font-bold w-14">الصورة</th>
                             <th className="px-3 py-2 text-start font-bold">اسم المنتج</th>
                             <th className="px-3 py-2 text-start font-bold" dir="ltr">SKU</th>
+                            <th className="px-3 py-2 text-start font-bold" dir="ltr">Product&nbsp;ID</th>
                             <th className="px-3 py-2 text-end font-bold">عدد الطلبات</th>
-                            <th className="px-3 py-2 text-end font-bold">إجمالي الكمية</th>
+                            <th className="px-3 py-2 text-start font-bold">آخر طلب</th>
                             <th className="px-3 py-2 text-center font-bold w-32">إجراء</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                         {missing.items.map((m, i) => (
                             <tr key={i} className="hover:bg-accent/20" data-testid={`missing-row-${m.sku || m.product_id || i}`}>
+                                <td className="px-2 py-2">
+                                    <div className="w-10 h-10 rounded-md border border-border bg-accent/30 overflow-hidden mx-auto flex items-center justify-center">
+                                        {m.image_url ? (
+                                            <img
+                                                src={m.image_url}
+                                                alt={m.name || "product"}
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                            />
+                                        ) : (
+                                            <Package size={14} className="text-muted-foreground/60" />
+                                        )}
+                                    </div>
+                                </td>
                                 <td className="px-3 py-3 font-semibold">{m.name || "(بدون اسم)"}</td>
                                 <td className="px-3 py-3 text-xs tabular-nums" dir="ltr">{m.sku || "—"}</td>
+                                <td className="px-3 py-3 text-xs tabular-nums" dir="ltr">{m.product_id || "—"}</td>
                                 <td className="px-3 py-3 text-end tabular-nums font-bold">{m.occurrences}</td>
-                                <td className="px-3 py-3 text-end tabular-nums">{Number(m.total_quantity).toFixed(0)}</td>
+                                <td className="px-3 py-3 text-xs">
+                                    {m.last_order_number ? (
+                                        <div className="leading-tight">
+                                            <div className="font-bold" dir="ltr">#{m.last_order_number}</div>
+                                            <div className="text-muted-foreground">{m.last_order_date}</div>
+                                        </div>
+                                    ) : "—"}
+                                </td>
                                 <td className="px-3 py-3 text-center">
                                     <button
                                         onClick={() => onQuickAdd(m)}
@@ -490,7 +545,13 @@ function MissingTab({ missing, onQuickAdd, loading }) {
 }
 
 export default function ProductCosts() {
-    const [tab, setTab] = useState("catalogue"); // catalogue | missing
+    // Iteration 24: honour ?tab=missing query string so the Dashboard
+    // alert can deep-link directly to the missing-products tab.
+    const initialTab = (typeof window !== "undefined"
+        && new URLSearchParams(window.location.search).get("tab") === "missing")
+        ? "missing"
+        : "catalogue";
+    const [tab, setTab] = useState(initialTab);
     const [items, setItems] = useState([]);
     const [total, setTotal] = useState(0);
     const [search, setSearch] = useState("");
@@ -723,6 +784,7 @@ export default function ProductCosts() {
                         product_name: m.name || "",
                         cost_price: "",
                         currency: "SAR",
+                        image_url: m.image_url || "",
                     })}
                 />
             )}

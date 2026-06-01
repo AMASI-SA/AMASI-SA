@@ -442,7 +442,7 @@ export default function Dashboard() {
                         so the merchant knows real profit may be off. */}
                     {totals.missing_product_cost_count > 0 && (
                         <Link
-                            to="/product-costs"
+                            to="/product-costs?tab=missing"
                             className="block rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-sm hover:bg-amber-100 transition-colors"
                             data-testid="dashboard-missing-product-costs-alert"
                         >
@@ -453,6 +453,23 @@ export default function Dashboard() {
                                 <span className="ms-auto text-xs font-bold text-amber-800 underline">إدارة التكاليف ←</span>
                             </div>
                         </Link>
+                    )}
+                    {/* Iteration 24: Excel-without-products alert. Orders
+                        coming from Excel uploads (no products[] array)
+                        cannot have their product cost auto-computed. */}
+                    {totals.excel_no_products_count > 0 && (
+                        <div
+                            className="rounded-xl border-2 border-orange-300 bg-orange-50 p-3 text-sm text-orange-900"
+                            data-testid="dashboard-excel-no-products-alert"
+                        >
+                            <div className="flex items-start gap-2 flex-wrap">
+                                <span className="text-base">📦</span>
+                                <div className="flex-1">
+                                    <strong>{totals.excel_no_products_count} طلب من Excel بدون تفاصيل منتجات</strong>
+                                    <span className="text-orange-800/80"> — تكلفة المنتجات لهذه الطلبات غير محسوبة (ربح غير مكتمل). يُنصح بربط Make.com لاستلام الطلبات مع تفاصيل المنتجات تلقائياً.</span>
+                                </div>
+                            </div>
+                        </div>
                     )}
                     {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
