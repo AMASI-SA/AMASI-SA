@@ -12,6 +12,39 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ROOT-CAUSE FIX (2026-06 — Iteration 31) — **data_source precedence: Make > Excel (يحلّ المشكلة المتكررة)**
+
+**Merchant report (متكررة)**: "عند رفع ملف اكسل بالطلبات الجديده يتوقف النظام عن احتساب طلبات make بكل مره ولازم اكلمك عشان تضبطه من جديد".
+
+**Root cause** (في `orders_db.py` السطر 142):
+```python
+merged["data_source"] = source  # ← آخر كاتب يفوز دائماً
+```
+- طلب يصل من Make → `data_source = "make"` ✓
+- نفس الطلب يأتي لاحقاً في رفع Excel → `data_source = "excel"` ❌
+- بعد كل رفع Excel، كل الطلبات التي أصلها Make تتحول صامتةً إلى `data_source = "excel"` → Dashboard counters: `orders_make_count` ينهار إلى ~0 → "النظام يتوقف عن احتساب طلبات make".
+
+**Fix in `orders_db.py`**:
+- ✅ **Make هي الـ AUTHORITATIVE source** (أغنى — تحوي `products[]`، webhook fresh).
+- ✅ بمجرد وجود أي كتابة من Make في تاريخ الطلب، `data_source` يبقى `"make"` للأبد، بغض النظر عن إعادة استيراد Excel.
+- ✅ `data_sources[]` (التاريخ الكامل) لا يزال يسجّل كل كتابة Excel للـ audit.
+- ✅ تدفّق Excel-first ثم Make → promote إلى `"make"` تلقائياً (لأن Make أغنى).
+- ✅ تدفّق Excel-only يبقى `"excel"` (لا false promotions).
+
+**Self-heal للطلبات السابقة (في `server.py`)**: عند فتح Dashboard، الطلبات التي data_source = "excel" لكن history فيها Make write يتم **promote تلقائياً** إلى "make" + يُحفظ التعديل في DB. هذا يصلح الطلبات القديمة المتضرّرة دون migration script.
+
+**Tests** (`test_data_source_precedence_iteration31.py`): 6 جديدة + 50 regression = **56/56 PASS** للمسارات المتأثرة. تغطّي:
+1. Make → Excel: `data_source` يبقى "make" ✅
+2. Excel → Make: يُرفع تلقائياً إلى "make" ✅
+3. Excel-only: يبقى "excel" ✅
+4. Dashboard يصلح طلبات قديمة متضرّرة تلقائياً ✅
+5. Dashboard لا يرفع طلبات Excel-only ✅
+6. End-to-end: `orders_make_count` لا ينقص بعد إعادة استيراد Excel ✅
+
+**أثر النشر**: بعد Re-deploy، **رفع أي ملف Excel جديد لن يكسر طلبات Make مرة أخرى**. الطلبات القديمة التي تضرّرت من البق ستصلَّح تلقائياً عند أول فتح للـ Dashboard.
+
+---
+
 ## 🎯 ROOT-CAUSE FIX (2026-06 — Iteration 30) — **Payment-gateway synonym matching (cross-language)**
 
 **Merchant report**: "بطاقة رسوم بوابة الدفع عدا تابي وتمارا وامكان في لوحة التحكم تظهر القيمة صفر — لا يتم احتساب الرسوم وخصمها من بطاقة صافي المدفوعات الإلكترونية".

@@ -138,8 +138,23 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
     data_sources = list(merged.get("data_sources") or [])
     data_sources.append({"source": source, "at": now})
     merged["data_sources"] = data_sources[-20:]  # cap history
-    # Primary data_source = last writer
-    merged["data_source"] = source
+    # Iteration 31 — data_source precedence: make > excel.
+    # Make is the AUTHORITATIVE source because:
+    #   • it carries the full products[] array (Excel exports usually don't)
+    #   • it is real-time webhook (vs. Excel which is periodic)
+    # Once an order has any Make write, the unified `data_source` stays
+    # 'make' forever, regardless of subsequent Excel re-imports. This
+    # prevents the Dashboard's source-bucket counters (orders_make_count,
+    # make_orders_count, source filters) from "losing" Make orders every
+    # time the merchant uploads an Excel snapshot of the same period.
+    # `data_sources[]` (history) still records the Excel write for audit.
+    existing_ds = (existing or {}).get("data_source")
+    has_make = (
+        existing_ds == "make"
+        or source == "make"
+        or any((s or {}).get("source") == "make" for s in data_sources)
+    )
+    merged["data_source"] = "make" if has_make else source
     return merged
 
 

@@ -823,6 +823,29 @@ async def dashboard(
         orders_q, {"_id": 0, "raw_by_source": 0}
     ).to_list(100000)
 
+    # Iteration 31: data_source self-heal. Past orders whose data_source
+    # was demoted to "excel" by Excel re-imports (pre-iteration-31 bug)
+    # are re-promoted to "make" whenever their data_sources[] history
+    # contains any Make write. This corrects historical bucketing
+    # WITHOUT requiring a manual recompute or migration script.
+    ds_promoted = 0
+    for o in all_orders:
+        if o.get("data_source") == "excel":
+            history = o.get("data_sources") or []
+            if any((s or {}).get("source") == "make" for s in history):
+                o["data_source"] = "make"
+                ds_promoted += 1
+                # Persist for next request so we don't repeat the work.
+                try:
+                    await db.unified_orders.update_one(
+                        {"user_id": user["id"], "order_number": o["order_number"]},
+                        {"$set": {"data_source": "make"}},
+                    )
+                except Exception:
+                    pass  # never fail dashboard on heal
+    if ds_promoted:
+        logger.info("Dashboard: promoted %d orders excel→make", ds_promoted)
+
     # Iteration 27: lazy self-heal. Any order in the filtered range
     # whose `total_product_cost` is still null/missing → re-run
     # attach_cost_to_order_doc. This guarantees the Dashboard always
