@@ -6,7 +6,7 @@
 ## Architecture
 - **Backend**: FastAPI + Motor (MongoDB async) — JWT auth (cookies + bearer), openpyxl Excel parsing, xlsxwriter Excel export, reportlab + arabic-reshaper for PDF export, httpx for Snapchat Marketing API.
 - **Frontend**: React 19 + React Router 7 + TailwindCSS + Shadcn/UI + Recharts + @phosphor-icons/react.
-- **Database**: MongoDB collections: `users`, `settings`, `daily_costs`, `analyses`, `snapchat_connections`.
+- **Database**: MongoDB collections: `users`, `settings`, `daily_costs`, `analyses`, `snapchat_connections`, `snapchat_ad_accounts` (multi-account selection — iteration 15), `snapchat_account_daily` (per-account, per-day spend with native + SAR + FX rate — iteration 15), `meta_connections`, `meta_daily_stats`.
 
 ## User Personas
 1. **تاجر إلكتروني** يدير متجر على منصة سلة ويحتاج لتحليل الأرباح الحقيقية.
@@ -19,6 +19,31 @@
 - إضافة التكاليف اليومية (إعلانات سناب/تيك توك/إنستقرام + منتجات).
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
+
+## ✅ COMPLETED & VERIFIED (2026-06 — Iteration 15) — **Snapchat Multi-Account Expansion**
+**Status**: 🟢 Production-ready. Tested end-to-end by `testing_agent_v3_fork`.
+
+**Acceptance — 100% PASS (7/7 new + 62/62 regression):**
+- ✅ **Multi-account selection**: `GET/PUT /api/snapchat/selected-accounts` — merchant can enable/disable any number of Snapchat ad accounts simultaneously via checkbox UI in Settings. Removing an account marks it `enabled=False` (not deleted) so re-enabling preserves sync history.
+- ✅ **DB schema**: new `snapchat_ad_accounts` collection (unique `(user_id, ad_account_id)`) and `snapchat_account_daily` collection (unique `(user_id, ad_account_id, date)` + secondary `(user_id, date)` index). Indexes registered in `server.py` startup.
+- ✅ **Asia/Riyadh enforcement**: all daily-spend windows = `00:00 → 23:59 Asia/Riyadh` (HOUR granularity to bypass Snap's DAY-PDT constraint). PDT is NEVER used for storage or display.
+- ✅ **Currency tracking**: each `snapchat_account_daily` row stores `spend_native` + `currency_native` + `fx_rate` + `spend_sar` (alongside legacy `spend` alias). USD→SAR conversion uses SAMA peg 3.75. Per-account UI shows BOTH native and SAR side-by-side.
+- ✅ **Dashboard card aggregation**: `POST /api/snapchat/sync-all-accounts` iterates over all enabled accounts and (1) writes per-(account,date) rows, (2) aggregates the cross-account sum back into legacy `daily_costs.snapchat_ads` so the existing dashboard card auto-updates without any other code change.
+- ✅ **New detail page `/snapchat-accounts`**: per-account cards with today / month / 30d spend in native+SAR+FX-rate, last-sync badge, "مزامنة كل الحسابات" button. Cross-account totals card on top. Empty-state with CTA to settings.
+- ✅ **Sidebar nav**: new "حسابات Snapchat" link (`nav-snapchat-accounts` testid).
+- ✅ **OAuth untouched**: existing connect/disconnect/`/snapchat/config`/`/select-adaccount` (back-compat) all still pass.
+- ✅ **Friendly Arabic errors**: `sync-all-accounts` without OAuth → "حساب سناب غير مربوط. اربطه من الإعدادات." (no JSON / OAuthException leak).
+- ✅ **Mobile responsive**: zero horizontal page scroll at 390x844 on `/settings` and `/snapchat-accounts`.
+
+**New endpoints**:
+- `GET /api/snapchat/selected-accounts` — list enabled accounts.
+- `PUT /api/snapchat/selected-accounts` — replace the enabled set.
+- `POST /api/snapchat/sync-all-accounts` — sync all enabled, write per-account daily rows + aggregate to `daily_costs`.
+- `GET /api/snapchat/accounts-summary` — per-account today/month/30d spend (native + SAR + FX).
+
+**Test report**: `/app/test_reports/iteration_15.json`. Pytest suite: `/app/backend/tests/test_snapchat_multi_account.py` (7 tests).
+
+---
 
 ## ✅ COMPLETED & VERIFIED (2026-06 — Iteration 14) — **خيار A: Meta Token Exchange**
 **Status**: 🟢 Production-ready. Tested end-to-end by `testing_agent_v3_fork`. Awaiting merchant green-light before starting **خيار B (Full OAuth flow)**.
