@@ -20,6 +20,12 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## Implemented (2026-06 — Meta Token Exchange E2E verification — Iteration 14)
+- ✅ **testing_agent_v3_fork ran full E2E**: 13/13 backend tests pass (6 new in `test_meta_token_exchange.py` + 7 in `test_meta_friendly_errors.py`) + 6/6 iteration-13 regression. Frontend Playwright @ 390x844 AND 1280x800: zero horizontal overflow, all testids present, exchange button correctly disabled-when-empty, toast always friendly Arabic (no raw OAuthException / English / `{"detail":` leaks).
+- ✅ **All acceptance criteria PASS**: empty/short token → friendly Arabic, missing creds → friendly Arabic, bad ad_account_id → friendly Arabic, fake creds → classified Meta error in Arabic, `token_expires_at` + `token_exchanged_at` exposed on `/meta/config`, SecretField masking works on `meta-access-token`, `meta-test-connection-btn` still functional, `meta-token-expiry-info` renders only when token_expires_at exists.
+- ✅ **New regression test file**: `/app/backend/tests/test_meta_token_exchange.py` (6 tests). Report: `/app/test_reports/iteration_14.json`.
+- 📝 **Doc note for next iteration**: SecretField testids are `{prefix}-input-masked` (hidden) and `{prefix}-textarea` (revealed) — NOT `{prefix}-input`. Update wiki/specs accordingly.
+
 ## Implemented (2026-05 — Meta Token Exchange: Short-lived → Long-lived auto-conversion)
 - 💡 **Merchant request**: Avoid having to re-paste a fresh 60-day Long-lived token every 2 months. Allow the merchant to paste any Short-lived token (1-2 hour, easier to obtain from Graph API Explorer) and have us convert it automatically.
 - ✅ **Backend**:
