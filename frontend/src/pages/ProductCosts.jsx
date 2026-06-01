@@ -325,9 +325,15 @@ function CatalogueTab({ items, total, search, setSearch, onEdit, onDelete, loadi
                         </thead>
                         <tbody className="divide-y divide-border">
                             {items.map((it) => (
-                                <tr key={it.id} className="hover:bg-accent/20" data-testid={`catalogue-row-${it.sku}`}>
+                                <tr key={it.id} className="hover:bg-accent/20" data-testid={`catalogue-row-${it.sku || it.product_id || it.id}`}>
                                     <td className="px-3 py-3 font-semibold">{it.product_name}</td>
-                                    <td className="px-3 py-3 text-xs tabular-nums" dir="ltr">{it.sku}</td>
+                                    <td className="px-3 py-3 text-xs tabular-nums" dir="ltr">
+                                        {it.sku || (
+                                            <span className="text-muted-foreground italic">
+                                                — <span className="text-[10px]">(رقم المنتج: {it.product_id || "?"})</span>
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="px-3 py-3 text-xs text-muted-foreground">{it.supplier_name || "—"}</td>
                                     <td className="px-3 py-3 text-end font-bold tabular-nums">
                                         {fmtMoney(it.cost_price)} <span className="text-xs text-muted-foreground">{it.currency || "SAR"}</span>
@@ -338,7 +344,7 @@ function CatalogueTab({ items, total, search, setSearch, onEdit, onDelete, loadi
                                                 onClick={() => onEdit(it)}
                                                 className="p-1.5 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors"
                                                 title="تعديل"
-                                                data-testid={`catalogue-edit-btn-${it.sku}`}
+                                                data-testid={`catalogue-edit-btn-${it.sku || it.product_id || it.id}`}
                                             >
                                                 <PencilSimple size={16} />
                                             </button>
@@ -346,7 +352,7 @@ function CatalogueTab({ items, total, search, setSearch, onEdit, onDelete, loadi
                                                 onClick={() => onDelete(it)}
                                                 className="p-1.5 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
                                                 title="حذف"
-                                                data-testid={`catalogue-delete-btn-${it.sku}`}
+                                                data-testid={`catalogue-delete-btn-${it.sku || it.product_id || it.id}`}
                                             >
                                                 <Trash size={16} />
                                             </button>
@@ -498,7 +504,7 @@ export default function ProductCosts() {
     };
 
     const onDelete = async (it) => {
-        if (!window.confirm(`حذف تكلفة المنتج "${it.product_name}" (${it.sku})؟`)) return;
+        if (!window.confirm(`حذف "${it.product_name}" (${it.sku || it.product_id || it.id})؟`)) return;
         try {
             await api.delete(`/product-costs/${it.id}`);
             toast.success("تم الحذف");
@@ -691,14 +697,15 @@ export default function ProductCosts() {
                         </div>
                         <div className="p-6 space-y-4 text-sm">
                             <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-blue-900 leading-relaxed">
-                                <strong>الأعمدة المُستوردة فقط:</strong>
+                                <strong>الأعمدة المُستخدَمة في الحساب:</strong>
                                 <ul className="list-disc list-inside mt-1 space-y-0.5">
-                                    <li><strong>SKU</strong> (كود المنتج / Reference / Product Code…)</li>
-                                    <li><strong>اسم المنتج</strong></li>
-                                    <li><strong>التكلفة</strong> (Cost / سعر التكلفة / الكلفة…)</li>
+                                    <li><strong>SKU</strong> <span className="text-xs opacity-80">(SKU / كود المنتج / Reference / Product Code…)</span></li>
+                                    <li><strong>رقم المنتج</strong> <span className="text-xs opacity-80">(رقم المنتج / Product ID / id) — يُستخدم بديلاً إذا لم يوجد SKU</span></li>
+                                    <li><strong>التكلفة</strong> <span className="text-xs opacity-80">(Cost / تكلفة المنتج / سعر التكلفة / الكلفة…)</span></li>
+                                    <li><strong>اسم المنتج</strong> <span className="text-xs opacity-80">(اختياري — لو غير موجود، يُستخدم SKU/رقم المنتج كاسم مؤقت)</span></li>
                                 </ul>
                                 <div className="mt-2 text-xs text-blue-800/80">
-                                    💡 كل الأعمدة الأخرى تُحفظ تلقائياً في حقل <code>meta</code> للاستخدام المستقبلي ولا تؤثر على احتساب الربح.
+                                    💡 يكفي وجود <strong>التكلفة + (SKU أو رقم المنتج)</strong>. كل الأعمدة الأخرى تُحفظ تلقائياً في حقل <code>meta</code> للاستخدام المستقبلي ولا تؤثر على احتساب الربح.
                                 </div>
                             </div>
 

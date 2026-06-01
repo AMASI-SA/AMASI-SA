@@ -316,9 +316,11 @@ def _build_router(db, current_user_dep) -> APIRouter:
     #   • Supplier (name/country/notes) is EXCLUSIVELY managed inside the
     #     UI (Add/Edit modal) — NOT imported, NOT inferred from Excel.
     HEADER_ALIASES = {
-        # SKU — every variant Salla / Zid / WooCommerce / Shopify might export.
+        # SKU — explicit SKU/Reference/Product Code. Note: "رقم المنتج" is
+        # ambiguous in Arabic — Salla uses it for the numeric product_id,
+        # NOT for the SKU. So it lives under product_id below (iteration 22).
         "sku": {
-            "sku", "كود المنتج", "كود", "الرمز", "رقم المنتج",
+            "sku", "كود المنتج", "كود", "الرمز",
             "reference", "product code", "code", "product_code",
             "item code", "item_code", "barcode-sku", "merchant_sku",
         },
@@ -331,11 +333,17 @@ def _build_router(db, current_user_dep) -> APIRouter:
         "cost_price": {
             "cost", "cost_price", "purchase_price", "purchase price",
             "buy price", "buy_price", "price_cost",
-            "التكلفة", "تكلفة الشراء", "سعر التكلفة", "سعر الشراء",
+            "التكلفة", "تكلفة الشراء", "تكلفة المنتج",
+            "سعر التكلفة", "سعر الشراء",
             "الكلفة", "كلفة المنتج",
         },
-        # product_id (Salla-specific, very rare)
-        "product_id": {"product_id", "id", "معرف المنتج"},
+        # product_id (Salla's internal numeric ID — every common alias).
+        # When the merchant's Salla export omits SKU, this becomes the
+        # primary identifier (iteration 22 — falls back gracefully).
+        "product_id": {
+            "product_id", "id", "معرف المنتج",
+            "رقم المنتج", "product id", "product-id",
+        },
         # currency (rarely present, defaults SAR)
         "currency": {"currency", "العملة"},
     }
@@ -393,11 +401,15 @@ def _build_router(db, current_user_dep) -> APIRouter:
         idx_cost = _find_col(headers_raw, "cost_price")
         idx_product_id = _find_col(headers_raw, "product_id")
         idx_currency = _find_col(headers_raw, "currency")
-        if idx_sku is None or idx_name is None or idx_cost is None:
+        # Iteration 22: accept files where SKU is missing if product_id IS
+        # present. (Salla exports often have only `رقم المنتج` + `تكلفة المنتج`
+        # when the merchant didn't fill SKUs.) name is also optional —
+        # we substitute the identifier as a placeholder name.
+        if idx_cost is None or (idx_sku is None and idx_product_id is None):
             raise HTTPException(
                 status_code=400,
-                detail="الأعمدة المطلوبة: SKU، اسم المنتج، التكلفة. "
-                       "(باقي الأعمدة تُحفظ تلقائياً للمستقبل ولا تُستخدم في الحسابات)",
+                detail="الأعمدة المطلوبة: التكلفة + (SKU أو رقم المنتج). "
+                       "اسم المنتج اختياري. باقي الأعمدة تُحفظ في meta.",
             )
 
         # Compute meta-column indices (every header that's NOT one of our
@@ -415,20 +427,30 @@ def _build_router(db, current_user_dep) -> APIRouter:
         errors: list[dict] = []
         for row_num, r in enumerate(rows[1:], start=2):
             try:
-                sku = str(r[idx_sku] or "").strip() if idx_sku < len(r) else ""
-                if not sku:
+                sku = (str(r[idx_sku] or "").strip()
+                       if (idx_sku is not None and idx_sku < len(r)) else "")
+                product_id = (str(r[idx_product_id] or "").strip()
+                              if (idx_product_id is not None and idx_product_id < len(r))
+                              else "")
+                # Iteration 22: require ONE of sku OR product_id per row.
+                if not sku and not product_id:
                     continue
-                name = str(r[idx_name] or "").strip() if idx_name < len(r) else ""
+                # If SKU is missing, USE product_id as the unique key so
+                # the catalogue stays uniquely-indexed. The actual
+                # `product_id` field is also populated so the order-cost
+                # lookup matches incoming Salla orders by product_id.
+                effective_sku = sku or product_id
+                name = (str(r[idx_name] or "").strip()
+                        if (idx_name is not None and idx_name < len(r)) else "")
                 if not name:
-                    errors.append({"row": row_num, "error": "اسم المنتج فارغ"})
-                    continue
+                    # No name in the file → use the identifier as a
+                    # placeholder so the merchant sees SOMETHING in the
+                    # catalogue (they can edit it later in the UI).
+                    name = effective_sku
                 cost = _to_float(r[idx_cost]) if idx_cost < len(r) else 0.0
                 if cost < 0:
                     errors.append({"row": row_num, "error": "التكلفة سالبة"})
                     continue
-                product_id = (str(r[idx_product_id] or "").strip()
-                              if (idx_product_id is not None and idx_product_id < len(r))
-                              else "")
                 currency = ((str(r[idx_currency] or "SAR").strip().upper() or "SAR")
                             if (idx_currency is not None and idx_currency < len(r))
                             else "SAR")
@@ -442,7 +464,11 @@ def _build_router(db, current_user_dep) -> APIRouter:
                         cell = r[col_idx]
                         if cell is not None and str(cell).strip() != "":
                             meta[col_label] = cell
-                sku_norm = _norm_sku(sku)
+                # The unique key is sku_normalized — when SKU is missing
+                # we use product_id (uppercased) as the key. The actual
+                # `sku` field stays empty so the UI can show "—" instead
+                # of pretending product_id is a SKU.
+                sku_norm = _norm_sku(effective_sku)
 
                 # Apply update_existing flag — skip rows whose SKU is
                 # already present when the merchant un-checked the box.
@@ -457,7 +483,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
 
                 doc = {
                     "user_id": uid,
-                    "sku": sku,
+                    "sku": sku,  # may be empty when only product_id was provided
                     "sku_normalized": sku_norm,
                     "product_id": _norm_product_id(product_id),
                     "product_name": name,
