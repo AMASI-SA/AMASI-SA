@@ -782,6 +782,457 @@ def _build_router(db) -> APIRouter:
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    # ── Multi-Account Selection (NEW — iteration 15) ─────────────────────
+    # Merchants with multiple Snapchat ad accounts (e.g. one per brand, or
+    # one for SA market + one for AE) want to enable several at once and
+    # see the AGGREGATED spend on the dashboard plus a per-account drill-down
+    # page. We keep the legacy single `ad_account_id` field on
+    # snapchat_connections for back-compat, but the source of truth for
+    # "which accounts are active" is now the `snapchat_ad_accounts`
+    # collection (one doc per (user_id, ad_account_id)).
+
+    class _SelectedAccount(BaseModel):
+        ad_account_id: str = Field(min_length=1)
+        name: str = Field(default="")
+        currency: str = Field(default="")
+        timezone: str = Field(default="")
+        organization_id: Optional[str] = ""
+        organization_name: Optional[str] = ""
+        status: Optional[str] = ""
+
+    class _SelectedAccountsIn(BaseModel):
+        accounts: list[_SelectedAccount] = Field(default_factory=list)
+
+    @router.get("/selected-accounts")
+    async def get_selected_accounts(user: dict = Depends(current_user)):
+        """Return the list of Snapchat ad accounts the merchant has explicitly
+        enabled. Each returned doc carries the native currency + timezone +
+        last_sync_at so the UI can render badges without an extra API call."""
+        rows = await db.snapchat_ad_accounts.find(
+            {"user_id": user["id"], "enabled": True}, {"_id": 0, "user_id": 0},
+        ).sort("name", 1).to_list(50)
+        return {"accounts": rows, "count": len(rows)}
+
+    @router.put("/selected-accounts")
+    async def set_selected_accounts(
+        payload: _SelectedAccountsIn, user: dict = Depends(current_user),
+    ):
+        """Replace the enabled-account set. Accounts in the payload are
+        upserted as `enabled=True`; any previously-enabled accounts NOT
+        present in this payload get `enabled=False` (we keep the document
+        with its history so the merchant can re-enable later without
+        losing sync metadata)."""
+        uid = user["id"]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        incoming_ids: set[str] = set()
+        for acc in payload.accounts:
+            ad_id = acc.ad_account_id.strip()
+            if not ad_id:
+                continue
+            incoming_ids.add(ad_id)
+            doc = {
+                "user_id": uid,
+                "ad_account_id": ad_id,
+                "name": (acc.name or "").strip(),
+                "currency_native": (acc.currency or "").strip().upper(),
+                "timezone": (acc.timezone or "").strip(),
+                "organization_id": (acc.organization_id or "").strip(),
+                "organization_name": (acc.organization_name or "").strip(),
+                "status": (acc.status or "").strip(),
+                "enabled": True,
+                "updated_at": now_iso,
+            }
+            await db.snapchat_ad_accounts.update_one(
+                {"user_id": uid, "ad_account_id": ad_id},
+                {"$set": doc, "$setOnInsert": {"created_at": now_iso}},
+                upsert=True,
+            )
+        # Disable accounts that are no longer in the selected set.
+        if incoming_ids:
+            await db.snapchat_ad_accounts.update_many(
+                {"user_id": uid, "ad_account_id": {"$nin": list(incoming_ids)}},
+                {"$set": {"enabled": False, "updated_at": now_iso}},
+            )
+        else:
+            # Empty payload → disable all.
+            await db.snapchat_ad_accounts.update_many(
+                {"user_id": uid},
+                {"$set": {"enabled": False, "updated_at": now_iso}},
+            )
+        # Keep the legacy single-account field in sync: point it at the
+        # FIRST enabled account so existing per-account endpoints keep
+        # working without a connected merchant noticing a break.
+        first_enabled = await db.snapchat_ad_accounts.find_one(
+            {"user_id": uid, "enabled": True},
+            {"_id": 0, "ad_account_id": 1, "name": 1, "currency_native": 1, "timezone": 1},
+            sort=[("name", 1)],
+        )
+        legacy_patch: dict = {"updated_at": now_iso}
+        if first_enabled:
+            legacy_patch.update({
+                "ad_account_id": first_enabled["ad_account_id"],
+                "ad_account_name": first_enabled.get("name", ""),
+                "ad_account_currency": first_enabled.get("currency_native", ""),
+                "ad_account_timezone": first_enabled.get("timezone", ""),
+            })
+        await db.snapchat_connections.update_one(
+            {"user_id": uid}, {"$set": legacy_patch},
+        )
+        enabled_count = await db.snapchat_ad_accounts.count_documents(
+            {"user_id": uid, "enabled": True},
+        )
+        return {"ok": True, "enabled_count": enabled_count}
+
+    async def _sync_one_account(
+        http: httpx.AsyncClient,
+        access_token: str,
+        uid: str,
+        account_doc: dict,
+        dates: list,
+        riyadh_tz,
+    ) -> tuple[int, list]:
+        """Sync ONE Snapchat ad account for a range of Riyadh dates.
+
+        Writes per-(account, date) rows into `snapchat_account_daily` AND
+        accumulates daily totals (across all accounts of this user) so the
+        caller can upsert the SUM into legacy `daily_costs.snapchat_ads`.
+
+        Returns (saved_count, errors[]). The caller is responsible for
+        aggregating daily_costs.snapchat_ads after iterating over all
+        accounts.
+        """
+        ad_id = account_doc["ad_account_id"]
+        ad_currency = (account_doc.get("currency_native") or "SAR").upper() or "SAR"
+        ad_name = account_doc.get("name") or ""
+        ad_tz = account_doc.get("timezone") or ""
+        base_headers = {"Authorization": f"Bearer {access_token}",
+                        "Accept": "application/json"}
+        stats_url = f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}/stats"
+        saved = 0
+        errors: list = []
+        for d in dates:
+            start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=riyadh_tz)
+            end_local = start_local + timedelta(days=1)
+            # ── Spend (HOUR granularity to bypass Snap's DAY TZ constraint) ──
+            spend_params = {
+                "start_time": start_local.isoformat(timespec="seconds"),
+                "end_time": end_local.isoformat(timespec="seconds"),
+                "granularity": "HOUR",
+                "fields": "spend",
+            }
+            try:
+                resp = await http.get(stats_url, headers=base_headers, params=spend_params)
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                body = (exc.response.text or "")[:240]
+                try:
+                    import json as _json
+                    j = _json.loads(body)
+                    snap_msg = j.get("debug_message") or j.get("request_status") or body
+                except Exception:
+                    snap_msg = body
+                errors.append({"ad_account_id": ad_id, "date": d.isoformat(),
+                               "error": str(snap_msg)[:240]})
+                continue
+            except httpx.HTTPError as exc:
+                errors.append({"ad_account_id": ad_id, "date": d.isoformat(),
+                               "error": str(exc)[:200]})
+                continue
+
+            data = resp.json()
+            total_micro = 0
+            for ts in data.get("timeseries_stats", []) or []:
+                stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
+                for point in stat.get("timeseries", []) or []:
+                    try:
+                        total_micro += int((point.get("stats") or {}).get("spend", 0) or 0)
+                    except (TypeError, ValueError):
+                        pass
+
+            # Conversions — best-effort (won't fail spend save).
+            total_purchases = 0
+            total_purchases_value_micro = 0
+            conv_params = {
+                "start_time": start_local.isoformat(timespec="seconds"),
+                "end_time": end_local.isoformat(timespec="seconds"),
+                "granularity": "HOUR",
+                "fields": "conversion_purchases,conversion_purchases_value",
+                "swipe_up_attribution_window": "28_DAY",
+                "view_attribution_window": "1_DAY",
+            }
+            try:
+                conv_resp = await http.get(stats_url, headers=base_headers, params=conv_params)
+                if conv_resp.status_code < 400:
+                    cdata = conv_resp.json()
+                    for ts in cdata.get("timeseries_stats", []) or []:
+                        stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
+                        for point in stat.get("timeseries", []) or []:
+                            s = point.get("stats") or {}
+                            try:
+                                total_purchases += int(s.get("conversion_purchases", 0) or 0)
+                            except (TypeError, ValueError):
+                                pass
+                            try:
+                                total_purchases_value_micro += int(s.get("conversion_purchases_value", 0) or 0)
+                            except (TypeError, ValueError):
+                                pass
+            except httpx.HTTPError:
+                pass
+
+            spend_native = round(total_micro / 1_000_000, 2)
+            revenue_native = round(total_purchases_value_micro / 1_000_000, 2)
+            spend_sar, fx_rate = _to_sar(spend_native, ad_currency)
+            revenue_sar, _ = _to_sar(revenue_native, ad_currency)
+            date_str = d.isoformat()
+
+            await db.snapchat_account_daily.update_one(
+                {"user_id": uid, "ad_account_id": ad_id, "date": date_str},
+                {"$set": {
+                    "user_id": uid,
+                    "ad_account_id": ad_id,
+                    "account_name": ad_name,
+                    "date": date_str,
+                    "spend_native": spend_native,
+                    "currency_native": ad_currency,
+                    "fx_rate": fx_rate,
+                    "spend_sar": spend_sar,
+                    "spend": spend_sar,  # alias for legacy reads
+                    "purchases": total_purchases,
+                    "revenue_native": revenue_native,
+                    "revenue_sar": revenue_sar,
+                    "business_timezone": "Asia/Riyadh",
+                    "ad_account_timezone": ad_tz,
+                    "snap_day_start_riyadh": start_local.strftime("%Y-%m-%d %H:%M"),
+                    "snap_day_end_riyadh": end_local.strftime("%Y-%m-%d %H:%M"),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                 "$setOnInsert": {
+                     "created_at": datetime.now(timezone.utc).isoformat(),
+                 }},
+                upsert=True,
+            )
+            saved += 1
+
+        # Mark this account's last_sync_at.
+        await db.snapchat_ad_accounts.update_one(
+            {"user_id": uid, "ad_account_id": ad_id},
+            {"$set": {"last_sync_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        return saved, errors
+
+    class _SyncAllIn(BaseModel):
+        days: int = Field(default=7, ge=1, le=62)
+        from_date: Optional[str] = None
+        to_date: Optional[str] = None
+
+    @router.post("/sync-all-accounts")
+    async def sync_all_accounts(payload: _SyncAllIn, user: dict = Depends(current_user)):
+        """Sync EVERY enabled Snapchat ad account for the given Riyadh-date
+        range. Writes per-(account, date) rows into `snapchat_account_daily`
+        and updates the AGGREGATED total into legacy `daily_costs.snapchat_ads`
+        so the existing dashboard card + reports continue to show the
+        cross-account total without any other code change.
+
+        Body: {days|from_date|to_date}. Returns {accounts_synced, items[],
+        errors[]} per-account.
+        """
+        uid = user["id"]
+        access_token, _ = await _ensure_access_token(uid)
+        enabled = await db.snapchat_ad_accounts.find(
+            {"user_id": uid, "enabled": True}, {"_id": 0},
+        ).to_list(50)
+        if not enabled:
+            raise HTTPException(status_code=400,
+                                detail="لم يتم تفعيل أي حساب Snapchat بعد. اختر حساباً واحداً أو أكثر من الإعدادات.")
+
+        # Riyadh-anchored date enumeration (00:00 → 23:59 Asia/Riyadh — per
+        # merchant requirement: SA timezone is the source of truth, NOT PDT).
+        try:
+            from zoneinfo import ZoneInfo as _ZI
+            riyadh_tz = _ZI("Asia/Riyadh")
+        except ImportError:  # pragma: no cover
+            riyadh_tz = timezone(timedelta(hours=3))
+        from datetime import date as _date
+        today_local = datetime.now(riyadh_tz).date()
+        if payload.from_date or payload.to_date:
+            try:
+                start_d = _date.fromisoformat(payload.from_date) if payload.from_date else today_local
+                end_d = _date.fromisoformat(payload.to_date) if payload.to_date else today_local
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date format; use YYYY-MM-DD")
+            if end_d < start_d:
+                raise HTTPException(status_code=400, detail="to_date < from_date")
+            span = (end_d - start_d).days + 1
+            if span > 62:
+                raise HTTPException(status_code=400, detail="Range too wide (max 62 days)")
+            dates = [start_d + timedelta(days=i) for i in range(span)]
+        else:
+            dates = [today_local - timedelta(days=i) for i in range(payload.days)]
+            dates.reverse()
+
+        accounts_summary: list[dict] = []
+        all_errors: list[dict] = []
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            for account_doc in enabled:
+                saved, errs = await _sync_one_account(
+                    http, access_token, uid, account_doc, dates, riyadh_tz,
+                )
+                accounts_summary.append({
+                    "ad_account_id": account_doc["ad_account_id"],
+                    "name": account_doc.get("name"),
+                    "currency_native": account_doc.get("currency_native"),
+                    "rows_saved": saved,
+                    "errors": len(errs),
+                })
+                all_errors.extend(errs)
+
+        # ── Aggregate per-date totals across ALL accounts and write back to
+        # legacy `daily_costs.snapchat_ads` so the dashboard card + existing
+        # reports continue to render the cross-account total without any
+        # other code change. Also update `snapchat_daily_stats` (used by the
+        # snapchat-summary card for orders+revenue) with cross-account
+        # aggregates.
+        for d in dates:
+            date_str = d.isoformat()
+            account_rows = await db.snapchat_account_daily.find(
+                {"user_id": uid, "date": date_str},
+                {"_id": 0, "spend_sar": 1, "revenue_sar": 1, "purchases": 1,
+                 "spend_native": 1, "revenue_native": 1, "currency_native": 1, "fx_rate": 1},
+            ).to_list(50)
+            sum_spend = round(sum(float(r.get("spend_sar") or 0) for r in account_rows), 2)
+            sum_revenue = round(sum(float(r.get("revenue_sar") or 0) for r in account_rows), 2)
+            sum_purchases = sum(int(r.get("purchases") or 0) for r in account_rows)
+
+            # Legacy daily_costs upsert (preserves other fields).
+            existing_dc = await db.daily_costs.find_one(
+                {"user_id": uid, "date": date_str}, {"_id": 0},
+            )
+            if existing_dc:
+                await db.daily_costs.update_one(
+                    {"user_id": uid, "date": date_str},
+                    {"$set": {"snapchat_ads": sum_spend,
+                              "updated_at": datetime.now(timezone.utc).isoformat()}},
+                )
+            else:
+                import uuid as _uuid
+                await db.daily_costs.insert_one({
+                    "id": str(_uuid.uuid4()),
+                    "user_id": uid,
+                    "date": date_str,
+                    "snapchat_ads": sum_spend,
+                    "snapchat_ads_2": 0.0,
+                    "tiktok_ads": 0.0,
+                    "instagram_ads": 0.0,
+                    "google_ads": 0.0,
+                    "product_costs": 0.0,
+                    "notes": f"auto from Snapchat ({len(account_rows)} حساب)",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+            # Aggregate Pixel stats too so the dashboard card shows the
+            # cross-account orders+revenue.
+            await db.snapchat_daily_stats.update_one(
+                {"user_id": uid, "date": date_str},
+                {"$set": {
+                    "user_id": uid,
+                    "date": date_str,
+                    "spend": sum_spend,
+                    "revenue": sum_revenue,
+                    "purchases": sum_purchases,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }},
+                upsert=True,
+            )
+
+        return {
+            "accounts_synced": len(accounts_summary),
+            "items": accounts_summary,
+            "errors": all_errors,
+            "currency": "SAR",
+            "business_timezone": "Asia/Riyadh",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    @router.get("/accounts-summary")
+    async def accounts_summary(user: dict = Depends(current_user)):
+        """Per-account spend breakdown for the new "حسابات Snapchat" detail
+        page. Returns today/month/30-day spend in BOTH native currency and
+        SAR for each enabled account, plus the FX rate that was applied.
+
+        All windows use Asia/Riyadh boundaries (matches the merchant's
+        business day). Empty `accounts` list with `total_*` zeros if no
+        account is enabled — UI shows a friendly empty-state.
+        """
+        uid = user["id"]
+        try:
+            from zoneinfo import ZoneInfo as _ZI
+            riyadh_tz = _ZI("Asia/Riyadh")
+        except ImportError:  # pragma: no cover
+            riyadh_tz = timezone(timedelta(hours=3))
+        today_d = datetime.now(riyadh_tz).date()
+        today_str = today_d.isoformat()
+        month_start_str = today_str[:8] + "01"
+        d30_start_str = (today_d - timedelta(days=29)).isoformat()
+
+        enabled = await db.snapchat_ad_accounts.find(
+            {"user_id": uid, "enabled": True}, {"_id": 0, "user_id": 0},
+        ).sort("name", 1).to_list(50)
+
+        out: list = []
+        total_today_sar = total_today_native = 0.0
+        total_month_sar = 0.0
+        total_30d_sar = 0.0
+        for acc in enabled:
+            ad_id = acc["ad_account_id"]
+            rows = await db.snapchat_account_daily.find(
+                {"user_id": uid, "ad_account_id": ad_id,
+                 "date": {"$gte": d30_start_str, "$lte": today_str}},
+                {"_id": 0, "date": 1, "spend_sar": 1, "spend_native": 1,
+                 "currency_native": 1, "fx_rate": 1, "purchases": 1,
+                 "revenue_sar": 1, "revenue_native": 1},
+            ).to_list(60)
+            by_date = {r["date"]: r for r in rows}
+            spend_today_sar = round(float((by_date.get(today_str) or {}).get("spend_sar") or 0), 2)
+            spend_today_nat = round(float((by_date.get(today_str) or {}).get("spend_native") or 0), 2)
+            spend_month_sar = round(sum(float(r.get("spend_sar") or 0)
+                                        for k, r in by_date.items() if k >= month_start_str), 2)
+            spend_30d_sar = round(sum(float(r.get("spend_sar") or 0)
+                                      for r in by_date.values()), 2)
+            cur_native = acc.get("currency_native") or "SAR"
+            # Pick the freshest fx_rate (most recent row); fall back to 1 if
+            # SAR-native account.
+            fx_rate = 1.0
+            if rows:
+                fx_rate = float(rows[-1].get("fx_rate") or 1.0)
+            elif cur_native == "USD":
+                fx_rate = 3.75
+            out.append({
+                "ad_account_id": ad_id,
+                "name": acc.get("name") or ad_id,
+                "currency_native": cur_native,
+                "currency_display": "SAR",
+                "fx_rate": fx_rate,
+                "timezone": acc.get("timezone"),
+                "business_timezone": "Asia/Riyadh",
+                "last_sync_at": acc.get("last_sync_at"),
+                "today": {"spend_sar": spend_today_sar, "spend_native": spend_today_nat},
+                "month": {"start": month_start_str, "spend_sar": spend_month_sar},
+                "last_30d": {"start": d30_start_str, "spend_sar": spend_30d_sar},
+            })
+            total_today_sar += spend_today_sar
+            total_today_native += spend_today_nat if cur_native == "SAR" else 0
+            total_month_sar += spend_month_sar
+            total_30d_sar += spend_30d_sar
+
+        return {
+            "accounts": out,
+            "count": len(out),
+            "today": {"date": today_str, "spend_sar": round(total_today_sar, 2)},
+            "month": {"start": month_start_str, "spend_sar": round(total_month_sar, 2)},
+            "last_30d": {"start": d30_start_str, "spend_sar": round(total_30d_sar, 2)},
+            "business_timezone": "Asia/Riyadh",
+            "currency": "SAR",
+        }
+
     return router
 
 

@@ -1725,6 +1725,20 @@ async def on_startup():
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
     await db.analyses.create_index([("user_id", 1), ("created_at", -1)])
     await db.snapchat_connections.create_index("user_id", unique=True)
+    # Multi-account Snapchat selection (iteration 15) — one doc per
+    # (user_id, ad_account_id). `enabled` toggles whether the account
+    # participates in /sync-all-accounts and /accounts-summary.
+    await db.snapchat_ad_accounts.create_index(
+        [("user_id", 1), ("ad_account_id", 1)], unique=True,
+    )
+    # Per-account, per-day spend rows. Stores BOTH native and SAR amounts +
+    # fx_rate so accounting traces are auditable.
+    await db.snapchat_account_daily.create_index(
+        [("user_id", 1), ("ad_account_id", 1), ("date", 1)], unique=True,
+    )
+    await db.snapchat_account_daily.create_index(
+        [("user_id", 1), ("date", -1)],
+    )
     await db.shipping_payments.create_index([("user_id", 1), ("company_name", 1), ("payment_date", -1)])
     await db.webhook_tokens.create_index("user_id", unique=True)
     await db.webhook_tokens.create_index("token", unique=True)

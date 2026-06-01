@@ -54,6 +54,12 @@ export default function Settings() {
     const [snapConnecting, setSnapConnecting] = useState(false);
     const [snapAccounts, setSnapAccounts] = useState([]);
     const [snapLoadingAccounts, setSnapLoadingAccounts] = useState(false);
+    // Multi-account selection (iteration 15): Set of ad_account_ids the
+    // merchant has enabled. Loaded from `/snapchat/selected-accounts` on
+    // mount and persisted via `PUT /snapchat/selected-accounts` when
+    // they click "حفظ الحسابات المختارة".
+    const [snapEnabledIds, setSnapEnabledIds] = useState(new Set());
+    const [snapSelectionSaving, setSnapSelectionSaving] = useState(false);
 
     // ── Meta Ads state ─────────────────────────────────────────────────
     const [metaConfig, setMetaConfig] = useState({
@@ -386,14 +392,66 @@ export default function Settings() {
     const loadSnapAccounts = async () => {
         setSnapLoadingAccounts(true);
         try {
-            const { data } = await api.get("/snapchat/adaccounts");
-            setSnapAccounts(data.adaccounts || []);
-            if ((data.adaccounts || []).length === 0) {
+            // Load BOTH the available accounts from Snapchat API AND the
+            // merchant's previously-enabled selection (so checkboxes default
+            // to the existing state).
+            const [accountsResp, selectedResp] = await Promise.all([
+                api.get("/snapchat/adaccounts"),
+                api.get("/snapchat/selected-accounts").catch(() => ({ data: { accounts: [] } })),
+            ]);
+            setSnapAccounts(accountsResp.data.adaccounts || []);
+            const enabled = new Set(
+                (selectedResp.data.accounts || []).map((a) => a.ad_account_id),
+            );
+            setSnapEnabledIds(enabled);
+            if ((accountsResp.data.adaccounts || []).length === 0) {
                 toast.message("لم يتم العثور على حسابات إعلانات في حسابك");
             }
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail));
         } finally { setSnapLoadingAccounts(false); }
+    };
+
+    const toggleSnapAccount = (ad_account_id) => {
+        setSnapEnabledIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(ad_account_id)) next.delete(ad_account_id);
+            else next.add(ad_account_id);
+            return next;
+        });
+    };
+
+    const saveSnapSelectedAccounts = async () => {
+        if (snapEnabledIds.size === 0) {
+            const confirmEmpty = window.confirm(
+                "لم تختر أي حساب — هل تريد إلغاء تفعيل جميع حسابات Snapchat؟",
+            );
+            if (!confirmEmpty) return;
+        }
+        setSnapSelectionSaving(true);
+        try {
+            const accountsPayload = snapAccounts
+                .filter((acc) => snapEnabledIds.has(acc.ad_account_id))
+                .map((acc) => ({
+                    ad_account_id: acc.ad_account_id,
+                    name: acc.name || "",
+                    currency: acc.currency || "",
+                    timezone: acc.timezone || "",
+                    organization_id: acc.organization_id || "",
+                    organization_name: acc.organization_name || "",
+                    status: acc.status || "",
+                }));
+            const { data } = await api.put("/snapchat/selected-accounts", {
+                accounts: accountsPayload,
+            });
+            toast.success(
+                `تم حفظ ${data.enabled_count} حساب Snapchat — افتح صفحة "حسابات Snapchat" لعرض التفاصيل.`,
+                { duration: 6000 },
+            );
+            await loadSnapConfig();
+        } catch (err) {
+            toast.error(formatApiErrorDetail(err.response?.data?.detail));
+        } finally { setSnapSelectionSaving(false); }
     };
 
     const selectAccount = async (acc) => {
@@ -1110,28 +1168,68 @@ export default function Settings() {
 
                 {snapAccounts.length > 0 && (
                     <div className="mt-4 border border-border rounded-lg overflow-hidden" data-testid="snap-accounts-list">
-                        <div className="px-3 py-2 bg-accent/60 text-xs font-semibold text-muted-foreground">
-                            اختر حساب الإعلانات الذي تريد ربطه
+                        <div className="px-3 py-2 bg-accent/60 text-xs font-semibold text-muted-foreground flex items-center justify-between gap-3 flex-wrap">
+                            <span>اختر حسابات الإعلانات المراد تفعيلها (يمكن اختيار أكثر من حساب)</span>
+                            <span className="text-[11px] text-brand font-bold" data-testid="snap-enabled-count">
+                                {snapEnabledIds.size} / {snapAccounts.length} مُفعَّل
+                            </span>
                         </div>
                         <div className="divide-y divide-border">
-                            {snapAccounts.map((acc) => (
-                                <div key={acc.ad_account_id} className="flex items-center justify-between gap-3 p-3 hover:bg-accent/30">
-                                    <div className="min-w-0">
-                                        <div className="font-semibold truncate">{acc.name || "—"}</div>
-                                        <div className="text-xs text-muted-foreground truncate" dir="ltr">
-                                            {acc.ad_account_id} · {acc.currency || ""} · {acc.status || ""}
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => selectAccount(acc)}
-                                        className="px-3 py-1.5 text-xs font-bold rounded-lg border border-border hover:bg-brand hover:text-white hover:border-brand transition-colors whitespace-nowrap"
-                                        data-testid={`snap-select-account-${acc.ad_account_id}`}
+                            {snapAccounts.map((acc) => {
+                                const isEnabled = snapEnabledIds.has(acc.ad_account_id);
+                                return (
+                                    <label
+                                        key={acc.ad_account_id}
+                                        className={[
+                                            "flex items-center justify-between gap-3 p-3 cursor-pointer transition-colors",
+                                            isEnabled ? "bg-emerald-50/60 hover:bg-emerald-50" : "hover:bg-accent/30",
+                                        ].join(" ")}
+                                        data-testid={`snap-account-row-${acc.ad_account_id}`}
                                     >
-                                        {snapConfig.ad_account_id === acc.ad_account_id ? "مختار حالياً" : "اختيار"}
-                                    </button>
-                                </div>
-                            ))}
+                                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={isEnabled}
+                                                onChange={() => toggleSnapAccount(acc.ad_account_id)}
+                                                className="w-5 h-5 rounded border-border accent-brand flex-shrink-0"
+                                                data-testid={`snap-account-toggle-${acc.ad_account_id}`}
+                                            />
+                                            <div className="min-w-0">
+                                                <div className="font-semibold truncate flex items-center gap-2">
+                                                    {acc.name || "—"}
+                                                    {acc.currency && acc.currency !== "SAR" && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full font-bold">
+                                                            {acc.currency} → SAR
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground truncate" dir="ltr">
+                                                    {acc.ad_account_id} · {acc.currency || ""} · {acc.status || ""}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {isEnabled && (
+                                            <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold whitespace-nowrap flex-shrink-0">
+                                                ✓ مُفعَّل
+                                            </span>
+                                        )}
+                                    </label>
+                                );
+                            })}
+                        </div>
+                        <div className="px-3 py-3 bg-accent/30 border-t border-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                            <div className="text-xs text-muted-foreground leading-relaxed">
+                                💡 جميع الحسابات المفعَّلة سيتم احتساب صرفها بتوقيت <strong>Asia/Riyadh (00:00-23:59)</strong> وتحويلها إلى SAR تلقائياً.
+                            </div>
+                            <button
+                                type="button"
+                                onClick={saveSnapSelectedAccounts}
+                                disabled={snapSelectionSaving}
+                                className="px-4 py-2 bg-brand text-white rounded-lg font-bold text-sm hover:opacity-90 disabled:opacity-50 transition-opacity whitespace-nowrap"
+                                data-testid="snap-save-selected-accounts-btn"
+                            >
+                                {snapSelectionSaving ? "جاري الحفظ…" : "حفظ الحسابات المختارة"}
+                            </button>
                         </div>
                     </div>
                 )}

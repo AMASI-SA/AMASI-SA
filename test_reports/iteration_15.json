@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 15 - Verified Snapchat multi-account expansion (Hesab). All 7 NEW pytest cases in test_snapchat_multi_account.py PASS. Full regression across 62 Snapchat/Meta tests = 62/62 PASS (when invoked from /app/backend cwd so the bare 'snapchat_routes' import resolves). Frontend /snapchat-accounts page renders correctly with empty state, sidebar nav link, disabled sync button when count=0. /settings page shows the new multi-select scaffolding (legacy single-select 'snap-select-account-X' radios completely removed); the snap-accounts-list / snap-enabled-count / snap-save-selected-accounts-btn testids exist in JSX and render conditionally once snapAccounts.length>0 (requires a real Snap OAuth connection to populate). OAuth connect/save buttons intact. No horizontal page scroll at 390x844 or 1280x900 on either route. Friendly Arabic error returned by /snapchat/sync-all-accounts without OAuth ('حساب سناب غير مربوط. اربطه من الإعدادات.'). All acceptance criteria met.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/app/backend/tests/test_snap_currency_conversion.py", "issue": "Test test_to_sar_usd_converts_at_peg does `from snapchat_routes import _build_router` which only resolves when pytest is run from /app/backend (so sys.path picks up the bare module). When invoked as `pytest backend/tests/...` from /app, the import fails with ModuleNotFoundError. Cosmetic - other two tests in the file pass either way and the broader regression is green. Suggested fix: add a conftest.py path entry or change to `from backend.snapchat_routes import ...`."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_snapchat_multi_account.py",
+    "/app/test_reports/pytest/iteration_15_multi.xml",
+    "/app/test_reports/pytest/iteration_15_regression.xml"
+  ],
+  "action_items": [
+    "Optional: normalise `from snapchat_routes import ...` in test_snap_currency_conversion.py so the test can be invoked from any cwd (low priority, not a regression)."
+  ],
+  "critical_code_review_comments": [
+    "snapchat_routes.py crosses 1000 lines including the new _SelectedAccount / _sync_one_account / accounts-summary endpoints — consider splitting the new multi-account routes into a dedicated module if more growth is expected (currently still maintainable).",
+    "Mongo indexes for snapchat_ad_accounts (user_id+ad_account_id unique) and snapchat_account_daily (user_id+ad_account_id+date unique, plus user_id+date) are correctly registered in server.py:1727-1740 — confirmed via behavioural test (PUT then PUT with subset disables instead of deleting, indicating upsert is keyed on the unique index).",
+    "Settings.jsx multi-select block is correctly gated by `snapAccounts.length > 0` so empty-state users never see an empty list; the legacy single-account 'snap-select-account-X' radios were cleanly removed.",
+    "SnapchatAccounts.jsx empty-state CTA links back to /settings via 'snap-go-settings-link' — UX is consistent with the spec."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (7/7 new multi-account + 62/62 regression when run from /app/backend)", "frontend": "100% (all acceptance testids present, no overflow, navigation works)"},
+  "test_credentials": "admin@hesab.app / admin123 (from /app/memory/test_credentials.md); fresh users created via POST /api/auth/register inside the multi-account test file.",
+  "seed_data_creation": "test_summary_aggregates_seeded_account_daily_rows seeds 2 rows in snapchat_account_daily for a USD account (today=50/187.5 SAR, yesterday=20/75 SAR) via motor; verified per-account today.spend_sar=187.5, last_30d.spend_sar=262.5, fx_rate=3.75, business_timezone=Asia/Riyadh.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run regression with: cd /app/backend && source .env && export REACT_APP_BACKEND_URL=$(grep REACT_APP_BACKEND_URL /app/frontend/.env | cut -d '=' -f2) && pytest tests/ -v. The multi-select UI in /settings (snap-accounts-list, snap-enabled-count, snap-save-selected-accounts-btn) is conditionally rendered ONLY when snapAccounts.length>0 (i.e., after clicking 'جلب الحسابات' which requires a real Snap OAuth connection). Empty admin will never see it - this is by design. The /snapchat-accounts page testids 'snapchat-accounts-page', 'snap-accounts-empty-state', 'snap-go-settings-link', 'snap-sync-all-btn' all render correctly. Sidebar testid 'nav-snapchat-accounts' is present. legacy POST /snapchat/select-adaccount is kept for back-compat; new UI uses PUT /selected-accounts.",
+  "acceptance_results": {
+    "new_multi_account_tests_pass": "7/7",
+    "full_regression_pass": "62/62",
+    "settings_multi_select_ui": "code present (conditionally rendered), legacy single-select removed",
+    "snapchat_accounts_page_empty": "renders with empty state + sidebar link + disabled sync btn",
+    "sync_all_accounts_friendly_arabic": "'حساب سناب غير مربوط. اربطه من الإعدادات.' (no JSON / OAuthException leak)",
+    "mobile_overflow_390": "no horizontal scroll on /snapchat-accounts or /settings",
+    "desktop_overflow_1280": "no horizontal scroll",
+    "dashboard_snapchat_summary_regression": "200 OK",
+    "operating_expenses_regression": "200 OK on /salaries, /daily, /summary",
+    "meta_endpoints_regression": "200 OK on /api/meta/config"
+  }
+}
