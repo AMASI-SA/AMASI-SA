@@ -173,6 +173,7 @@ class ProductCostIn(BaseModel):
     supplier_notes: Optional[str] = ""
     cost_price: float = Field(ge=0)
     currency: str = Field(default="SAR", max_length=8)
+    image_url: Optional[str] = ""
 
 
 class ProductCostUpdate(BaseModel):
@@ -184,6 +185,7 @@ class ProductCostUpdate(BaseModel):
     cost_price: Optional[float] = Field(default=None, ge=0)
     currency: Optional[str] = None
     is_active: Optional[bool] = None
+    image_url: Optional[str] = None
 
 
 # ── Router factory ─────────────────────────────────────────────────────────
@@ -245,6 +247,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
             "supplier_notes": (payload.supplier_notes or "").strip(),
             "cost_price": round(float(payload.cost_price), 2),
             "currency": (payload.currency or "SAR").upper(),
+            "image_url": (payload.image_url or "").strip(),
             "is_active": True,
             "meta": {},
             "created_at": now,
@@ -284,6 +287,8 @@ def _build_router(db, current_user_dep) -> APIRouter:
             patch["cost_price"] = round(float(patch["cost_price"]), 2)
         if "product_id" in patch:
             patch["product_id"] = _norm_product_id(patch["product_id"])
+        if "image_url" in patch:
+            patch["image_url"] = str(patch["image_url"] or "").strip()
         patch["updated_at"] = _now_iso()
         r = await db.product_costs.update_one(
             {"user_id": user["id"], "id": item_id}, {"$set": patch},
@@ -346,6 +351,14 @@ def _build_router(db, current_user_dep) -> APIRouter:
         },
         # currency (rarely present, defaults SAR)
         "currency": {"currency", "العملة"},
+        # image URL (iteration 23) — Salla product Excel exports place the
+        # image URL in column F by default. If a header alias is missing
+        # we fall back to column index 5 (F) at parse time.
+        "image_url": {
+            "image", "image_url", "image url", "img", "img_url",
+            "صورة", "صورة المنتج", "الصورة", "رابط الصورة",
+            "photo", "picture", "thumbnail",
+        },
     }
     # Mapped header keys we KNOW about — every other header is preserved in meta.
     _MAPPED_HEADERS = (
@@ -354,6 +367,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
         | HEADER_ALIASES["cost_price"]
         | HEADER_ALIASES["product_id"]
         | HEADER_ALIASES["currency"]
+        | HEADER_ALIASES["image_url"]
     )
 
     def _find_col(headers: list, target: str) -> Optional[int]:
@@ -401,6 +415,31 @@ def _build_router(db, current_user_dep) -> APIRouter:
         idx_cost = _find_col(headers_raw, "cost_price")
         idx_product_id = _find_col(headers_raw, "product_id")
         idx_currency = _find_col(headers_raw, "currency")
+        # Iteration 23: image URL detection. Try header aliases first, then
+        # fall back to column F (index 5) which is the default position
+        # for product image URLs in Salla's product Excel export.
+        # Guard 1: only use the fallback if column F isn't already claimed
+        # by another mapped column (sku/name/cost/product_id/currency).
+        # Guard 2: only use the fallback if ≥1 data row in column F contains
+        # a URL-looking value. Otherwise treat F as a regular meta column
+        # so we don't accidentally swallow unrelated data (e.g. category).
+        idx_image = _find_col(headers_raw, "image_url")
+        if idx_image is None and len(headers_raw) > 5:
+            used = {idx_sku, idx_name, idx_cost, idx_product_id, idx_currency}
+            if 5 not in used:
+                def _looks_like_url(v: Any) -> bool:
+                    s = str(v or "").strip()
+                    if not s:
+                        return False
+                    return s.startswith(("http://", "https://", "//")) or any(
+                        s.lower().endswith(ext) for ext in
+                        (".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg")
+                    )
+                # Scan up to first 200 data rows for performance on big files.
+                for row in rows[1:201]:
+                    if len(row) > 5 and _looks_like_url(row[5]):
+                        idx_image = 5  # column F → image
+                        break
         # Iteration 22: accept files where SKU is missing if product_id IS
         # present. (Salla exports often have only `رقم المنتج` + `تكلفة المنتج`
         # when the merchant didn't fill SKUs.) name is also optional —
@@ -414,9 +453,12 @@ def _build_router(db, current_user_dep) -> APIRouter:
 
         # Compute meta-column indices (every header that's NOT one of our
         # mapped headers). These get saved into doc.meta verbatim.
+        # Iteration 23: also exclude the image column when it was matched
+        # via the column-F fallback (its header isn't in _MAPPED_HEADERS
+        # because we matched by position, not by name).
         meta_cols: list[tuple[int, str]] = []
         for i, h in enumerate(headers_lc):
-            if h and h not in _MAPPED_HEADERS:
+            if h and h not in _MAPPED_HEADERS and i != idx_image:
                 meta_cols.append((i, headers_raw[i]))
 
         uid = user["id"]
@@ -424,6 +466,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
         created = 0
         updated = 0
         skipped = 0
+        images_imported = 0
         errors: list[dict] = []
         for row_num, r in enumerate(rows[1:], start=2):
             try:
@@ -454,6 +497,20 @@ def _build_router(db, current_user_dep) -> APIRouter:
                 currency = ((str(r[idx_currency] or "SAR").strip().upper() or "SAR")
                             if (idx_currency is not None and idx_currency < len(r))
                             else "SAR")
+                # Iteration 23: parse image URL from the resolved column.
+                image_url = ""
+                if idx_image is not None and idx_image < len(r):
+                    raw_img = str(r[idx_image] or "").strip()
+                    # Only accept values that look like a real URL or
+                    # image path (avoid storing random text from column F
+                    # when the column isn't actually images).
+                    if raw_img and (
+                        raw_img.startswith(("http://", "https://", "//", "/"))
+                        or any(raw_img.lower().endswith(ext) for ext in (
+                            ".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg",
+                        ))
+                    ):
+                        image_url = raw_img
                 # Capture every UNMAPPED column verbatim into meta (skip
                 # empty cells so the dict stays clean). Imports a 30-col
                 # Salla export → only sku/name/cost go into the cost
@@ -495,6 +552,11 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     "meta": meta,
                     "updated_at": now,
                 }
+                # Iteration 23: only $set image_url when this row has one
+                # — preserves any manually-uploaded image on re-imports
+                # whose Excel doesn't include the image column.
+                if image_url:
+                    doc["image_url"] = image_url
                 res = await db.product_costs.update_one(
                     {"user_id": uid, "sku_normalized": sku_norm},
                     {"$set": doc,
@@ -503,6 +565,9 @@ def _build_router(db, current_user_dep) -> APIRouter:
                          "supplier_name": "",
                          "supplier_country": "",
                          "supplier_notes": "",
+                         # Default image_url on insert (kept empty so we
+                         # don't override existing values via $set above).
+                         **({"image_url": ""} if not image_url else {}),
                          "created_at": now,
                      }},
                     upsert=True,
@@ -511,6 +576,8 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     created += 1
                 else:
                     updated += 1
+                if image_url:
+                    images_imported += 1
             except Exception as exc:
                 errors.append({"row": row_num, "error": str(exc)[:200]})
 
@@ -522,6 +589,11 @@ def _build_router(db, current_user_dep) -> APIRouter:
             "total_processed": created + updated,
             "update_existing": update_existing,
             "meta_columns_preserved": [c[1] for c in meta_cols],
+            "images_imported": images_imported,
+            "image_column_detected": (
+                "header" if _find_col(headers_raw, "image_url") is not None
+                else ("column_F" if idx_image == 5 else None)
+            ),
         }
 
     # ── Missing costs (orders with unmatched products) ───────────────────

@@ -29,7 +29,7 @@ const fmtMoney = (v) =>
 const blankForm = {
     sku: "", product_id: "", product_name: "",
     supplier_name: "", supplier_country: "", supplier_notes: "",
-    cost_price: "", currency: "SAR",
+    cost_price: "", currency: "SAR", image_url: "",
 };
 
 function AddEditModal({ open, initial, onClose, onSaved }) {
@@ -93,6 +93,49 @@ function AddEditModal({ open, initial, onClose, onSaved }) {
                     </button>
                 </div>
                 <div className="p-6 space-y-4">
+                    {/* Iteration 23: image preview + URL input.
+                        The image is auto-populated from column F of the
+                        Excel import; merchant can also paste a URL
+                        manually or clear it here. */}
+                    <div>
+                        <label className="text-xs font-bold text-muted-foreground mb-1 block">
+                            صورة المنتج
+                        </label>
+                        <div className="flex items-start gap-3">
+                            <div
+                                className="w-24 h-24 rounded-lg border-2 border-dashed border-border bg-accent/30 flex items-center justify-center overflow-hidden flex-shrink-0"
+                                data-testid="product-cost-image-preview"
+                            >
+                                {form.image_url ? (
+                                    <img
+                                        src={form.image_url}
+                                        alt={form.product_name || "product"}
+                                        className="w-full h-full object-contain"
+                                        onError={(e) => {
+                                            e.currentTarget.style.display = "none";
+                                            e.currentTarget.parentElement.dataset.broken = "1";
+                                        }}
+                                    />
+                                ) : (
+                                    <Package size={28} weight="duotone" className="text-muted-foreground" />
+                                )}
+                            </div>
+                            <div className="flex-1 space-y-1">
+                                <input
+                                    type="url"
+                                    value={form.image_url || ""}
+                                    onChange={set("image_url")}
+                                    dir="ltr"
+                                    placeholder="https://cdn.salla.sa/.../image.jpg"
+                                    className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand text-xs"
+                                    data-testid="product-cost-image-url-input"
+                                />
+                                <div className="text-[10px] text-muted-foreground leading-relaxed">
+                                    تُستورد تلقائياً من العمود F في ملف Excel من سلة. يمكنك أيضاً لصق رابط الصورة هنا يدوياً أو مسحه.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div>
                         <label className="text-xs font-bold text-muted-foreground mb-1 block">
                             SKU <span className="text-red-500">*</span>
@@ -316,6 +359,7 @@ function CatalogueTab({ items, total, search, setSearch, onEdit, onDelete, loadi
                     <table className="w-full text-sm" data-testid="catalogue-table">
                         <thead className="bg-accent/40 text-xs">
                             <tr>
+                                <th className="px-3 py-2 text-center font-bold w-14">الصورة</th>
                                 <th className="px-3 py-2 text-start font-bold">اسم المنتج</th>
                                 <th className="px-3 py-2 text-start font-bold" dir="ltr">SKU</th>
                                 <th className="px-3 py-2 text-start font-bold">المورد</th>
@@ -326,6 +370,23 @@ function CatalogueTab({ items, total, search, setSearch, onEdit, onDelete, loadi
                         <tbody className="divide-y divide-border">
                             {items.map((it) => (
                                 <tr key={it.id} className="hover:bg-accent/20" data-testid={`catalogue-row-${it.sku || it.product_id || it.id}`}>
+                                    <td className="px-2 py-2">
+                                        <div
+                                            className="w-10 h-10 rounded-md border border-border bg-accent/30 overflow-hidden mx-auto flex items-center justify-center"
+                                            data-testid={`catalogue-thumb-${it.sku || it.product_id || it.id}`}
+                                        >
+                                            {it.image_url ? (
+                                                <img
+                                                    src={it.image_url}
+                                                    alt={it.product_name || "product"}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                                />
+                                            ) : (
+                                                <Package size={14} className="text-muted-foreground/60" />
+                                            )}
+                                        </div>
+                                    </td>
                                     <td className="px-3 py-3 font-semibold">{it.product_name}</td>
                                     <td className="px-3 py-3 text-xs tabular-nums" dir="ltr">
                                         {it.sku || (
@@ -531,16 +592,18 @@ export default function ProductCosts() {
             const errs = (data.errors || []).length;
             const skipped = data.skipped || 0;
             const metaCols = (data.meta_columns_preserved || []).length;
+            const imagesImported = data.images_imported || 0;
             const parts = [
                 `${data.created} جديد`,
                 `${data.updated} محدّث`,
             ];
             if (skipped) parts.push(`${skipped} مُتخطى`);
             if (errs) parts.push(`${errs} خطأ`);
+            const imgHint = imagesImported > 0 ? ` • ${imagesImported} صورة` : "";
             const metaHint = metaCols > 0
                 ? ` (تم حفظ ${metaCols} عمود إضافي في meta للمستقبل)`
                 : "";
-            toast.success(`تم الاستيراد: ${parts.join(" • ")}${metaHint}`,
+            toast.success(`تم الاستيراد: ${parts.join(" • ")}${imgHint}${metaHint}`,
                 { duration: 8000 });
             await loadCatalogue();
             await loadSummary();
@@ -703,6 +766,7 @@ export default function ProductCosts() {
                                     <li><strong>رقم المنتج</strong> <span className="text-xs opacity-80">(رقم المنتج / Product ID / id) — يُستخدم بديلاً إذا لم يوجد SKU</span></li>
                                     <li><strong>التكلفة</strong> <span className="text-xs opacity-80">(Cost / تكلفة المنتج / سعر التكلفة / الكلفة…)</span></li>
                                     <li><strong>اسم المنتج</strong> <span className="text-xs opacity-80">(اختياري — لو غير موجود، يُستخدم SKU/رقم المنتج كاسم مؤقت)</span></li>
+                                    <li><strong>صورة المنتج</strong> <span className="text-xs opacity-80">(العمود F افتراضياً — أو header: صورة / image / image_url)</span></li>
                                 </ul>
                                 <div className="mt-2 text-xs text-blue-800/80">
                                     💡 يكفي وجود <strong>التكلفة + (SKU أو رقم المنتج)</strong>. كل الأعمدة الأخرى تُحفظ تلقائياً في حقل <code>meta</code> للاستخدام المستقبلي ولا تؤثر على احتساب الربح.
