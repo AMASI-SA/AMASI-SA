@@ -982,12 +982,22 @@ async def dashboard(
     meta_purchases_total = sum(int(r.get("purchases") or 0) for r in meta_rows)
     meta_revenue_total = sum(float(r.get("revenue") or 0) for r in meta_rows)
 
+    # ── Total ads cost across all platforms ──────────────────────────────
+    # IMPORTANT (iteration 16 fix): the legacy `daily_costs.tiktok_ads`
+    # path was the ONLY TikTok source in this sum, but Make.com webhooks
+    # populate `tiktok_ads_daily` (collection above) — NOT `daily_costs`.
+    # As a result, every merchant whose TikTok feed went through the
+    # webhook (the supported path) had their TikTok spend dropped from
+    # the master "إجمالي تكلفة الإعلانات" card. Take the MAX per-day to
+    # avoid double-counting if someone happens to have both sources.
+    dc_tt_total = sum((d.get("tiktok_ads", 0) or 0) for d in daily)
+    tiktok_total_for_dashboard = max(tiktok_spend, dc_tt_total)
     daily_ads_total = sum(
         (d.get("snapchat_ads", 0) or 0) + (d.get("snapchat_ads_2", 0) or 0)
-        + (d.get("tiktok_ads", 0) or 0) + (d.get("instagram_ads", 0) or 0)
+        + (d.get("instagram_ads", 0) or 0)
         + (d.get("google_ads", 0) or 0)
         for d in daily
-    ) + meta_spend_total
+    ) + tiktok_total_for_dashboard + meta_spend_total
     daily_products_total = sum((d.get("product_costs", 0) or 0) for d in daily)
     daily_totals = daily_ads_total + daily_products_total
 
@@ -1472,12 +1482,23 @@ async def tiktok_summary(user: dict = Depends(current_user)):
     d30_start_str = (today_d - timedelta(days=29)).isoformat()
 
     # tiktok_ads_daily: rich per-day rows (spend, purchases, revenue, +
-    # optional CPC/CPM/CTR fields from TikTok native fields).
+    # optional CPC/CPM/CTR fields from TikTok native fields). Make.com may
+    # push MULTIPLE rows per date (one per active campaign), so we MUST
+    # aggregate across rows for the same date — using a naive `{date: row}`
+    # dict would drop all-but-one campaign's spend (iteration 16 fix).
     tt_rows = await db.tiktok_ads_daily.find(
         {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
         {"_id": 0},
-    ).to_list(60)
-    tt_by_date: dict = {r["date"]: r for r in tt_rows}
+    ).to_list(500)
+    tt_by_date: dict = {}
+    for r in tt_rows:
+        d = r.get("date")
+        if not d:
+            continue
+        agg = tt_by_date.setdefault(d, {"spend": 0.0, "purchases": 0, "revenue": 0.0})
+        agg["spend"] += float(r.get("spend") or 0)
+        agg["purchases"] += int(r.get("purchases") or 0)
+        agg["revenue"] += float(r.get("revenue") or 0)
 
     # daily_costs fallback (rare — most users will have webhook data)
     daily_rows = await db.daily_costs.find(
@@ -1488,27 +1509,28 @@ async def tiktok_summary(user: dict = Depends(current_user)):
                               for r in daily_rows if r.get("date")}
 
     def _row_spend(date_key: str) -> float:
-        r = tt_by_date.get(date_key) or {}
-        s = float(r.get("spend") or 0)
-        # Use the bigger of webhook vs manual (avoids double-counting when both
-        # paths populated the same day historically).
-        return max(s, dc_spend_by_date.get(date_key, 0.0))
+        webhook = float((tt_by_date.get(date_key) or {}).get("spend") or 0)
+        manual = float(dc_spend_by_date.get(date_key) or 0)
+        # Use the bigger of the two so we never double-count, but we ALSO
+        # never silently drop webhook data when the merchant happens to
+        # have a 0-valued daily_costs row for the same date (this exact
+        # case broke /dashboard/tiktok-summary in iteration 15 — fixed in 16).
+        return max(webhook, manual)
 
     def _agg(start: str, end: str):
+        # Iterate over the UNION of dates from BOTH sources — never
+        # restrict to one (the previous bug). For each date, use
+        # max(webhook, manual) so we never double-count.
+        date_keys = {k for k in tt_by_date if start <= k <= end} \
+                    | {k for k in dc_spend_by_date if start <= k <= end}
         spend = 0.0
         purchases = 0
         revenue = 0.0
-        for k in tt_by_date:
-            if start <= k <= end:
-                purchases += int((tt_by_date[k] or {}).get("purchases") or 0)
-                revenue += float((tt_by_date[k] or {}).get("revenue") or 0)
-        for k, v in dc_spend_by_date.items():
-            if start <= k <= end:
-                spend += _row_spend(k)
-        # When dc_spend_by_date doesn't cover the range, sum from tt_by_date directly
-        if spend == 0.0:
-            spend = sum(float((tt_by_date[k] or {}).get("spend") or 0)
-                        for k in tt_by_date if start <= k <= end)
+        for k in date_keys:
+            spend += _row_spend(k)
+            row = tt_by_date.get(k) or {}
+            purchases += int(row.get("purchases") or 0)
+            revenue += float(row.get("revenue") or 0)
         roas = round(revenue / spend, 2) if spend > 0 else 0.0
         cpa = round(spend / purchases, 2) if purchases > 0 else 0.0
         return {"spend": round(spend, 2), "orders": int(purchases),

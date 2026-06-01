@@ -20,6 +20,28 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## 🐛 BUG FIX (2026-06 — Iteration 16) — **TikTok Dashboard Card was 0 even when campaigns were spending**
+
+**Reported by merchant**: "تقرير التيك تك في لوحة التحكم أو بطاقة تكلفة الإعلانات لا تعرض أي بيانات على الرغم من أن الحملات تصرف بالوقت الحالي."
+
+**Root cause investigation** (3 bugs in one report):
+- **Bug A — multi-campaign-per-date overwrite** (`/api/dashboard/tiktok-summary`):  the line `tt_by_date = {r["date"]: r for r in tt_rows}` SILENTLY dropped all but the last campaign per date. Merchants running 2-3 active TikTok campaigns saw only 1/3 of their actual spend on the card.
+- **Bug B — partial daily_costs coverage dropped webhook spend** (`/api/dashboard/tiktok-summary`):  `_agg()` iterated over `dc_spend_by_date.items()` only, then fell back to webhook ONLY when daily_costs contributed exactly `0.0`. As a result, **any merchant with even one old manual `daily_costs.tiktok_ads` row inside the range had ALL webhook spend for OTHER dates dropped**. Admin's card showed 73 SAR (= old manual 33 + 40) instead of the correct 423 SAR (= 73 + webhook 350.75).
+- **Bug C — master `daily_ads_total` missed TikTok webhook entirely** (`/api/dashboard`): the `daily_ads_total` sum read `tiktok_ads` only from `daily_costs`, ignoring `tiktok_ads_daily` (where Make.com pushes). The "إجمالي تكلفة الإعلانات" card on Dashboard therefore undercounted TikTok by the full webhook amount for every merchant.
+
+**Fix applied** (`/app/backend/server.py`):
+- ✅ Multi-campaign aggregation: `tt_by_date` now accumulates spend+purchases+revenue across rows for the same date.
+- ✅ Spend aggregation iterates the **union** of `tt_by_date` and `dc_spend_by_date` dates and uses `max(webhook, manual)` per date to avoid double-counting.
+- ✅ `daily_ads_total` adds `max(tiktok_spend_from_tiktok_ads_daily, sum(daily_costs.tiktok_ads))` (no more silent drop).
+
+**Verification**:
+- ✅ Live admin card: before fix `last_30d.spend=73.0`, after fix `last_30d.spend=423.75` (correct: 33+40 manual + 350.75 webhook).
+- ✅ Live admin dashboard: `daily_ads_total = 702.75`, `total_ads_cost = 702.75`, `tiktok_spend = 350.75` (was 0).
+- ✅ Pytest: `tests/test_tiktok_dashboard_aggregation.py` — 4/4 new regression tests pass (locks in bug A/B/C).
+- ✅ Full Snapchat+Meta+TikTok suite: 63/63 pass.
+
+---
+
 ## ✅ COMPLETED & VERIFIED (2026-06 — Iteration 15) — **Snapchat Multi-Account Expansion**
 **Status**: 🟢 Production-ready. Tested end-to-end by `testing_agent_v3_fork`.
 
