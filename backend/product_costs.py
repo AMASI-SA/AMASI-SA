@@ -97,10 +97,18 @@ async def compute_order_cost(
     pids = {_norm_product_id(p.get("product_id") or p.get("id"))
             for p in products if (p.get("product_id") or p.get("id"))}
     or_clauses: list[dict] = []
+    # Iteration 29: CROSS-MATCH lookup. A merchant's product Excel from
+    # Salla often dumps the Salla product_id into the SKU column (or
+    # vice-versa). To make matching robust regardless of which column
+    # the merchant used, we now query EACH inbound identifier against
+    # BOTH `sku_normalized` AND `product_id` on the catalogue side.
+    # The matching loop later resolves any ambiguity by priority.
     if skus:
         or_clauses.append({"sku_normalized": {"$in": list(skus)}})
+        or_clauses.append({"product_id": {"$in": list(skus)}})  # cross
     if pids:
         or_clauses.append({"product_id": {"$in": list(pids)}})
+        or_clauses.append({"sku_normalized": {"$in": list(pids)}})  # cross
     cost_docs: list[dict] = []
     if or_clauses:
         cost_docs = await db.product_costs.find(
@@ -128,12 +136,25 @@ async def compute_order_cost(
         image_url = str(p.get("image_url") or p.get("image") or "").strip()
         cost_doc = None
         matched_by = None
+        # Iteration 29: priority order for matching is:
+        #   1. order.sku → catalogue.sku_normalized (canonical)
+        #   2. order.product_id → catalogue.product_id (canonical)
+        #   3. order.sku → catalogue.product_id (cross — merchant put
+        #      product_id in SKU column at import time)
+        #   4. order.product_id → catalogue.sku_normalized (cross —
+        #      merchant put SKU in product_id column at import time)
         if sku and sku in by_sku:
             cost_doc = by_sku[sku]
             matched_by = "sku"
         elif pid and pid in by_pid:
             cost_doc = by_pid[pid]
             matched_by = "product_id"
+        elif sku and sku in by_pid:
+            cost_doc = by_pid[sku]
+            matched_by = "sku_as_product_id"
+        elif pid and pid in by_sku:
+            cost_doc = by_sku[pid]
+            matched_by = "product_id_as_sku"
         if cost_doc:
             unit_cost = round(_to_float(cost_doc.get("cost_price")), 2)
             line_cost = round(unit_cost * qty, 2)
@@ -218,30 +239,23 @@ async def _reprocess_orders_for_keys(
         return 0
     or_clauses: list[dict] = []
     if skus:
-        # Both `missing_product_cost_lines.sku` AND `cost_items.sku` are
-        # stored already-normalised (upper-case) by compute_order_cost.
-        # We query BOTH because:
-        #   - "missing" matches orders currently unmatched (covers POST
-        #     /product-costs/ — merchant just added the cost).
-        #   - "cost_items" matches orders ALREADY matched (covers PUT
-        #     /product-costs/{id} — merchant edited the price).
         sku_list = [s for s in skus if s]
         if sku_list:
-            or_clauses.append(
-                {"missing_product_cost_lines.sku": {"$in": sku_list}}
-            )
-            or_clauses.append(
-                {"cost_items.sku": {"$in": sku_list}}
-            )
+            or_clauses.append({"missing_product_cost_lines.sku": {"$in": sku_list}})
+            or_clauses.append({"cost_items.sku": {"$in": sku_list}})
+            # Iteration 29 cross-match: also re-process orders whose
+            # missing/cost lines stored the value in product_id when the
+            # catalogue stored it in sku (or vice-versa).
+            or_clauses.append({"missing_product_cost_lines.product_id": {"$in": sku_list}})
+            or_clauses.append({"cost_items.product_id": {"$in": sku_list}})
     if pids:
         pid_list = [p for p in pids if p]
         if pid_list:
-            or_clauses.append(
-                {"missing_product_cost_lines.product_id": {"$in": pid_list}}
-            )
-            or_clauses.append(
-                {"cost_items.product_id": {"$in": pid_list}}
-            )
+            or_clauses.append({"missing_product_cost_lines.product_id": {"$in": pid_list}})
+            or_clauses.append({"cost_items.product_id": {"$in": pid_list}})
+            # cross-match for product_id
+            or_clauses.append({"missing_product_cost_lines.sku": {"$in": pid_list}})
+            or_clauses.append({"cost_items.sku": {"$in": pid_list}})
     if not or_clauses:
         return 0
     affected = 0
@@ -1229,10 +1243,23 @@ def _build_router(db, current_user_dep) -> APIRouter:
     ):
         """Re-attach cost data to every order in the last `days`. Useful
         after a bulk Excel import — orders ingested BEFORE the cost was
-        known will now reflect the new cost."""
+        known will now reflect the new cost.
+
+        Iteration 28: response now includes detailed audit fields so the
+        UI can show the merchant exactly what changed:
+          - orders_updated: total orders re-enriched
+          - complete_orders: orders now with profit_status='complete'
+          - incomplete_orders: still missing at least one cost
+          - distinct_missing_products: how many unique SKU/PIDs still lack
+            a cost entry across the window
+        """
         uid = user["id"]
         cutoff = (datetime.now(timezone.utc).date() - timedelta(days=days)).isoformat()
         updated = 0
+        complete = 0
+        incomplete = 0
+        no_products = 0
+        missing_keys: set = set()
         async for o in db.unified_orders.find(
             {"user_id": uid, "order_date": {"$gte": cutoff}},
             {"_id": 0, "order_number": 1, "products": 1},
@@ -1243,7 +1270,28 @@ def _build_router(db, current_user_dep) -> APIRouter:
                 {"$set": patch},
             )
             updated += 1
-        return {"orders_updated": updated, "window_days": days}
+            status = patch.get("profit_status")
+            if status == "complete":
+                complete += 1
+            elif status == "incomplete_no_products":
+                no_products += 1
+                incomplete += 1
+            else:
+                incomplete += 1
+            for ln in (patch.get("missing_product_cost_lines") or []):
+                k = (_norm_sku(ln.get("sku")) or
+                     _norm_product_id(ln.get("product_id")) or
+                     (ln.get("name") or "").strip())
+                if k:
+                    missing_keys.add(k)
+        return {
+            "orders_updated": updated,
+            "window_days": days,
+            "complete_orders": complete,
+            "incomplete_orders": incomplete,
+            "no_products_orders": no_products,
+            "distinct_missing_products": len(missing_keys),
+        }
 
     return router
 

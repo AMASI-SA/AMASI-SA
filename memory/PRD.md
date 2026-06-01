@@ -12,6 +12,71 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ROOT-CAUSE FIX (2026-06 — Iteration 29) — **Cross-match SKU ↔ Product ID**
+
+**Merchant report (real production data)**: "إلى الآن مافي اي بيانات تكلفة المنتجات ماتظهر خالص — مرتبط 2,123 منتج بدون تكلفة 0 — اليوم 0 الشهر 0".
+
+**Root cause** (discovered via direct DB inspection of merchant's catalogue):
+- التاجر استورد ملف منتجات سلة، وكل الـ 2,123 منتج وُضِعت معرّفاتهم في حقل **`sku`** (مثلاً `sku='1573005664'`) بينما حقل **`product_id`** يبقى فارغ ('').
+- لكن طلبات Make.com القادمة تحوي القيمة في حقل **`product_id`** (لأن سلة يرسل `product_id`).
+- النتيجة: المطابقة الكلاسيكية (`sku→sku` و `product_id→product_id`) **تفشل دائماً** لكل الطلبات لأن المعرّفات في حقول متبادلة.
+
+**Fix in `compute_order_cost` و `_reprocess_orders_for_keys`**:
+- ✅ **Cross-match lookup**: عند البحث، نطابق كل معرّف من الطلب على **كلا الحقلين** في الكاتالوج:
+  - `order.sku → catalogue.sku_normalized` (canonical) → ثم `catalogue.product_id` (cross)
+  - `order.product_id → catalogue.product_id` (canonical) → ثم `catalogue.sku_normalized` (cross)
+- ✅ **أولوية المطابقة**: canonical أولاً، ثم cross (لتجنب تعارض في حالة وجود نفس القيمة في كلا الحقلين على صفين مختلفين).
+- ✅ **`matched_by` الجديد**: `sku_as_product_id` أو `product_id_as_sku` للإفصاح عن طريقة المطابقة (مفيد للتصحيح).
+- ✅ **Reprocess محسّن**: عند تعديل تكلفة، يبحث في `cost_items.sku`, `cost_items.product_id`, `missing_product_cost_lines.sku`, و `missing_product_cost_lines.product_id` على كل المعرّفات (لتغطية cross-match في الطلبات السابقة).
+
+**Live verification on the merchant's actual catalogue (preview env)**:
+- أرسلت طلب اختباري بـ `product_id="129545691"` (محفوظ في الكاتالوج كـ SKU بتكلفة 22 ر.س × 3 وحدات)
+- النتيجة: `total_product_cost=66.0 ر.س`, `profit_status=complete`, `matched_by=product_id_as_sku` ✅
+- Summary endpoint: `today_total=66.0`, `month_total=66.0` ✅
+
+**Tests** (`test_cross_match_iteration29.py`): 4 جديدة + 65 regression = **69/69 PASS**:
+- catalogue SKU = order product_id → match cross
+- catalogue product_id = order sku → match cross
+- canonical match يفوز على cross عند التعارض
+- recompute يلتقط cross-match للطلبات السابقة
+
+**أثر النشر**:
+- بمجرد إعادة النشر (Re-deploy) للإنتاج، كل الطلبات السابقة (الشهر + الـ 60 يوم) ستتم مطابقتها تلقائياً عبر self-heal في `/summary` و `/api/dashboard`.
+- لو ضغط التاجر "تحديث الشهر بالكامل"، النتيجة الفورية: 2,123 منتج مرتبط بالفعل بكل الطلبات.
+
+---
+
+## 🔧 ENHANCEMENT (2026-06 — Iteration 28) — **Self-heal شهر كامل + زر "تحديث الشهر بالكامل" + Audit details**
+
+**Merchant requirement**: "إجمالي تكاليف المنتجات ما تظهر في بطاقة تكلفة المنتجات في لوحة التحكم" + الخيار C (إعادة نشر + زر شهر كامل + تأكيد بعد التنفيذ).
+
+**Backend** (`product_costs.py`):
+- ✅ **`/summary` self-heal الشهر بالكامل** (بدلاً من اليوم فقط في iter 27): يبحث عن كل طلبات الشهر الحالي بـ `total_product_cost=null` ويُعيد ربطها قبل احتساب الإجماليات. الـ response يحوي الآن `stale_today_healed` + `stale_month_healed`.
+- ✅ **`/recompute` محسَّن** يرجع تفاصيل تدقيق كاملة (audit breakdown):
+  - `orders_updated`, `window_days`
+  - `complete_orders` (الربح موثوق)
+  - `incomplete_orders` (≥1 منتج بدون تكلفة)
+  - `no_products_orders` (طلب بدون products[])
+  - `distinct_missing_products` (منتجات فريدة لا زالت بدون تكلفة فعلياً)
+
+**Frontend** (`ProductCostCard.jsx`):
+- ✅ **زر "تحديث آخر يومين"** (أخضر) — الحل السريع للطلبات الحديثة.
+- ✅ **زر "تحديث الشهر بالكامل"** (كهرماني، بارز) — يستدعي `/recompute?days=30` ويصلح كل طلبات الشهر السابقة.
+- ✅ **Toast تفصيلي بعد التحديث** يعرض: "تحديث الشهر بالكامل: 1,250 طلب • ✅ 1,180 مكتمل الربح • ⚠️ 70 غير مكتمل • 18 منتج بدون تكلفة" — التاجر يعرف بالضبط ماذا تم.
+- ✅ يعمل على **جميع البيئات** (الإنتاج والمعاينة) لأن `/recompute` موجود منذ iteration 19.
+
+**Tests** (`test_self_heal_iteration27.py` موسّع): 6/6 جديدة + 59 regression = **65/65 PASS**. التغطية الإضافية:
+- `/summary` يصلح طلبات قديمة في الشهر (ليس اليوم فقط) → `stale_month_healed >= 1`.
+- `/recompute` يرجع audit breakdown كامل (complete/incomplete/no_products/distinct_missing).
+
+**خطة النشر للإنتاج**:
+1. التاجر يضغط **"Re-deploy"** على Emergent → iteration 28 ينتشر.
+2. عند فتح Dashboard، `/summary` و `/api/dashboard` يُنفّذان self-heal تلقائياً للشهر الكامل.
+3. لو بقيت طلبات لم تصلح (سبب نادر) → يضغط "تحديث الشهر بالكامل" → toast يؤكد العدد المُصلَح.
+4. التأكيد: لا طلبات بحالة "Missing Cost" إلا تلك التي منتجاتها فعلياً ليست في الكاتالوج (يمكن مراجعتها من `/product-costs?tab=missing`).
+
+---
+
 ## 🐛 BUGFIX (2026-06 — Iteration 27) — **Self-heal لتكلفة طلبات اليوم + زر "تحديث التكلفة الآن"**
 
 **Merchant report**: "تكلفة منتجات الطلبات حق تاريخ اليوم كامله لم يتم احتسبها".

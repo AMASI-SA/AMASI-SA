@@ -32,19 +32,32 @@ export default function ProductCostCard({ refreshKey = 0 }) {
     //   • the deployed environment is older than iteration 26 and lacks
     //     the auto-recompute hook (the underlying /recompute endpoint
     //     has shipped since iteration 19, so this button works anywhere).
-    const recomputeNow = async () => {
+    // Iteration 28: separate "recompute current month" trigger for a
+    // full backfill — handles older-in-month stale orders in one click.
+    const recompute = async (days, label) => {
         setRecomputing(true);
         try {
-            const { data } = await api.post("/product-costs/recompute?days=2");
+            const { data } = await api.post(`/product-costs/recompute?days=${days}`);
             await load();
+            const ok = data.orders_updated || 0;
+            const complete = data.complete_orders || 0;
+            const incomplete = data.incomplete_orders || 0;
+            const noProd = data.no_products_orders || 0;
+            const distinct = data.distinct_missing_products || 0;
+            const parts = [`✅ ${complete} مكتمل الربح`];
+            if (incomplete > 0) parts.push(`⚠️ ${incomplete} غير مكتمل`);
+            if (noProd > 0) parts.push(`📦 ${noProd} بدون products[]`);
+            if (distinct > 0) parts.push(`${distinct} منتج بدون تكلفة`);
             toast.success(
-                `تم تحديث تكلفة ${data.orders_updated || 0} طلب من آخر ${data.window_days || 2} يوم`,
-                { duration: 5000 },
+                `${label}: ${ok} طلب • ${parts.join(" • ")}`,
+                { duration: 9000 },
             );
         } catch (err) {
             toast.error("تعذر تحديث التكلفة — حاول مرة أخرى");
         } finally { setRecomputing(false); }
     };
+    const recomputeNow = () => recompute(2, "آخر يومين");
+    const recomputeMonth = () => recompute(30, "الشهر بالكامل");
 
     useEffect(() => { load(); /* eslint-disable-next-line */ }, [refreshKey]);
 
@@ -65,8 +78,8 @@ export default function ProductCostCard({ refreshKey = 0 }) {
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    {/* Iteration 27: prominent CTA — manual recompute of last 2 days. */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    {/* Iteration 27: manual recompute of last 2 days. */}
                     <button
                         type="button"
                         onClick={recomputeNow}
@@ -76,7 +89,20 @@ export default function ProductCostCard({ refreshKey = 0 }) {
                         data-testid="dashboard-product-cost-recompute-btn"
                     >
                         <Lightning size={14} weight="fill" className={recomputing ? "animate-pulse" : ""} />
-                        {recomputing ? "جارٍ التحديث…" : "تحديث التكلفة الآن"}
+                        {recomputing ? "جارٍ التحديث…" : "تحديث آخر يومين"}
+                    </button>
+                    {/* Iteration 28: manual recompute of the WHOLE month
+                        (30 days). Heavier but covers stale older orders. */}
+                    <button
+                        type="button"
+                        onClick={recomputeMonth}
+                        disabled={recomputing}
+                        className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:bg-amber-600/60 text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
+                        title="إعادة احتساب جميع الطلبات في آخر 30 يوم — يحلّ مشكلة الطلبات القديمة بدون تكلفة"
+                        data-testid="dashboard-product-cost-recompute-month-btn"
+                    >
+                        <Lightning size={14} weight="fill" className={recomputing ? "animate-pulse" : ""} />
+                        {recomputing ? "جارٍ…" : "تحديث الشهر بالكامل"}
                     </button>
                     <button
                         type="button"

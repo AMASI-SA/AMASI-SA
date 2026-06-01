@@ -233,3 +233,54 @@ class TestManualRecompute:
         body = r.json()
         assert "orders_updated" in body
         assert "window_days" in body
+
+    def test_recompute_returns_audit_breakdown(self):
+        """Iteration 28: /recompute response includes detailed audit
+        fields so the UI can confirm to the merchant exactly what
+        changed (complete vs incomplete, plus distinct missing products)."""
+        token, uid = _register()
+        wh = _wh(token)
+        # 1 order WITH cost in catalogue → should land complete after recompute.
+        requests.post(
+            f"{API}/product-costs/",
+            json={"product_id": "AUD-OK", "product_name": "ok",
+                  "cost_price": 10.0},
+            headers={**_hdr(token), "Content-Type": "application/json"},
+            timeout=15,
+        )
+        today = datetime.now(timezone.utc).date().isoformat()
+        requests.post(
+            f"{API}/webhook/make/{wh}",
+            json={"order_number": f"O-AUD-OK-{uuid.uuid4().hex[:6]}",
+                  "total": 100, "order_date": today,
+                  "products": [{"product_id": "AUD-OK", "name": "ok",
+                                "quantity": 2, "price": 50}]},
+            timeout=15,
+        )
+        # 1 order WITHOUT cost → incomplete after recompute.
+        requests.post(
+            f"{API}/webhook/make/{wh}",
+            json={"order_number": f"O-AUD-MISS-{uuid.uuid4().hex[:6]}",
+                  "total": 80, "order_date": today,
+                  "products": [{"product_id": "AUD-MISS", "name": "miss",
+                                "quantity": 1, "price": 80}]},
+            timeout=15,
+        )
+        # 1 order WITHOUT products[] → no_products bucket.
+        requests.post(
+            f"{API}/webhook/make/{wh}",
+            json={"order_number": f"O-AUD-NOPR-{uuid.uuid4().hex[:6]}",
+                  "total": 25, "order_date": today, "products": []},
+            timeout=15,
+        )
+        r = requests.post(f"{API}/product-costs/recompute?days=30",
+                          headers=_hdr(token), timeout=20)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # Detailed audit fields must be present.
+        assert body["orders_updated"] >= 3
+        assert body["complete_orders"] >= 1
+        assert body["incomplete_orders"] >= 2
+        assert body["no_products_orders"] >= 1
+        assert body["distinct_missing_products"] >= 1
+        assert body["window_days"] == 30
