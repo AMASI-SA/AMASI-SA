@@ -20,6 +20,28 @@
 - حسابات منفصلة لكل مستخدم (auth + isolation).
 - تصدير التقارير إلى PDF و Excel.
 
+## 🐛 BUG FIX (2026-06 — Iteration 17) — **Snapchat card dropping the 2nd account after legacy refresh**
+
+**Reported by merchant**: "بطاقة اعلانات السناب في لوحة التحكم تعرض تكلفة الإعلانات من حساب [user_id] فقط ... بالبداية كان يعرض بشكل صحيح التكلفة من الحسابين الإعلانيين ولكن بعد التحديث مرتين نقصه صرف الحساب الثاني."
+
+**Root cause**: TWO endpoints were writing to `daily_costs.snapchat_ads`:
+1. `/snapchat/sync-all-accounts` (new, iteration 15) — wrote the SUM across all enabled accounts.
+2. `/snapchat/daily-spend/bulk` (legacy single-account) — wrote ONLY the spend of `snapchat_connections.ad_account_id`, OVERWRITING the multi-account aggregate.
+
+When the merchant hit the legacy refresh on the dashboard (which still pointed at `/daily-spend/bulk`), it silently wiped the second account's spend from the card. Each subsequent click kept the value pinned to a single account.
+
+**Fix applied** (`/app/backend/snapchat_routes.py`):
+- ✅ Added `_reaggregate_snap_daily(uid, date_str)` helper — the single source of truth for `daily_costs.snapchat_ads` and `snapchat_daily_stats`. Sums from `snapchat_account_daily` (per-account collection) across ALL of the user's accounts.
+- ✅ Added `_ensure_legacy_account_tracked(uid, ad_id, ...)` — auto-upserts a `snapchat_ad_accounts` enabled row for the legacy account so the aggregation helper sees it (idempotent).
+- ✅ Refactored legacy `/daily-spend/bulk`: now writes to `snapchat_account_daily` for the account being synced, then calls the helper. Never overwrites another account's data.
+- ✅ Refactored `/sync-all-accounts`: replaced inline aggregation with calls to the same helper (DRY + guarantees both endpoints stay in sync forever).
+
+**Verification**:
+- ✅ Regression test `tests/test_snap_aggregation_no_overwrite.py` (2/2 pass) — simulates the exact bug sequence: seed 2 accounts → legacy refresh on account A twice → confirm B's spend STILL counted.
+- ✅ Full Snapchat+TikTok+Meta suite: **68/68 pass**.
+
+---
+
 ## 🐛 BUG FIX (2026-06 — Iteration 16) — **TikTok Dashboard Card was 0 even when campaigns were spending**
 
 **Reported by merchant**: "تقرير التيك تك في لوحة التحكم أو بطاقة تكلفة الإعلانات لا تعرض أي بيانات على الرغم من أن الحملات تصرف بالوقت الحالي."

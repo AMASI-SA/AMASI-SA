@@ -438,6 +438,95 @@ def _build_router(db) -> APIRouter:
         logger.warning("Unknown Snapchat ad account currency %r; leaving amount unchanged.", cur)
         return round(amount, 2), 1.0
 
+    async def _reaggregate_snap_daily(uid: str, date_str: str) -> dict:
+        """Recompute `daily_costs.snapchat_ads` and `snapchat_daily_stats`
+        for one (user, date) by SUMMING every per-account row in
+        `snapchat_account_daily`.
+
+        Iteration 17 fix — root cause of "after refresh the second account's
+        spend disappears": the legacy `/daily-spend/bulk` endpoint and
+        the new `/sync-all-accounts` endpoint were independently writing
+        to `daily_costs.snapchat_ads`. The legacy one wrote only ONE
+        account's spend, overwriting any prior multi-account aggregate.
+        By funneling EVERY snap-spend write through this helper —
+        and treating `snapchat_account_daily` as the single source of
+        truth — both endpoints now produce consistent aggregates no
+        matter which one runs last.
+
+        Returns {sum_spend, sum_revenue, sum_purchases, account_count}.
+        """
+        account_rows = await db.snapchat_account_daily.find(
+            {"user_id": uid, "date": date_str},
+            {"_id": 0, "spend_sar": 1, "revenue_sar": 1, "purchases": 1},
+        ).to_list(50)
+        sum_spend = round(sum(float(r.get("spend_sar") or 0) for r in account_rows), 2)
+        sum_revenue = round(sum(float(r.get("revenue_sar") or 0) for r in account_rows), 2)
+        sum_purchases = sum(int(r.get("purchases") or 0) for r in account_rows)
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        existing_dc = await db.daily_costs.find_one(
+            {"user_id": uid, "date": date_str}, {"_id": 0},
+        )
+        if existing_dc:
+            await db.daily_costs.update_one(
+                {"user_id": uid, "date": date_str},
+                {"$set": {"snapchat_ads": sum_spend, "updated_at": now_iso}},
+            )
+        else:
+            import uuid as _uuid
+            await db.daily_costs.insert_one({
+                "id": str(_uuid.uuid4()),
+                "user_id": uid,
+                "date": date_str,
+                "snapchat_ads": sum_spend,
+                "snapchat_ads_2": 0.0,
+                "tiktok_ads": 0.0,
+                "instagram_ads": 0.0,
+                "google_ads": 0.0,
+                "product_costs": 0.0,
+                "notes": f"auto from Snapchat ({len(account_rows)} حساب)",
+                "created_at": now_iso,
+            })
+        await db.snapchat_daily_stats.update_one(
+            {"user_id": uid, "date": date_str},
+            {"$set": {
+                "user_id": uid, "date": date_str,
+                "spend": sum_spend, "revenue": sum_revenue,
+                "purchases": sum_purchases, "updated_at": now_iso,
+            }},
+            upsert=True,
+        )
+        return {"sum_spend": sum_spend, "sum_revenue": sum_revenue,
+                "sum_purchases": sum_purchases, "account_count": len(account_rows)}
+
+    async def _ensure_legacy_account_tracked(
+        uid: str, ad_id: str, ad_currency: str, ad_tz: str, ad_name: str = "",
+    ) -> None:
+        """Auto-upsert a `snapchat_ad_accounts` enabled row for the legacy
+        single-account user so the aggregation helper has a known set
+        of accounts to sum from. Idempotent — safe to call on every
+        legacy sync.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.snapchat_ad_accounts.update_one(
+            {"user_id": uid, "ad_account_id": ad_id},
+            {
+                "$set": {
+                    "user_id": uid,
+                    "ad_account_id": ad_id,
+                    "currency_native": (ad_currency or "").upper() or "SAR",
+                    "timezone": ad_tz or "",
+                    "updated_at": now_iso,
+                },
+                "$setOnInsert": {
+                    "name": ad_name or ad_id,
+                    "enabled": True,  # legacy connected account counts as enabled
+                    "created_at": now_iso,
+                },
+            },
+            upsert=True,
+        )
+
     @router.get("/daily-spend")
     async def daily_spend(
         date: str = Query(..., description="YYYY-MM-DD"),
@@ -713,54 +802,48 @@ def _build_router(db) -> APIRouter:
                 revenue_native = round(total_purchases_value_micro / 1_000_000, 2)
                 spend, fx_rate = _to_sar(spend_native, ad_currency)
                 revenue, _ = _to_sar(revenue_native, ad_currency)
-
-                # Upsert into daily_costs, preserving other fields (snapchat_ads_2,
-                # tiktok, etc) if the row already exists.
                 date_str = d.isoformat()
-                existing = await db.daily_costs.find_one(
-                    {"user_id": user["id"], "date": date_str}, {"_id": 0}
-                )
-                if existing:
-                    await db.daily_costs.update_one(
-                        {"user_id": user["id"], "date": date_str},
-                        {"$set": {"snapchat_ads": spend,
-                                  "updated_at": datetime.now(timezone.utc).isoformat()}},
-                    )
-                else:
-                    import uuid as _uuid
-                    await db.daily_costs.insert_one({
-                        "id": str(_uuid.uuid4()),
-                        "user_id": user["id"],
-                        "date": date_str,
-                        "snapchat_ads": spend,
-                        "snapchat_ads_2": 0.0,
-                        "tiktok_ads": 0.0,
-                        "instagram_ads": 0.0,
-                        "google_ads": 0.0,
-                        "product_costs": 0.0,
-                        "notes": f"auto from Snapchat ({ad_currency}→SAR ×{fx_rate})" if fx_rate != 1 else "auto from Snapchat",
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    })
 
-                # Separately persist Snapchat-reported conversions (Pixel data)
-                # so the dashboard can read attributed orders + revenue from
-                # the ad platform itself rather than from unified_orders.
-                await db.snapchat_daily_stats.update_one(
-                    {"user_id": user["id"], "date": date_str},
+                # ── Per-account row (iteration 17 fix) ─────────────────
+                # Write this account's spend into `snapchat_account_daily`
+                # FIRST, then re-aggregate `daily_costs.snapchat_ads` from
+                # ALL accounts. Previously the legacy bulk endpoint wrote
+                # ONLY this account's spend directly into `daily_costs`,
+                # silently overwriting the multi-account aggregate
+                # written by `/sync-all-accounts`.
+                await db.snapchat_account_daily.update_one(
+                    {"user_id": user["id"], "ad_account_id": ad_id,
+                     "date": date_str},
                     {"$set": {
                         "user_id": user["id"],
+                        "ad_account_id": ad_id,
                         "date": date_str,
-                        "spend": spend,
                         "spend_native": spend_native,
-                        "revenue": revenue,
-                        "revenue_native": revenue_native,
-                        "purchases": total_purchases,
                         "currency_native": ad_currency,
                         "fx_rate": fx_rate,
+                        "spend_sar": spend,
+                        "spend": spend,
+                        "purchases": total_purchases,
+                        "revenue_native": revenue_native,
+                        "revenue_sar": revenue,
+                        "business_timezone": "Asia/Riyadh",
+                        "ad_account_timezone": tz_name,
                         "updated_at": datetime.now(timezone.utc).isoformat(),
-                    }},
+                    },
+                     "$setOnInsert": {
+                         "created_at": datetime.now(timezone.utc).isoformat(),
+                     }},
                     upsert=True,
                 )
+                # Ensure the legacy account is tracked so the aggregation
+                # helper sees it (idempotent — safe on every sync).
+                await _ensure_legacy_account_tracked(
+                    user["id"], ad_id, ad_currency, tz_name,
+                )
+                # Re-aggregate this date across ALL the user's per-account
+                # rows (this is what protects multi-account merchants from
+                # the previous bug).
+                await _reaggregate_snap_daily(user["id"], date_str)
 
                 saved.append({
                     "date": date_str,
@@ -1091,57 +1174,11 @@ def _build_router(db) -> APIRouter:
         # reports continue to render the cross-account total without any
         # other code change. Also update `snapchat_daily_stats` (used by the
         # snapchat-summary card for orders+revenue) with cross-account
-        # aggregates.
+        # aggregates. Iteration 17: refactored to use `_reaggregate_snap_daily`
+        # so the legacy `/daily-spend/bulk` endpoint and this one stay in
+        # sync forever.
         for d in dates:
-            date_str = d.isoformat()
-            account_rows = await db.snapchat_account_daily.find(
-                {"user_id": uid, "date": date_str},
-                {"_id": 0, "spend_sar": 1, "revenue_sar": 1, "purchases": 1,
-                 "spend_native": 1, "revenue_native": 1, "currency_native": 1, "fx_rate": 1},
-            ).to_list(50)
-            sum_spend = round(sum(float(r.get("spend_sar") or 0) for r in account_rows), 2)
-            sum_revenue = round(sum(float(r.get("revenue_sar") or 0) for r in account_rows), 2)
-            sum_purchases = sum(int(r.get("purchases") or 0) for r in account_rows)
-
-            # Legacy daily_costs upsert (preserves other fields).
-            existing_dc = await db.daily_costs.find_one(
-                {"user_id": uid, "date": date_str}, {"_id": 0},
-            )
-            if existing_dc:
-                await db.daily_costs.update_one(
-                    {"user_id": uid, "date": date_str},
-                    {"$set": {"snapchat_ads": sum_spend,
-                              "updated_at": datetime.now(timezone.utc).isoformat()}},
-                )
-            else:
-                import uuid as _uuid
-                await db.daily_costs.insert_one({
-                    "id": str(_uuid.uuid4()),
-                    "user_id": uid,
-                    "date": date_str,
-                    "snapchat_ads": sum_spend,
-                    "snapchat_ads_2": 0.0,
-                    "tiktok_ads": 0.0,
-                    "instagram_ads": 0.0,
-                    "google_ads": 0.0,
-                    "product_costs": 0.0,
-                    "notes": f"auto from Snapchat ({len(account_rows)} حساب)",
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                })
-            # Aggregate Pixel stats too so the dashboard card shows the
-            # cross-account orders+revenue.
-            await db.snapchat_daily_stats.update_one(
-                {"user_id": uid, "date": date_str},
-                {"$set": {
-                    "user_id": uid,
-                    "date": date_str,
-                    "spend": sum_spend,
-                    "revenue": sum_revenue,
-                    "purchases": sum_purchases,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }},
-                upsert=True,
-            )
+            await _reaggregate_snap_daily(uid, d.isoformat())
 
         return {
             "accounts_synced": len(accounts_summary),
