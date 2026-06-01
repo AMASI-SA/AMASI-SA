@@ -943,21 +943,26 @@ def _build_router(db, current_user_dep) -> APIRouter:
         today_d = datetime.now(timezone.utc).date()
         today_str = today_d.isoformat()
         month_start = today_str[:8] + "01"
-        # Iteration 27: lazy self-heal — before computing today/month
-        # totals, re-attach cost on every TODAY order whose
-        # total_product_cost is still null (i.e. never enriched, or
-        # enriched before the catalogue had its cost). This is cheap
-        # (only touches stale rows) and idempotent, and ensures the
-        # Dashboard card always reflects reality even on environments
-        # that don't have the iteration-26 auto-recompute hooks.
+        # Iteration 27/28: lazy self-heal — before computing today/month
+        # totals, re-attach cost on every order in the CURRENT MONTH
+        # whose total_product_cost is still null. This is cheap (only
+        # touches stale rows) and idempotent. It guarantees the Dashboard
+        # card always reflects reality even on environments that don't
+        # have the iteration-26 auto-recompute hooks.
+        #
+        # Iteration 28: widened from "today only" → "whole current month"
+        # because the merchant reported month_total stayed 0 even after
+        # today's orders healed (older-in-month orders were still stale).
         stale_today_healed = 0
+        stale_month_healed = 0
         async for o in db.unified_orders.find(
-            {"user_id": uid, "order_date": today_str,
+            {"user_id": uid,
+             "order_date": {"$gte": month_start, "$lte": today_str},
              "$or": [
                  {"total_product_cost": None},
                  {"total_product_cost": {"$exists": False}},
              ]},
-            {"_id": 0, "order_number": 1, "products": 1},
+            {"_id": 0, "order_number": 1, "products": 1, "order_date": 1},
         ):
             try:
                 patch = await attach_cost_to_order_doc(db, uid, o)
@@ -965,7 +970,9 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     {"user_id": uid, "order_number": o["order_number"]},
                     {"$set": patch},
                 )
-                stale_today_healed += 1
+                stale_month_healed += 1
+                if o.get("order_date") == today_str:
+                    stale_today_healed += 1
             except Exception:
                 pass  # never fail summary if heal fails on one row
         # Today / month: sum total_product_cost on orders in that range.
@@ -1068,6 +1075,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
             "avg_cost": avg_cost,
             "top_products_last_30d": top,
             "stale_today_healed": int(stale_today_healed),
+            "stale_month_healed": int(stale_month_healed),
             "currency": "SAR",
         }
 

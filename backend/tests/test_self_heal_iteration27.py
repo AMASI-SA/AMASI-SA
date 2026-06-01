@@ -149,6 +149,43 @@ class TestSummarySelfHeal:
         assert body["stale_today_healed"] == 0
         assert body["today_total"] == 10.0
 
+    def test_summary_heals_entire_current_month(self):
+        """Iteration 28: self-heal must cover the WHOLE current month,
+        not just today — so month_total reflects reality after a single
+        /summary call even if older-in-month orders are stale."""
+        token, uid = _register()
+        wh = _wh(token)
+        requests.post(
+            f"{API}/product-costs/",
+            json={"product_id": "MONTH-1", "product_name": "x",
+                  "cost_price": 20.0},
+            headers={**_hdr(token), "Content-Type": "application/json"},
+            timeout=15,
+        )
+        from datetime import date as _date
+        today_d = _date.fromisoformat(datetime.now(timezone.utc).date().isoformat())
+        # Pick a date earlier in the current month (if today != month_start)
+        early_str = (today_d.replace(day=1)).isoformat()
+        order_no = f"O-MONTH-{uuid.uuid4().hex[:6]}"
+        requests.post(
+            f"{API}/webhook/make/{wh}",
+            json={"order_number": order_no, "total": 200,
+                  "order_date": early_str,
+                  "products": [{"product_id": "MONTH-1", "name": "x",
+                                "quantity": 2, "price": 100}]},
+            timeout=15,
+        )
+        _force_null_tpc(uid, order_no)
+        # Now /summary must heal it as part of month-wide scan.
+        r = requests.get(f"{API}/product-costs/summary", headers=_hdr(token),
+                         timeout=15)
+        body = r.json()
+        assert body["stale_month_healed"] >= 1
+        # month_total now includes the healed order (2 * 20 = 40)
+        assert body["month_total"] >= 40.0
+        after = _get_order_field(uid, order_no, "total_product_cost")
+        assert after["total_product_cost"] == 40.0
+
 
 # ──────────────────────────────────────────────────────────────────────────
 class TestDashboardSelfHeal:
