@@ -12,6 +12,51 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ROOT-CAUSE FIX (2026-06 — Iteration 30) — **Payment-gateway synonym matching (cross-language)**
+
+**Merchant report**: "بطاقة رسوم بوابة الدفع عدا تابي وتمارا وامكان في لوحة التحكم تظهر القيمة صفر — لا يتم احتساب الرسوم وخصمها من بطاقة صافي المدفوعات الإلكترونية".
+
+**Root cause** (verified via direct DB inspection):
+- إعدادات المستخدم بأسماء عربية (`"مدى"`, `"البطاقة الإئتمانية"`, `"Apple Pay"`).
+- لكن سلة ترسل أسماء البوابات بصيغ إنجليزية / متغايرة (`"Mada"`, `"Visa/MasterCard"`, `"apple pay"`).
+- `normalize_name` القديم كان يطبّق lowercase + إزالة diacritics فقط، لم يتعرّف على أن `"مدى" = "Mada"`.
+- نتيجةً: `fee_amount = 0` لكل البوابات إلا Tabby/Tamara/Emkan (الوحيدة التي صادف أن اسمها العربي == ما يرسله سلة).
+
+**Backend** (`excel_parser.py`):
+- ✅ **`normalize_name` موسّع**: يوحّد الآن المتغيرات العربية:
+  - أ/إ/آ → ا
+  - ى → ي
+  - ة → ه
+  - ؤ → و
+  - ئ → ي
+  - (بالإضافة إلى lowercase + diacritics — السابق)
+- ✅ **`PAYMENT_SYNONYMS`** — قاموس مرادفات شامل لـ 10 مجموعات بوابات. كل مجموعة ثنائية الاتجاه:
+  - Mada: `مدى`/`mada`/`مدا`
+  - Tamara: `تمارا`/`tamara`
+  - Tabby: `تابي`/`tabby`
+  - Emkan: `إمكان`/`امكان`/`emkan`/`amkan`/`emkaninstallment`
+  - Apple Pay: `ابل باي`/`apple pay`/`applepay`
+  - STC Pay: `stc pay`/`stcpay`/`stc`/`اس تي سي باي`
+  - Credit cards: `بطاقة ائتمانية`/`credit card`/`visa`/`mastercard`/`visa/mastercard`
+  - COD: `عند الاستلام`/`cod`/`cash on delivery`
+  - Bank transfer: `تحويل بنكي`/`bank transfer`
+  - Wallet: `محفظة`/`wallet`/`salla wallet`
+- ✅ **`_payment_synonym_match`** — bidirectional lookup. يجرّب: (1) exact match → (2) substring → (3) synonym group resolution.
+- ✅ المجموعات تُنرمَل عند module-load (`PAYMENT_SYNONYMS = [...normalize_name(t)...]`) لتطابق الـ post-normalize keys.
+
+**Tests** (`test_payment_synonym_iteration30.py`): 18 جديدة + 105 regression = **123/123 PASS** للـ payment + product_costs suites.
+التغطية:
+- normalize_name يوحّد كل المتغيرات العربية (أ/إ/آ/ى/ة/ؤ/ئ).
+- 7 cross-language pairs (Mada/Tabby/Apple Pay/STC/Credit Cards/Emkan/COD).
+- `Visa/MasterCard` ينطبق على إعداد `البطاقة الإئتمانية` بـ commission 1.5%.
+- `بطاقة ائتمانية` (بدون "ال" + بدون "إ") ينطبق على إعداد `البطاقة الإئتمانية`.
+- بوابة فعلياً غير معروفة (`Crypto-Pay-XYZ`) تبقى `matched=False` بـ fee=0 (لا false positives).
+- Tabby/Tamara/Emkan ما زالت تشتغل (لا regression).
+
+**أثر النشر**: بمجرد إعادة النشر (Re-deploy)، رسوم كل بوابات الدفع التي تستخدمها المتجر ستحسب تلقائياً وتخصم من بطاقة "صافي المدفوعات الإلكترونية" في Dashboard وتقارير المبيعات.
+
+---
+
 ## 🎯 ROOT-CAUSE FIX (2026-06 — Iteration 29) — **Cross-match SKU ↔ Product ID**
 
 **Merchant report (real production data)**: "إلى الآن مافي اي بيانات تكلفة المنتجات ماتظهر خالص — مرتبط 2,123 منتج بدون تكلفة 0 — اليوم 0 الشهر 0".

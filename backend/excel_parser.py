@@ -314,7 +314,82 @@ def normalize_name(name: str) -> str:
     n = re.sub(r"\s+", " ", n)
     # Remove Arabic diacritics
     n = re.sub(r"[\u064B-\u0652]", "", n)
+    # Iteration 30: also unify common Arabic letter variants so that
+    # "البطاقة الإئتمانية" matches "بطاقة ائتمانية" or "credit card".
+    n = n.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+    n = n.replace("ى", "ي").replace("ة", "ه").replace("ؤ", "و").replace("ئ", "ي")
     return n
+
+
+# Iteration 30: payment-method synonym groups.
+# Maps a CANONICAL token (Arabic preferred) to every alternate spelling
+# Salla / the merchant might use across configs and order rows. Each
+# group is bidirectional — if EITHER side appears in the settings name
+# AND the other side appears in the order's payment_method, we match.
+# Raw tokens here may contain ANY spelling — they're normalised at
+# import time below so the matcher only ever compares like-with-like.
+_RAW_PAYMENT_SYNONYMS: list[set[str]] = [
+    # Mada
+    {"مدى", "مدا", "مادا", "mada"},
+    # Tamara
+    {"تمارا", "تمارة", "tamara"},
+    # Tabby
+    {"تابي", "tabby"},
+    # Emkan / Amkan
+    {"امكان", "إمكان", "emkan", "amkan", "emkaninstallment", "emkan installment",
+     "امكان للتقسيط", "إمكان للتقسيط"},
+    # Apple Pay
+    {"ابل باي", "ابل بي", "applepay", "apple pay", "apple"},
+    # STC Pay
+    {"اس تي سي باي", "stcpay", "stc pay", "stc"},
+    # Credit / debit cards (Visa / MasterCard / generic credit)
+    {"بطاقه ائتمانيه", "البطاقه الائتمانيه", "بطاقة ائتمانية",
+     "البطاقة الإئتمانية", "credit card", "creditcard", "visa", "mastercard",
+     "master card", "visa/mastercard", "visa / mastercard",
+     "بطاقة بنكية", "بطاقه بنكيه"},
+    # Cash on delivery
+    {"الدفع عند الاستلام", "عند الاستلام", "عند الاستلم", "نقدا عند الاستلام",
+     "cod", "cash on delivery", "cash_on_delivery", "cashondelivery"},
+    # Bank transfer
+    {"تحويل بنكي", "حواله بنكيه", "حوالة بنكية", "bank transfer", "banktransfer"},
+    # Wallet (mostly Salla-specific)
+    {"محفظه", "محفظة", "wallet", "salla wallet"},
+]
+# Pre-normalised groups — each token is run through normalize_name once.
+PAYMENT_SYNONYMS: list[set[str]] = [
+    {normalize_name(t) for t in group if t} for group in _RAW_PAYMENT_SYNONYMS
+]
+
+
+def _payment_synonym_match(settings_key: str, order_key: str) -> bool:
+    """Iteration 30: bidirectional synonym lookup. Both keys are already
+    passed through normalize_name(). Returns True if they belong to the
+    SAME synonym group OR if one contains the other as substring (the
+    legacy fuzzy fallback)."""
+    if not settings_key or not order_key:
+        return False
+    if settings_key == order_key:
+        return True
+    # Substring fallback (legacy behaviour, kept for backwards-compat).
+    if settings_key in order_key or order_key in settings_key:
+        return True
+    # Synonym groups: pick the group of the settings key, see if the
+    # order key resolves into the same group. Both keys are already
+    # normalised so we can do plain string membership / substring checks.
+    for group in PAYMENT_SYNONYMS:
+        in_settings = any(
+            t == settings_key or t in settings_key or settings_key in t
+            for t in group
+        )
+        if not in_settings:
+            continue
+        in_order = any(
+            t == order_key or t in order_key or order_key in t
+            for t in group
+        )
+        if in_order:
+            return True
+    return False
 
 
 def match_settings(
@@ -355,10 +430,12 @@ def match_settings(
     for pm in parsed["payment_methods"]:
         key = normalize_name(pm["name"])
         cfg = payment_map.get(key)
-        # fuzzy contains match if exact key not found
+        # Iteration 30: synonym + fuzzy match (bidirectional). Covers
+        # cross-language pairs like "مدى" ↔ "Mada", spelling variants
+        # like "البطاقة الإئتمانية" ↔ "بطاقة ائتمانية" ↔ "credit card".
         if cfg is None:
             for k, v in payment_map.items():
-                if k and (k in key or key in k):
+                if _payment_synonym_match(k, key):
                     cfg = v
                     break
         matched = cfg is not None
