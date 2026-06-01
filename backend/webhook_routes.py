@@ -96,7 +96,11 @@ class WebhookOrderIn(BaseModel):
     currency: Optional[str] = ""
 
     # Items + meta
+    # Iteration 32: Salla's new order_created webhook ships line items
+    # under `items[]` (instead of the older `products[]`). Accept both
+    # field names — they're merged at parse time below.
     products: list[ProductItem] = []
+    items: list[ProductItem] = []
     tags: list[str] = []
     source: Optional[str] = ""
 
@@ -496,10 +500,35 @@ def _build_router(db) -> APIRouter:
                 "utm_medium": str(raw.get("utm_medium") or "").strip(),
                 "utm_campaign": str(raw.get("utm_campaign") or "").strip(),
                 "device": str(raw.get("device") or "").strip(),
-                # Items
-                "products": [p.dict() for p in payload.products],
-                "tags": [str(t).strip() for t in (payload.tags or []) if str(t).strip()],
             }
+            # Items + product-cost lookup
+            # Iteration 32: merge `items[]` into `products[]`. Salla's
+            # new webhook payload ships line items under `items[]`
+            # without SKU or product_id — only name + quantity. We
+            # normalise both shapes here so downstream code can keep
+            # using a single canonical `products` list. Cost matching
+            # falls back to name-based lookup (iteration 32) when SKU
+            # and product_id are absent.
+            merged_items_raw = list(payload.products or []) + list(payload.items or [])
+            normalised_products = []
+            for p in merged_items_raw:
+                d = p.dict() if hasattr(p, "dict") else dict(p)
+                name = str(d.get("name") or d.get("product_name") or "").strip()
+                if not name:
+                    continue
+                qty = _to_float(d.get("quantity"), 1.0)
+                if qty <= 0:
+                    qty = 1.0
+                normalised_products.append({
+                    "name": name,
+                    "quantity": qty,
+                    "price": _to_float(d.get("price"), 0.0),
+                    "sku": str(d.get("sku") or "").strip(),
+                    "product_id": str(d.get("product_id") or d.get("id") or "").strip(),
+                    "image_url": str(d.get("image_url") or d.get("image") or "").strip(),
+                })
+            incoming["products"] = normalised_products
+            incoming["tags"] = [str(t).strip() for t in (payload.tags or []) if str(t).strip()]
             res = await upsert_order(
                 db, user_id, order_number, incoming, source="make", raw=raw,
             )

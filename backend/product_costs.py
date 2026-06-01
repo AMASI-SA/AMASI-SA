@@ -60,6 +60,30 @@ def _norm_product_id(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _norm_name(value: Any) -> str:
+    """Iteration 32: normalised product-name key for matching.
+
+    Salla's new order_created webhook ships `items[]` carrying ONLY
+    `name` + `quantity` (no SKU, no product_id). When neither of the
+    structured identifiers is available, we fall back to a normalised
+    product name as the match key. The normaliser:
+      • lowercases
+      • strips Arabic diacritics
+      • unifies common Arabic letter variants (أ/إ/آ→ا, ى→ي, ة→ه, ؤ→و, ئ→ي)
+      • collapses runs of whitespace
+    so that " تغليف أنيق مع الورد - أماسي " ≡ "تغليف انيق مع الورد - اماسي".
+    """
+    s = str(value or "").strip().lower()
+    if not s:
+        return ""
+    import re as _re
+    s = _re.sub(r"[\u064B-\u0652]", "", s)
+    s = s.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+    s = s.replace("ى", "ي").replace("ة", "ه").replace("ؤ", "و").replace("ئ", "ي")
+    s = _re.sub(r"\s+", " ", s)
+    return s
+
+
 def _to_float(v: Any, default: float = 0.0) -> float:
     if v is None or v == "":
         return default
@@ -96,6 +120,10 @@ async def compute_order_cost(
     skus = {_norm_sku(p.get("sku")) for p in products if p.get("sku")}
     pids = {_norm_product_id(p.get("product_id") or p.get("id"))
             for p in products if (p.get("product_id") or p.get("id"))}
+    # Iteration 32: also collect normalised name keys when products
+    # don't carry SKU/product_id (e.g. Salla's new order_created
+    # webhook).
+    names = {_norm_name(p.get("name")) for p in products if p.get("name")}
     or_clauses: list[dict] = []
     # Iteration 29: CROSS-MATCH lookup. A merchant's product Excel from
     # Salla often dumps the Salla product_id into the SKU column (or
@@ -109,6 +137,9 @@ async def compute_order_cost(
     if pids:
         or_clauses.append({"product_id": {"$in": list(pids)}})
         or_clauses.append({"sku_normalized": {"$in": list(pids)}})  # cross
+    if names:
+        # Iteration 32: name-based matching tier.
+        or_clauses.append({"product_name_normalized": {"$in": list(names)}})
     cost_docs: list[dict] = []
     if or_clauses:
         cost_docs = await db.product_costs.find(
@@ -124,12 +155,23 @@ async def compute_order_cost(
     by_sku = {_norm_sku(d.get("sku")): d for d in cost_docs if d.get("sku")}
     by_pid = {_norm_product_id(d.get("product_id")): d
               for d in cost_docs if d.get("product_id")}
+    # Iteration 32: name → catalogue lookup. We also include rows whose
+    # product_name_normalized field isn't materialised yet — compute it
+    # on-the-fly so the matcher works even on legacy catalogue rows
+    # (auto-creation will backfill the field on the next write).
+    by_name: dict[str, dict] = {}
+    for d in cost_docs:
+        key = (d.get("product_name_normalized")
+               or _norm_name(d.get("product_name")))
+        if key:
+            by_name[key] = d
 
     for p in products:
         qty = _to_float(p.get("quantity"), 1.0)
         sku = _norm_sku(p.get("sku"))
         pid = _norm_product_id(p.get("product_id") or p.get("id"))
         name = (p.get("name") or "").strip()
+        name_norm = _norm_name(name)
         # Iteration 24: also pull the product's image_url from the
         # webhook payload so the "missing products" UI can render a
         # thumbnail for each unmatched product.
@@ -155,6 +197,11 @@ async def compute_order_cost(
         elif pid and pid in by_sku:
             cost_doc = by_sku[pid]
             matched_by = "product_id_as_sku"
+        elif name_norm and name_norm in by_name:
+            # Iteration 32: last-resort match by normalised product name.
+            # Used for Salla's new `items[]` payload that omits SKU/PID.
+            cost_doc = by_name[name_norm]
+            matched_by = "name"
         if cost_doc:
             unit_cost = round(_to_float(cost_doc.get("cost_price")), 2)
             line_cost = round(unit_cost * qty, 2)
