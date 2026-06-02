@@ -79,6 +79,7 @@ export default function AdvancedFilters({
     onChange,
     showPaymentFilter = true,
     showShippingFilter = true,
+    defaultPreset = "this_month",
 }) {
     const [paymentOptions, setPaymentOptions] = useState([]);
     const [shippingOptions, setShippingOptions] = useState([]);
@@ -116,8 +117,8 @@ export default function AdvancedFilters({
     };
 
     const clearAll = () => onChange({
-        preset: "this_month",
-        ...presetRange("this_month"),
+        preset: defaultPreset,
+        ...presetRange(defaultPreset),
         payment_methods: [],
         shipping_companies: [],
     });
@@ -199,7 +200,7 @@ export default function AdvancedFilters({
             )}
 
             {/* Reset */}
-            {(activeCount > 0 || value.preset !== "this_month") && (
+            {(activeCount > 0 || value.preset !== defaultPreset) && (
                 <button
                     type="button"
                     onClick={clearAll}
@@ -266,8 +267,8 @@ export function filtersToQueryString(filters) {
     return params.toString();
 }
 
-/** Default initial filter state: this month */
-export function defaultFilters() {
-    const r = presetRange("this_month");
-    return { preset: "this_month", from: r.from, to: r.to, payment_methods: [], shipping_companies: [] };
+/** Default initial filter state. Pass a preset key to override (defaults to "this_month"). */
+export function defaultFilters(preset = "this_month") {
+    const r = presetRange(preset);
+    return { preset, from: r.from, to: r.to, payment_methods: [], shipping_companies: [] };
 }

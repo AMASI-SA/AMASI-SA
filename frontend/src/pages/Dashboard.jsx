@@ -70,7 +70,7 @@ export default function Dashboard() {
     const { user } = useAuth();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState(defaultFilters());
+    const [filters, setFilters] = useState(defaultFilters("today"));
     const [reprocessingId, setReprocessingId] = useState(null);
     const [hiddenCards, setHiddenCards] = useState([]);
     const [lastUpdated, setLastUpdated] = useState(null);
@@ -399,7 +399,7 @@ export default function Dashboard() {
             {/* Advanced filters: date preset + payment + shipping */}
             <div className="flex items-stretch gap-2 flex-wrap">
                 <div className="flex-1 min-w-0">
-                    <AdvancedFilters value={filters} onChange={setFilters} />
+                    <AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" />
                 </div>
                 <button
                     type="button"

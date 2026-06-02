@@ -12,6 +12,21 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 UX TWEAK (2026-06 — Iteration 32) — **Dashboard default filter = اليوم بدل هذا الشهر**
+
+**Merchant request**: "تاريخ افتراضي عرض البيانات اخر يوم بلوحة التحكم بدل الشهر".
+
+**Change**:
+- `defaultFilters()` في `AdvancedFilters.jsx` يقبل الآن preset key اختياري (default = `"this_month"` للحفاظ على سلوك التقارير).
+- `AdvancedFilters` يقبل prop جديد `defaultPreset` (default = `"this_month"`) لكي يعيد زر "مسح" الفلاتر إلى الـ preset الافتراضي للصفحة بدل القيمة المثبتة.
+- `Dashboard.jsx` يستخدم الآن `defaultFilters("today")` و `<AdvancedFilters defaultPreset="today" />` — اللوحة تفتح افتراضياً على بيانات اليوم فقط.
+- صفحة التقارير `Reports.jsx` تبقى على `"this_month"` كما هي (لا regression).
+
+**Verified**: لقطة شاشة بعد تسجيل دخول `admin@hesab.app` — زر الفلتر يعرض "اليوم" والنطاق `02-06-2026 → 02-06-2026`.
+
+---
+
+
 ## 🎯 ROOT-CAUSE FIX (2026-06 — Iteration 31) — **data_source precedence: Make > Excel (يحلّ المشكلة المتكررة)**
 
 **Merchant report (متكررة)**: "عند رفع ملف اكسل بالطلبات الجديده يتوقف النظام عن احتساب طلبات make بكل مره ولازم اكلمك عشان تضبطه من جديد".
