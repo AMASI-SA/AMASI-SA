@@ -24,6 +24,7 @@ import { formatMoney, formatInt } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { ALL_KPI_CARDS } from "../lib/dashboardCards";
 import ProductCostCard from "../components/ProductCostCard";
+import SnapchatOfficialCard from "../components/SnapchatOfficialCard";
 
 function formatRelative(ms) {
     if (ms < 5_000) return "الآن";
@@ -780,6 +781,13 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Snapchat Official (PDT) — read-only reference card.
+                                Pulls official Snapchat numbers in the ad account's
+                                NATIVE timezone (PDT/PT) into an isolated collection
+                                `snapchat_reference_stats`. Never feeds any system
+                                calculation — purely for visual comparison. */}
+                            <SnapchatOfficialCard />
 
                             {/* Footer: link to detailed report */}
                             <div className="mt-4 flex justify-end">

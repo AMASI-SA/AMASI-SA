@@ -12,6 +12,31 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 NEW FEATURE (2026-06 — Iteration 33) — **Snapchat Official (PDT) — بطاقة مرجعية معزولة للمقارنة**
+
+**Merchant request**: بطاقة عرض داخل قسم Snapchat Ads تُظهِر أرقام Snapchat الرسمية بتوقيت الحساب الإعلاني PDT (للمقارنة فقط) دون أن تدخل في أي حسابات أرباح/مصروفات/ROAS/تقارير نهائية.
+
+**Backend**:
+- جديد: `GET /api/snapchat/reference-stats` (مع `?refresh=true` للجلب الفوري).
+- لكل حساب إعلاني مفعّل: يحسب "أمس" بتوقيت الحساب الأصلي (PDT/PT) + "الشهر الحالي (1→أمس)" ويستدعي `/adaccounts/{id}/stats` بـ `granularity=TOTAL` (مع `DAY` كـ fallback) لجلب `spend, impressions, swipes, conversion_purchases, conversion_purchases_value`.
+- التحويل USD→SAR بسعر **3.752** (ثابت — اختيار التاجر) عبر `SNAP_REF_USD_TO_SAR` وهو **متغير معزول** غير مستخدم في أي مكان آخر في الكود.
+- التجميع عبر جميع الحسابات المفعّلة في رقم واحد + Cache مدته 10 دقائق لتقليل ضغط Snap API.
+- التخزين في مجموعة **منعزلة تماماً**: `snapchat_reference_stats` (لا يوجد أي استعلام في النظام يقرأها سوى هذا الـ endpoint).
+
+**Frontend**: `SnapchatOfficialCard.jsx` يُحقن داخل قسم Snapchat Ads بعد الـ trend، بتنسيق indigo/dashed مميِّز عن البطاقات المالية الصفراء + Disclaimer + Last Sync + زر "تحديث الآن" + ROAS-aware lights.
+
+**Isolation contract verified (5/5 tests)**: `tests/test_snapchat_reference_stats_iteration33.py` يضمن:
+1. Auth مطلوب للـ endpoint ✅
+2. خطأ ودود عندما Snap غير مربوط ✅
+3. Cache يعيد الـ snapshot المخزَّن دون أن يلمس Snap API ✅
+4. **/api/dashboard لا يتأثر** بعد حقن snapshot في `snapchat_reference_stats` (نفس total_sales/net_sales/snapchat_ads_total إلخ) ✅
+5. **/api/dashboard/snapchat-summary** يبقى كما هو ولا يتأثر ✅
+
+**Bonus regression fix**: `tests/test_unified_orders.test_merge_make_then_excel` كان يطالب بسلوك Iteration 31 القديم (Excel يطغى على Make). تم تحديث assertion ليطابق سلوك Iteration 31 (Make هو المرجع). الآن **343/343 PASS** (باستثناء 2 اختبارات Meta token المتعلقة بانتهاء صلاحية toke​n test مستقل).
+
+---
+
+
 ## 🎯 UX TWEAK (2026-06 — Iteration 32) — **Dashboard default filter = اليوم بدل هذا الشهر**
 
 **Merchant request**: "تاريخ افتراضي عرض البيانات اخر يوم بلوحة التحكم بدل الشهر".

@@ -212,8 +212,11 @@ def test_merge_make_then_excel(user):
     assert doc["payment_method"] == "تابي"
     # customer_name was empty in make → filled by excel
     assert doc["customer_name"] == "Late Excel"
-    # latest data_source = excel
-    assert doc["data_source"] == "excel"
+    # data_source: Make wins over Excel (iteration 31 precedence fix).
+    # Once any Make write exists in the order's history, data_source stays
+    # "make" forever — even after a later Excel re-import. field_sources
+    # still records per-field provenance for audit (see below).
+    assert doc["data_source"] == "make"
     fs = doc.get("field_sources") or {}
     assert fs.get("total_amount") == "excel"
     assert fs.get("payment_method") == "make"

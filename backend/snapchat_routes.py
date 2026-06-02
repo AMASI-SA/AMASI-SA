@@ -395,6 +395,12 @@ def _build_router(db) -> APIRouter:
     # a third-party FX API (which would add latency and a possible failure mode).
     USD_TO_SAR = 3.75
 
+    # Reference-only rate for the *isolated* Snapchat Official (PDT) card.
+    # Merchant-specified (iteration 33). DO NOT use this in any profit/cost/
+    # ROAS calculation — it is consumed ONLY by /reference-stats and the
+    # corresponding read-only dashboard card.
+    SNAP_REF_USD_TO_SAR = 3.752
+
     async def _resolve_ad_account_currency(http: httpx.AsyncClient, access_token: str, ad_id: str, conn: dict) -> str:
         """Return the ISO currency code of the ad account (e.g. 'USD', 'SAR').
         Cached on conn.ad_account_currency once resolved.
@@ -1269,6 +1275,267 @@ def _build_router(db) -> APIRouter:
             "business_timezone": "Asia/Riyadh",
             "currency": "SAR",
         }
+
+    # ── Snapchat Official (PDT) — READ-ONLY reference card (iteration 33) ──
+    # Isolated endpoint that pulls each ad account's official Snapchat stats
+    # using the AD ACCOUNT'S NATIVE TIMEZONE (typically America/Los_Angeles =
+    # PT/PDT). The result is stored in the separate `snapchat_reference_stats`
+    # collection and is ONLY consumed by the dedicated read-only dashboard
+    # card. It NEVER enters daily_costs, snapchat_daily_stats,
+    # snapchat_account_daily, profit reports, or system-wide ROAS — it is a
+    # comparison reference only.
+    @router.get("/reference-stats")
+    async def reference_stats(
+        user: dict = Depends(current_user),
+        refresh: bool = Query(default=False, description="Force live re-fetch even if a cached snapshot is fresh"),
+    ):
+        uid = user["id"]
+        # Serve a cached snapshot when fresh (≤10 min old) unless refresh=True.
+        cached = await db.snapchat_reference_stats.find_one({"user_id": uid}, {"_id": 0})
+        if cached and not refresh:
+            try:
+                last = datetime.fromisoformat(str(cached.get("last_sync_at", "")).replace("Z", "+00:00"))
+                if (datetime.now(timezone.utc) - last).total_seconds() < 600:
+                    return cached
+            except Exception:
+                pass
+
+        access_token, conn = await _ensure_access_token(uid)
+
+        # Source of truth: explicitly-enabled accounts; fall back to the
+        # legacy single connected account so users who never opened the
+        # multi-account picker still get data.
+        enabled = await db.snapchat_ad_accounts.find(
+            {"user_id": uid, "enabled": True}, {"_id": 0, "user_id": 0},
+        ).to_list(50)
+        if not enabled:
+            legacy_id = conn.get("ad_account_id")
+            if legacy_id:
+                enabled = [{
+                    "ad_account_id": legacy_id,
+                    "name": conn.get("ad_account_name") or legacy_id,
+                    "currency_native": conn.get("ad_account_currency") or "USD",
+                    "timezone": conn.get("ad_account_timezone") or "America/Los_Angeles",
+                }]
+            else:
+                raise HTTPException(status_code=400, detail="لا توجد حسابات إعلانات Snapchat مفعّلة")
+
+        try:
+            from zoneinfo import ZoneInfo as _ZI
+        except ImportError:  # pragma: no cover
+            _ZI = None  # type: ignore
+
+        def _conv_to_sar(amount: float, currency: str) -> float:
+            cur = (currency or "").upper().strip()
+            if cur == "USD":
+                return round(float(amount) * SNAP_REF_USD_TO_SAR, 2)
+            return round(float(amount), 2)
+
+        def _parse_stats_payload(j: dict) -> dict:
+            """Extract aggregated metrics from a Snapchat /stats response
+            covering both timeseries and total shapes (DAY/TOTAL grans)."""
+            agg = {"spend_micro": 0, "impressions": 0, "swipes": 0,
+                   "purchases": 0, "revenue_micro": 0}
+
+            def _add(s: dict) -> None:
+                key_map = (
+                    ("spend_micro", "spend"),
+                    ("impressions", "impressions"),
+                    ("swipes", "swipes"),
+                    ("purchases", "conversion_purchases"),
+                    ("revenue_micro", "conversion_purchases_value"),
+                )
+                for agg_key, src_key in key_map:
+                    try:
+                        agg[agg_key] += int(s.get(src_key) or 0)
+                    except (TypeError, ValueError):
+                        pass
+
+            for ts in j.get("timeseries_stats", []) or []:
+                stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
+                for point in stat.get("timeseries", []) or []:
+                    _add(point.get("stats") or {})
+            for ts in j.get("total_stats", []) or []:
+                stat = ts.get("total_stat", ts) if isinstance(ts, dict) else {}
+                _add((stat.get("stats") if isinstance(stat, dict) else None) or {})
+            return agg
+
+        FIELDS = "spend,impressions,swipes,conversion_purchases,conversion_purchases_value"
+
+        accounts_data: list = []
+        errors: list = []
+
+        # Aggregations across all enabled accounts.
+        yest_date_str: Optional[str] = None
+        month_start_str: Optional[str] = None
+        month_end_str: Optional[str] = None
+        agg_yest = {"spend_native_usd": 0.0, "spend_sar": 0.0,
+                    "impressions": 0, "swipes": 0, "purchases": 0,
+                    "revenue_sar": 0.0}
+        agg_month = {"spend_native_usd": 0.0, "spend_sar": 0.0,
+                     "purchases": 0, "revenue_sar": 0.0}
+
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            for acc in enabled:
+                ad_id = acc["ad_account_id"]
+                ad_currency = (acc.get("currency_native") or "USD").upper() or "USD"
+                ad_tz_name = (acc.get("timezone") or "").strip()
+                if not ad_tz_name:
+                    ad_tz_name = await _resolve_ad_account_timezone(http, access_token, ad_id, conn) or "America/Los_Angeles"
+                try:
+                    ad_tz = _ZI(ad_tz_name) if _ZI else timezone(timedelta(hours=-7))
+                except Exception:
+                    ad_tz = timezone(timedelta(hours=-7))
+
+                # Compute boundaries in the account's NATIVE timezone (PDT/PST).
+                now_local = datetime.now(ad_tz)
+                today_local = now_local.date()
+                yesterday_local = today_local - timedelta(days=1)
+                month_start_local = today_local.replace(day=1)
+
+                yest_start = datetime(yesterday_local.year, yesterday_local.month,
+                                      yesterday_local.day, 0, 0, 0, tzinfo=ad_tz)
+                yest_end = yest_start + timedelta(days=1)
+                mon_start = datetime(month_start_local.year, month_start_local.month,
+                                     month_start_local.day, 0, 0, 0, tzinfo=ad_tz)
+                # Month-to-date through end-of-yesterday (last completed day).
+                # If today is the 1st of the month, month range is empty.
+                mon_end = yest_end if yesterday_local >= month_start_local else mon_start
+
+                # Expose chosen reference dates (use first account's TZ —
+                # all enabled accounts typically share the same TZ).
+                if yest_date_str is None:
+                    yest_date_str = yesterday_local.isoformat()
+                    month_start_str = month_start_local.isoformat()
+                    month_end_str = yesterday_local.isoformat() if mon_end > mon_start else month_start_local.isoformat()
+
+                stats_url = f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}/stats"
+                headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+
+                acc_yest_native = {"spend": 0.0, "impressions": 0, "swipes": 0,
+                                   "purchases": 0, "revenue": 0.0}
+                acc_month_native = {"spend": 0.0, "purchases": 0, "revenue": 0.0}
+
+                for period_key, p_start, p_end, target in [
+                    ("yesterday", yest_start, yest_end, acc_yest_native),
+                    ("month", mon_start, mon_end, acc_month_native),
+                ]:
+                    if p_end <= p_start:
+                        continue
+                    params = {
+                        "start_time": p_start.isoformat(timespec="seconds"),
+                        "end_time": p_end.isoformat(timespec="seconds"),
+                        "granularity": "TOTAL",
+                        "fields": FIELDS,
+                        "swipe_up_attribution_window": "28_DAY",
+                        "view_attribution_window": "1_DAY",
+                    }
+                    try:
+                        resp = await http.get(stats_url, headers=headers, params=params)
+                        if resp.status_code >= 400:
+                            # Some accounts reject TOTAL; retry with DAY.
+                            params["granularity"] = "DAY"
+                            resp = await http.get(stats_url, headers=headers, params=params)
+                        resp.raise_for_status()
+                        parsed = _parse_stats_payload(resp.json())
+                        target["spend"] = round(parsed["spend_micro"] / 1_000_000, 2)
+                        target["revenue"] = round(parsed["revenue_micro"] / 1_000_000, 2)
+                        target["purchases"] = parsed["purchases"]
+                        if period_key == "yesterday":
+                            target["impressions"] = parsed["impressions"]
+                            target["swipes"] = parsed["swipes"]
+                    except httpx.HTTPStatusError as exc:
+                        body = (exc.response.text or "")[:240]
+                        errors.append({"ad_account_id": ad_id, "period": period_key,
+                                       "error": body})
+                    except httpx.HTTPError as exc:
+                        errors.append({"ad_account_id": ad_id, "period": period_key,
+                                       "error": str(exc)[:200]})
+
+                yest_spend_sar = _conv_to_sar(acc_yest_native["spend"], ad_currency)
+                yest_rev_sar = _conv_to_sar(acc_yest_native["revenue"], ad_currency)
+                month_spend_sar = _conv_to_sar(acc_month_native["spend"], ad_currency)
+                month_rev_sar = _conv_to_sar(acc_month_native["revenue"], ad_currency)
+
+                accounts_data.append({
+                    "ad_account_id": ad_id,
+                    "name": acc.get("name") or ad_id,
+                    "currency_native": ad_currency,
+                    "timezone": ad_tz_name,
+                    "yesterday_date": yesterday_local.isoformat(),
+                    "yesterday": {
+                        "spend_native": acc_yest_native["spend"],
+                        "spend_sar": yest_spend_sar,
+                        "impressions": acc_yest_native["impressions"],
+                        "swipes": acc_yest_native["swipes"],
+                        "purchases": acc_yest_native["purchases"],
+                        "revenue_sar": yest_rev_sar,
+                    },
+                    "month": {
+                        "start": month_start_local.isoformat(),
+                        "end": yesterday_local.isoformat() if mon_end > mon_start else month_start_local.isoformat(),
+                        "spend_native": acc_month_native["spend"],
+                        "spend_sar": month_spend_sar,
+                        "purchases": acc_month_native["purchases"],
+                        "revenue_sar": month_rev_sar,
+                    },
+                })
+
+                # Aggregate (USD native only counted toward USD total).
+                if ad_currency == "USD":
+                    agg_yest["spend_native_usd"] += acc_yest_native["spend"]
+                    agg_month["spend_native_usd"] += acc_month_native["spend"]
+                agg_yest["spend_sar"] += yest_spend_sar
+                agg_yest["impressions"] += acc_yest_native["impressions"]
+                agg_yest["swipes"] += acc_yest_native["swipes"]
+                agg_yest["purchases"] += acc_yest_native["purchases"]
+                agg_yest["revenue_sar"] += yest_rev_sar
+                agg_month["spend_sar"] += month_spend_sar
+                agg_month["purchases"] += acc_month_native["purchases"]
+                agg_month["revenue_sar"] += month_rev_sar
+
+        yest_roas = round(agg_yest["revenue_sar"] / agg_yest["spend_sar"], 2) if agg_yest["spend_sar"] > 0 else 0.0
+        month_roas = round(agg_month["revenue_sar"] / agg_month["spend_sar"], 2) if agg_month["spend_sar"] > 0 else 0.0
+
+        result = {
+            "user_id": uid,
+            "fx_rate": SNAP_REF_USD_TO_SAR,
+            "currency_display": "SAR",
+            "last_sync_at": datetime.now(timezone.utc).isoformat(),
+            "account_count": len(accounts_data),
+            "accounts": accounts_data,
+            "yesterday": {
+                "date": yest_date_str,
+                "spend_usd": round(agg_yest["spend_native_usd"], 2),
+                "spend_sar": round(agg_yest["spend_sar"], 2),
+                "impressions": int(agg_yest["impressions"]),
+                "swipes": int(agg_yest["swipes"]),
+                "purchases": int(agg_yest["purchases"]),
+                "revenue_sar": round(agg_yest["revenue_sar"], 2),
+                "roas": yest_roas,
+            },
+            "month": {
+                "start": month_start_str,
+                "end": month_end_str,
+                "spend_usd": round(agg_month["spend_native_usd"], 2),
+                "spend_sar": round(agg_month["spend_sar"], 2),
+                "purchases": int(agg_month["purchases"]),
+                "revenue_sar": round(agg_month["revenue_sar"], 2),
+                "roas": month_roas,
+            },
+            "errors": errors,
+            "note": "بيانات مرجعية من Snapchat بتوقيت الحساب الإعلاني — لا تدخل في حسابات النظام",
+        }
+
+        # Persist the snapshot in the ISOLATED collection. Nothing else
+        # in the codebase ever reads from `snapchat_reference_stats`.
+        await db.snapchat_reference_stats.update_one(
+            {"user_id": uid},
+            {"$set": result,
+             "$setOnInsert": {"created_at": result["last_sync_at"]}},
+            upsert=True,
+        )
+        return result
 
     return router
 
