@@ -161,9 +161,41 @@ export default function ProductPreparation() {
     const [showExcluded, setShowExcluded] = useState(false);
     const fileRef = useRef(null);
     const [dragOver, setDragOver] = useState(false);
+    // Set of selected line `idx` values across all groups. Cleared after
+    // a successful print and re-populated by the user via checkboxes.
+    const [selectedIdx, setSelectedIdx] = useState(() => new Set());
     // Bump this after a per-product image upload so <img> tags re-fetch
     // and the freshly-stored image shows up immediately.
     const [imgVersion, setImgVersion] = useState(0);
+
+    const toggleOne = (idx) => {
+        setSelectedIdx(prev => {
+            const next = new Set(prev);
+            if (next.has(idx)) next.delete(idx); else next.add(idx);
+            return next;
+        });
+    };
+
+    const toggleGroup = (group) => {
+        const ids = (group.preview_lines || []).map(l => l.idx);
+        setSelectedIdx(prev => {
+            const next = new Set(prev);
+            const allSelected = ids.every(i => next.has(i));
+            if (allSelected) ids.forEach(i => next.delete(i));
+            else ids.forEach(i => next.add(i));
+            return next;
+        });
+    };
+
+    const toggleAll = () => {
+        if (!data?.groups) return;
+        setSelectedIdx(prev => {
+            const all = [];
+            data.groups.forEach(g => (g.preview_lines || []).forEach(l => all.push(l.idx)));
+            const allSelected = all.every(i => prev.has(i));
+            return allSelected ? new Set() : new Set(all);
+        });
+    };
 
     const refreshPreview = useCallback(async () => {
         if (!data?.upload_id) return;
@@ -220,16 +252,22 @@ export default function ProductPreparation() {
         if (f) handleFileChange(f);
     };
 
-    const handleGenerate = async () => {
+    const handleGenerate = async (selectedIndicesArr = null) => {
         if (!data?.upload_id) return;
         setGenerating(true);
         try {
-            const resp = await api.post(`/preparation/generate/${data.upload_id}`, null, {
+            // Always POST a body — when null we send `{}` (= "print all
+            // remaining"), otherwise we send the explicit selection.
+            const body = selectedIndicesArr === null
+                ? {}
+                : { selected_indices: Array.from(selectedIndicesArr) };
+            const resp = await api.post(`/preparation/generate/${data.upload_id}`, body, {
                 responseType: "blob",
+                headers: { "Content-Type": "application/json" },
             });
             const exported = resp.headers["x-exported-orders"] || "?";
             const cards = resp.headers["x-exported-cards"] || "?";
-            // Trigger browser download
+            const items = resp.headers["x-exported-items"] || cards;
             const url = window.URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
             const a = document.createElement("a");
             a.href = url;
@@ -238,11 +276,11 @@ export default function ProductPreparation() {
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
-            toast.success(`تم إنشاء PDF: ${cards} بطاقة (${exported} طلب) — تم تحديث سجل التصدير`);
+            toast.success(`تم إنشاء PDF: ${cards} بطاقة (${items} منتج، ${exported} طلب)`);
+            setSelectedIdx(new Set());  // reset selection after print
             await loadStats();
             await refreshPreview();
         } catch (e) {
-            // axios blob errors are tricky — try to read the JSON detail
             let msg = "فشل إنشاء الملف";
             if (e?.response?.data instanceof Blob) {
                 try {
@@ -351,13 +389,26 @@ export default function ProductPreparation() {
                 <div className="flex items-center gap-2 flex-wrap" data-testid="prep-actions-bar">
                     <button
                         type="button"
-                        onClick={handleGenerate}
-                        disabled={generating || totalCards === 0}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold"
-                        data-testid="prep-generate-btn"
+                        onClick={() => handleGenerate(Array.from(selectedIdx))}
+                        disabled={generating || selectedIdx.size === 0}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold"
+                        data-testid="prep-print-selected-btn"
                     >
                         <FilePdf size={16} weight="bold" />
-                        {generating ? "جاري الإنشاء…" : "تحميل PDF التجهيز"}
+                        {generating
+                            ? "جاري الإنشاء…"
+                            : selectedIdx.size > 0
+                                ? `طباعة المحدد إلى PDF (${selectedIdx.size})`
+                                : "طباعة المحدد إلى PDF"}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={toggleAll}
+                        disabled={generating || totalCards === 0}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-bold text-sm"
+                        data-testid="prep-select-all-btn"
+                    >
+                        {selectedIdx.size > 0 && selectedIdx.size === totalCards ? "إلغاء التحديد" : "تحديد الكل"}
                     </button>
                     <button
                         type="button"
@@ -412,6 +463,22 @@ export default function ProductPreparation() {
                             >
                                 <summary className="cursor-pointer p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
                                     <div className="flex items-center gap-3 min-w-0">
+                                        {/* Group checkbox — toggles all rows in this product */}
+                                        <input
+                                            type="checkbox"
+                                            checked={(g.preview_lines || []).every(l => selectedIdx.has(l.idx))}
+                                            ref={el => {
+                                                if (!el) return;
+                                                const some = (g.preview_lines || []).some(l => selectedIdx.has(l.idx));
+                                                const all = (g.preview_lines || []).every(l => selectedIdx.has(l.idx));
+                                                el.indeterminate = some && !all;
+                                            }}
+                                            onClick={e => { e.stopPropagation(); toggleGroup(g); }}
+                                            onChange={() => {}}
+                                            className="w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer"
+                                            data-testid={`prep-group-check-${g.product_name?.slice(0, 12)}`}
+                                            title="تحديد كل بطاقات هذا المنتج"
+                                        />
                                         {g.preview_lines?.[0] ? (
                                             <ProductImage
                                                 uploadId={data.upload_id}
@@ -447,7 +514,18 @@ export default function ProductPreparation() {
                                 </summary>
                                 <div className="border-t border-slate-200 divide-y divide-slate-100" data-testid="prep-group-rows">
                                     {(g.preview_lines || []).map((row) => (
-                                        <div key={`${row.order_number}-${row.idx}`} className="flex items-center gap-3 p-3 text-sm">
+                                        <label
+                                            key={`${row.order_number}-${row.idx}`}
+                                            className={`flex items-center gap-3 p-3 text-sm cursor-pointer transition-colors ${selectedIdx.has(row.idx) ? "bg-indigo-50/40" : "hover:bg-slate-50"}`}
+                                            data-testid={`prep-row-${row.idx}`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIdx.has(row.idx)}
+                                                onChange={() => toggleOne(row.idx)}
+                                                className="w-4 h-4 rounded border-slate-300 accent-indigo-600 flex-shrink-0"
+                                                data-testid={`prep-row-check-${row.idx}`}
+                                            />
                                             <ProductImage uploadId={data.upload_id} idx={row.idx} hasImage={row.has_image} alt={row.product_name} version={imgVersion} />
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-baseline gap-2">
@@ -464,7 +542,7 @@ export default function ProductPreparation() {
                                                     {(row.shipping_company || "—")} - {row.total_products_in_order}
                                                 </div>
                                             </div>
-                                        </div>
+                                        </label>
                                     ))}
                                 </div>
                             </details>

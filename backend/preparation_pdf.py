@@ -73,9 +73,27 @@ class ProductLine:
     note: Optional[str]
     quantity: int
     total_products_in_order: int   # used for "iMile - N"
+    item_index: int = 0            # 0-based position of this item within its order
     image_bytes: Optional[bytes] = field(default=None, repr=False)
     image_mime: Optional[str] = None
     shipping_company: Optional[str] = None  # populated from unified_orders later
+
+    @property
+    def item_key(self) -> str:
+        """Composite key identifying a single item within a single order.
+
+        Two items of the same product appearing in the same order are still
+        distinct cards (different option values / item_index), so the dedup
+        log uses this key — not the order number alone.
+        """
+        import hashlib
+        parts = "|".join([
+            str(self.order_number or ""),
+            (self.product_name or "").strip().lower(),
+            (self.customer_name or "").strip().lower(),
+            str(self.item_index),
+        ])
+        return hashlib.sha1(parts.encode("utf-8")).hexdigest()
 
     def to_dict_preview(self) -> dict:
         d = asdict(self)
@@ -247,6 +265,7 @@ def parse_salla_orders_pdf(pdf_bytes: bytes) -> list[ProductLine]:
                     note=_pick_note_from_options(opts),
                     quantity=1,
                     total_products_in_order=total_products,
+                    item_index=i,
                     image_bytes=img_bytes,
                     image_mime=f"image/{img_ext}" if img_ext else None,
                 ))
@@ -347,13 +366,142 @@ def _truncate(s: str, max_chars: int) -> str:
     return s[: max_chars - 1] + "…"
 
 
+_MONTH_ALIASES = {
+    "january": 1, "jan": 1, "february": 2, "feb": 2,
+    "march": 3, "mar": 3, "april": 4, "apr": 4,
+    "may": 5, "june": 6, "jun": 6, "july": 7, "jul": 7,
+    "august": 8, "aug": 8, "september": 9, "sep": 9, "sept": 9,
+    "october": 10, "oct": 10, "november": 11, "nov": 11,
+    "december": 12, "dec": 12,
+    # Arabic month names sometimes appear in Salla PDFs
+    "يناير": 1, "فبراير": 2, "مارس": 3, "أبريل": 4, "إبريل": 4,
+    "مايو": 5, "يونيو": 6, "يوليو": 7, "أغسطس": 8, "أغسطو": 8,
+    "سبتمبر": 9, "أكتوبر": 10, "اكتوبر": 10, "نوفمبر": 11, "ديسمبر": 12,
+}
+
+
+def short_date(raw: Optional[str]) -> Optional[str]:
+    """Compress a long date string ("Tuesday 2 June 2026") into MM/DD.
+
+    Supports: "DD Month YYYY", "Month DD, YYYY", and ISO "YYYY-MM-DD".
+    Returns None when no parseable date is found — caller decides whether
+    to skip the line or show the raw string.
+    """
+    if not raw:
+        return None
+    text = str(raw).strip().lower()
+    # Pattern 1: "...DD Month YYYY..."
+    m = re.search(r"(\d{1,2})[\s\u00A0]+([\u0600-\u06FFA-Za-z]+)[\s\u00A0]+\d{4}", text)
+    if m:
+        day = int(m.group(1))
+        mname = m.group(2)
+        if mname in _MONTH_ALIASES:
+            return f"{_MONTH_ALIASES[mname]:02d}/{day:02d}"
+    # Pattern 2: "Month DD, YYYY"
+    m = re.search(r"([\u0600-\u06FFA-Za-z]+)[\s\u00A0]+(\d{1,2}),?[\s\u00A0]+\d{4}", text)
+    if m:
+        mname = m.group(1)
+        day = int(m.group(2))
+        if mname in _MONTH_ALIASES:
+            return f"{_MONTH_ALIASES[mname]:02d}/{day:02d}"
+    # Pattern 3: ISO YYYY-MM-DD
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", text)
+    if m:
+        return f"{m.group(2)}/{m.group(3)}"
+    return None
+
+
+def _wrap_arabic_lines(raw_text: str, font_name: str, font_size: float,
+                       max_width: float, max_lines: int = 2) -> list[str]:
+    """Word-wrap raw Arabic to fit within `max_width` over up to `max_lines`.
+
+    Returns a list of *reshaped+bidi* strings ready to pass to drawRightString.
+    Adds an ellipsis on the last line if there's leftover text. Guarantees
+    every returned line measures ≤ max_width — the printable card stays
+    within its bounds no matter how long the source text is.
+    """
+    raw = (raw_text or "").strip()
+    if not raw:
+        return []
+    # Fast path: full text fits
+    full_visual = _ar(raw)
+    if pdfmetrics.stringWidth(full_visual, font_name, font_size) <= max_width:
+        return [full_visual]
+
+    words = raw.split()
+    out_lines: list[str] = []
+    i = 0
+    while i < len(words) and len(out_lines) < max_lines:
+        # Find the largest prefix words[i:j+1] that fits.
+        j = i
+        last_fit_visual: Optional[str] = None
+        last_fit_j = i - 1
+        while j < len(words):
+            candidate = " ".join(words[i:j + 1])
+            visual = _ar(candidate)
+            if pdfmetrics.stringWidth(visual, font_name, font_size) <= max_width:
+                last_fit_visual = visual
+                last_fit_j = j
+                j += 1
+            else:
+                break
+        if last_fit_visual is None:
+            # Even the first remaining word doesn't fit — hard truncate it.
+            w = words[i]
+            while w and pdfmetrics.stringWidth(_ar(w + "…"), font_name, font_size) > max_width:
+                w = w[:-1]
+            out_lines.append(_ar((w or "") + "…"))
+            return out_lines
+        out_lines.append(last_fit_visual)
+        i = last_fit_j + 1
+
+    # If text remains uncaptured, append ellipsis to the last line.
+    if i < len(words) and out_lines:
+        last = out_lines[-1]
+        # Try simple "…" append
+        if pdfmetrics.stringWidth(last + "…", font_name, font_size) <= max_width:
+            out_lines[-1] = last + "…"
+        else:
+            while last and pdfmetrics.stringWidth(last + "…", font_name, font_size) > max_width:
+                last = last[:-1]
+            out_lines[-1] = (last or "") + "…"
+    return out_lines
+
+
+def _fit_single_line(text: str, font_name: str, font_size: float,
+                     max_width: float) -> str:
+    """Truncate a single reshaped Arabic line to fit max_width with ellipsis."""
+    visual = _ar(text)
+    if pdfmetrics.stringWidth(visual, font_name, font_size) <= max_width:
+        return visual
+    # Trim characters off the trailing (visual-left = logical-end) side
+    while visual and pdfmetrics.stringWidth(visual + "…", font_name, font_size) > max_width:
+        visual = visual[1:]  # drop one char at the trailing visual edge
+    return (visual + "…") if visual else "…"
+
+
 def generate_preparation_pdf(
     lines: list[ProductLine],
     *,
     serial_start: int = 1,
     title: str = "تجهيز المنتجات",
 ) -> bytes:
-    """Generate the 4×4 prep PDF and return its bytes."""
+    """Generate the 4×4 prep PDF and return its bytes.
+
+    Every card is rendered inside a *clipping rectangle* so even if our
+    wrapping/truncation underestimates a glyph's width, no character is
+    allowed to spill into the neighbouring card. Field-by-field rules:
+
+    - Order# (ط:) — fixed 9pt, digits LTR.
+    - الاسم — single line, ellipsis if it overflows.
+    - ملاحظة — up to 2 lines, ellipsis on overflow.
+    - التاريخ — compressed to MM/DD.
+    - الكمية — single line.
+    - شركة الشحن + N — single line, smaller if needed.
+
+    All text is drawRightString'd from a fixed right edge (RTL). Auto font
+    shrinking applies when even the truncated short variant doesn't fit.
+    """
     if not lines:
         raise ValueError("No product lines to render")
 
@@ -367,87 +515,128 @@ def generate_preparation_pdf(
     per_page = cols * rows
     card_w = (page_w - 2 * margin) / cols
     card_h = (page_h - 2 * margin) / rows
+    pad = 4  # inner padding (pts) — fixed text frame
 
-    accent = HexColor("#0A3622")  # match app palette
+    accent = HexColor("#0A3622")
+    text_color = HexColor("#1A1A1A")
+    muted_color = HexColor("#666666")
 
     def _draw_card(card_idx_on_page: int, line: ProductLine, serial: int) -> None:
         col = card_idx_on_page % cols
         row = card_idx_on_page // cols
-        # Cards laid out left-to-right, top-to-bottom (visual print order).
         x = margin + col * card_w
         y = page_h - margin - (row + 1) * card_h
 
-        # Card border (thin)
-        c.setStrokeColor(HexColor("#888888"))
-        c.setLineWidth(0.4)
-        c.rect(x + 1, y + 1, card_w - 2, card_h - 2)
+        # ── 1. Card border ──────────────────────────────────────────
+        c.setStrokeColor(HexColor("#A0A0A0"))
+        c.setLineWidth(0.5)
+        c.rect(x + 0.5, y + 0.5, card_w - 1, card_h - 1)
 
-        # ── Serial number (top-right corner; Arabic reads RTL) ──
-        c.setFont(font_name, 9)
-        c.setFillColor(accent)
-        c.drawRightString(x + card_w - 4, y + card_h - 12, str(serial))
+        # ── 2. Clip everything else to the card interior ────────────
+        c.saveState()
+        p = c.beginPath()
+        p.rect(x + pad, y + pad, card_w - 2 * pad, card_h - 2 * pad)
+        c.clipPath(p, stroke=0)
 
-        # ── Product image (centered, top half) ──
+        right_edge = x + card_w - pad   # text right-align anchor
+        left_edge = x + pad
+        usable_w = right_edge - left_edge
+
+        # ── 3. Serial (top-right) + QR (top-left) + Image (centered) ──
+        from reportlab.lib.utils import ImageReader
+
+        c.setFont(font_name, 7)
+        c.setFillColor(muted_color)
+        c.drawRightString(right_edge, y + card_h - pad - 8, f"#{serial}")
+
+        qr_size = 36
+        qr_buf = io.BytesIO(_qr_png_bytes(line.order_number))
+        c.drawImage(ImageReader(qr_buf),
+                    left_edge, y + card_h - pad - qr_size,
+                    width=qr_size, height=qr_size, mask="auto")
+
+        # Image area: between QR and serial, sits below them; size ~ 55×55
+        img_slot = 56
+        img_x = x + (card_w - img_slot) / 2
+        img_y = y + card_h - pad - img_slot - 2
         pim = _safe_image_or_placeholder(line.image_bytes)
         img_buf = io.BytesIO()
         pim.save(img_buf, format="PNG")
         img_buf.seek(0)
-        from reportlab.lib.utils import ImageReader
-        ir = ImageReader(img_buf)
-        # Image area: centered, fixed slot ~ 32mm × 32mm
-        img_slot = min(card_w - 14 * mm, card_h * 0.42)
-        img_x = x + (card_w - img_slot) / 2
-        img_y = y + card_h - img_slot - 6
-        c.drawImage(ir, img_x, img_y, width=img_slot, height=img_slot,
+        c.drawImage(ImageReader(img_buf), img_x, img_y,
+                    width=img_slot, height=img_slot,
                     preserveAspectRatio=True, anchor="c", mask="auto")
 
-        # ── QR code (top-left, smaller than image) ──
-        qr_bytes = _qr_png_bytes(line.order_number)
-        qr_buf = io.BytesIO(qr_bytes)
-        qr_reader = ImageReader(qr_buf)
-        qr_size = 18 * mm
-        c.drawImage(qr_reader, x + 4, y + card_h - qr_size - 4,
-                    width=qr_size, height=qr_size, mask="auto")
+        # ── 4. Text block — anchored to the card's bottom ────────────
+        # Compute total required vertical space; if it overflows, shrink.
+        order_size = 9.0
+        body_size = 8.0
+        ship_size = 8.5
+        line_gap = 2.0   # gap between lines (added to font size)
 
-        # ── Text block (bottom half) ──
-        text_y = img_y - 8  # baseline of first line
-        line_gap = 10
-        c.setFillColor(HexColor("#111111"))
-        c.setFont(font_name, 8)
+        # Pre-wrap dynamic fields with measurements based on body_size.
+        def _build_text_lines(base_size: float) -> list[tuple[str, float, HexColor, bool]]:
+            """Return [(visual_text, font_size, color, is_bold), ...] for body block."""
+            block: list[tuple[str, float, HexColor, bool]] = []
+            # Order# (with ط prefix)
+            order_visual = _ar("ط") + f" : {line.order_number}"
+            block.append((order_visual, order_size, text_color, True))
+            if line.customer_name:
+                v = _fit_single_line(f"الاسم: {line.customer_name}", font_name, base_size, usable_w)
+                block.append((v, base_size, text_color, False))
+            if line.note:
+                note_lines = _wrap_arabic_lines(
+                    f"ملاحظة: {line.note}", font_name, base_size, usable_w, max_lines=2,
+                )
+                for nl in note_lines:
+                    block.append((nl, base_size, muted_color, False))
+            # Compact: date + quantity on the same line — saves vertical room
+            date_short = short_date(line.order_date)
+            qty_str = f"ك: {line.quantity or 1}"
+            tail = qty_str
+            if date_short:
+                tail = f"{date_short}    {qty_str}"  # two-space gap
+            block.append((_fit_single_line(tail, font_name, base_size, usable_w),
+                          base_size, text_color, False))
+            # Shipping line (carrier - N)
+            carrier = (line.shipping_company or "").strip() or "—"
+            n = max(1, int(line.total_products_in_order or 1))
+            ship_line = f"{carrier} - {n}"
+            ship_visual = _fit_single_line(ship_line, font_name, ship_size, usable_w)
+            block.append((ship_visual, ship_size, accent, True))
+            return block
 
-        def _line(label_ar: str, value: str, *, bold: bool = False) -> None:
-            nonlocal text_y
-            # Render full sentence right-aligned; Arabic text reshaped.
-            sentence = f"{label_ar}: {value}" if value else label_ar
-            c.setFont(font_name, 8.5 if bold else 8)
-            c.drawRightString(x + card_w - 4, text_y, _ar(sentence))
-            text_y -= line_gap
+        block = _build_text_lines(body_size)
 
-        # ط (Order#) — keep digits LTR by placing them as ASCII.
-        c.setFont(font_name, 9)
-        c.drawRightString(
-            x + card_w - 4, text_y,
-            _ar("ط") + f" : {line.order_number}",
-        )
-        text_y -= line_gap + 1
+        # Available vertical room below the image
+        text_top = img_y - 4
+        text_bottom = y + pad + 1   # leave 1pt above border inside clip
 
-        if line.customer_name:
-            _line("الاسم", _truncate(line.customer_name, 22))
-        if line.note:
-            _line("ملاحظة", _truncate(line.note, 32))
-        if line.order_date:
-            # Render date in ISO-like form if we can parse it; otherwise raw.
-            _line("التاريخ", _truncate(line.order_date, 22))
-        _line("الكمية", str(line.quantity or 1))
+        def _total_height(blk: list[tuple[str, float, HexColor, bool]]) -> float:
+            return sum(item[1] + line_gap for item in blk) - line_gap
 
-        # Shipping line — always last; bold-ish weight
-        carrier = (line.shipping_company or "").strip() or "—"
-        n = max(1, int(line.total_products_in_order or 1))
-        # Format like "iMile - 3" — carrier may be Arabic.
-        ship_line = f"{carrier} - {n}"
-        c.setFont(font_name, 9)
-        c.setFillColor(accent)
-        c.drawRightString(x + card_w - 4, text_y, _ar(ship_line))
+        # Auto-shrink if it overflows: reduce body_size step by step.
+        while _total_height(block) > (text_top - text_bottom) and body_size > 6.0:
+            body_size -= 0.5
+            ship_size = max(7.0, ship_size - 0.5)
+            block = _build_text_lines(body_size)
+        # As a last resort, drop the note entirely if still overflowing
+        if _total_height(block) > (text_top - text_bottom) and line.note:
+            line_note_backup = line.note
+            line.note = None
+            block = _build_text_lines(body_size)
+            line.note = line_note_backup
+
+        # Render top-down from the top of the text block
+        cursor = text_top
+        for visual, fsize, color, is_bold in block:
+            c.setFillColor(color)
+            c.setFont(font_name, fsize)
+            cursor -= fsize  # move down by ascent
+            c.drawRightString(right_edge, cursor, visual)
+            cursor -= line_gap
+
+        c.restoreState()
 
     # Render pages
     for page_idx in range(0, len(lines), per_page):

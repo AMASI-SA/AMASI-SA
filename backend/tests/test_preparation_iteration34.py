@@ -54,8 +54,9 @@ def _cleanup(uid: str) -> None:
     async def _do():
         c = AsyncIOMotorClient(os.environ["MONGO_URL"])
         db = c[os.environ["DB_NAME"]]
-        for coll in ("preparation_uploads", "exported_orders",
-                     "unified_orders", "product_costs", "users"):
+        for coll in ("preparation_uploads", "exported_orders", "exported_items",
+                     "product_image_catalog", "unified_orders",
+                     "product_costs", "users"):
             await db[coll].delete_many({"user_id": uid})
         await db.users.delete_many({"id": uid})
         c.close()
@@ -130,6 +131,7 @@ def test_generate_returns_pdf_and_marks_exported():
         s = requests.get(f"{API}/preparation/export-log/stats",
                          headers=_hdr(token), timeout=10).json()
         assert s["total_exported_orders"] == 0
+        assert s["total_exported_items"] == 0
 
         # Generate
         r2 = requests.post(
@@ -143,9 +145,10 @@ def test_generate_returns_pdf_and_marks_exported():
         assert r2.content[:4] == b"%PDF", "response is not a PDF"
         assert len(r2.content) > 50_000, "PDF is suspiciously small"
 
-        # Stats now show 12
+        # Stats now show 19 items (item-level dedup) + 12 orders touched.
         s2 = requests.get(f"{API}/preparation/export-log/stats",
                           headers=_hdr(token), timeout=10).json()
+        assert s2["total_exported_items"] == 19
         assert s2["total_exported_orders"] == 12
         assert s2["last_exported_at"] is not None
     finally:
@@ -162,9 +165,13 @@ def test_reupload_excludes_previously_exported():
         requests.post(f"{API}/preparation/generate/{upload_id1}",
                       headers=_hdr(token), timeout=60).raise_for_status()
 
-        # Second upload — same PDF
+        # Second upload — same PDF. With item-level dedup all 19 items
+        # are filtered out (which means all 12 orders are excluded too).
         r2 = _upload(token)
         body = r2.json()
+        assert body["excluded_items_count"] == 19, (
+            f"Expected all 19 items dedup'd at item-level; got {body}"
+        )
         assert body["excluded_orders_count"] == 12
         assert body["kept_lines"] == 0
         assert set(body["excluded_orders"]) == {
@@ -179,7 +186,7 @@ def test_reupload_excludes_previously_exported():
                            headers=_hdr(token), timeout=15)
         assert r3.status_code == 400
         detail = r3.json().get("detail") or ""
-        assert "تم تصديرها مسبقاً" in detail
+        assert "طباعتها مسبقاً" in detail
         assert "مسح سجل التصدير" in detail
     finally:
         _cleanup(uid)
@@ -202,22 +209,27 @@ def test_clear_log_requires_confirm_and_re_enables_export():
         assert r2.status_code == 400, r2.text[:200]
         assert "تأكيد" in (r2.json().get("detail") or "")
 
-        # DELETE with confirm → deletes 12
+        # DELETE with confirm → deletes 19 items
         r3 = requests.delete(
             f"{API}/preparation/export-log",
             headers=_hdr(token), json={"confirm": True}, timeout=10,
         )
         assert r3.status_code == 200
-        assert r3.json()["deleted_count"] == 12
+        # 19 items deleted from exported_items
+        assert r3.json()["deleted_items"] == 19
+        # No legacy rows to delete on a fresh user
+        assert r3.json()["deleted_legacy_orders"] == 0
 
         # After clear: stats is 0
         s = requests.get(f"{API}/preparation/export-log/stats",
                          headers=_hdr(token), timeout=10).json()
+        assert s["total_exported_items"] == 0
         assert s["total_exported_orders"] == 0
 
-        # Re-upload: all 12 are now keep-able again
+        # Re-upload: all 19 items are now keep-able again
         r4 = _upload(token)
         body = r4.json()
+        assert body["excluded_items_count"] == 0
         assert body["excluded_orders_count"] == 0
         assert body["kept_lines"] == 19
     finally:
@@ -490,3 +502,293 @@ def test_generated_pdf_uses_user_uploaded_image():
         assert len(rg.content) > 50_000
     finally:
         _cleanup(uid)
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Iteration 34c additions — item-level dedup, selection, image catalog
+# ════════════════════════════════════════════════════════════════════════
+def test_partial_print_with_selected_indices():
+    """Print only 5 of 19 items, then verify the remaining 14 still appear
+    in the next preview. This is the key "item-level granularity" promise."""
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        body = r.json()
+        upload_id = body["upload_id"]
+
+        # Pick 5 item indices from the first group
+        first_group = body["groups"][0]
+        selected = [ln["idx"] for ln in first_group["preview_lines"][:5]]
+        assert len(selected) >= 2, "need ≥2 selectable items for the test"
+
+        r2 = requests.post(
+            f"{API}/preparation/generate/{upload_id}",
+            headers=_hdr(token),
+            json={"selected_indices": selected},
+            timeout=60,
+        )
+        assert r2.status_code == 200, r2.text[:300]
+        assert int(r2.headers.get("X-Exported-Cards", 0)) == len(selected)
+        assert int(r2.headers.get("X-Exported-Items", 0)) == len(selected)
+
+        # Preview again — selected ones are now excluded, the rest remain.
+        preview = requests.get(
+            f"{API}/preparation/preview/{upload_id}",
+            headers=_hdr(token), timeout=10,
+        ).json()
+        assert preview["excluded_items_count"] == len(selected)
+        assert preview["kept_lines"] == 19 - len(selected)
+
+        # The same indices are now in exported_items
+        exported_idxs = set()
+        for g in preview["groups"]:
+            for ln in g["preview_lines"]:
+                exported_idxs.add(ln["idx"])
+        for s in selected:
+            assert s not in exported_idxs, (
+                f"idx {s} should be excluded from kept lines after print"
+            )
+    finally:
+        _cleanup(uid)
+
+
+def test_same_order_with_multiple_items_partial_print():
+    """Order #263822478 has 3 items in the sample. Printing only the first
+    must leave the other 2 visible in the next preview — the WHOLE order
+    must NOT be excluded."""
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        body = r.json()
+        upload_id = body["upload_id"]
+
+        # Find lines belonging to order #263822478
+        target_lines = []
+        for g in body["groups"]:
+            for ln in g["preview_lines"]:
+                if ln["order_number"] == "263822478":
+                    target_lines.append(ln)
+        assert len(target_lines) == 3, (
+            f"Sample order should have 3 items; got {len(target_lines)}"
+        )
+
+        # Print just the FIRST one
+        sel = [target_lines[0]["idx"]]
+        rg = requests.post(
+            f"{API}/preparation/generate/{upload_id}",
+            headers=_hdr(token), json={"selected_indices": sel},
+            timeout=60,
+        )
+        assert rg.status_code == 200, rg.text[:300]
+
+        # Re-preview: the OTHER 2 items of this order must still appear.
+        prev = requests.get(
+            f"{API}/preparation/preview/{upload_id}",
+            headers=_hdr(token), timeout=10,
+        ).json()
+        remaining_for_order = []
+        for g in prev["groups"]:
+            for ln in g["preview_lines"]:
+                if ln["order_number"] == "263822478":
+                    remaining_for_order.append(ln)
+        assert len(remaining_for_order) == 2, (
+            f"order #263822478 should still have 2 items visible; "
+            f"got {len(remaining_for_order)}"
+        )
+        # And the excluded list should report just 1 item for this order
+        excluded_for_order = [e for e in prev["excluded_items"]
+                              if e["order_number"] == "263822478"]
+        assert len(excluded_for_order) == 1
+    finally:
+        _cleanup(uid)
+
+
+def test_empty_selection_rejected():
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        upload_id = r.json()["upload_id"]
+        r2 = requests.post(
+            f"{API}/preparation/generate/{upload_id}",
+            headers=_hdr(token), json={"selected_indices": []},
+            timeout=15,
+        )
+        assert r2.status_code == 400, r2.text[:200]
+        assert "حدّد" in (r2.json().get("detail") or "")
+    finally:
+        _cleanup(uid)
+
+
+def test_put_image_also_persists_to_catalog():
+    """PUT /image saves to product_image_catalog so NEXT upload picks it up."""
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        body = r.json()
+        upload_id = body["upload_id"]
+        # Find any product line without image
+        target = None
+        for g in body["groups"]:
+            for ln in g["preview_lines"]:
+                if not ln["has_image"] and ln["product_name"]:
+                    target = (ln, g["product_name"])
+                    break
+            if target:
+                break
+        assert target is not None, "sample should have at least one image-less product"
+        ln, pname = target
+
+        from PIL import Image
+        png = io.BytesIO()
+        Image.new("RGB", (300, 300), (100, 200, 50)).save(png, format="PNG")
+        png.seek(0)
+
+        rput = requests.put(
+            f"{API}/preparation/image/{upload_id}/{ln['idx']}",
+            headers=_hdr(token),
+            files={"file": ("c.png", png, "image/png")},
+            timeout=15,
+        )
+        assert rput.status_code == 200, rput.text[:200]
+        assert rput.json()["catalog_saved"] is True
+
+        # Confirm catalog endpoint returns it
+        cat = requests.get(
+            f"{API}/preparation/image-catalog",
+            headers=_hdr(token), timeout=10,
+        ).json()
+        assert cat["count"] >= 1
+        names = [it["product_name"] for it in cat["items"]]
+        assert pname in names, f"{pname!r} not in {names!r}"
+    finally:
+        _cleanup(uid)
+
+
+def test_image_catalog_auto_match_on_next_upload():
+    """Upload PDF, fix one image, clear log, re-upload → the previously
+    image-less product now arrives WITH an image (auto-matched)."""
+    token, uid = _register()
+    try:
+        # 1st upload
+        r1 = _upload(token)
+        body1 = r1.json()
+        upload_id1 = body1["upload_id"]
+        target = None
+        for g in body1["groups"]:
+            for ln in g["preview_lines"]:
+                if not ln["has_image"] and ln["product_name"]:
+                    target = ln
+                    break
+            if target:
+                break
+        assert target is not None
+        target_name = target["product_name"]
+
+        # Provide an image manually
+        from PIL import Image
+        png = io.BytesIO()
+        Image.new("RGB", (200, 200), (255, 0, 0)).save(png, format="PNG")
+        png.seek(0)
+        requests.put(
+            f"{API}/preparation/image/{upload_id1}/{target['idx']}",
+            headers=_hdr(token),
+            files={"file": ("c.png", png, "image/png")},
+            timeout=15,
+        ).raise_for_status()
+
+        # Clear exported log so re-upload doesn't filter the line out
+        requests.delete(
+            f"{API}/preparation/export-log",
+            headers=_hdr(token), json={"confirm": True}, timeout=10,
+        )
+
+        # 2nd upload — same PDF
+        r2 = _upload(token)
+        body2 = r2.json()
+        # Find the same product in the new upload
+        new_line = None
+        for g in body2["groups"]:
+            if g["product_name"] == target_name:
+                new_line = g["preview_lines"][0]
+                break
+        assert new_line is not None, (
+            f"product {target_name!r} missing from new upload"
+        )
+        assert new_line["has_image"] is True, (
+            "auto-match from product_image_catalog should have set has_image=True"
+        )
+    finally:
+        _cleanup(uid)
+
+
+def test_image_catalog_crud():
+    """List → upsert → fetch image → delete → 404."""
+    token, uid = _register()
+    try:
+        from PIL import Image
+        # 1. List on a fresh user → empty
+        r1 = requests.get(
+            f"{API}/preparation/image-catalog",
+            headers=_hdr(token), timeout=10,
+        ).json()
+        assert r1["count"] == 0
+
+        # 2. Upsert manually
+        png = io.BytesIO()
+        Image.new("RGB", (100, 100), (0, 0, 255)).save(png, format="PNG")
+        png.seek(0)
+        ru = requests.put(
+            f"{API}/preparation/image-catalog/test-product",
+            headers=_hdr(token),
+            files={"file": ("c.png", png, "image/png")},
+            params={"product_name": "Test Product"},
+            timeout=10,
+        )
+        assert ru.status_code == 200, ru.text[:200]
+
+        # 3. List shows 1 item
+        r2 = requests.get(
+            f"{API}/preparation/image-catalog",
+            headers=_hdr(token), timeout=10,
+        ).json()
+        assert r2["count"] == 1
+        norm = r2["items"][0]["name_norm"]
+
+        # 4. Fetch image
+        r3 = requests.get(
+            f"{API}/preparation/image-catalog/image/{norm}",
+            headers=_hdr(token), timeout=10,
+        )
+        assert r3.status_code == 200
+        assert r3.headers["content-type"].startswith("image/")
+
+        # 5. Delete
+        r4 = requests.delete(
+            f"{API}/preparation/image-catalog/{norm}",
+            headers=_hdr(token), timeout=10,
+        )
+        assert r4.status_code == 200
+        assert r4.json()["deleted_count"] == 1
+
+        # 6. Fetch after delete → 404
+        r5 = requests.get(
+            f"{API}/preparation/image-catalog/image/{norm}",
+            headers=_hdr(token), timeout=10,
+        )
+        assert r5.status_code == 404
+    finally:
+        _cleanup(uid)
+
+
+def test_short_date_helper():
+    """Direct unit-level coverage of the date compressor."""
+    import sys
+    sys.path.insert(0, "/app/backend")
+    from preparation_pdf import short_date
+    assert short_date("Tuesday 2 June 2026") == "06/02"
+    assert short_date("Friday 25 December 2026") == "12/25"
+    assert short_date("June 2, 2026") == "06/02"
+    assert short_date("2026-06-02") == "06/02"
+    assert short_date(None) is None
+    assert short_date("") is None
+    assert short_date("garbage") is None
