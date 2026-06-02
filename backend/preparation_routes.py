@@ -82,6 +82,12 @@ def _line_to_preview(line: ProductLine, idx: int, *, image_source: Optional[str]
         "image_source": image_source,
         "shipping_company": line.shipping_company,
         "already_printed": already_printed,
+        # iter-36 — extra options surfaced on the card
+        "size": line.size,
+        "color": line.color,
+        "product_id": line.product_id,
+        "sku": line.sku,
+        "product_options": line.product_options or {},
     }
 
 
@@ -104,6 +110,12 @@ def _line_to_storage(line: ProductLine, idx: int) -> dict:
         ),
         "image_mime": line.image_mime,
         "shipping_company": line.shipping_company,
+        # iter-36 — store extra option fields so they survive a refresh
+        "size": line.size,
+        "color": line.color,
+        "product_id": line.product_id,
+        "sku": line.sku,
+        "product_options": line.product_options or {},
     }
 
 
@@ -121,6 +133,11 @@ def _line_from_storage(d: dict) -> ProductLine:
         image_bytes=img,
         image_mime=d.get("image_mime"),
         shipping_company=d.get("shipping_company"),
+        size=d.get("size"),
+        color=d.get("color"),
+        product_id=d.get("product_id"),
+        sku=d.get("sku"),
+        product_options=d.get("product_options") or {},
     )
 
 
@@ -409,16 +426,21 @@ def _build_router(db) -> APIRouter:
 
     # ── PUT /image/{upload_id}/{idx} — user-uploaded product image ────
     # Lets the merchant supply a custom image for a product when the PDF
-    # did not include one (and the catalogue fallback also missed). By
-    # default the new image is applied to ALL lines that share the same
-    # product_name (which is what users almost always want — it's a
-    # "product" image, not an "order" image). Pass scope=line to override.
+    # did not include one (and the catalogue fallback also missed).
+    #
+    # Iter-36 behaviour (per user spec):
+    #   * Sibling lines that ALREADY HAVE AN IMAGE are NEVER overwritten.
+    #   * Sibling matching priority:
+    #       1) product_id (exact, non-empty)
+    #       2) sku (exact, non-empty)
+    #       3) normalized product_name
+    #   * The catalog is always updated so the next upload auto-matches.
     @router.put("/image/{upload_id}/{idx}")
     async def upload_product_image(
         upload_id: str,
         idx: int,
         file: UploadFile = File(...),
-        scope: str = "product",
+        scope: str = "product",          # kept for API back-compat
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
@@ -455,8 +477,7 @@ def _build_router(db) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"تعذّر قراءة الصورة: {e}")
 
-        # 3) Locate the upload + the line, find which sibling lines should
-        #    also get the image (same product_name → scope=product).
+        # 3) Locate the upload + the target line.
         doc = await db.preparation_uploads.find_one(
             {"user_id": uid, "upload_id": upload_id},
             {"_id": 0, "lines": 1},
@@ -467,49 +488,80 @@ def _build_router(db) -> APIRouter:
         if idx < 0 or idx >= len(stored):
             raise HTTPException(status_code=404, detail="index out of range")
 
-        target_name = (stored[idx].get("product_name") or "").strip()
-        if scope == "product" and target_name:
-            # Apply to all lines whose product_name matches (case+space normalized)
-            tgt_norm = " ".join(target_name.lower().split())
-            indices = [
-                i for i, ln in enumerate(stored)
-                if " ".join((ln.get("product_name") or "").lower().split()) == tgt_norm
-            ]
+        target = stored[idx]
+        target_name = (target.get("product_name") or "").strip()
+        target_pid = (target.get("product_id") or "").strip()
+        target_sku = (target.get("sku") or "").strip()
+
+        # 4) Find sibling indices via priority chain (product_id → sku →
+        #    name_norm). `scope=line` forces a single-card update.
+        def _norm(s):
+            return " ".join((s or "").lower().split())
+
+        if scope != "line" and (target_pid or target_sku or target_name):
+            def _matches(ln: dict) -> bool:
+                # Highest-precedence match wins, but only if BOTH sides have
+                # the same kind of identifier (avoid cross-matching a row
+                # with no product_id against another that has one).
+                if target_pid:
+                    return (ln.get("product_id") or "").strip() == target_pid
+                if target_sku:
+                    return (ln.get("sku") or "").strip() == target_sku
+                return _norm(ln.get("product_name")) == _norm(target_name)
+            candidates = [i for i, ln in enumerate(stored) if _matches(ln)]
         else:
-            indices = [idx]
+            candidates = [idx]
+
+        # 5) NEVER overwrite an existing image. The clicked card is always
+        #    included (it triggered the upload), even if for some reason
+        #    it already had one — that's an explicit user override.
+        indices = [
+            i for i in candidates
+            if i == idx or not (stored[i].get("image_b64"))
+        ]
+        skipped_count = len(candidates) - len(indices)
 
         b64 = base64.b64encode(normalized).decode("ascii")
-        # 4) Persist the new image on every matching line. We update the
-        #    nested array via positional-filter so we don't have to rewrite
-        #    the whole doc each call.
-        updates = {}
+        # 6) Persist the new image on every selected sibling.
+        updates: dict = {}
         for i in indices:
             updates[f"lines.{i}.image_b64"] = b64
             updates[f"lines.{i}.image_mime"] = mime
             updates[f"lines.{i}.image_source"] = "user_upload"
-        await db.preparation_uploads.update_one(
-            {"user_id": uid, "upload_id": upload_id},
-            {"$set": updates},
-        )
+        if updates:
+            await db.preparation_uploads.update_one(
+                {"user_id": uid, "upload_id": upload_id},
+                {"$set": updates},
+            )
 
-        # 5) Persist to the Product Image Catalog so the NEXT upload that
-        #    contains the same product gets this image automatically — the
-        #    merchant only needs to upload an image once per product.
+        # 7) Persist to the Product Image Catalog so the NEXT upload that
+        #    contains the same product gets this image automatically.
         catalog_saved = False
         if target_name:
             await _save_to_image_catalog(
                 db, uid, target_name, b64, mime,
-                product_id=(stored[idx].get("product_id") or None),
-                sku=(stored[idx].get("sku") or None),
+                product_id=(target_pid or None),
+                sku=(target_sku or None),
             )
             catalog_saved = True
+
+        # Decide the effective scope label to return.
+        if scope == "line" or len(indices) <= 1:
+            effective_scope = "line"
+        elif target_pid:
+            effective_scope = "product_id"
+        elif target_sku:
+            effective_scope = "sku"
+        else:
+            effective_scope = "name"
 
         return {
             "ok": True,
             "applied_to_indices": indices,
             "applied_count": len(indices),
+            "skipped_with_existing_image": skipped_count,
             "product_name": target_name or None,
-            "scope": "product" if (scope == "product" and target_name) else "line",
+            "scope": effective_scope,
             "catalog_saved": catalog_saved,
             "bytes": len(normalized),
         }

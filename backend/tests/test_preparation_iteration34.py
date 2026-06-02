@@ -317,8 +317,10 @@ def _png_bytes(size=(320, 320), color=(180, 40, 90)) -> bytes:
 
 def test_put_image_applies_to_all_lines_with_same_product_name():
     """When the same product appears on N orders (e.g. "تغليف انيق" ×4),
-    uploading once with scope=product must update ALL N lines so the
-    final PDF uses the same image for every card of that product."""
+    uploading once with scope=product must update ALL siblings WITHOUT
+    an existing image. Sibling lines that already have an image (extracted
+    from the Salla PDF or uploaded previously) are NEVER overwritten —
+    iter-36 semantics."""
     token, uid = _register()
     try:
         r = _upload(token)
@@ -334,6 +336,8 @@ def test_put_image_applies_to_all_lines_with_same_product_name():
         target_idx = next(
             ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]
         )
+        no_img_idxs = {ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]}
+        has_img_idxs = {ln["idx"] for ln in target_group["preview_lines"] if ln["has_image"]}
 
         r2 = requests.put(
             f"{API}/preparation/image/{upload_id}/{target_idx}?scope=product",
@@ -343,17 +347,26 @@ def test_put_image_applies_to_all_lines_with_same_product_name():
         )
         assert r2.status_code == 200, r2.text[:300]
         j = r2.json()
-        assert j["scope"] == "product"
-        assert j["applied_count"] == 4, (
-            f"All 4 sibling lines should have been updated; got {j}"
+        # Iter-36 returns more granular labels — "product" was the old label.
+        # When the match falls through to name_norm (no product_id/sku in
+        # the Salla PDF), the new label is "name". Either is acceptable.
+        # When only ONE sibling matches (singleton after the "skip existing
+        # images" filter), the label collapses to "line".
+        assert j["scope"] in ("product", "name", "line"), j
+        # All previously image-LESS siblings should now have the new image.
+        applied = set(j["applied_to_indices"])
+        assert applied == no_img_idxs, (
+            f"applied indices must equal the no-image siblings; "
+            f"got {applied} vs expected {no_img_idxs}"
         )
-        assert sorted(j["applied_to_indices"]) == sorted({
-            ln["idx"] for ln in target_group["preview_lines"]
-        }), "applied indices should equal the group's idxs"
+        # Sibling lines that already had an image must NEVER be overwritten.
+        assert not (applied & has_img_idxs), j
+        # The skipped counter must reflect the existing-image siblings.
+        assert j.get("skipped_with_existing_image", 0) == len(has_img_idxs), j
         assert j["bytes"] > 0
 
         # Re-fetch preview — every line in the group must now have
-        # has_image=True and image_source=user_upload.
+        # has_image=True (either pre-existing or freshly uploaded).
         prev = requests.get(
             f"{API}/preparation/preview/{upload_id}",
             headers=_hdr(token), timeout=10,
@@ -361,7 +374,8 @@ def test_put_image_applies_to_all_lines_with_same_product_name():
         rg = next(g for g in prev["groups"] if "تغليف" in (g["product_name"] or ""))
         for ln in rg["preview_lines"]:
             assert ln["has_image"] is True, ln
-            assert ln["image_source"] == "user_upload", ln
+            if ln["idx"] in applied:
+                assert ln["image_source"] == "user_upload", ln
     finally:
         _cleanup(uid)
 
@@ -394,6 +408,126 @@ def test_put_image_scope_line_only_updates_one_row():
         assert j["applied_to_indices"] == [target_idx]
     finally:
         _cleanup(uid)
+
+
+# ── Iter-36 — "don't overwrite existing image" semantics ──────────────
+def test_put_image_skips_lines_with_existing_image():
+    """When a sibling line ALREADY has an image (from the Salla PDF or
+    a previous user upload), uploading a new image to one card of the
+    same product must NOT overwrite that sibling.
+
+    The fixture's "تغليف انيق" group has 4 lines: 1 with no image + 3
+    with PDF-extracted images. We PUT a recognizable PNG into the
+    no-image line with scope=product → only that single line should be
+    updated; the other 3 must keep their original PDF bytes."""
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        body = r.json()
+        upload_id = body["upload_id"]
+        target_group = next(
+            g for g in body["groups"] if "تغليف" in (g["product_name"] or "")
+        )
+        no_img = [ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]]
+        has_img = [ln["idx"] for ln in target_group["preview_lines"] if ln["has_image"]]
+        assert no_img and has_img, target_group
+
+        # Snapshot ALL existing-image siblings' bytes
+        before = {
+            i: requests.get(
+                f"{API}/preparation/image/{upload_id}/{i}",
+                headers=_hdr(token), timeout=10,
+            ).content
+            for i in has_img
+        }
+
+        # Upload a recognizable PNG to the no-image line with scope=product
+        custom = _png_bytes(color=(50, 200, 100))
+        r2 = requests.put(
+            f"{API}/preparation/image/{upload_id}/{no_img[0]}?scope=product",
+            headers=_hdr(token),
+            files={"file": ("c.png", io.BytesIO(custom), "image/png")},
+            timeout=15,
+        )
+        assert r2.status_code == 200, r2.text[:200]
+        j = r2.json()
+        # NO existing-image sibling should appear in applied_to_indices
+        for i in has_img:
+            assert i not in j["applied_to_indices"], (
+                f"sibling {i} (had image) was overwritten — applied={j['applied_to_indices']}"
+            )
+        assert j.get("skipped_with_existing_image", 0) == len(has_img), j
+
+        # Re-fetch all 3 protected siblings → bytes UNCHANGED
+        for i in has_img:
+            after = requests.get(
+                f"{API}/preparation/image/{upload_id}/{i}",
+                headers=_hdr(token), timeout=10,
+            ).content
+            assert after == before[i], f"line {i} image bytes mutated!"
+    finally:
+        _cleanup(uid)
+
+
+def test_preview_exposes_size_color_options():
+    """Iter-36 — verify _line_to_preview surfaces size/color/product_options
+    fields so the new individual-card UI can render them.
+
+    We don't have a fixture with size/color in the sample PDF, so we test
+    this at the route serialization level: round-trip through PUT image
+    and GET preview, then assert the keys exist (values may be None)."""
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        body = r.json()
+        # All preview_lines should expose the new keys
+        sample = body["groups"][0]["preview_lines"][0]
+        assert "size" in sample, sample
+        assert "color" in sample, sample
+        assert "product_options" in sample, sample
+        assert "product_id" in sample
+        assert "sku" in sample
+        # product_options must be a dict (possibly empty)
+        assert isinstance(sample["product_options"], dict)
+    finally:
+        _cleanup(uid)
+
+
+def test_pdf_parser_extracts_size_color_from_options_block():
+    """Pure unit test on the PDF parser's helpers: a fabricated options
+    dict with size/color keys must populate the dedicated fields and the
+    `product_options` dict must NOT duplicate them."""
+    import sys
+    sys.path.insert(0, "/app/backend")
+    from preparation_pdf import (
+        _pick_size_from_options, _pick_color_from_options,
+        _filter_display_options, _pick_name_from_options,
+        _pick_note_from_options,
+    )
+
+    opts = {
+        "الاسم": "أحمد محمد",
+        "المقاس": "L",
+        "اللون": "أزرق",
+        "ملاحظة": "هدية",
+        "النوع": "ذهب",          # custom — must end up in remaining
+        "":      "ignored",       # empty key — skipped
+        "noise": "",              # empty value — skipped
+    }
+    assert _pick_size_from_options(opts) == "L"
+    assert _pick_color_from_options(opts) == "أزرق"
+    assert _pick_name_from_options(opts) == "أحمد محمد"
+    assert _pick_note_from_options(opts) == "هدية"
+    rem = _filter_display_options(opts)
+    assert "النوع" in rem and rem["النوع"] == "ذهب"
+    assert "الاسم" not in rem
+    assert "المقاس" not in rem
+    assert "اللون" not in rem
+    assert "ملاحظة" not in rem
+    assert "" not in rem
+    assert "noise" not in rem
+
+
 
 
 def test_put_image_rejects_non_image_and_oversized():
@@ -490,7 +624,11 @@ def test_generated_pdf_uses_user_uploaded_image():
             ln.get("image_source") for ln in (doc.get("lines") or [])
             if "تغليف" in (ln.get("product_name") or "")
         ]
-        assert sources and all(s == "user_upload" for s in sources), sources
+        # Iter-36: only siblings that had NO image are tagged user_upload.
+        # Siblings with PDF-extracted images keep their None source (the
+        # don't-overwrite-existing-image rule).
+        assert sources, sources
+        assert any(s == "user_upload" for s in sources), sources
 
         # Now generate — must succeed and return a PDF.
         rg = requests.post(

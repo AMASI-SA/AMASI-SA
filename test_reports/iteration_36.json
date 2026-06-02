@@ -1,0 +1,23 @@
+{
+  "summary": "Frontend-only test of /product-preparation iter-36 cards-grid UX revamp. All 10 explicit testable steps PASSED including the critical don't-overwrite-existing-images bug fix. PDF upload → 12 orders / 19 cards rendered correctly, individual card grid (2/3/4/5 responsive cols) renders all required testid elements, selection counter + sticky action bar work, select-all/deselect toggles, custom image upload triggers the 'مخصّصة' badge and DOES NOT clobber sibling cards that already had PDF-extracted images (verified by the in-app toast '3 بطاقات لها صور أصلاً — لم يتم استبدالها'), PDF export downloads successfully and selected items disappear (19 → 17 after exporting 2), /image-catalog cross-page persistence shows the auto-saved image, and mobile 390x844 viewport has no horizontal overflow (scrollWidth == innerWidth).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ProductPreparation.jsx is 657 lines — borderline for splitting (ProductCard, MissingImageButton, CardImage, StatCard, ConfirmModal could move to /components/preparation/). Not urgent.",
+    "Step 11 (reupload after some printed items) and Step 12 (excluded panel) were not exercised in this run because the freshly-deployed export-log was empty before the test; the underlying wiring (prep-reupload-btn, prep-toggle-excluded-btn, prep-excluded-panel) is present in the code. Action: optional follow-up test after a clean dev seed."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "100% (18/18 PASS, 2 INFO)"},
+  "test_credentials": "admin@hesab.app / admin123",
+  "seed_data_creation": "Used /tmp/pdfs/orders_sample.pdf (12 orders / 19 lines, one with 'تغليف انيق' family of 4 lines, 3 with images + 1 empty — perfect for don't-overwrite verification). Custom test image generated at /tmp/test_custom_image.png (256x256 red PNG).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test image catalog shows 1 row after step 6 image upload — that is the auto-saved 'قلادة روز ب السم مطيل ذهب' product. Backend route PUT /preparation/image/{upload_id}/{idx}?scope=product returned applied_count and skipped_with_existing_image counts; the UI rendered the latter as an info toast. The card grid uses imgVersion bump after image upload — every img src gets ?v=N which is the correct cache-bust pattern. Step 7's screenshots are at /tmp/before_upload.png and /tmp/after_upload.png.",
+  "rca_of_the_issue": "N/A — no defects found. Iter-36 UX revamp and don't-overwrite-existing-images fix are working as specified."
+}

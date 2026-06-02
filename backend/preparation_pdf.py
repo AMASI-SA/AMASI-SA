@@ -58,6 +58,16 @@ NOTE_KEY_PREFIXES: tuple[str, ...] = (
     "العباره عىل الكرت", "العبارة على الكرت",
     "رسالة الكرت", "رساله الكرت",
 )
+# Size/color option-key variants (display-only on the preview cards).
+# Keys do not generally contain lam-alef so PDF extraction preserves them.
+SIZE_KEY_PREFIXES: tuple[str, ...] = (
+    "المقاس", "المقس", "مقاس", "القياس", "القس",
+    "size", "Size", "SIZE",
+)
+COLOR_KEY_PREFIXES: tuple[str, ...] = (
+    "اللون", "الون", "لون",
+    "color", "Color", "COLOR", "colour", "Colour",
+)
 FOOTER_MARKERS: tuple[str, ...] = ("شكر", "نتمن", "نتمنى")
 ORDER_NUM_RE = re.compile(r"رقم\s*الطلب[\s\S]{0,40}#\s*(\d+)")
 DATE_RE = re.compile(r"(\w+\s+\d{1,2}\s+\w+\s+\d{4})")
@@ -77,6 +87,13 @@ class ProductLine:
     image_bytes: Optional[bytes] = field(default=None, repr=False)
     image_mime: Optional[str] = None
     shipping_company: Optional[str] = None  # populated from unified_orders later
+    # ── iteration 36 — extra option fields shown on the individual card ──
+    size: Optional[str] = None
+    color: Optional[str] = None
+    product_id: Optional[str] = None
+    sku: Optional[str] = None
+    product_options: dict[str, str] = field(default_factory=dict)
+
 
     @property
     def item_key(self) -> str:
@@ -215,6 +232,51 @@ def _pick_note_from_options(opts: dict[str, str]) -> Optional[str]:
     return None
 
 
+def _pick_by_prefixes(opts: dict[str, str], prefixes: tuple[str, ...]) -> Optional[str]:
+    """Generic key-lookup helper used for size/color. Tries exact match
+    first, then prefix match (handles e.g. 'المقاس' vs 'المقاس (متر)')."""
+    for p in prefixes:
+        if p in opts:
+            v = (opts.get(p) or "").strip()
+            if v:
+                return v
+    for k, v in opts.items():
+        for p in prefixes:
+            if k.startswith(p):
+                vv = (v or "").strip()
+                if vv:
+                    return vv
+    return None
+
+
+def _pick_size_from_options(opts: dict[str, str]) -> Optional[str]:
+    return _pick_by_prefixes(opts, SIZE_KEY_PREFIXES)
+
+
+def _pick_color_from_options(opts: dict[str, str]) -> Optional[str]:
+    return _pick_by_prefixes(opts, COLOR_KEY_PREFIXES)
+
+
+def _filter_display_options(opts: dict[str, str]) -> dict[str, str]:
+    """Return only options that aren't already covered by the typed
+    fields (customer_name / note / size / color). Useful when the
+    frontend wants to spread the remaining options on the card."""
+    out: dict[str, str] = {}
+    for k, v in opts.items():
+        if not k or not (v or "").strip():
+            continue
+        if k in KEY_NAME_VARIANTS:
+            continue
+        if any(k.startswith(p) or p in k for p in NOTE_KEY_PREFIXES):
+            continue
+        if any(k.startswith(p) for p in SIZE_KEY_PREFIXES):
+            continue
+        if any(k.startswith(p) for p in COLOR_KEY_PREFIXES):
+            continue
+        out[k] = v
+    return out
+
+
 def parse_salla_orders_pdf(pdf_bytes: bytes) -> list[ProductLine]:
     """Parse a Salla-exported orders PDF into a flat list of product lines.
 
@@ -268,6 +330,9 @@ def parse_salla_orders_pdf(pdf_bytes: bytes) -> list[ProductLine]:
                     item_index=i,
                     image_bytes=img_bytes,
                     image_mime=f"image/{img_ext}" if img_ext else None,
+                    size=_pick_size_from_options(opts),
+                    color=_pick_color_from_options(opts),
+                    product_options=_filter_display_options(opts),
                 ))
     finally:
         doc.close()

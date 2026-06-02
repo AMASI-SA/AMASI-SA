@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     UploadSimple, Package, ArrowsClockwise, Eye, Trash, Warning,
-    FilePdf, ListChecks, ImageBroken, Info, CheckCircle,
+    FilePdf, ListChecks, ImageBroken, Info, CheckCircle, Plus,
+    Ruler, Palette, User, NotePencil,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { API_BASE } from "../lib/api";
@@ -9,15 +10,18 @@ import api, { API_BASE } from "../lib/api";
 /**
  * /product-preparation — "تجهيز المنتجات"
  *
- * 3-step flow:
- *   1. Upload Salla orders PDF → backend parses + groups by product
- *   2. Preview the grouped products (sorted by count desc) + see which
- *      orders were excluded because they're already in `exported_orders`
- *   3. Generate the printable 4×4 prep PDF (or clear the export log first
- *      to allow re-exporting old orders).
- *
- * The file is intentionally self-contained; it never touches the dashboard
- * or accounting calculations.
+ * Iter-36 flow (individual cards, not grouped):
+ *   1. Upload Salla orders PDF → backend parses + dedups by item_key
+ *   2. Each line is shown as ONE card in a responsive Grid
+ *      (2/3/4/5 cols depending on viewport).
+ *   3. User checkboxes the cards they want, hits
+ *      "تصدير المنتجات المحددة إلى PDF". After export only those
+ *      items disappear (item-level dedup, not order-level).
+ *   4. Cards with no image have an inline "إضافة صورة" button — the
+ *      uploaded image fills the empty siblings in this same upload
+ *      (matched by product_id → SKU → name_norm) and is auto-saved
+ *      to /image-catalog for next time. Existing images are never
+ *      overwritten.
  */
 
 function ConfirmModal({ open, title, description, confirmLabel, onConfirm, onCancel, danger = false }) {
@@ -71,12 +75,16 @@ function StatCard({ label, value, sub, testid, icon: Icon, tone = "slate" }) {
     );
 }
 
-function ProductImage({ uploadId, idx, hasImage, alt, version }) {
+/** Square product image with hard fallback if the byte stream errors. */
+function CardImage({ uploadId, idx, hasImage, alt, version }) {
     const [errored, setErrored] = useState(false);
     if (!hasImage || errored) {
         return (
-            <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 flex-shrink-0" title="لا توجد صورة">
-                <ImageBroken size={20} />
+            <div
+                className="w-full aspect-square rounded-lg bg-slate-100 flex items-center justify-center text-slate-400"
+                title="لا توجد صورة"
+            >
+                <ImageBroken size={36} />
             </div>
         );
     }
@@ -85,16 +93,17 @@ function ProductImage({ uploadId, idx, hasImage, alt, version }) {
             src={`${API_BASE}/preparation/image/${uploadId}/${idx}${version ? `?v=${version}` : ""}`}
             alt={alt || "product"}
             onError={() => setErrored(true)}
-            className="w-14 h-14 rounded-lg object-cover border border-slate-200 flex-shrink-0"
+            className="w-full aspect-square rounded-lg object-cover bg-slate-50"
             loading="lazy"
         />
     );
 }
 
-/** Inline image uploader — appears on rows without an image. The uploaded
- *  image applies to all sibling rows that share the same product_name
- *  (scope=product), so the merchant uploads once per product, not per order. */
-function MissingImageUploader({ uploadId, idx, productName, onUploaded }) {
+/** Inline "add image" button — shown only when the card has no image.
+ *  Behaviour per iter-36 backend: applies to this card + any sibling in
+ *  the same upload that shares product_id / sku / name_norm AND has no
+ *  image. Cards that already have images are untouched. */
+function MissingImageButton({ uploadId, idx, productName, onUploaded }) {
     const inputRef = useRef(null);
     const [busy, setBusy] = useState(false);
 
@@ -114,11 +123,14 @@ function MissingImageUploader({ uploadId, idx, productName, onUploaded }) {
                 fd,
                 { headers: { "Content-Type": "multipart/form-data" } },
             );
-            toast.success(
-                r.applied_count > 1
-                    ? `تم تطبيق الصورة على ${r.applied_count} طلبات لنفس المنتج "${productName || ""}"`
-                    : "تم رفع صورة المنتج",
-            );
+            if (r.applied_count > 1) {
+                toast.success(`تمت إضافة الصورة لـ ${r.applied_count} بطاقات لنفس المنتج`);
+            } else {
+                toast.success("تمت إضافة الصورة لهذه البطاقة");
+            }
+            if (r.skipped_with_existing_image > 0) {
+                toast.info(`${r.skipped_with_existing_image} بطاقات لها صور أصلاً — لم يتم استبدالها.`);
+            }
             onUploaded?.();
         } catch (err) {
             toast.error(err?.response?.data?.detail || "فشل رفع الصورة");
@@ -136,36 +148,188 @@ function MissingImageUploader({ uploadId, idx, productName, onUploaded }) {
                 accept="image/*"
                 className="hidden"
                 onChange={handleChange}
-                data-testid={`prep-missing-image-input-${idx}`}
+                data-testid={`prep-card-image-input-${idx}`}
             />
             <button
                 type="button"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); inputRef.current?.click(); }}
                 disabled={busy}
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 text-indigo-700 text-[11px] font-bold border border-indigo-200"
-                data-testid={`prep-missing-image-btn-${idx}`}
-                title="أضف صورة لهذا المنتج (تنطبق على كل طلباته)"
+                data-testid={`prep-card-add-image-btn-${idx}`}
+                title={`أضف صورة لـ "${productName || ""}"`}
             >
+                <Plus size={12} weight="bold" />
                 {busy ? "جاري الرفع…" : "إضافة صورة"}
             </button>
         </>
     );
 }
 
+/** A single product card. ONE per line — order info + image + options. */
+function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUploaded }) {
+    const orderNum = row.order_number;
+    const opts = row.product_options || {};
+    const extraOpts = Object.entries(opts).slice(0, 3);  // cap so the card stays compact
+
+    return (
+        <label
+            className={`group relative flex flex-col gap-2 p-3 border-2 rounded-xl bg-white shadow-sm cursor-pointer transition-all ${
+                isSelected
+                    ? "border-indigo-500 ring-2 ring-indigo-200 shadow-md"
+                    : "border-slate-200 hover:border-indigo-300 hover:shadow-md"
+            }`}
+            data-testid={`prep-card-${row.idx}`}
+        >
+            {/* Checkbox — top-right (RTL) corner */}
+            <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggle(row.idx)}
+                className="absolute top-2 left-2 w-5 h-5 rounded border-slate-300 accent-indigo-600 z-10 bg-white shadow"
+                data-testid={`prep-card-check-${row.idx}`}
+                aria-label="تحديد المنتج"
+            />
+
+            {/* Order badge — top-right */}
+            <div
+                className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-md bg-slate-900/90 text-white text-[10px] font-bold backdrop-blur"
+                data-testid={`prep-card-order-${row.idx}`}
+                title="رقم الطلب"
+            >
+                #{orderNum}
+            </div>
+
+            {/* Image */}
+            <CardImage
+                uploadId={uploadId}
+                idx={row.idx}
+                hasImage={row.has_image}
+                alt={row.product_name}
+                version={imgVersion}
+            />
+
+            {/* Body */}
+            <div className="flex flex-col gap-1 min-w-0">
+                {/* Product name — truncate w/ tooltip */}
+                <div
+                    className="font-extrabold text-slate-900 text-sm truncate leading-tight"
+                    title={row.product_name}
+                    data-testid={`prep-card-name-${row.idx}`}
+                >
+                    {row.product_name || "بدون اسم"}
+                </div>
+
+                {/* Customer name (الاسم) — if present */}
+                {row.customer_name ? (
+                    <div className="flex items-center gap-1 text-[11px] text-slate-700 truncate" title={row.customer_name}>
+                        <User size={10} weight="bold" className="flex-shrink-0 text-slate-400" />
+                        <span className="truncate">{row.customer_name}</span>
+                    </div>
+                ) : null}
+
+                {/* Size / Color row */}
+                {(row.size || row.color) && (
+                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                        {row.size ? (
+                            <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 max-w-full truncate"
+                                title={`المقاس: ${row.size}`}
+                                data-testid={`prep-card-size-${row.idx}`}
+                            >
+                                <Ruler size={10} weight="bold" />
+                                <span className="truncate">{row.size}</span>
+                            </span>
+                        ) : null}
+                        {row.color ? (
+                            <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 max-w-full truncate"
+                                title={`اللون: ${row.color}`}
+                                data-testid={`prep-card-color-${row.idx}`}
+                            >
+                                <Palette size={10} weight="bold" />
+                                <span className="truncate">{row.color}</span>
+                            </span>
+                        ) : null}
+                    </div>
+                )}
+
+                {/* Note — truncate */}
+                {row.note ? (
+                    <div
+                        className="flex items-start gap-1 text-[11px] text-slate-600 leading-tight line-clamp-2"
+                        title={row.note}
+                        data-testid={`prep-card-note-${row.idx}`}
+                    >
+                        <NotePencil size={10} weight="bold" className="flex-shrink-0 text-slate-400 mt-0.5" />
+                        <span className="break-words">{row.note}</span>
+                    </div>
+                ) : null}
+
+                {/* Extra options (e.g. النوع) — generic spread, cap 3 */}
+                {extraOpts.length > 0 && (
+                    <div className="flex flex-wrap gap-1 text-[10px]" data-testid={`prep-card-opts-${row.idx}`}>
+                        {extraOpts.map(([k, v]) => (
+                            <span
+                                key={k}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-50 border border-slate-200 text-slate-600 max-w-full truncate"
+                                title={`${k}: ${v}`}
+                            >
+                                <span className="font-bold text-slate-500 truncate">{k}:</span>
+                                <span className="truncate">{v}</span>
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {/* Footer row: qty + shipping + add-image */}
+                <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100 mt-auto">
+                    <div className="flex items-center gap-1 text-[10px] text-slate-500 min-w-0">
+                        {row.quantity > 1 ? (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-bold">
+                                ×{row.quantity}
+                            </span>
+                        ) : null}
+                        <span className="truncate" title={row.shipping_company || ""}>
+                            {row.shipping_company || "—"}
+                        </span>
+                        {row.total_products_in_order > 1 && (
+                            <span className="font-bold text-slate-700">/ {row.total_products_in_order}</span>
+                        )}
+                    </div>
+                    {!row.has_image && (
+                        <MissingImageButton
+                            uploadId={uploadId}
+                            idx={row.idx}
+                            productName={row.product_name}
+                            onUploaded={onUploaded}
+                        />
+                    )}
+                    {row.image_source === "user_upload" && (
+                        <span
+                            className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold"
+                            data-testid={`prep-card-custom-img-${row.idx}`}
+                            title="صورة مرفوعة من المستخدم"
+                        >
+                            <CheckCircle size={8} weight="fill" />
+                            مخصّصة
+                        </span>
+                    )}
+                </div>
+            </div>
+        </label>
+    );
+}
+
 export default function ProductPreparation() {
     const [uploading, setUploading] = useState(false);
     const [generating, setGenerating] = useState(false);
-    const [data, setData] = useState(null);           // upload+preview response
+    const [data, setData] = useState(null);
     const [stats, setStats] = useState(null);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
     const [showExcluded, setShowExcluded] = useState(false);
     const fileRef = useRef(null);
     const [dragOver, setDragOver] = useState(false);
-    // Set of selected line `idx` values across all groups. Cleared after
-    // a successful print and re-populated by the user via checkboxes.
     const [selectedIdx, setSelectedIdx] = useState(() => new Set());
-    // Bump this after a per-product image upload so <img> tags re-fetch
-    // and the freshly-stored image shows up immediately.
     const [imgVersion, setImgVersion] = useState(0);
 
     const toggleOne = (idx) => {
@@ -176,24 +340,23 @@ export default function ProductPreparation() {
         });
     };
 
-    const toggleGroup = (group) => {
-        const ids = (group.preview_lines || []).map(l => l.idx);
-        setSelectedIdx(prev => {
-            const next = new Set(prev);
-            const allSelected = ids.every(i => next.has(i));
-            if (allSelected) ids.forEach(i => next.delete(i));
-            else ids.forEach(i => next.add(i));
-            return next;
-        });
-    };
+    // Flatten ALL preview lines from all groups into a single ordered list
+    // for the grid view. Keeps the backend's group ordering (by frequency).
+    const flatLines = useMemo(() => {
+        if (!data?.groups) return [];
+        const out = [];
+        for (const g of data.groups) {
+            for (const ln of (g.preview_lines || [])) out.push(ln);
+        }
+        return out;
+    }, [data]);
 
     const toggleAll = () => {
-        if (!data?.groups) return;
+        if (flatLines.length === 0) return;
         setSelectedIdx(prev => {
-            const all = [];
-            data.groups.forEach(g => (g.preview_lines || []).forEach(l => all.push(l.idx)));
-            const allSelected = all.every(i => prev.has(i));
-            return allSelected ? new Set() : new Set(all);
+            const allIds = flatLines.map(l => l.idx);
+            const allSelected = allIds.every(i => prev.has(i));
+            return allSelected ? new Set() : new Set(allIds);
         });
     };
 
@@ -212,8 +375,8 @@ export default function ProductPreparation() {
         try {
             const { data: s } = await api.get("/preparation/export-log/stats");
             setStats(s);
-        } catch (e) {
-            // Silent — stats are an enhancement
+        } catch {
+            /* stats are optional */
         }
     }, []);
     useEffect(() => { loadStats(); }, [loadStats]);
@@ -227,6 +390,7 @@ export default function ProductPreparation() {
         setUploading(true);
         setData(null);
         setShowExcluded(false);
+        setSelectedIdx(new Set());
         try {
             const fd = new FormData();
             fd.append("file", file);
@@ -256,8 +420,6 @@ export default function ProductPreparation() {
         if (!data?.upload_id) return;
         setGenerating(true);
         try {
-            // Always POST a body — when null we send `{}` (= "print all
-            // remaining"), otherwise we send the explicit selection.
             const body = selectedIndicesArr === null
                 ? {}
                 : { selected_indices: Array.from(selectedIndicesArr) };
@@ -277,7 +439,7 @@ export default function ProductPreparation() {
             a.remove();
             window.URL.revokeObjectURL(url);
             toast.success(`تم إنشاء PDF: ${cards} بطاقة (${items} منتج، ${exported} طلب)`);
-            setSelectedIdx(new Set());  // reset selection after print
+            setSelectedIdx(new Set());
             await loadStats();
             await refreshPreview();
         } catch (e) {
@@ -310,10 +472,8 @@ export default function ProductPreparation() {
         }
     };
 
-    const totalCards = useMemo(
-        () => (data?.groups || []).reduce((a, g) => a + g.count, 0),
-        [data]
-    );
+    const totalCards = flatLines.length;
+    const allSelected = totalCards > 0 && selectedIdx.size === totalCards;
 
     return (
         <div className="p-4 sm:p-6 space-y-6" data-testid="product-preparation-page" style={{ fontFamily: "Tajawal" }}>
@@ -386,7 +546,7 @@ export default function ProductPreparation() {
 
             {/* Action bar */}
             {data && (
-                <div className="flex items-center gap-2 flex-wrap" data-testid="prep-actions-bar">
+                <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 bg-white/95 backdrop-blur border-b border-slate-200 flex items-center gap-2 flex-wrap" data-testid="prep-actions-bar">
                     <button
                         type="button"
                         onClick={() => handleGenerate(Array.from(selectedIdx))}
@@ -398,8 +558,8 @@ export default function ProductPreparation() {
                         {generating
                             ? "جاري الإنشاء…"
                             : selectedIdx.size > 0
-                                ? `طباعة المحدد إلى PDF (${selectedIdx.size})`
-                                : "طباعة المحدد إلى PDF"}
+                                ? `تصدير المنتجات المحددة إلى PDF (${selectedIdx.size})`
+                                : "تصدير المنتجات المحددة إلى PDF"}
                     </button>
                     <button
                         type="button"
@@ -408,7 +568,7 @@ export default function ProductPreparation() {
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-bold text-sm"
                         data-testid="prep-select-all-btn"
                     >
-                        {selectedIdx.size > 0 && selectedIdx.size === totalCards ? "إلغاء التحديد" : "تحديد الكل"}
+                        {allSelected ? "إلغاء التحديد" : "تحديد الكل"}
                     </button>
                     <button
                         type="button"
@@ -427,6 +587,11 @@ export default function ProductPreparation() {
                         >
                             <Eye size={14} weight="bold" /> {showExcluded ? "إخفاء" : "عرض"} الطلبات المستبعدة ({data.excluded_orders_count})
                         </button>
+                    )}
+                    {selectedIdx.size > 0 && (
+                        <div className="ms-auto text-xs text-slate-600 font-bold" data-testid="prep-selection-count">
+                            <span className="num">{selectedIdx.size}</span> من <span className="num">{totalCards}</span> محدّد
+                        </div>
                     )}
                 </div>
             )}
@@ -448,106 +613,32 @@ export default function ProductPreparation() {
                 </div>
             )}
 
-            {/* Product groups preview */}
-            {data?.groups?.length > 0 && (
-                <div className="space-y-3" data-testid="prep-groups-panel">
-                    <h2 className="text-base font-extrabold text-slate-900">
-                        المنتجات مرتبة حسب الأكثر مبيعاً
-                    </h2>
-                    <div className="space-y-2">
-                        {data.groups.map((g) => (
-                            <details
-                                key={g.product_name}
-                                className="border border-slate-200 rounded-xl bg-white overflow-hidden group"
-                                data-testid={`prep-group-${g.product_name?.slice(0, 12)}`}
-                            >
-                                <summary className="cursor-pointer p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        {/* Group checkbox — toggles all rows in this product */}
-                                        <input
-                                            type="checkbox"
-                                            checked={(g.preview_lines || []).every(l => selectedIdx.has(l.idx))}
-                                            ref={el => {
-                                                if (!el) return;
-                                                const some = (g.preview_lines || []).some(l => selectedIdx.has(l.idx));
-                                                const all = (g.preview_lines || []).every(l => selectedIdx.has(l.idx));
-                                                el.indeterminate = some && !all;
-                                            }}
-                                            onClick={e => { e.stopPropagation(); toggleGroup(g); }}
-                                            onChange={() => {}}
-                                            className="w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer"
-                                            data-testid={`prep-group-check-${g.product_name?.slice(0, 12)}`}
-                                            title="تحديد كل بطاقات هذا المنتج"
-                                        />
-                                        {g.preview_lines?.[0] ? (
-                                            <ProductImage
-                                                uploadId={data.upload_id}
-                                                idx={g.preview_lines[0].idx}
-                                                hasImage={g.preview_lines[0].has_image}
-                                                alt={g.product_name}
-                                                version={imgVersion}
-                                            />
-                                        ) : null}
-                                        <div className="min-w-0">
-                                            <div className="font-extrabold text-slate-900 truncate">{g.product_name}</div>
-                                            <div className="text-xs text-slate-500 flex items-center gap-2">
-                                                <span>{g.count} {g.count === 1 ? "طلب" : "طلبات"}</span>
-                                                {!g.preview_lines?.[0]?.has_image && (
-                                                    <MissingImageUploader
-                                                        uploadId={data.upload_id}
-                                                        idx={g.preview_lines[0].idx}
-                                                        productName={g.product_name}
-                                                        onUploaded={refreshPreview}
-                                                    />
-                                                )}
-                                                {g.preview_lines?.[0]?.image_source === "user_upload" && (
-                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold" data-testid="prep-custom-img-badge">
-                                                        صورة مخصّصة
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="inline-flex items-center justify-center min-w-[44px] h-9 rounded-lg bg-indigo-50 text-indigo-700 font-extrabold border border-indigo-200">
-                                        {g.count}
-                                    </div>
-                                </summary>
-                                <div className="border-t border-slate-200 divide-y divide-slate-100" data-testid="prep-group-rows">
-                                    {(g.preview_lines || []).map((row) => (
-                                        <label
-                                            key={`${row.order_number}-${row.idx}`}
-                                            className={`flex items-center gap-3 p-3 text-sm cursor-pointer transition-colors ${selectedIdx.has(row.idx) ? "bg-indigo-50/40" : "hover:bg-slate-50"}`}
-                                            data-testid={`prep-row-${row.idx}`}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedIdx.has(row.idx)}
-                                                onChange={() => toggleOne(row.idx)}
-                                                className="w-4 h-4 rounded border-slate-300 accent-indigo-600 flex-shrink-0"
-                                                data-testid={`prep-row-check-${row.idx}`}
-                                            />
-                                            <ProductImage uploadId={data.upload_id} idx={row.idx} hasImage={row.has_image} alt={row.product_name} version={imgVersion} />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-baseline gap-2">
-                                                    <span className="font-bold text-slate-900">#{row.order_number}</span>
-                                                    {row.customer_name ? (
-                                                        <span className="text-slate-600">— {row.customer_name}</span>
-                                                    ) : null}
-                                                    <span className="text-[11px] text-slate-500 ms-auto">{row.order_date || ""}</span>
-                                                </div>
-                                                {row.note ? (
-                                                    <div className="text-[11px] text-slate-500 truncate" title={row.note}>ملاحظة: {row.note}</div>
-                                                ) : null}
-                                                <div className="text-[11px] text-slate-400 mt-0.5">
-                                                    {(row.shipping_company || "—")} - {row.total_products_in_order}
-                                                </div>
-                                            </div>
-                                        </label>
-                                    ))}
-                                </div>
-                            </details>
-                        ))}
-                    </div>
+            {/* Individual product cards Grid */}
+            {flatLines.length > 0 && (
+                <div
+                    className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+                    data-testid="prep-cards-grid"
+                >
+                    {flatLines.map(row => (
+                        <ProductCard
+                            key={row.item_key || `${row.order_number}-${row.idx}`}
+                            row={row}
+                            uploadId={data.upload_id}
+                            imgVersion={imgVersion}
+                            isSelected={selectedIdx.has(row.idx)}
+                            onToggle={toggleOne}
+                            onUploaded={refreshPreview}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {/* Empty grid state (after upload, but no remaining items) */}
+            {data && flatLines.length === 0 && (
+                <div className="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center bg-white" data-testid="prep-empty-grid">
+                    <CheckCircle size={48} weight="bold" className="mx-auto text-emerald-500 mb-3" />
+                    <div className="font-extrabold text-slate-900">كل المنتجات في هذا الملف تم تصديرها سابقاً</div>
+                    <p className="text-sm text-slate-500 mt-1">ارفع ملف PDF جديد أو امسح سجل التصدير لإعادة طباعة المنتجات القديمة.</p>
                 </div>
             )}
 
