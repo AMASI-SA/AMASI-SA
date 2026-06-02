@@ -12,6 +12,37 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 BUG FIX (2026-06 — Iteration 42) — **خط عربي بدعم كامل لتجنّب الترميز المكسور في PDF التجهيز**
+
+**Merchant report**: "نوع الخط يظهر الترميز حق الأحرف غلط" — بعد تبديل الخط في iteration 39 لـ Cairo، بعض الأحرف العربية (خصوصاً الـ Arabic Presentation Forms-B في النطاق `FE70–FEFF`) ظهرت كصناديق `.notdef` (□) في الـ PDF الناتج.
+
+### Root cause
+ملفات Cairo TTF المحمّلة من `fonts.googleapis.com` كانت **subsetted** (تغطّي 89/144 من Arabic Presentation Forms-B فقط). ReportLab يرسم صامتاً صندوق `.notdef` لأي codepoint غير موجود في الـ cmap → الأحرف تظهر مكسورة.
+
+### Fix (`/app/backend/preparation_pdf.py`)
+- ✅ **Bundled `NotoSansArabic-SemiBold.ttf` + `NotoSansArabic-Bold.ttf`** at `/app/backend/fonts/` (~190 KB each — full glyph coverage).
+- ✅ **Coverage verified programmatically**:
+  - Base Arabic block (`0600–06FF`): **256/256** (100%).
+  - Arabic Presentation Forms-A (`FB50–FDFF`): full coverage.
+  - Arabic Presentation Forms-B (`FE70–FEFF`): **141/144** (only 3 reserved codepoints missing — `0xFE75`, `0xFEFD`, `0xFEFE` which are not used in real text).
+- ✅ **Preference order in `_register_font()`**:
+  1. NotoSansArabic SemiBold + Bold (PRIMARY — bundled, full coverage).
+  2. Cairo SemiBold + Bold (secondary — still bundled for future per-glyph fallback).
+  3. Noto Naskh Arabic (system).
+  4. DejaVu Sans / Amiri (last resort).
+- ✅ **New helpers** `_font_supports(font_name, text)` + `_load_cmap(ttf_path)` + `_FONT_CMAPS` dict — let the draw loop verify glyph coverage at runtime and catch missing glyphs BEFORE they ship.
+
+### Verification
+- ✅ All 12 real-world Arabic test strings (الاسم / ملاحظة / المقاس / اللون / تغليف انيق آمايس / شركة الشحن / iMile / رقم الطلب / تعليقة النصر / الكتابه على الكرت / إجمالي المنتجات في الطلب / كف وقلادة فضة 925) → fully covered by primary font.
+- ✅ **72/72 cross-suite pytest PASS** (preparation + Salla phase 1).
+- ✅ Generated a real PDF from `/tmp/compare/original_salla.pdf` (19 product cards) → fonts embedded: `NotoSansArabic-SemiBold`, `NotoSansArabic-Bold`. 
+- ✅ `analyze_file_tool` visual confirmation across all 19 cards: **PERFECT** rendering — all Arabic letters connected, no `.notdef` boxes, lam-alef + diacritics render correctly.
+
+### Why this is durable
+Future agents touching the font logic should remember: **Google Fonts CSS-API delivers subsetted TTFs by default**. Always verify a TTF's cmap covers `FE70–FEFF` (use `_load_cmap` + `_font_supports`). NotoSansArabic ships with comprehensive coverage and is the safe primary.
+
+---
+
 ## 🎯 ENHANCEMENT (2026-06 — Iteration 41) — **Multi-file accumulative upload + unique export filenames**
 
 **Merchant request**:
