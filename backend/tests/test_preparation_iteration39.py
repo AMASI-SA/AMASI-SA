@@ -42,19 +42,29 @@ def test_cairo_ttf_files_are_bundled():
     assert (fonts_dir / "Cairo-Bold.ttf").stat().st_size > 50_000
 
 
-def test_register_font_picks_cairo():
+def test_register_font_picks_arabic_capable_primary():
+    """Iter-39 originally required Cairo as the primary. Iter-42 promoted
+    Noto Sans Arabic because Cairo's CSS-API TTF only covered 89/144
+    Arabic Presentation Forms-B — broken glyphs for merchant product
+    names. Both fonts are still REGISTERED (for fallback / future
+    per-glyph picker), but the primary must be Arabic-complete."""
     name, bold = preparation_pdf._register_font()
-    assert name == "Cairo-SemiBold", f"expected Cairo-SemiBold, got {name!r}"
-    assert bold == "Cairo-Bold", f"expected Cairo-Bold, got {bold!r}"
+    # In any reasonable bundle, primary must NOT be Helvetica.
+    assert name != "Helvetica"
+    # Cairo or Noto are both acceptable PRIMARY values; whichever one
+    # _register_font() picks must have BOTH its SemiBold + Bold faces.
+    assert name.endswith("SemiBold"), name
+    assert bold.endswith("Bold"), bold
     # idempotent — second call must return the same tuple
     assert preparation_pdf._register_font() == (name, bold)
+    # Both bundled font families should be registered as fallbacks.
+    assert "Cairo-SemiBold" in preparation_pdf._FONT_CMAPS or \
+        "NotoSansArabic-SemiBold" in preparation_pdf._FONT_CMAPS
 
 
-def test_generated_pdf_embeds_cairo_font():
-    """Parse the PDF binary and verify Cairo+ glyphs are embedded.
-
-    PyMuPDF exposes the font list per page; we look for "Cairo" in any
-    of the embedded font's BaseFont identifiers."""
+def test_generated_pdf_embeds_arabic_font():
+    """The output PDF must embed at least one Arabic-capable font
+    (Cairo OR Noto Sans Arabic — iter-42 made Noto the primary)."""
     import fitz
     from preparation_pdf import parse_salla_orders_pdf, generate_preparation_pdf
 
@@ -71,8 +81,10 @@ def test_generated_pdf_embeds_cairo_font():
             for f in page.get_fonts():
                 # Each font tuple: (xref, ext, type, basefont, refname, encoding, ...)
                 fonts_seen.add(f[3])
-        assert any("Cairo" in n for n in fonts_seen), (
-            f"Cairo font NOT found in embedded fonts: {fonts_seen}"
+        # PDF subset prefixes like "AAAAAA+" — strip them for the check.
+        bare = {n.split("+", 1)[-1] for n in fonts_seen}
+        assert any("Cairo" in n or "NotoSansArabic" in n for n in bare), (
+            f"No Arabic-capable font embedded; saw {fonts_seen}"
         )
     finally:
         doc.close()

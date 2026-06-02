@@ -498,42 +498,110 @@ _FONT_BOLD_NAME: str = "Helvetica-Bold"
 # Bundled with the app so we don't depend on whatever the host OS ships.
 _BUNDLED_FONTS_DIR = Path(__file__).parent / "fonts"
 
+# Iter-42: glyph-coverage maps per registered font, so the draw loop
+# can pick whichever bundled font ACTUALLY contains the codepoint of
+# the rune it's about to draw. Populated by _register_font().
+#   key   = registered font name (e.g. "NotoSansArabic-SemiBold")
+#   value = frozenset[int]   of every codepoint in the font's cmap.
+_FONT_CMAPS: dict[str, frozenset[int]] = {}
+
+
+def _font_supports(font_name: str, text: str) -> bool:
+    """True iff every codepoint in `text` is present in the font's cmap.
+
+    Used by tests + future per-glyph fallback logic. Whitespace is
+    ignored because every font has it. ReportLab silently draws missing
+    glyphs as the .notdef box ("□"), which is exactly the merchant's
+    complaint — this helper lets us catch that BEFORE it ships.
+    """
+    cm = _FONT_CMAPS.get(font_name)
+    if cm is None:
+        return False
+    return all((ord(ch) in cm) for ch in text if not ch.isspace())
+
+
+def _load_cmap(ttf_path: Path) -> frozenset[int]:
+    """Return the set of codepoints supported by `ttf_path`. Cached by
+    the caller through _FONT_CMAPS so we only pay the parse cost once
+    per process."""
+    try:
+        from fontTools.ttLib import TTFont
+        return frozenset(TTFont(str(ttf_path)).getBestCmap().keys())
+    except Exception:
+        return frozenset()
+
 
 def _register_font() -> tuple[str, str]:
     """Register Arabic-capable TTFs with ReportLab. Returns
     (regular_or_semibold_name, bold_name).
 
-    Preference order (iter-39):
-        1. Cairo SemiBold + Cairo Bold  ← bundled in `backend/fonts/`,
-           merchant-requested font for a cleaner modern look.
-        2. Noto Naskh Arabic (system).
-        3. DejaVu Sans / Amiri fallbacks.
+    Iter-42 changed the preference order:
+        1. **Noto Sans Arabic** (bundled) — comprehensive Arabic coverage
+           (1561 glyphs incl. 141/144 presentation forms FE70-FEFF), so
+           NO character renders as a missing-glyph box. This is the
+           primary font for body text.
+        2. **Cairo SemiBold + Bold** (bundled) — modern aesthetic;
+           still registered so we can fall back to it for Latin /
+           digits when the rendering pipeline picks per-glyph.
+        3. Noto Naskh Arabic (system).
+        4. DejaVu Sans / Amiri.
 
-    Falling back to Helvetica is the absolute last resort — it can
-    render Latin only, so any Arabic would come out as garbage.
+    The on-disk Cairo TTFs from `fonts.googleapis.com` are SUBSETTED —
+    they cover only 89/144 presentation forms. That's why the merchant
+    reported "نوع الخط يظهر الترميز حق الأحرف غلط" — many Arabic glyphs
+    were rendering as .notdef boxes. Switching the PRIMARY to Noto Sans
+    Arabic eliminates the missing-glyph problem.
     """
     global _FONT_REGISTERED, _FONT_NAME, _FONT_BOLD_NAME
     if _FONT_REGISTERED:
         return _FONT_NAME, _FONT_BOLD_NAME
 
-    # Try Cairo SemiBold + Bold (bundled).
+    # Try Noto Sans Arabic FIRST (full Arabic coverage).
+    noto_semi = _BUNDLED_FONTS_DIR / "NotoSansArabic-SemiBold.ttf"
+    noto_bold = _BUNDLED_FONTS_DIR / "NotoSansArabic-Bold.ttf"
+    if noto_semi.exists() and noto_bold.exists():
+        try:
+            pdfmetrics.registerFont(TTFont("NotoSansArabic-SemiBold", str(noto_semi)))
+            pdfmetrics.registerFont(TTFont("NotoSansArabic-Bold", str(noto_bold)))
+            _FONT_CMAPS["NotoSansArabic-SemiBold"] = _load_cmap(noto_semi)
+            _FONT_CMAPS["NotoSansArabic-Bold"] = _load_cmap(noto_bold)
+            _FONT_NAME = "NotoSansArabic-SemiBold"
+            _FONT_BOLD_NAME = "NotoSansArabic-Bold"
+            # Also try to register Cairo as a SECONDARY (used only as a
+            # per-glyph fallback by `_pick_font_for_run`). Failure is
+            # silent — we already have a complete primary.
+            cairo_semi = _BUNDLED_FONTS_DIR / "Cairo-SemiBold.ttf"
+            cairo_bold = _BUNDLED_FONTS_DIR / "Cairo-Bold.ttf"
+            if cairo_semi.exists() and cairo_bold.exists():
+                try:
+                    pdfmetrics.registerFont(TTFont("Cairo-SemiBold", str(cairo_semi)))
+                    pdfmetrics.registerFont(TTFont("Cairo-Bold", str(cairo_bold)))
+                    _FONT_CMAPS["Cairo-SemiBold"] = _load_cmap(cairo_semi)
+                    _FONT_CMAPS["Cairo-Bold"] = _load_cmap(cairo_bold)
+                except Exception:
+                    pass
+            _FONT_REGISTERED = True
+            return _FONT_NAME, _FONT_BOLD_NAME
+        except Exception:
+            pass
+
+    # Fallback path — Cairo only (still better than nothing).
     cairo_semi = _BUNDLED_FONTS_DIR / "Cairo-SemiBold.ttf"
     cairo_bold = _BUNDLED_FONTS_DIR / "Cairo-Bold.ttf"
     if cairo_semi.exists() and cairo_bold.exists():
         try:
             pdfmetrics.registerFont(TTFont("Cairo-SemiBold", str(cairo_semi)))
             pdfmetrics.registerFont(TTFont("Cairo-Bold", str(cairo_bold)))
+            _FONT_CMAPS["Cairo-SemiBold"] = _load_cmap(cairo_semi)
+            _FONT_CMAPS["Cairo-Bold"] = _load_cmap(cairo_bold)
             _FONT_NAME = "Cairo-SemiBold"
             _FONT_BOLD_NAME = "Cairo-Bold"
             _FONT_REGISTERED = True
             return _FONT_NAME, _FONT_BOLD_NAME
         except Exception:
-            # Fall through to next candidate
             pass
 
-    # System Arabic fonts as fallback (single weight — we reuse it for
-    # both "regular" and "bold" slots; ReportLab will simulate bold via
-    # x-axis stroke width on draw).
+    # System fallbacks (single weight — reused for both slots).
     candidates = [
         ("NotoNaskhArabic", "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf"),
         ("DejaVuSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
