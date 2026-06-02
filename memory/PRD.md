@@ -12,6 +12,49 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 NEW FEATURE (2026-06 — Iteration 43) — **تعديل بيانات البطاقات قبل الطباعة (الاسم/المقاس/اللون/الملاحظة)**
+
+**Merchant request**: "عرض تفصيل المنتج وإمكانية التعديل عليها قبل رفع الملف — مثل الاسم، اللون، التعديل على الكتابه".
+
+### المتطلبات المختارة
+- **الحقول القابلة للتعديل**: `customer_name` (الاسم/العميل) + `size` (المقاس) + `color` (اللون) + `note` (الملاحظة/الكتابة على الكرت).
+- **النطاق**: مؤقت — يعيش 24 ساعة مع جلسة الـ upload، ولا يلمس `unified_orders` أو أي مجموعة أخرى. Make / Excel / Webhooks تظل غير متأثرة تماماً.
+- **زر "إعادة تعيين"** يرجع البطاقة إلى القيم الأصلية المستخرجة من PDF سلة.
+- **تعديل مجمّع** (`scope: "product"`): تطبيق نفس القيم على كل البطاقات التي تشترك في المنتج (priority: `product_id` → `sku` → `name_norm`).
+
+### Backend (`preparation_routes.py`)
+- ✅ **`_line_to_storage`** يحفظ snapshot لـ `original_customer_name / original_size / original_color / original_note` عند أول رفع. لا يُكتب فوقها أبداً.
+- ✅ **`_edited_fields_from_storage(d)`** يقارن القيم الحالية مع الـ snapshot ويُعيد قائمة الحقول المعدّلة. تُحقَن في `_line_to_preview` كحقل `edited_fields`.
+- ✅ **`PATCH /api/preparation/line/{upload_id}/{idx}`** — body اختياري `{customer_name?, size?, color?, note?, scope: "line"|"product"}`. الحقول الغائبة لا تُعدَّل؛ `null` يمسح الحقل؛ السترينج المُمرَّر يُحفظ بعد `strip()` و cap 500 حرف. يرجع `{ok, applied_to_indices, applied_count, fields_updated, scope, product_name}`.
+- ✅ **`POST /api/preparation/line/{upload_id}/{idx}/reset`** — body `{scope}`. يستعيد الحقول الأربعة من الـ snapshot.
+- ✅ **`/preview/{upload_id}`** يحقن `edited_fields` في كل preview line لكي تعرف الواجهة أي البطاقات معدَّلة.
+
+### Frontend (`ProductPreparation.jsx`)
+- ✅ **`EditCardModal`** — modal ثنائي اللغة بالكامل، يفتح عند الضغط على زر **"تعديل"** (Pencil icon، grey/amber على hover) في footer البطاقة.
+- ✅ ترويسة المودال تظهر اسم المنتج + رقم الطلب.
+- ✅ Toggle Scope (`prep-edit-scope-line` / `prep-edit-scope-product`) — اختيار البطاقة الواحدة أو كل بطاقات نفس المنتج (مع تنبيه أصفر صريح عند اختيار "كل البطاقات").
+- ✅ 4 حقول form: الاسم (text) + المقاس (text) + اللون (text) + الملاحظة (textarea 3 سطور). كلها capped 500 حرف.
+- ✅ زر **"إعادة تعيين"** (amber pill) يظهر فقط عند `row.edited_fields.length > 0`.
+- ✅ **شارة ✏️ صغيرة (amber)** تظهر بجانب كل حقل معدَّل في البطاقة — التاجر يرى بصرياً أي البطاقات تحتاج مراجعة قبل التصدير.
+- ✅ **Smart diff**: المودال يرسل فقط الحقول التي تغيّرت فعلاً (تجنّب overwrites غير ضرورية).
+- ✅ Toasts عربية بالكامل: "تم حفظ التعديل (الاسم، الملاحظة) على N بطاقة" / "تم استرجاع القيم الأصلية".
+
+### Tests (`tests/test_preparation_iteration43.py` — 9/9 PASS، 62/62 cross-suite preparation)
+1. `test_patch_single_line_updates_only_target` — تعديل بطاقة واحدة، الجيران لا يتأثرون.
+2. `test_patch_product_scope_applies_to_all_siblings` — `scope=product` يطبّق على كل البطاقات التي تشترك بنفس المنتج.
+3. `test_reset_line_restores_original_values` — reset يعيد القيم الأربعة إلى الـ snapshot، `edited_fields` تصبح فارغة.
+4. `test_edited_fields_propagate_to_generated_pdf` — التعديل يظهر في PDF النهائي (ASCII marker مضمَّن في نص الصفحة).
+5. `test_patch_with_no_editable_fields_returns_400` — body فيه `{scope: "line"}` فقط بدون حقول قابلة للتعديل → 400.
+6. `test_patch_out_of_range_idx_returns_404` — idx خارج النطاق → 404.
+7. `test_edit_endpoints_require_auth` — كلا الـ endpoints يتطلبان bearer token.
+8. `test_edit_cross_user_returns_404` — المستخدم B لا يستطيع تعديل upload للمستخدم A.
+9. `test_patch_with_none_clears_the_field` — `{note: null}` يمسح الملاحظة و `note` يدخل قائمة `edited_fields`.
+
+### Visual verification (Playwright)
+- Modal يفتح → القيم الحالية معبأة → تبديل النطاق يعمل → الحفظ يُغلق المودال + يعرض toast + شارات ✏️ تظهر بجانب الحقول المعدلة في البطاقة → reset يرجع كل شيء و يخفي الشارات.
+
+---
+
 ## 🎯 BUG FIX (2026-06 — Iteration 42) — **خط عربي بدعم كامل لتجنّب الترميز المكسور في PDF التجهيز**
 
 **Merchant report**: "نوع الخط يظهر الترميز حق الأحرف غلط" — بعد تبديل الخط في iteration 39 لـ Cairo، بعض الأحرف العربية (خصوصاً الـ Arabic Presentation Forms-B في النطاق `FE70–FEFF`) ظهرت كصناديق `.notdef` (□) في الـ PDF الناتج.

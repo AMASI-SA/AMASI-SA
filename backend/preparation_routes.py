@@ -64,9 +64,20 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_EDITABLE_FIELDS: tuple[str, ...] = ("customer_name", "size", "color", "note")
+
+
 def _line_to_preview(line: ProductLine, idx: int, *, image_source: Optional[str] = None,
-                     already_printed: bool = False) -> dict:
-    """Public preview shape — strips raw image bytes."""
+                     already_printed: bool = False,
+                     edited_fields: Optional[list[str]] = None) -> dict:
+    """Public preview shape — strips raw image bytes.
+
+    `edited_fields` (iter-43) — list of fields the merchant has manually
+    modified on this card (subset of {"customer_name","size","color","note"}).
+    The UI uses this to render a small "✏️ مُعدّل" badge per field so
+    the merchant can see at-a-glance which cards diverge from the
+    Salla-PDF original.
+    """
     return {
         "idx": idx,
         "order_number": line.order_number,
@@ -88,11 +99,19 @@ def _line_to_preview(line: ProductLine, idx: int, *, image_source: Optional[str]
         "product_id": line.product_id,
         "sku": line.sku,
         "product_options": line.product_options or {},
+        # iter-43 — edit-state flags
+        "edited_fields": edited_fields or [],
     }
 
 
 def _line_to_storage(line: ProductLine, idx: int) -> dict:
-    """How a single line is persisted in `preparation_uploads.lines[]`."""
+    """How a single line is persisted in `preparation_uploads.lines[]`.
+
+    Iter-43 — Also persists `original_*` snapshots of the four editable
+    fields (customer_name, size, color, note) so the merchant can reset
+    a card to its parsed-from-Salla-PDF state at any time. Snapshots are
+    set ONCE at first-store and are never overwritten by edits.
+    """
     return {
         "idx": idx,
         "order_number": line.order_number,
@@ -116,7 +135,32 @@ def _line_to_storage(line: ProductLine, idx: int) -> dict:
         "product_id": line.product_id,
         "sku": line.sku,
         "product_options": line.product_options or {},
+        # iter-43 — frozen originals for the "إعادة تعيين" button
+        "original_customer_name": line.customer_name,
+        "original_size": line.size,
+        "original_color": line.color,
+        "original_note": line.note,
     }
+
+
+def _edited_fields_from_storage(d: dict) -> list[str]:
+    """Return the names of editable fields whose CURRENT value differs
+    from the persisted ORIGINAL snapshot. Used to flag cards in the UI.
+
+    Treats `None` and `""` as equivalent so we don't surface noise from
+    empty-vs-missing semantics.
+    """
+    out: list[str] = []
+    for f in _EDITABLE_FIELDS:
+        cur = (d.get(f) or "").strip() if isinstance(d.get(f), str) else d.get(f)
+        orig_key = f"original_{f}"
+        if orig_key not in d:
+            # Pre-iter-43 row — treat as unedited.
+            continue
+        orig = (d.get(orig_key) or "").strip() if isinstance(d.get(orig_key), str) else d.get(orig_key)
+        if (cur or "") != (orig or ""):
+            out.append(f)
+    return out
 
 
 def _line_from_storage(d: dict) -> ProductLine:
@@ -515,6 +559,7 @@ def _build_router(db) -> APIRouter:
         stored = doc.get("lines", [])
         lines = [_line_from_storage(d) for d in stored]
         source_by_idx = {i: (d.get("image_source") or None) for i, d in enumerate(stored)}
+        edited_by_idx = {i: _edited_fields_from_storage(d) for i, d in enumerate(stored)}
         idx_by_id = {id(ln): i for i, ln in enumerate(lines)}
 
         # Re-check exported_items (rather than relying on the snapshot in
@@ -555,6 +600,7 @@ def _build_router(db) -> APIRouter:
                      _line_to_preview(
                          ln, idx_by_id.get(id(ln), -1),
                          image_source=source_by_idx.get(idx_by_id.get(id(ln), -1)),
+                         edited_fields=edited_by_idx.get(idx_by_id.get(id(ln), -1)),
                      )
                      for ln in g["lines"]
                  ]}
@@ -703,6 +749,182 @@ def _build_router(db) -> APIRouter:
             "catalog_saved": catalog_saved,
             "bytes": len(normalized),
         }
+
+    # ── PATCH /line/{upload_id}/{idx} — iter-43 — manual field edits ────
+    # Lets the merchant fix or customise card text BEFORE generating the
+    # printable PDF. The edit is SESSION-SCOPED (lives 24h with the
+    # upload doc) — it never touches `unified_orders` or any other
+    # collection, so Make/Excel/PDF flows are completely unaffected.
+    #
+    # Body fields (all OPTIONAL — only present keys are updated):
+    #   { customer_name?: str|null, size?: str|null,
+    #     color?: str|null, note?: str|null, scope?: "line" | "product" }
+    # When scope == "product" the same edit is applied to every sibling
+    # card that shares a product_id (preferred) → SKU → name_norm.
+    @router.patch("/line/{upload_id}/{idx}")
+    async def edit_line_fields(
+        upload_id: str,
+        idx: int,
+        payload: dict = Body(...),
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        scope = (payload.get("scope") or "line").strip().lower()
+        if scope not in ("line", "product"):
+            raise HTTPException(status_code=400, detail="scope يجب أن يكون line أو product")
+
+        # Whitelist + sanitise the editable fields. A `None` value clears
+        # the field; a missing key leaves it untouched.
+        updates_for_line: dict[str, Optional[str]] = {}
+        for field in _EDITABLE_FIELDS:
+            if field in payload:
+                v = payload[field]
+                if v is None:
+                    updates_for_line[field] = None
+                else:
+                    s = str(v).strip()
+                    if len(s) > 500:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"الحقل '{field}' أطول من الحد المسموح (500 حرف)",
+                        )
+                    updates_for_line[field] = s or None
+        if not updates_for_line:
+            raise HTTPException(
+                status_code=400,
+                detail="لم يتم تمرير أي حقل للتعديل. الحقول المسموحة: customer_name, size, color, note",
+            )
+
+        # Locate the upload and the target row.
+        doc = await db.preparation_uploads.find_one(
+            {"user_id": uid, "upload_id": upload_id},
+            {"_id": 0, "lines": 1},
+        )
+        if not doc:
+            raise HTTPException(status_code=404, detail="المعاينة غير موجودة أو انتهت صلاحيتها")
+        stored = doc.get("lines") or []
+        if idx < 0 or idx >= len(stored):
+            raise HTTPException(status_code=404, detail="index out of range")
+
+        target = stored[idx]
+        target_pid = (target.get("product_id") or "").strip()
+        target_sku = (target.get("sku") or "").strip()
+        target_name_norm = _norm_name(target.get("product_name") or "")
+
+        # Sibling priority chain (matches the image PUT semantics).
+        if scope == "product" and (target_pid or target_sku or target_name_norm):
+            def _matches(ln: dict) -> bool:
+                if target_pid:
+                    return (ln.get("product_id") or "").strip() == target_pid
+                if target_sku:
+                    return (ln.get("sku") or "").strip() == target_sku
+                return _norm_name(ln.get("product_name") or "") == target_name_norm
+            indices = [i for i, ln in enumerate(stored) if _matches(ln)]
+        else:
+            indices = [idx]
+
+        # Build the $set payload — applies the SAME edit to every selected
+        # sibling. We touch ONLY the editable fields; originals stay frozen.
+        set_payload: dict = {}
+        for i in indices:
+            for f, v in updates_for_line.items():
+                set_payload[f"lines.{i}.{f}"] = v
+        if set_payload:
+            await db.preparation_uploads.update_one(
+                {"user_id": uid, "upload_id": upload_id},
+                {"$set": set_payload},
+            )
+
+        # Resolve effective scope label.
+        if scope == "line" or len(indices) <= 1:
+            effective_scope = "line"
+        elif target_pid:
+            effective_scope = "product_id"
+        elif target_sku:
+            effective_scope = "sku"
+        else:
+            effective_scope = "name"
+
+        return {
+            "ok": True,
+            "applied_to_indices": indices,
+            "applied_count": len(indices),
+            "fields_updated": sorted(updates_for_line.keys()),
+            "scope": effective_scope,
+            "product_name": target.get("product_name") or None,
+        }
+
+    # ── POST /line/{upload_id}/{idx}/reset — iter-43 — revert edits ────
+    # Restores the four editable fields to their parsed-from-Salla-PDF
+    # snapshots stored on first upload. Same scope semantics as PATCH.
+    @router.post("/line/{upload_id}/{idx}/reset")
+    async def reset_line_fields(
+        upload_id: str,
+        idx: int,
+        payload: dict = Body(default_factory=dict),
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        scope = (payload.get("scope") or "line").strip().lower()
+        if scope not in ("line", "product"):
+            raise HTTPException(status_code=400, detail="scope يجب أن يكون line أو product")
+
+        doc = await db.preparation_uploads.find_one(
+            {"user_id": uid, "upload_id": upload_id},
+            {"_id": 0, "lines": 1},
+        )
+        if not doc:
+            raise HTTPException(status_code=404, detail="المعاينة غير موجودة أو انتهت صلاحيتها")
+        stored = doc.get("lines") or []
+        if idx < 0 or idx >= len(stored):
+            raise HTTPException(status_code=404, detail="index out of range")
+
+        target = stored[idx]
+        target_pid = (target.get("product_id") or "").strip()
+        target_sku = (target.get("sku") or "").strip()
+        target_name_norm = _norm_name(target.get("product_name") or "")
+
+        if scope == "product" and (target_pid or target_sku or target_name_norm):
+            def _matches(ln: dict) -> bool:
+                if target_pid:
+                    return (ln.get("product_id") or "").strip() == target_pid
+                if target_sku:
+                    return (ln.get("sku") or "").strip() == target_sku
+                return _norm_name(ln.get("product_name") or "") == target_name_norm
+            indices = [i for i, ln in enumerate(stored) if _matches(ln)]
+        else:
+            indices = [idx]
+
+        set_payload: dict = {}
+        for i in indices:
+            for f in _EDITABLE_FIELDS:
+                # Restore from the frozen snapshot; falls back to None when
+                # the row predates iter-43 (no snapshot was captured).
+                orig = stored[i].get(f"original_{f}")
+                set_payload[f"lines.{i}.{f}"] = orig
+        if set_payload:
+            await db.preparation_uploads.update_one(
+                {"user_id": uid, "upload_id": upload_id},
+                {"$set": set_payload},
+            )
+
+        if scope == "line" or len(indices) <= 1:
+            effective_scope = "line"
+        elif target_pid:
+            effective_scope = "product_id"
+        elif target_sku:
+            effective_scope = "sku"
+        else:
+            effective_scope = "name"
+
+        return {
+            "ok": True,
+            "applied_to_indices": indices,
+            "applied_count": len(indices),
+            "scope": effective_scope,
+            "product_name": target.get("product_name") or None,
+        }
+
 
     # ── GET /image/{upload_id}/{idx} — stream thumbnail ──────────────
     @router.get("/image/{upload_id}/{idx}")

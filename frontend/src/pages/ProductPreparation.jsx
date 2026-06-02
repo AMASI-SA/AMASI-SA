@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     UploadSimple, Package, ArrowsClockwise, Eye, Trash, Warning,
     FilePdf, ListChecks, ImageBroken, Info, CheckCircle, Plus,
-    Ruler, Palette, User, NotePencil,
+    Ruler, Palette, User, NotePencil, PencilSimple, ArrowCounterClockwise, X,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { API_BASE } from "../lib/api";
@@ -165,11 +165,292 @@ function MissingImageButton({ uploadId, idx, productName, onUploaded }) {
     );
 }
 
+/**
+ * iter-43 — Per-card edit modal. Lets the merchant manually correct
+ * customer_name / size / color / note BEFORE generating the printable
+ * PDF. The edits are session-scoped (24h with the upload) and never
+ * touch Make/Excel/Salla data.
+ *
+ * Scope toggle:
+ *   • "هذه البطاقة فقط" — only the target line.
+ *   • "كل بطاقات نفس المنتج" — applies to every sibling sharing the
+ *     same product (priority: product_id → SKU → product_name).
+ *
+ * Reset button restores the four fields to their parsed-from-Salla
+ * values stored at first upload.
+ */
+function EditCardModal({ open, row, uploadId, onClose, onSaved }) {
+    const [customerName, setCustomerName] = useState("");
+    const [size, setSize] = useState("");
+    const [color, setColor] = useState("");
+    const [note, setNote] = useState("");
+    const [scope, setScope] = useState("line");
+    const [busy, setBusy] = useState(false);
+    const [resetBusy, setResetBusy] = useState(false);
+
+    // Hydrate from `row` whenever the modal is opened on a new card.
+    useEffect(() => {
+        if (!open || !row) return;
+        setCustomerName(row.customer_name || "");
+        setSize(row.size || "");
+        setColor(row.color || "");
+        setNote(row.note || "");
+        setScope("line");
+    }, [open, row]);
+
+    if (!open || !row) return null;
+
+    const handleSave = async () => {
+        setBusy(true);
+        try {
+            // Only send fields that actually changed from the current
+            // server values — keeps the diff minimal and lets the user
+            // edit one field without nulling another.
+            const payload = { scope };
+            const norm = (v) => (v ?? "").trim();
+            if (norm(customerName) !== norm(row.customer_name))
+                payload.customer_name = norm(customerName) || null;
+            if (norm(size) !== norm(row.size))
+                payload.size = norm(size) || null;
+            if (norm(color) !== norm(row.color))
+                payload.color = norm(color) || null;
+            if (norm(note) !== norm(row.note))
+                payload.note = norm(note) || null;
+
+            if (Object.keys(payload).length === 1) {
+                toast.info("لم يتم تغيير أي حقل.");
+                setBusy(false);
+                return;
+            }
+
+            const { data: r } = await api.patch(
+                `/preparation/line/${uploadId}/${row.idx}`,
+                payload,
+            );
+            const countMsg = r.applied_count > 1
+                ? ` على ${r.applied_count} بطاقات`
+                : "";
+            const fieldsAr = {
+                customer_name: "الاسم",
+                size: "المقاس",
+                color: "اللون",
+                note: "الملاحظة",
+            };
+            const fieldsLbl = (r.fields_updated || []).map(f => fieldsAr[f] || f).join("، ");
+            toast.success(`تم حفظ التعديل (${fieldsLbl})${countMsg}`);
+            onSaved?.();
+            onClose?.();
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "تعذّر حفظ التعديل");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handleReset = async () => {
+        setResetBusy(true);
+        try {
+            const { data: r } = await api.post(
+                `/preparation/line/${uploadId}/${row.idx}/reset`,
+                { scope },
+            );
+            const countMsg = r.applied_count > 1 ? ` لـ ${r.applied_count} بطاقات` : "";
+            toast.success(`تم استرجاع القيم الأصلية${countMsg}`);
+            onSaved?.();
+            onClose?.();
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "تعذّر إعادة التعيين");
+        } finally {
+            setResetBusy(false);
+        }
+    };
+
+    const hasEdits = (row.edited_fields || []).length > 0;
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 overflow-y-auto"
+            data-testid="prep-edit-modal"
+            onClick={onClose}
+        >
+            <div
+                className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+                style={{ fontFamily: "Tajawal" }}
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-slate-200">
+                    <div className="flex items-start gap-2 min-w-0">
+                        <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center flex-shrink-0">
+                            <PencilSimple size={20} weight="bold" />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="font-extrabold text-base sm:text-lg text-slate-900">تعديل بيانات البطاقة</h3>
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate" title={row.product_name}>
+                                {row.product_name || "بدون اسم"} · #{row.order_number}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-slate-400 hover:text-slate-700 p-1 flex-shrink-0"
+                        data-testid="prep-edit-close-btn"
+                        aria-label="إغلاق"
+                    >
+                        <X size={20} weight="bold" />
+                    </button>
+                </div>
+
+                {/* Scope toggle */}
+                <div className="mb-4">
+                    <div className="text-[11px] font-bold text-slate-600 mb-1.5">نطاق التعديل</div>
+                    <div className="grid grid-cols-2 gap-2" data-testid="prep-edit-scope">
+                        <button
+                            type="button"
+                            onClick={() => setScope("line")}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold border-2 transition-colors ${
+                                scope === "line"
+                                    ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                                    : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                            }`}
+                            data-testid="prep-edit-scope-line"
+                        >
+                            هذه البطاقة فقط
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setScope("product")}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold border-2 transition-colors ${
+                                scope === "product"
+                                    ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                                    : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                            }`}
+                            data-testid="prep-edit-scope-product"
+                        >
+                            كل بطاقات نفس المنتج
+                        </button>
+                    </div>
+                    {scope === "product" && (
+                        <div className="mt-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 flex items-start gap-1">
+                            <Warning size={12} weight="bold" className="flex-shrink-0 mt-0.5" />
+                            سيتم تطبيق نفس القيم على كل البطاقات التي تشترك في هذا المنتج.
+                        </div>
+                    )}
+                </div>
+
+                {/* Form fields */}
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                            الاسم (العميل)
+                        </label>
+                        <input
+                            type="text"
+                            value={customerName}
+                            onChange={e => setCustomerName(e.target.value)}
+                            placeholder="اسم العميل كما سيظهر في بطاقة الطباعة"
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm outline-none"
+                            data-testid="prep-edit-customer-name"
+                            maxLength={500}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">المقاس</label>
+                            <input
+                                type="text"
+                                value={size}
+                                onChange={e => setSize(e.target.value)}
+                                placeholder="—"
+                                className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm outline-none"
+                                data-testid="prep-edit-size"
+                                maxLength={500}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">اللون</label>
+                            <input
+                                type="text"
+                                value={color}
+                                onChange={e => setColor(e.target.value)}
+                                placeholder="—"
+                                className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm outline-none"
+                                data-testid="prep-edit-color"
+                                maxLength={500}
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                            الملاحظة (الكتابة على الكرت)
+                        </label>
+                        <textarea
+                            value={note}
+                            onChange={e => setNote(e.target.value)}
+                            placeholder="نص الملاحظة أو الكتابة الخاصة بالعميل"
+                            rows={3}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm outline-none resize-y"
+                            data-testid="prep-edit-note"
+                            maxLength={500}
+                        />
+                    </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-wrap gap-2 justify-end mt-5 pt-4 border-t border-slate-200">
+                    {hasEdits && (
+                        <button
+                            type="button"
+                            onClick={handleReset}
+                            disabled={resetBusy || busy}
+                            className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 font-bold text-xs disabled:opacity-50 mr-auto"
+                            data-testid="prep-edit-reset-btn"
+                            title="استرجاع القيم الأصلية من ملف Salla"
+                        >
+                            <ArrowCounterClockwise size={14} weight="bold" />
+                            {resetBusy ? "جارٍ…" : "إعادة تعيين"}
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={busy || resetBusy}
+                        className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-sm disabled:opacity-50"
+                        data-testid="prep-edit-cancel-btn"
+                    >
+                        إلغاء
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={busy || resetBusy}
+                        className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-bold text-sm disabled:opacity-50"
+                        data-testid="prep-edit-save-btn"
+                    >
+                        {busy ? "جارٍ الحفظ…" : "حفظ التعديلات"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 /** A single product card. ONE per line — order info + image + options. */
-function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUploaded }) {
+function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUploaded, onEdit }) {
     const orderNum = row.order_number;
     const opts = row.product_options || {};
     const extraOpts = Object.entries(opts).slice(0, 3);  // cap so the card stays compact
+    const editedSet = new Set(row.edited_fields || []);
+    const fieldBadge = (
+        <span
+            className="inline-flex items-center gap-0.5 px-1 py-0 rounded bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300 leading-none"
+            title="تم تعديل هذا الحقل يدوياً"
+        >
+            <PencilSimple size={8} weight="bold" />
+        </span>
+    );
 
     return (
         <label
@@ -224,6 +505,7 @@ function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUpload
                     <div className="flex items-center gap-1 text-[11px] text-slate-700 truncate" title={row.customer_name}>
                         <User size={10} weight="bold" className="flex-shrink-0 text-slate-400" />
                         <span className="truncate">{row.customer_name}</span>
+                        {editedSet.has("customer_name") && fieldBadge}
                     </div>
                 ) : null}
 
@@ -238,6 +520,7 @@ function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUpload
                             >
                                 <Ruler size={10} weight="bold" />
                                 <span className="truncate">{row.size}</span>
+                                {editedSet.has("size") && fieldBadge}
                             </span>
                         ) : null}
                         {row.color ? (
@@ -248,6 +531,7 @@ function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUpload
                             >
                                 <Palette size={10} weight="bold" />
                                 <span className="truncate">{row.color}</span>
+                                {editedSet.has("color") && fieldBadge}
                             </span>
                         ) : null}
                     </div>
@@ -262,6 +546,9 @@ function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUpload
                     >
                         <NotePencil size={10} weight="bold" className="flex-shrink-0 text-slate-400 mt-0.5" />
                         <span className="break-words">{row.note}</span>
+                        {editedSet.has("note") && (
+                            <span className="flex-shrink-0">{fieldBadge}</span>
+                        )}
                     </div>
                 ) : null}
 
@@ -281,7 +568,7 @@ function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUpload
                     </div>
                 )}
 
-                {/* Footer row: qty + shipping + add-image */}
+                {/* Footer row: qty + shipping + edit + add-image */}
                 <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100 mt-auto">
                     <div className="flex items-center gap-1 text-[10px] text-slate-500 min-w-0">
                         {row.quantity > 1 ? (
@@ -296,24 +583,37 @@ function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUpload
                             <span className="font-bold text-slate-700">/ {row.total_products_in_order}</span>
                         )}
                     </div>
-                    {!row.has_image && (
-                        <MissingImageButton
-                            uploadId={uploadId}
-                            idx={row.idx}
-                            productName={row.product_name}
-                            onUploaded={onUploaded}
-                        />
-                    )}
-                    {row.image_source === "user_upload" && (
-                        <span
-                            className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold"
-                            data-testid={`prep-card-custom-img-${row.idx}`}
-                            title="صورة مرفوعة من المستخدم"
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* iter-43 — Manual edit button (always visible). */}
+                        <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit?.(row); }}
+                            className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-700 text-[10px] font-bold border border-slate-200 hover:border-amber-300 transition-colors"
+                            data-testid={`prep-card-edit-btn-${row.idx}`}
+                            title="تعديل الاسم، اللون، المقاس، والملاحظة"
                         >
-                            <CheckCircle size={8} weight="fill" />
-                            مخصّصة
-                        </span>
-                    )}
+                            <PencilSimple size={11} weight="bold" />
+                            <span>تعديل</span>
+                        </button>
+                        {!row.has_image && (
+                            <MissingImageButton
+                                uploadId={uploadId}
+                                idx={row.idx}
+                                productName={row.product_name}
+                                onUploaded={onUploaded}
+                            />
+                        )}
+                        {row.image_source === "user_upload" && (
+                            <span
+                                className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold"
+                                data-testid={`prep-card-custom-img-${row.idx}`}
+                                title="صورة مرفوعة من المستخدم"
+                            >
+                                <CheckCircle size={8} weight="fill" />
+                                مخصّصة
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
         </label>
@@ -333,6 +633,8 @@ export default function ProductPreparation() {
     const [dragOver, setDragOver] = useState(false);
     const [selectedIdx, setSelectedIdx] = useState(() => new Set());
     const [imgVersion, setImgVersion] = useState(0);
+    // iter-43 — per-card edit modal state
+    const [editingRow, setEditingRow] = useState(null);
 
     const toggleOne = (idx) => {
         setSelectedIdx(prev => {
@@ -718,6 +1020,7 @@ export default function ProductPreparation() {
                             isSelected={selectedIdx.has(row.idx)}
                             onToggle={toggleOne}
                             onUploaded={refreshPreview}
+                            onEdit={setEditingRow}
                         />
                     ))}
                 </div>
@@ -740,6 +1043,15 @@ export default function ProductPreparation() {
                 onConfirm={handleClearLog}
                 onCancel={() => setShowClearConfirm(false)}
                 danger
+            />
+
+            {/* iter-43 — per-card edit modal */}
+            <EditCardModal
+                open={!!editingRow}
+                row={editingRow}
+                uploadId={data?.upload_id}
+                onClose={() => setEditingRow(null)}
+                onSaved={refreshPreview}
             />
         </div>
     );
