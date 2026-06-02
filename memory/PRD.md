@@ -12,6 +12,65 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ENHANCEMENT (2026-06 — Iteration 37) — **Salla Direct Integration — Phase 1 (OAuth + Encrypted tokens + Status UI)**
+
+**Merchant request**: Build a direct `Salla → System` connection via OAuth + (later) Webhooks, **without touching Make / PDF / Excel** (those must keep working). Tokens, Store ID auto-fetched after merchant consent. 4-phase roll-out plan — this iteration delivers Phase 1 only.
+
+### Phase 1 Scope (this iteration — DONE)
+1. New isolated module `/app/backend/salla_integration/` (no edits to any pre-existing import path).
+2. Encrypted token storage (Fernet via `cryptography` library) with key rotation support.
+3. Full OAuth 2.0 Authorization-Code flow:
+   - `GET /api/salla/oauth/login` — builds Salla authorize URL with scopes `offline_access orders.read orders.write webhooks.read webhooks.write customers.read settings.read` + CSRF `state` stored in `salla_oauth_states` (10-min TTL).
+   - `GET /api/salla/oauth/callback` — state validation → token exchange → `/store/info` fetch → encrypted upsert into `salla_integrations` → 302 redirect to frontend with `?status=connected|error|warn`.
+4. Auto-refresh wrapper `ensure_fresh_access_token()` with per-user `asyncio.Lock` (no race on refresh-token rotation).
+5. `GET /api/salla/status` — public, no secrets — for the UI.
+6. `POST /api/salla/test-connection` + `POST /api/salla/refresh-store-info` — live calls to `/store/info`.
+7. `POST /api/salla/disconnect` — local-only revoke (Phase 2 will add remote webhook delete).
+8. Frontend: new page `/settings/salla` (`SallaIntegration.jsx`) with:
+   - Status pill (connected / not_connected / needs_reauth / غير مُعدّ بعد).
+   - **Coexistence banner**: "Make.com و رفع PDF و رفع Excel يعملون كما هم" — explicitly reassures the merchant.
+   - "Not configured" panel surfaces the EXACT `.env` keys + the redirect URI to register in Salla Partners.
+   - "Connect" CTA → full-page navigation to Salla's authorize URL.
+   - Connected card: store name + domain + ID + email + plan + status + scopes + expires + last refresh.
+   - Actions: اختبار الاتصال / جلب بيانات المتجر / إعادة الربط / إلغاء الربط (with confirm modal).
+   - Phase 2/3/4 preview list at the bottom.
+9. Settings page gets a new entry-point card (`settings-salla-link-card`) at the very top — visible immediately on `/settings`.
+10. Route registered in `App.js`: `/settings/salla`.
+
+### Required env vars (added to `backend/.env` — empty by default)
+```
+SALLA_CLIENT_ID=            # ← merchant fills from Partners Portal
+SALLA_CLIENT_SECRET=        # ← merchant fills from Partners Portal
+SALLA_TOKEN_ENC_KEY=...     # ← auto-generated Fernet key
+SALLA_AUTH_BASE=https://accounts.salla.sa
+SALLA_API_BASE=https://api.salla.dev/admin/v2
+```
+
+### Critical guarantees
+- **No edits** to any pre-existing collection (`unified_orders`, `analyses`, `snapchat_*`, `meta_*`, `preparation_*`, `product_*`, etc.) — verified by `test_isolation_from_existing_collections`.
+- **No edits** to Make webhooks, PDF upload, Excel upload routes.
+- Tokens NEVER appear in logs or API responses (only the encrypted blob is stored; the public serializer drops it).
+- `/api/salla/oauth/login` returns **503 with Arabic guidance** when `SALLA_CLIENT_ID` is empty — never builds a malformed authorize URL.
+
+### Tests (`tests/test_salla_phase1.py` → 13/13 PASS, regression-safe with iter-34 → 37/37 total)
+- Fernet roundtrip + nondeterministic encryption + tamper detection.
+- All `/api/salla/*` routes require auth (401/403 without bearer).
+- `/status` shape when not connected.
+- `/oauth/login` returns valid authorize URL with all required scopes when configured; 503 when not.
+- `/disconnect` is idempotent.
+- `/test-connection` returns 404 + needs_reauth=True when no integration row exists.
+- Full OAuth callback flow (respx-mocked) — exchange_code → fetch_store_info → encrypted persist → integration_to_public exposes no secrets.
+- Auto-refresh: expired access_token triggers `refresh_with_token`, new tokens persisted.
+- `invalid_grant` on refresh marks the row `status: needs_reauth` and sets `last_error`.
+- **Isolation**: connecting Salla writes nothing to unified_orders / analyses / snapchat_* / meta_* / preparation_* / product_costs / operating_expenses / daily_costs.
+
+### Future Phases (gated on user approval after 7-14 day validation)
+- **Phase 2**: HMAC-verified webhook endpoint `POST /api/webhooks/salla/order` + programmatic webhook registration (order.created/updated/status.updated/cancelled/refunded) + event log page.
+- **Phase 3**: "مزامنة الطلبات القديمة" pulling historical orders into unified_orders + tying into existing P/L calculations.
+- **Phase 4**: Connection monitoring dashboard + Salla↔system reconciliation tool.
+
+---
+
 ## 🎯 ENHANCEMENT (2026-06 — Iteration 36) — **Cards-Grid UX revamp + Critical "don't overwrite existing image" fix**
 
 **Merchant report**: "عند إضافة صوره يتم تعديلها على المنتج الذي ليس لديه صوره فقط وليس جميع المنتجات بالبلوك" → the previous iteration's `scope=product` was blindly overwriting sibling lines' images (including PDF-extracted ones). Also requested a major UX overhaul: per-product individual cards in a Grid (not grouped `<details>`).

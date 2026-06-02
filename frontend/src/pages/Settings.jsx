@@ -520,6 +520,26 @@ export default function Settings() {
                 </button>
             </div>
 
+            {/* Salla direct integration entry-point — new in iter-37 (Phase 1) */}
+            <button
+                type="button"
+                onClick={() => navigate("/settings/salla")}
+                className="group w-full text-right rounded-xl border-2 border-dashed border-indigo-300 bg-gradient-to-l from-indigo-50 to-white hover:from-indigo-100 hover:border-indigo-400 transition-all p-5 flex items-center gap-4"
+                data-testid="settings-salla-link-card"
+                style={{ fontFamily: "Tajawal" }}
+            >
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg flex-shrink-0">
+                    <LinkSimple size={26} weight="bold" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="font-extrabold text-slate-900 text-base">ربط متجر سلة المباشر (OAuth)</div>
+                    <div className="text-xs text-slate-600 mt-0.5">
+                        ربط Salla → النظام مباشرة عبر OAuth + Webhooks. <span className="font-bold text-emerald-700">Make و PDF و Excel تبقى تعمل كما هي.</span>
+                    </div>
+                </div>
+                <div className="text-indigo-600 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">فتح ←</div>
+            </button>
+
             {/* Payment methods */}
             <div className="rounded-xl border border-border bg-white p-6">
                 <div className="flex items-center justify-between mb-5">
