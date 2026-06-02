@@ -26,6 +26,7 @@ const links = [
     { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
     { to: "/snapchat-accounts", label: "حسابات Snapchat", icon: Ghost, testid: "nav-snapchat-accounts" },
     { to: "/product-costs", label: "تكاليف المنتجات", icon: Package, testid: "nav-product-costs" },
+    { to: "/product-preparation", label: "تجهيز المنتجات", icon: Package, testid: "nav-product-preparation" },
     { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
     { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" },
 ];

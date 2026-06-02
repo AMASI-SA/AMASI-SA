@@ -12,6 +12,49 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 NEW FEATURE (2026-06 — Iteration 34) — **تجهيز المنتجات: تحويل PDF طلبات سلة → ملف طباعة 4×4**
+
+**Merchant request**: صفحة جديدة `/product-preparation` تستقبل PDF الطلبات من سلة، تستخرج لكل منتج: اسم العميل (من خيار "الاسم")، الملاحظة، الكمية، شركة الشحن، التاريخ، صورة المنتج، ثم تُجمّع المنتجات (لا الطلبات) وتُرتّبها من الأكثر مبيعاً، وتُخرج PDF A4 portrait بترتيب 4×4 = 16 بطاقة في الصفحة. كل بطاقة تحتوي: تسلسل، صورة، QR (رقم الطلب فقط لا URL)، رقم الطلب، الاسم، ملاحظة، تاريخ، كمية، "{carrier} - {N}" حيث N = إجمالي منتجات الطلب. مع منع تكرار التصدير عبر مجموعة `exported_orders`.
+
+**Backend** (Python — استقرار مع الـ stack الحالي، بدلاً من إضافة Node.js sidecar):
+- `preparation_pdf.py`: parser/generator نقي بدون أي ربط بـ FastAPI/Mongo
+  - `parse_salla_orders_pdf(bytes) → list[ProductLine]` — PyMuPDF لقراءة PDF
+  - يتعامل مع كل صفحة كطلب، يستخرج رقم الطلب من `رقم الطلب #...`، التاريخ، ثم لكل "خيارات المنتج" block يستخرج "الاسم" (يدعم الـ glyph-encoded variants: "السم" / "الاسم" / "الإسم"…) والملاحظات (`الكتابه على الكرت` / `ملاحظة` …)
+  - استخراج صور المنتجات بـ heuristic ذكية (≥150px، أبعاد 0.4–2.5، حجم ≤1.5MP) لاستبعاد الشعارات والخلفيات
+  - `generate_preparation_pdf(lines) → bytes` — reportlab + arabic-reshaper + python-bidi + NotoNaskhArabic/DejaVuSans، QR عبر `qrcode` (محتوى رقم الطلب فقط)
+- `preparation_routes.py`: 7 endpoints تحت `/api/preparation/`
+  - `POST /upload` — رفع PDF (حد 25MB)، يستدعي parser، يثري بـ `shipping_company` من `unified_orders` وصور احتياطية من `product_costs.image_url`، يستبعد الطلبات الموجودة سابقاً في `exported_orders`، يحفظ snapshot في `preparation_uploads` (TTL 24h)
+  - `GET /preview/{upload_id}` — معاينة المجموعات
+  - `GET /image/{upload_id}/{idx}` — بث صور المنتجات للـ thumbnails
+  - `POST /generate/{upload_id}` — توليد PDF نهائي + استبعاد ثاني عند التوليد + إدراج في `exported_orders` (insert_many ordered=False مع unique index)
+  - `GET /excluded/{upload_id}` — قائمة المستبعدين
+  - `GET /export-log/stats` — عدّاد سجل التصدير
+  - `DELETE /export-log` — حذف السجل (يتطلب `{"confirm": true}`)
+- مجموعات جديدة + indexes:
+  - `exported_orders`: unique (user_id, order_number) — يضمن عدم التكرار
+  - `preparation_uploads`: unique (user_id, upload_id) + TTL على `expires_at_dt`
+
+**Frontend** (React — مع شعار الـ stack الحالي):
+- `ProductPreparation.jsx` (~340 سطر) في `/product-preparation` + nav link "تجهيز المنتجات" (أيقونة Package)
+- Drag-and-drop dropzone، Stats row (4 بطاقات)، Action bar (تحميل/إعادة رفع/عرض المستبعدين)، Confirm modal للمسح، Group accordion بالصورة والعدد + توسعة لعرض كل الطلبات
+
+**ملاحظة على الـ Stack**: التاجر طلب Node.js + pdf-lib + sharp، لكنني استخدمت Python equivalents لتجنّب sidecar مكلف وغير ضروري في تطبيق FastAPI: PyMuPDF (vs pdfjs-dist) + reportlab + arabic-reshaper (vs pdf-lib) + qrcode (Python) + Pillow (vs sharp). كل ذلك يعمل على نفس process الـ backend بدون أي تعقيد عملياتي إضافي.
+
+**Tests**: 8 Pytests في `test_preparation_iteration34.py`:
+1. Auth مطلوب لكل endpoint ✅
+2. Upload يستخرج 12 طلب / 19 منتج / 12 مجموعة مرتّبة من الأكثر للأقل (top = "قالدة روز" بـ 5) ✅
+3. Generate يُرجع PDF (>50KB) + headers X-Exported-Orders/Cards + يحدّث stats إلى 12 ✅
+4. Re-upload يستبعد جميع الـ 12 ومحاولة الـ generate ترجع 400 برسالة عربية تتضمن "مسح سجل التصدير" ✅
+5. Clear-log بدون confirm = 400، مع confirm = 200 + deleted_count 12 + إعادة الـ upload تنجح ✅
+6. Cross-user scoping — مستخدم B لا يستطيع رؤية upload الخاص بـ A (404 على preview/generate/image) ✅
+7. رفض الملفات غير-PDF والملفات الفارغة ✅
+8. Image streaming يُرجع content-type يبدأ بـ image/ ✅
+
+التغطية الإجمالية الآن: **350+ Pytests** تعمل (مع 2 pre-existing failures في Meta TTL test).
+
+---
+
+
 ## 🎯 ENHANCEMENT (2026-06 — Iteration 33b) — **Δ% Δ comparison badge: Snap vs النظام**
 
 Added a side-by-side delta comparison so the merchant can instantly spot attribution gaps without opening a second report.

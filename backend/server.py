@@ -59,6 +59,7 @@ from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
 from product_costs import attach_product_costs_routes, attach_cost_to_order_doc
+from preparation_routes import attach_preparation_routes, ensure_preparation_indexes
 from expenses_routes import (
     attach_operating_expenses_routes,
     compute_operating_expenses_for_range,
@@ -1916,6 +1917,7 @@ attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
 attach_operating_expenses_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
+attach_preparation_routes(api, db)
 app.include_router(api)
 
 # CORS
@@ -1979,6 +1981,8 @@ async def on_startup():
     await db.operating_daily_expenses.create_index([("user_id", 1), ("date", -1)])
     await db.operating_prepaid_expenses.create_index([("user_id", 1), ("status", 1)])
     await db.operating_prepaid_expenses.create_index([("user_id", 1), ("expense_type", 1)])
+    # Indexes for the "تجهيز المنتجات" feature (iteration 34).
+    await ensure_preparation_indexes(db)
     # Backfill: older salaries created before the country column existed are
     # treated as Saudi by default (most common merchant home country).
     legacy_country = await db.operating_salaries.update_many(
