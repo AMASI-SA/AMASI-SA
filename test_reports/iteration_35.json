@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend testing for Iteration 35 (Hesab — Image Catalog + Product Preparation revamp). Tested with admin@hesab.app on the preview URL. ALL critical flows for the new /image-catalog page pass: sidebar nav link visible & clickable, route loads (image-catalog-page testid present), empty-state CTA opens upload modal, end-to-end Add flow (name + product_id + sku + small PNG upload) creates a row and bumps count badge to 1, search filter shows catalog-no-results for non-matching text and filters rows for matching text, edit modal opens prefilled with name input DISABLED, delete confirm modal works end-to-end and count decrements 1→0. ProductPreparation page renders with prep-upload-dropzone + file input + zero JS errors. Mobile (390x844) — both /image-catalog and /product-preparation render with NO horizontal scroll. Auth gating: unauthenticated GET /image-catalog correctly redirects to /login. Cross-page API GET /api/preparation/image-catalog returns 200 with {items:[],count:0} for an authenticated user. ONE real frontend-blocking bug found: the Edit-without-new-file path returns HTTP 422 from the backend (file field is required), which contradicts the iteration spec ('Submitting without picking a new file keeps the existing image (no error)'). On the first run this broke React enough to trigger an error boundary warning and made the catalog row's image render as broken until a refresh.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/preparation/image-catalog/{slug}", "issue": "Returns 422 'Field required (file)' when called WITHOUT a file. Frontend Edit flow sends multipart with only query params (product_name/product_id/sku) when the user wants to keep the existing image — spec explicitly states this case must succeed silently. Make `file: UploadFile = File(None)` so metadata-only updates work.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ImageCatalog UploadModal (edit mode)", "issue": "When user clicks Edit and submits with no new file, the PUT fails 422 → toast appears but the optimistic UI (preview/refresh) can leave the row's image rendering as broken (X icon) until a hard refresh. Triggered a React error-boundary console warning during testing.", "selector": "[data-testid=\"catalog-upload-submit-btn\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "ImageCatalog edit-without-file → PUT /api/preparation/image-catalog/{slug}", "issue": "Frontend builds FormData with file omitted when no new file is picked, but backend marks `file` as required. Either make the backend `file` parameter optional OR have the frontend skip the upload network call and only PATCH metadata when no file is selected.", "affected_selectors": ["[data-testid=\"catalog-upload-submit-btn\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_35.json"
+  ],
+  "action_items": [
+    "Fix the Edit-without-new-file 422: either set `file: UploadFile = File(None)` in preparation_routes.py and keep the existing stored image if file is None, OR have the frontend short-circuit when no file is picked and submit metadata via a separate PATCH/PUT without a file field.",
+    "Optionally add a frontend guard in ImageCatalog UploadModal so that when isEdit && !file, we send no `file` part in FormData (and skip the FormData entirely if backend exposes a JSON metadata endpoint)."
+  ],
+  "critical_code_review_comments": [
+    "ImageCatalog.jsx submit() unconditionally calls api.put with `Content-Type: multipart/form-data` even when FormData has no `file` part. The combination of empty multipart + required backend file param is the direct root cause of the 422.",
+    "ImageCatalog.jsx — `data-testid={`catalog-img-${nameNorm.slice(0, 12)}`}` and the row/edit/delete buttons all slice the same prefix → for Arabic-only product names this still produces a unique enough id, but two products with the same first-12-chars would collide. Consider hashing or using full encoded name.",
+    "ProductPreparation page is gated behind PDF upload for selection UI (prep-row-check-*, prep-group-check-*, prep-select-all-btn, prep-print-selected-btn) — these testids could not be exercised because no Salla orders PDF fixture is available. Smoke test of the empty page passed with zero JS errors.",
+    "Token (access_token) is being persisted in localStorage AND httpOnly cookies — duplicate state. Not an iteration-35 issue but worth flagging."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not retested)", "frontend": "92% (12 of 13 sub-flows pass; edit-without-file fails)"},
+  "test_credentials": "admin@hesab.app / admin123 (used during this run)",
+  "seed_data_creation": "Created and then cleaned up one test row in product_image_catalog with product_name='TEST_منتج_<ts>' (deleted via UI at end of run; final GET returns empty list).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Image Catalog Add / Search / Delete and Auth gating are all green. The single remaining failure is metadata-only edit (no new file). The cross-page integration through /api/preparation/image-catalog GET is verified. Skip backend pytest run — main agent says 20/20 already passing. To retest the edit-without-file fix: create a catalog item, click [data-testid^=catalog-edit-btn-], leave the file input empty, click [data-testid=catalog-upload-submit-btn], expect modal to close and toast success, count unchanged, image still renders.",
+  "rca of the issue": "Reproduced the 422 directly with curl: `PUT /api/preparation/image-catalog/testslug?product_name=testslug` (no body) → 422 {'detail':[{'type':'missing','loc':['body','file'],'msg':'Field required'}]}. The Pydantic/FastAPI signature in /app/backend/preparation_routes.py declares `file: UploadFile = File(...)` instead of `File(None)`. Mitigation: change to `file: Optional[UploadFile] = File(None)` and inside the handler skip the image-overwrite branch when `file is None` so existing JPEG on disk is preserved."
+}
