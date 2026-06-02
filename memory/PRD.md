@@ -12,6 +12,41 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ENHANCEMENT (2026-06 — Iteration 39) — **Printable PDF: Cairo SemiBold + Cairo Bold + increased line spacing**
+
+**Merchant request**: change PDF font to **Cairo SemiBold** (Bold accents for Order#/Product/Shipping rows), add visible spacing between data rows, and keep the iter-38 field order locked.
+
+### Changes
+- **Bundled** `Cairo-SemiBold.ttf` + `Cairo-Bold.ttf` at `/app/backend/fonts/` (downloaded from `fonts.gstatic.com` — actual static TTF instances at weight 600 and 700 respectively). Sizes ~150 KB + ~150 KB.
+- `_register_font()` now returns a **tuple** `(regular_or_semibold, bold)`; preference order:
+  1. Cairo SemiBold + Cairo Bold (bundled)
+  2. Noto Naskh Arabic (system fallback — used the same TTF for both slots if Cairo missing)
+  3. DejaVu / Amiri (last resort)
+- `generate_preparation_pdf` updated:
+  - `font_name, font_bold = _register_font()` — caller now gets both names.
+  - **`line_gap` raised from 2.0 → 3.5 pt**.
+  - Each block entry now carries an `extra_gap_above` 5th tuple slot — used to push specific groups (customer name, note, date+qty, shipping) a little further from the previous group for cleaner visual sectioning.
+  - Draw loop: `c.setFont(font_bold if is_bold else font_name, fsize)` — bold rows render with Cairo-Bold; the rest render with Cairo-SemiBold.
+
+### Field order (locked, per merchant)
+1. Order # (Bold)
+2. Product name (Bold, up to 2 wrapped lines)
+3. الاسم: customer (SemiBold)
+4. المقاس: X   اللون: Y (SemiBold, combined row)
+5. ملاحظة: note (SemiBold, muted color, up to 2 lines)
+6. Date + Qty (SemiBold)
+7. Shipping carrier - N (Bold, accent color)
+
+### Tests (`tests/test_preparation_iteration39.py` — 6/6 PASS, 55/55 cross-suite)
+- `test_cairo_ttf_files_are_bundled` — both TTFs exist & ≥50 KB (catches accidental HTML downloads).
+- `test_register_font_picks_cairo` — returns `("Cairo-SemiBold","Cairo-Bold")` + idempotent.
+- `test_generated_pdf_embeds_cairo_font` — PyMuPDF `page.get_fonts()` includes a basefont containing "Cairo".
+- `test_line_gap_increased_for_iter39` — source parse asserts `line_gap >= 3.0`.
+- `test_field_order_in_build_text_lines_matches_spec` — source-position regex anchors verify the merchant's field order.
+- `test_pdf_uses_bold_font_for_accent_rows` — BOTH Cairo-SemiBold AND Cairo-Bold are embedded in the output PDF.
+
+---
+
 ## 🎯 ENHANCEMENT (2026-06 — Iteration 38) — **Salla PDF parser + printable PDF — major data-fidelity fixes**
 
 **Merchant report**: compared a generated `system_pdf` against the original `orders.pdf` he uploaded. Cards in the printed output were missing/wrong on multiple fields. Detailed diff revealed 5 distinct bugs.

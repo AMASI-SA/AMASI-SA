@@ -25,6 +25,7 @@ import re
 import logging
 from collections import OrderedDict
 from dataclasses import dataclass, field, asdict
+from pathlib import Path
 from typing import Optional
 
 import fitz  # PyMuPDF
@@ -461,14 +462,47 @@ def flatten_sorted(groups: list[dict]) -> list[ProductLine]:
 # ── PDF generation ───────────────────────────────────────────────────────
 _FONT_REGISTERED = False
 _FONT_NAME = "Helvetica"
+_FONT_BOLD_NAME: str = "Helvetica-Bold"
+
+# Bundled with the app so we don't depend on whatever the host OS ships.
+_BUNDLED_FONTS_DIR = Path(__file__).parent / "fonts"
 
 
-def _register_font() -> str:
-    """Register a TTF that supports Arabic. We prefer NotoNaskhArabic;
-    DejaVuSans is a fine secondary."""
-    global _FONT_REGISTERED, _FONT_NAME
+def _register_font() -> tuple[str, str]:
+    """Register Arabic-capable TTFs with ReportLab. Returns
+    (regular_or_semibold_name, bold_name).
+
+    Preference order (iter-39):
+        1. Cairo SemiBold + Cairo Bold  ← bundled in `backend/fonts/`,
+           merchant-requested font for a cleaner modern look.
+        2. Noto Naskh Arabic (system).
+        3. DejaVu Sans / Amiri fallbacks.
+
+    Falling back to Helvetica is the absolute last resort — it can
+    render Latin only, so any Arabic would come out as garbage.
+    """
+    global _FONT_REGISTERED, _FONT_NAME, _FONT_BOLD_NAME
     if _FONT_REGISTERED:
-        return _FONT_NAME
+        return _FONT_NAME, _FONT_BOLD_NAME
+
+    # Try Cairo SemiBold + Bold (bundled).
+    cairo_semi = _BUNDLED_FONTS_DIR / "Cairo-SemiBold.ttf"
+    cairo_bold = _BUNDLED_FONTS_DIR / "Cairo-Bold.ttf"
+    if cairo_semi.exists() and cairo_bold.exists():
+        try:
+            pdfmetrics.registerFont(TTFont("Cairo-SemiBold", str(cairo_semi)))
+            pdfmetrics.registerFont(TTFont("Cairo-Bold", str(cairo_bold)))
+            _FONT_NAME = "Cairo-SemiBold"
+            _FONT_BOLD_NAME = "Cairo-Bold"
+            _FONT_REGISTERED = True
+            return _FONT_NAME, _FONT_BOLD_NAME
+        except Exception:
+            # Fall through to next candidate
+            pass
+
+    # System Arabic fonts as fallback (single weight — we reuse it for
+    # both "regular" and "bold" slots; ReportLab will simulate bold via
+    # x-axis stroke width on draw).
     candidates = [
         ("NotoNaskhArabic", "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf"),
         ("DejaVuSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
@@ -478,12 +512,13 @@ def _register_font() -> str:
         try:
             pdfmetrics.registerFont(TTFont(name, path))
             _FONT_NAME = name
+            _FONT_BOLD_NAME = name
             _FONT_REGISTERED = True
-            return _FONT_NAME
+            return _FONT_NAME, _FONT_BOLD_NAME
         except Exception:
             continue
     _FONT_REGISTERED = True
-    return _FONT_NAME
+    return _FONT_NAME, _FONT_BOLD_NAME
 
 
 def _qr_png_bytes(payload: str) -> bytes:
@@ -666,7 +701,7 @@ def generate_preparation_pdf(
     if not lines:
         raise ValueError("No product lines to render")
 
-    font_name = _register_font()
+    font_name, font_bold = _register_font()
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     page_w, page_h = A4
@@ -733,36 +768,42 @@ def generate_preparation_pdf(
         order_size = 9.0
         body_size = 8.0
         ship_size = 8.5
-        line_gap = 2.0   # gap between lines (added to font size)
+        # Increased in iter-39 (merchant requested clearer spacing).
+        # Default ~ baseline + this gap between every consecutive line.
+        line_gap = 3.5
 
         # Pre-wrap dynamic fields with measurements based on body_size.
-        def _build_text_lines(base_size: float) -> list[tuple[str, float, HexColor, bool]]:
-            """Return [(visual_text, font_size, color, is_bold), ...] for body block.
+        def _build_text_lines(base_size: float) -> list[tuple[str, float, HexColor, bool, float]]:
+            """Return [(visual_text, font_size, color, is_bold, extra_gap_above), ...].
 
-            Card field rules (iter-38, matching the on-screen card UI):
-                Order#  →  one line, bold
-                Product →  up to 2 lines, ellipsis on overflow (BOLD)
-                Customer name (الاسم)  →  one line
-                Size + Color  →  one combined line ("المقاس: X   اللون: Y")
-                Note (ملاحظة) →  up to 2 lines
-                Date + Qty   →  one line
-                Shipping     →  one line, bold accent
+            `extra_gap_above` lets us push specific groups (e.g. note,
+            shipping) a little further from the previous group so the
+            card reads as logical sections rather than one dense column.
+
+            Card field rules (iter-39 — merchant-confirmed order):
+                Order#                bold      0 extra
+                Product               bold      0.5 extra
+                Customer (الاسم)       semibold  1.0 extra
+                Size / Color           semibold  0.5 extra
+                Note (ملاحظة)          semibold  1.0 extra
+                Date + Qty             semibold  1.5 extra
+                Shipping carrier       bold      1.5 extra
             """
-            block: list[tuple[str, float, HexColor, bool]] = []
+            block: list[tuple[str, float, HexColor, bool, float]] = []
             # Order# (with ط prefix)
             order_visual = _ar("ط") + f" : {line.order_number}"
-            block.append((order_visual, order_size, text_color, True))
+            block.append((order_visual, order_size, text_color, True, 0.0))
             # Product name — newly added in iter-38 (was previously missing!)
             if line.product_name:
                 pname_lines = _wrap_arabic_lines(
                     line.product_name, font_name, base_size + 0.5,
                     usable_w, max_lines=2,
                 )
-                for pl in pname_lines:
-                    block.append((pl, base_size + 0.5, text_color, True))
+                for j, pl in enumerate(pname_lines):
+                    block.append((pl, base_size + 0.5, text_color, True, 0.5 if j == 0 else 0.0))
             if line.customer_name:
                 v = _fit_single_line(f"الاسم: {line.customer_name}", font_name, base_size, usable_w)
-                block.append((v, base_size, text_color, False))
+                block.append((v, base_size, text_color, False, 1.0))
             # Size + color (iter-38 — newly rendered)
             sc_parts: list[str] = []
             if line.size:
@@ -773,14 +814,14 @@ def generate_preparation_pdf(
                 sc_line = "   ".join(sc_parts)
                 block.append((
                     _fit_single_line(sc_line, font_name, base_size, usable_w),
-                    base_size, text_color, False,
+                    base_size, text_color, False, 0.5,
                 ))
             if line.note:
                 note_lines = _wrap_arabic_lines(
                     f"ملاحظة: {line.note}", font_name, base_size, usable_w, max_lines=2,
                 )
-                for nl in note_lines:
-                    block.append((nl, base_size, muted_color, False))
+                for j, nl in enumerate(note_lines):
+                    block.append((nl, base_size, muted_color, False, 1.0 if j == 0 else 0.0))
             # Compact: date + quantity on the same line — saves vertical room
             date_short = short_date(line.order_date)
             qty_str = f"ك: {line.quantity or 1}"
@@ -788,13 +829,13 @@ def generate_preparation_pdf(
             if date_short:
                 tail = f"{date_short}    {qty_str}"  # two-space gap
             block.append((_fit_single_line(tail, font_name, base_size, usable_w),
-                          base_size, text_color, False))
+                          base_size, text_color, False, 1.5))
             # Shipping line (carrier - N)
             carrier = (line.shipping_company or "").strip() or "—"
             n = max(1, int(line.total_products_in_order or 1))
             ship_line = f"{carrier} - {n}"
             ship_visual = _fit_single_line(ship_line, font_name, ship_size, usable_w)
-            block.append((ship_visual, ship_size, accent, True))
+            block.append((ship_visual, ship_size, accent, True, 1.5))
             return block
 
         block = _build_text_lines(body_size)
@@ -803,8 +844,9 @@ def generate_preparation_pdf(
         text_top = img_y - 4
         text_bottom = y + pad + 1   # leave 1pt above border inside clip
 
-        def _total_height(blk: list[tuple[str, float, HexColor, bool]]) -> float:
-            return sum(item[1] + line_gap for item in blk) - line_gap
+        def _total_height(blk) -> float:
+            # baseline-to-baseline = font_size + line_gap + per-row extra
+            return sum(item[1] + line_gap + item[4] for item in blk) - line_gap
 
         # Auto-shrink if it overflows: reduce body_size step by step.
         while _total_height(block) > (text_top - text_bottom) and body_size > 6.0:
@@ -818,12 +860,13 @@ def generate_preparation_pdf(
             block = _build_text_lines(body_size)
             line.note = line_note_backup
 
-        # Render top-down from the top of the text block
+        # Render top-down from the top of the text block. Bold rows use
+        # the dedicated bold font face when available (iter-39 — Cairo Bold).
         cursor = text_top
-        for visual, fsize, color, is_bold in block:
+        for visual, fsize, color, is_bold, extra_gap in block:
             c.setFillColor(color)
-            c.setFont(font_name, fsize)
-            cursor -= fsize  # move down by ascent
+            c.setFont(font_bold if is_bold else font_name, fsize)
+            cursor -= fsize + extra_gap  # move down by ascent + extra
             c.drawRightString(right_edge, cursor, visual)
             cursor -= line_gap
 
