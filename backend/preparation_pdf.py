@@ -54,8 +54,10 @@ logger = logging.getLogger(__name__)
 KEY_NAME_VARIANTS: tuple[str, ...] = ("الاسم", "السم", "الإسم", "الأسم")
 NOTE_KEY_PREFIXES: tuple[str, ...] = (
     "ملاحظ",                # ملاحظة / ملاحظات / ملاحظه
+    "مالحظ",                # PyMuPDF ligature-break variant ("لا" → "ال")
     "الكتابه عىل الكرت", "الكتابة على الكرت",
     "العباره عىل الكرت", "العبارة على الكرت",
+    "العباره ع كرت",        # short variant
     "رسالة الكرت", "رساله الكرت",
 )
 # Size/color option-key variants (display-only on the preview cards).
@@ -165,12 +167,56 @@ def _extract_page_product_images(doc: fitz.Document, page: fitz.Page) -> list[tu
     return out
 
 
+def _looks_like_address_or_footer(line: str) -> bool:
+    """Return True if a line looks like a Salla invoice footer/address
+    boundary — i.e. NOT a product option. Used by _parse_options_block
+    to stop walking before consuming address/phone/postal-code junk
+    (which then pollutes the customer's product_options dict).
+
+    Heuristics (all derived from observed Salla PDFs):
+        * Phone number: starts with + and ≥6 digits, OR ≥7 consecutive digits.
+        * Country marker: "السعودية" by itself or trailing comma.
+        * Postal code marker: contains "الرمز الربيدي" (lam-alef-broken)
+          or "الرمز البريدي".
+        * Footer / thank-you message: contains a FOOTER_MARKERS substring.
+        * Address tokens: "حي ", "شارع ", "،" with digits — these are
+          address fragments leaking into the options block.
+    """
+    s = (line or "").strip()
+    if not s:
+        return True
+    # Phone — explicit +
+    if s.startswith("+") and sum(c.isdigit() for c in s) >= 6:
+        return True
+    # Phone — long digit run
+    if PHONE_RE.match(s):
+        return True
+    # Country
+    if s in ("السعودية", "الإمارات", "الكويت", "البحرين", "قطر", "عمان"):
+        return True
+    # Postal code labels — Salla writes "الرمز البريدي" / lam-alef break
+    if "الرمز الربيدي" in s or "الرمز البريدي" in s or "الرمز البرييد" in s:
+        return True
+    # Footer thank-you message
+    if any(m in s for m in FOOTER_MARKERS):
+        return True
+    # Address fragments — lines starting with "حي" or "شارع"
+    if s.startswith("حي ") or s.startswith("شارع "):
+        return True
+    return False
+
+
 def _parse_options_block(block_lines: list[str]) -> dict[str, str]:
     """Walk key/value pairs in a خيارات المنتج block.
 
-    Stops when we encounter a bare-digit line (which is the quantity
-    indicator of the *next* product) so each block stays scoped to one
-    product.
+    Stops at:
+      1. A bare-digit line (the qty indicator of the next product), OR
+      2. Any line that looks like address/phone/postal-code/footer
+         text — see `_looks_like_address_or_footer`.
+
+    Without rule (2), the LAST options block on a page would gobble up
+    the entire customer-shipping section and store nonsense pairs like
+    `{"+966500275471": "السعودية"}` which then pollute the printed card.
     """
     opts: dict[str, str] = {}
     k = 0
@@ -178,8 +224,14 @@ def _parse_options_block(block_lines: list[str]) -> dict[str, str]:
         key = block_lines[k]
         if re.match(r"^\d+$", key) and k > 0:
             break
+        # ❶ Hard stop on customer-info / footer boundary
+        if _looks_like_address_or_footer(key):
+            break
         val = block_lines[k + 1] if k + 1 < len(block_lines) else None
         if val is None:
+            break
+        # ❷ If the VALUE crosses into address/footer territory, also stop
+        if _looks_like_address_or_footer(val):
             break
         opts[key] = val
         k += 2
@@ -217,18 +269,62 @@ def _collect_bottom_product_names(lines: list[str], expected_count: int) -> list
 
 
 def _pick_name_from_options(opts: dict[str, str]) -> Optional[str]:
+    """Extract the customer's name. Salla uses several option keys:
+        - "الاسم"                   (simple — exact match)
+        - "الاسم على سبحه"          (compound — prefix match)
+        - "الاسم على التعليقه"
+        - "السم على X"             (lam-alef ligature corruption from PDF text extract)
+    We accept any key that STARTS WITH one of the variants so the lookup
+    is robust to whatever wording the merchant chose in their product
+    customization options.
+    """
+    # 1. Try exact matches first (cheapest + most common case)
     for variant in KEY_NAME_VARIANTS:
         if variant in opts:
             v = (opts.get(variant) or "").strip()
-            return v or None
+            if v:
+                return v
+    # 2. Prefix match — catches "الاسم على X", "الاسم في الكرت", etc.
+    for k, v in opts.items():
+        for variant in KEY_NAME_VARIANTS:
+            if k.startswith(variant + " ") or k.startswith(variant + "ال") or k == variant:
+                vv = (v or "").strip()
+                if vv:
+                    return vv
     return None
 
 
 def _pick_note_from_options(opts: dict[str, str]) -> Optional[str]:
+    """Extract the customer's note (e.g. card-message text).
+
+    Two strategies:
+      1. Key-side match: any key starting with / containing a known note
+         prefix → value is the note. Standard happy path.
+      2. Value-side match (iter-38): when PyMuPDF concatenates lines, the
+         options dict can be SHIFTED by one — the note text ends up as
+         a KEY, and the literal word "ملاحظه" lands as a VALUE. We
+         detect this by scanning values for the prefix; the FOLLOWING
+         entry's key is then the actual note text.
+    """
+    # Strategy 1 — key match
     for k, v in opts.items():
         for pref in NOTE_KEY_PREFIXES:
             if k.startswith(pref) or pref in k:
-                return (v or "").strip() or None
+                vv = (v or "").strip()
+                if vv:
+                    return vv
+    # Strategy 2 — value match (shifted dict due to PDF text concatenation)
+    items = list(opts.items())
+    for idx, (_k, v) in enumerate(items):
+        if not v:
+            continue
+        for pref in NOTE_KEY_PREFIXES:
+            if v.startswith(pref) or pref in v:
+                # The NEXT entry's key is the actual note text
+                if idx + 1 < len(items):
+                    candidate = (items[idx + 1][0] or "").strip()
+                    if len(candidate) >= 3 and " " in candidate:
+                        return candidate
     return None
 
 
@@ -641,14 +737,44 @@ def generate_preparation_pdf(
 
         # Pre-wrap dynamic fields with measurements based on body_size.
         def _build_text_lines(base_size: float) -> list[tuple[str, float, HexColor, bool]]:
-            """Return [(visual_text, font_size, color, is_bold), ...] for body block."""
+            """Return [(visual_text, font_size, color, is_bold), ...] for body block.
+
+            Card field rules (iter-38, matching the on-screen card UI):
+                Order#  →  one line, bold
+                Product →  up to 2 lines, ellipsis on overflow (BOLD)
+                Customer name (الاسم)  →  one line
+                Size + Color  →  one combined line ("المقاس: X   اللون: Y")
+                Note (ملاحظة) →  up to 2 lines
+                Date + Qty   →  one line
+                Shipping     →  one line, bold accent
+            """
             block: list[tuple[str, float, HexColor, bool]] = []
             # Order# (with ط prefix)
             order_visual = _ar("ط") + f" : {line.order_number}"
             block.append((order_visual, order_size, text_color, True))
+            # Product name — newly added in iter-38 (was previously missing!)
+            if line.product_name:
+                pname_lines = _wrap_arabic_lines(
+                    line.product_name, font_name, base_size + 0.5,
+                    usable_w, max_lines=2,
+                )
+                for pl in pname_lines:
+                    block.append((pl, base_size + 0.5, text_color, True))
             if line.customer_name:
                 v = _fit_single_line(f"الاسم: {line.customer_name}", font_name, base_size, usable_w)
                 block.append((v, base_size, text_color, False))
+            # Size + color (iter-38 — newly rendered)
+            sc_parts: list[str] = []
+            if line.size:
+                sc_parts.append(f"المقاس: {line.size}")
+            if line.color:
+                sc_parts.append(f"اللون: {line.color}")
+            if sc_parts:
+                sc_line = "   ".join(sc_parts)
+                block.append((
+                    _fit_single_line(sc_line, font_name, base_size, usable_w),
+                    base_size, text_color, False,
+                ))
             if line.note:
                 note_lines = _wrap_arabic_lines(
                     f"ملاحظة: {line.note}", font_name, base_size, usable_w, max_lines=2,

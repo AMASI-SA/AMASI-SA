@@ -12,6 +12,39 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ENHANCEMENT (2026-06 — Iteration 38) — **Salla PDF parser + printable PDF — major data-fidelity fixes**
+
+**Merchant report**: compared a generated `system_pdf` against the original `orders.pdf` he uploaded. Cards in the printed output were missing/wrong on multiple fields. Detailed diff revealed 5 distinct bugs.
+
+### Bugs found & fixed
+1. **Address/phone/footer leaking into `product_options`**
+   `_parse_options_block` stopped only on bare-digit lines, so the LAST product on each Salla page consumed the trailing `+966… / السعودية / الرمز البريدي / حي … / شارع …` strings, producing dict entries like `{"+966500275471": "السعودية"}`. Pollution then surfaced as junky option pills on the printed card.
+   Fix: new `_looks_like_address_or_footer()` sentinel; `_parse_options_block` now stops at phones, country names, postal-code labels, address tokens, and footer markers (for BOTH key-side and value-side matches).
+
+2. **Customer name missing on compound option keys**
+   Salla supports keys like `"الاسم على التعليقه"`, `"الاسم على سبحه"`, plus the PyMuPDF ligature-broken `"السم عىل …"`. The old `_pick_name_from_options` required an exact match against `KEY_NAME_VARIANTS`. Items like `تعليقة النصر` therefore lost the name `"أبو عمر"`. Fix: prefix-match with `+ " "` or `+ "ال"` after the variant.
+
+3. **Note missing when PyMuPDF concatenates lines**
+   PyMuPDF sometimes merges two source lines into one (`"سنة التخرج"` + `"2026"` → `"سنة التخرج2026"`), which shifts the alternating key/value dict by one. The note word `"ملاحظه"` ends up as a *value* and the actual note text as the *next entry's key*. Fix: `_pick_note_from_options` now has a 2-strategy approach — key-side (happy path) + value-side scan of `(items[idx+1][0])` as fallback.
+
+4. **Note key variant missing**
+   `NOTE_KEY_PREFIXES` listed only `"ملاحظ"`. PyMuPDF's lam-alef reorder produces `"مالحظ"` (extra alef early) — never matched. Added `"مالحظ"` and `"العباره ع كرت"` variants.
+
+5. **Printed PDF cards did NOT render product_name, size, color**
+   `_build_text_lines` in `generate_preparation_pdf` only drew order#, customer, note, qty+date, shipping. Iter-36 added size/color to `ProductLine` but the PRINTABLE PDF never rendered them — so the merchant's on-screen card and printed card disagreed. Fix: insert product_name (up to 2 wrapped lines, bold), and a combined `المقاس: X   اللون: Y` line right after the customer name.
+
+### Tests (`tests/test_preparation_iteration38.py` — 12/12 PASS, 49/49 total cross-suite)
+- Unit tests on `_looks_like_address_or_footer`, `_parse_options_block` (asserts address/phone NOT consumed), `_pick_name_from_options` (prefix match), `_pick_note_from_options` (shifted-dict scenario).
+- E2E pinned to `/tmp/compare/original_salla.pdf` (12 orders / 19 lines):
+  - Order `#263829492` has size + color.
+  - Order `#263839771` (تعليقة) has customer "أبو عمر".
+  - Order `#263840401` has the previously-lost shifted note.
+  - Order `#263832078` has color on both items + note on the كف item.
+  - No address pollution in any line's `product_options`.
+  - Generated PDF contains product name, size label + value, color label, customer "أبو عمر", and the shifted-note text (via NFKD normalization).
+
+---
+
 ## 🎯 ENHANCEMENT (2026-06 — Iteration 37) — **Salla Direct Integration — Phase 1 (OAuth + Encrypted tokens + Status UI)**
 
 **Merchant request**: Build a direct `Salla → System` connection via OAuth + (later) Webhooks, **without touching Make / PDF / Excel** (those must keep working). Tokens, Store ID auto-fetched after merchant consent. 4-phase roll-out plan — this iteration delivers Phase 1 only.
