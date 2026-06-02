@@ -12,6 +12,39 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ENHANCEMENT (2026-06 — Iteration 41) — **Multi-file accumulative upload + unique export filenames**
+
+**Merchant request**:
+1. "تغير اسم كل ملف يتم طباعته" — every exported PDF should have a unique filename (the current `product_preparation_YYYYMMDD.pdf` collides when generating multiple batches per day).
+2. "إمكانية إضافة ملفات متعددة ثم اختيار المنتجات لرفعها" — accumulate products from several Salla orders PDFs into one preparation session, then cherry-pick which to print.
+
+### Backend changes
+- New endpoint `POST /api/preparation/append/{upload_id}` (preparation_routes.py).
+  - Validates PDF (size + extension).
+  - Parses with `parse_salla_orders_pdf` then enriches with shipping + catalog images.
+  - **Dedup strategy**: items sharing an `item_key` with the new file are dropped from the existing list — the new file wins (latest copy). Returns `replaced_count` so the UI can show "حُدِّث N منتج مكرر".
+  - **Re-indexes all storage rows** contiguously to keep `idx` valid across the UI.
+  - Persists a growing `filenames: list[str]` on the upload doc (insert order preserved).
+  - Refreshes the upload TTL so multi-step sessions don't auto-expire.
+- `/upload` and `/preview/{upload_id}` responses now also return `filenames` (always at least 1 entry) — same response shape across the lifecycle.
+
+### Frontend changes (`ProductPreparation.jsx`)
+- New state: `appending`, `appendRef` (hidden file input).
+- New handler `handleAppendFile(file)` — calls `/append/{upload_id}` if a session exists, otherwise falls through to a fresh upload.
+- **Chip strip** under the dropzone showing every uploaded filename with the `(N ملف)` counter.
+- **New button** "+ إضافة ملف PDF آخر" (emerald 600) in the sticky action bar between "تحديد الكل" and "إعادة الرفع". Tooltip clarifies the difference (تتراكم vs تستبدل).
+- **Unique filename per export**: changed from `product_preparation_YYYYMMDD.pdf` to `preparation_YYYYMMDD_HHMMSS_Nمنتج.pdf` — includes hour:minute:second AND the card count, so two batches generated in the same day land as distinct files in Downloads.
+
+### Tests (`tests/test_preparation_iteration41.py` — 6/6 PASS, 66/66 cross-suite)
+- `test_append_returns_merged_preview` — append with the same content → `replaced_count == first_count`, `filenames == ["fileA.pdf","fileB.pdf"]`, same `upload_id`.
+- `test_append_reindexes_lines_contiguously` — no idx duplicates, all idx ∈ [0, total).
+- `test_append_against_invalid_upload_id_returns_404` — bad upload_id → 404.
+- `test_append_rejects_non_pdf` — wrong extension + empty body → 400.
+- `test_preview_exposes_filenames_list` — both `/upload` and `/append` populate `filenames` consistently.
+- `test_generate_after_append_with_selected_indices` — PDF binary download works on merged indices, `X-Exported-Cards` header matches selection size.
+
+---
+
 ## 🎯 ENHANCEMENT (2026-06 — Iteration 40) — **Critical image-to-name alignment fixes**
 
 **Merchant report**: "صور المنتجات مختلفة عن أسماء المنتجات" — images on cards didn't match the product names.

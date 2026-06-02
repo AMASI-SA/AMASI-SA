@@ -343,6 +343,7 @@ def _build_router(db) -> APIRouter:
         return {
             "upload_id": upload_id,
             "filename": file.filename,
+            "filenames": [file.filename],
             "total_orders": len({ln.order_number for ln in lines}),
             "total_product_lines": len(lines),
             "kept_lines": len(kept_lines),
@@ -365,6 +366,142 @@ def _build_router(db) -> APIRouter:
             if ln is target:
                 return i
         return -1
+
+    # ── POST /append/{upload_id} — multi-PDF accumulative upload ──────
+    # New in iter-41 per merchant request: "إضافة ملفات متعدّدة ثم
+    # اختيار المنتجات لرفعها". The frontend keeps adding PDFs to an
+    # existing upload row instead of replacing it; each new file's
+    # parsed lines are MERGED into the existing `lines[]` array with
+    # item-key dedup (the latest occurrence wins, per the merchant's
+    # choice of 'h' in the planning dialog).
+    @router.post("/append/{upload_id}")
+    async def append_orders_pdf(
+        upload_id: str,
+        file: UploadFile = File(...),
+        user: dict = Depends(current_user),
+    ):
+        if not (file.filename or "").lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="الملف يجب أن يكون PDF")
+        data = await file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="الملف فارغ")
+        if len(data) > MAX_PDF_BYTES:
+            raise HTTPException(status_code=413, detail=f"حجم الملف يتجاوز {MAX_PDF_BYTES // 1024 // 1024}MB")
+
+        uid = user["id"]
+        existing = await db.preparation_uploads.find_one(
+            {"user_id": uid, "upload_id": upload_id},
+            {"_id": 0, "lines": 1, "filename": 1, "filenames": 1, "excluded_item_keys": 1},
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="المعاينة غير موجودة أو انتهت صلاحيتها")
+
+        try:
+            new_lines = parse_salla_orders_pdf(data)
+        except Exception as e:
+            logger.exception("PDF parse failed (append)")
+            raise HTTPException(status_code=400, detail=f"تعذّر قراءة الملف: {e}")
+        if not new_lines:
+            raise HTTPException(status_code=400, detail="لم يتم العثور على أي طلبات داخل الملف.")
+
+        await _enrich_lines_with_shipping(db, uid, new_lines)
+        await _enrich_lines_with_catalog_images(db, uid, new_lines)
+
+        # ── Dedup against existing storage (key = item_key) ──────────
+        # The new file wins (per merchant choice 'h'): we drop existing
+        # entries that share an item_key with the incoming batch and
+        # append the fresh ones.
+        existing_lines = list(existing.get("lines") or [])
+        new_keys = {ln.item_key for ln in new_lines}
+        # Track which existing rows we're about to overwrite (so their
+        # uploaded images don't leak across appends).
+        kept_existing = [ln for ln in existing_lines if ln.get("item_key") not in new_keys]
+        replaced_count = len(existing_lines) - len(kept_existing)
+
+        # Re-index everything starting from 0 to keep indices contiguous.
+        merged_storage: list[dict] = []
+        for i, ln in enumerate(kept_existing):
+            ln = dict(ln)
+            ln["idx"] = i
+            merged_storage.append(ln)
+        offset = len(merged_storage)
+        for j, ln in enumerate(new_lines):
+            merged_storage.append(_line_to_storage(ln, offset + j))
+
+        # ── Filter out previously-PRINTED items so they don't reappear ──
+        item_keys = [ln["item_key"] for ln in merged_storage]
+        already = await db.exported_items.find(
+            {"user_id": uid, "item_key": {"$in": item_keys}},
+            {"_id": 0, "item_key": 1, "order_number": 1,
+             "product_name": 1, "exported_at": 1, "upload_id": 1},
+        ).to_list(length=len(item_keys) or 1)
+        already_keys = {d["item_key"] for d in already}
+
+        # Build the new groups view based on un-printed lines.
+        unprinted = [
+            _line_from_storage(d)
+            for d in merged_storage if d["item_key"] not in already_keys
+        ]
+        groups = group_and_sort_by_product(unprinted)
+
+        # Persist the merged doc back.
+        filenames = list(existing.get("filenames") or [])
+        if existing.get("filename") and existing["filename"] not in filenames and not filenames:
+            filenames.append(existing["filename"])
+        filenames.append(file.filename)
+        # Refresh TTL so multi-step preparation flows don't auto-expire.
+        new_expiry_dt = datetime.now(timezone.utc) + timedelta(hours=UPLOAD_TTL_HOURS)
+        await db.preparation_uploads.update_one(
+            {"user_id": uid, "upload_id": upload_id},
+            {"$set": {
+                "filename": file.filename,                  # newest = "primary"
+                "filenames": filenames,                     # full ordered list
+                "lines": merged_storage,
+                "groups_order": [g["product_name"] for g in groups],
+                "excluded_item_keys": sorted(list(already_keys)),
+                "expires_at": new_expiry_dt.isoformat(),
+                "expires_at_dt": new_expiry_dt,
+                "appended_at": _now_iso(),
+            }},
+        )
+
+        excluded_order_set = sorted({d["order_number"] for d in already})
+        excluded_items = [
+            {"order_number": d["order_number"],
+             "product_name": d.get("product_name"),
+             "exported_at": d.get("exported_at"),
+             "item_key": d["item_key"]}
+            for d in already
+        ]
+
+        # Helper: locate idx of a parsed line within `merged_storage`.
+        # The storage list is the canonical numbering; we built it ourselves
+        # so a name+order+item_index lookup is straightforward.
+        def _find_idx(ln: ProductLine) -> int:
+            for i, d in enumerate(merged_storage):
+                if (d.get("item_key") == ln.item_key):
+                    return i
+            return -1
+
+        return {
+            "upload_id": upload_id,
+            "filename": file.filename,
+            "filenames": filenames,
+            "total_orders": len({d["order_number"] for d in merged_storage}),
+            "total_product_lines": len(merged_storage),
+            "kept_lines": len(unprinted),
+            "replaced_count": replaced_count,
+            "excluded_orders_count": len(excluded_order_set),
+            "excluded_items_count": len(already_keys),
+            "excluded_orders": excluded_order_set,
+            "excluded_items": excluded_items,
+            "groups": [
+                {"product_name": g["product_name"],
+                 "count": g["count"],
+                 "preview_lines": [_line_to_preview(ln, _find_idx(ln)) for ln in g["lines"]]}
+                for g in groups
+            ],
+        }
 
     # ── GET /preview/{upload_id} ──────────────────────────────────────
     @router.get("/preview/{upload_id}")
@@ -402,6 +539,7 @@ def _build_router(db) -> APIRouter:
         return {
             "upload_id": upload_id,
             "filename": doc.get("filename"),
+            "filenames": doc.get("filenames") or ([doc["filename"]] if doc.get("filename") else []),
             "uploaded_at": doc.get("uploaded_at"),
             "total_orders": len({ln.order_number for ln in lines}),
             "total_product_lines": len(lines),

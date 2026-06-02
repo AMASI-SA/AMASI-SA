@@ -322,12 +322,14 @@ function ProductCard({ row, uploadId, imgVersion, isSelected, onToggle, onUpload
 
 export default function ProductPreparation() {
     const [uploading, setUploading] = useState(false);
+    const [appending, setAppending] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [data, setData] = useState(null);
     const [stats, setStats] = useState(null);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
     const [showExcluded, setShowExcluded] = useState(false);
     const fileRef = useRef(null);
+    const appendRef = useRef(null);
     const [dragOver, setDragOver] = useState(false);
     const [selectedIdx, setSelectedIdx] = useState(() => new Set());
     const [imgVersion, setImgVersion] = useState(0);
@@ -409,6 +411,44 @@ export default function ProductPreparation() {
         }
     };
 
+    /**
+     * iter-41 — append another PDF to the current upload session.
+     * Merges products from the new file with the existing list,
+     * deduping by item_key (latest wins). Existing image uploads
+     * for items NOT shared with the new file are preserved.
+     */
+    const handleAppendFile = async (file) => {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".pdf")) {
+            toast.error("يجب رفع ملف بصيغة PDF فقط");
+            return;
+        }
+        if (!data?.upload_id) {
+            return handleFileChange(file);   // no session yet → first upload
+        }
+        setAppending(true);
+        try {
+            const fd = new FormData();
+            fd.append("file", file);
+            const { data: resp } = await api.post(`/preparation/append/${data.upload_id}`, fd, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
+            setData(resp);
+            setSelectedIdx(new Set());        // selection invalidated by new indices
+            setImgVersion(v => v + 1);
+            const extra = resp.replaced_count > 0
+                ? ` — حُدِّث ${resp.replaced_count} منتج مكرر`
+                : "";
+            toast.success(`أُضيف "${file.name}" — الإجمالي الآن ${resp.total_product_lines} منتج${extra}`);
+        } catch (e) {
+            const msg = e?.response?.data?.detail || e.message || "تعذّر إضافة الملف";
+            toast.error(String(msg));
+        } finally {
+            setAppending(false);
+            if (appendRef.current) appendRef.current.value = "";
+        }
+    };
+
     const onDrop = (e) => {
         e.preventDefault();
         setDragOver(false);
@@ -433,7 +473,20 @@ export default function ProductPreparation() {
             const url = window.URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
             const a = document.createElement("a");
             a.href = url;
-            a.download = `product_preparation_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.pdf`;
+            // iter-41 — unique-per-export filename: timestamp + cards count.
+            // Ensures every print download is a distinct file in the
+            // merchant's Downloads folder + reflects the batch size.
+            const now = new Date();
+            const ts = (
+                String(now.getFullYear()) +
+                String(now.getMonth() + 1).padStart(2, "0") +
+                String(now.getDate()).padStart(2, "0") +
+                "_" +
+                String(now.getHours()).padStart(2, "0") +
+                String(now.getMinutes()).padStart(2, "0") +
+                String(now.getSeconds()).padStart(2, "0")
+            );
+            a.download = `preparation_${ts}_${cards}منتج.pdf`;
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -527,12 +580,37 @@ export default function ProductPreparation() {
                     {uploading ? "جاري الرفع والقراءة…" : "اسحب ملف orders.pdf هنا أو انقر للاختيار"}
                 </div>
                 <div className="text-xs text-slate-500 mt-1">يقبل ملفات PDF حتى 25MB. الطلبات المُصدَّرة مسبقاً سيتم استبعادها تلقائياً.</div>
-                {data?.filename && !uploading && (
-                    <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
-                        <CheckCircle size={12} weight="bold" /> {data.filename}
+                {!!(data?.filenames?.length) && !uploading && (
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5" data-testid="prep-filenames-strip">
+                        {data.filenames.map((fn, i) => (
+                            <span
+                                key={`${fn}-${i}`}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold max-w-[260px]"
+                                title={fn}
+                                data-testid={`prep-filename-chip-${i}`}
+                            >
+                                <CheckCircle size={11} weight="bold" />
+                                <span className="truncate">{fn}</span>
+                            </span>
+                        ))}
+                        <span className="text-[10px] text-slate-500 ms-1" data-testid="prep-filenames-count">
+                            ({data.filenames.length} ملف)
+                        </span>
                     </div>
                 )}
             </div>
+
+            {/* iter-41 — hidden input + button for "append another PDF" */}
+            {data && (
+                <input
+                    ref={appendRef}
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(e) => handleAppendFile(e.target.files?.[0])}
+                    data-testid="prep-append-file-input"
+                />
+            )}
 
             {/* Stats row */}
             {data && (
@@ -572,9 +650,21 @@ export default function ProductPreparation() {
                     </button>
                     <button
                         type="button"
+                        onClick={() => appendRef.current?.click()}
+                        disabled={appending || generating}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm"
+                        data-testid="prep-append-btn"
+                        title="إضافة ملف PDF آخر لنفس الجلسة (المنتجات تتراكم)"
+                    >
+                        <Plus size={14} weight="bold" />
+                        {appending ? "جاري الإضافة…" : "إضافة ملف PDF آخر"}
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => fileRef.current?.click()}
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold"
                         data-testid="prep-reupload-btn"
+                        title="استبدال كل الملفات بملف جديد فقط"
                     >
                         <ArrowsClockwise size={14} weight="bold" /> إعادة الرفع
                     </button>
