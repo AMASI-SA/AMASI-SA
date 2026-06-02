@@ -255,3 +255,129 @@ def test_snapchat_summary_ignores_reference_stats():
                     )
     finally:
         _cleanup(uid)
+
+
+
+# ── 6. Δ comparison: system_comparison block + delta math ──────────────
+def test_system_comparison_block_present_and_math_correct():
+    """When the cached snapshot has the system_comparison block, the
+    endpoint returns it verbatim. Verify Δ math for representative cases.
+
+    Expected math:
+      Snap official yesterday ROAS = 2.0x; system yesterday ROAS = 2.50x
+        → delta_roas_pct = (2.0 - 2.5) / 2.5 * 100 = -20.0%
+      Snap official month ROAS = 2.0x; system month ROAS = 2.83x
+        → delta_roas_pct = (2.0 - 2.83) / 2.83 * 100 ≈ -29.3%
+      Spend yesterday Snap=3752 vs system=100 → +3652.0%
+    """
+    token, uid = _register()
+    try:
+        async def _seed():
+            c = AsyncIOMotorClient(os.environ["MONGO_URL"])
+            db = c[os.environ["DB_NAME"]]
+            await db.snapchat_reference_stats.update_one(
+                {"user_id": uid},
+                {"$set": {
+                    "user_id": uid,
+                    "last_sync_at": datetime.now(timezone.utc).isoformat(),
+                    "fx_rate": 3.752,
+                    "account_count": 1,
+                    "accounts": [],
+                    "yesterday": {
+                        "date": "2026-06-01", "spend_usd": 1000.0,
+                        "spend_sar": 3752.0, "impressions": 100000,
+                        "swipes": 5000, "purchases": 25,
+                        "revenue_sar": 7504.0, "roas": 2.0,
+                    },
+                    "month": {
+                        "start": "2026-06-01", "end": "2026-06-01",
+                        "spend_usd": 1000.0, "spend_sar": 3752.0,
+                        "purchases": 25, "revenue_sar": 7504.0, "roas": 2.0,
+                    },
+                    "system_comparison": {
+                        "business_timezone": "Asia/Riyadh",
+                        "yesterday": {
+                            "date": "2026-06-01",
+                            "spend_sar": 100.0, "revenue_sar": 250.0,
+                            "roas": 2.5,
+                            "delta_roas_pct": -20.0,
+                            "delta_spend_pct": 3652.0,
+                        },
+                        "month": {
+                            "start": "2026-06-01", "end": "2026-06-01",
+                            "spend_sar": 300.0, "revenue_sar": 850.0,
+                            "roas": 2.83,
+                            "delta_roas_pct": -29.3,
+                            "delta_spend_pct": 1150.7,
+                        },
+                    },
+                }}, upsert=True,
+            )
+            c.close()
+        asyncio.run(_seed())
+
+        r = requests.get(f"{API}/snapchat/reference-stats",
+                         headers=_hdr(token), timeout=15)
+        assert r.status_code == 200, r.text[:200]
+        sc = r.json().get("system_comparison") or {}
+        assert sc.get("business_timezone") == "Asia/Riyadh"
+        sy = sc["yesterday"]
+        sm = sc["month"]
+        assert sy["roas"] == 2.5
+        assert sy["delta_roas_pct"] == -20.0
+        assert sy["delta_spend_pct"] == 3652.0
+        assert sm["roas"] == 2.83
+        assert sm["delta_roas_pct"] == -29.3
+    finally:
+        _cleanup(uid)
+
+
+def test_delta_pct_is_none_when_system_has_no_data():
+    """Division-by-zero protection: when system spend/ROAS is 0,
+    delta_*_pct must be None (frontend renders '—' instead of '+∞%')."""
+    token, uid = _register()
+    try:
+        async def _seed():
+            c = AsyncIOMotorClient(os.environ["MONGO_URL"])
+            db = c[os.environ["DB_NAME"]]
+            await db.snapchat_reference_stats.update_one(
+                {"user_id": uid},
+                {"$set": {
+                    "user_id": uid,
+                    "last_sync_at": datetime.now(timezone.utc).isoformat(),
+                    "fx_rate": 3.752, "account_count": 0, "accounts": [],
+                    "yesterday": {"date": "2026-06-01", "spend_usd": 100,
+                                  "spend_sar": 375.2, "impressions": 0,
+                                  "swipes": 0, "purchases": 0,
+                                  "revenue_sar": 0, "roas": 0},
+                    "month": {"start": "2026-06-01", "end": "2026-06-01",
+                              "spend_usd": 100, "spend_sar": 375.2,
+                              "purchases": 0, "revenue_sar": 0, "roas": 0},
+                    "system_comparison": {
+                        "business_timezone": "Asia/Riyadh",
+                        "yesterday": {"date": "2026-06-01",
+                                      "spend_sar": 0, "revenue_sar": 0,
+                                      "roas": 0,
+                                      "delta_roas_pct": None,
+                                      "delta_spend_pct": None},
+                        "month": {"start": "2026-06-01", "end": "2026-06-01",
+                                  "spend_sar": 0, "revenue_sar": 0,
+                                  "roas": 0,
+                                  "delta_roas_pct": None,
+                                  "delta_spend_pct": None},
+                    },
+                }}, upsert=True,
+            )
+            c.close()
+        asyncio.run(_seed())
+
+        r = requests.get(f"{API}/snapchat/reference-stats",
+                         headers=_hdr(token), timeout=15)
+        assert r.status_code == 200, r.text[:200]
+        sc = r.json()["system_comparison"]
+        assert sc["yesterday"]["delta_roas_pct"] is None
+        assert sc["yesterday"]["delta_spend_pct"] is None
+        assert sc["month"]["delta_roas_pct"] is None
+        assert sc["month"]["delta_spend_pct"] is None
+    finally:
+        _cleanup(uid)

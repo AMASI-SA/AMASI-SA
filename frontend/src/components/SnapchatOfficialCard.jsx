@@ -18,19 +18,40 @@ function formatInt(n) {
     return v.toLocaleString("en-US");
 }
 
-function MetricTile({ label, value, suffix, accent = "slate", testid }) {
+function MetricTile({ label, value, suffix, accent = "slate", testid, delta, deltaLabel }) {
     const accents = {
         slate: "border-slate-200 bg-white text-slate-900",
         emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
         amber: "border-amber-200 bg-amber-50 text-amber-900",
         blue: "border-blue-200 bg-blue-50 text-blue-900",
     };
+    // Delta badge: green up-arrow if Snap > system, red down-arrow if lower.
+    // Hidden when delta is null/undefined (insufficient system data).
+    const hasDelta = delta !== null && delta !== undefined && Number.isFinite(Number(delta));
+    const dNum = hasDelta ? Number(delta) : 0;
+    const dColor = dNum > 0
+        ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+        : dNum < 0
+            ? "bg-rose-100 text-rose-700 border-rose-200"
+            : "bg-slate-100 text-slate-600 border-slate-200";
+    const dSign = dNum > 0 ? "+" : "";
     return (
         <div className={`border rounded-lg p-3 sm:p-4 ${accents[accent] || accents.slate}`} data-testid={testid}>
             <div className="text-xs font-semibold text-slate-500 mb-1" style={{ fontFamily: "Tajawal" }}>{label}</div>
             <div className="num text-xl sm:text-2xl font-extrabold leading-tight" style={{ fontFamily: "Tajawal" }}>
                 {value}{suffix ? <span className="text-sm font-bold text-slate-500 ms-1">{suffix}</span> : null}
             </div>
+            {hasDelta && (
+                <div
+                    className={`mt-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-bold ${dColor}`}
+                    data-testid={`${testid}-delta`}
+                    title={deltaLabel}
+                    style={{ fontFamily: "Tajawal" }}
+                >
+                    {dSign}{dNum.toFixed(1)}%
+                    {deltaLabel && <span className="text-[10px] font-medium opacity-80">· {deltaLabel}</span>}
+                </div>
+            )}
         </div>
     );
 }
@@ -109,6 +130,9 @@ export default function SnapchatOfficialCard() {
 
     const y = data.yesterday || {};
     const m = data.month || {};
+    const sysComp = data.system_comparison || {};
+    const sysY = sysComp.yesterday || {};
+    const sysM = sysComp.month || {};
     const accountTz = data.accounts?.[0]?.timezone || "Snapchat TZ";
     const fx = Number(data.fx_rate || 3.752);
     const yRoasBad = (y.spend_sar || 0) > 0 && (y.roas || 0) < 2;
@@ -163,7 +187,10 @@ export default function SnapchatOfficialCard() {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3" data-testid="snap-official-yesterday">
                     <MetricTile label="Spend (USD)" value={`$${formatMoney(y.spend_usd || 0)}`} testid="snap-official-yest-spend-usd" />
-                    <MetricTile label="Spend (SAR)" value={formatMoney(y.spend_sar || 0)} suffix="ر.س" testid="snap-official-yest-spend-sar" />
+                    <MetricTile label="Spend (SAR)" value={formatMoney(y.spend_sar || 0)} suffix="ر.س" testid="snap-official-yest-spend-sar"
+                        delta={sysY.delta_spend_pct}
+                        deltaLabel={sysY.spend_sar != null ? `vs النظام ${formatMoney(sysY.spend_sar)}` : ""}
+                    />
                     <MetricTile label="Impressions" value={formatInt(y.impressions)} testid="snap-official-yest-impressions" />
                     <MetricTile label="Clicks" value={formatInt(y.swipes)} testid="snap-official-yest-clicks" />
                     <MetricTile label="Purchases" value={formatInt(y.purchases)} accent="emerald" testid="snap-official-yest-purchases" />
@@ -172,6 +199,8 @@ export default function SnapchatOfficialCard() {
                         value={(y.spend_sar || 0) > 0 ? `${Number(y.roas || 0).toFixed(2)}x` : "—"}
                         accent={yRoasBad ? "amber" : "emerald"}
                         testid="snap-official-yest-roas"
+                        delta={sysY.delta_roas_pct}
+                        deltaLabel={sysY.roas != null ? `vs النظام ${Number(sysY.roas).toFixed(2)}x` : ""}
                     />
                 </div>
             </div>
@@ -183,13 +212,18 @@ export default function SnapchatOfficialCard() {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3" data-testid="snap-official-month">
                     <MetricTile label="Month Spend (USD)" value={`$${formatMoney(m.spend_usd || 0)}`} testid="snap-official-month-spend-usd" />
-                    <MetricTile label="Month Spend (SAR)" value={formatMoney(m.spend_sar || 0)} suffix="ر.س" testid="snap-official-month-spend-sar" />
+                    <MetricTile label="Month Spend (SAR)" value={formatMoney(m.spend_sar || 0)} suffix="ر.س" testid="snap-official-month-spend-sar"
+                        delta={sysM.delta_spend_pct}
+                        deltaLabel={sysM.spend_sar != null ? `vs النظام ${formatMoney(sysM.spend_sar)}` : ""}
+                    />
                     <MetricTile label="Month Purchases" value={formatInt(m.purchases)} accent="emerald" testid="snap-official-month-purchases" />
                     <MetricTile
                         label="Month ROAS"
                         value={(m.spend_sar || 0) > 0 ? `${Number(m.roas || 0).toFixed(2)}x` : "—"}
                         accent={mRoasBad ? "amber" : "emerald"}
                         testid="snap-official-month-roas"
+                        delta={sysM.delta_roas_pct}
+                        deltaLabel={sysM.roas != null ? `vs النظام ${Number(sysM.roas).toFixed(2)}x` : ""}
                     />
                 </div>
             </div>
@@ -209,6 +243,17 @@ export default function SnapchatOfficialCard() {
                     تم تجميع {data.account_count} حسابات إعلانية في هذه البطاقة.
                 </div>
             )}
+            {(sysY.roas != null && sysY.roas > 0) || (sysM.roas != null && sysM.roas > 0) ? (
+                <div className="mt-2 text-[11px] text-indigo-700 bg-indigo-50 rounded px-2 py-1.5 border border-indigo-100" data-testid="snap-official-vs-system">
+                    مقارنة ROAS — Snap الرسمي: <span className="font-bold">{Number(y.roas || 0).toFixed(2)}x</span>
+                    {" "}/ النظام (بتوقيت الرياض، أمس): <span className="font-bold">{Number(sysY.roas || 0).toFixed(2)}x</span>
+                    {sysY.delta_roas_pct != null && (
+                        <span className={`ms-2 font-bold ${sysY.delta_roas_pct > 0 ? "text-emerald-700" : sysY.delta_roas_pct < 0 ? "text-rose-700" : "text-slate-700"}`}>
+                            (فرق {sysY.delta_roas_pct > 0 ? "+" : ""}{Number(sysY.delta_roas_pct).toFixed(1)}%)
+                        </span>
+                    )}
+                </div>
+            ) : null}
             {data.errors && data.errors.length > 0 && (
                 <div className="mt-2 text-[11px] text-amber-700" data-testid="snap-official-warnings">
                     تحذيرات أثناء الجلب: {data.errors.length} — البيانات قد تكون جزئية.

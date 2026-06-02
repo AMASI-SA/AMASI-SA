@@ -1497,6 +1497,44 @@ def _build_router(db) -> APIRouter:
         yest_roas = round(agg_yest["revenue_sar"] / agg_yest["spend_sar"], 2) if agg_yest["spend_sar"] > 0 else 0.0
         month_roas = round(agg_month["revenue_sar"] / agg_month["spend_sar"], 2) if agg_month["spend_sar"] > 0 else 0.0
 
+        # ── System-side comparison (Riyadh day boundary) ────────────────
+        # Pull the SYSTEM's own view of Snapchat spend/revenue for matching
+        # periods so the UI can render a Δ% badge ("Snap رسمياً vs النظام").
+        # READ-ONLY: we only read snapchat_account_daily; we don't write.
+        try:
+            from zoneinfo import ZoneInfo as _ZI2
+            riyadh_tz = _ZI2("Asia/Riyadh")
+        except ImportError:  # pragma: no cover
+            riyadh_tz = timezone(timedelta(hours=3))
+        r_today = datetime.now(riyadh_tz).date()
+        r_yest_str = (r_today - timedelta(days=1)).isoformat()
+        r_month_start_str = r_today.replace(day=1).isoformat()
+
+        sys_yest_rows = await db.snapchat_account_daily.find(
+            {"user_id": uid, "date": r_yest_str},
+            {"_id": 0, "spend_sar": 1, "revenue_sar": 1},
+        ).to_list(50)
+        sys_y_spend = round(sum(float(r.get("spend_sar") or 0) for r in sys_yest_rows), 2)
+        sys_y_rev = round(sum(float(r.get("revenue_sar") or 0) for r in sys_yest_rows), 2)
+        sys_y_roas = round(sys_y_rev / sys_y_spend, 2) if sys_y_spend > 0 else 0.0
+
+        sys_mon_rows = await db.snapchat_account_daily.find(
+            {"user_id": uid,
+             "date": {"$gte": r_month_start_str, "$lte": r_yest_str}},
+            {"_id": 0, "spend_sar": 1, "revenue_sar": 1},
+        ).to_list(500)
+        sys_m_spend = round(sum(float(r.get("spend_sar") or 0) for r in sys_mon_rows), 2)
+        sys_m_rev = round(sum(float(r.get("revenue_sar") or 0) for r in sys_mon_rows), 2)
+        sys_m_roas = round(sys_m_rev / sys_m_spend, 2) if sys_m_spend > 0 else 0.0
+
+        def _delta_pct(official: float, system: float):
+            """Δ% of `official` relative to `system`.
+            Returns None when system has no data (avoids division-by-zero
+            blow-ups and renders a sensible '—' on the frontend)."""
+            if system <= 0:
+                return None
+            return round((float(official) - float(system)) / float(system) * 100, 1)
+
         result = {
             "user_id": uid,
             "fx_rate": SNAP_REF_USD_TO_SAR,
@@ -1522,6 +1560,31 @@ def _build_router(db) -> APIRouter:
                 "purchases": int(agg_month["purchases"]),
                 "revenue_sar": round(agg_month["revenue_sar"], 2),
                 "roas": month_roas,
+            },
+            # ── System-side comparison (NOT used in any other calculation) ─
+            # Riyadh-day numbers from snapchat_account_daily for the matching
+            # period — purely for rendering a delta badge on the read-only
+            # card. The card is still 100% isolated; this block is just an
+            # additional READ from existing system data for UI purposes.
+            "system_comparison": {
+                "business_timezone": "Asia/Riyadh",
+                "yesterday": {
+                    "date": r_yest_str,
+                    "spend_sar": sys_y_spend,
+                    "revenue_sar": sys_y_rev,
+                    "roas": sys_y_roas,
+                    "delta_roas_pct": _delta_pct(yest_roas, sys_y_roas),
+                    "delta_spend_pct": _delta_pct(agg_yest["spend_sar"], sys_y_spend),
+                },
+                "month": {
+                    "start": r_month_start_str,
+                    "end": r_yest_str,
+                    "spend_sar": sys_m_spend,
+                    "revenue_sar": sys_m_rev,
+                    "roas": sys_m_roas,
+                    "delta_roas_pct": _delta_pct(month_roas, sys_m_roas),
+                    "delta_spend_pct": _delta_pct(agg_month["spend_sar"], sys_m_spend),
+                },
             },
             "errors": errors,
             "note": "بيانات مرجعية من Snapchat بتوقيت الحساب الإعلاني — لا تدخل في حسابات النظام",

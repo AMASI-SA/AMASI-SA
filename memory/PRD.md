@@ -12,6 +12,30 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ENHANCEMENT (2026-06 — Iteration 33b) — **Δ% Δ comparison badge: Snap vs النظام**
+
+Added a side-by-side delta comparison so the merchant can instantly spot attribution gaps without opening a second report.
+
+**Backend** (`/api/snapchat/reference-stats`):
+- New `system_comparison` block in the response, READ-only (no extra writes):
+  - `yesterday`: Riyadh-day spend/revenue/ROAS from `snapchat_account_daily` + `delta_roas_pct`, `delta_spend_pct`.
+  - `month`: Riyadh MTD (1st → yesterday) + same deltas.
+- Δ% = `(official - system) / system * 100`. Returns `None` when system has zero data — frontend renders "—" instead of "+∞%".
+- Note: the comparison block reads `snapchat_account_daily` only (which is the existing source-of-truth for the system's Snap view) — no new collection added, no isolation broken.
+
+**Frontend** (`SnapchatOfficialCard.jsx`):
+- `MetricTile` now accepts `delta` and `deltaLabel` props → renders a small badge under the value (green up / red down / slate flat).
+- Δ badge surfaces on: yesterday's Spend(SAR) + ROAS, month's Spend(SAR) + ROAS.
+- Added a one-line summary banner: "مقارنة ROAS — Snap الرسمي: X / النظام (بتوقيت الرياض، أمس): Y (فرق ±Z%)".
+
+**Tests** (2 new):
+- `test_system_comparison_block_present_and_math_correct`: locks in Δ math (e.g. Snap 2.0x vs system 2.5x → -20.0%).
+- `test_delta_pct_is_none_when_system_has_no_data`: division-by-zero protection.
+
+Total Iteration 33 test count: **7/7 PASS**.
+
+---
+
 ## 🎯 NEW FEATURE (2026-06 — Iteration 33) — **Snapchat Official (PDT) — بطاقة مرجعية معزولة للمقارنة**
 
 **Merchant request**: بطاقة عرض داخل قسم Snapchat Ads تُظهِر أرقام Snapchat الرسمية بتوقيت الحساب الإعلاني PDT (للمقارنة فقط) دون أن تدخل في أي حسابات أرباح/مصروفات/ROAS/تقارير نهائية.
