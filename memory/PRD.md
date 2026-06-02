@@ -12,6 +12,39 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ENHANCEMENT (2026-06 — Iteration 36) — **Cards-Grid UX revamp + Critical "don't overwrite existing image" fix**
+
+**Merchant report**: "عند إضافة صوره يتم تعديلها على المنتج الذي ليس لديه صوره فقط وليس جميع المنتجات بالبلوك" → the previous iteration's `scope=product` was blindly overwriting sibling lines' images (including PDF-extracted ones). Also requested a major UX overhaul: per-product individual cards in a Grid (not grouped `<details>`).
+
+**Backend changes** (`/app/backend/preparation_pdf.py` + `/app/backend/preparation_routes.py`):
+- `ProductLine` extended with `size`, `color`, `product_id`, `sku`, `product_options` (free-form dict of remaining option keys).
+- New helpers `_pick_size_from_options`, `_pick_color_from_options`, `_filter_display_options`. Size keys: `المقاس / مقاس / القياس / Size`. Color keys: `اللون / لون / Color`. Lam-alef-stripped variants supported.
+- `_line_to_preview` + `_line_to_storage` + `_line_from_storage` round-trip the new fields.
+- **`PUT /api/preparation/image/{upload_id}/{idx}` rewritten** (iter-36 semantics):
+  - Sibling-matching priority chain: `product_id` (if both target+sibling have it) → `sku` → normalized `product_name`.
+  - **Lines that already have an image are NEVER overwritten** — only the clicked card + image-LESS siblings are updated.
+  - Response shape adds `skipped_with_existing_image: int` and `scope ∈ {'line','name','sku','product_id'}` for granular UI feedback.
+  - The catalog auto-save logic is unchanged → next upload's matching products still auto-load.
+
+**Frontend changes** (`/app/frontend/src/pages/ProductPreparation.jsx` — rewritten):
+- Replaced `<details>` grouped view with a **flat responsive Grid** (`prep-cards-grid`): `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5`.
+- New `ProductCard` component: square image on top, checkbox (`prep-card-check-{idx}`) top-left, order badge (`prep-card-order-{idx}`) top-right, product name truncated (`prep-card-name-{idx}`), customer name with user-icon, size pill (`prep-card-size-{idx}`), color pill (`prep-card-color-{idx}`), note line-clamped-to-2, free-form options spread (cap 3), footer with shipping company / total products / "إضافة صورة" button or "مخصّصة" badge.
+- Sticky action bar (top-of-scroll): "تصدير المنتجات المحددة إلى PDF (N)" + "تحديد الكل" + "إعادة الرفع" + selection counter "(N) من (M) محدّد".
+- Inline `MissingImageButton` shown only on cards without an image. After upload, shows two toasts: success + (optional) "(K) بطاقات لها صور أصلاً — لم يتم استبدالها" using the new `skipped_with_existing_image` count.
+- Text NEVER overflows: `truncate` for short fields, `line-clamp-2 break-words` for notes, all with `title` tooltips.
+- Mobile-first: 390px viewport renders 2 cols with zero horizontal overflow (verified by testing agent).
+
+**Tests** (`tests/test_preparation_iteration34.py` → 24 PASS):
+- New: `test_put_image_skips_lines_with_existing_image` — proves the 3 pre-imaged siblings keep their bytes byte-identical after a scope=product upload by a 4th card.
+- New: `test_preview_exposes_size_color_options` — `_line_to_preview` includes size / color / product_id / sku / product_options.
+- New: `test_pdf_parser_extracts_size_color_from_options_block` — unit test on the helpers; verifies size, color, name, note extraction + remaining-options dict excludes them.
+- Updated: `test_put_image_applies_to_all_lines_with_same_product_name` — now asserts the iter-36 contract: applied_to_indices == no-image siblings; existing-image siblings → skipped_with_existing_image counter.
+- Updated: `test_generated_pdf_uses_user_uploaded_image` — accepts mixed image_source ∈ {user_upload, None} since pre-imaged siblings are no longer overwritten.
+
+**End-to-end frontend regression (iteration_36.json)**: **18/18 PASS, 0 defects**. The critical don't-overwrite fix verified via before/after screenshots of the "تغليف انيق" group + the in-app info toast.
+
+---
+
 ## 🎯 ENHANCEMENT (2026-06 — Iteration 35) — **Image Catalog UI + Item-level Print Selection (14-point list)**
 
 **Merchant request** (14-point revamp of `/product-preparation`): item-level selection (a single order with 3 products lets you print 1 + skip 2), PDF text never overflows the card, dates in MM/DD, every uploaded image is silently persisted into a global per-user catalog so the *next* PDF containing the same product auto-loads the saved image — and a dedicated UI page to inspect/edit/delete that catalog.
