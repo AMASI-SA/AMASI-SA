@@ -77,6 +77,47 @@ def _upload(token: str) -> dict:
     return r
 
 
+def _strip_image_from_one_sibling(uid: str, upload_id: str, product_keyword: str) -> int:
+    """Clear `image_b64` on ONE line that matches `product_keyword`.
+
+    Iter-40 fixed an image-extraction bug — now ALL siblings of the
+    same product reliably have images. The pre-iter-40 tests relied on
+    the parser bug accidentally producing a "1 missing image" scenario,
+    so they need a deterministic way to recreate it. This helper does
+    that surgically against MongoDB so the rest of the test logic can
+    remain unchanged.
+
+    Returns the idx of the line whose image was cleared.
+    """
+    from motor.motor_asyncio import AsyncIOMotorClient
+
+    async def _do():
+        client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+        try:
+            db = client[os.environ["DB_NAME"]]
+            doc = await db.preparation_uploads.find_one(
+                {"user_id": uid, "upload_id": upload_id},
+                {"_id": 0, "lines": 1},
+            )
+            assert doc and doc.get("lines"), f"upload {upload_id} not found"
+            for ln in doc["lines"]:
+                if product_keyword in (ln.get("product_name") or ""):
+                    idx = ln["idx"]
+                    await db.preparation_uploads.update_one(
+                        {"user_id": uid, "upload_id": upload_id},
+                        {"$set": {
+                            f"lines.{idx}.image_b64": None,
+                            f"lines.{idx}.image_mime": None,
+                        }},
+                    )
+                    return idx
+            raise AssertionError(f"no line matched keyword {product_keyword!r}")
+        finally:
+            client.close()
+
+    return asyncio.run(_do())
+
+
 # ── 1. Auth required ───────────────────────────────────────────────────
 def test_endpoints_require_auth():
     for method, path, payload in [
@@ -320,24 +361,34 @@ def test_put_image_applies_to_all_lines_with_same_product_name():
     uploading once with scope=product must update ALL siblings WITHOUT
     an existing image. Sibling lines that already have an image (extracted
     from the Salla PDF or uploaded previously) are NEVER overwritten —
-    iter-36 semantics."""
+    iter-36 semantics.
+
+    Iter-40 note: the parser used to leave one of the 4 تغليف lines
+    without an image (xref-dedup bug). After fixing that, we now
+    deliberately strip one image to recreate the 1-missing scenario."""
     token, uid = _register()
     try:
         r = _upload(token)
         body = r.json()
         upload_id = body["upload_id"]
 
-        # Find the "تغليف انيق" group (4 lines in the sample) — pick a line
-        # without an image to target with scope=product.
+        # iter-40 — strip one image to set up the scenario.
+        stripped_idx = _strip_image_from_one_sibling(uid, upload_id, "تغليف")
+        # Re-fetch preview after the stripping
+        body = requests.get(
+            f"{API}/preparation/preview/{upload_id}",
+            headers=_hdr(token), timeout=10,
+        ).json()
+
+        # Find the "تغليف انيق" group (4 lines) — pick the line we stripped
         target_group = next(
             g for g in body["groups"] if "تغليف" in (g["product_name"] or "")
         )
         assert target_group["count"] == 4, target_group
-        target_idx = next(
-            ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]
-        )
+        target_idx = stripped_idx
         no_img_idxs = {ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]}
         has_img_idxs = {ln["idx"] for ln in target_group["preview_lines"] if ln["has_image"]}
+        assert no_img_idxs == {target_idx}, (no_img_idxs, target_idx)
 
         r2 = requests.put(
             f"{API}/preparation/image/{upload_id}/{target_idx}?scope=product",
@@ -388,12 +439,9 @@ def test_put_image_scope_line_only_updates_one_row():
         r = _upload(token)
         body = r.json()
         upload_id = body["upload_id"]
-        target_group = next(
-            g for g in body["groups"] if "تغليف" in (g["product_name"] or "")
-        )
-        target_idx = next(
-            ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]
-        )
+        # iter-40 — strip one image first so we have a deterministic
+        # no-image target.
+        target_idx = _strip_image_from_one_sibling(uid, upload_id, "تغليف")
 
         r2 = requests.put(
             f"{API}/preparation/image/{upload_id}/{target_idx}?scope=line",
@@ -419,12 +467,22 @@ def test_put_image_skips_lines_with_existing_image():
     The fixture's "تغليف انيق" group has 4 lines: 1 with no image + 3
     with PDF-extracted images. We PUT a recognizable PNG into the
     no-image line with scope=product → only that single line should be
-    updated; the other 3 must keep their original PDF bytes."""
+    updated; the other 3 must keep their original PDF bytes.
+
+    Iter-40 note: the parser used to leave one of the 4 تغليف lines
+    without an image (xref-dedup bug). After fixing that, we now
+    deliberately strip one image to recreate the 1-missing scenario."""
     token, uid = _register()
     try:
         r = _upload(token)
         body = r.json()
         upload_id = body["upload_id"]
+        # iter-40 — strip one image so we have the 1 vs 3 split.
+        _strip_image_from_one_sibling(uid, upload_id, "تغليف")
+        body = requests.get(
+            f"{API}/preparation/preview/{upload_id}",
+            headers=_hdr(token), timeout=10,
+        ).json()
         target_group = next(
             g for g in body["groups"] if "تغليف" in (g["product_name"] or "")
         )
@@ -588,18 +646,16 @@ def test_put_image_cross_user_404():
 def test_generated_pdf_uses_user_uploaded_image():
     """End-to-end: upload PDF → upload custom image → generate PDF →
     the bytes for that line's image inside the prep_uploads doc must
-    match the user-uploaded image (re-encoded as JPEG)."""
+    match the user-uploaded image (re-encoded as JPEG).
+
+    Iter-40: parser bug fixed → all 4 تغليف lines now have images by
+    default; we strip one to set up the test scenario."""
     token, uid = _register()
     try:
         r = _upload(token)
         body = r.json()
         upload_id = body["upload_id"]
-        target_group = next(
-            g for g in body["groups"] if "تغليف" in (g["product_name"] or "")
-        )
-        target_idx = next(
-            ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]
-        )
+        target_idx = _strip_image_from_one_sibling(uid, upload_id, "تغليف")
         custom = _png_bytes()
         requests.put(
             f"{API}/preparation/image/{upload_id}/{target_idx}?scope=product",
@@ -758,22 +814,32 @@ def test_empty_selection_rejected():
 
 
 def test_put_image_also_persists_to_catalog():
-    """PUT /image saves to product_image_catalog so NEXT upload picks it up."""
+    """PUT /image saves to product_image_catalog so NEXT upload picks it up.
+
+    Iter-40: parser used to leave some product images empty due to the
+    xref-dedup bug. After the fix all products have images, so we
+    explicitly strip one to recreate the no-image scenario."""
     token, uid = _register()
     try:
         r = _upload(token)
         body = r.json()
         upload_id = body["upload_id"]
-        # Find any product line without image
+        # iter-40 — strip تغليف to get a deterministic no-image line
+        stripped_idx = _strip_image_from_one_sibling(uid, upload_id, "تغليف")
+        body = requests.get(
+            f"{API}/preparation/preview/{upload_id}",
+            headers=_hdr(token), timeout=10,
+        ).json()
+        # Find that line + its product name
         target = None
         for g in body["groups"]:
             for ln in g["preview_lines"]:
-                if not ln["has_image"] and ln["product_name"]:
+                if ln["idx"] == stripped_idx:
                     target = (ln, g["product_name"])
                     break
             if target:
                 break
-        assert target is not None, "sample should have at least one image-less product"
+        assert target is not None
         ln, pname = target
 
         from PIL import Image
@@ -804,17 +870,24 @@ def test_put_image_also_persists_to_catalog():
 
 def test_image_catalog_auto_match_on_next_upload():
     """Upload PDF, fix one image, clear log, re-upload → the previously
-    image-less product now arrives WITH an image (auto-matched)."""
+    image-less product now arrives WITH an image (auto-matched).
+
+    Iter-40: strip an image deterministically to set up the scenario."""
     token, uid = _register()
     try:
         # 1st upload
         r1 = _upload(token)
         body1 = r1.json()
         upload_id1 = body1["upload_id"]
+        stripped_idx = _strip_image_from_one_sibling(uid, upload_id1, "تغليف")
+        body1 = requests.get(
+            f"{API}/preparation/preview/{upload_id1}",
+            headers=_hdr(token), timeout=10,
+        ).json()
         target = None
         for g in body1["groups"]:
             for ln in g["preview_lines"]:
-                if not ln["has_image"] and ln["product_name"]:
+                if ln["idx"] == stripped_idx:
                     target = ln
                     break
             if target:

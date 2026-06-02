@@ -12,6 +12,36 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ENHANCEMENT (2026-06 — Iteration 40) — **Critical image-to-name alignment fixes**
+
+**Merchant report**: "صور المنتجات مختلفة عن أسماء المنتجات" — images on cards didn't match the product names.
+
+### Two distinct bugs found by inspecting the merchant's June 2026 upload
+
+**Bug ① — IMAGE/NAME SWAP on multi-item orders.**
+`page.get_images(full=True)` returns images in **xref-declaration order**, not visual order. On page 11 of the sample (order `#263839904`, 2 items: تغليف انيق آمايس + قلادة روز), Salla declared the قلادة xref FIRST even though it appears visually BELOW the تغليف image. The parser blindly zipped `images[i]` with `bottom_names[i]`, so قلادة got the تغليف image and vice-versa.
+
+**Bug ② — MISSING IMAGE for repeated products in same order.**
+The parser had `seen_xrefs: set[int]` to dedupe — but when an order contained the SAME product twice (e.g. order `#263822478` has قلادة روز ×2), Salla emitted the same xref at 2 distinct rectangles. The set rejected the second appearance, so only one of the two قلادة slots got an image. The third product line in that order (تغليف آمايس) was ALSO missing because the dedup logic ran out of xrefs.
+
+### Fix
+`_extract_page_product_images` rewritten to:
+- Walk **every rectangle** via `page.get_image_rects(xref)` (one entry per rect, not per xref).
+- Cache the decoded bytes/dimensions per xref to avoid repeated zlib decompression.
+- **Sort all candidates by `rect.y0` (visual top-to-bottom)** before returning — guaranteed to match the bottom-name extraction order.
+
+### Tests (`tests/test_preparation_iteration40.py` — 5/5 PASS, 60/60 cross-suite)
+- `test_all_items_in_repeated_product_orders_have_images` — order #263822478 must yield 3 images for 3 items (was 2 before fix).
+- `test_repeated_product_uses_same_image_bytes` — the two قلادة slots share identical bytes.
+- `test_same_product_across_orders_has_same_image_hash` — تغليف and قلادة each have a single unique hash across ALL their occurrences (proves no swap).
+- `test_order_263839904_image_not_swapped` — explicit regression for the originally-reported page.
+- `test_no_product_has_wrong_image_via_cross_order_consistency` — broad fuzz check: no product family may have >1 distinct image hash.
+
+### Other affected tests (iter-34 suite)
+The pre-iter-40 tests relied on the parser bug coincidentally producing a "1 missing image" scenario in the تغليف group. After the fix all 4 images are present, so a new test helper `_strip_image_from_one_sibling()` was added that deterministically clears one image via direct MongoDB update — preserving the test scenarios without depending on the original bug. 5 tests in iter-34 updated to use the helper.
+
+---
+
 ## 🎯 ENHANCEMENT (2026-06 — Iteration 39) — **Printable PDF: Cairo SemiBold + Cairo Bold + increased line spacing**
 
 **Merchant request**: change PDF font to **Cairo SemiBold** (Bold accents for Order#/Product/Shipping rows), add visible spacing between data rows, and keep the iter-38 field order locked.

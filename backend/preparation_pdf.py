@@ -136,36 +136,67 @@ def _ar(text: Optional[str]) -> str:
 
 
 def _extract_page_product_images(doc: fitz.Document, page: fitz.Page) -> list[tuple[bytes, str]]:
-    """Return product-image bytes per page (heuristic filter).
+    """Return product-image bytes IN VISUAL TOP-TO-BOTTOM ORDER.
 
     Salla embeds: tiny header logos (≈ 200×40), the printable product image
     (~200..1200 px each side, aspect 0.5..2.0), and a wide cover background
     (4222×2235 in the sample). We keep only the printable mid-size ones.
+
+    🐛 Iter-40 fix: `page.get_images()` returns images in xref-declaration
+    order, which is NOT always the visual order. Salla sometimes
+    declares product images out-of-sequence (observed on page 11 of the
+    customer's June 2026 sample: xref 159 declared first but visually
+    BELOW xref 160). The previous parser zipped these into product
+    rows positionally, so the wrong image got attached to the wrong
+    product name on multi-item orders. The fix here: collect both the
+    bytes AND each image's visual `rect.y0`, then sort ascending — that
+    matches how the merchant reads the invoice (top-down) and how
+    `_collect_bottom_product_names` returns names.
     """
-    out: list[tuple[bytes, str]] = []
-    seen_xrefs: set[int] = set()
+    # 1) Collect every candidate (bytes, ext, y_top) — one entry per
+    #    rectangle, because the same xref can appear at multiple
+    #    positions on a single page (which we want to treat as
+    #    SEPARATE product slots).
+    candidates: list[tuple[float, bytes, str]] = []
+    cache: dict[int, tuple[bytes, str, int, int]] = {}
     for img in page.get_images(full=True):
         xref = img[0]
-        if xref in seen_xrefs:
-            continue
-        seen_xrefs.add(xref)
+        # Fetch + cache once per xref to avoid repeated zlib decompress.
+        if xref not in cache:
+            try:
+                info = doc.extract_image(xref)
+            except Exception:
+                continue
+            w = info.get("width") or 0
+            h = info.get("height") or 0
+            if not w or not h:
+                continue
+            ratio = w / h
+            if w < 150 or h < 150:                  # logos / icons
+                continue
+            if w * h > 1_500_000:                   # 4222×2235 cover
+                continue
+            if not (0.4 <= ratio <= 2.5):           # banners / strips
+                continue
+            cache[xref] = (info["image"], info.get("ext", "png"), w, h)
+        data, ext, _, _ = cache[xref]
+        # 2) Walk every rectangle that THIS xref appears at on the page.
         try:
-            info = doc.extract_image(xref)
+            rects = page.get_image_rects(xref) or []
         except Exception:
+            rects = []
+        if not rects:
+            # Fallback: keep the bytes once at y=∞ so it lands last —
+            # still better than dropping a valid image entirely.
+            candidates.append((float("inf"), data, ext))
             continue
-        w, h = info.get("width") or 0, info.get("height") or 0
-        if not w or not h:
-            continue
-        ratio = w / h
-        # Reject obvious non-product imagery
-        if w < 150 or h < 150:                  # logos / icons
-            continue
-        if w * h > 1_500_000:                   # 4222×2235 cover
-            continue
-        if not (0.4 <= ratio <= 2.5):           # banners / strips
-            continue
-        out.append((info["image"], info.get("ext", "png")))
-    return out
+        for r in rects:
+            candidates.append((r.y0, data, ext))
+
+    # 3) Sort top-to-bottom; tie-break by x (irrelevant in Salla since
+    #    images stack vertically, but safe).
+    candidates.sort(key=lambda c: c[0])
+    return [(data, ext) for _y, data, ext in candidates]
 
 
 def _looks_like_address_or_footer(line: str) -> bool:
