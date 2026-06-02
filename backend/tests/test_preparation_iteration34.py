@@ -780,6 +780,71 @@ def test_image_catalog_crud():
         _cleanup(uid)
 
 
+def test_image_catalog_metadata_only_update():
+    """PUT /image-catalog/{name_norm} without a file must update metadata
+    (product_id / sku / product_name) while keeping the existing image
+    intact. Regression for iter-35 frontend Edit flow (testing-agent #35)."""
+    token, uid = _register()
+    try:
+        from PIL import Image as _Img
+        # 1. Seed a row with an image
+        png = io.BytesIO()
+        _Img.new("RGB", (50, 50), (255, 0, 0)).save(png, format="PNG")
+        png.seek(0)
+        r0 = requests.put(
+            f"{API}/preparation/image-catalog/widget",
+            headers=_hdr(token),
+            files={"file": ("w.png", png, "image/png")},
+            params={"product_name": "Widget", "product_id": "P-1", "sku": "S-1"},
+            timeout=10,
+        )
+        assert r0.status_code == 200, r0.text[:200]
+        norm = r0.json()["name_norm"]
+
+        # 2. Snapshot the image bytes
+        img_before = requests.get(
+            f"{API}/preparation/image-catalog/image/{norm}",
+            headers=_hdr(token), timeout=10,
+        ).content
+
+        # 3. PUT metadata-only — NO file
+        r1 = requests.put(
+            f"{API}/preparation/image-catalog/{norm}",
+            headers=_hdr(token),
+            params={"product_name": "Widget", "product_id": "P-2", "sku": "S-2"},
+            timeout=10,
+        )
+        assert r1.status_code == 200, r1.text[:300]
+        body = r1.json()
+        assert body.get("metadata_only") is True
+
+        # 4. Verify metadata was updated AND image is byte-identical
+        items = requests.get(
+            f"{API}/preparation/image-catalog",
+            headers=_hdr(token), timeout=10,
+        ).json()["items"]
+        row = next(i for i in items if i["name_norm"] == norm)
+        assert row["product_id"] == "P-2"
+        assert row["sku"] == "S-2"
+
+        img_after = requests.get(
+            f"{API}/preparation/image-catalog/image/{norm}",
+            headers=_hdr(token), timeout=10,
+        ).content
+        assert img_after == img_before, "image bytes must be preserved on metadata-only update"
+
+        # 5. Metadata-only PUT against a non-existent slug → 400
+        r2 = requests.put(
+            f"{API}/preparation/image-catalog/does-not-exist",
+            headers=_hdr(token),
+            params={"product_name": "ghost"},
+            timeout=10,
+        )
+        assert r2.status_code == 400
+    finally:
+        _cleanup(uid)
+
+
 def test_short_date_helper():
     """Direct unit-level coverage of the date compressor."""
     import sys

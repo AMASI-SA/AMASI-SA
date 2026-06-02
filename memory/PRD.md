@@ -12,6 +12,41 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ENHANCEMENT (2026-06 — Iteration 35) — **Image Catalog UI + Item-level Print Selection (14-point list)**
+
+**Merchant request** (14-point revamp of `/product-preparation`): item-level selection (a single order with 3 products lets you print 1 + skip 2), PDF text never overflows the card, dates in MM/DD, every uploaded image is silently persisted into a global per-user catalog so the *next* PDF containing the same product auto-loads the saved image — and a dedicated UI page to inspect/edit/delete that catalog.
+
+**Backend** (already completed in the previous fork's session, 20/20 pytest):
+- `exported_items` collection: unique `(user_id, item_key)` where `item_key = "{order#}_{product_name}_{option}_{idx}"`. Replaces the older order-level `exported_orders` for dedup so partial prints work.
+- `product_image_catalog` collection: unique `(user_id, name_norm)` — stores user-uploaded images keyed by normalized product_name. Auto-populated when the merchant uploads a custom image via `PUT /preparation/image/{upload_id}/{idx}`, and consumed when a new PDF is parsed via `_enrich_lines_with_catalog_images`.
+- PDF generator (`preparation_pdf.py`): word-wraps long product names + `short_date()` helper formats every date as `MM/DD`.
+- New endpoints under `/api/preparation/image-catalog/`:
+  - `GET /` — list saved images (name_norm + product_name + product_id + sku + updated_at).
+  - `GET /image/{name_norm}` — stream the stored JPEG.
+  - `PUT /{name_norm}` — multipart upsert. **Iter-35 fix**: `file` is now `Optional[UploadFile] = File(None)` so metadata-only edits (product_id / sku changes without re-uploading the image) succeed with 200 + `metadata_only: true`. Was previously 422.
+  - `DELETE /{name_norm}` — remove a catalog row.
+
+**Frontend** (this fork):
+- `ProductPreparation.jsx` — checkboxes wired: `selectedIdx` Set state, `toggleOne`/`toggleGroup`/`toggleAll`, `prep-row-check-{idx}`, `prep-group-check-{name}`, `prep-print-selected-btn` (disabled when selection empty), `prep-select-all-btn`. After a successful print, `selectedIdx` is reset and preview is refreshed so only the *remaining* items show.
+- **NEW page `ImageCatalog.jsx`** (`/image-catalog`):
+  - Header: count badge + refresh + "إضافة صورة" CTA.
+  - Search input filters by product_name / product_id / SKU.
+  - Empty-state card with primary CTA `إضافة أول صورة`.
+  - Table: thumbnail + product_name + product_id + SKU + updated_at + edit + delete actions.
+  - **Upload/Edit modal** (`catalog-upload-modal`): name + product_id + sku + image input. In edit mode the name input is disabled, and submitting **without picking a new file** triggers the backend metadata-only branch (image bytes preserved).
+  - **Confirm-delete modal** (`catalog-delete-modal`) with product name in the message.
+  - Indigo info banner explaining the auto-match behaviour.
+  - Pillow-style image resize is server-side; client only previews via FileReader.
+- **Sidebar nav**: new "إدارة صور المنتجات" link (`nav-image-catalog`) with `<Image>` icon, right under "تجهيز المنتجات".
+- **Route registration**: `/image-catalog` added to `App.js`.
+
+**Tests** (`tests/test_preparation_iteration34.py` extended to 21):
+- All 20 prior tests still PASS.
+- New `test_image_catalog_metadata_only_update` (iter-35) — seeds a row, PUTs metadata only (no file), asserts: `metadata_only=True`, product_id/sku updated, image bytes are **byte-identical** before/after, and PUT against a non-existent slug → 400.
+- Full E2E UI flow verified by `testing_agent_v3_fork` (12/13 → 13/13 after the file-required fix): add → search → edit (metadata-only path) → delete; mobile 390 no horizontal scroll; auth gating.
+
+---
+
 ## 🎯 ENHANCEMENT (2026-06 — Iteration 34b) — **رفع صور مخصّصة للمنتجات الناقصة**
 
 **Merchant request**: عند وجود منتج بدون صورة (لم تكن في PDF ولا في الكتالوج)، يجب أن يستطيع التاجر **رفع صورة بنفسه**، وتعتمد الصورة المرفوعة في PDF التجهيز النهائي.

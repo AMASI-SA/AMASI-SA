@@ -759,7 +759,7 @@ def _build_router(db) -> APIRouter:
     @router.put("/image-catalog/{name_norm}")
     async def upsert_catalog_image(
         name_norm: str,
-        file: UploadFile = File(...),
+        file: Optional[UploadFile] = File(None),
         product_name: Optional[str] = None,
         product_id: Optional[str] = None,
         sku: Optional[str] = None,
@@ -767,12 +767,47 @@ def _build_router(db) -> APIRouter:
     ):
         """Manual upsert endpoint for the catalog management UI. Allows
         the merchant to upload images proactively, without going through
-        an order's preparation_upload first."""
+        an order's preparation_upload first.
+
+        `file` is OPTIONAL: when omitted, only the metadata (product_name,
+        product_id, sku) is updated and the existing stored image is kept
+        verbatim. Both `file` and `name_norm` together implicitly create
+        a new row when no existing one matches.
+        """
+        uid = user["id"]
+
+        # ── Metadata-only branch: no file → just update product_id/sku ──
+        if file is None or not getattr(file, "filename", None):
+            existing = await db.product_image_catalog.find_one(
+                {"user_id": uid, "name_norm": name_norm},
+                {"_id": 0, "image_b64": 1, "image_mime": 1, "product_name": 1},
+            )
+            if not existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail="ارفع صورة للمنتج عند الإضافة لأول مرة",
+                )
+            pname = (product_name or existing.get("product_name") or name_norm).strip()
+            await _save_to_image_catalog(
+                db, uid, pname,
+                existing["image_b64"], existing.get("image_mime") or "image/jpeg",
+                product_id=product_id, sku=sku,
+            )
+            return {
+                "ok": True,
+                "product_name": pname,
+                "name_norm": _norm_name(pname),
+                "metadata_only": True,
+            }
+
+        # ── Full upsert branch: validate + normalize image ──
         if not (file.content_type or "").startswith("image/"):
             raise HTTPException(status_code=400, detail="يجب رفع ملف صورة")
         raw = await file.read()
         if not raw:
             raise HTTPException(status_code=400, detail="الملف فارغ")
+        if len(raw) > 8 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="حجم الصورة يتجاوز 8MB")
         try:
             from PIL import Image
             import io as _io
@@ -793,7 +828,7 @@ def _build_router(db) -> APIRouter:
         # We accept product_name in the body OR fall back to the URL slug
         pname = (product_name or name_norm).strip()
         await _save_to_image_catalog(
-            db, user["id"], pname, b64, "image/jpeg",
+            db, uid, pname, b64, "image/jpeg",
             product_id=product_id, sku=sku,
         )
         return {"ok": True, "product_name": pname, "name_norm": _norm_name(pname)}
