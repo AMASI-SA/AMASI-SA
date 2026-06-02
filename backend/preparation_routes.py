@@ -55,7 +55,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _line_to_preview(line: ProductLine, idx: int) -> dict:
+def _line_to_preview(line: ProductLine, idx: int, *, image_source: Optional[str] = None) -> dict:
     """Public preview shape — strips raw image bytes."""
     return {
         "idx": idx,
@@ -67,6 +67,7 @@ def _line_to_preview(line: ProductLine, idx: int) -> dict:
         "quantity": line.quantity,
         "total_products_in_order": line.total_products_in_order,
         "has_image": bool(line.image_bytes),
+        "image_source": image_source,
         "shipping_company": line.shipping_company,
     }
 
@@ -257,8 +258,14 @@ def _build_router(db) -> APIRouter:
         )
         if not doc:
             raise HTTPException(status_code=404, detail="المعاينة غير موجودة أو انتهت صلاحيتها")
-        # Re-hydrate ProductLines for grouping
-        lines = [_line_from_storage(d) for d in doc.get("lines", [])]
+        # Re-hydrate ProductLines for grouping + remember the per-idx
+        # image_source so we can surface "صورة مخصّصة" in the UI.
+        stored = doc.get("lines", [])
+        lines = [_line_from_storage(d) for d in stored]
+        source_by_idx = {i: (d.get("image_source") or None) for i, d in enumerate(stored)}
+        # Map back from object identity → storage idx (in case a single ln
+        # appears in two groups, identity still works).
+        idx_by_id = {id(ln): i for i, ln in enumerate(lines)}
         excluded = set(doc.get("excluded_orders") or [])
         kept = [ln for ln in lines if ln.order_number not in excluded]
         groups = group_and_sort_by_product(kept)
@@ -274,9 +281,108 @@ def _build_router(db) -> APIRouter:
             "groups": [
                 {"product_name": g["product_name"],
                  "count": g["count"],
-                 "preview_lines": [_line_to_preview(ln, _idx_in_all(lines, ln)) for ln in g["lines"]]}
+                 "preview_lines": [
+                     _line_to_preview(
+                         ln, idx_by_id.get(id(ln), -1),
+                         image_source=source_by_idx.get(idx_by_id.get(id(ln), -1)),
+                     )
+                     for ln in g["lines"]
+                 ]}
                 for g in groups
             ],
+        }
+
+    # ── PUT /image/{upload_id}/{idx} — user-uploaded product image ────
+    # Lets the merchant supply a custom image for a product when the PDF
+    # did not include one (and the catalogue fallback also missed). By
+    # default the new image is applied to ALL lines that share the same
+    # product_name (which is what users almost always want — it's a
+    # "product" image, not an "order" image). Pass scope=line to override.
+    @router.put("/image/{upload_id}/{idx}")
+    async def upload_product_image(
+        upload_id: str,
+        idx: int,
+        file: UploadFile = File(...),
+        scope: str = "product",
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        # 1) Validate input
+        if not (file.content_type or "").startswith("image/"):
+            raise HTTPException(status_code=400, detail="يجب رفع ملف صورة (PNG/JPG/WEBP)")
+        raw = await file.read()
+        if not raw:
+            raise HTTPException(status_code=400, detail="الملف فارغ")
+        if len(raw) > 8 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="حجم الصورة يتجاوز 8MB")
+
+        # 2) Validate + resize via Pillow. We cap the longest edge at 800px
+        #    so we don't bloat MongoDB docs; the printable PDF only needs
+        #    ~300×300. Strip metadata and re-encode as JPEG (smaller).
+        try:
+            from PIL import Image
+            import io as _io
+            im = Image.open(_io.BytesIO(raw))
+            im.load()
+            if im.mode not in ("RGB", "L"):
+                im = im.convert("RGB")
+            max_side = 800
+            if max(im.width, im.height) > max_side:
+                scale = max_side / max(im.width, im.height)
+                im = im.resize(
+                    (int(im.width * scale), int(im.height * scale)),
+                    Image.LANCZOS,
+                )
+            out = _io.BytesIO()
+            im.save(out, format="JPEG", quality=85, optimize=True)
+            normalized = out.getvalue()
+            mime = "image/jpeg"
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"تعذّر قراءة الصورة: {e}")
+
+        # 3) Locate the upload + the line, find which sibling lines should
+        #    also get the image (same product_name → scope=product).
+        doc = await db.preparation_uploads.find_one(
+            {"user_id": uid, "upload_id": upload_id},
+            {"_id": 0, "lines": 1},
+        )
+        if not doc:
+            raise HTTPException(status_code=404, detail="المعاينة غير موجودة أو انتهت صلاحيتها")
+        stored = doc.get("lines") or []
+        if idx < 0 or idx >= len(stored):
+            raise HTTPException(status_code=404, detail="index out of range")
+
+        target_name = (stored[idx].get("product_name") or "").strip()
+        if scope == "product" and target_name:
+            # Apply to all lines whose product_name matches (case+space normalized)
+            tgt_norm = " ".join(target_name.lower().split())
+            indices = [
+                i for i, ln in enumerate(stored)
+                if " ".join((ln.get("product_name") or "").lower().split()) == tgt_norm
+            ]
+        else:
+            indices = [idx]
+
+        b64 = base64.b64encode(normalized).decode("ascii")
+        # 4) Persist the new image on every matching line. We update the
+        #    nested array via positional-filter so we don't have to rewrite
+        #    the whole doc each call.
+        updates = {}
+        for i in indices:
+            updates[f"lines.{i}.image_b64"] = b64
+            updates[f"lines.{i}.image_mime"] = mime
+            updates[f"lines.{i}.image_source"] = "user_upload"
+        await db.preparation_uploads.update_one(
+            {"user_id": uid, "upload_id": upload_id},
+            {"$set": updates},
+        )
+        return {
+            "ok": True,
+            "applied_to_indices": indices,
+            "applied_count": len(indices),
+            "product_name": target_name or None,
+            "scope": "product" if (scope == "product" and target_name) else "line",
+            "bytes": len(normalized),
         }
 
     # ── GET /image/{upload_id}/{idx} — stream thumbnail ──────────────

@@ -292,3 +292,201 @@ def test_image_endpoint_streams_bytes():
         assert r3.status_code == 404
     finally:
         _cleanup(uid)
+
+
+
+# ── 9. PUT /image — user uploads a custom image (iteration 34b) ───────
+def _png_bytes(size=(320, 320), color=(180, 40, 90)) -> bytes:
+    from PIL import Image
+    out = io.BytesIO()
+    Image.new("RGB", size, color).save(out, format="PNG")
+    return out.getvalue()
+
+
+def test_put_image_applies_to_all_lines_with_same_product_name():
+    """When the same product appears on N orders (e.g. "تغليف انيق" ×4),
+    uploading once with scope=product must update ALL N lines so the
+    final PDF uses the same image for every card of that product."""
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        body = r.json()
+        upload_id = body["upload_id"]
+
+        # Find the "تغليف انيق" group (4 lines in the sample) — pick a line
+        # without an image to target with scope=product.
+        target_group = next(
+            g for g in body["groups"] if "تغليف" in (g["product_name"] or "")
+        )
+        assert target_group["count"] == 4, target_group
+        target_idx = next(
+            ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]
+        )
+
+        r2 = requests.put(
+            f"{API}/preparation/image/{upload_id}/{target_idx}?scope=product",
+            headers=_hdr(token),
+            files={"file": ("custom.png", io.BytesIO(_png_bytes()), "image/png")},
+            timeout=15,
+        )
+        assert r2.status_code == 200, r2.text[:300]
+        j = r2.json()
+        assert j["scope"] == "product"
+        assert j["applied_count"] == 4, (
+            f"All 4 sibling lines should have been updated; got {j}"
+        )
+        assert sorted(j["applied_to_indices"]) == sorted({
+            ln["idx"] for ln in target_group["preview_lines"]
+        }), "applied indices should equal the group's idxs"
+        assert j["bytes"] > 0
+
+        # Re-fetch preview — every line in the group must now have
+        # has_image=True and image_source=user_upload.
+        prev = requests.get(
+            f"{API}/preparation/preview/{upload_id}",
+            headers=_hdr(token), timeout=10,
+        ).json()
+        rg = next(g for g in prev["groups"] if "تغليف" in (g["product_name"] or ""))
+        for ln in rg["preview_lines"]:
+            assert ln["has_image"] is True, ln
+            assert ln["image_source"] == "user_upload", ln
+    finally:
+        _cleanup(uid)
+
+
+def test_put_image_scope_line_only_updates_one_row():
+    """scope=line is the granular escape hatch — only the targeted idx
+    gets the new image, sibling lines in the same product remain unchanged."""
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        body = r.json()
+        upload_id = body["upload_id"]
+        target_group = next(
+            g for g in body["groups"] if "تغليف" in (g["product_name"] or "")
+        )
+        target_idx = next(
+            ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]
+        )
+
+        r2 = requests.put(
+            f"{API}/preparation/image/{upload_id}/{target_idx}?scope=line",
+            headers=_hdr(token),
+            files={"file": ("c.png", io.BytesIO(_png_bytes()), "image/png")},
+            timeout=15,
+        )
+        assert r2.status_code == 200, r2.text[:200]
+        j = r2.json()
+        assert j["scope"] == "line"
+        assert j["applied_count"] == 1
+        assert j["applied_to_indices"] == [target_idx]
+    finally:
+        _cleanup(uid)
+
+
+def test_put_image_rejects_non_image_and_oversized():
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        upload_id = r.json()["upload_id"]
+
+        # Non-image content-type
+        r1 = requests.put(
+            f"{API}/preparation/image/{upload_id}/0",
+            headers=_hdr(token),
+            files={"file": ("bad.pdf", io.BytesIO(b"not an image"), "application/pdf")},
+            timeout=10,
+        )
+        assert r1.status_code == 400, r1.text[:200]
+
+        # Empty body but image content-type → still 400 (empty file)
+        r2 = requests.put(
+            f"{API}/preparation/image/{upload_id}/0",
+            headers=_hdr(token),
+            files={"file": ("empty.png", io.BytesIO(b""), "image/png")},
+            timeout=10,
+        )
+        assert r2.status_code == 400, r2.text[:200]
+
+        # Image content-type but corrupt bytes → 400
+        r3 = requests.put(
+            f"{API}/preparation/image/{upload_id}/0",
+            headers=_hdr(token),
+            files={"file": ("c.png", io.BytesIO(b"\x00\x01\x02notapng"), "image/png")},
+            timeout=10,
+        )
+        assert r3.status_code == 400, r3.text[:200]
+    finally:
+        _cleanup(uid)
+
+
+def test_put_image_cross_user_404():
+    """User B cannot upload an image into A's preparation_uploads doc."""
+    tok_a, uid_a = _register()
+    tok_b, uid_b = _register()
+    try:
+        r = _upload(tok_a)
+        upid = r.json()["upload_id"]
+        rb = requests.put(
+            f"{API}/preparation/image/{upid}/0",
+            headers=_hdr(tok_b),
+            files={"file": ("c.png", io.BytesIO(_png_bytes()), "image/png")},
+            timeout=10,
+        )
+        assert rb.status_code == 404, rb.text[:200]
+    finally:
+        _cleanup(uid_a)
+        _cleanup(uid_b)
+
+
+def test_generated_pdf_uses_user_uploaded_image():
+    """End-to-end: upload PDF → upload custom image → generate PDF →
+    the bytes for that line's image inside the prep_uploads doc must
+    match the user-uploaded image (re-encoded as JPEG)."""
+    token, uid = _register()
+    try:
+        r = _upload(token)
+        body = r.json()
+        upload_id = body["upload_id"]
+        target_group = next(
+            g for g in body["groups"] if "تغليف" in (g["product_name"] or "")
+        )
+        target_idx = next(
+            ln["idx"] for ln in target_group["preview_lines"] if not ln["has_image"]
+        )
+        custom = _png_bytes()
+        requests.put(
+            f"{API}/preparation/image/{upload_id}/{target_idx}?scope=product",
+            headers=_hdr(token),
+            files={"file": ("c.png", io.BytesIO(custom), "image/png")},
+            timeout=15,
+        ).raise_for_status()
+
+        # Verify the storage now reports user_upload on every related line.
+        async def _check():
+            from motor.motor_asyncio import AsyncIOMotorClient
+            c = AsyncIOMotorClient(os.environ["MONGO_URL"])
+            db = c[os.environ["DB_NAME"]]
+            doc = await db.preparation_uploads.find_one(
+                {"user_id": uid, "upload_id": upload_id},
+                {"_id": 0, "lines": 1},
+            )
+            c.close()
+            return doc
+        doc = asyncio.run(_check())
+        sources = [
+            ln.get("image_source") for ln in (doc.get("lines") or [])
+            if "تغليف" in (ln.get("product_name") or "")
+        ]
+        assert sources and all(s == "user_upload" for s in sources), sources
+
+        # Now generate — must succeed and return a PDF.
+        rg = requests.post(
+            f"{API}/preparation/generate/{upload_id}",
+            headers=_hdr(token), timeout=60,
+        )
+        assert rg.status_code == 200, rg.text[:300]
+        assert rg.content[:4] == b"%PDF"
+        assert len(rg.content) > 50_000
+    finally:
+        _cleanup(uid)

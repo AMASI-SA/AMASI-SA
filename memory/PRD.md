@@ -12,6 +12,36 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 ENHANCEMENT (2026-06 — Iteration 34b) — **رفع صور مخصّصة للمنتجات الناقصة**
+
+**Merchant request**: عند وجود منتج بدون صورة (لم تكن في PDF ولا في الكتالوج)، يجب أن يستطيع التاجر **رفع صورة بنفسه**، وتعتمد الصورة المرفوعة في PDF التجهيز النهائي.
+
+**Backend** — new endpoint `PUT /api/preparation/image/{upload_id}/{idx}`:
+- يقبل multipart `file` + query `scope` (default `product`، optional `line`).
+- يتحقق من content-type `image/*`، حد 8MB، صورة سليمة عبر Pillow.
+- يُعيد ضبط الحجم تلقائياً (أقصى ضلع 800px) ويعيد التشفير JPEG quality 85 لتوفير مساحة Mongo.
+- **Smart scoping**: `scope=product` (الافتراضي) يطبّق الصورة على **كل البطاقات** التي تشترك في نفس `product_name` (case+whitespace normalized) — لأن الصورة هي صورة المنتج لا الطلب، ولن يحتاج التاجر لرفعها 4 مرات لـ "تغليف انيق" المتكرر في 4 طلبات.
+- يحفظ `image_b64`, `image_mime: image/jpeg`, و `image_source: "user_upload"` على كل line مطابقة.
+
+**Frontend**:
+- زر **"إضافة صورة"** indigo صغير يظهر فقط بجانب المجموعات بدون صورة.
+- File picker مخفي + Toast: "تم تطبيق الصورة على N طلبات لنفس المنتج 'XYZ'".
+- شارة خضراء **"صورة مخصّصة"** بجانب اسم المجموعة بعد الرفع — التاجر يعرف بصرياً أي صور أصلية وأي مرفوعة منه.
+- Cache busting عبر `imgVersion` state — `<img src=".../{idx}?v=N">` يتجدّد فوراً بعد الرفع.
+- Refactor: `refreshPreview()` helper مشترك لتجنّب تكرار الـ inline fetch في `handleGenerate` و `handleClearLog`.
+
+**Tests** (5 جديدة، إجمالي **13/13** PASS لـ Iteration 34):
+1. `test_put_image_applies_to_all_lines_with_same_product_name` — uploading once → 4 lines updated ✅
+2. `test_put_image_scope_line_only_updates_one_row` — escape hatch granular ✅
+3. `test_put_image_rejects_non_image_and_oversized` — content-type/empty/corrupt → 400 ✅
+4. `test_put_image_cross_user_404` — B لا يستطيع تعديل upload الخاص بـ A ✅
+5. `test_generated_pdf_uses_user_uploaded_image` — PDF نهائي يحتوي على الصورة المرفوعة ✅
+
+**E2E UI verified**: التقطنا لقطة شاشة بعد رفع صورة لمجموعة "تغليف انيق" (4 طلبات) — Toast "تم تطبيق الصورة على 4 طلبات"، شارة "صورة مخصّصة" ظهرت، الصورة الجديدة معروضة فوراً.
+
+---
+
+
 ## 🎯 NEW FEATURE (2026-06 — Iteration 34) — **تجهيز المنتجات: تحويل PDF طلبات سلة → ملف طباعة 4×4**
 
 **Merchant request**: صفحة جديدة `/product-preparation` تستقبل PDF الطلبات من سلة، تستخرج لكل منتج: اسم العميل (من خيار "الاسم")، الملاحظة، الكمية، شركة الشحن، التاريخ، صورة المنتج، ثم تُجمّع المنتجات (لا الطلبات) وتُرتّبها من الأكثر مبيعاً، وتُخرج PDF A4 portrait بترتيب 4×4 = 16 بطاقة في الصفحة. كل بطاقة تحتوي: تسلسل، صورة، QR (رقم الطلب فقط لا URL)، رقم الطلب، الاسم، ملاحظة، تاريخ، كمية، "{carrier} - {N}" حيث N = إجمالي منتجات الطلب. مع منع تكرار التصدير عبر مجموعة `exported_orders`.

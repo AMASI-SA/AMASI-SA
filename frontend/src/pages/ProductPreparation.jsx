@@ -71,7 +71,7 @@ function StatCard({ label, value, sub, testid, icon: Icon, tone = "slate" }) {
     );
 }
 
-function ProductImage({ uploadId, idx, hasImage, alt }) {
+function ProductImage({ uploadId, idx, hasImage, alt, version }) {
     const [errored, setErrored] = useState(false);
     if (!hasImage || errored) {
         return (
@@ -82,12 +82,73 @@ function ProductImage({ uploadId, idx, hasImage, alt }) {
     }
     return (
         <img
-            src={`${API_BASE}/preparation/image/${uploadId}/${idx}`}
+            src={`${API_BASE}/preparation/image/${uploadId}/${idx}${version ? `?v=${version}` : ""}`}
             alt={alt || "product"}
             onError={() => setErrored(true)}
             className="w-14 h-14 rounded-lg object-cover border border-slate-200 flex-shrink-0"
             loading="lazy"
         />
+    );
+}
+
+/** Inline image uploader — appears on rows without an image. The uploaded
+ *  image applies to all sibling rows that share the same product_name
+ *  (scope=product), so the merchant uploads once per product, not per order. */
+function MissingImageUploader({ uploadId, idx, productName, onUploaded }) {
+    const inputRef = useRef(null);
+    const [busy, setBusy] = useState(false);
+
+    const handleChange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            toast.error("الملف يجب أن يكون صورة (PNG/JPG/WEBP)");
+            return;
+        }
+        setBusy(true);
+        try {
+            const fd = new FormData();
+            fd.append("file", file);
+            const { data: r } = await api.put(
+                `/preparation/image/${uploadId}/${idx}?scope=product`,
+                fd,
+                { headers: { "Content-Type": "multipart/form-data" } },
+            );
+            toast.success(
+                r.applied_count > 1
+                    ? `تم تطبيق الصورة على ${r.applied_count} طلبات لنفس المنتج "${productName || ""}"`
+                    : "تم رفع صورة المنتج",
+            );
+            onUploaded?.();
+        } catch (err) {
+            toast.error(err?.response?.data?.detail || "فشل رفع الصورة");
+        } finally {
+            setBusy(false);
+            if (inputRef.current) inputRef.current.value = "";
+        }
+    };
+
+    return (
+        <>
+            <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleChange}
+                data-testid={`prep-missing-image-input-${idx}`}
+            />
+            <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); inputRef.current?.click(); }}
+                disabled={busy}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 text-indigo-700 text-[11px] font-bold border border-indigo-200"
+                data-testid={`prep-missing-image-btn-${idx}`}
+                title="أضف صورة لهذا المنتج (تنطبق على كل طلباته)"
+            >
+                {busy ? "جاري الرفع…" : "إضافة صورة"}
+            </button>
+        </>
     );
 }
 
@@ -100,6 +161,20 @@ export default function ProductPreparation() {
     const [showExcluded, setShowExcluded] = useState(false);
     const fileRef = useRef(null);
     const [dragOver, setDragOver] = useState(false);
+    // Bump this after a per-product image upload so <img> tags re-fetch
+    // and the freshly-stored image shows up immediately.
+    const [imgVersion, setImgVersion] = useState(0);
+
+    const refreshPreview = useCallback(async () => {
+        if (!data?.upload_id) return;
+        try {
+            const { data: refreshed } = await api.get(`/preparation/preview/${data.upload_id}`);
+            setData(refreshed);
+            setImgVersion(v => v + 1);
+        } catch {
+            // expired upload — silent (frontend already shows the error from generate)
+        }
+    }, [data?.upload_id]);
 
     const loadStats = useCallback(async () => {
         try {
@@ -165,11 +240,7 @@ export default function ProductPreparation() {
             window.URL.revokeObjectURL(url);
             toast.success(`تم إنشاء PDF: ${cards} بطاقة (${exported} طلب) — تم تحديث سجل التصدير`);
             await loadStats();
-            // Force a re-load of the preview so the now-excluded orders move out.
-            try {
-                const { data: refreshed } = await api.get(`/preparation/preview/${data.upload_id}`);
-                setData(refreshed);
-            } catch { /* preview may have expired — that's OK */ }
+            await refreshPreview();
         } catch (e) {
             // axios blob errors are tricky — try to read the JSON detail
             let msg = "فشل إنشاء الملف";
@@ -195,12 +266,7 @@ export default function ProductPreparation() {
             });
             toast.success(`تم مسح سجل التصدير (${r.deleted_count} طلب). يمكنك الآن إعادة تصدير الطلبات.`);
             await loadStats();
-            if (data?.upload_id) {
-                try {
-                    const { data: refreshed } = await api.get(`/preparation/preview/${data.upload_id}`);
-                    setData(refreshed);
-                } catch { /* ignore */ }
-            }
+            await refreshPreview();
         } catch (e) {
             toast.error(e?.response?.data?.detail || "فشل المسح");
         }
@@ -352,11 +418,27 @@ export default function ProductPreparation() {
                                                 idx={g.preview_lines[0].idx}
                                                 hasImage={g.preview_lines[0].has_image}
                                                 alt={g.product_name}
+                                                version={imgVersion}
                                             />
                                         ) : null}
                                         <div className="min-w-0">
                                             <div className="font-extrabold text-slate-900 truncate">{g.product_name}</div>
-                                            <div className="text-xs text-slate-500">{g.count} {g.count === 1 ? "طلب" : "طلبات"}</div>
+                                            <div className="text-xs text-slate-500 flex items-center gap-2">
+                                                <span>{g.count} {g.count === 1 ? "طلب" : "طلبات"}</span>
+                                                {!g.preview_lines?.[0]?.has_image && (
+                                                    <MissingImageUploader
+                                                        uploadId={data.upload_id}
+                                                        idx={g.preview_lines[0].idx}
+                                                        productName={g.product_name}
+                                                        onUploaded={refreshPreview}
+                                                    />
+                                                )}
+                                                {g.preview_lines?.[0]?.image_source === "user_upload" && (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold" data-testid="prep-custom-img-badge">
+                                                        صورة مخصّصة
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="inline-flex items-center justify-center min-w-[44px] h-9 rounded-lg bg-indigo-50 text-indigo-700 font-extrabold border border-indigo-200">
@@ -366,7 +448,7 @@ export default function ProductPreparation() {
                                 <div className="border-t border-slate-200 divide-y divide-slate-100" data-testid="prep-group-rows">
                                     {(g.preview_lines || []).map((row) => (
                                         <div key={`${row.order_number}-${row.idx}`} className="flex items-center gap-3 p-3 text-sm">
-                                            <ProductImage uploadId={data.upload_id} idx={row.idx} hasImage={row.has_image} alt={row.product_name} />
+                                            <ProductImage uploadId={data.upload_id} idx={row.idx} hasImage={row.has_image} alt={row.product_name} version={imgVersion} />
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-baseline gap-2">
                                                     <span className="font-bold text-slate-900">#{row.order_number}</span>
