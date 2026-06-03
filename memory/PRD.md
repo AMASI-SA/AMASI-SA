@@ -12,6 +12,57 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🛠️ BUG FIX (2026-06 — Iteration 45) — **مطابقة "صافي المدفوعات الإلكترونية" مع شاشة سلة "غير المفوترة"**
+
+**Merchant report**: لوحة التحكم تعرض صافي المدفوعات = `26,643.23` SAR بينما شاشة سلة → المدفوعات → غير المفوترة = `21,715.87` SAR (فارق `4,927.36` ≈ 23% زيادة).
+
+### RCA
+- `electronic_net` كان يُحسب كـ `SUM(other_payment_sales) − SUM(other_payment_fees)` من `payment_breakdown` بدون أي فلترة على حالة الطلب.
+- النتيجة: الطلبات الملغية / المرتجعة / فشل الدفع / بانتظار الدفع كانت تُحسب رغم أنها لم تمر فعلياً عبر البوابة.
+- سلة في "غير المفوترة" تعرض فقط المعاملات التي تم استلامها فعلياً.
+
+### Backend (`server.py`)
+- ✅ ثابت `DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES` يغطي: `ملغ`, `مسترد`, `مرتجع`, `فشل`, `مرفوض`, `بانتظار الدفع` + المرادفات الإنجليزية.
+- ✅ helper `_is_excluded_for_electronic_net(status, terms)` — مطابقة جزئية حساسة-بـ-`lower`.
+- ✅ إضافة حقلين جديدين في الإعدادات: `electronic_net_excluded_statuses` (override) + `salla_electronic_net_reference` (للمقارنة).
+- ✅ بعد حساب الـ payment_breakdown الكامل، نُعيد حساب `other_payment_sales / other_payment_fees` من قائمة طلبات مفلترة (electronic-only + non-excluded statuses). البطاقات الأخرى (BNPL/COD/الإجمالي) لا تتأثر.
+- ✅ حقل جديد في `totals.electronic_net_breakdown` يُرجع: `included_count / excluded_count / gross_before_filter / gross_after_filter / fees_before/after / excluded_statuses_active`.
+- ✅ **endpoint جديد** `GET /api/dashboard/electronic-net-debug?from_date=&to_date=` يُرجع:
+  - إجمالي الطلبات قبل الفلترة + بعدها
+  - تقسيم حسب الحالة المستبعدة (status → count)
+  - عيّنة من الطلبات المضمنة / المستبعدة (50 لكل واحدة + سبب الاستبعاد)
+  - per-payment-method breakdown بعد الفلترة
+  - مقارنة مع `salla_electronic_net_reference` (gap_vs_computed + gap_percent)
+- ✅ **endpoint جديد** `POST /api/settings/electronic-net/sync-to-salla` — يستعيد القائمة الافتراضية المطابقة لسلة بنقرة واحدة.
+
+### Frontend
+- ✅ زر **"تفاصيل"** صغير على بطاقة `kpi-electronic_net` يفتح modal جديد (`ElectronicNetDebugModal.jsx`).
+- ✅ Modal يُظهر:
+  - شارة المقارنة مع سلة (أخضر للتطابق ≤ 1% أو أصفر للفارق)
+  - 3 صناديق (قبل الفلترة / الاستبعاد بسبب الحالة / الصافي النهائي) مع الأرقام التفصيلية
+  - جدول الاستبعاد حسب الحالة
+  - جدول تقسيم حسب طريقة الدفع بعد الفلترة (عدد، إجمالي، رسوم، صافي)
+  - عيّنة الطلبات المستبعدة قابلة للطي مع سبب الاستبعاد لكل صف
+  - زر **تنزيل CSV** للتقرير الكامل
+- ✅ في `/settings` قسم جديد "صافي المدفوعات الإلكترونية — مطابقة سلة" يحتوي:
+  - زر **"مزامنة مطابقة مع سلة"** يستدعي `POST /sync-to-salla`
+  - `StatusListEditor` للحالات المستبعدة (مع 11 اقتراحاً افتراضياً + الحالات المُكتشَفة من طلبات المستخدم)
+  - حقل **"رقم سلة المرجعي"** (placeholder = `21715.87`) — يحفظ في `salla_electronic_net_reference`
+  - تنبيه أصفر يوضّح أن الحل النهائي 100% يحتاج Salla Payments API (Phase 2)
+
+### Tests (6/6 PASS — `tests/test_dashboard_iteration45_electronic_net.py`)
+1. `test_default_filter_excludes_cancelled_refunded_pending` — 7 طلبات (4 مدفوعة + 3 مستبعدة) → `included_count=4`, `excluded_count=3`, post-filter gross = 500.
+2. `test_debug_endpoint_returns_full_breakdown` — جدول الحالات المستبعدة + سبب الاستبعاد لكل طلب + عيّنة المضمنة/المستبعدة.
+3. `test_salla_reference_populates_gap` — `salla_electronic_net_reference=900` على صافي 1000 → `gap=+100, gap_percent=11.11%`.
+4. `test_sync_to_salla_restores_default_exclusions` — override `["custom_only"]` ثم sync → القائمة تعود للقيم الافتراضية المطابقة لسلة.
+5. `test_bnpl_and_cod_orders_unchanged_by_filter` — تمارا/تابي/إمكان/COD لا تتأثر بالفلتر.
+6. `test_debug_endpoint_handles_empty_store_safely` — متجر فارغ يُرجع الـ shape الصحيح بدون كسر.
+
+### Path forward (Phase 2 — لاحقاً)
+البطاقة حالياً تعتمد على فلتر حالة الطلب لتقريب الرقم. الحل النهائي 100% يتطلب جمع جدول `payment_transactions` مباشرة من Salla Payments API (مذكور في الإعدادات و في تنبيه الـ modal). سيُنفَّذ ضمن **Salla Direct Integration — Phase 2**.
+
+---
+
 ## 🎯 NEW FEATURE (2026-06 — Iteration 44) — **بطاقتا ROAS ومتوسط تكلفة الطلب في لوحة التحكم**
 
 **Merchant request**: "اضافة بطاقة ROAS في لوحة التحكم ومتوسط تكلفة الطلب".

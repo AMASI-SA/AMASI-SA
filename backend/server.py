@@ -158,6 +158,47 @@ class NetSalesConfig(BaseModel):
 DEFAULT_NET_SALES_CONFIG = NetSalesConfig().model_dump()
 
 
+# ── iter-45 — Electronic Net status semantics ─────────────────────────────
+# "صافي المدفوعات الإلكترونية" should match Salla's "غير المفوترة" screen,
+# which only shows transactions where money was successfully captured by
+# the gateway. Until we have a per-transaction store from Salla's Payments
+# API, we approximate by EXCLUDING orders whose status indicates the
+# payment was never captured (or was reversed).
+#
+# Defaults below cover Salla's standard Arabic + the most common English
+# equivalents. Match is case-insensitive partial substring — "ملغ" matches
+# "ملغي", "ملغية", "تم الإلغاء" etc.
+DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES: list[str] = [
+    "ملغ",          # ملغي / ملغية / تم الإلغاء
+    "مسترد",        # مسترد / تم الاسترداد
+    "مرتجع",        # مرتجع / تم الإرجاع
+    "فشل",          # فشل الدفع
+    "مرفوض",        # مرفوض من البوابة
+    "بانتظار الدفع",  # لم يتم استلام المبلغ بعد
+    "cancel",       # cancelled / canceled
+    "refund",       # refunded
+    "fail",         # failed
+    "reject",       # rejected
+    "pending payment",
+]
+
+
+def _is_excluded_for_electronic_net(status: str, excluded_terms: list[str]) -> bool:
+    """Return True when the order status matches ANY of the excluded terms.
+
+    Matching is case-insensitive substring — captures "ملغ" → "تم إلغاء الطلب",
+    "fail" → "Payment Failed", etc. Empty status is NOT excluded (kept for
+    backwards compatibility with orders that lack a status field).
+    """
+    if not status:
+        return False
+    s = status.strip().lower()
+    for t in excluded_terms:
+        if t and t.strip().lower() in s:
+            return True
+    return False
+
+
 class SettingsIn(BaseModel):
     payment_methods: List[PaymentMethod]
     shipping_companies: List[ShippingCompany]
@@ -175,6 +216,15 @@ class SettingsIn(BaseModel):
     # When True, only orders with authoritative date (from Excel or Make.com
     # webhook that included created_at) are counted in dashboard KPIs.
     hide_inferred_date_orders: Optional[bool] = None
+    # iter-45 — extra statuses that should NEVER count in the "صافي المدفوعات
+    # الإلكترونية" KPI, even when `report_included_statuses` is empty. When
+    # None (default) the bundled DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES is
+    # used. Empty list means "include all statuses" (legacy behaviour).
+    electronic_net_excluded_statuses: Optional[List[str]] = None
+    # Optional Salla reference figure used in the debug endpoint to show
+    # the gap between our computed net and the merchant's actual Salla
+    # "غير المفوترة" total. Pure UX — not used in any calculation.
+    salla_electronic_net_reference: Optional[float] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -260,6 +310,11 @@ async def get_settings(user: dict = Depends(current_user)):
         "dashboard_hidden_cards": s.get("dashboard_hidden_cards", []),
         "net_sales_config": s.get("net_sales_config", DEFAULT_NET_SALES_CONFIG),
         "hide_inferred_date_orders": bool(s.get("hide_inferred_date_orders", False)),
+        # iter-45 — electronic net status filter
+        "electronic_net_excluded_statuses": s.get(
+            "electronic_net_excluded_statuses", DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES,
+        ),
+        "salla_electronic_net_reference": s.get("salla_electronic_net_reference"),
     }
 
 
@@ -283,6 +338,15 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["net_sales_config"] = payload.net_sales_config.model_dump()
     if payload.hide_inferred_date_orders is not None:
         update_doc["hide_inferred_date_orders"] = bool(payload.hide_inferred_date_orders)
+    # iter-45 — electronic net status filter overrides
+    if payload.electronic_net_excluded_statuses is not None:
+        update_doc["electronic_net_excluded_statuses"] = [
+            s.strip() for s in payload.electronic_net_excluded_statuses if s.strip()
+        ]
+    if payload.salla_electronic_net_reference is not None:
+        # Allow 0 to mean "clear the reference" (settable to None via JSON null).
+        ref = float(payload.salla_electronic_net_reference)
+        update_doc["salla_electronic_net_reference"] = ref if ref > 0 else None
     await db.settings.update_one(
         {"user_id": user["id"]},
         {"$set": update_doc},
@@ -929,6 +993,76 @@ async def dashboard(
     for sh in matched_all.get("shipping_breakdown", []):
         total_vat += float(sh.get("vat_amount", 0) or 0)
 
+    # ── iter-45 — Electronic Net status filter ─────────────────────────────
+    # The default `other_payment_sales` / `other_payment_fees` above include
+    # EVERY order, even cancelled/refunded/failed ones. Salla's "غير المفوترة"
+    # screen only shows transactions actually captured by the gateway. We
+    # recompute `other_payment_sales` & `other_payment_fees` using a status
+    # filter that mirrors Salla's behaviour. The other buckets (BNPL/COD)
+    # stay untouched so we don't break the existing tests/cards.
+    elec_excluded_terms = settings.get(
+        "electronic_net_excluded_statuses",
+    )
+    if elec_excluded_terms is None:
+        elec_excluded_terms = DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES
+
+    def _is_electronic_method(payment_method: str) -> bool:
+        n = (payment_method or "").strip().lower()
+        if not n:
+            return False
+        if any(k in n for k in tamara_keywords): return False
+        if any(k in n for k in tabby_keywords):  return False
+        if any(k in n for k in emkan_keywords):  return False
+        if any(k in n for k in cod_keywords):    return False
+        return True
+
+    # Build a filtered electronic-only order list.
+    electronic_orders_included: list[dict] = []
+    electronic_orders_excluded: list[dict] = []
+    for o in all_orders:
+        if not _is_electronic_method(o.get("payment_method", "")):
+            continue
+        if _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms):
+            electronic_orders_excluded.append(o)
+        else:
+            electronic_orders_included.append(o)
+
+    if electronic_orders_included or electronic_orders_excluded:
+        parsed_elec = orders_to_parsed(electronic_orders_included)
+        matched_elec = match_settings(
+            parsed_elec,
+            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        )
+        # Override electronic sales/fees with the filtered figures.
+        filtered_elec_sales = 0.0
+        filtered_elec_fees = 0.0
+        for p in matched_elec.get("payment_breakdown", []):
+            filtered_elec_sales += float(p.get("total_sales", 0) or 0)
+            filtered_elec_fees += float(p.get("fee_amount", 0) or 0)
+        # Stash the pre-filter values for transparency in the response.
+        electronic_net_breakdown = {
+            "included_count": len(electronic_orders_included),
+            "excluded_count": len(electronic_orders_excluded),
+            "excluded_statuses_active": list(elec_excluded_terms),
+            "gross_before_filter": round(other_payment_sales, 2),
+            "fees_before_filter": round(other_payment_fees, 2),
+            "gross_after_filter": round(filtered_elec_sales, 2),
+            "fees_after_filter": round(filtered_elec_fees, 2),
+        }
+        other_payment_sales = filtered_elec_sales
+        other_payment_fees = filtered_elec_fees
+    else:
+        electronic_net_breakdown = {
+            "included_count": 0,
+            "excluded_count": 0,
+            "excluded_statuses_active": list(elec_excluded_terms),
+            "gross_before_filter": round(other_payment_sales, 2),
+            "fees_before_filter": round(other_payment_fees, 2),
+            "gross_after_filter": round(other_payment_sales, 2),
+            "fees_after_filter": round(other_payment_fees, 2),
+        }
+
     # ── Legacy analyses fallback ────────────────────────────────────────────
     # Older Excel uploads (pre unified_orders migration) wrote ONLY aggregate
     # summaries into `analyses` without saving the per-order details, so they
@@ -1239,6 +1373,9 @@ async def dashboard(
             "emkan_fees": round(emkan_fees, 2),
             "other_payment_fees": round(other_payment_fees, 2),
             "electronic_net": round(other_payment_sales - other_payment_fees, 2),
+            # iter-45 — visible filtering metadata for the UI
+            "electronic_net_breakdown": electronic_net_breakdown,
+            "salla_electronic_net_reference": settings.get("salla_electronic_net_reference"),
             "bnpl_net": round(bnpl_sales - bnpl_fees, 2),
             "total_shipping_cost": round(total_shipping, 2),
             "deferred_shipping_cost": round(deferred_shipping, 2),
@@ -1316,6 +1453,190 @@ async def dashboard(
             } for a in recent
         ],
     }
+
+
+# ── iter-45 — Electronic Net debug / verification endpoint ────────────────
+@api.get("/dashboard/electronic-net-debug")
+async def electronic_net_debug(
+    user: dict = Depends(current_user),
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+):
+    """Return a fully-itemized breakdown of the "صافي المدفوعات الإلكترونية"
+    KPI so the merchant can audit it against Salla's "غير المفوترة" screen.
+    """
+    settings = await ensure_user_settings(db, user["id"])
+    elec_excluded_terms = settings.get("electronic_net_excluded_statuses")
+    if elec_excluded_terms is None:
+        elec_excluded_terms = DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES
+
+    orders_q: dict = {"user_id": user["id"]}
+    if from_date or to_date:
+        orders_q["order_date"] = {}
+        if from_date:
+            orders_q["order_date"]["$gte"] = from_date
+        if to_date:
+            orders_q["order_date"]["$lte"] = to_date
+    all_orders = await db.unified_orders.find(orders_q, {"_id": 0}).to_list(20000)
+
+    if settings.get("hide_inferred_date_orders"):
+        all_orders = [o for o in all_orders if not bool(o.get("order_date_inferred"))]
+
+    included_statuses = settings.get("report_included_statuses") or []
+    if included_statuses:
+        all_orders = [
+            o for o in all_orders
+            if _matches_any(o.get("order_status", ""), included_statuses)
+        ]
+
+    tamara_keywords = ("تمارا", "tamara")
+    tabby_keywords = ("تابي", "tabby")
+    emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
+    cod_keywords = ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery")
+
+    def _is_electronic(name: str) -> bool:
+        n = (name or "").strip().lower()
+        if not n:
+            return False
+        if any(k in n for k in tamara_keywords):
+            return False
+        if any(k in n for k in tabby_keywords):
+            return False
+        if any(k in n for k in emkan_keywords):
+            return False
+        if any(k in n for k in cod_keywords):
+            return False
+        return True
+
+    electronic_total = 0
+    electronic_included: list[dict] = []
+    electronic_excluded: list[dict] = []
+    status_excluded_counts: dict[str, int] = {}
+
+    for o in all_orders:
+        pm = o.get("payment_method", "")
+        if not _is_electronic(pm):
+            continue
+        electronic_total += 1
+        status = (o.get("order_status") or "").strip()
+        if _is_excluded_for_electronic_net(status, elec_excluded_terms):
+            electronic_excluded.append(o)
+            key = status or "(فارغ)"
+            status_excluded_counts[key] = status_excluded_counts.get(key, 0) + 1
+        else:
+            electronic_included.append(o)
+
+    def _compute_with_fees(orders: list[dict]) -> tuple[float, float, list[dict]]:
+        parsed = orders_to_parsed(orders)
+        matched = match_settings(
+            parsed,
+            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        )
+        gross = sum(float(p.get("total_sales", 0) or 0) for p in matched.get("payment_breakdown", []))
+        fees = sum(float(p.get("fee_amount", 0) or 0) for p in matched.get("payment_breakdown", []))
+        return gross, fees, matched.get("payment_breakdown", [])
+
+    all_electronic_orders = electronic_included + electronic_excluded
+    pre_gross, pre_fees, _ = _compute_with_fees(all_electronic_orders)
+    post_gross, post_fees, post_breakdown = _compute_with_fees(electronic_included)
+
+    def _short(o: dict, *, reason: Optional[str] = None) -> dict:
+        d = {
+            "order_number": o.get("order_number") or "",
+            "order_date": o.get("order_date") or "",
+            "payment_method": o.get("payment_method") or "",
+            "order_status": o.get("order_status") or "",
+            "total_amount": round(float(o.get("total_amount") or 0), 2),
+        }
+        if reason:
+            d["exclusion_reason"] = reason
+        return d
+
+    excluded_sample = [
+        _short(o, reason=_first_match_reason(o.get("order_status", ""), elec_excluded_terms))
+        for o in electronic_excluded[:50]
+    ]
+    included_sample = [_short(o) for o in electronic_included[:50]]
+
+    ref = settings.get("salla_electronic_net_reference")
+    computed_net = round(post_gross - post_fees, 2)
+    gap = None
+    gap_pct = None
+    if isinstance(ref, (int, float)) and ref > 0:
+        gap = round(computed_net - float(ref), 2)
+        gap_pct = round((gap / float(ref)) * 100, 2) if ref else None
+
+    return {
+        "range": {"from_date": from_date, "to_date": to_date},
+        "excluded_statuses_active": list(elec_excluded_terms),
+        "totals": {
+            "electronic_orders_total": electronic_total,
+            "electronic_orders_included": len(electronic_included),
+            "electronic_orders_excluded": len(electronic_excluded),
+            "pre_filter_gross": round(pre_gross, 2),
+            "pre_filter_fees": round(pre_fees, 2),
+            "pre_filter_net": round(pre_gross - pre_fees, 2),
+            "post_filter_gross": round(post_gross, 2),
+            "post_filter_fees": round(post_fees, 2),
+            "post_filter_net": computed_net,
+        },
+        "salla_reference": {
+            "value": ref,
+            "gap_vs_computed": gap,
+            "gap_percent": gap_pct,
+        },
+        "excluded_by_status": [
+            {"status": k, "count": v}
+            for k, v in sorted(status_excluded_counts.items(), key=lambda x: -x[1])
+        ],
+        "payment_breakdown_after_filter": [
+            {
+                "name": p.get("name"),
+                "orders_count": int(p.get("orders_count") or 0),
+                "total_sales": round(float(p.get("total_sales") or 0), 2),
+                "fee_amount": round(float(p.get("fee_amount") or 0), 2),
+                "net_amount": round(
+                    float(p.get("total_sales") or 0) - float(p.get("fee_amount") or 0), 2,
+                ),
+                "commission_percent": float(p.get("commission_percent") or 0),
+                "fixed_fee": float(p.get("fixed_fee") or 0),
+                "vat_percent": float(p.get("vat_percent") or 0),
+            }
+            for p in post_breakdown
+        ],
+        "excluded_orders_sample": excluded_sample,
+        "included_orders_sample": included_sample,
+    }
+
+
+def _first_match_reason(status: str, excluded_terms: list[str]) -> str:
+    """Return the first excluded-term that matched this status."""
+    s = (status or "").strip().lower()
+    if not s:
+        return ""
+    for t in excluded_terms:
+        if t and t.strip().lower() in s:
+            return t
+    return ""
+
+
+# ── iter-45 — One-click "Sync to Salla" preset ────────────────────────────
+@api.post("/settings/electronic-net/sync-to-salla")
+async def electronic_net_sync_to_salla(user: dict = Depends(current_user)):
+    """Restore the Salla-compatible default exclusion list."""
+    new_list = list(DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES)
+    await db.settings.update_one(
+        {"user_id": user["id"]},
+        {"$set": {
+            "electronic_net_excluded_statuses": new_list,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"ok": True, "electronic_net_excluded_statuses": new_list}
+
+
 
 
 # ── Shared attribution helper ─────────────────────────────────────────────

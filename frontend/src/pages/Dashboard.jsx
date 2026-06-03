@@ -17,6 +17,11 @@ import {
     ArrowsClockwise,
     EyeSlash,
     GearSix,
+    MagnifyingGlass,
+    X,
+    Warning,
+    CheckCircle,
+    Equals,
 } from "@phosphor-icons/react";import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { toast } from "sonner";
 import api from "../lib/api";
@@ -25,6 +30,7 @@ import { useAuth } from "../context/AuthContext";
 import { ALL_KPI_CARDS } from "../lib/dashboardCards";
 import ProductCostCard from "../components/ProductCostCard";
 import SnapchatOfficialCard from "../components/SnapchatOfficialCard";
+import ElectronicNetDebugModal from "../components/ElectronicNetDebugModal";
 
 function formatRelative(ms) {
     if (ms < 5_000) return "الآن";
@@ -33,7 +39,7 @@ function formatRelative(ms) {
     return `قبل ${Math.floor(ms / 3_600_000)} ساعة`;
 }
 
-function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide }) {
+function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide, onDetails }) {
     return (
         <div
             className={[
@@ -60,7 +66,21 @@ function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide })
                 {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
             </div>
             <div className="text-sm text-muted-foreground mb-1">{label}</div>
-            <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{value}</div>
+            <div className="flex items-end justify-between gap-2">
+                <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{value}</div>
+                {onDetails && (
+                    <button
+                        type="button"
+                        onClick={onDetails}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold bg-slate-50 hover:bg-brand/10 text-slate-600 hover:text-brand border border-slate-200 hover:border-brand/30 transition-colors"
+                        data-testid={`${testid}-details-btn`}
+                        title="عرض تفاصيل الحساب ومطابقتها مع سلة"
+                    >
+                        <MagnifyingGlass size={12} weight="bold" />
+                        تفاصيل
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
@@ -78,6 +98,8 @@ export default function Dashboard() {
     const [nowTick, setNowTick] = useState(Date.now());
     const [snapSummary, setSnapSummary] = useState(null);
     const [snapDayInfo, setSnapDayInfo] = useState(null); // {tz, startRiyadh, endRiyadh}
+    // iter-45 — Electronic Net debug modal trigger
+    const [showElectronicNetDebug, setShowElectronicNetDebug] = useState(false);
     // Per-account today-spend breakdown (iteration 18). Lets the dashboard
     // Snapchat card display each enabled ad account's TODAY spend on its
     // own card, replacing the previous "this-month" summary block.
@@ -509,6 +531,9 @@ export default function Dashboard() {
                                         accent={c.accent}
                                         testid={`kpi-${c.id}`}
                                         onHide={() => hideCard(c.id)}
+                                        onDetails={c.id === "electronic_net"
+                                            ? () => setShowElectronicNetDebug(true)
+                                            : undefined}
                                     />
                                 );
                             })}
@@ -1251,6 +1276,12 @@ export default function Dashboard() {
                     </div>
                 </>
             )}
+            {/* iter-45 — Electronic Net audit modal */}
+            <ElectronicNetDebugModal
+                open={showElectronicNetDebug}
+                onClose={() => setShowElectronicNetDebug(false)}
+                filters={filters}
+            />
         </div>
     );
 }

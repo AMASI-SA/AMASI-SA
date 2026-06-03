@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator, LockKey } from "@phosphor-icons/react";
+import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator, LockKey, MagnifyingGlass, Warning } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { KPI_GROUPS } from "../lib/dashboardCards";
@@ -32,6 +32,10 @@ export default function Settings() {
         deduct_operating_expenses: true,
     });
     const [hideInferred, setHideInferred] = useState(false);
+    // iter-45 — Electronic Net status filter overrides
+    const [electronicNetExcluded, setElectronicNetExcluded] = useState([]);
+    const [sallaElectronicNetRef, setSallaElectronicNetRef] = useState("");
+    const [syncingElectronicNet, setSyncingElectronicNet] = useState(false);
     const [discoveredStatuses, setDiscoveredStatuses] = useState([]); // [{name,count}]
     const [shippingDiscovery, setShippingDiscovery] = useState(null);
     const [autoAdding, setAutoAdding] = useState(false);
@@ -147,6 +151,13 @@ export default function Settings() {
                 setHiddenCards(settings.dashboard_hidden_cards || []);
                 if (settings.net_sales_config) setNetSalesConfig(settings.net_sales_config);
                 setHideInferred(!!settings.hide_inferred_date_orders);
+                // iter-45 — Electronic Net status overrides
+                setElectronicNetExcluded(settings.electronic_net_excluded_statuses || []);
+                setSallaElectronicNetRef(
+                    settings.salla_electronic_net_reference != null
+                        ? String(settings.salla_electronic_net_reference)
+                        : ""
+                );
                 setDiscoveredStatuses(statuses.statuses || []);
                 setShippingDiscovery(discovery || null);
             } finally { setLoading(false); }
@@ -469,6 +480,22 @@ export default function Settings() {
         }
     };
 
+    // iter-45 — One-click sync of the electronic-net exclusion list to
+    // the Salla-compatible defaults. We then immediately reload settings
+    // so the UI stays in sync without a manual refresh.
+    const syncElectronicNetToSalla = async () => {
+        setSyncingElectronicNet(true);
+        try {
+            const { data } = await api.post("/settings/electronic-net/sync-to-salla");
+            setElectronicNetExcluded(data.electronic_net_excluded_statuses || []);
+            toast.success("تم تطبيق القائمة الافتراضية المطابقة لسلة");
+        } catch (err) {
+            toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذّرت المزامنة");
+        } finally {
+            setSyncingElectronicNet(false);
+        }
+    };
+
     const save = async () => {
         setSaving(true);
         try {
@@ -491,6 +518,11 @@ export default function Settings() {
                 dashboard_hidden_cards: hiddenCards,
                 net_sales_config: netSalesConfig,
                 hide_inferred_date_orders: hideInferred,
+                // iter-45 — Electronic Net overrides
+                electronic_net_excluded_statuses: electronicNetExcluded,
+                salla_electronic_net_reference: sallaElectronicNetRef.trim()
+                    ? Number(sallaElectronicNetRef)
+                    : null,
             });
             toast.success("تم حفظ الإعدادات");
         } catch (err) {
@@ -987,6 +1019,93 @@ export default function Settings() {
                     testIdPrefix="report-included"
                 />
             </div>
+
+            {/* iter-45 — Electronic Net (صافي المدفوعات الإلكترونية) — Salla parity */}
+            <div
+                className="rounded-xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/40 to-white p-6"
+                data-testid="electronic-net-section"
+            >
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                    <div>
+                        <h2 className="text-2xl font-bold flex items-center gap-2" style={{ fontFamily: "Tajawal" }}>
+                            <span className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-600 text-white">
+                                <MagnifyingGlass size={20} weight="bold" />
+                            </span>
+                            صافي المدفوعات الإلكترونية — مطابقة سلة
+                        </h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            هذا القسم يخصّ <strong>بطاقة "صافي المدفوعات الإلكترونية" فقط</strong> في لوحة التحكم. يستبعد
+                            الطلبات الملغية/المرتجعة/الفاشلة/المعلّقة لتطابق شاشة سلة → المدفوعات → غير المفوترة.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={syncElectronicNetToSalla}
+                        disabled={syncingElectronicNet}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs disabled:opacity-50"
+                        data-testid="electronic-net-sync-btn"
+                        title="استرجاع القائمة الافتراضية المطابقة لسلة"
+                    >
+                        <ArrowsClockwise size={14} weight="bold" />
+                        {syncingElectronicNet ? "جارٍ…" : "مزامنة مطابقة مع سلة"}
+                    </button>
+                </div>
+
+                <StatusListEditor
+                    title="الحالات المستبعدة من حساب الصافي"
+                    description={
+                        "أي طلب تكون حالته مطابقة جزئياً لإحدى هذه الكلمات يُستبعَد من حساب " +
+                        "صافي المدفوعات الإلكترونية. اتركها فارغة لتعطيل الفلتر تماماً (السلوك القديم)."
+                    }
+                    values={electronicNetExcluded}
+                    onChange={setElectronicNetExcluded}
+                    suggestions={Array.from(new Set([
+                        "ملغ", "مسترد", "مرتجع", "فشل", "مرفوض", "بانتظار الدفع",
+                        "cancel", "refund", "fail", "reject", "pending payment",
+                        ...(discoveredStatuses.map((s) => s.name)),
+                    ]))}
+                    suggestionMeta={discoveredStatuses.reduce((acc, s) => { acc[s.name] = s.count; return acc; }, {})}
+                    testIdPrefix="electronic-net-excluded"
+                />
+
+                <div className="my-5 border-t border-indigo-100" />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                            رقم سلة المرجعي للمقارنة (اختياري)
+                        </label>
+                        <p className="text-xs text-muted-foreground mb-2 leading-relaxed">
+                            انسخ "الصافي الإجمالي" من شاشة سلة → غير المفوترة لنفس الفترة.
+                            سيظهر الفرق مباشرةً في زر "تفاصيل" على البطاقة.
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={sallaElectronicNetRef}
+                                onChange={e => setSallaElectronicNetRef(e.target.value)}
+                                placeholder="21715.87"
+                                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-sm"
+                                data-testid="salla-electronic-net-ref-input"
+                            />
+                            <span className="text-sm text-slate-500 font-bold">ر.س</span>
+                        </div>
+                    </div>
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+                        <div className="font-bold flex items-center gap-1 mb-1">
+                            <Warning size={14} weight="bold" />
+                            ملاحظة مهمة
+                        </div>
+                        <p className="leading-relaxed">
+                            هذا الفلتر يعمل على مستوى <strong>حالة الطلب</strong> فقط. الحل النهائي المطابق 100%
+                            لسلة يتطلب جلب جدول معاملات الدفع من واجهة سلة Payments API
+                            (سيُضاف لاحقاً ضمن Salla Direct Integration — Phase 2).
+                        </p>
+                    </div>
+                </div>
+            </div>
+
 
             {/* Phase 1: Order Status Approval settings */}
             <div className="rounded-xl border border-border bg-white p-6" data-testid="status-approval-section">
