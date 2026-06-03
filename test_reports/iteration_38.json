@@ -1,0 +1,48 @@
+{
+  "summary": "Iter52 full validation (backend + frontend) — Made-with-Emergent badge removal + UI-level 'show_register_link' toggle. All 7 frontend scenarios PASS and 5/5 pytest backend tests PASS. Flag restored to false at end of run as instructed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_app_config_iter52.py",
+    "/app/backend/tests/test_register_unaffected_iter52.py",
+    "/app/test_reports/pytest/iteration_38_combined.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Defensive CSS in /app/frontend/src/index.css correctly hides #emergent-badge with !important — guards against platform re-injection. Good.",
+    "GET /api/public/login-config is rightly public (no auth) and returns a minimal payload — no info-leak risk.",
+    "Settings.jsx wraps login-settings-card with {user?.is_owner && (...)} — verified hidden for viewer role; backend still 403s on /api/app-config for non-owners, so even DOM tampering is blocked.",
+    "POST /api/auth/register still works when show_register_link=false (verified) — toggle is correctly UI-level only; reduces blast radius.",
+    "Optimistic update in handleToggleRegister with rollback on error is a clean pattern; toast feedback via sonner works."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_register_unaffected_iter52.py (new — register-still-works regression)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (7/7 scenarios)"},
+  "test_credentials": "Owner: admin@hesab.app / admin123 (untouched). Viewer: test_viewer_3401@hesab.app / viewerpass123 (used for non-owner gating). Backend test created/deleted TEST_iter52_* throwaway users.",
+  "seed_data_creation": "No new persistent seed data. Test users from pytest are cleaned up in fixtures.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "App-config singleton lives in Mongo collection 'app_config' with _id='global'. /api/public/login-config is the ONLY unauthenticated config endpoint; /api/app-config (GET/PUT) is owner-only. Always restore show_register_link=false at end of any test run because the system is single-store production. The UI-level toggle does NOT disable POST /api/auth/register — register endpoint is always reachable.",
+  "verified_flows": [
+    "Badge absent (#emergent-badge count=0) on /login (logged-out), /, /settings, /profile, /team",
+    "Default /login (OFF): link-to-register count=0, register-link-hidden shows 'التسجيل مغلق — هذا النظام خاص بمتجر واحد.'",
+    "/api/public/login-config returns {show_register_link:false} by default with no auth",
+    "Owner login → /settings shows login-settings-card; status 'مخفي' initially",
+    "Toggle ON → status flips to 'ظاهر'; public endpoint returns true",
+    "Incognito /login after ON → link-to-register present, href='/register'",
+    "Toggle OFF → status 'مخفي'; public endpoint returns false; incognito /login hides link again",
+    "Viewer (test_viewer_3401) /settings → login-settings-card count=0 (RBAC-gated)",
+    "Backend: POST /api/auth/register succeeds with 200 + access_token whether toggle is ON or OFF",
+    "Backend: GET/PUT /api/app-config rejects non-owner with 403",
+    "Regression: forgot-password modal opens from /login (verified visually + DOM)"
+  ],
+  "rca of the issue": "N/A — no defects found."
+}

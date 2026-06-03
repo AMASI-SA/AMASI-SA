@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator, LockKey, MagnifyingGlass, Warning } from "@phosphor-icons/react";
+import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator, LockKey, MagnifyingGlass, Warning, UserPlus } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { KPI_GROUPS } from "../lib/dashboardCards";
 import SecretField, { StatusBadge } from "../components/SecretField";
+import { useAuth } from "../context/AuthContext";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const DEFAULT_SNAP_REDIRECT = `${BACKEND_URL}/api/snapchat/oauth/callback`;
@@ -15,6 +16,7 @@ const newRowId = () => `r${Date.now().toString(36)}_${(_rowSeq += 1)}`;
 const withRowIds = (arr) => (arr || []).map((it) => ({ _rid: it?._rid || newRowId(), ...it }));
 
 export default function Settings() {
+    const { user } = useAuth();
     const [payments, setPayments] = useState([]);
     const [shippings, setShippings] = useState([]);
     const [shipApproved, setShipApproved] = useState([]);
@@ -93,6 +95,36 @@ export default function Settings() {
     const [shortLivedToken, setShortLivedToken] = useState("");
     const [exchangingToken, setExchangingToken] = useState(false);
 
+    // ── App-level Login settings (Owner-only — toggle visibility of the
+    //     "create new account" link on the public /login page) ──────────
+    const [appConfig, setAppConfig] = useState({ show_register_link: false });
+    const [appConfigSaving, setAppConfigSaving] = useState(false);
+
+    const loadAppConfig = async () => {
+        try {
+            const { data } = await api.get("/app-config");
+            setAppConfig({ show_register_link: !!data.show_register_link });
+        } catch {
+            // Non-owner gets 403 → keep defaults silently (the UI also gates the section).
+        }
+    };
+
+    const toggleShowRegister = async () => {
+        const next = !appConfig.show_register_link;
+        setAppConfigSaving(true);
+        // Optimistic update so the toggle feels instant
+        setAppConfig({ show_register_link: next });
+        try {
+            await api.put("/app-config", { show_register_link: next });
+            toast.success(next ? "تم تفعيل زر إنشاء حساب" : "تم إخفاء زر إنشاء حساب");
+        } catch (err) {
+            setAppConfig({ show_register_link: !next });  // rollback
+            toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر تحديث الإعداد");
+        } finally {
+            setAppConfigSaving(false);
+        }
+    };
+
     /** Robust error-detail formatter: handles both string and object
      * `detail` payloads from the backend without ever exposing raw JSON. */
     const fmtMetaErr = (e, fallback = "تعذّرت العملية") => {
@@ -164,6 +196,7 @@ export default function Settings() {
         })();
         loadSnapConfig();
         loadMetaConfig();
+        loadAppConfig();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -571,6 +604,57 @@ export default function Settings() {
                 </div>
                 <div className="text-indigo-600 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">فتح ←</div>
             </button>
+
+            {/* Login / Public-access settings (Owner only) — iter-52 */}
+            {user?.is_owner && (
+                <div className="rounded-xl border border-border bg-white p-6" data-testid="login-settings-card">
+                    <div className="flex items-start gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-lg bg-brand/10 text-brand flex items-center justify-center shrink-0">
+                            <LockKey size={22} weight="duotone" />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>إعدادات تسجيل الدخول</h2>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                تحكّم في ما يظهر للزوار على شاشة تسجيل الدخول.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-4 p-4 rounded-lg border border-border bg-slate-50/60" data-testid="show-register-toggle-row">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <UserPlus size={22} className="text-brand mt-0.5 shrink-0" weight="duotone" />
+                            <div className="min-w-0">
+                                <div className="font-bold text-foreground">إظهار زر "إنشاء حساب جديد"</div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    عند الإيقاف يختفي الرابط من شاشة تسجيل الدخول. وظيفة التسجيل تبقى متاحة في الـ Backend
+                                    (لتجنّب كسر أي تكامل قائم) — فقط الواجهة العامة تُخفى.
+                                    <br />
+                                    الافتراضي: <span className="font-bold text-amber-700">إيقاف</span> لأن النظام مُخصّص لمتجر واحد.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={appConfig.show_register_link}
+                            onClick={toggleShowRegister}
+                            disabled={appConfigSaving}
+                            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-60 ${appConfig.show_register_link ? "bg-brand" : "bg-slate-300"}`}
+                            data-testid="show-register-toggle"
+                        >
+                            <span
+                                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${appConfig.show_register_link ? "translate-x-1" : "translate-x-6"}`}
+                            />
+                        </button>
+                    </div>
+                    <div className="mt-3 text-xs text-muted-foreground" data-testid="show-register-status">
+                        الحالة الحالية:{" "}
+                        <span className={`font-bold ${appConfig.show_register_link ? "text-emerald-700" : "text-rose-600"}`}>
+                            {appConfig.show_register_link ? "ظاهر" : "مخفي"}
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* Payment methods */}
             <div className="rounded-xl border border-border bg-white p-6">

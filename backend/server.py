@@ -732,6 +732,53 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
     return {"ok": True}
 
 
+# ── Global App Config (singleton — affects all users) ────────────────────────
+# `app_config` is a single-document collection (id='global'). It holds settings
+# that affect the public-facing UI (e.g. whether the "create new account" link
+# is visible on /login). Only the Owner can modify it.
+APP_CONFIG_DEFAULTS = {
+    "show_register_link": False,  # Single-store deployment by default — public
+                                  # registration is hidden but the endpoint
+                                  # still works (UI-level toggle only).
+}
+
+
+async def _get_app_config() -> dict:
+    """Fetch the singleton config doc, creating it with defaults if missing."""
+    doc = await db.app_config.find_one({"_id": "global"}) or {}
+    return {**APP_CONFIG_DEFAULTS, **{k: v for k, v in doc.items() if k != "_id"}}
+
+
+@api.get("/public/login-config")
+async def public_login_config():
+    """Public, unauthenticated endpoint that exposes only the flags needed by
+    the /login screen. Kept intentionally minimal to avoid leaking any other
+    app config to anonymous visitors."""
+    cfg = await _get_app_config()
+    return {"show_register_link": bool(cfg.get("show_register_link", False))}
+
+
+class AppConfigIn(BaseModel):
+    show_register_link: Optional[bool] = None
+
+
+@api.get("/app-config")
+async def get_app_config(user: dict = Depends(current_user)):
+    """Owner-only — full app config readback for the Settings page."""
+    _require_owner(user)
+    return await _get_app_config()
+
+
+@api.put("/app-config")
+async def update_app_config(payload: AppConfigIn, user: dict = Depends(current_user)):
+    _require_owner(user)
+    update_doc = {"updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user["id"]}
+    if payload.show_register_link is not None:
+        update_doc["show_register_link"] = bool(payload.show_register_link)
+    await db.app_config.update_one({"_id": "global"}, {"$set": update_doc}, upsert=True)
+    return await _get_app_config()
+
+
 @api.get("/order-statuses")
 async def list_order_statuses(user: dict = Depends(current_user)):
     """Return distinct order_status values observed in the user's unified_orders

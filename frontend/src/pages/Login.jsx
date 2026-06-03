@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeSlash, EnvelopeSimple, LockKey } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
+import api from "../lib/api";
 import ForgotPasswordModal from "../components/ForgotPasswordModal";
 
 const AUTH_BG = "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/9126576d79013e8b54614eb6ef7268db1c88914c10825a71376e455fc32c7233.png";
@@ -16,6 +17,22 @@ export default function Login() {
     const [showPass, setShowPass] = useState(false);
     const [busy, setBusy] = useState(false);
     const [showForgot, setShowForgot] = useState(false);
+    // Defaults to false so the link stays hidden on first paint until config
+    // arrives — single-store deployments stay clean by default.
+    const [showRegisterLink, setShowRegisterLink] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const { data } = await api.get("/public/login-config");
+                if (!cancelled) setShowRegisterLink(!!data?.show_register_link);
+            } catch {
+                // Network error → keep default (hidden). Single-store is the safe fallback.
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     const submit = async (e) => {
         e.preventDefault();
@@ -119,11 +136,19 @@ export default function Login() {
                         </div>
                     </form>
 
-                    <p className="mt-8 text-center text-sm text-muted-foreground">
-                        ليس لديك حساب؟{" "}
-                        <Link to="/register" className="text-brand font-bold hover:underline" data-testid="link-to-register">
-                            إنشاء حساب جديد
-                        </Link>
+                    <p className="mt-8 text-center text-sm text-muted-foreground" data-testid="register-link-wrapper">
+                        {showRegisterLink ? (
+                            <>
+                                ليس لديك حساب؟{" "}
+                                <Link to="/register" className="text-brand font-bold hover:underline" data-testid="link-to-register">
+                                    إنشاء حساب جديد
+                                </Link>
+                            </>
+                        ) : (
+                            <span className="text-xs text-muted-foreground/60" data-testid="register-link-hidden">
+                                التسجيل مغلق — هذا النظام خاص بمتجر واحد.
+                            </span>
+                        )}
                     </p>
                 </div>
             </div>
