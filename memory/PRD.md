@@ -12,6 +12,30 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## ✅ ITERATION 52 (2026-02) — Remove "Made with Emergent" badge + Show-Register toggle — **DONE**
+
+**User asks**:
+1. Remove the "Made with Emergent" badge permanently from every page.
+2. Add a setting in `الإعدادات → إعدادات تسجيل الدخول` to toggle the visibility of the "إنشاء حساب جديد" link on the login screen. Default OFF (single-store deployment). UI-only — keep `/api/auth/register` working.
+
+### Implementation
+- **Badge removal**: Deleted the `<a id="emergent-badge">` block from `/app/frontend/public/index.html` (was lines 41-85). Added a defensive CSS rule in `/app/frontend/src/index.css` (`#emergent-badge { display: none !important; }`) to hide it in case the platform re-injects it post-deploy.
+- **Backend** (new endpoints in `server.py`, singleton `app_config` collection with `_id='global'`):
+  - `GET /api/public/login-config` — **unauthenticated**, returns `{show_register_link: bool}`. Read by the public `/login` page.
+  - `GET /api/app-config` — Owner-only, returns full app config.
+  - `PUT /api/app-config` — Owner-only, accepts partial `AppConfigIn{show_register_link?: bool}`.
+  - Defaults: `show_register_link=False` (kept hidden by default for single-store deployments).
+- **Frontend**:
+  - `pages/Login.jsx` — calls `GET /public/login-config` on mount; conditionally renders either the register link or a muted "التسجيل مغلق — هذا النظام خاص بمتجر واحد." message.
+  - `pages/Settings.jsx` — new `login-settings-card` (Owner-only — gated by `user?.is_owner`) with a switch (`show-register-toggle`) that auto-saves on click. Status indicator below shows "ظاهر" / "مخفي".
+
+### Tests
+- **Backend**: `/app/backend/tests/test_app_config_iter52.py` (3 tests) — public endpoint anonymous read, Owner toggle round-trip, non-Owner 403. Combined run: 12/12 PASS (iter51 9 + iter52 3).
+- **Frontend (iteration_38.json)**: 7/7 scenarios PASS via testing agent. Badge confirmed absent on `/login`, `/`, `/settings`, `/profile`, `/team`. Toggle round-trips fully validated. `/api/auth/register` confirmed still functional even when UI toggle is OFF.
+
+---
+
+
 ## ✅ ITERATION 51 (2026-02) — RBAC: Profile / Team Management / Password Recovery — **DONE**
 
 **User ask**: "Responsive Dashboard + Profile (Email/Password) + Password Recovery + Team Roles/Permissions".
