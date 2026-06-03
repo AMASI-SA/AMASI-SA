@@ -12,6 +12,39 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## ✅ ITERATION 51 (2026-02) — RBAC: Profile / Team Management / Password Recovery — **DONE**
+
+**User ask**: "Responsive Dashboard + Profile (Email/Password) + Password Recovery + Team Roles/Permissions".
+
+### Backend (already shipped in previous session, fixed this iteration)
+- `PUT /api/auth/profile/name|password|email|security-question` — self-service profile updates.
+- `POST /api/auth/forgot-password/check` — returns the security question (or a generic prompt to avoid email enumeration).
+- `POST /api/auth/forgot-password/reset` — resets password if the security-question answer matches (bcrypt-hashed, normalised).
+- `GET/POST/PUT/DELETE /api/team/users` — Owner-only CRUD. Owner row cannot be modified/deleted by others.
+- `GET /api/auth/permissions/catalogue` — returns `permissions[]` (with i18n labels) + `role_defaults{}` mapping.
+- **Bug fix**: All `verify_password(payload.current_password, user["password_hash"])` calls were failing because `get_current_user_from_db` strips `password_hash` for safety. Fixed by re-fetching the user via `db.users.find_one({"id": user["id"]})` inside the four profile endpoints.
+- **Bug fix**: `GET /team/users` capped at 500 with no sort — newly created users wouldn't appear if DB had ≥500 users. Now sorts by `created_at DESC` with cap 5000.
+
+### Frontend (new — this iteration)
+- `/app/frontend/src/pages/Profile.jsx` — 4 sections: Name, Email (with current-password confirm), Password (current + new + confirm), Security Question (current-password confirm).
+- `/app/frontend/src/pages/TeamManagement.jsx` — Owner-only table with role badges (color-coded per role), Add/Edit/Delete modals, fine-grained permissions UI showing role defaults vs added/denied.
+- `/app/frontend/src/components/ForgotPasswordModal.jsx` — 2-step modal (email lookup → question + answer + new password). Linked from `/login` via "نسيت كلمة المرور؟".
+- `/app/frontend/src/components/Sidebar.jsx` — Added "حسابي" (always) and "إدارة الفريق" (owner-only) nav links.
+- `/app/frontend/src/context/AuthContext.jsx` — `login()` now refreshes via `/auth/me` so `is_owner` + `permissions` + `has_security_question` are available immediately.
+- `/app/frontend/src/App.js` — Routes `/profile` and `/team` added.
+
+### Testing
+- **Backend**: 9/9 PASS — `/app/backend/tests/test_auth_and_team_iter51.py`.
+- **Frontend (iteration_37.json)**: 5/5 feature groups PASS via testing agent. Full forgot-password flow exercised against the live preview URL.
+- Test credentials updated in `/app/memory/test_credentials.md` (admin sec question + viewer seed).
+
+### Known optional improvements (NOT blocking)
+- TeamManagement renders all rows client-side — virtualization or server-side pagination would help when team grows beyond a few hundred. (Current testing DB has 4499 stale test users which is not a real-world scenario.)
+- Logout button can be overlapped by the "Made with Emergent" badge on small viewports — raise z-index of sidebar footer to fix.
+
+---
+
+
 ## 🐛 CRITICAL BUG FIX (2026-06 — Iteration 50) — **Meta Ads orders inflated 5-10× by duplicate `action_type` values**
 
 **Merchant report (Production)**: "نتائج الإعلانات في بطاقات الحسابات الإعلانية فيسبوك ليست صحيحة، يظهر أرقام طلبات أكبر من الحقيقية بـ 10 أضعاف، والعائد والمبيعات الشهرية واليومية".
