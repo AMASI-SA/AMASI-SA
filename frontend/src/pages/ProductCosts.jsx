@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
     Package, Plus, MagnifyingGlass, PencilSimple, Trash, UploadSimple,
     Warning, ArrowsClockwise, Storefront, X, CheckCircle, Tag, ChartLineUp,
+    Coins,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import DailyProductCostModal from "../components/DailyProductCostModal";
 
 /**
  * ProductCosts — `/product-costs` (iteration 19).
@@ -603,6 +605,8 @@ export default function ProductCosts() {
     const [updateExisting, setUpdateExisting] = useState(true);
     const [importModalOpen, setImportModalOpen] = useState(false);
     const [recomputing, setRecomputing] = useState(false);
+    // iter-46 — Daily aggregate cost modal (temporary while per-product costs aren't fully populated).
+    const [dailyCostModalOpen, setDailyCostModalOpen] = useState(false);
 
     const loadCatalogue = async (q = search) => {
         setLoadingCat(true);
@@ -776,6 +780,16 @@ export default function ProductCosts() {
                     </button>
                     <button
                         type="button"
+                        onClick={() => setDailyCostModalOpen(true)}
+                        className="px-3 py-2 border-2 border-amber-300 bg-amber-50 text-amber-800 rounded-lg font-bold text-sm inline-flex items-center gap-2 hover:bg-amber-100"
+                        data-testid="product-costs-daily-aggregate-btn"
+                        title="إدخال إجمالي تكلفة المنتجات لتاريخ معين (حل مؤقت)"
+                    >
+                        <Coins size={16} weight="bold" />
+                        إجمالي تكلفة يوم
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => openAdd(null)}
                         className="px-3 py-2 bg-brand text-white rounded-lg font-bold text-sm inline-flex items-center gap-2 hover:opacity-90"
                         data-testid="product-costs-add-btn"
@@ -839,6 +853,13 @@ export default function ProductCosts() {
                 initial={modalInitial}
                 onClose={() => setModalOpen(false)}
                 onSaved={onSaved}
+            />
+
+            {/* iter-46 — Daily aggregate product-cost entry */}
+            <DailyProductCostModal
+                open={dailyCostModalOpen}
+                onClose={() => setDailyCostModalOpen(false)}
+                onSaved={loadSummary}
             />
 
             {/* Import options modal (iteration 20) — collects the

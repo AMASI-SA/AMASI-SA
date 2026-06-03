@@ -12,6 +12,43 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 NEW FEATURE (2026-06 — Iteration 46) — **كارت منبثق لإضافة إجمالي تكلفة المنتجات حسب التاريخ**
+
+**Merchant request**: "كارت منبثق لإضافة إجمالي تكلفة المنتجات حسب التاريخ المحدد في صفحة تكلفة المنتجات بشكل مؤقت حتى يتم موازنة التكاليف من كل منتج بالمستقبل".
+
+### Backend
+- ✅ **صفر تعديلات**. الـ endpoint موجود مسبقاً:
+  - `POST /api/daily-costs` — upsert by `date`، يضم حقل `product_costs`.
+  - `GET /api/daily-costs` — قائمة مرتبة DESC.
+  - `DELETE /api/daily-costs/{date}` — يمسح الصف كاملاً.
+- ✅ **الدمج التلقائي مع لوحة التحكم**: السطر 1233 في `server.py` يستخدم:
+  ```py
+  product_cost_effective = max(computed_product_cost, daily_products_total)
+  ```
+  أي أن أي قيمة تُحفظ في `daily_costs.product_costs` تدخل تلقائياً في حساب صافي الربح بدون أي تعديل إضافي.
+
+### Frontend
+- ✅ **مكون جديد** `DailyProductCostModal.jsx`:
+  - منتقي تاريخ + حقل المبلغ (ر.س) + ملاحظة اختيارية.
+  - **تنبيه أصفر صريح** "حل مؤقت — استبدله بتكلفة لكل منتج لاحقاً".
+  - **تنبيه ذكي** عند اختيار تاريخ له إدخال سابق: يعرض القيمة الحالية ويغير الزر من "حفظ" إلى "تحديث".
+  - **جدول آخر 30 إدخال** مع زر حذف لكل سطر (يحافظ على بيانات الإعلانات للتاريخ نفسه عبر upsert بـ `product_costs=0` بدلاً من DELETE كامل).
+  - Preserves the OTHER cost fields (snapchat_ads, tiktok_ads, etc.) عند الحفظ — لا يصفّرها.
+- ✅ **زر جديد** "إجمالي تكلفة يوم" (Coins icon، خلفية كهرمانية) في header صفحة `/product-costs` بجانب "إضافة منتج".
+- ✅ Toast نجاح ديناميكي حسب الحالة (`حفظ` vs `تحديث`).
+
+### Tests (5/5 PASS — `tests/test_daily_product_costs_iter46.py`)
+1. `test_daily_product_cost_flows_into_dashboard` — قيمة 1250.50 ر.س تظهر في `manual_product_cost` و`total_product_cost` بالـ dashboard.
+2. `test_daily_product_cost_upsert_replaces_for_same_date` — حفظ تاريخ نفسه مرتين → القيمة تُستبدل (لا تُضاف).
+3. `test_zeroing_product_cost_removes_it_from_total` — تصفير القيمة يزيلها من الحساب.
+4. `test_multiple_days_sum_correctly` — يومان مختلفان (300+700) يُجمعان إلى 1000 في الـ dashboard.
+5. `test_endpoint_requires_auth` — يتطلب bearer token.
+
+### Visual verification (Playwright)
+- الزر ظاهر، الـ modal يفتح، الإدخال يُحفظ → toast يظهر → الصف يُضاف إلى جدول الإدخالات السابقة → التنبيه الذكي يظهر عند إعادة فتح نفس التاريخ.
+
+---
+
 ## 🐛 BUG FIX (2026-06 — Iteration 45.1) — **"تعذّر تحميل تفاصيل الحساب" عند فتح modal تفاصيل صافي المدفوعات**
 
 **Merchant report**: "رسالة خطأ تظهر تعذّر تحميل تفاصيل الحساب عند الضغط على تفاصيل صافي المدفوعات الإلكترونية".
