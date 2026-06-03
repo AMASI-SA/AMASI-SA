@@ -121,14 +121,22 @@ async def seed_admin(db) -> None:
             "email": admin_email,
             "password_hash": hash_password(admin_password),
             "name": "المدير",
-            "role": "admin",
+            # iter-51 — the seeded user is the Owner (highest privilege).
+            # Only one Owner per installation; cannot be downgraded via API.
+            "role": "owner",
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-    elif not verify_password(admin_password, existing.get("password_hash", "")):
-        await db.users.update_one(
-            {"email": admin_email},
-            {"$set": {"password_hash": hash_password(admin_password)}},
-        )
+    else:
+        updates = {}
+        if not verify_password(admin_password, existing.get("password_hash", "")):
+            updates["password_hash"] = hash_password(admin_password)
+        # iter-51 — promote the existing seeded admin to Owner so the team
+        # management endpoints work out of the box. Idempotent: skipped
+        # if already owner.
+        if (existing.get("role") or "").lower() != "owner":
+            updates["role"] = "owner"
+        if updates:
+            await db.users.update_one({"email": admin_email}, {"$set": updates})
 
 
 DEFAULT_PAYMENT_METHODS = [

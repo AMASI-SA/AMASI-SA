@@ -124,6 +124,129 @@ class LoginIn(BaseModel):
     password: str
 
 
+# iter-51 — Profile/account management schemas
+class ChangePasswordIn(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+class ChangeEmailIn(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_email: EmailStr
+
+
+class ChangeNameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class SecurityQuestionIn(BaseModel):
+    """Save / update the merchant's security question + plain answer.
+    The answer is hashed on the server before storage."""
+    current_password: str = Field(min_length=1)
+    question: str = Field(min_length=4, max_length=200)
+    answer: str = Field(min_length=2, max_length=200)
+
+
+class ForgotPasswordCheckIn(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordResetIn(BaseModel):
+    email: EmailStr
+    answer: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+# iter-51 — Multi-user / RBAC schemas
+# Roles ranked from highest privilege to lowest. Stored as a single
+# string on the user document.
+_ROLE_HIERARCHY: tuple[str, ...] = ("owner", "admin", "accountant", "operations", "viewer")
+
+# Permission catalogue — drives the UI checkbox list AND the @require_perm
+# dependency on protected routes. Keep keys short, descriptive, lowercase.
+PERMISSIONS_CATALOGUE: dict[str, str] = {
+    "dashboard.view":         "عرض لوحة التحكم",
+    "reports.view":           "عرض التقارير",
+    "orders.view":            "عرض الطلبات",
+    "orders.manage":          "إدارة الطلبات (إعادة معالجة، حذف)",
+    "preparation.view":       "عرض تجهيز المنتجات",
+    "preparation.manage":     "إدارة تجهيز المنتجات",
+    "product_costs.view":     "عرض تكاليف المنتجات",
+    "product_costs.manage":   "إدارة تكاليف المنتجات",
+    "operating_expenses.view":   "عرض المصروفات التشغيلية",
+    "operating_expenses.manage": "إدارة المصروفات التشغيلية",
+    "daily_costs.view":       "عرض التكاليف اليومية",
+    "daily_costs.manage":     "إدارة التكاليف اليومية",
+    "ads.view":               "عرض الإعلانات (Meta/TikTok/Snap)",
+    "ads.manage":             "إدارة الإعلانات وربط الحسابات",
+    "salla.view":             "عرض تكامل سلة",
+    "salla.manage":           "إدارة تكامل سلة (OAuth + Webhooks)",
+    "settings.view":          "عرض الإعدادات",
+    "settings.manage":        "إدارة الإعدادات العامة",
+    "users.manage":           "إدارة المستخدمين والصلاحيات (Owner فقط)",
+}
+
+# Default permissions per role. Override on the user document via
+# `extra_permissions` (add) and `denied_permissions` (subtract).
+ROLE_DEFAULT_PERMS: dict[str, list[str]] = {
+    "owner": list(PERMISSIONS_CATALOGUE.keys()),  # owner = all
+    "admin": [k for k in PERMISSIONS_CATALOGUE if k != "users.manage"],
+    "accountant": [
+        "dashboard.view", "reports.view", "orders.view",
+        "product_costs.view", "product_costs.manage",
+        "operating_expenses.view", "operating_expenses.manage",
+        "daily_costs.view", "daily_costs.manage",
+        "ads.view",
+    ],
+    "operations": [
+        "dashboard.view", "orders.view", "orders.manage",
+        "preparation.view", "preparation.manage",
+    ],
+    "viewer": [
+        "dashboard.view", "reports.view", "orders.view",
+        "preparation.view", "product_costs.view",
+        "operating_expenses.view", "daily_costs.view",
+        "ads.view", "salla.view", "settings.view",
+    ],
+}
+
+
+class TeamUserCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=128)
+    role: str = Field(default="viewer")
+    extra_permissions: list[str] = Field(default_factory=list)
+    denied_permissions: list[str] = Field(default_factory=list)
+
+
+class TeamUserUpdateIn(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=80)
+    role: Optional[str] = None
+    extra_permissions: Optional[list[str]] = None
+    denied_permissions: Optional[list[str]] = None
+    new_password: Optional[str] = Field(default=None, min_length=6, max_length=128)
+
+
+def _effective_perms(user_doc: dict) -> set[str]:
+    """Resolve the effective permission set for a user document.
+
+    Formula:  role_defaults ∪ extra_permissions  −  denied_permissions
+    The owner ALWAYS has every permission and cannot be downgraded.
+    """
+    role = (user_doc.get("role") or "viewer").lower()
+    if role == "owner":
+        return set(PERMISSIONS_CATALOGUE.keys())
+    base = set(ROLE_DEFAULT_PERMS.get(role, ROLE_DEFAULT_PERMS["viewer"]))
+    base |= set(user_doc.get("extra_permissions") or [])
+    base -= set(user_doc.get("denied_permissions") or [])
+    return base
+
+
+def _is_owner(user_doc: dict) -> bool:
+    return (user_doc.get("role") or "").lower() == "owner"
+
+
 class PaymentMethod(BaseModel):
     name: str
     commission_percent: float = Field(ge=0, le=100, default=0.0)
@@ -290,7 +413,261 @@ async def logout(response: Response, user: dict = Depends(current_user)):
 
 @api.get("/auth/me")
 async def me(user: dict = Depends(current_user)):
-    return {"id": user["id"], "name": user.get("name"), "email": user["email"], "role": user.get("role", "user")}
+    return {
+        "id": user["id"], "name": user.get("name"), "email": user["email"],
+        "role": user.get("role", "user"),
+        # iter-51 — surface effective permissions + Salla owner flag so the
+        # frontend can drive RBAC navigation without an extra round-trip.
+        "permissions": sorted(_effective_perms(user)),
+        "is_owner": _is_owner(user),
+        "has_security_question": bool(user.get("security_question")),
+    }
+
+
+# ── iter-51 — Profile / account self-management ────────────────────────────
+@api.put("/auth/profile/name")
+async def update_my_name(payload: ChangeNameIn, user: dict = Depends(current_user)):
+    """Lets a logged-in user update their display name."""
+    new_name = payload.name.strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="الاسم لا يمكن أن يكون فارغاً")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"name": new_name, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"ok": True, "name": new_name}
+
+
+@api.put("/auth/profile/password")
+async def change_my_password(payload: ChangePasswordIn, user: dict = Depends(current_user)):
+    """Change own password. Requires the current password for security."""
+    # `current_user` strips password_hash for safety; re-fetch the full doc.
+    full = await db.users.find_one({"id": user["id"]})
+    if not full or not verify_password(payload.current_password, full.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="كلمة المرور الحالية غير صحيحة")
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="كلمة المرور الجديدة يجب أن تختلف عن الحالية")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "password_hash": hash_password(payload.new_password),
+            "password_updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"ok": True}
+
+
+@api.put("/auth/profile/email")
+async def change_my_email(payload: ChangeEmailIn, user: dict = Depends(current_user)):
+    """Change own email. Requires current password + email uniqueness."""
+    full = await db.users.find_one({"id": user["id"]})
+    if not full or not verify_password(payload.current_password, full.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="كلمة المرور الحالية غير صحيحة")
+    new_email = payload.new_email.lower()
+    if new_email == user["email"]:
+        raise HTTPException(status_code=400, detail="البريد الإلكتروني الجديد مطابق للحالي")
+    existing = await db.users.find_one({"email": new_email})
+    if existing and existing.get("id") != user["id"]:
+        raise HTTPException(status_code=400, detail="هذا البريد الإلكتروني مسجل بالفعل")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"email": new_email, "email_updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"ok": True, "email": new_email}
+
+
+@api.put("/auth/profile/security-question")
+async def set_security_question(payload: SecurityQuestionIn, user: dict = Depends(current_user)):
+    """Set/update the security question used for password recovery. The
+    answer is normalised (trim + lower) and bcrypt-hashed before storage."""
+    full = await db.users.find_one({"id": user["id"]})
+    if not full or not verify_password(payload.current_password, full.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="كلمة المرور الحالية غير صحيحة")
+    normalized_answer = payload.answer.strip().lower()
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "security_question": payload.question.strip(),
+            "security_answer_hash": hash_password(normalized_answer),
+            "security_question_updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"ok": True, "question": payload.question.strip()}
+
+
+# ── iter-51 — Password recovery via security question (no email needed) ────
+@api.post("/auth/forgot-password/check")
+async def forgot_password_check(payload: ForgotPasswordCheckIn):
+    """Step 1 — given an email, return that user's security question
+    (if any). We intentionally DO NOT reveal whether the email exists,
+    to avoid email enumeration: return a generic question if not found
+    or no security question is set."""
+    user = await db.users.find_one({"email": payload.email.lower()})
+    if user and user.get("security_question"):
+        return {"question": user["security_question"], "has_question": True}
+    # Generic placeholder — prevents enumeration. Frontend should still
+    # collect an answer but the next call will fail.
+    return {"question": "سؤال الاسترداد غير مضبوط لهذا الحساب.", "has_question": False}
+
+
+@api.post("/auth/forgot-password/reset")
+async def forgot_password_reset(payload: ForgotPasswordResetIn):
+    """Step 2 — verify the answer + reset the password in one shot."""
+    user = await db.users.find_one({"email": payload.email.lower()})
+    if not user or not user.get("security_answer_hash"):
+        # Same generic message → no enumeration.
+        raise HTTPException(status_code=400, detail="تعذّر التحقق من بيانات الاسترداد")
+    normalized = payload.answer.strip().lower()
+    if not verify_password(normalized, user["security_answer_hash"]):
+        raise HTTPException(status_code=400, detail="إجابة سؤال الأمان غير صحيحة")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "password_hash": hash_password(payload.new_password),
+            "password_updated_at": datetime.now(timezone.utc).isoformat(),
+            "password_reset_via_security": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"ok": True}
+
+
+# ── iter-51 — Permissions catalogue (drives the Settings UI) ──────────────
+@api.get("/auth/permissions/catalogue")
+async def get_permissions_catalogue(user: dict = Depends(current_user)):
+    """Return the permissions list + role defaults so the team-management
+    UI can render checkboxes without hardcoding strings."""
+    return {
+        "permissions": [{"key": k, "label": v} for k, v in PERMISSIONS_CATALOGUE.items()],
+        "role_defaults": ROLE_DEFAULT_PERMS,
+        "roles_ordered": list(_ROLE_HIERARCHY),
+    }
+
+
+# ── iter-51 — Team / multi-user CRUD (owner only) ─────────────────────────
+def _require_owner(user: dict) -> None:
+    if not _is_owner(user):
+        raise HTTPException(status_code=403, detail="هذه العملية متاحة لـ Owner فقط")
+
+
+def _public_user_view(u: dict) -> dict:
+    """Strip sensitive fields before sending a user document to the UI."""
+    return {
+        "id": u["id"],
+        "name": u.get("name", ""),
+        "email": u.get("email", ""),
+        "role": u.get("role", "viewer"),
+        "extra_permissions": sorted(u.get("extra_permissions") or []),
+        "denied_permissions": sorted(u.get("denied_permissions") or []),
+        "effective_permissions": sorted(_effective_perms(u)),
+        "is_owner": _is_owner(u),
+        "created_at": u.get("created_at"),
+        "updated_at": u.get("updated_at"),
+        "last_login_at": u.get("last_login_at"),
+    }
+
+
+@api.get("/team/users")
+async def list_team_users(user: dict = Depends(current_user)):
+    _require_owner(user)
+    # Sort newest first so freshly created users always appear at the top
+    # of the team management screen. Cap at 5000 (production-safe).
+    docs = await db.users.find(
+        {}, {"_id": 0, "password_hash": 0, "security_answer_hash": 0}
+    ).sort("created_at", -1).to_list(5000)
+    return [_public_user_view(u) for u in docs]
+
+
+@api.post("/team/users")
+async def create_team_user(payload: TeamUserCreateIn, user: dict = Depends(current_user)):
+    _require_owner(user)
+    role = (payload.role or "viewer").lower()
+    if role not in _ROLE_HIERARCHY:
+        raise HTTPException(status_code=400, detail=f"الدور غير صالح: {role}")
+    if role == "owner":
+        raise HTTPException(
+            status_code=400,
+            detail="لا يمكن إنشاء مستخدم Owner — Owner واحد فقط لكل حساب",
+        )
+    email = payload.email.lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="هذا البريد الإلكتروني مسجل بالفعل")
+    # Validate permission keys
+    for p in (payload.extra_permissions + payload.denied_permissions):
+        if p not in PERMISSIONS_CATALOGUE:
+            raise HTTPException(status_code=400, detail=f"صلاحية غير معروفة: {p}")
+    now = datetime.now(timezone.utc).isoformat()
+    new_doc = {
+        "id": str(uuid.uuid4()),
+        "name": payload.name.strip(),
+        "email": email,
+        "password_hash": hash_password(payload.password),
+        "role": role,
+        "extra_permissions": payload.extra_permissions,
+        "denied_permissions": payload.denied_permissions,
+        "created_at": now,
+        "created_by": user["id"],
+    }
+    await db.users.insert_one(new_doc)
+    return _public_user_view(new_doc)
+
+
+@api.put("/team/users/{user_id}")
+async def update_team_user(
+    user_id: str,
+    payload: TeamUserUpdateIn,
+    user: dict = Depends(current_user),
+):
+    _require_owner(user)
+    target = await db.users.find_one({"id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    if _is_owner(target) and user_id != user["id"]:
+        raise HTTPException(status_code=403, detail="لا يمكن تعديل Owner")
+    set_ops: dict = {}
+    if payload.name is not None:
+        new_name = payload.name.strip()
+        if new_name:
+            set_ops["name"] = new_name
+    if payload.role is not None:
+        role = payload.role.lower()
+        if role not in _ROLE_HIERARCHY:
+            raise HTTPException(status_code=400, detail=f"الدور غير صالح: {role}")
+        if role == "owner":
+            raise HTTPException(status_code=400, detail="لا يمكن ترقية مستخدم إلى Owner")
+        set_ops["role"] = role
+    if payload.extra_permissions is not None:
+        for p in payload.extra_permissions:
+            if p not in PERMISSIONS_CATALOGUE:
+                raise HTTPException(status_code=400, detail=f"صلاحية غير معروفة: {p}")
+        set_ops["extra_permissions"] = payload.extra_permissions
+    if payload.denied_permissions is not None:
+        for p in payload.denied_permissions:
+            if p not in PERMISSIONS_CATALOGUE:
+                raise HTTPException(status_code=400, detail=f"صلاحية غير معروفة: {p}")
+        set_ops["denied_permissions"] = payload.denied_permissions
+    if payload.new_password:
+        set_ops["password_hash"] = hash_password(payload.new_password)
+        set_ops["password_updated_at"] = datetime.now(timezone.utc).isoformat()
+    if not set_ops:
+        raise HTTPException(status_code=400, detail="لا يوجد ما يُحدَّث")
+    set_ops["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one({"id": user_id}, {"$set": set_ops})
+    updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0, "security_answer_hash": 0})
+    return _public_user_view(updated)
+
+
+@api.delete("/team/users/{user_id}")
+async def delete_team_user(user_id: str, user: dict = Depends(current_user)):
+    _require_owner(user)
+    if user_id == user["id"]:
+        raise HTTPException(status_code=400, detail="لا يمكنك حذف نفسك")
+    target = await db.users.find_one({"id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    if _is_owner(target):
+        raise HTTPException(status_code=403, detail="لا يمكن حذف Owner")
+    await db.users.delete_one({"id": user_id})
+    return {"ok": True}
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────

@@ -103,7 +103,7 @@ function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide, o
     return (
         <div
             className={[
-                "group relative rounded-xl border border-border p-5 bg-white transition-shadow hover:shadow-sm",
+                "group relative rounded-xl border border-border p-3 sm:p-5 bg-white transition-shadow hover:shadow-sm",
                 accent ? "border-brand/40 bg-accent" : "",
             ].join(" ")}
             data-testid={testid}
@@ -451,7 +451,7 @@ export default function Dashboard() {
     const recent = data?.recent_analyses || [];
 
     return (
-        <div className="space-y-8 animate-fade-in-up" data-testid="dashboard-page">
+        <div className="space-y-6 sm:space-y-8 animate-fade-in-up" data-testid="dashboard-page">
             <input
                 ref={fileInputRef}
                 type="file"
@@ -460,13 +460,13 @@ export default function Dashboard() {
                 className="hidden"
                 data-testid="reprocess-file-input"
             />
-            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-                <div>
-                    <div className="text-sm text-muted-foreground mb-1">مرحباً، {user?.name || "ضيف"}</div>
-                    <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground" style={{ fontFamily: "Tajawal" }}>
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 md:gap-4">
+                <div className="min-w-0">
+                    <div className="text-xs sm:text-sm text-muted-foreground mb-1">مرحباً، {user?.name || "ضيف"}</div>
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-extrabold tracking-tight text-foreground" style={{ fontFamily: "Tajawal" }}>
                         لوحة التحكم
                     </h1>
-                    <p className="text-muted-foreground mt-2 text-base">
+                    <p className="text-muted-foreground mt-1.5 text-xs sm:text-sm md:text-base leading-relaxed">
                         {(filters.from || filters.to)
                             ? `عرض البيانات من ${filters.from || "البداية"} إلى ${filters.to || "الآن"}`
                             : "نظرة شاملة على أدائك المالي عبر جميع التحاليل المحفوظة."}
@@ -474,41 +474,44 @@ export default function Dashboard() {
                 </div>
                 <Link
                     to="/upload"
-                    className="inline-flex items-center gap-2 px-5 py-3 bg-brand text-white font-semibold rounded-lg bg-brand-hover transition-colors"
+                    className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-brand text-white font-semibold rounded-lg bg-brand-hover transition-colors text-sm sm:text-base w-full md:w-auto md:flex-shrink-0"
                     data-testid="dashboard-upload-btn"
                 >
-                    <UploadSimple size={20} weight="bold" />
+                    <UploadSimple size={18} weight="bold" />
                     تحليل ملف جديد
                 </Link>
             </div>
 
             {/* Advanced filters: date preset + payment + shipping */}
-            <div className="flex items-stretch gap-2 flex-wrap">
+            <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
                 <div className="flex-1 min-w-0">
                     <AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" />
                 </div>
-                <button
-                    type="button"
-                    onClick={refreshAllAds}
-                    disabled={refreshingAll}
-                    title="تحديث صرف اليوم من جميع منصات الإعلانات (Snapchat + Meta + TikTok) في خطوة واحدة"
-                    className="px-3 py-2 rounded-lg bg-gradient-to-r from-yellow-400 via-pink-500 to-blue-600 text-white font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center gap-1.5"
-                    data-testid="refresh-all-ads-btn"
-                >
-                    <ArrowsClockwise size={16} weight="bold" className={refreshingAll ? "animate-spin" : ""} />
-                    {refreshingAll ? "جاري التحديث…" : "تحديث جميع الإعلانات"}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => fetchDashboard(filters)}
-                    disabled={loading}
-                    title="تحديث البيانات الآن (يحدّث تلقائياً كل دقيقة)"
-                    className="px-3 py-2 rounded-lg border border-border bg-white font-bold text-sm hover:bg-accent transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
-                    data-testid="dashboard-refresh-btn"
-                >
-                    <ArrowsClockwise size={16} weight="bold" className={loading ? "animate-spin" : ""} />
-                    تحديث
-                </button>
+                <div className="flex gap-2 flex-wrap">
+                    <button
+                        type="button"
+                        onClick={refreshAllAds}
+                        disabled={refreshingAll}
+                        title="تحديث صرف اليوم من جميع منصات الإعلانات (Snapchat + Meta + TikTok) في خطوة واحدة"
+                        className="flex-1 sm:flex-initial px-3 py-2 rounded-lg bg-gradient-to-r from-yellow-400 via-pink-500 to-blue-600 text-white font-bold text-xs sm:text-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+                        data-testid="refresh-all-ads-btn"
+                    >
+                        <ArrowsClockwise size={16} weight="bold" className={refreshingAll ? "animate-spin" : ""} />
+                        <span className="hidden sm:inline">{refreshingAll ? "جاري التحديث…" : "تحديث جميع الإعلانات"}</span>
+                        <span className="sm:hidden">{refreshingAll ? "جاري…" : "كل الإعلانات"}</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => fetchDashboard(filters)}
+                        disabled={loading}
+                        title="تحديث البيانات الآن (يحدّث تلقائياً كل دقيقة)"
+                        className="px-3 py-2 rounded-lg border border-border bg-white font-bold text-xs sm:text-sm hover:bg-accent transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+                        data-testid="dashboard-refresh-btn"
+                    >
+                        <ArrowsClockwise size={16} weight="bold" className={loading ? "animate-spin" : ""} />
+                        تحديث
+                    </button>
+                </div>
             </div>
             {lastUpdated && (
                 <div className="text-xs text-muted-foreground -mt-2" data-testid="dashboard-last-updated">
@@ -566,7 +569,7 @@ export default function Dashboard() {
                     {/* iter-49 — Executive profit summary (sales → deductions → net) */}
                     <ProfitSummaryCard totals={totals} />
                     {/* KPI grid (config-driven, supports per-card hide) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                         {ALL_KPI_CARDS
                             .filter((c) => !hiddenCards.includes(c.id))
                             .map((c) => {
