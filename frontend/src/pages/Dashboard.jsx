@@ -30,6 +30,7 @@ import { formatMoney, formatInt } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { ALL_KPI_CARDS } from "../lib/dashboardCards";
 import ProductCostCard from "../components/ProductCostCard";
+import ProfitSummaryCard from "../components/ProfitSummaryCard";
 import SnapchatOfficialCard from "../components/SnapchatOfficialCard";
 import ElectronicNetDebugModal from "../components/ElectronicNetDebugModal";
 
@@ -562,6 +563,8 @@ export default function Dashboard() {
                         today/month product cost + linked vs missing counts.
                         Refreshes whenever filter range changes. */}
                     <ProductCostCard refreshKey={`${filters.from || ""}-${filters.to || ""}`} />
+                    {/* iter-49 — Executive profit summary (sales → deductions → net) */}
+                    <ProfitSummaryCard totals={totals} />
                     {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {ALL_KPI_CARDS

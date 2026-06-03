@@ -12,6 +12,37 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 NEW FEATURE (2026-06 — Iteration 49) — **بطاقة "الملخص التنفيذي للأرباح" في لوحة التحكم**
+
+**Merchant request**: "تقرير مختصر في لوحة التحكم — المبيعات / تكاليف المنتجات / إجمالي تكاليف الإعلانات / إجمالي تكاليف الشحن الآجل والمقدم / إجمالي رسوم جميع طرق الدفع / صافي الأرباح — باللون مرتبة وأنيقة".
+
+### Frontend (`ProfitSummaryCard.jsx` — مكوّن جديد)
+- ✅ بطاقة منفصلة بتصميم **gradient أخضر-كهرماني**، تظهر فوق شبكة الـKPI مباشرة (تحت ProductCostCard).
+- ✅ **شريط علوي** أخضر داكن بعنوان: "الملخص التنفيذي للأرباح" + وصف "تقرير مختصر للفترة المحددة".
+- ✅ **5 صفوف خصم ملوّنة** بصرياً (كل صف بأيقونة + لون مختلف لتمييز سريع):
+  1. 🟢 **المبيعات** (Coins) — `total_sales`
+  2. 🟠 **− تكاليف المنتجات** (Package) — `total_product_cost`
+  3. 🔴 **− إجمالي تكاليف الإعلانات** (Megaphone) — `total_ads_cost`
+  4. 🔵 **− إجمالي تكاليف الشحن (مقدم + آجل)** (Truck) — `total_shipping_cost` (يشمل المقدّم والآجل معاً)
+  5. 🟣 **− إجمالي رسوم جميع طرق الدفع** (Receipt) — `other_payment_fees + tamara_fees + tabby_fees + emkan_fees + bank_fees`
+- ✅ **صف الصافي** صندوق أخضر مميّز (text-2xl، gradient، shadow-md) لإبراز الرقم النهائي:
+  6. ✅ **= صافي الأرباح** = من `totals.net_profit` (مع fallback ذاتي إذا غاب من الـ backend).
+
+### Design details
+- Soft `bg-gradient-to-br from-emerald-50 via-white to-amber-50` — يدمج البطاقة مع باقي الـ dashboard.
+- Border emerald-200/60 + shadow-sm للتركيز دون إزعاج.
+- Hover effects على كل صف (`hover:bg-white/40`).
+- RTL-aware، Tajawal font للأرقام، responsive (يتقلّص على mobile).
+
+### Wiring
+- زيرو تعديلات في الـ backend — كل القيم متاحة في `totals` المُرسل أصلاً من `/api/dashboard`.
+- Pure presentational — لا يطلب API إضافي.
+
+### Visual verification (Playwright)
+- البطاقة ظاهرة، net-profit يطابق `totals.net_profit` (-1,339.50 ر.س)، تكاليف المنتجات تظهر القيمة المُدخلة في iter-46 (1,234.50)، باقي الصفوف تعرض القيم الصحيحة.
+
+---
+
 ## 🎯 NEW FEATURE (2026-06 — Iteration 48) — **أيقونة معلومات ⓘ على كل بطاقة KPI تشرح طريقة الاحتساب**
 
 **Merchant request**: "نشتي توضيح على كل بطاقة كيف تم احتساب تقرير البطاقة من خلال النقر على أيقونة صغيرة تظهر توضيح ثم يختفي عند يرحل إشارة الموس".
