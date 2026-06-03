@@ -12,6 +12,44 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 NEW FEATURE (2026-06 — Iteration 48) — **أيقونة معلومات ⓘ على كل بطاقة KPI تشرح طريقة الاحتساب**
+
+**Merchant request**: "نشتي توضيح على كل بطاقة كيف تم احتساب تقرير البطاقة من خلال النقر على أيقونة صغيرة تظهر توضيح ثم يختفي عند يرحل إشارة الموس".
+
+### Frontend (`dashboardCards.js` + `Dashboard.jsx`)
+- ✅ كل بطاقة في `KPI_GROUPS` الآن تحتوي حقل **`explanation`** بنصّ متعدد الأسطر يشرح:
+  - **الصيغة الرياضية** الدقيقة المُستخدَمة.
+  - **مصدر البيانات** (Make / Excel / Webhooks / إدخال يدوي / إعدادات).
+  - **القيود/الفلاتر** المطبَّقة (مثلاً: استبعاد الحالات الملغية في `electronic_net`).
+- ✅ مكوّن جديد `KpiInfoTooltip`:
+  - أيقونة `Info` صغيرة (14px، رمادي افتراضياً، تتلوّن brand عند الـ hover).
+  - يظهر **tooltip أسود متراص** بعرض 18-20rem + سهم صغير للأعلى.
+  - **يعمل على ٤ مسارات**: `mouseenter` + `focus` + `click toggle` + `escape/click-outside`.
+    - hover (سطح المكتب): يفتح تلقائياً.
+    - focus (لوحة المفاتيح): يفتح للتصفّح بإمكانية الوصول.
+    - click (mobile/touch): toggle.
+    - Escape key أو الضغط خارج الـ tooltip: يُغلق.
+  - رأس صغير بلون كهرماني: **"طريقة الاحتساب"**.
+  - النص يحترم `whitespace-pre-line` فيُعرض كما كُتب بفواصل أسطر طبيعية.
+- ✅ يُحقن داخل label الـ Kpi → 28 بطاقة كلها تحصل على الأيقونة تلقائياً (data-driven).
+
+### Coverage
+كل البطاقات الـ28 لها explanation مكتوب بعناية: 
+- **المبيعات**: total_sales, net_sales, total_orders, expected_salla_transfer.
+- **التسويق**: overall_roas, avg_cost_per_order.
+- **رسوم الدفع**: other_payment_fees, electronic_net, bank_net, tamara/tabby/emkan_fees, bnpl_net.
+- **الشحن**: total_shipping_cost, deferred_shipping_cost, shipping_approved/unapproved.
+- **COD**: cod_approved, cod_unapproved.
+- **المصاريف**: total_vat, total_ads_cost, total_product_cost, daily_expenses_total, operating_expenses_total, operating_salaries_total, operating_rentals_total, operating_prepaid_total, net_profit.
+
+### Visual verification (Playwright)
+- 28 أيقونة معلومات ظاهرة على كل البطاقات (`data-testid` لكل: `kpi-{id}-info-btn` + `kpi-{id}-info-btn-content`).
+- Hover على ROAS → الـ tooltip يظهر بالنص الصحيح.
+- Mouseleave → الـ tooltip يختفي تلقائياً (تأكيد من E2E).
+- لا توجد regression: **21/21 backend tests** عابرة (iter-44/45/46/47).
+
+---
+
 ## 🎯 NEW FEATURE (2026-06 — Iteration 47) — **فصل التحويلات البنكية في بطاقة KPI مستقلة**
 
 **Merchant request**: "طريقة الدفع bank لا تنحسب ضمن صافي المدفوعات الإلكترونية، تنحسب في بطاقة لحالها باسم المدفوعات البنكية".

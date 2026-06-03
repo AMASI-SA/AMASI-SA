@@ -22,6 +22,7 @@ import {
     Warning,
     CheckCircle,
     Equals,
+    Info,
 } from "@phosphor-icons/react";import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { toast } from "sonner";
 import api from "../lib/api";
@@ -39,7 +40,65 @@ function formatRelative(ms) {
     return `قبل ${Math.floor(ms / 3_600_000)} ساعة`;
 }
 
-function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide, onDetails }) {
+function KpiInfoTooltip({ explanation, testid }) {
+    // iter-48 — hover/tap-to-reveal explanation for each KPI card.
+    // Uses React state (not CSS-only) so it works on touch devices via
+    // explicit click, and dismisses cleanly on mouseleave/blur.
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+
+    // Close when the user taps anywhere else (mobile/touch UX).
+    useEffect(() => {
+        if (!open) return;
+        const onDocClick = (e) => {
+            if (!ref.current?.contains(e.target)) setOpen(false);
+        };
+        const onEsc = (e) => { if (e.key === "Escape") setOpen(false); };
+        document.addEventListener("mousedown", onDocClick);
+        document.addEventListener("keydown", onEsc);
+        return () => {
+            document.removeEventListener("mousedown", onDocClick);
+            document.removeEventListener("keydown", onEsc);
+        };
+    }, [open]);
+
+    if (!explanation) return null;
+    return (
+        <span ref={ref} className="relative inline-flex items-center">
+            <button
+                type="button"
+                onMouseEnter={() => setOpen(true)}
+                onMouseLeave={() => setOpen(false)}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(v => !v); }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setOpen(false)}
+                className="p-0.5 rounded-full text-muted-foreground/60 hover:text-brand hover:bg-brand/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                aria-label="كيف تم احتساب هذه البطاقة؟"
+                data-testid={testid}
+            >
+                <Info size={14} weight="bold" />
+            </button>
+            {open && (
+                <div
+                    role="tooltip"
+                    className="absolute z-40 top-full mt-2 start-0 sm:start-auto sm:end-0 w-72 sm:w-80 rounded-lg bg-slate-900 text-white text-[11px] leading-relaxed px-3 py-2.5 shadow-xl pointer-events-none whitespace-pre-line text-start"
+                    style={{ fontFamily: "Tajawal" }}
+                    data-testid={`${testid}-content`}
+                >
+                    <div className="font-bold text-[11px] mb-1 text-amber-200 flex items-center gap-1">
+                        <Info size={12} weight="bold" />
+                        طريقة الاحتساب
+                    </div>
+                    {explanation}
+                    {/* little arrow pointing up to the ⓘ icon */}
+                    <span className="absolute -top-1 start-3 w-2 h-2 bg-slate-900 rotate-45" />
+                </div>
+            )}
+        </span>
+    );
+}
+
+function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide, onDetails, explanation }) {
     return (
         <div
             className={[
@@ -65,7 +124,10 @@ function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide, o
                 </div>
                 {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
             </div>
-            <div className="text-sm text-muted-foreground mb-1">{label}</div>
+            <div className="text-sm text-muted-foreground mb-1 flex items-center gap-1.5">
+                <span>{label}</span>
+                <KpiInfoTooltip explanation={explanation} testid={`${testid}-info-btn`} />
+            </div>
             <div className="flex items-end justify-between gap-2">
                 <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>{value}</div>
                 {onDetails && (
@@ -534,6 +596,7 @@ export default function Dashboard() {
                                         onDetails={c.id === "electronic_net"
                                             ? () => setShowElectronicNetDebug(true)
                                             : undefined}
+                                        explanation={c.explanation}
                                     />
                                 );
                             })}
