@@ -12,6 +12,52 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 NEW FEATURE (2026-06 — Iteration 47) — **فصل التحويلات البنكية في بطاقة KPI مستقلة**
+
+**Merchant request**: "طريقة الدفع bank لا تنحسب ضمن صافي المدفوعات الإلكترونية، تنحسب في بطاقة لحالها باسم المدفوعات البنكية".
+
+### Why this split matters
+التحويلات البنكية لا تمر عبر بوابة سلة — تتم تسويتها بنكياً (T+1/T+2) وتُحفظ أحياناً يدوياً من قِبل التاجر. خلطها مع `electronic_net` كان يُربك التطابق مع شاشة سلة "غير المفوترة" ويُضخّم الرقم بمبالغ لم تمر إلكترونياً أصلاً.
+
+### Backend (`server.py`)
+- ✅ ثابت جديد `bank_keywords`:
+  ```py
+  ("تحويل بنكي", "حوالة بنكية", "تحويل البنك", "تحويل بنوك",
+   "bank transfer", "bank_transfer", "wire transfer")
+  ```
+  + مطابقة `name_lc == "bank"` لتغطية الاسم الحرفي "Bank".
+- ✅ في حلقة `payment_breakdown` (السطر 988-991): فرع جديد قبل else يجمع `bank_sales` و`bank_fees` ويستثنيها من `other_payment_sales`.
+- ✅ نفس المنطق مطبَّق في فرع `legacy_analyses` (السطر 1129-1131) للحفاظ على الـ backward-compat.
+- ✅ `_is_electronic_method` (داخل dashboard) و `_is_electronic` (في debug endpoint) كلاهما الآن يستثنيان البنك → audit modal يبقى متوافقاً مع البطاقة.
+- ✅ payload response يحتوي الآن 3 حقول جديدة:
+  ```json
+  "bank_sales": …, "bank_fees": …, "bank_net": …
+  ```
+
+### Frontend (`dashboardCards.js`)
+- ✅ بطاقة KPI جديدة `bank_net` في مجموعة "رسوم بوابات الدفع":
+  - icon: `Bank` (أخضر accent للتمييز عن باقي بطاقات الصف)
+  - hint: "تحويل بنكي بعد العمولة"
+  - money: true → عرض `…ر.س` بشكل صحيح
+- ✅ تظهر بجانب `electronic_net` مباشرةً ليرى التاجر الفصل بصرياً فوراً.
+- ✅ تخضع تلقائياً لنظام `dashboard_hidden_cards` — يمكن للتاجر إخفاؤها مثل باقي البطاقات.
+
+### Behavior contract
+- البنك **يظهر دائماً** بكل الحالات (الملغية والمرتجعة كذلك) لأنه يمثّل تدفق نقدي بنكي، ليس مدفوعات بوابة. الـ status filter لا يلمس بطاقة البنك.
+- المبلغ الإجمالي للبطاقة = `SUM(bank_sales) − SUM(bank_fees)` (الرسوم 0 افتراضياً ما لم يضبط التاجر عمولة لطريقة الدفع البنكية في الإعدادات).
+
+### Tests (5/5 PASS — `tests/test_dashboard_iter47_bank_split.py`)
+1. `test_bank_orders_have_dedicated_kpi` — 900 ر.س بنكي + 200 ر.س مدى → `bank_net=900`، `electronic_net≈200` (بعد العمولة).
+2. `test_bare_bank_name_is_classified_as_bank` — اسم "Bank" الحرفي يدخل البطاقة البنكية.
+3. `test_bank_card_includes_all_statuses` — الملغية البنكية تبقى في البطاقة.
+4. `test_debug_endpoint_excludes_bank_orders` — audit modal لا يرى الطلبات البنكية (consistency).
+5. `test_mixed_payment_types_are_independent` — 4 طرق دفع (مدى + بنك + تمارا + COD) — كل دلو في بطاقته بشكل منفصل.
+
+### Visual verification (Playwright)
+بطاقة "المدفوعات البنكية" ظاهرة بأيقونة Bank الخضراء في صف "رسوم بوابات الدفع"، بطاقة `electronic_net` مازالت موجودة بجانبها مع زر "تفاصيل".
+
+---
+
 ## 🎯 NEW FEATURE (2026-06 — Iteration 46) — **كارت منبثق لإضافة إجمالي تكلفة المنتجات حسب التاريخ**
 
 **Merchant request**: "كارت منبثق لإضافة إجمالي تكلفة المنتجات حسب التاريخ المحدد في صفحة تكلفة المنتجات بشكل مؤقت حتى يتم موازنة التكاليف من كل منتج بالمستقبل".

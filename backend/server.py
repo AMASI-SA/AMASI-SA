@@ -971,10 +971,18 @@ async def dashboard(
     bnpl_fees = tamara_fees = tabby_fees = emkan_fees = 0.0
     other_payment_fees = 0.0
     bnpl_sales = other_payment_sales = cod_sales = cod_fees = 0.0
+    # iter-47 — Bank transfer split into its own KPI card.
+    bank_sales = bank_fees = 0.0
     tamara_keywords = ("تمارا", "tamara")
     tabby_keywords = ("تابي", "tabby")
     emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
     cod_keywords = ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery")
+    # Bank-transfer detection (intentionally specific to avoid matching
+    # generic words like "card"). Covers Salla's Arabic + standard English.
+    bank_keywords = (
+        "تحويل بنكي", "حوالة بنكية", "تحويل البنك", "تحويل بنوك",
+        "bank transfer", "bank_transfer", "wire transfer",
+    )
     for p in matched_all.get("payment_breakdown", []):
         total_vat += float(p.get("vat_amount", 0) or 0)
         name_lc = (p.get("name", "") or "").strip().lower()
@@ -988,6 +996,10 @@ async def dashboard(
             emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
         elif any(k in name_lc for k in cod_keywords):
             cod_fees += fee; cod_sales += sales
+        elif any(k in name_lc for k in bank_keywords) or name_lc == "bank":
+            # Bare "bank" is treated as bank too — merchants sometimes
+            # name the method literally "Bank" in their store.
+            bank_fees += fee; bank_sales += sales
         else:
             other_payment_fees += fee; other_payment_sales += sales
     for sh in matched_all.get("shipping_breakdown", []):
@@ -1014,6 +1026,9 @@ async def dashboard(
         if any(k in n for k in tabby_keywords):  return False
         if any(k in n for k in emkan_keywords):  return False
         if any(k in n for k in cod_keywords):    return False
+        # iter-47 — Bank transfer has its own KPI card; exclude here.
+        if any(k in n for k in bank_keywords):   return False
+        if n == "bank":                          return False
         return True
 
     # Build a filtered electronic-only order list.
@@ -1114,6 +1129,8 @@ async def dashboard(
                     emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
                 elif any(k in name_lc for k in cod_keywords):
                     cod_fees += fee; cod_sales += sales
+                elif any(k in name_lc for k in bank_keywords) or name_lc == "bank":
+                    bank_fees += fee; bank_sales += sales
                 else:
                     other_payment_fees += fee; other_payment_sales += sales
             for sh in rep.get("shipping_breakdown", []) or []:
@@ -1377,6 +1394,11 @@ async def dashboard(
             "electronic_net_breakdown": electronic_net_breakdown,
             "salla_electronic_net_reference": settings.get("salla_electronic_net_reference"),
             "bnpl_net": round(bnpl_sales - bnpl_fees, 2),
+            # iter-47 — Bank transfer is now a dedicated KPI; the figures
+            # below give the UI everything it needs to render the new card.
+            "bank_sales": round(bank_sales, 2),
+            "bank_fees": round(bank_fees, 2),
+            "bank_net": round(bank_sales - bank_fees, 2),
             "total_shipping_cost": round(total_shipping, 2),
             "deferred_shipping_cost": round(deferred_shipping, 2),
             "regular_shipping_cost": round(total_shipping - deferred_shipping, 2),
@@ -1498,6 +1520,11 @@ async def electronic_net_debug(
     tabby_keywords = ("تابي", "tabby")
     emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
     cod_keywords = ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery")
+    # iter-47 — bank transfer is excluded from the electronic-net audit
+    bank_keywords = (
+        "تحويل بنكي", "حوالة بنكية", "تحويل البنك", "تحويل بنوك",
+        "bank transfer", "bank_transfer", "wire transfer",
+    )
 
     def _is_electronic(name: str) -> bool:
         n = (name or "").strip().lower()
@@ -1510,6 +1537,11 @@ async def electronic_net_debug(
         if any(k in n for k in emkan_keywords):
             return False
         if any(k in n for k in cod_keywords):
+            return False
+        # iter-47 — bank has its own KPI; never count in electronic-net.
+        if any(k in n for k in bank_keywords):
+            return False
+        if n == "bank":
             return False
         return True
 

@@ -55,6 +55,11 @@ export const KPI_GROUPS = [
         cards: [
             { id: "other_payment_fees", label: "رسوم بوابات الدفع", icon: Receipt, money: true, hint: "عدا تمارا وتابي وإمكان", value: (t) => t.other_payment_fees },
             { id: "electronic_net", label: "صافي المدفوعات الإلكترونية", icon: Wallet, money: true, hint: "المبيعات − العمولات", value: (t) => t.electronic_net },
+            // iter-47 — Bank transfers are intentionally separated from the
+            // electronic-net card so cash-flow timing differences (bank
+            // transfers settle T+1/2, not via Salla payouts) don't muddy
+            // the gateway-net figure the merchant reconciles with Salla.
+            { id: "bank_net", label: "المدفوعات البنكية", icon: Bank, accent: true, money: true, hint: "تحويل بنكي بعد العمولة", value: (t) => t.bank_net },
             { id: "tamara_fees", label: "رسوم تمارا", icon: Receipt, money: true, hint: "BNPL", value: (t) => t.tamara_fees },
             { id: "tabby_fees", label: "رسوم تابي", icon: Receipt, money: true, hint: "BNPL", value: (t) => t.tabby_fees },
             { id: "emkan_fees", label: "رسوم إمكان", icon: Receipt, money: true, hint: "BNPL", value: (t) => t.emkan_fees },
