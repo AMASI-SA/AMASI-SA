@@ -12,6 +12,28 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🐛 BUG FIX (2026-02 — Iteration 53) — Executive Profit Summary card hid the Operating Expenses line
+
+**Merchant report**: "هناك غلط ببطاقة الملخص للأرباح، الإجمالي النهائي لا يطابق طرح السطور أعلاه."
+
+### Root Cause
+Backend's `net_profit_adjusted` formula deducts **operating expenses** (rents + salaries + …) from the running total:
+```
+net_profit = sales − fees − shipping − ads − product_cost − operating_expenses_total
+```
+But `/app/frontend/src/components/ProfitSummaryCard.jsx` only displayed 5 deduction lines (product cost, ads, shipping, payment fees) and used `t.net_profit` from the backend as-is for the final row — creating an unexplained gap equal to `operating_expenses_total` whenever the merchant had any operating costs configured.
+
+### Fix
+- Added a conditional line `− المصروفات التشغيلية (رواتب وإيجارات وغيرها)` in the card, rendered only when `operating_expenses_total > 0` so it doesn't add visual clutter for stores that don't use that feature.
+- Updated the manual-fallback math (used only when backend hasn't yet returned `net_profit`) to also subtract `operating_expenses_total`.
+- File touched: `frontend/src/components/ProfitSummaryCard.jsx`.
+
+### Verified
+Live dashboard run with `total_sales=28,153.25`, `operating_expenses_total=315` → backend reports `net_profit=22,605.29`, manual sum after the new line: `28153.25 − 1734.50 − 1102.75 − 1875.65 − 520.06 − 315 = 22605.29` ✅ (perfect match).
+
+---
+
+
 ## ✅ ITERATION 52 (2026-02) — Remove "Made with Emergent" badge + Show-Register toggle — **DONE**
 
 **User asks**:

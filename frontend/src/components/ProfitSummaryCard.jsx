@@ -11,7 +11,7 @@
  * /api/dashboard (no extra API calls).
  */
 import {
-    Coins, Package, Megaphone, Truck, Receipt, TrendUp, Minus, Equals,
+    Coins, Package, Megaphone, Truck, Receipt, TrendUp, Equals, Briefcase,
 } from "@phosphor-icons/react";
 
 const fmtSar = (v) => {
@@ -71,11 +71,17 @@ export default function ProfitSummaryCard({ totals }) {
                             + Number(t.tabby_fees         || 0)
                             + Number(t.emkan_fees         || 0)
                             + Number(t.bank_fees          || 0));
+    // Operating expenses (المصروفات التشغيلية اليومية) — backend's
+    // `net_profit` formula deducts this, so we MUST display it as a line
+    // here too. Otherwise sales − productCost − ads − shipping − fees
+    // doesn't equal the "صافي الأرباح" number and merchants reasonably
+    // flag it as a bug (iter-53 fix).
+    const operatingExpenses = Number(t.operating_expenses_total || 0);
     // Use the authoritative net_profit from backend; fall back to manual
     // calc only when the backend hasn't surfaced it yet (e.g., empty store).
     const netProfit = t.net_profit != null
         ? Number(t.net_profit)
-        : sales - productCost - adsCost - shippingTotal - allPaymentFees;
+        : sales - productCost - adsCost - shippingTotal - allPaymentFees - operatingExpenses;
 
     return (
         <div
@@ -102,6 +108,9 @@ export default function ProfitSummaryCard({ totals }) {
                 <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        color="rose"   />
                 <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  color="sky"    />
                 <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} color="violet" />
+                {operatingExpenses > 0 && (
+                    <Line icon={Briefcase} label="− المصروفات التشغيلية (رواتب وإيجارات وغيرها)" value={fmtSar(operatingExpenses)} color="amber" />
+                )}
 
                 {/* Net profit row — visually distinguished */}
                 <div className="mt-1 mx-2 mb-2 rounded-xl bg-emerald-600 text-white shadow-md">
