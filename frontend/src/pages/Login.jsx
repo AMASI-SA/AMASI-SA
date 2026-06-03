@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeSlash, EnvelopeSimple, LockKey } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
+import ForgotPasswordModal from "../components/ForgotPasswordModal";
 
 const AUTH_BG = "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/9126576d79013e8b54614eb6ef7268db1c88914c10825a71376e455fc32c7233.png";
 
@@ -14,6 +15,7 @@ export default function Login() {
     const [password, setPassword] = useState("");
     const [showPass, setShowPass] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [showForgot, setShowForgot] = useState(false);
 
     const submit = async (e) => {
         e.preventDefault();
@@ -104,6 +106,17 @@ export default function Login() {
                         >
                             {busy ? "جاري الدخول…" : "تسجيل الدخول"}
                         </button>
+
+                        <div className="text-center">
+                            <button
+                                type="button"
+                                onClick={() => setShowForgot(true)}
+                                className="text-sm text-brand font-semibold hover:underline"
+                                data-testid="forgot-password-link"
+                            >
+                                نسيت كلمة المرور؟
+                            </button>
+                        </div>
                     </form>
 
                     <p className="mt-8 text-center text-sm text-muted-foreground">
@@ -134,6 +147,13 @@ export default function Login() {
                     </p>
                 </div>
             </div>
+
+            {showForgot && (
+                <ForgotPasswordModal
+                    onClose={() => setShowForgot(false)}
+                    onSuccess={(em) => setEmail(em)}
+                />
+            )}
         </div>
     );
 }

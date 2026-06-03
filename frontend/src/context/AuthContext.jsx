@@ -7,32 +7,37 @@ export function AuthProvider({ children }) {
     const [user, setUser] = useState(null); // null while checking, false if anon
     const [loading, setLoading] = useState(true);
 
-    const checkSession = useCallback(async () => {
+    const refreshUser = useCallback(async () => {
         try {
             const { data } = await api.get("/auth/me");
             setUser(data);
+            return data;
         } catch {
             setUser(false);
-        } finally {
-            setLoading(false);
+            return null;
         }
     }, []);
 
     useEffect(() => {
-        checkSession();
-    }, [checkSession]);
+        (async () => {
+            await refreshUser();
+            setLoading(false);
+        })();
+    }, [refreshUser]);
 
     const login = async (email, password) => {
         const { data } = await api.post("/auth/login", { email, password });
         if (data?.access_token) localStorage.setItem("access_token", data.access_token);
-        setUser(data);
+        // Fetch the FULL /auth/me payload (includes permissions + is_owner + has_security_question)
+        // so RBAC-aware navigation works immediately after login.
+        await refreshUser();
         return data;
     };
 
     const register = async (name, email, password) => {
         const { data } = await api.post("/auth/register", { name, email, password });
         if (data?.access_token) localStorage.setItem("access_token", data.access_token);
-        setUser(data);
+        await refreshUser();
         return data;
     };
 
@@ -49,7 +54,7 @@ export function AuthProvider({ children }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, register, logout, formatApiErrorDetail }}>
+        <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, formatApiErrorDetail }}>
             {children}
         </AuthContext.Provider>
     );

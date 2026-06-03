@@ -20,6 +20,8 @@ import ProductCosts from "./pages/ProductCosts";
 import ProductPreparation from "./pages/ProductPreparation";
 import ImageCatalog from "./pages/ImageCatalog";
 import SallaIntegration from "./pages/SallaIntegration";
+import Profile from "./pages/Profile";
+import TeamManagement from "./pages/TeamManagement";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -50,6 +52,8 @@ function AppRoutes() {
             <Route path="/settings/salla" element={<ProtectedRoute><Layout><SallaIntegration /></Layout></ProtectedRoute>} />
             <Route path="/shipping-accounts" element={<ProtectedRoute><Layout><ShippingAccounts /></Layout></ProtectedRoute>} />
             <Route path="/make-webhook" element={<ProtectedRoute><Layout><MakeWebhook /></Layout></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
+            <Route path="/team" element={<ProtectedRoute><Layout><TeamManagement /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -13,11 +13,13 @@ import {
     Ghost,
     Package,
     Image,
+    UserCircle,
+    UsersThree,
     X,
 } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
 
-const links = [
+const baseLinks = [
     { to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" },
     { to: "/upload", label: "رفع ملف Excel", icon: UploadSimple, testid: "nav-upload" },
     { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
@@ -30,8 +32,11 @@ const links = [
     { to: "/product-preparation", label: "تجهيز المنتجات", icon: Package, testid: "nav-product-preparation" },
     { to: "/image-catalog", label: "إدارة صور المنتجات", icon: Image, testid: "nav-image-catalog" },
     { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
-    { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" },
+    { to: "/profile", label: "حسابي", icon: UserCircle, testid: "nav-profile" },
 ];
+
+const ownerLink = { to: "/team", label: "إدارة الفريق", icon: UsersThree, testid: "nav-team" };
+const settingsLink = { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" };
 
 export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }) {
     const { user, logout } = useAuth();
@@ -39,6 +44,12 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
     const onLogout = async () => {
         await logout();
     };
+
+    const links = [
+        ...baseLinks,
+        ...(user?.is_owner ? [ownerLink] : []),
+        settingsLink,
+    ];
 
     return (
         <>
