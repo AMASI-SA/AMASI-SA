@@ -484,7 +484,20 @@ export default function Dashboard() {
                             .filter((c) => !hiddenCards.includes(c.id))
                             .map((c) => {
                                 const rawVal = c.value(totals);
-                                const display = c.money ? formatMoney(rawVal) : (c.isInt ? formatInt(rawVal) : String(rawVal));
+                                // iter-44 — `format` overrides the built-in
+                                // money/int formatters; we also treat null
+                                // as "—" for money KPIs so ROAS/CPA don't
+                                // render "0 ر.س" when there's no ad spend.
+                                let display;
+                                if (typeof c.format === "function") {
+                                    display = c.format(rawVal);
+                                } else if (c.money) {
+                                    display = rawVal == null ? "—" : formatMoney(rawVal);
+                                } else if (c.isInt) {
+                                    display = formatInt(rawVal);
+                                } else {
+                                    display = String(rawVal);
+                                }
                                 const label = c.money ? `${c.label} (ر.س)` : c.label;
                                 return (
                                     <Kpi

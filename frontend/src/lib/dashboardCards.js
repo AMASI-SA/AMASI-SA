@@ -8,7 +8,7 @@
  */
 import {
     Coins, ShoppingBag, Receipt, Truck, Megaphone, Package,
-    TrendUp, Percent, Wallet, Bank,
+    TrendUp, Percent, Wallet, Bank, ChartLineUp, Tag,
 } from "@phosphor-icons/react";
 
 export const KPI_GROUPS = [
@@ -20,6 +20,33 @@ export const KPI_GROUPS = [
             { id: "net_sales", label: "صافي المبيعات", icon: TrendUp, accent: true, money: true, hint: "حسب إعدادات الخصم", value: (t) => t.net_sales },
             { id: "total_orders", label: "إجمالي الطلبات", icon: ShoppingBag, isInt: true, value: (t) => t.total_orders },
             { id: "expected_salla_transfer", label: "المتوقع من سلة", icon: Bank, accent: true, money: true, hint: "حوالة سلة المتوقعة", value: (t) => t.expected_salla_transfer },
+        ],
+    },
+    {
+        // iter-44 — Cross-platform marketing KPIs (ROAS + Average Cost Per
+        // Order). Surfaced as their own group so the merchant can hide
+        // the whole marketing block independently of payment/shipping KPIs.
+        id: "marketing",
+        title: "أداء التسويق",
+        cards: [
+            {
+                id: "overall_roas",
+                label: "ROAS (العائد على الإنفاق الإعلاني)",
+                icon: ChartLineUp,
+                accent: true,
+                hint: "إجمالي المبيعات ÷ إجمالي تكلفة الإعلانات",
+                value: (t) => t.overall_roas,
+                format: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}×`),
+            },
+            {
+                id: "avg_cost_per_order",
+                label: "متوسط تكلفة الطلب",
+                icon: Tag,
+                accent: true,
+                money: true,
+                hint: "إجمالي تكلفة الإعلانات ÷ عدد الطلبات",
+                value: (t) => t.avg_cost_per_order,
+            },
         ],
     },
     {

@@ -1210,12 +1210,28 @@ async def dashboard(
         matched_all.get("shipping_breakdown", []), legacy_analyses, "shipping_breakdown",
     )
 
+    # ── Iter-44: Cross-platform ROAS + Average Cost Per Order ────────────
+    # ROAS (Return On Ad Spend) — how many SAR of revenue each SAR of ad
+    # spend produced. Industry-standard formula is gross sales ÷ total
+    # ad spend (matches GA, Meta, TikTok, Snap conventions); merchants
+    # who prefer net-sales-based ROAS can flip a setting later.
+    # CPA (متوسط تكلفة الطلب) — total ad spend ÷ number of orders.
+    # Both surfaced as null when the denominator is 0 so the UI can show
+    # "—" instead of "Infinity" or "NaN".
+    overall_roas = round(total_sales / daily_ads_total, 2) if daily_ads_total > 0 else None
+    avg_cost_per_order = (
+        round(daily_ads_total / total_orders, 2) if total_orders > 0 and daily_ads_total > 0 else None
+    )
+
     return {
         "range": {"from_date": from_date, "to_date": to_date},
         "totals": {
             "total_sales": round(total_sales, 2),
             "net_sales": round(net_sales, 2),
             "total_orders": int(total_orders),
+            # iter-44 — cross-platform marketing KPIs
+            "overall_roas": overall_roas,
+            "avg_cost_per_order": avg_cost_per_order,
             "total_payment_fees": round(total_fees, 2),
             "bnpl_fees": round(bnpl_fees, 2),
             "tamara_fees": round(tamara_fees, 2),

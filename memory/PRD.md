@@ -12,6 +12,37 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🎯 NEW FEATURE (2026-06 — Iteration 44) — **بطاقتا ROAS ومتوسط تكلفة الطلب في لوحة التحكم**
+
+**Merchant request**: "اضافة بطاقة ROAS في لوحة التحكم ومتوسط تكلفة الطلب".
+
+### Backend (`server.py`)
+- ✅ في `/api/dashboard` بعد حساب `total_sales`, `total_orders`, `daily_ads_total`:
+  ```py
+  overall_roas        = total_sales / daily_ads_total   if daily_ads_total > 0   else None
+  avg_cost_per_order  = daily_ads_total / total_orders  if total_orders > 0 and daily_ads_total > 0 else None
+  ```
+- يُحقَن الحقلان في `totals` payload.
+- `null` بدلاً من `0` أو `Infinity` عند انعدام الإنفاق/الطلبات — لتمكين الواجهة من إظهار "—" بدلاً من قيم مضللة.
+
+### Frontend (`dashboardCards.js` + `Dashboard.jsx`)
+- ✅ مجموعة KPI جديدة `marketing` ("أداء التسويق") تحتوي بطاقتين:
+  1. **`overall_roas`** — icon: `ChartLineUp`, accent: green, value: `t.overall_roas`, `format: v => v == null ? "—" : v.toFixed(2) + "×"`.
+  2. **`avg_cost_per_order`** — icon: `Tag`, accent, money: true (تُلحق `(ر.س)` تلقائياً).
+- ✅ Renderer في `Dashboard.jsx` يدعم الآن دالة `format` اختيارية لكل بطاقة + يعرض `—` بدلاً من `formatMoney(null)` للبطاقات النقدية ذات القيمة الخالية.
+- ✅ يعملان تلقائياً مع نظام إخفاء البطاقات (`dashboard_hidden_cards`) — يمكن للتاجر إخفاء أي منهما من الإعدادات بدون أي كود إضافي.
+
+### Tests (4/4 PASS — `tests/test_dashboard_iteration44_roas.py`)
+1. `test_overall_roas_and_cpa_when_ads_present` — 1000 SAR sales / 200 SAR ads → ROAS=5.00×, CPA=20.00 SAR.
+2. `test_kpis_are_null_when_no_ad_spend` — `daily_ads_total=0` → كلتاهما `None`.
+3. `test_cpa_null_when_no_orders` — `total_orders=0` → ROAS=0 (finite)، CPA=None.
+4. `test_roas_uses_all_ad_platforms_combined` — Snapchat+Instagram+Google → تجمع كل المنصات في المقام.
+
+### Visual verification (Playwright)
+- البطاقتان ظاهرتان في صف "أداء التسويق" مع ال hints الصحيحة بالعربية، تعرضان `—` لمستخدم تجريبي بلا بيانات.
+
+---
+
 ## 🎯 NEW FEATURE (2026-06 — Iteration 43) — **تعديل بيانات البطاقات قبل الطباعة (الاسم/المقاس/اللون/الملاحظة)**
 
 **Merchant request**: "عرض تفصيل المنتج وإمكانية التعديل عليها قبل رفع الملف — مثل الاسم، اللون، التعديل على الكتابه".
