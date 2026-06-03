@@ -106,33 +106,73 @@ class MetaTokenExchangeIn(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def _extract_purchases(actions: Optional[list]) -> int:
-    """Sum Facebook 'purchase' actions across types (web, omni, offsite_conversion)."""
+# iter-50 — Meta Graph API returns the SAME conversion under multiple
+# action_types (purchase + omni_purchase + offsite_conversion.fb_pixel_purchase
+# + onsite_web_purchase + …). Summing across types gives 5-10× inflation
+# when Pixel + Conversions API + Instagram/Facebook Shop are all wired
+# up simultaneously (very common Saudi merchant setup).
+#
+# Meta's OFFICIAL deduplicated metric is `omni_purchase`, and `purchase`
+# is the canonical Pixel event. We pick ONE of them — never sum.
+#
+# Priority (most-deduplicated first):
+#   1. omni_purchase                            — Meta's official cross-channel dedup
+#   2. purchase                                 — base Pixel event
+#   3. offsite_conversion.fb_pixel_purchase     — Pixel-only attribution
+#   4. onsite_web_purchase / onsite_conversion.purchase — Shop purchases
+#
+# Anything else (custom events, app purchases) is ignored because it
+# is almost always a duplicate signal of one of the above.
+_PURCHASE_TYPE_PRIORITY: tuple[str, ...] = (
+    "omni_purchase",
+    "purchase",
+    "offsite_conversion.fb_pixel_purchase",
+    "onsite_web_purchase",
+    "onsite_conversion.purchase",
+)
+
+
+def _pick_canonical_purchase_value(actions: Optional[list], *, value_key: str = "value") -> float:
+    """Return the FIRST matching action_type's value, following the
+    priority list. Treats missing/invalid numbers as 0. Returns a float
+    that callers can cast to int (for purchase count) or keep as-is
+    (for purchase_value).
+    """
     if not actions:
-        return 0
-    total = 0
+        return 0.0
+    by_type: dict[str, float] = {}
     for a in actions:
         atype = (a.get("action_type") or "").lower()
-        if "purchase" in atype:
-            try:
-                total += int(float(a.get("value") or 0))
-            except (TypeError, ValueError):
-                pass
-    return total
+        if not atype:
+            continue
+        try:
+            v = float(a.get(value_key) or 0)
+        except (TypeError, ValueError):
+            continue
+        # If Meta lists the same action_type twice (rare — different
+        # attribution windows), keep the LARGER value to be safe.
+        if v > by_type.get(atype, 0.0):
+            by_type[atype] = v
+    for t in _PURCHASE_TYPE_PRIORITY:
+        if t in by_type:
+            return by_type[t]
+    return 0.0
+
+
+def _extract_purchases(actions: Optional[list]) -> int:
+    """Number of purchases attributed to the ad — deduplicated.
+
+    Replaces the previous "sum across all *purchase* action_types"
+    behaviour that inflated counts 5-10× for merchants using both Pixel
+    and Conversions API (every Saudi store with Salla → Meta Pixel +
+    server-side CAPI).
+    """
+    return int(_pick_canonical_purchase_value(actions, value_key="value"))
 
 
 def _extract_purchase_value(action_values: Optional[list]) -> float:
-    if not action_values:
-        return 0.0
-    total = 0.0
-    for a in action_values:
-        atype = (a.get("action_type") or "").lower()
-        if "purchase" in atype:
-            try:
-                total += float(a.get("value") or 0)
-            except (TypeError, ValueError):
-                pass
-    return total
+    """Revenue attributed to the ad — deduplicated, matches purchase count."""
+    return float(_pick_canonical_purchase_value(action_values, value_key="value"))
 
 
 def _classify_meta_error(error_text: str) -> tuple[str, str]:

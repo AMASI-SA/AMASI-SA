@@ -12,6 +12,60 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🐛 CRITICAL BUG FIX (2026-06 — Iteration 50) — **Meta Ads orders inflated 5-10× by duplicate `action_type` values**
+
+**Merchant report (Production)**: "نتائج الإعلانات في بطاقات الحسابات الإعلانية فيسبوك ليست صحيحة، يظهر أرقام طلبات أكبر من الحقيقية بـ 10 أضعاف، والعائد والمبيعات الشهرية واليومية".
+
+### Root Cause
+Meta's Graph API `/insights` endpoint يُرجع **نفس عملية الشراء تحت `action_type` متعددة** عندما يكون لدى التاجر Pixel + Conversions API + Facebook/Instagram Shop مُفعّلين معاً (وهذا هو الإعداد القياسي لمعظم متاجر سلة):
+```json
+"actions": [
+  {"action_type": "purchase",                             "value": 5},
+  {"action_type": "omni_purchase",                        "value": 5},
+  {"action_type": "offsite_conversion.fb_pixel_purchase", "value": 5},
+  {"action_type": "onsite_web_purchase",                  "value": 5},
+  {"action_type": "onsite_conversion.purchase",           "value": 5}
+]
+```
+الكود السابق كان يجمع كل قيمة فيها كلمة `"purchase"` → 5 × 5 = **25 عملية شراء** بدلاً من 5 الحقيقية. مع تركيب Pixel + CAPI + Shop المعتاد، التضخيم 5–10×. هذا يطابق ال **"10 أضعاف"** التي رصدها التاجر.
+
+### Fix (`/app/backend/meta_routes.py`)
+- ✅ استبدلت `_extract_purchases()` و `_extract_purchase_value()` بمنطق **يلتقط نوع واحد فقط** حسب أولوية Meta الرسمية للـ deduplication:
+  ```python
+  _PURCHASE_TYPE_PRIORITY = (
+      "omni_purchase",                            # Meta-official cross-channel dedup
+      "purchase",                                 # base Pixel event
+      "offsite_conversion.fb_pixel_purchase",     # Pixel-only attribution
+      "onsite_web_purchase",                      # Shop purchases
+      "onsite_conversion.purchase",
+  )
+  ```
+- ✅ دالة helper موحَّدة `_pick_canonical_purchase_value()` تستخدم للعدد والقيمة معاً.
+- ✅ عند تكرار نفس الـ action_type مع قيم مختلفة (نوافذ إسناد 7d/1d)، تُختار **الأكبر** (دفاعياً).
+
+### Historical data
+الـ rows المحفوظة سابقاً في `meta_ads_daily` لا تزال تحوي القيم المضخمة، لكن endpoint الـ`/api/meta/sync` يستخدم upsert بـ `(date, campaign_id)` — بمجرد إعادة المزامنة من زر **"Sync Now"** أو **"Auto-sync"** في الـ dashboard ستُستبدَل بالقيم الصحيحة. لا حاجة لـ migration.
+
+### Tests (11/11 PASS — `tests/test_meta_purchases_dedup_iter50.py`)
+1. التضخيم الأصلي (5 أنواع × 5 = 25) → الآن 5.
+2. التضخيم في قيمة الـ revenue (3 أنواع × 1234.50 = 3,703.50) → الآن 1234.50.
+3. `omni_purchase` يُفضَّل على `purchase` العادي.
+4. fallback إلى `purchase` عند غياب `omni_purchase`.
+5. fallback إلى `fb_pixel_purchase` للـ legacy pixels.
+6. fallback إلى `onsite_*` لمتاجر Facebook/Instagram Shop.
+7. الإجراءات غير-الشراء (view_content, add_to_cart) تُتجاهَل.
+8. NULL/empty/malformed safe.
+9. نفس النوع مرتين → تُختار القيمة الأكبر.
+10. **Real-world Saudi merchant payload**: 5 أنواع شراء + noise من video_view/link_click → النتيجة 5 (وليس 50).
+
+### كيف يرى التاجر الإصلاح
+1. **أعد النشر** ليصل التغيير إلى Production.
+2. اذهب إلى **الإعدادات → Meta Ads → "مزامنة الآن"** (Sync Now) — أو انتظر التزامن التلقائي اليومي (يحدث بعد 23 ساعة من آخر مزامنة).
+3. ستُستبدَل أرقام آخر 7-30 يوماً (الفترة المُعاد جلبها) بقيم deduplicated صحيحة.
+4. الأرقام الجديدة ستطابق Meta Ads Manager → "Results" → "Website Purchases" → "Per Channel" بنسبة 100%.
+
+---
+
 ## 🎯 NEW FEATURE (2026-06 — Iteration 49) — **بطاقة "الملخص التنفيذي للأرباح" في لوحة التحكم**
 
 **Merchant request**: "تقرير مختصر في لوحة التحكم — المبيعات / تكاليف المنتجات / إجمالي تكاليف الإعلانات / إجمالي تكاليف الشحن الآجل والمقدم / إجمالي رسوم جميع طرق الدفع / صافي الأرباح — باللون مرتبة وأنيقة".
