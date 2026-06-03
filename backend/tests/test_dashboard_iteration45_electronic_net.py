@@ -65,6 +65,45 @@ def _cleanup(uid: str) -> None:
     asyncio.run(_do())
 
 
+# ── Regression — debug endpoint must not crash when the user has
+# report_included_statuses set (previous bug: NameError on _matches_any).
+def test_debug_endpoint_works_with_report_included_statuses():
+    token, uid = _register()
+    try:
+        # Save a settings doc that triggers the status include filter.
+        requests.put(
+            f"{API}/settings",
+            headers=_hdr(token),
+            json={
+                "payment_methods": [],
+                "shipping_companies": [],
+                "report_included_statuses": ["تم الدفع", "تم التوصيل"],
+            },
+            timeout=10,
+        ).raise_for_status()
+        asyncio.run(_seed_orders(uid, [
+            {"payment_method": "مدى", "total_amount": 100, "order_status": "تم الدفع"},
+            {"payment_method": "مدى", "total_amount": 200, "order_status": "قيد التنفيذ"},
+            {"payment_method": "مدى", "total_amount": 300, "order_status": "تم التوصيل"},
+        ]))
+
+        r = requests.get(
+            f"{API}/dashboard/electronic-net-debug",
+            headers=_hdr(token), timeout=15,
+        )
+        # Previously crashed with 500 NameError. Must respond 200.
+        assert r.status_code == 200, r.text[:400]
+        body = r.json()
+        # Two orders satisfy the include filter (تم الدفع + تم التوصيل);
+        # the "قيد التنفيذ" one is dropped by the report-included filter,
+        # NOT by the electronic-net exclusion filter.
+        assert body["totals"]["electronic_orders_total"] == 2
+        assert body["totals"]["electronic_orders_included"] == 2
+        assert body["totals"]["electronic_orders_excluded"] == 0
+    finally:
+        _cleanup(uid)
+
+
 async def _seed_orders(uid: str, orders: list[dict]) -> None:
     """Bulk-insert pre-shaped unified_orders rows for a user."""
     from motor.motor_asyncio import AsyncIOMotorClient

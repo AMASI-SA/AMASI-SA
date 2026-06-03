@@ -1484,9 +1484,14 @@ async def electronic_net_debug(
 
     included_statuses = settings.get("report_included_statuses") or []
     if included_statuses:
+        # Substring match (case-insensitive) — inlined here because
+        # the dashboard's `_matches_any` helper is a nested function and
+        # not in this module's scope.
+        included_lower = [s.strip().lower() for s in included_statuses if s and s.strip()]
         all_orders = [
             o for o in all_orders
-            if _matches_any(o.get("order_status", ""), included_statuses)
+            if any(t in (o.get("order_status", "") or "").strip().lower()
+                   for t in included_lower)
         ]
 
     tamara_keywords = ("تمارا", "tamara")

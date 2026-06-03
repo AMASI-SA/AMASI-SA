@@ -12,6 +12,33 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## 🐛 BUG FIX (2026-06 — Iteration 45.1) — **"تعذّر تحميل تفاصيل الحساب" عند فتح modal تفاصيل صافي المدفوعات**
+
+**Merchant report**: "رسالة خطأ تظهر تعذّر تحميل تفاصيل الحساب عند الضغط على تفاصيل صافي المدفوعات الإلكترونية".
+
+### Root cause
+في الـ endpoint الجديد `GET /api/dashboard/electronic-net-debug` كنا نستدعي `_matches_any(...)` — وهي **دالة nested معرّفة داخل `dashboard()` handler**، غير قابلة للوصول من خارجها. عندما يكون لدى المستخدم `settings.report_included_statuses` غير فارغة، يحدث `NameError: name '_matches_any' is not defined` → 500 → toast "تعذّر تحميل تفاصيل الحساب".
+
+### Fix (`server.py`)
+- ✅ استبدال استدعاء `_matches_any` بـ inline substring-match داخل الـ endpoint:
+  ```py
+  included_lower = [s.strip().lower() for s in included_statuses if s and s.strip()]
+  all_orders = [o for o in all_orders
+                if any(t in (o.get("order_status", "") or "").strip().lower()
+                       for t in included_lower)]
+  ```
+- ✅ **Regression test جديد** `test_debug_endpoint_works_with_report_included_statuses` يثبت أن الـ endpoint يستجيب 200 (وليس 500) عندما يكون `report_included_statuses` مضبوطاً.
+
+### Tests (7/7 PASS — `tests/test_dashboard_iteration45_electronic_net.py`)
+الـ 6 الأصلية + الـ regression الجديد.
+
+### Visual confirm
+Modal يفتح، الصناديق الـ 3 ظاهرة، لا توجد رسالة خطأ.
+
+> ⚠️ **ملاحظة**: المستخدم رأى هذه الرسالة على **Production**. الإصلاح مطبَّق في Preview فقط — تحتاج لإعادة نشر التطبيق ليصل إصلاح إلى Production.
+
+---
+
 ## 🛠️ BUG FIX (2026-06 — Iteration 45) — **مطابقة "صافي المدفوعات الإلكترونية" مع شاشة سلة "غير المفوترة"**
 
 **Merchant report**: لوحة التحكم تعرض صافي المدفوعات = `26,643.23` SAR بينما شاشة سلة → المدفوعات → غير المفوترة = `21,715.87` SAR (فارق `4,927.36` ≈ 23% زيادة).
