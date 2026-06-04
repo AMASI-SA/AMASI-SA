@@ -13,6 +13,7 @@
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
 ## ✅ ITERATION 58 — Order Diagnostics (شاشة تشخيص فروقات الطلبات)
+**Status (Feb 2026)**: COMPLETE — wired into `/diagnostics` route + sidebar nav link "تشخيص فروقات الطلبات" with MagnifyingGlass icon. Verified end-to-end via screenshot: page renders, scan executes, summary cards populate (unified_orders / legacy_analyses / webhook_orders / system_total), and overlap card shows correct state.
 
 **User pain**: Dashboard shows 478 orders / 95,178.89 ر.س while Salla shows 475 / 94,724.17 — needs to know WHY without auto-deleting anything.
 
