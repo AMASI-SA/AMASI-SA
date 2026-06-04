@@ -23,6 +23,8 @@ import SallaIntegration from "./pages/SallaIntegration";
 import Profile from "./pages/Profile";
 import TeamManagement from "./pages/TeamManagement";
 import Settlements from "./pages/Settlements";
+import Accounts from "./pages/Accounts";
+import AccountDetails from "./pages/AccountDetails";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -56,6 +58,8 @@ function AppRoutes() {
             <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><Layout><TeamManagement /></Layout></ProtectedRoute>} />
             <Route path="/settlements" element={<ProtectedRoute><Layout><Settlements /></Layout></ProtectedRoute>} />
+            <Route path="/accounts" element={<ProtectedRoute><Layout><Accounts /></Layout></ProtectedRoute>} />
+            <Route path="/accounts/:id" element={<ProtectedRoute><Layout><AccountDetails /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />

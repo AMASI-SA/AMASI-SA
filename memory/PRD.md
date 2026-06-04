@@ -12,6 +12,47 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## ✅ ITERATION 57 — Phase 1: Financial Accounts & Transactions foundation
+
+**User ask**: Foundation layer for the upcoming accounting system. Three account types (bank / payment platform / ads platform), opening balance auto-transaction, summary cards, transactions ledger per account.
+
+### Implementation
+
+#### New Backend module — `/app/backend/accounts_routes.py`
+- Two new collections: `accounts` and `account_transactions` (3 indexes each).
+- 3 account types: `bank`, `payment_platform`, `ads_platform`.
+- 8 transaction types: opening_balance, income, expense, internal_transfer, settlement, debt, debt_payment, manual_adjustment.
+- 3 statuses: active, hidden, inactive.
+- **Opening balance auto-creates an `opening_balance` transaction** when non-zero.
+- Negative opening balances supported (e.g., owed amount on ads platform).
+- `current_balance` stored on account doc (cached). Recompute walks transactions chronologically and rewrites `balance_after` on each row to keep history honest after edits.
+- **Deletion gate**: cannot delete an account with > 1 transaction; must hide instead. UI shows Arabic error message.
+- Endpoints: catalogue, summary (by_type + grand_total), CRUD on accounts, CRUD on transactions, all owner-scoped.
+
+#### Server.py wiring
+- Imported `attach_accounts_routes` and mounted under `/api/accounts/*`.
+- 3 new indexes created at startup.
+
+#### Frontend
+- `/app/frontend/src/pages/Accounts.jsx` — list page with 4 summary cards (gradient backgrounds: emerald/sky/violet/amber), 5 tabs (all/bank/payment_platform/ads_platform/hidden), full table with type badge + currency + balance (color-coded for negative), edit/hide/delete actions, info banner.
+- `/app/frontend/src/pages/AccountDetails.jsx` — hero card showing big balance + status + actions, full transactions table (date / type / description / in / out / balance after / status / actions), Add Transaction modal with in/out direction toggle. Opening balance transaction is non-deletable.
+- `App.js`: routes `/accounts` and `/accounts/:id` added.
+- `Sidebar.jsx`: new `nav-accounts` link with `Wallet` icon, placed right after `nav-dashboard` per spec.
+
+### Verified
+- **Backend tests** (`tests/test_accounts_iter57.py`): **6/6 PASS** — catalogue, opening-balance auto-tx, summary aggregation (50k + 12.4k + −2.3k = 60.1k), running balance after CRUD, deletion gate enforced, hidden accounts excluded from summary.
+- **Live Playwright E2E**: created 3 accounts of all types (positive bank, positive payment, NEGATIVE ads), navigated to detail page, added a 5,000 USD transaction → balance recomputed correctly (-2,300 + 5,000 = 2,700 USD) ✅.
+
+### Pending / Phase 2 (deferred)
+- Internal transfer wizard (move money between accounts as two linked transactions).
+- Reconciliation with Salla/Tamara/Tabby actual payouts.
+- Recurring deposits / payouts (rentals, salaries).
+- Attachment uploads (currently field exists but no upload flow).
+- Multi-currency conversion in the grand_total card (currently sums raw values without FX).
+
+---
+
+
 ## ✅ ITERATION 56 (2026-02) — Payment Settlements Ledger + 14-day Salla Window
 
 **User pain**: A partial refund (139 SAR removed from a delivered order, not a full cancellation) caused a silent mismatch between Salla's wallet ("غير المفوّترة") and the system's electronic_net — because the system only excluded refunded/cancelled status orders, not partial amount adjustments. Merchant flagged this as a bug, but the actual issue is the absence of an adjustment ledger.

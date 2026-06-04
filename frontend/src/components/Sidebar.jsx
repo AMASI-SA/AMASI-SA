@@ -21,6 +21,7 @@ import { useAuth } from "../context/AuthContext";
 
 const baseLinks = [
     { to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" },
+    { to: "/accounts", label: "الأصول والحسابات", icon: Wallet, testid: "nav-accounts" },
     { to: "/upload", label: "رفع ملف Excel", icon: UploadSimple, testid: "nav-upload" },
     { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
     { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },

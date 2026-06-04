@@ -72,6 +72,7 @@ from settlements_routes import (
     classify_14d_window,
     SALLA_PAYOUT_DAYS,
 )
+from accounts_routes import attach_accounts_routes
 from orders_db import upsert_order, orders_to_parsed
 from balances import compute_balances
 
@@ -2774,6 +2775,7 @@ attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
 attach_operating_expenses_routes(api, db)
 attach_settlements_routes(api, db)
+attach_accounts_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
 attach_preparation_routes(api, db)
 attach_salla_routes(api, db)
@@ -2844,6 +2846,10 @@ async def on_startup():
     await db.payment_adjustments.create_index([("user_id", 1), ("adjusted_at", -1)])
     await db.payment_adjustments.create_index([("user_id", 1), ("order_number", 1)])
     await db.payment_adjustments.create_index([("user_id", 1), ("provider", 1)])
+    # iter-57 — Financial Accounts foundation
+    await db.accounts.create_index([("user_id", 1), ("account_type", 1)])
+    await db.accounts.create_index([("user_id", 1), ("status", 1)])
+    await db.account_transactions.create_index([("user_id", 1), ("account_id", 1), ("transaction_date", -1)])
     # Indexes for the "تجهيز المنتجات" feature (iteration 34).
     await ensure_preparation_indexes(db)
     await ensure_salla_indexes(db)
