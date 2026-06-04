@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     Plus, Bank, CreditCard, Megaphone, Wallet, Eye, EyeSlash, Trash,
-    PencilSimple, X, Warning,
+    PencilSimple, X, Warning, ArrowsClockwise, Lightning,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
@@ -205,6 +205,29 @@ export default function Accounts() {
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState("all"); // all | bank | payment_platform | ads_platform | hidden
     const [modal, setModal] = useState(null);
+    const [syncing, setSyncing] = useState(false);
+
+    const syncPaymentMethods = async () => {
+        setSyncing(true);
+        try {
+            const { data } = await api.post("/accounts/sync-payment-methods");
+            const created = data.created || 0;
+            const updated = data.updated || 0;
+            if (data.synced === 0) {
+                toast.info("لا توجد طرق دفع في الطلبات بعد. ارفع ملف Excel أو فعّل Make.com أولاً.");
+            } else {
+                toast.success(
+                    `تمت مزامنة ${data.synced} طريقة دفع، وإنشاء ${created} حساب${created === 1 ? "" : "ات"} جديد${created === 1 ? "" : "ة"}، وتحديث ${updated} حساب${updated === 1 ? "" : "ات"}.`
+                );
+            }
+            await load();
+            setTab("payment_platform");
+        } catch (err) {
+            toast.error(formatApiErrorDetail(err.response?.data?.detail));
+        } finally {
+            setSyncing(false);
+        }
+    };
 
     const load = async () => {
         setLoading(true);
@@ -269,6 +292,10 @@ export default function Accounts() {
                 </div>
                 <button onClick={() => setModal({})} className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand text-white text-sm font-semibold rounded-lg bg-brand-hover" data-testid="accounts-add-btn">
                     <Plus size={18} weight="bold" /> إضافة حساب جديد
+                </button>
+                <button onClick={syncPaymentMethods} disabled={syncing} className="inline-flex items-center gap-2 px-4 py-2.5 bg-sky-700 text-white text-sm font-semibold rounded-lg hover:bg-sky-800 disabled:opacity-60" data-testid="accounts-sync-payment-methods-btn">
+                    <ArrowsClockwise size={18} weight="bold" className={syncing ? "animate-spin" : ""} />
+                    {syncing ? "جاري المزامنة…" : "مزامنة طرق الدفع من الطلبات"}
                 </button>
             </header>
 
@@ -338,8 +365,18 @@ export default function Accounts() {
                                             <Link to={`/accounts/${a.id}`} className="flex items-center gap-2 font-bold text-foreground hover:text-brand" data-testid={`account-link-${a.id}`}>
                                                 <Icon size={18} weight="duotone" className="text-brand shrink-0" />
                                                 <span>{a.name}</span>
+                                                {a.auto_created && (
+                                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200" title="تم إنشاؤه تلقائياً من طرق الدفع في الطلبات" data-testid={`account-auto-badge-${a.id}`}>
+                                                        <Lightning size={9} weight="fill" /> تلقائي
+                                                    </span>
+                                                )}
                                             </Link>
                                             {a.provider_name && <div className="text-[11px] text-muted-foreground pr-6">{a.provider_name}</div>}
+                                            {a.auto_created && a.orders_count != null && (
+                                                <div className="text-[10px] text-sky-700 pr-6 mt-0.5">
+                                                    {Number(a.orders_count).toLocaleString("en-US")} طلب · رصيد متوقع التحصيل
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${meta.cls}`}>

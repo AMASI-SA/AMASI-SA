@@ -60,6 +60,72 @@ SUGGESTED_PROVIDERS = {
 
 ACCOUNT_STATUSES = ("active", "hidden", "inactive")
 
+# ── Payment-method normalisation ───────────────────────────────────────────
+# Maps the many spellings of a payment method (Arabic + English, with or
+# without spaces) to a canonical key so we never create two accounts for
+# the same method. Order DOES matter — longest/most-specific aliases first
+# so "Apple Pay" doesn't accidentally match a generic "pay".
+_PAYMENT_ALIASES: list[tuple[str, str, str]] = [
+    # (canonical_key, display_name, alias substring — lower-cased, stripped)
+    ("apple_pay",         "Apple Pay",          "apple pay"),
+    ("apple_pay",         "Apple Pay",          "applepay"),
+    ("apple_pay",         "Apple Pay",          "ابل باي"),
+    ("apple_pay",         "Apple Pay",          "أبل باي"),
+    ("apple_pay",         "Apple Pay",          "آبل باي"),
+    ("stc_pay",           "STC Pay",            "stc pay"),
+    ("stc_pay",           "STC Pay",            "stcpay"),
+    ("stc_pay",           "STC Pay",            "اس تي سي"),
+    ("stc_pay",           "STC Pay",            "إس تي سي"),
+    ("mastercard",        "MasterCard",         "mastercard"),
+    ("mastercard",        "MasterCard",         "master card"),
+    ("mastercard",        "MasterCard",         "ماستر كارد"),
+    ("mastercard",        "MasterCard",         "ماستركارد"),
+    ("visa",              "Visa",               "visa"),
+    ("visa",              "Visa",               "فيزا"),
+    ("mada",              "مدى",                "mada"),
+    ("mada",              "مدى",                "مدى"),
+    ("tabby",             "تابي (Tabby)",       "tabby"),
+    ("tabby",             "تابي (Tabby)",       "تابي"),
+    ("tamara",            "تمارا (Tamara)",     "tamara"),
+    ("tamara",            "تمارا (Tamara)",     "تمارا"),
+    ("emkan",             "إمكان (Emkan)",      "emkan"),
+    ("emkan",             "إمكان (Emkan)",      "إمكان"),
+    ("emkan",             "إمكان (Emkan)",      "امكان"),
+    ("cash_on_delivery",  "الدفع عند الاستلام",  "cash on delivery"),
+    ("cash_on_delivery",  "الدفع عند الاستلام",  "cash_on_delivery"),
+    ("cash_on_delivery",  "الدفع عند الاستلام",  "cod"),
+    ("cash_on_delivery",  "الدفع عند الاستلام",  "الدفع عند الاستلام"),
+    ("cash_on_delivery",  "الدفع عند الاستلام",  "دفع عند الاستلام"),
+    ("bank_transfer",     "تحويل بنكي",          "bank transfer"),
+    ("bank_transfer",     "تحويل بنكي",          "تحويل بنكي"),
+    ("bank_transfer",     "تحويل بنكي",          "حوالة بنكية"),
+    ("bank_transfer",     "تحويل بنكي",          "wire transfer"),
+    ("salla_pay",         "سلة (Salla Pay)",     "salla pay"),
+    ("salla_pay",         "سلة (Salla Pay)",     "sallapay"),
+]
+
+
+def normalize_payment_method(raw: str) -> tuple[str, str]:
+    """Return (canonical_key, display_name) for a raw payment-method string.
+
+    Returns ("", "") when the input is empty / غير محدد. Unknown methods
+    fall back to a slug derived from the input."""
+    if not raw:
+        return ("", "")
+    s = str(raw).strip().lower()
+    for ch in (".", ",", "،", "(", ")", "/", "\\"):
+        s = s.replace(ch, " ")
+    s = " ".join(s.split())
+    if not s or s in {"غير محدد", "none", "n/a", "-"}:
+        return ("", "")
+    for key, display, alias in _PAYMENT_ALIASES:
+        if alias in s:
+            return (key, display)
+    slug = "".join(c if c.isalnum() else "_" for c in str(raw).strip().lower())
+    slug = "_".join(filter(None, slug.split("_")))[:60] or "other"
+    return (slug, str(raw).strip())
+
+
 # Movement vocabulary — kept intentionally small for iter-57; phase 2 will
 # add `transfer_in/out`, `debt_paid`, …
 TRANSACTION_TYPES = (
@@ -155,13 +221,24 @@ async def _recompute_balance(db, user_id: str, account_id: str) -> float:
     """Walk the account's transactions in chronological order, rewriting each
     row's `balance_after`. Returns the final balance which is then stored on
     the account doc as `current_balance`. O(n) but n is small (<10k usually);
-    we accept that for correctness."""
+    we accept that for correctness.
+
+    For accounts auto-created from order payment_methods, the running ledger
+    starts from `expected_orders_balance` (the gross order amount) so adding
+    a real bank-transfer transaction (direction="out") deducts from it.
+    """
+    acc = await db.accounts.find_one(
+        {"id": account_id, "user_id": user_id},
+        {"_id": 0, "expected_orders_balance": 1, "opening_balance": 1},
+    ) or {}
+    expected = float(acc.get("expected_orders_balance") or 0)
+
     docs = await db.account_transactions.find(
         {"user_id": user_id, "account_id": account_id},
         {"_id": 0},
     ).sort([("transaction_date", 1), ("created_at", 1)]).to_list(50000)
 
-    running = 0.0
+    running = expected  # auto-orders balance lives at the bottom of the stack
     for d in docs:
         amt = float(d.get("amount", 0) or 0)
         running += amt if d.get("direction") == "in" else -amt
@@ -405,5 +482,122 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             raise HTTPException(404, "Transaction not found")
         await _recompute_balance(db, user["id"], account_id)
         return {"ok": True}
+
+    @router.post("/sync-payment-methods")
+    async def sync_payment_methods(user: dict = Depends(current_user)):
+        """Scan `unified_orders` for distinct payment_method values and
+        auto-create a `payment_platform` account per canonical method.
+
+        Each account's `current_balance` is set to the sum of order totals
+        for that method (the *expected* amount to be collected — actual
+        bank arrival is tracked separately in Phase 2 via transactions).
+
+        Returns counts so the UI can show a friendly success message.
+        """
+        uid = user["id"]
+        # 1. Aggregate distinct payment_method + sum + count from unified_orders.
+        pipeline = [
+            {"$match": {"user_id": uid}},
+            {"$group": {
+                "_id": {"$ifNull": ["$payment_method", ""]},
+                "amount": {"$sum": {"$ifNull": ["$total_amount", 0]}},
+                "count":  {"$sum": 1},
+            }},
+        ]
+        groups: dict[str, dict] = {}      # canonical_key → {amount, count, display, raw_names[]}
+        async for row in db.unified_orders.aggregate(pipeline):
+            raw = (row.get("_id") or "").strip()
+            key, display = normalize_payment_method(raw)
+            if not key:
+                continue
+            slot = groups.setdefault(key, {
+                "key": key,
+                "display": display,
+                "amount": 0.0,
+                "count": 0,
+                "raw_names": [],
+            })
+            slot["amount"] += float(row.get("amount") or 0)
+            slot["count"]  += int(row.get("count") or 0)
+            if raw and raw not in slot["raw_names"]:
+                slot["raw_names"].append(raw)
+
+        # 2. For each canonical method, upsert the payment_platform account.
+        created = 0
+        updated = 0
+        now = _now()
+        result_accounts = []
+        for key, data in groups.items():
+            existing = await db.accounts.find_one(
+                {"user_id": uid, "normalized_payment_method": key},
+                {"_id": 0},
+            )
+            expected = round(float(data["amount"]), 2)
+            orders_count = int(data["count"])
+            if existing:
+                # Refresh balance + meta. Don't touch user-editable fields.
+                await db.accounts.update_one(
+                    {"id": existing["id"], "user_id": uid},
+                    {"$set": {
+                        "current_balance": round(
+                            float(existing.get("opening_balance") or 0) + expected, 2
+                        ),
+                        "expected_orders_balance": expected,
+                        "orders_count": orders_count,
+                        "raw_payment_names": data["raw_names"][:20],
+                        "updated_at": now,
+                        "last_synced_at": now,
+                    }},
+                )
+                updated += 1
+                fresh = await db.accounts.find_one(
+                    {"id": existing["id"], "user_id": uid}, {"_id": 0}
+                )
+                result_accounts.append(fresh)
+            else:
+                doc = {
+                    "id": str(uuid.uuid4()),
+                    "user_id": uid,
+                    "name": data["display"],
+                    "account_type": "payment_platform",
+                    "provider_name": data["display"],
+                    "currency": "SAR",
+                    "opening_balance": 0.0,
+                    "opening_balance_date": now[:10],
+                    "current_balance": expected,
+                    "expected_orders_balance": expected,
+                    "orders_count": orders_count,
+                    "raw_payment_names": data["raw_names"][:20],
+                    "default_bank_account_id": None,
+                    "status": "active",
+                    "notes": "تم إنشاؤه تلقائياً من طرق الدفع في الطلبات.",
+                    "auto_created": True,
+                    "source": "orders_payment_method",
+                    "normalized_payment_method": key,
+                    "created_at": now,
+                    "updated_at": now,
+                    "last_synced_at": now,
+                }
+                await db.accounts.insert_one(doc)
+                created += 1
+                doc.pop("_id", None)
+                result_accounts.append(doc)
+
+        return {
+            "ok": True,
+            "synced": len(groups),
+            "created": created,
+            "updated": updated,
+            "accounts": [
+                {
+                    "id": a["id"],
+                    "name": a["name"],
+                    "normalized_payment_method": a.get("normalized_payment_method"),
+                    "current_balance": a.get("current_balance"),
+                    "orders_count": a.get("orders_count"),
+                }
+                for a in result_accounts
+            ],
+        }
 
     parent_router.include_router(router)

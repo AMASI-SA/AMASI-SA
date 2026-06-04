@@ -1,5 +1,24 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+## ✅ ITERATION 60 — Auto-create Payment Platform Accounts from Orders
+
+**User pain**: `/accounts` had empty Payment Platforms tab and required manual addition of every method.
+
+### Backend — `/app/backend/accounts_routes.py`
+- **NEW `POST /api/accounts/sync-payment-methods`**: aggregates `payment_method` across `unified_orders` (sum + count), normalises via `normalize_payment_method()` to a canonical key, upserts a `payment_platform` account per key with `auto_created: true`, `source: "orders_payment_method"`, `normalized_payment_method`, `expected_orders_balance`, `orders_count`. Returns `{synced, created, updated, accounts[]}`.
+- **`normalize_payment_method`**: alias table maps Arabic + English spellings (Apple Pay / ApplePay / ابل باي → `apple_pay`; مدى / mada → `mada`; Tabby / تابي → `tabby`; Tamara, Emkan, STC Pay, MasterCard, Visa, COD, Bank Transfer, Salla Pay) — fallback to slug. Idempotent: 2nd sync = 0 created, N updated.
+- **`_recompute_balance`**: now starts running balance from `expected_orders_balance` (auto-accounts) so manually adding settlement transactions (Phase 2) deducts correctly from the gross order amount.
+
+### Frontend — `/app/frontend/src/pages/Accounts.jsx`
+- Sky button **"مزامنة طرق الدفع من الطلبات"** next to **"إضافة حساب جديد"** in the header, with spinning icon while syncing.
+- Each auto-created row shows a small **⚡ تلقائي** pill (sky background) + helper line `"X طلب · رصيد متوقع التحصيل"`.
+
+### Verified live
+- 1st sync detected: مدى (794 orders → 139,144 ر.س), Apple Pay (7 → 2,235), تحويل بنكي (10 → 2,300), Tabby (1 → 120), الدفع عند الاستلام (2 → 500). Total payment-platforms summary card jumped to **144,299.49 ر.س**.
+- 2nd sync: `synced=5, created=0, updated=5` ✓ idempotent.
+
+---
+
 ## ✅ ITERATION 59 — Concurrent Excel + Make Pipeline (تشغيل متوازي بدون توقف)
 
 **User pain**: Uploading Excel froze Make.com webhook ingestion for several seconds while the synchronous endpoint parsed openpyxl + ran 2 DB ops per order serially.
