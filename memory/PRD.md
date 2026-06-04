@@ -12,6 +12,38 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## ✅ ITERATION 58 — Order Diagnostics (شاشة تشخيص فروقات الطلبات)
+
+**User pain**: Dashboard shows 478 orders / 95,178.89 ر.س while Salla shows 475 / 94,724.17 — needs to know WHY without auto-deleting anything.
+
+### Backend — `/app/backend/diagnostics_routes.py` (READ-ONLY)
+- `GET /diagnostics/summary?from_date&to_date` — counts from all sources separately: unified_orders, legacy analyses (with their orders/sales), webhook_orders, plus a system_total roll-up.
+- `GET /diagnostics/scan-duplicates` — detects 3 inflation sources:
+  1. **legacy_overlap_orders**: same order_number in BOTH unified_orders AND a legacy analysis sample (counted twice in dashboard).
+  2. **legacy_file_duplicates**: same filename uploaded N times (each adds its totals to dashboard).
+  3. **unified_self_dups**: should be zero; safety net.
+- `POST /diagnostics/compare-with-salla` — merchant supplies Salla's count/sales (+ optional list of order_numbers). Returns exact arithmetic gap AND set-diff (`in_system_not_in_salla`, `in_salla_not_in_system`).
+- `GET /diagnostics/order-trace/{order_number}` — find every collection an order_number lives in (unified, webhook, embedded in legacy analyses) for forensic trace.
+
+### Frontend — `/app/frontend/src/pages/OrdersDiagnostics.jsx`
+- Two-column input panel: date range + Salla reference (orders, sales, optional list of order_numbers).
+- **"فحص التكرارات الآن"** button → shows source-by-source counts + overlap detection card (rose if any, emerald if none) + per-file upload history.
+- **"مقارنة مع سلة"** button → comparison card with system/salla/diff for both orders and sales; two side-by-side lists (in-system-not-salla in rose, in-salla-not-system in amber) with CSV export.
+- Click any order number in the diff lists → opens **Trace Modal** showing every location that order_number exists.
+- "قراءة فقط" notice — no destructive actions; merchant explicitly approves any cleanup later.
+- Sidebar link `nav-diagnostics` (with magnifying-glass icon) added between History and Daily Costs.
+
+### Verified on PREVIEW
+- Scan correctly detected `salla_test.xlsx` uploaded 4× (would inflate dashboard by 4× orders), `make_*.json` uploaded 2× (legacy_file_duplicates list).
+- Compare correctly reported the arithmetic gap for the user's exact scenario (475 / 94,724.17).
+- Trace modal works for any order_number; shows source + amount + dates per location.
+
+### Why no auto-delete
+Spec explicitly: "قبل أي حذف أو دمج: أعرض لي أولاً قائمة الطلبات المكررة بالتفصيل حتى أراجعها." Phase 2 (later, after user reviews data) will add an approval-gated merge UI.
+
+---
+
+
 ## ✅ ITERATION 57 — Phase 1: Financial Accounts & Transactions foundation
 
 **User ask**: Foundation layer for the upcoming accounting system. Three account types (bank / payment platform / ads platform), opening balance auto-transaction, summary cards, transactions ledger per account.

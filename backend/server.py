@@ -73,6 +73,7 @@ from settlements_routes import (
     SALLA_PAYOUT_DAYS,
 )
 from accounts_routes import attach_accounts_routes
+from diagnostics_routes import attach_diagnostics_routes
 from orders_db import upsert_order, orders_to_parsed
 from balances import compute_balances
 
@@ -2776,6 +2777,7 @@ attach_webhook_routes(api, db)
 attach_operating_expenses_routes(api, db)
 attach_settlements_routes(api, db)
 attach_accounts_routes(api, db)
+attach_diagnostics_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
 attach_preparation_routes(api, db)
 attach_salla_routes(api, db)

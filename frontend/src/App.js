@@ -25,6 +25,7 @@ import TeamManagement from "./pages/TeamManagement";
 import Settlements from "./pages/Settlements";
 import Accounts from "./pages/Accounts";
 import AccountDetails from "./pages/AccountDetails";
+import OrdersDiagnostics from "./pages/OrdersDiagnostics";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -60,6 +61,7 @@ function AppRoutes() {
             <Route path="/settlements" element={<ProtectedRoute><Layout><Settlements /></Layout></ProtectedRoute>} />
             <Route path="/accounts" element={<ProtectedRoute><Layout><Accounts /></Layout></ProtectedRoute>} />
             <Route path="/accounts/:id" element={<ProtectedRoute><Layout><AccountDetails /></Layout></ProtectedRoute>} />
+            <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />

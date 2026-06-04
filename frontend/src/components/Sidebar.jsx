@@ -15,6 +15,7 @@ import {
     Image,
     UserCircle,
     UsersThree,
+    MagnifyingGlass,
     X,
 } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
@@ -25,6 +26,7 @@ const baseLinks = [
     { to: "/upload", label: "رفع ملف Excel", icon: UploadSimple, testid: "nav-upload" },
     { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
     { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },
+    { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
     { to: "/daily-costs", label: "التكاليف اليومية", icon: Receipt, testid: "nav-daily-costs" },
     { to: "/operating-expenses", label: "المصروفات التشغيلية", icon: Wallet, testid: "nav-operating-expenses" },
     { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
