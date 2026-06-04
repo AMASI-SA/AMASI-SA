@@ -12,6 +12,26 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## ✅ ITERATION 54 (2026-02) — Toggle visibility of "Product Cost" card on Dashboard
+
+**User ask**: "التحكم بإظهار وإخفاء بطاقة تكلفة المنتجات بداية لوحة التحكم".
+
+### Implementation (reuses existing `dashboard_hidden_cards` setting — no schema change)
+- `frontend/src/lib/dashboardCards.js` — exported new `SPECIAL_DASHBOARD_CARDS` array containing one entry `{id: "product_cost_card", label: "تكلفة المنتجات (بطاقة خاصة)"}`. This keeps standalone components (not KPI-grid-driven) toggleable using the same `dashboard_hidden_cards` user setting.
+- `frontend/src/pages/Dashboard.jsx` — wrapped `<ProductCostCard>` with `{!hiddenCards.includes("product_cost_card") && (...)}`.
+- `frontend/src/pages/Settings.jsx` — added a new amber-highlighted "بطاقات خاصة (أعلى لوحة التحكم)" group at the end of the existing KPI customization card. The Show-all / Hide-all buttons now also operate on these special cards. Uses the same `card-toggle-{id}` testid pattern.
+
+### Verified end-to-end via Playwright
+1. Default state — product cost card visible on `/`.
+2. Toggling OFF in Settings → Save → reload `/` → card gone (`SKU/Product ID` substring count = 0).
+3. Toggling back ON → Save → reload `/` → card present again.
+
+### Future-proofing
+The `SPECIAL_DASHBOARD_CARDS` mechanism is reusable: when we want to toggle the Executive Profit Summary or any other standalone block, we just add one more entry to that array.
+
+---
+
+
 ## 🐛 BUG FIX (2026-02 — Iteration 53) — Executive Profit Summary card hid the Operating Expenses line
 
 **Merchant report**: "هناك غلط ببطاقة الملخص للأرباح، الإجمالي النهائي لا يطابق طرح السطور أعلاه."

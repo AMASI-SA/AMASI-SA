@@ -564,9 +564,11 @@ export default function Dashboard() {
                     {/* Iteration 26: Product Cost Card — visible at the
                         top of the KPI region so the merchant always sees
                         today/month product cost + linked vs missing counts.
-                        Refreshes whenever filter range changes. */}
-                    <ProductCostCard refreshKey={`${filters.from || ""}-${filters.to || ""}`} />
-                    {/* iter-49 — Executive profit summary (sales → deductions → net) */}
+                        Refreshes whenever filter range changes.
+                        iter-54: hideable via Settings → "بطاقات خاصة". */}
+                    {!hiddenCards.includes("product_cost_card") && (
+                        <ProductCostCard refreshKey={`${filters.from || ""}-${filters.to || ""}`} />
+                    )}                    {/* iter-49 — Executive profit summary (sales → deductions → net) */}
                     <ProfitSummaryCard totals={totals} />
                     {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">

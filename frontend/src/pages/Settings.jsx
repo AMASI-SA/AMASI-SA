@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator, LockKey, MagnifyingGlass, Warning, UserPlus } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
-import { KPI_GROUPS } from "../lib/dashboardCards";
+import { KPI_GROUPS, SPECIAL_DASHBOARD_CARDS } from "../lib/dashboardCards";
 import SecretField, { StatusBadge } from "../components/SecretField";
 import { useAuth } from "../context/AuthContext";
 
@@ -1020,8 +1020,8 @@ export default function Settings() {
 
                 <div className="flex items-center justify-between mb-4 text-sm">
                     <div className="text-muted-foreground">
-                        مفعَّلة: <strong className="text-foreground">{KPI_GROUPS.flatMap((g) => g.cards).length - hiddenCards.length}</strong>
-                        {" "}/ {KPI_GROUPS.flatMap((g) => g.cards).length}
+                        مفعَّلة: <strong className="text-foreground">{KPI_GROUPS.flatMap((g) => g.cards).length + SPECIAL_DASHBOARD_CARDS.length - hiddenCards.length}</strong>
+                        {" "}/ {KPI_GROUPS.flatMap((g) => g.cards).length + SPECIAL_DASHBOARD_CARDS.length}
                     </div>
                     <div className="flex gap-2">
                         <button type="button"
@@ -1031,7 +1031,10 @@ export default function Settings() {
                             <Eye size={14} className="inline" /> إظهار الكل
                         </button>
                         <button type="button"
-                            onClick={() => setHiddenCards(KPI_GROUPS.flatMap((g) => g.cards.map((c) => c.id)))}
+                            onClick={() => setHiddenCards([
+                                ...KPI_GROUPS.flatMap((g) => g.cards.map((c) => c.id)),
+                                ...SPECIAL_DASHBOARD_CARDS.map((c) => c.id),
+                            ])}
                             className="text-xs px-3 py-1.5 rounded-lg border border-border hover:bg-accent font-bold"
                             data-testid="hide-all-cards-btn">
                             <EyeSlash size={14} className="inline" /> إخفاء الكل
@@ -1076,6 +1079,47 @@ export default function Settings() {
                             </div>
                         </div>
                     ))}
+
+                    {/* Special standalone dashboard cards (iter-54) — not part
+                        of the KPI grid but still toggleable via the same
+                        `dashboard_hidden_cards` setting. */}
+                    <div className="border border-amber-200 rounded-lg p-4 bg-amber-50/30" data-testid="special-cards-group">
+                        <h3 className="font-bold text-foreground mb-3 flex items-center gap-2" style={{ fontFamily: "Tajawal" }}>
+                            <SquaresFour size={18} weight="duotone" className="text-amber-700" />
+                            بطاقات خاصة (أعلى لوحة التحكم)
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {SPECIAL_DASHBOARD_CARDS.map((c) => {
+                                const Icon = c.icon;
+                                const isHidden = hiddenCards.includes(c.id);
+                                return (
+                                    <label
+                                        key={c.id}
+                                        className={`flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer transition-colors border ${isHidden ? "border-border bg-accent/40 text-muted-foreground" : "border-emerald-200 bg-emerald-50/40"}`}
+                                        data-testid={`card-toggle-${c.id}`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            className="w-4 h-4 accent-brand"
+                                            checked={!isHidden}
+                                            onChange={() => {
+                                                setHiddenCards((prev) => (
+                                                    prev.includes(c.id)
+                                                        ? prev.filter((x) => x !== c.id)
+                                                        : [...prev, c.id]
+                                                ));
+                                            }}
+                                        />
+                                        <Icon size={18} weight="duotone" className={isHidden ? "text-muted-foreground" : "text-brand"} />
+                                        <div className="flex-1">
+                                            <div className="text-sm font-semibold">{c.label}</div>
+                                            {c.hint && <div className="text-xs text-muted-foreground">{c.hint}</div>}
+                                        </div>
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
             </div>
 

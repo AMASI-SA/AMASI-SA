@@ -291,6 +291,23 @@ export const KPI_GROUPS = [
 /** Flat list of all KPI cards (preserves group order). */
 export const ALL_KPI_CARDS = KPI_GROUPS.flatMap((g) => g.cards.map((c) => ({ ...c, groupId: g.id, groupTitle: g.title })));
 
+/**
+ * Special standalone cards on the dashboard that aren't part of the KPI grid
+ * (e.g., the Product Cost summary tile, Executive Profit Summary, etc.).
+ *
+ * These have NO `value(totals)` function — they are rendered as their own
+ * React components in Dashboard.jsx — but they ARE toggleable via the same
+ * `dashboard_hidden_cards` setting so merchants can hide them too.
+ */
+export const SPECIAL_DASHBOARD_CARDS = [
+    {
+        id: "product_cost_card",
+        label: "تكلفة المنتجات (بطاقة خاصة)",
+        icon: Package,
+        hint: "يومي/شهري + المرتبط/بدون تكلفة",
+    },
+];
+
 /** Look up a card by id (returns undefined if removed). */
 export function findKpi(id) {
     return ALL_KPI_CARDS.find((c) => c.id === id);
