@@ -12,6 +12,7 @@
  */
 import {
     Coins, Package, Megaphone, Truck, Receipt, TrendUp, Equals, Briefcase,
+    ShoppingCart, ChartBar,
 } from "@phosphor-icons/react";
 
 const fmtSar = (v) => {
@@ -34,6 +35,46 @@ const sharePct = (cost, sales) => {
 };
 
 const fmtPct = (p) => `${p.toFixed(2)}%`;
+
+/** Compact integer formatter for "عدد الطلبات" (with thousands separator). */
+const fmtInt = (v) => {
+    if (v == null || Number.isNaN(Number(v))) return "—";
+    return Number(v).toLocaleString("en-US");
+};
+
+/** Hero KPI tile used in the new header strip (3 tiles in one row). */
+function HeaderKpi({ icon: Icon, label, value, hint, tone = "emerald", testid }) {
+    const tones = {
+        sky:     { border: "border-sky-100",     iconBg: "bg-sky-100 text-sky-700",         num: "text-sky-700" },
+        amber:   { border: "border-amber-100",   iconBg: "bg-amber-100 text-amber-700",     num: "text-amber-700" },
+        emerald: { border: "border-emerald-100", iconBg: "bg-emerald-100 text-emerald-700", num: "text-emerald-700" },
+    };
+    const t = tones[tone] || tones.emerald;
+    return (
+        <div
+            className={`rounded-xl bg-white/80 border ${t.border} px-3 py-2.5 text-center`}
+            data-testid={testid}
+        >
+            <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-500 mb-1">
+                <span className={`w-4 h-4 inline-flex items-center justify-center rounded ${t.iconBg}`}>
+                    <Icon size={11} weight="bold" />
+                </span>
+                <span className="truncate">{label}</span>
+            </div>
+            <div
+                className={`num text-xl sm:text-2xl font-extrabold ${t.num} leading-tight`}
+                style={{ fontFamily: "Tajawal" }}
+            >
+                {value}
+            </div>
+            {hint && (
+                <div className="text-[10px] text-slate-400 mt-0.5 truncate" title={hint}>
+                    {hint}
+                </div>
+            )}
+        </div>
+    );
+}
 
 function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false }) {
     // Color palette for each row — tuned for clarity on a soft gradient bg.
@@ -100,6 +141,18 @@ export default function ProfitSummaryCard({ totals }) {
     // doesn't equal the "صافي الأرباح" number and merchants reasonably
     // flag it as a bug (iter-53 fix).
     const operatingExpenses = Number(t.operating_expenses_total || 0);
+
+    // ── iter-55 header KPIs (3 tiles in one row above the breakdown) ──
+    const totalOrders     = Number(t.total_orders || 0);
+    // `avg_cost_per_order` is null when ads=0 or orders=0 (backend convention).
+    const avgCostPerOrder = t.avg_cost_per_order != null
+        ? Number(t.avg_cost_per_order)
+        : null;
+    // `overall_roas` is null when ads=0 (backend convention).
+    const roas            = t.overall_roas != null
+        ? Number(t.overall_roas)
+        : null;
+
     // Use the authoritative net_profit from backend; fall back to manual
     // calc only when the backend hasn't surfaced it yet (e.g., empty store).
     const netProfit = t.net_profit != null
@@ -123,6 +176,40 @@ export default function ProfitSummaryCard({ totals }) {
                     تقرير مختصر للفترة المحددة
                 </div>
             </div>
+
+            {/* iter-55: Header KPI strip — 3 tiles in one row.
+                Sits between the title bar and the breakdown so merchants get
+                an at-a-glance read of efficiency (orders / cost-per-order /
+                ROAS) before the waterfall begins. */}
+            <div className="grid grid-cols-3 gap-2 px-3 pt-3" data-testid="profit-header-kpis">
+                <HeaderKpi
+                    icon={ShoppingCart}
+                    label="عدد الطلبات"
+                    value={fmtInt(totalOrders)}
+                    hint="إجمالي طلبات الفترة"
+                    tone="sky"
+                    testid="profit-kpi-orders"
+                />
+                <HeaderKpi
+                    icon={Coins}
+                    label="متوسط تكلفة الطلب"
+                    value={avgCostPerOrder != null ? fmtSar(avgCostPerOrder) : "—"}
+                    hint="ر.س / طلب (إعلانات)"
+                    tone="amber"
+                    testid="profit-kpi-avg-cost"
+                />
+                <HeaderKpi
+                    icon={ChartBar}
+                    label="العائد على الإعلانات"
+                    value={roas != null ? `${roas.toFixed(2)}×` : "—"}
+                    hint="ROAS = المبيعات ÷ الإعلانات"
+                    tone="emerald"
+                    testid="profit-kpi-roas"
+                />
+            </div>
+
+            {/* Subtle dashed divider so the KPI strip feels grouped */}
+            <div className="mx-3 mt-3 mb-1 border-t border-dashed border-emerald-200/70"></div>
 
             {/* Body */}
             <div className="p-3 space-y-0">

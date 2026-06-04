@@ -12,6 +12,27 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## ✅ ITERATION 55 (2026-02) — Header KPI strip on Executive Profit Summary card
+
+**User ask**: "اضافة متوصط تكلفة الطلب / العائد / عدد الطلبات براس بطاقة الملخص التنفيذي للأرباح بصف واحد".
+
+### Implementation
+- Added new `HeaderKpi` sub-component in `ProfitSummaryCard.jsx` plus `fmtInt()` helper for thousands-separated integers.
+- New strip rendered between the green title bar and the body — `grid grid-cols-3 gap-2` (stays one row even on mobile by design, with `truncate` on labels so long Arabic text wraps gracefully).
+- 3 tiles: عدد الطلبات (sky/`ShoppingCart`), متوسط تكلفة الطلب (amber/`Coins`), العائد على الإعلانات ROAS (emerald/`ChartBar`).
+- All values pulled from existing `totals` fields — **no backend changes** (`total_orders`, `avg_cost_per_order`, `overall_roas`).
+- Graceful fallback to `—` when `avg_cost_per_order` or `overall_roas` are null (backend returns null when ads spend is 0 — matches existing tooltip behavior).
+- ROAS shown with `×` suffix per industry convention (e.g., `3.26×`).
+- Dashed divider beneath the strip visually groups it as a "summary header" distinct from the cost breakdown.
+
+### Verified
+- With merchant-like data (1,247 orders / 18.57 SAR avg / 3.26× ROAS) — all three render correctly.
+- Empty-ads scenario (orders=47, avg=null, roas=null) — shows `47` / `—` / `—` cleanly.
+- Mobile (390px viewport) — grid stays 3 columns, labels truncate, no horizontal scroll. Verified visually.
+
+---
+
+
 ## ✅ ITERATION 54 (2026-02) — Toggle visibility of "Product Cost" card on Dashboard
 
 **User ask**: "التحكم بإظهار وإخفاء بطاقة تكلفة المنتجات بداية لوحة التحكم".
