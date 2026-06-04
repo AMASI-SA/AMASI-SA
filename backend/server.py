@@ -65,6 +65,13 @@ from expenses_routes import (
     attach_operating_expenses_routes,
     compute_operating_expenses_for_range,
 )
+from settlements_routes import (
+    attach_settlements_routes,
+    aggregate_settlements_by_provider,
+    detect_provider as detect_settlement_provider,
+    classify_14d_window,
+    SALLA_PAYOUT_DAYS,
+)
 from orders_db import upsert_order, orders_to_parsed
 from balances import compute_balances
 
@@ -1798,6 +1805,46 @@ async def dashboard(
         round(daily_ads_total / total_orders, 2) if total_orders > 0 and daily_ads_total > 0 else None
     )
 
+    # ── iter-56 — Payment Adjustments (الاسترجاعات/التسويات) ────────────────
+    # Subtract any partial refunds / item removals / cancellations that were
+    # recorded against orders in the period (or even pre-period orders whose
+    # adjustment date falls in the period — matching Salla's actual wallet
+    # behavior). This affects per-provider NET sales; gross sales remain
+    # untouched so totals stay traceable to raw orders.
+    settlements_by_provider = await aggregate_settlements_by_provider(
+        db, user["id"], from_date, to_date
+    )
+    salla_adj         = settlements_by_provider["salla"]["total_adjustment"]
+    tamara_adj        = settlements_by_provider["tamara"]["total_adjustment"]
+    tabby_adj         = settlements_by_provider["tabby"]["total_adjustment"]
+    emkan_adj         = settlements_by_provider["emkan"]["total_adjustment"]
+    bank_adj          = settlements_by_provider["bank_transfer"]["total_adjustment"]
+    cod_adj           = settlements_by_provider["cod"]["total_adjustment"]
+    other_adj         = settlements_by_provider["other"]["total_adjustment"]
+    total_adjustments = round(
+        salla_adj + tamara_adj + tabby_adj + emkan_adj + bank_adj + cod_adj + other_adj, 2,
+    )
+
+    # Salla-specific: split adjustments by whether the original order is
+    # still within Salla's 14-day pending wallet. Used by the "Salla wallet
+    # alert" badge to explain reference mismatches.
+    salla_settle_inside = salla_settle_outside = 0.0
+    salla_settle_docs = await db.payment_adjustments.find(
+        {
+            "user_id": user["id"],
+            "provider": "salla",
+            **({"adjusted_at": {**({"$gte": from_date} if from_date else {}),
+                                **({"$lte": to_date} if to_date else {})}}
+               if (from_date or to_date) else {}),
+        },
+        {"_id": 0, "adjustment_amount": 1, "order_created_at": 1},
+    ).to_list(20000)
+    for d in salla_settle_docs:
+        if classify_14d_window(d.get("order_created_at", "")) == "inside_14d":
+            salla_settle_inside += float(d.get("adjustment_amount", 0) or 0)
+        else:
+            salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
+
     return {
         "range": {"from_date": from_date, "to_date": to_date},
         "totals": {
@@ -1813,16 +1860,27 @@ async def dashboard(
             "tabby_fees": round(tabby_fees, 2),
             "emkan_fees": round(emkan_fees, 2),
             "other_payment_fees": round(other_payment_fees, 2),
-            "electronic_net": round(other_payment_sales - other_payment_fees, 2),
+            # iter-56 — electronic_net now subtracts Salla settlements too
+            "electronic_net": round(
+                other_payment_sales - other_payment_fees - salla_adj, 2,
+            ),
+            "electronic_net_before_settlements": round(
+                other_payment_sales - other_payment_fees, 2,
+            ),
             # iter-45 — visible filtering metadata for the UI
             "electronic_net_breakdown": electronic_net_breakdown,
             "salla_electronic_net_reference": settings.get("salla_electronic_net_reference"),
-            "bnpl_net": round(bnpl_sales - bnpl_fees, 2),
+            # iter-56 — per-provider adjustment totals + breakdown
+            "settlements_total": total_adjustments,
+            "settlements_by_provider": settlements_by_provider,
+            "salla_settlements_inside_14d": round(salla_settle_inside, 2),
+            "salla_settlements_outside_14d": round(salla_settle_outside, 2),
+            "bnpl_net": round(bnpl_sales - bnpl_fees - tamara_adj - tabby_adj - emkan_adj, 2),
             # iter-47 — Bank transfer is now a dedicated KPI; the figures
             # below give the UI everything it needs to render the new card.
             "bank_sales": round(bank_sales, 2),
             "bank_fees": round(bank_fees, 2),
-            "bank_net": round(bank_sales - bank_fees, 2),
+            "bank_net": round(bank_sales - bank_fees - bank_adj, 2),
             "total_shipping_cost": round(total_shipping, 2),
             "deferred_shipping_cost": round(deferred_shipping, 2),
             "regular_shipping_cost": round(total_shipping - deferred_shipping, 2),
@@ -2715,6 +2773,7 @@ attach_meta_routes(api, db)
 attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
 attach_operating_expenses_routes(api, db)
+attach_settlements_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
 attach_preparation_routes(api, db)
 attach_salla_routes(api, db)
@@ -2781,6 +2840,10 @@ async def on_startup():
     await db.operating_daily_expenses.create_index([("user_id", 1), ("date", -1)])
     await db.operating_prepaid_expenses.create_index([("user_id", 1), ("status", 1)])
     await db.operating_prepaid_expenses.create_index([("user_id", 1), ("expense_type", 1)])
+    # iter-56 — Payment Settlements ledger
+    await db.payment_adjustments.create_index([("user_id", 1), ("adjusted_at", -1)])
+    await db.payment_adjustments.create_index([("user_id", 1), ("order_number", 1)])
+    await db.payment_adjustments.create_index([("user_id", 1), ("provider", 1)])
     # Indexes for the "تجهيز المنتجات" feature (iteration 34).
     await ensure_preparation_indexes(db)
     await ensure_salla_indexes(db)

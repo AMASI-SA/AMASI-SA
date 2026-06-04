@@ -22,6 +22,7 @@ import ImageCatalog from "./pages/ImageCatalog";
 import SallaIntegration from "./pages/SallaIntegration";
 import Profile from "./pages/Profile";
 import TeamManagement from "./pages/TeamManagement";
+import Settlements from "./pages/Settlements";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -54,6 +55,7 @@ function AppRoutes() {
             <Route path="/make-webhook" element={<ProtectedRoute><Layout><MakeWebhook /></Layout></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><Layout><TeamManagement /></Layout></ProtectedRoute>} />
+            <Route path="/settlements" element={<ProtectedRoute><Layout><Settlements /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />

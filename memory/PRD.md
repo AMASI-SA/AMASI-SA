@@ -12,6 +12,59 @@
   - `products_total_lines`, `products_matched_lines`
   - `missing_product_cost_lines[]` now stores `image_url` per line.
 
+## ✅ ITERATION 56 (2026-02) — Payment Settlements Ledger + 14-day Salla Window
+
+**User pain**: A partial refund (139 SAR removed from a delivered order, not a full cancellation) caused a silent mismatch between Salla's wallet ("غير المفوّترة") and the system's electronic_net — because the system only excluded refunded/cancelled status orders, not partial amount adjustments. Merchant flagged this as a bug, but the actual issue is the absence of an adjustment ledger.
+
+### Implementation
+
+#### New Backend module — `/app/backend/settlements_routes.py`
+- New Mongo collection `payment_adjustments` with 3 indexes (`adjusted_at desc`, `order_number`, `provider`).
+- Provider auto-detection (`detect_provider`) with 6 named providers + `other`: salla / tamara / tabby / emkan / bank_transfer / cod.
+- 14-day window classifier (`classify_14d_window`) — Salla-only, classifies as `inside_14d` (still pending in Salla's wallet) vs `outside_14d` (already paid out).
+- 5 adjustment types: `partial_refund`, `full_refund`, `item_removed`, `order_cancelled`, `manual_adjustment`.
+- Endpoints: `GET/POST/PUT/DELETE /api/settlements`, `GET /api/settlements/summary`, `GET /api/settlements/providers`.
+- `adjustment_amount` is canonicalised server-side as `original_amount - new_amount` — client-supplied mismatches are rejected.
+- **Critical rule**: adjustments aggregate by their `adjusted_at` date (NOT order date) so a refund processed today against a 30-day-old order shows up in today's report, matching Salla's actual wallet behavior.
+
+#### Dashboard integration (`server.py`)
+- Calls `aggregate_settlements_by_provider(db, user_id, from, to)` on every dashboard request.
+- Subtracts per-provider adjustment totals from each NET:
+  - `electronic_net` (salla) now = `gross − fees − salla_adjustments`
+  - `bnpl_net` = `gross − fees − tamara_adj − tabby_adj − emkan_adj`
+  - `bank_net` = `gross − fees − bank_adj`
+- Added new response fields: `settlements_total`, `settlements_by_provider`, `electronic_net_before_settlements`, `salla_settlements_inside_14d`, `salla_settlements_outside_14d`.
+
+#### New Frontend page — `/settlements`
+- Date range + provider + 14-day window filters.
+- 7 per-provider summary cards showing total adjustment + count.
+- Grand-total banner with explanation that adjustments deduct from dashboard nets.
+- Full table: order#, order date, adjusted date, provider badge, 14d window pill, original, new, adjustment (rose-red), type, reason, edit/delete actions.
+- Add/edit modal with live `adjustment_amount` preview before save.
+- Smart info banner explaining the `adjusted_at` rule + 14-day window logic.
+
+#### Sidebar + routing
+- New link `nav-settlements` between shipping accounts and profile.
+- Route `/settlements` registered in `App.js`.
+
+#### Dashboard alert (reconciliation)
+- When `|electronic_net − salla_reference|` matches the total Salla adjustments for the period (±0.5 SAR), shows an amber "الفرق مع محفظة سلة مفسَّر" banner explaining that the gap is **not a bug** — it's the 14-day cycle behavior, with a link to `/settlements` for details.
+
+### Tests
+- `/app/backend/tests/test_settlements_iter56.py` — 6/6 PASS covering: provider detection (8 different raw payment_method strings), amount canonicalisation + validation, 14-day window classification (inside/outside/non-Salla), adjusted_at-based range filter, dashboard deduction integration (creates 139 SAR adjustment → verifies electronic_net drops by exactly 139 + before-settlements field matches), full CRUD lifecycle.
+
+### Verified end-to-end
+- Live curl test: 500 SAR Salla order → 361 SAR new → adjustment = 139 SAR → electronic_net dropped from 14,026.37 → 13,887.37 (exact match).
+- Live Playwright run: opened modal, filled fields, saved → row appeared with correct provider badge, 14-day pill, and rose-red adjustment column. Cleanup worked.
+
+### Pending / Future
+- Webhook capture from Salla Direct when partial refunds happen (currently manual entry only).
+- Make.com refund webhook integration.
+- COD adjustments don't show 14-day window (intentional — applies to Salla payments only per spec).
+
+---
+
+
 ## ✅ ITERATION 55 (2026-02) — Header KPI strip on Executive Profit Summary card
 
 **User ask**: "اضافة متوصط تكلفة الطلب / العائد / عدد الطلبات براس بطاقة الملخص التنفيذي للأرباح بصف واحد".

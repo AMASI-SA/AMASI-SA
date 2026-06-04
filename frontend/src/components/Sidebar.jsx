@@ -32,6 +32,7 @@ const baseLinks = [
     { to: "/product-preparation", label: "تجهيز المنتجات", icon: Package, testid: "nav-product-preparation" },
     { to: "/image-catalog", label: "إدارة صور المنتجات", icon: Image, testid: "nav-image-catalog" },
     { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
+    { to: "/settlements", label: "تسويات المدفوعات", icon: Receipt, testid: "nav-settlements" },
     { to: "/profile", label: "حسابي", icon: UserCircle, testid: "nav-profile" },
 ];
 

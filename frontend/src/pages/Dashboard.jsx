@@ -559,7 +559,39 @@ export default function Dashboard() {
                         iter-54: hideable via Settings → "بطاقات خاصة". */}
                     {!hiddenCards.includes("product_cost_card") && (
                         <ProductCostCard refreshKey={`${filters.from || ""}-${filters.to || ""}`} />
-                    )}                    {/* iter-49 — Executive profit summary (sales → deductions → net) */}
+                    )}
+                    {/* iter-56 — Salla wallet reconciliation alert: if the
+                        merchant's reference (entered manually from Salla's
+                        "غير المفوّترة" screen) is off from the system net
+                        and we have recorded settlements that exactly explain
+                        the gap, show a helpful banner instead of letting them
+                        think it's a bug. */}
+                    {(() => {
+                        const t = totals || {};
+                        const ref = Number(t.salla_electronic_net_reference || 0);
+                        const sysNet = Number(t.electronic_net || 0);
+                        const settles = Number(t.settlements_by_provider?.salla?.total_adjustment || 0);
+                        if (!ref || settles <= 0) return null;
+                        const diff = Math.abs(sysNet - ref);
+                        const explainsRoughly = Math.abs(diff - settles) < 0.5;
+                        if (!explainsRoughly) return null;
+                        return (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3" data-testid="salla-wallet-reconcile-alert">
+                                <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                                    <span className="font-extrabold">!</span>
+                                </div>
+                                <div className="flex-1 text-sm">
+                                    <div className="font-bold text-amber-900 mb-0.5">الفرق مع محفظة سلة مفسَّر</div>
+                                    <div className="text-amber-800">
+                                        فرق <span className="num font-extrabold">{diff.toFixed(2)}</span> ر.س بين رقم سلة المرجعي ورقم النظام يطابق إجمالي{" "}
+                                        <Link to="/settlements" className="font-bold underline">تسويات سلة المسجَّلة</Link>{" "}
+                                        لهذه الفترة (<span className="num">{settles.toFixed(2)}</span> ر.س). هذا ليس خطأ — هكذا تعمل دورة 14 يوم.
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    {/* iter-49 — Executive profit summary (sales → deductions → net) */}
                     <ProfitSummaryCard totals={totals} />
                     {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
