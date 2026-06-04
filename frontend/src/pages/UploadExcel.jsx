@@ -44,8 +44,8 @@ export default function UploadExcel() {
             const { data } = await api.post(`/analyses?${params.toString()}`, fd, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
-            toast.success("تم تحليل الملف بنجاح!");
-            navigate(`/analyses/${data.id}`);
+            toast.success("تم استلام الملف — جاري المعالجة في الخلفية");
+            navigate(`/import-jobs`);
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر تحليل الملف");
         } finally {

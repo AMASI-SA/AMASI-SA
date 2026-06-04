@@ -75,6 +75,12 @@ from settlements_routes import (
 from accounts_routes import attach_accounts_routes
 from diagnostics_routes import attach_diagnostics_routes
 from orders_db import upsert_order, orders_to_parsed
+from import_jobs import (
+    attach_import_jobs_routes,
+    ensure_import_jobs_indexes,
+    create_job as create_import_job,
+    schedule_excel_job,
+)
 from balances import compute_balances
 
 
@@ -1052,77 +1058,45 @@ async def create_analysis(
     product_costs: float = 0.0,
     user: dict = Depends(current_user),
 ):
+    """Accept an Excel upload and process it in the background.
+
+    Iter-59: returns within ~50 ms with a job_id. The actual parse +
+    upsert loop runs in an `asyncio.create_task` so Make.com webhook
+    ingestion is never blocked by a long upload.
+    """
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls", ".xlsm")):
         raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel بصيغة .xlsx")
     content = await file.read()
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="الملف فارغ")
-    try:
-        parsed = parse_salla_excel(content)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logging.exception("excel parse error")
-        raise HTTPException(status_code=400, detail=f"تعذر قراءة الملف: {e}")
 
-    settings = await ensure_user_settings(db, user["id"])
-    report = _build_report(
-        parsed,
-        settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
-        settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
-        snapchat_ads, tiktok_ads, instagram_ads, product_costs,
+    job = await create_import_job(
+        db,
+        user_id=user["id"],
+        filename=file.filename,
+        total_rows=0,  # filled in once parse completes
+        params={
+            "name": name,
+            "date": date,
+            "snapchat_ads": snapchat_ads,
+            "tiktok_ads": tiktok_ads,
+            "instagram_ads": instagram_ads,
+            "product_costs": product_costs,
+        },
     )
-
-    # Upsert every individual order into the unified orders store so Excel
-    # data joins the same pipeline as Make.com webhook orders. Dedupes by
-    # order_number and merges fields source-by-source.
-    excel_individual = parsed.get("orders_individual") or []
-    orders_imported = 0
-    orders_updated = 0
-    for o in excel_individual:
-        order_number = (o.get("order_number") or "").strip()
-        if not order_number:
-            continue
-        # Normalize Salla date strings (e.g. "2026-02-15 14:30:00") → YYYY-MM-DD
-        order_date = _normalize_date_str(o.get("order_date_raw") or "")
-        incoming = {
-            "order_id": o.get("order_id") or "",
-            "order_date": order_date,
-            "order_date_raw": o.get("order_date_raw") or "",
-            "order_date_inferred": False,  # Excel = authoritative Salla export
-            "order_status": o.get("order_status") or "",
-            "customer_name": o.get("customer_name") or "",
-            "customer_mobile": o.get("customer_mobile") or "",
-            "payment_method": o.get("payment_method") or "",
-            "shipping_company": o.get("shipping_company") or "",
-            "shipping_cost": float(o.get("shipping_cost") or 0),
-            "subtotal": float(o.get("subtotal") or 0),
-            "discount": float(o.get("discount") or 0),
-            "total_amount": float(o.get("total_amount") or 0),
-            "currency": o.get("currency") or "",
-            "source": o.get("source") or "",
-        }
-        res = await upsert_order(db, user["id"], order_number, incoming, source="excel", raw=o)
-        if res["created"]:
-            orders_imported += 1
-        else:
-            orders_updated += 1
-
-    analysis = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["id"],
-        "name": name or file.filename,
-        "filename": file.filename,
-        "source": "excel",
-        "date": date or datetime.now(timezone.utc).date().isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "report": report,
-        "orders_imported": orders_imported,
-        "orders_updated": orders_updated,
+    schedule_excel_job(
+        db=db,
+        job_id=job["id"],
+        user_id=user["id"],
+        file_content=content,
+        filename=file.filename,
+        params=job["params"],
+    )
+    return {
+        "job_id": job["id"],
+        "status": "queued",
+        "message": "تم استلام الملف وجاري المعالجة في الخلفية.",
     }
-    await db.analyses.insert_one(analysis)
-    analysis.pop("_id", None)
-    return analysis
 
 
 @api.get("/analyses")
@@ -2778,6 +2752,7 @@ attach_operating_expenses_routes(api, db)
 attach_settlements_routes(api, db)
 attach_accounts_routes(api, db)
 attach_diagnostics_routes(api, db)
+attach_import_jobs_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
 attach_preparation_routes(api, db)
 attach_salla_routes(api, db)
@@ -2806,6 +2781,7 @@ async def on_startup():
     await db.settings.create_index("user_id", unique=True)
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
     await db.analyses.create_index([("user_id", 1), ("created_at", -1)])
+    await ensure_import_jobs_indexes(db)
     await db.snapchat_connections.create_index("user_id", unique=True)
     # Multi-account Snapchat selection (iteration 15) — one doc per
     # (user_id, ad_account_id). `enabled` toggles whether the account

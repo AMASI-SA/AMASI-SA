@@ -63,10 +63,23 @@ def _is_empty(v: Any) -> bool:
 
 
 def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
-    """Return merged document. `existing` is the prior MongoDB doc (or empty dict)."""
+    """Return merged document. `existing` is the prior MongoDB doc (or empty dict).
+
+    Iter-59 merge rule
+    -------------------
+    Make is the authoritative *live* source. Once an order has been
+    touched by Make (`last_make_update_at` is set), subsequent Excel
+    writes only fill EMPTY fields — they never overwrite values Make
+    already provided, even for fields tagged "critical". Excel still
+    behaves as before on orders Make hasn't touched.
+    """
     now = _now()
     merged: dict = dict(existing or {})
     field_sources: dict = dict(merged.get("field_sources") or {})
+
+    # `make_has_touched` controls whether Excel writes can override.
+    make_has_touched = bool((existing or {}).get("last_make_update_at"))
+    excel_only_fills_empty = (source == "excel" and make_has_touched)
 
     # First-time insert path
     if not existing:
@@ -100,6 +113,9 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                 merged[f] = new_val
                 field_sources[f] = source
                 continue
+            if excel_only_fills_empty:
+                # Excel is only allowed to fill blanks once Make has been here.
+                continue
             if f in CRITICAL_FIELDS and new_val != old_val:
                 merged[f] = new_val
                 field_sources[f] = source
@@ -123,9 +139,15 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                 merged["order_date_raw"] = incoming_raw
                 merged["order_date_inferred"] = False
                 field_sources["order_date"] = source
-        # Lists: take incoming if richer
+        # Lists: take incoming if richer — UNLESS Make already has products
+        # and this is an Excel write (Excel exports rarely carry products[]
+        # but we never want a sparser Excel list to clobber Make's full list).
         new_prods = incoming.get("products") or []
-        if new_prods and len(new_prods) >= len(merged.get("products") or []):
+        if new_prods and not excel_only_fills_empty:
+            if len(new_prods) >= len(merged.get("products") or []):
+                merged["products"] = new_prods
+                field_sources["products"] = source
+        elif new_prods and excel_only_fills_empty and not (merged.get("products") or []):
             merged["products"] = new_prods
             field_sources["products"] = source
         new_tags = incoming.get("tags") or []
@@ -138,6 +160,16 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
     data_sources = list(merged.get("data_sources") or [])
     data_sources.append({"source": source, "at": now})
     merged["data_sources"] = data_sources[-20:]  # cap history
+
+    # Iter-59 — explicit per-source timestamps so the UI / diagnostics
+    # can answer "when did Make last touch this order" without scanning
+    # the data_sources history.
+    if source == "make":
+        merged["last_make_update_at"] = now
+    elif source == "excel":
+        merged["last_excel_import_at"] = now
+    merged["last_source"] = source
+    merged["updated_by_source"] = source
     # Iteration 31 — data_source precedence: make > excel.
     # Make is the AUTHORITATIVE source because:
     #   • it carries the full products[] array (Excel exports usually don't)

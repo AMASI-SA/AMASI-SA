@@ -1,5 +1,33 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+## ✅ ITERATION 59 — Concurrent Excel + Make Pipeline (تشغيل متوازي بدون توقف)
+
+**User pain**: Uploading Excel froze Make.com webhook ingestion for several seconds while the synchronous endpoint parsed openpyxl + ran 2 DB ops per order serially.
+
+### Backend
+- **NEW `/app/backend/import_jobs.py`** — async background worker with:
+  - `import_jobs` collection (status, counts, errors, started/completed timestamps).
+  - `parse_salla_excel` + `build_report` offloaded to threads via `asyncio.to_thread`.
+  - Order upserts in `BATCH_SIZE=50` batches; `await asyncio.sleep(0)` between batches lets webhook coroutines run.
+  - Process-local `_ORDER_LOCKS` dict keyed by `(user_id, order_number)` — Excel + Make never race on the same doc, but DIFFERENT orders proceed in parallel.
+  - Endpoints: `GET /api/import-jobs`, `GET /api/import-jobs/{id}`, `DELETE /api/import-jobs/{id}`.
+- **`POST /api/analyses`** now returns `{job_id, status:"queued"}` in <100 ms; processing runs as a fire-and-forget `asyncio.create_task`.
+- **`orders_db.py`** merge rule — Make is authoritative once it touches an order: subsequent Excel writes only fill empty fields (no overwrite of `total_amount`/`order_status`/`payment_method` or `products[]`). New persisted fields: `last_make_update_at`, `last_excel_import_at`, `last_source`, `updated_by_source`.
+- **`webhook_routes.py`** `POST /webhook/make/{token}` wraps each order upsert in the same per-order lock.
+
+### Frontend
+- **NEW `/app/frontend/src/pages/ImportJobs.jsx`** — table of jobs with progress bars, status pills (queued/processing/completed/failed), per-job detail panel (created/updated/skipped/error counts + last 20 error rows), auto-poll every 2s while any job is active.
+- `UploadExcel.jsx` now redirects to `/import-jobs` after a successful POST.
+- Sidebar link "حالة الاستيراد" added with `Queue` icon.
+
+### Verified by `/app/backend/tests/test_concurrent_iter59.py`
+- 800-row Excel POST returned in **4 ms** (was: seconds).
+- 10 parallel webhooks DURING the Excel job: avg **105 ms**, max **145 ms** (was: blocked waiting for Excel).
+- 800 orders upserted in < 2 s in the background.
+- Make-priority test: Make wrote first → Excel re-write did NOT overwrite `total_amount`/`order_status`/`payment_method`, BUT Excel DID fill the empty `customer_name`. Both `last_make_update_at` & `last_excel_import_at` populated.
+
+---
+
 ## Original Problem Statement
 أريد بناء تطبيق محاسبي ذكي للتجارة الإلكترونية يقوم بتحليل ملفات Excel المصدرة من منصة سلة واستخراج وتحليل البيانات المالية تلقائياً.
 

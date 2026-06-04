@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from report_builder import build_report
 from orders_db import upsert_order, orders_to_parsed
 from product_costs import attach_cost_to_order_doc
+from import_jobs import get_order_lock
 
 logger = logging.getLogger(__name__)
 
@@ -529,9 +530,13 @@ def _build_router(db) -> APIRouter:
                 })
             incoming["products"] = normalised_products
             incoming["tags"] = [str(t).strip() for t in (payload.tags or []) if str(t).strip()]
-            res = await upsert_order(
-                db, user_id, order_number, incoming, source="make", raw=raw,
-            )
+            # Per-order lock — serialises Excel + Make writes to the SAME
+            # order while leaving other orders free to process in parallel.
+            lock = get_order_lock(user_id, order_number)
+            async with lock:
+                res = await upsert_order(
+                    db, user_id, order_number, incoming, source="make", raw=raw,
+                )
             if res["created"]:
                 accepted += 1
             else:
