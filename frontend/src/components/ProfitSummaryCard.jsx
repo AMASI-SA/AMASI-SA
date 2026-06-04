@@ -21,7 +21,21 @@ const fmtSar = (v) => {
     });
 };
 
-function Line({ icon: Icon, label, value, color = "amber", isFirst = false, isLast = false }) {
+/**
+ * Format a cost as a percentage of total sales. Returns null when the
+ * computation isn't meaningful (no sales, or the cost is zero) so the
+ * caller can decide whether to render the badge at all.
+ */
+const sharePct = (cost, sales) => {
+    const s = Number(sales || 0);
+    const c = Number(cost || 0);
+    if (s <= 0 || c === 0) return null;
+    return (c / s) * 100;
+};
+
+const fmtPct = (p) => `${p.toFixed(2)}%`;
+
+function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false }) {
     // Color palette for each row — tuned for clarity on a soft gradient bg.
     const palettes = {
         green:   { tile: "bg-emerald-600",      icon: "text-white",      amount: "text-emerald-700",   bar: "bg-emerald-200/60" },
@@ -46,8 +60,17 @@ function Line({ icon: Icon, label, value, color = "amber", isFirst = false, isLa
                 </div>
                 <span className="text-sm font-bold text-slate-700 truncate">{label}</span>
             </div>
-            <div className={`num text-base font-extrabold ${p.amount}`} style={{ fontFamily: "Tajawal" }}>
-                {value}
+            <div className={`flex items-center gap-2 num text-base font-extrabold ${p.amount}`} style={{ fontFamily: "Tajawal" }}>
+                {share != null && (
+                    <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.bar} ${p.amount}`}
+                        title="نسبة هذه التكلفة من إجمالي المبيعات"
+                        data-testid="profit-line-share"
+                    >
+                        {fmtPct(share)}
+                    </span>
+                )}
+                <span>{value}</span>
             </div>
         </div>
     );
@@ -104,12 +127,12 @@ export default function ProfitSummaryCard({ totals }) {
             {/* Body */}
             <div className="p-3 space-y-0">
                 <Line icon={Coins}      label="المبيعات"                      value={fmtSar(sales)}          color="green"  isFirst />
-                <Line icon={Package}    label="− تكاليف المنتجات"             value={fmtSar(productCost)}    color="amber"  />
-                <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        color="rose"   />
-                <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  color="sky"    />
-                <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} color="violet" />
+                <Line icon={Package}    label="− تكاليف المنتجات"             value={fmtSar(productCost)}    share={sharePct(productCost, sales)}     color="amber"  />
+                <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        share={sharePct(adsCost, sales)}         color="rose"   />
+                <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  share={sharePct(shippingTotal, sales)}   color="sky"    />
+                <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} share={sharePct(allPaymentFees, sales)}  color="violet" />
                 {operatingExpenses > 0 && (
-                    <Line icon={Briefcase} label="− المصروفات التشغيلية (رواتب وإيجارات وغيرها)" value={fmtSar(operatingExpenses)} color="amber" />
+                    <Line icon={Briefcase} label="− المصروفات التشغيلية (رواتب وإيجارات وغيرها)" value={fmtSar(operatingExpenses)} share={sharePct(operatingExpenses, sales)} color="amber" />
                 )}
 
                 {/* Net profit row — visually distinguished */}
@@ -122,11 +145,21 @@ export default function ProfitSummaryCard({ totals }) {
                             <span className="text-sm sm:text-base font-extrabold">صافي الأرباح</span>
                         </div>
                         <div
-                            className="num text-xl sm:text-2xl font-extrabold"
+                            className="flex items-center gap-2 num text-xl sm:text-2xl font-extrabold"
                             style={{ fontFamily: "Tajawal" }}
-                            data-testid="profit-summary-net"
                         >
-                            {fmtSar(netProfit)} ر.س
+                            {sales > 0 && (
+                                <span
+                                    className="text-xs font-bold px-2 py-0.5 rounded bg-white/20 text-white"
+                                    title="هامش الربح الصافي = صافي الأرباح ÷ المبيعات"
+                                    data-testid="profit-summary-margin"
+                                >
+                                    {fmtPct((netProfit / sales) * 100)}
+                                </span>
+                            )}
+                            <span data-testid="profit-summary-net">
+                                {fmtSar(netProfit)} ر.س
+                            </span>
                         </div>
                     </div>
                 </div>
