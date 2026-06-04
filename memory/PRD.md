@@ -1,5 +1,28 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+## ✅ ITERATION 61 — Salla Rollup Account (تجميع منصات الدفع تحت "سلة")
+
+**User pain**: After iter-60, every payment method (مدى, Apple Pay, …) became a standalone payment_platform account. The user wants **one** "سلة" account that aggregates all Salla card rails, with breakdown shown only inside its detail page.
+
+### Backend — `accounts_routes.py`
+- `_PAYMENT_ALIASES` now carries a 4th column `parent_key`. Salla card rails (`mada`, `apple_pay`, `stc_pay`, `visa`, `mastercard`, `credit_card`) all have `parent_key="salla"`. Tabby / Tamara / Emkan / COD / Bank Transfer stay standalone (`parent_key=None`).
+- `normalize_payment_method` returns `(sub_key, sub_display, parent_key)`.
+- `POST /api/accounts/sync-payment-methods` does TWO-LEVEL aggregation:
+  - Rolls every Salla rail up into a single account `normalized_payment_method="salla"`, name "سلة".
+  - Stores per-rail breakdown in `sub_methods[]`: `[{key, display, amount, count}]`.
+  - **Auto-cleanup**: any auto-created standalone account whose key is now a Salla rail AND has no transactions is deleted (returned as `removed_legacy`).
+  - Response: `{synced, created, updated, removed_legacy, accounts[]}`.
+
+### Frontend
+- `AccountDetails.jsx`: new card "تفاصيل طرق الدفع داخل هذا الحساب" rendered when `account.sub_methods.length > 0`. Shows per-rail amount, count, and a % bar of the rollup total.
+
+### Verified live
+- Sync deleted legacy "Apple Pay" + "مدى" standalone accounts (returned in `removed_legacy`).
+- Created "سلة" rollup = **141,379.49 ر.س** (801 orders) → sub_methods: مدى 139,144 (98.4%), Apple Pay 2,235 (1.6%).
+- Payment-platforms tab now shows 4 accounts: سلة / تحويل بنكي / تابي / الدفع عند الاستلام.
+
+---
+
 ## ✅ ITERATION 60 — Auto-create Payment Platform Accounts from Orders
 
 **User pain**: `/accounts` had empty Payment Platforms tab and required manual addition of every method.

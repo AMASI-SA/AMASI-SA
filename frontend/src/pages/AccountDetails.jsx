@@ -239,6 +239,47 @@ export default function AccountDetails() {
                 </div>
             </div>
 
+            {/* Sub-methods breakdown — only for rollup accounts like سلة */}
+            {account.sub_methods?.length > 0 && (
+                <div className="bg-white rounded-xl border border-border overflow-hidden" data-testid="sub-methods-card">
+                    <div className="px-5 py-3 border-b border-border bg-sky-50/60 flex items-center justify-between">
+                        <h2 className="font-bold text-sky-900">تفاصيل طرق الدفع داخل هذا الحساب</h2>
+                        <span className="text-xs text-sky-700">{account.sub_methods.length} طريقة دفع</span>
+                    </div>
+                    <table className="w-full text-sm">
+                        <thead className="bg-slate-50/50 text-xs text-muted-foreground">
+                            <tr>
+                                <th className="text-right px-4 py-2.5 font-bold">طريقة الدفع</th>
+                                <th className="text-right px-4 py-2.5 font-bold">عدد الطلبات</th>
+                                <th className="text-right px-4 py-2.5 font-bold">المبلغ</th>
+                                <th className="text-right px-4 py-2.5 font-bold">نسبة من الحساب</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {account.sub_methods.map((s) => {
+                                const pct = (account.expected_orders_balance || 0) > 0
+                                    ? (s.amount / account.expected_orders_balance) * 100 : 0;
+                                return (
+                                    <tr key={s.key} className="border-t border-border" data-testid={`sub-method-${s.key}`}>
+                                        <td className="px-4 py-2.5 font-bold text-foreground">{s.display}</td>
+                                        <td className="px-4 py-2.5 num">{Number(s.count).toLocaleString("en-US")}</td>
+                                        <td className="px-4 py-2.5 num font-bold text-emerald-700">{fmt(s.amount, account.currency)}</td>
+                                        <td className="px-4 py-2.5">
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden max-w-[120px]">
+                                                    <div className="h-full bg-sky-500" style={{ width: `${Math.min(100, pct).toFixed(1)}%` }} />
+                                                </div>
+                                                <span className="num text-xs text-muted-foreground">{pct.toFixed(1)}%</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
             {/* Transactions table */}
             <div className="bg-white rounded-xl border border-border overflow-hidden">
                 <div className="px-5 py-3 border-b border-border bg-slate-50 flex items-center justify-between">

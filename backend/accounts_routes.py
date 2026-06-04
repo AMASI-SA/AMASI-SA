@@ -61,69 +61,83 @@ SUGGESTED_PROVIDERS = {
 ACCOUNT_STATUSES = ("active", "hidden", "inactive")
 
 # ── Payment-method normalisation ───────────────────────────────────────────
-# Maps the many spellings of a payment method (Arabic + English, with or
-# without spaces) to a canonical key so we never create two accounts for
-# the same method. Order DOES matter — longest/most-specific aliases first
-# so "Apple Pay" doesn't accidentally match a generic "pay".
-_PAYMENT_ALIASES: list[tuple[str, str, str]] = [
-    # (canonical_key, display_name, alias substring — lower-cased, stripped)
-    ("apple_pay",         "Apple Pay",          "apple pay"),
-    ("apple_pay",         "Apple Pay",          "applepay"),
-    ("apple_pay",         "Apple Pay",          "ابل باي"),
-    ("apple_pay",         "Apple Pay",          "أبل باي"),
-    ("apple_pay",         "Apple Pay",          "آبل باي"),
-    ("stc_pay",           "STC Pay",            "stc pay"),
-    ("stc_pay",           "STC Pay",            "stcpay"),
-    ("stc_pay",           "STC Pay",            "اس تي سي"),
-    ("stc_pay",           "STC Pay",            "إس تي سي"),
-    ("mastercard",        "MasterCard",         "mastercard"),
-    ("mastercard",        "MasterCard",         "master card"),
-    ("mastercard",        "MasterCard",         "ماستر كارد"),
-    ("mastercard",        "MasterCard",         "ماستركارد"),
-    ("visa",              "Visa",               "visa"),
-    ("visa",              "Visa",               "فيزا"),
-    ("mada",              "مدى",                "mada"),
-    ("mada",              "مدى",                "مدى"),
-    ("tabby",             "تابي (Tabby)",       "tabby"),
-    ("tabby",             "تابي (Tabby)",       "تابي"),
-    ("tamara",            "تمارا (Tamara)",     "tamara"),
-    ("tamara",            "تمارا (Tamara)",     "تمارا"),
-    ("emkan",             "إمكان (Emkan)",      "emkan"),
-    ("emkan",             "إمكان (Emkan)",      "إمكان"),
-    ("emkan",             "إمكان (Emkan)",      "امكان"),
-    ("cash_on_delivery",  "الدفع عند الاستلام",  "cash on delivery"),
-    ("cash_on_delivery",  "الدفع عند الاستلام",  "cash_on_delivery"),
-    ("cash_on_delivery",  "الدفع عند الاستلام",  "cod"),
-    ("cash_on_delivery",  "الدفع عند الاستلام",  "الدفع عند الاستلام"),
-    ("cash_on_delivery",  "الدفع عند الاستلام",  "دفع عند الاستلام"),
-    ("bank_transfer",     "تحويل بنكي",          "bank transfer"),
-    ("bank_transfer",     "تحويل بنكي",          "تحويل بنكي"),
-    ("bank_transfer",     "تحويل بنكي",          "حوالة بنكية"),
-    ("bank_transfer",     "تحويل بنكي",          "wire transfer"),
-    ("salla_pay",         "سلة (Salla Pay)",     "salla pay"),
-    ("salla_pay",         "سلة (Salla Pay)",     "sallapay"),
+# Each row: (sub_key, sub_display, alias substring [lowercase], parent_key).
+# parent_key="salla" means the method is a Salla collection rail (cards) and
+# the dedicated account is rolled up into a single "سلة" account whose
+# detail page shows the breakdown. parent_key=None means the method is its
+# own standalone account (Tabby, Tamara, Emkan, COD, Bank Transfer).
+_PAYMENT_ALIASES: list[tuple[str, str, str, str | None]] = [
+    # ── Salla card rails (aggregated under a single "سلة" account) ─────────
+    ("mada",         "مدى",            "mada",                "salla"),
+    ("mada",         "مدى",            "مدى",                 "salla"),
+    ("apple_pay",    "Apple Pay",      "apple pay",           "salla"),
+    ("apple_pay",    "Apple Pay",      "applepay",            "salla"),
+    ("apple_pay",    "Apple Pay",      "ابل باي",              "salla"),
+    ("apple_pay",    "Apple Pay",      "أبل باي",              "salla"),
+    ("apple_pay",    "Apple Pay",      "آبل باي",              "salla"),
+    ("stc_pay",      "STC Pay",        "stc pay",             "salla"),
+    ("stc_pay",      "STC Pay",        "stcpay",              "salla"),
+    ("stc_pay",      "STC Pay",        "اس تي سي",            "salla"),
+    ("stc_pay",      "STC Pay",        "إس تي سي",            "salla"),
+    ("mastercard",   "MasterCard",     "mastercard",          "salla"),
+    ("mastercard",   "MasterCard",     "master card",         "salla"),
+    ("mastercard",   "MasterCard",     "ماستر كارد",           "salla"),
+    ("mastercard",   "MasterCard",     "ماستركارد",            "salla"),
+    ("visa",         "Visa",           "visa",                "salla"),
+    ("visa",         "Visa",           "فيزا",                "salla"),
+    ("credit_card",  "بطاقات ائتمانية", "credit card",         "salla"),
+    ("credit_card",  "بطاقات ائتمانية", "credit_card",         "salla"),
+    ("credit_card",  "بطاقات ائتمانية", "credit",              "salla"),
+    ("credit_card",  "بطاقات ائتمانية", "بطاقة ائتمان",         "salla"),
+    ("credit_card",  "بطاقات ائتمانية", "بطاقات ائتمانية",      "salla"),
+    ("credit_card",  "بطاقات ائتمانية", "البطاقات الائتمانية",   "salla"),
+
+    # ── Standalone payment platforms (own account each) ────────────────────
+    ("tabby",            "تابي (Tabby)",       "tabby",                None),
+    ("tabby",            "تابي (Tabby)",       "تابي",                  None),
+    ("tamara",           "تمارا (Tamara)",     "tamara",                None),
+    ("tamara",           "تمارا (Tamara)",     "تمارا",                  None),
+    ("emkan",            "إمكان (Emkan)",      "emkan",                 None),
+    ("emkan",            "إمكان (Emkan)",      "إمكان",                  None),
+    ("emkan",            "إمكان (Emkan)",      "امكان",                  None),
+    ("cash_on_delivery", "الدفع عند الاستلام",  "cash on delivery",       None),
+    ("cash_on_delivery", "الدفع عند الاستلام",  "cash_on_delivery",       None),
+    ("cash_on_delivery", "الدفع عند الاستلام",  "cod",                    None),
+    ("cash_on_delivery", "الدفع عند الاستلام",  "الدفع عند الاستلام",      None),
+    ("cash_on_delivery", "الدفع عند الاستلام",  "دفع عند الاستلام",         None),
+    ("bank_transfer",    "تحويل بنكي",          "bank transfer",          None),
+    ("bank_transfer",    "تحويل بنكي",          "تحويل بنكي",              None),
+    ("bank_transfer",    "تحويل بنكي",          "حوالة بنكية",             None),
+    ("bank_transfer",    "تحويل بنكي",          "wire transfer",          None),
 ]
 
+# Display name of the rollup parent account.
+_PARENT_LABELS = {
+    "salla": "سلة",
+}
 
-def normalize_payment_method(raw: str) -> tuple[str, str]:
-    """Return (canonical_key, display_name) for a raw payment-method string.
 
-    Returns ("", "") when the input is empty / غير محدد. Unknown methods
-    fall back to a slug derived from the input."""
+def normalize_payment_method(raw: str) -> tuple[str, str, str | None]:
+    """Return (sub_key, sub_display, parent_key) for a raw payment-method.
+
+    parent_key is the account-rollup parent ("salla") when the method is one
+    of Salla's collection rails; otherwise None means the sub_key itself is
+    the standalone account key. Returns ("", "", None) for empty inputs.
+    """
     if not raw:
-        return ("", "")
+        return ("", "", None)
     s = str(raw).strip().lower()
     for ch in (".", ",", "،", "(", ")", "/", "\\"):
         s = s.replace(ch, " ")
     s = " ".join(s.split())
     if not s or s in {"غير محدد", "none", "n/a", "-"}:
-        return ("", "")
-    for key, display, alias in _PAYMENT_ALIASES:
+        return ("", "", None)
+    for sub_key, display, alias, parent in _PAYMENT_ALIASES:
         if alias in s:
-            return (key, display)
+            return (sub_key, display, parent)
     slug = "".join(c if c.isalnum() else "_" for c in str(raw).strip().lower())
     slug = "_".join(filter(None, slug.split("_")))[:60] or "other"
-    return (slug, str(raw).strip())
+    return (slug, str(raw).strip(), None)
 
 
 # Movement vocabulary — kept intentionally small for iter-57; phase 2 will
@@ -486,15 +500,21 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
     @router.post("/sync-payment-methods")
     async def sync_payment_methods(user: dict = Depends(current_user)):
         """Scan `unified_orders` for distinct payment_method values and
-        auto-create a `payment_platform` account per canonical method.
+        sync `payment_platform` accounts.
 
-        Each account's `current_balance` is set to the sum of order totals
-        for that method (the *expected* amount to be collected — actual
-        bank arrival is tracked separately in Phase 2 via transactions).
-
-        Returns counts so the UI can show a friendly success message.
+        Aggregation rules (iter-61):
+        - Salla card rails (mada / Apple Pay / STC Pay / Visa / MasterCard /
+          credit cards) collapse into ONE account called "سلة". Its details
+          page shows the per-rail breakdown.
+        - Tabby, Tamara, Emkan, COD, Bank Transfer each get their own
+          standalone account.
+        - Any sub-account auto-created by an earlier sync that's now a Salla
+          rail is removed (only if it has no manual transactions) so the
+          accounts list stays clean.
         """
         uid = user["id"]
+        now = _now()
+
         # 1. Aggregate distinct payment_method + sum + count from unified_orders.
         pipeline = [
             {"$match": {"user_id": uid}},
@@ -504,38 +524,85 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                 "count":  {"$sum": 1},
             }},
         ]
-        groups: dict[str, dict] = {}      # canonical_key → {amount, count, display, raw_names[]}
+        # Two-level group:
+        #   groups[account_key] = {
+        #     display, parent_key, amount, count, raw_names[], sub_methods{}
+        #   }
+        groups: dict[str, dict] = {}
         async for row in db.unified_orders.aggregate(pipeline):
             raw = (row.get("_id") or "").strip()
-            key, display = normalize_payment_method(raw)
-            if not key:
+            sub_key, sub_display, parent_key = normalize_payment_method(raw)
+            if not sub_key:
                 continue
-            slot = groups.setdefault(key, {
-                "key": key,
-                "display": display,
+            account_key = parent_key or sub_key
+            account_display = _PARENT_LABELS.get(parent_key, sub_display) if parent_key else sub_display
+            slot = groups.setdefault(account_key, {
+                "key": account_key,
+                "display": account_display,
+                "parent_key": parent_key,
                 "amount": 0.0,
                 "count": 0,
                 "raw_names": [],
+                "sub_methods": {},  # sub_key → {key, display, amount, count}
             })
-            slot["amount"] += float(row.get("amount") or 0)
-            slot["count"]  += int(row.get("count") or 0)
+            amount = float(row.get("amount") or 0)
+            count = int(row.get("count") or 0)
+            slot["amount"] += amount
+            slot["count"] += count
             if raw and raw not in slot["raw_names"]:
                 slot["raw_names"].append(raw)
+            sub_slot = slot["sub_methods"].setdefault(sub_key, {
+                "key": sub_key,
+                "display": sub_display,
+                "amount": 0.0,
+                "count": 0,
+            })
+            sub_slot["amount"] += amount
+            sub_slot["count"] += count
 
-        # 2. For each canonical method, upsert the payment_platform account.
+        # 2. Cleanup: remove auto-created accounts whose key is now a Salla
+        #    sub-rail (only if they hold no transactions). This catches
+        #    accounts created by iter-60 before rollup existed.
+        salla_subs = {sk for sk, _, _, p in _PAYMENT_ALIASES if p == "salla"}
+        stale = await db.accounts.find(
+            {
+                "user_id": uid,
+                "auto_created": True,
+                "source": "orders_payment_method",
+                "normalized_payment_method": {"$in": list(salla_subs)},
+            },
+            {"_id": 0, "id": 1, "name": 1},
+        ).to_list(50)
+        removed_subs = []
+        for s in stale:
+            tx_count = await db.account_transactions.count_documents(
+                {"user_id": uid, "account_id": s["id"]}
+            )
+            if tx_count == 0:
+                await db.accounts.delete_one({"id": s["id"], "user_id": uid})
+                removed_subs.append(s["name"])
+
+        # 3. Upsert one account per top-level key.
         created = 0
         updated = 0
-        now = _now()
         result_accounts = []
         for key, data in groups.items():
+            expected = round(float(data["amount"]), 2)
+            orders_count = int(data["count"])
+            # Sub-methods list sorted by amount desc for nicer detail UI.
+            sub_list = sorted(
+                data["sub_methods"].values(), key=lambda x: x["amount"], reverse=True
+            )
+            sub_list = [
+                {**s, "amount": round(float(s["amount"]), 2), "count": int(s["count"])}
+                for s in sub_list
+            ]
+
             existing = await db.accounts.find_one(
                 {"user_id": uid, "normalized_payment_method": key},
                 {"_id": 0},
             )
-            expected = round(float(data["amount"]), 2)
-            orders_count = int(data["count"])
             if existing:
-                # Refresh balance + meta. Don't touch user-editable fields.
                 await db.accounts.update_one(
                     {"id": existing["id"], "user_id": uid},
                     {"$set": {
@@ -545,6 +612,7 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                         "expected_orders_balance": expected,
                         "orders_count": orders_count,
                         "raw_payment_names": data["raw_names"][:20],
+                        "sub_methods": sub_list,
                         "updated_at": now,
                         "last_synced_at": now,
                     }},
@@ -568,6 +636,7 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                     "expected_orders_balance": expected,
                     "orders_count": orders_count,
                     "raw_payment_names": data["raw_names"][:20],
+                    "sub_methods": sub_list,
                     "default_bank_account_id": None,
                     "status": "active",
                     "notes": "تم إنشاؤه تلقائياً من طرق الدفع في الطلبات.",
@@ -588,6 +657,7 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             "synced": len(groups),
             "created": created,
             "updated": updated,
+            "removed_legacy": removed_subs,
             "accounts": [
                 {
                     "id": a["id"],
@@ -595,6 +665,7 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                     "normalized_payment_method": a.get("normalized_payment_method"),
                     "current_balance": a.get("current_balance"),
                     "orders_count": a.get("orders_count"),
+                    "sub_methods": a.get("sub_methods") or [],
                 }
                 for a in result_accounts
             ],
