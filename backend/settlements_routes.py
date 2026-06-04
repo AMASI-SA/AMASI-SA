@@ -218,7 +218,7 @@ def attach_settlements_routes(parent_router: APIRouter, db) -> None:
     async def list_providers(_: dict = Depends(current_user)):
         """Static list — useful for filter dropdowns on the frontend."""
         labels = {
-            "salla":         "مدفوعات سلة",
+            "salla":         "سلة",
             "tamara":        "تمارا",
             "tabby":         "تابي",
             "emkan":         "إمكان",

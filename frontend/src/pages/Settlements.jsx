@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 
 const PROVIDER_TONES = {
-    salla:         { label: "مدفوعات سلة",       cls: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+    salla:         { label: "سلة",                cls: "bg-emerald-100 text-emerald-800 border-emerald-200" },
     tamara:        { label: "تمارا",              cls: "bg-pink-100 text-pink-800 border-pink-200" },
     tabby:         { label: "تابي",               cls: "bg-violet-100 text-violet-800 border-violet-200" },
     emkan:         { label: "إمكان",              cls: "bg-amber-100 text-amber-800 border-amber-200" },
@@ -126,7 +126,7 @@ function SettlementModal({ initial, onClose, onSaved }) {
                                 className={inputCls}
                                 disabled={isEdit}
                                 data-testid="settlement-payment-method-input"
-                                placeholder="مدفوعات سلة / تمارا / تابي ..."
+                                placeholder="سلة / تمارا / تابي ..."
                             />
                             <p className="text-[11px] text-muted-foreground mt-1">سيتم تصنيف المزوّد تلقائياً.</p>
                         </div>

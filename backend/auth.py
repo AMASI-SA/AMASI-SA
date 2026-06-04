@@ -139,15 +139,8 @@ async def seed_admin(db) -> None:
             await db.users.update_one({"email": admin_email}, {"$set": updates})
 
 
-DEFAULT_PAYMENT_METHODS = [
-    {"name": "مدى", "commission_percent": 1.0, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": "Apple Pay", "commission_percent": 2.5, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": "تمارا", "commission_percent": 6.99, "fixed_fee": 0.0, "vat_percent": 15.0},
-    {"name": "تابي", "commission_percent": 5.0, "fixed_fee": 0.0, "vat_percent": 15.0},
-    {"name": "إمكان", "commission_percent": 5.0, "fixed_fee": 0.0, "vat_percent": 15.0},
-    {"name": "بطاقة ائتمانية", "commission_percent": 2.75, "fixed_fee": 1.0, "vat_percent": 15.0},
-    {"name": "الدفع عند الاستلام", "commission_percent": 0.0, "fixed_fee": 0.0, "vat_percent": 0.0},
-]
+from payment_methods import DEFAULT_PAYMENT_METHODS  # noqa: F401 — re-exported
+
 
 DEFAULT_SHIPPING_COMPANIES = [
     {"name": "سمسا", "cost_per_order": 23.0, "vat_percent": 15.0, "is_deferred": False},
@@ -168,5 +161,23 @@ async def ensure_user_settings(db, user_id: str) -> dict:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.settings.insert_one(settings)
+    else:
+        # iter-62 — backfill any new canonical payment methods that the
+        # user is missing (added in newer releases). Preserves the user's
+        # existing commission/vat edits — only APPENDS new rows.
+        current_pms = settings.get("payment_methods") or []
+        current_names = {(pm.get("name") or "").strip() for pm in current_pms}
+        added = [pm for pm in DEFAULT_PAYMENT_METHODS
+                 if (pm.get("name") or "").strip() not in current_names]
+        if added:
+            new_pms = list(current_pms) + added
+            await db.settings.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "payment_methods": new_pms,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }},
+            )
+            settings["payment_methods"] = new_pms
     settings.pop("_id", None)
     return settings

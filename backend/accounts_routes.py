@@ -60,84 +60,12 @@ SUGGESTED_PROVIDERS = {
 
 ACCOUNT_STATUSES = ("active", "hidden", "inactive")
 
-# ── Payment-method normalisation ───────────────────────────────────────────
-# Each row: (sub_key, sub_display, alias substring [lowercase], parent_key).
-# parent_key="salla" means the method is a Salla collection rail (cards) and
-# the dedicated account is rolled up into a single "سلة" account whose
-# detail page shows the breakdown. parent_key=None means the method is its
-# own standalone account (Tabby, Tamara, Emkan, COD, Bank Transfer).
-_PAYMENT_ALIASES: list[tuple[str, str, str, str | None]] = [
-    # ── Salla card rails (aggregated under a single "سلة" account) ─────────
-    ("mada",         "مدى",            "mada",                "salla"),
-    ("mada",         "مدى",            "مدى",                 "salla"),
-    ("apple_pay",    "Apple Pay",      "apple pay",           "salla"),
-    ("apple_pay",    "Apple Pay",      "applepay",            "salla"),
-    ("apple_pay",    "Apple Pay",      "ابل باي",              "salla"),
-    ("apple_pay",    "Apple Pay",      "أبل باي",              "salla"),
-    ("apple_pay",    "Apple Pay",      "آبل باي",              "salla"),
-    ("stc_pay",      "STC Pay",        "stc pay",             "salla"),
-    ("stc_pay",      "STC Pay",        "stcpay",              "salla"),
-    ("stc_pay",      "STC Pay",        "اس تي سي",            "salla"),
-    ("stc_pay",      "STC Pay",        "إس تي سي",            "salla"),
-    ("mastercard",   "MasterCard",     "mastercard",          "salla"),
-    ("mastercard",   "MasterCard",     "master card",         "salla"),
-    ("mastercard",   "MasterCard",     "ماستر كارد",           "salla"),
-    ("mastercard",   "MasterCard",     "ماستركارد",            "salla"),
-    ("visa",         "Visa",           "visa",                "salla"),
-    ("visa",         "Visa",           "فيزا",                "salla"),
-    ("credit_card",  "بطاقات ائتمانية", "credit card",         "salla"),
-    ("credit_card",  "بطاقات ائتمانية", "credit_card",         "salla"),
-    ("credit_card",  "بطاقات ائتمانية", "credit",              "salla"),
-    ("credit_card",  "بطاقات ائتمانية", "بطاقة ائتمان",         "salla"),
-    ("credit_card",  "بطاقات ائتمانية", "بطاقات ائتمانية",      "salla"),
-    ("credit_card",  "بطاقات ائتمانية", "البطاقات الائتمانية",   "salla"),
-
-    # ── Standalone payment platforms (own account each) ────────────────────
-    ("tabby",            "تابي (Tabby)",       "tabby",                None),
-    ("tabby",            "تابي (Tabby)",       "تابي",                  None),
-    ("tamara",           "تمارا (Tamara)",     "tamara",                None),
-    ("tamara",           "تمارا (Tamara)",     "تمارا",                  None),
-    ("emkan",            "إمكان (Emkan)",      "emkan",                 None),
-    ("emkan",            "إمكان (Emkan)",      "إمكان",                  None),
-    ("emkan",            "إمكان (Emkan)",      "امكان",                  None),
-    ("cash_on_delivery", "الدفع عند الاستلام",  "cash on delivery",       None),
-    ("cash_on_delivery", "الدفع عند الاستلام",  "cash_on_delivery",       None),
-    ("cash_on_delivery", "الدفع عند الاستلام",  "cod",                    None),
-    ("cash_on_delivery", "الدفع عند الاستلام",  "الدفع عند الاستلام",      None),
-    ("cash_on_delivery", "الدفع عند الاستلام",  "دفع عند الاستلام",         None),
-    ("bank_transfer",    "تحويل بنكي",          "bank transfer",          None),
-    ("bank_transfer",    "تحويل بنكي",          "تحويل بنكي",              None),
-    ("bank_transfer",    "تحويل بنكي",          "حوالة بنكية",             None),
-    ("bank_transfer",    "تحويل بنكي",          "wire transfer",          None),
-]
-
-# Display name of the rollup parent account.
-_PARENT_LABELS = {
-    "salla": "سلة",
-}
-
-
-def normalize_payment_method(raw: str) -> tuple[str, str, str | None]:
-    """Return (sub_key, sub_display, parent_key) for a raw payment-method.
-
-    parent_key is the account-rollup parent ("salla") when the method is one
-    of Salla's collection rails; otherwise None means the sub_key itself is
-    the standalone account key. Returns ("", "", None) for empty inputs.
-    """
-    if not raw:
-        return ("", "", None)
-    s = str(raw).strip().lower()
-    for ch in (".", ",", "،", "(", ")", "/", "\\"):
-        s = s.replace(ch, " ")
-    s = " ".join(s.split())
-    if not s or s in {"غير محدد", "none", "n/a", "-"}:
-        return ("", "", None)
-    for sub_key, display, alias, parent in _PAYMENT_ALIASES:
-        if alias in s:
-            return (sub_key, display, parent)
-    slug = "".join(c if c.isalnum() else "_" for c in str(raw).strip().lower())
-    slug = "_".join(filter(None, slug.split("_")))[:60] or "other"
-    return (slug, str(raw).strip(), None)
+# ── Payment-method normalisation (single source of truth in payment_methods.py)
+from payment_methods import (
+    PAYMENT_ALIASES as _PAYMENT_ALIASES,
+    PARENT_LABELS as _PARENT_LABELS,
+    normalize_payment_method,
+)
 
 
 # Movement vocabulary — kept intentionally small for iter-57; phase 2 will
@@ -603,19 +531,26 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                 {"_id": 0},
             )
             if existing:
+                # Refresh balance + sub-method breakdown. Also keep the
+                # canonical display name in sync so renames in
+                # payment_methods.py propagate to existing auto-accounts.
+                update_fields = {
+                    "current_balance": round(
+                        float(existing.get("opening_balance") or 0) + expected, 2
+                    ),
+                    "expected_orders_balance": expected,
+                    "orders_count": orders_count,
+                    "raw_payment_names": data["raw_names"][:20],
+                    "sub_methods": sub_list,
+                    "updated_at": now,
+                    "last_synced_at": now,
+                }
+                if existing.get("auto_created"):
+                    update_fields["name"] = data["display"]
+                    update_fields["provider_name"] = data["display"]
                 await db.accounts.update_one(
                     {"id": existing["id"], "user_id": uid},
-                    {"$set": {
-                        "current_balance": round(
-                            float(existing.get("opening_balance") or 0) + expected, 2
-                        ),
-                        "expected_orders_balance": expected,
-                        "orders_count": orders_count,
-                        "raw_payment_names": data["raw_names"][:20],
-                        "sub_methods": sub_list,
-                        "updated_at": now,
-                        "last_synced_at": now,
-                    }},
+                    {"$set": update_fields},
                 )
                 updated += 1
                 fresh = await db.accounts.find_one(

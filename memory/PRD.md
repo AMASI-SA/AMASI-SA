@@ -1,5 +1,37 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+## ✅ ITERATION 62 — Unified Payment-Method Names (قاموس موحّد)
+
+**User pain**: Same payment method had different spellings across pages — "تابي (Tabby)" in Accounts vs "تابي" in Settings; "بطاقات ائتمانية" (plural) in Accounts vs "بطاقة ائتمانية" (singular) in Settings; "مدفوعات سلة" in Settlements vs "سلة" in Accounts. Also: محفظة سلة / بطاقة بنكية / STC Pay / Visa / MasterCard were referenced in the parser but absent from Settings, so the merchant couldn't edit their commission.
+
+### Single source of truth — `backend/payment_methods.py` (NEW)
+Module exports:
+- Canonical constants: `SALLA`, `TABBY`, `TAMARA`, `EMKAN`, `BANK_TRANSFER`, `CASH_ON_DELIVERY`, `MADA`, `APPLE_PAY`, `STC_PAY`, `VISA`, `MASTERCARD`, `CREDIT_CARD`, `DEBIT_CARD`, `SALLA_WALLET`.
+- `DEFAULT_PAYMENT_METHODS` (13 rows) — used to seed settings.
+- `PAYMENT_ALIASES` — every raw spelling we've ever seen, tagged with parent (`"salla"` for rollup rails, `None` for standalone).
+- `normalize_payment_method(raw) → (sub_key, sub_display, parent_key)`.
+- `PARENT_LABELS`, `SALLA_SUB_KEYS`.
+
+### Settings (`auth.py`)
+- `DEFAULT_PAYMENT_METHODS` now imported from `payment_methods.py`.
+- `ensure_user_settings` **backfills** missing canonical methods into existing user settings docs — preserves user's commission/vat edits (only APPENDS new rows). Result: every existing tenant gets STC Pay / Visa / MasterCard / بطاقة بنكية / محفظة سلة added on next request, without losing their tweaked rates.
+
+### Accounts (`accounts_routes.py`)
+- Inline alias table deleted — module imports from `payment_methods.py`.
+- `sync_payment_methods` now refreshes the `name` + `provider_name` of existing auto-created accounts on every sync, so canonical-name changes propagate (e.g. "تابي (Tabby)" → "تابي").
+
+### Settlements
+- Backend `list_providers` label `"مدفوعات سلة"` → `"سلة"`.
+- Frontend `Settlements.jsx` `PROVIDER_TONES.salla.label` → `"سلة"`.
+- Placeholder text updated.
+
+### Verified live
+- Settings now shows 13 payment methods, all with unified names. User's prior commission edits (مدى 1.85%) preserved.
+- Accounts sync produces 4 standalone accounts with unified names: سلة / تابي / تحويل بنكي / الدفع عند الاستلام (no parentheses).
+- Sub-methods inside سلة show: مدى, Apple Pay (and would show STC Pay / Visa / MasterCard / بطاقة ائتمانية / بطاقة بنكية / محفظة سلة if orders arrive with those rails).
+
+---
+
 ## ✅ ITERATION 61 — Salla Rollup Account (تجميع منصات الدفع تحت "سلة")
 
 **User pain**: After iter-60, every payment method (مدى, Apple Pay, …) became a standalone payment_platform account. The user wants **one** "سلة" account that aggregates all Salla card rails, with breakdown shown only inside its detail page.
