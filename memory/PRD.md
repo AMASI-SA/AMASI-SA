@@ -1,5 +1,30 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+## ✅ ITERATION 65 — Dashboard payment_breakdown Rollup (تجميع الجدول)
+
+**User pain after iter-64**: KPI buckets (تحويل بنكي = 5,507) were already merged using `normalize_payment_method`, but the **payment_breakdown TABLE** on the Dashboard still showed each raw spelling ("حوالة بنكيةمصرف الراجحي", "حوالة بنكيةمصرف الإنماء", "حوالة بنكيةالبنك الأهلي التجاري") as 3 separate rows. The table totals matched but the visual presentation drifted from the Accounts page.
+
+### Change — `server.py:dashboard`
+After `_merge_breakdown(...)`, a new `_rollup_payment_breakdown()` pass:
+1. Maps each raw row through `normalize_payment_method`.
+2. Groups by `parent or sub_key` (so all 3 "حوالة بنكية…" rows roll into one "تحويل بنكي" row).
+3. Sums totals/fees/orders/VAT per bucket.
+4. Aggregates `sub_methods` by canonical key inside each bucket (so 3 spellings of الراجحي collapse to one sub-row).
+5. Sorts buckets by sales desc, sub-rows by sales desc.
+
+### Verified on real data (amasi.jewelery@gmail.com Preview)
+Dashboard total **87,529.49** = Σ payment_breakdown **87,529.49** = Accounts total **87,529.49**. Per bucket:
+- سلة 51,321.40 (255) → مدى, بطاقة ائتمانية, STC Pay, Apple Pay
+- تمارا 16,090.72 (81)
+- تابي 12,320.78 (60)
+- **تحويل بنكي 5,507.43 (25)** → بنك الراجحي 4,923 / الإنماء 343 / الأهلي 241 ✅ rolled up
+- الدفع عند الاستلام 2,057.96 (11)
+- إمكان 231.20 (1)
+
+> Frontend table (`Dashboard.jsx`) already maps from `payment_breakdown[]` — it now shows 6 canonical rows automatically.
+
+---
+
 ## ✅ ITERATION 64 — Full Cross-Page Unification (الأرقام موحّدة في كل صفحة)
 
 **Real impact (amasi.jewelery@gmail.com Preview)**: Dashboard 87,529.49 ↔ Accounts 87,529.49 — **exact match**, was 9,541 ر.س off before this iter.

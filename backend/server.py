@@ -1757,6 +1757,74 @@ async def dashboard(
         matched_all.get("shipping_breakdown", []), legacy_analyses, "shipping_breakdown",
     )
 
+    # iter-64 — Roll the per-raw-name payment_breakdown rows up into the
+    # SAME canonical buckets used by Accounts (سلة, تحويل بنكي, تابي, …).
+    # Each bucket keeps a `sub_methods` array so the UI can still show the
+    # original Salla rail / specific bank inside the row.
+    def _rollup_payment_breakdown(rows: list[dict]) -> list[dict]:
+        buckets: dict[str, dict] = {}
+        for r in rows:
+            raw = (r.get("name") or "").strip()
+            sub_key, sub_disp, parent = _npm(raw)
+            if not sub_key:
+                # Skip null/unknown markers — they'd pollute the table.
+                continue
+            top_key = parent or sub_key
+            top_disp = PARENT_LABELS.get(parent, sub_disp) if parent else sub_disp
+            b = buckets.setdefault(top_key, {
+                "name": top_disp,
+                "key": top_key,
+                "total_sales": 0.0,
+                "fee_amount": 0.0,
+                "vat_amount": 0.0,
+                "orders_count": 0,
+                "commission_percent": r.get("commission_percent"),
+                "fixed_fee": r.get("fixed_fee"),
+                "vat_percent": r.get("vat_percent"),
+                "sub_methods": [],
+            })
+            sales = float(r.get("total_sales") or 0)
+            fee   = float(r.get("fee_amount") or 0)
+            vat   = float(r.get("vat_amount") or 0)
+            cnt   = int(r.get("orders_count") or 0)
+            b["total_sales"] += sales
+            b["fee_amount"]  += fee
+            b["vat_amount"]  += vat
+            b["orders_count"] += cnt
+            # Aggregate sub-methods by their CANONICAL key so multiple raw
+            # spellings of e.g. الراجحي collapse into one sub-row.
+            sm_idx = {s["key"]: i for i, s in enumerate(b["sub_methods"])}
+            if sub_key in sm_idx:
+                s = b["sub_methods"][sm_idx[sub_key]]
+                s["total_sales"] += sales
+                s["fee_amount"]  += fee
+                s["orders_count"] += cnt
+            else:
+                b["sub_methods"].append({
+                    "key": sub_key,
+                    "display": sub_disp,
+                    "name": sub_disp,
+                    "total_sales": sales,
+                    "fee_amount": fee,
+                    "orders_count": cnt,
+                })
+        # Sort sub_methods by sales desc, round everything for the response.
+        out = []
+        for b in buckets.values():
+            b["sub_methods"].sort(key=lambda s: s["total_sales"], reverse=True)
+            for s in b["sub_methods"]:
+                s["total_sales"] = round(s["total_sales"], 2)
+                s["fee_amount"]  = round(s["fee_amount"], 2)
+            b["total_sales"] = round(b["total_sales"], 2)
+            b["fee_amount"]  = round(b["fee_amount"], 2)
+            b["vat_amount"]  = round(b["vat_amount"], 2)
+            out.append(b)
+        out.sort(key=lambda x: x["total_sales"], reverse=True)
+        return out
+
+    from payment_methods import PARENT_LABELS
+    payment_breakdown_merged = _rollup_payment_breakdown(payment_breakdown_merged)
+
     # ── Iter-44: Cross-platform ROAS + Average Cost Per Order ────────────
     # ROAS (Return On Ad Spend) — how many SAR of revenue each SAR of ad
     # spend produced. Industry-standard formula is gross sales ÷ total
