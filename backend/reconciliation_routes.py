@@ -92,10 +92,18 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
         }
 
     @router.get("/summary")
-    async def reconciliation_summary(user: dict = Depends(current_user)):
+    async def reconciliation_summary(
+        user: dict = Depends(current_user),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ):
         """Powers the main /reconciliation page — grand totals + per-platform rows
         + a `transparency` block that explains any gap between Reports total
         sales and Accounts total assets (waiting, empty payment_method, …).
+
+        `from_date` / `to_date` (YYYY-MM-DD, inclusive) date-filter the
+        transparency block ONLY — platform balances (`expected/current_balance`)
+        are point-in-time snapshots and remain unchanged.
         """
         uid = user["id"]
         accs = await db.accounts.find(
@@ -112,8 +120,9 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
         )
 
         # ── Transparency: compute Reports total_sales vs Accounts total
-        # using IDENTICAL filters (status whitelist + hide_inferred_date_orders).
-        # Then break down the gap into named buckets the user can verify.
+        # using IDENTICAL filters (status whitelist + hide_inferred_date_orders
+        # + optional from_date / to_date so Reports KPI honours the user's
+        # period selector). Break the gap down into named buckets.
         from auth import ensure_user_settings  # local import to avoid cycle
         from payment_methods import resolve_account_key as _resolve
         import re as _re
@@ -127,6 +136,13 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
             ]
         if settings.get("hide_inferred_date_orders"):
             match_stage["order_date_inferred"] = {"$ne": True}
+        if from_date or to_date:
+            date_q: dict = {}
+            if from_date:
+                date_q["$gte"] = from_date
+            if to_date:
+                date_q["$lte"] = to_date
+            match_stage["order_date"] = date_q
 
         pipeline = [
             {"$match": match_stage},
@@ -197,6 +213,8 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
                     "hide_inferred_date_orders": bool(
                         settings.get("hide_inferred_date_orders")
                     ),
+                    "from_date": from_date,
+                    "to_date": to_date,
                 },
             },
         }

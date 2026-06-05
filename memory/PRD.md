@@ -1,6 +1,25 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 71b — Reconciliation transparency accepts date filters
+
+Caught a regression in iter71 before redeploy: the Reports KPI was about
+to lose its date filter because `reconciliation.transparency.total_sales`
+was lifetime-only. Fixed by:
+- `reconciliation_routes.summary` now accepts optional `from_date` /
+  `to_date` query params that filter the transparency computation only
+  (platform balances stay point-in-time snapshots).
+- `Reports.jsx` passes the current filter querystring when calling
+  `/reconciliation/summary` so the transparency block + KPI honour the
+  user's period selector.
+
+Verified on Preview: with-dates and without-dates both produce
+`total_sales == dashboard.totals.total_sales` for matching filters
+(87,529.49 with 433 orders for 2026-06-01..05).
+
+---
+
+
 ## ✅ ITERATION 71 — Reports KPI uses reconciliation.transparency.total_sales
 
 User saw a 128.60 SAR discrepancy between the "إجمالي المبيعات" KPI at the top of /reports (sourced from `dashboard.totals.total_sales`) and the new transparency card (sourced from `reconciliation.transparency.total_sales`). Root cause: Dashboard's `_matches_any` does bi-directional substring matching while sync uses MongoDB regex (one-directional), so Dashboard included a couple of orders with shorter statuses.

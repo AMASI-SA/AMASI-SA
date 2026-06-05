@@ -37,7 +37,9 @@ export default function Reports() {
             const [dashRes, dailyRes, reconRes] = await Promise.all([
                 api.get(`/dashboard${qs ? "?" + qs : ""}`),
                 api.get("/daily-costs"),
-                api.get("/reconciliation/summary").catch(() => ({ data: null })),
+                // Pass the same date filter so the transparency block + KPI
+                // honour the user's selected period (iter-71b).
+                api.get(`/reconciliation/summary${qs ? "?" + qs : ""}`).catch(() => ({ data: null })),
             ]);
             setDashboard(dashRes.data || null);
             setAllDaily(dailyRes.data || []);
