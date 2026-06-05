@@ -9,6 +9,7 @@ import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import ProductSalesReport from "../components/ProductSalesReport";
+import ProviderCommissionCard from "../components/ProviderCommissionCard";
 
 const COLORS = ["#0A3622", "#D4AF37", "#16A34A", "#D97706", "#0EA5E9", "#7C3AED", "#DC2626", "#0891B2"];
 
@@ -335,6 +336,49 @@ export default function Reports() {
                             </div>
                         </div>
                     )}
+
+                    {/* iter-73 — Per-provider commission cards (collapsible) */}
+                    {(() => {
+                        const breakdown = dashboard?.payment_breakdown || [];
+                        const findBy = (rx) => breakdown.find(
+                            (p) => rx.test(p?.name || "") || rx.test(p?.normalized_payment_method || "")
+                        );
+                        const salla  = findBy(/سلة|salla/i);
+                        const tamara = findBy(/تمارا|tamara/i);
+                        const tabby  = findBy(/تابي|تابى|tabby/i);
+                        const emkan  = findBy(/إمكان|امكان|emkan/i);
+                        const cards = [
+                            { p: salla,  accent: "emerald", testid: "provider-card-salla" },
+                            { p: tamara, accent: "violet",  testid: "provider-card-tamara" },
+                            { p: tabby,  accent: "sky",     testid: "provider-card-tabby" },
+                            { p: emkan,  accent: "amber",   testid: "provider-card-emkan" },
+                        ].filter((c) => c.p);
+                        if (cards.length === 0) return null;
+                        return (
+                            <div className="rounded-xl border border-border bg-white p-5" data-testid="provider-commission-section">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div>
+                                        <h3 className="text-base font-bold" style={{ fontFamily: "Tajawal" }}>
+                                            صافي مزوّدات الدفع بعد العمولة
+                                        </h3>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            لكل مزوّد دفع: الإجمالي قبل العمولة، الصافي بعد خصمها، عدد الطلبات، ونسبة العمولة المعمول بها.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {cards.map(({ p, accent, testid }) => (
+                                        <ProviderCommissionCard
+                                            key={testid}
+                                            provider={p}
+                                            accent={accent}
+                                            testid={testid}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* Ads breakdown by platform */}
                     <div className="rounded-xl border border-border bg-white p-6">
