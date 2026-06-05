@@ -86,6 +86,7 @@ PAYMENT_ALIASES: list[tuple[str, str, str, str | None]] = [
     ("credit_card",   CREDIT_CARD,   "بطاقة ائتمانية",        "salla"),
     ("credit_card",   CREDIT_CARD,   "بطاقات ائتمانية",       "salla"),
     ("credit_card",   CREDIT_CARD,   "البطاقات الائتمانية",   "salla"),
+    ("credit_card",   CREDIT_CARD,   "البطاقة الائتمانية",    "salla"),
     ("debit_card",    DEBIT_CARD,    "بطاقة بنكية",           "salla"),
     ("debit_card",    DEBIT_CARD,    "بطاقه بنكيه",           "salla"),
     ("debit_card",    DEBIT_CARD,    "debit card",            "salla"),
@@ -121,26 +122,61 @@ PARENT_LABELS = {
 }
 
 
+def _normalize_arabic(s: str) -> str:
+    """Fold Arabic letter variants to a canonical form for matching.
+
+    - أ / إ / آ → ا   (all hamza-bearing alef → bare alef)
+    - ى         → ي  (alef maksura → ya)
+    - ة         → ه  (ta marbouta → ha — matches search-engine behaviour)
+    - ـ         → "" (tatweel — decorative kashida)
+    """
+    if not s:
+        return s
+    table = str.maketrans({
+        "أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا",
+        "ى": "ي",
+        "ة": "ه",
+        "ـ": "",
+    })
+    return s.translate(table)
+
+
+# Null markers we treat as "no payment method".
+_NULL_MARKERS = {
+    "", "غير محدد", "none", "n/a", "-", "null", "nan", "غير معروف",
+    "\\n", "\\N", r"\n", r"\N",
+}
+
+
 def normalize_payment_method(raw: str) -> tuple[str, str, str | None]:
     """Return (sub_key, sub_display, parent_key) for a raw payment-method.
 
-    Returns ("", "", None) when the input is empty / غير محدد. Unknown
-    methods fall back to a slug derived from the input (parent_key=None).
+    Returns ("", "", None) when the input is empty / null. Unknown methods
+    fall back to a slug derived from the input.
     """
     if not raw:
         return ("", "", None)
-    s = str(raw).strip().lower()
+    # Null sentinels first (case-insensitive). Catches both literal "\N"
+    # (the CSV/Postgres null marker) and "null"/"nan" strings.
+    raw_stripped = str(raw).strip()
+    if raw_stripped.lower() in _NULL_MARKERS or raw_stripped in {"\\N", "\\n"}:
+        return ("", "", None)
+    s = raw_stripped.lower()
     for ch in (".", ",", "،", "(", ")", "/", "\\"):
         s = s.replace(ch, " ")
     s = " ".join(s.split())
-    if not s or s in {"غير محدد", "none", "n/a", "-"}:
+    if not s or s in _NULL_MARKERS:
         return ("", "", None)
+    # Apply Arabic letter folding to BOTH the input and the aliases so we
+    # match across hamza / alef-maksura / ta-marbouta variants. Without
+    # this, "البطاقة الإئتمانية" never matched alias "بطاقة ائتمانية".
+    s_norm = _normalize_arabic(s)
     for sub_key, display, alias, parent in PAYMENT_ALIASES:
-        if alias in s:
+        if _normalize_arabic(alias) in s_norm:
             return (sub_key, display, parent)
-    slug = "".join(c if c.isalnum() else "_" for c in str(raw).strip().lower())
+    slug = "".join(c if c.isalnum() else "_" for c in raw_stripped.lower())
     slug = "_".join(filter(None, slug.split("_")))[:60] or "other"
-    return (slug, str(raw).strip(), None)
+    return (slug, raw_stripped, None)
 
 
 # Salla-rollup sub-keys (used by settlements/reports to know whether a

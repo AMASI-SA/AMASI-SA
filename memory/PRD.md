@@ -1,5 +1,26 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+## ✅ ITERATION 63 — Arabic Letter Folding + Null Filtering (إصلاح المطابقة)
+
+**Real user impact (amasi.jewelery@gmail.com)**: 3 stale auto-accounts cluttering the assets page — "البطاقة الإئتمانية" (15,770 ر.س, hamza-bearing alef), "دفع عند الإستلام" (3,200 ر.س, ditto), "\N" (250 ر.س, literal CSV null).
+
+### `backend/payment_methods.py`
+- **`_normalize_arabic`**: collapses أ/إ/آ/ٱ→ا, ى→ي, ة→ه, drops kashida. Applied to BOTH input and aliases at match-time. Without it, "البطاقة الإئتمانية" never matched alias "بطاقة ائتمانية" → was kept as its own asset.
+- **`_NULL_MARKERS`**: catches `\N`, `\n`, `null`, `nan`, "غير محدد", "غير معروف". Returns empty triple so the row is dropped during sync.
+- Added explicit alias "البطاقة الائتمانية" (with ال) so the article variant is recognised.
+
+### `backend/accounts_routes.py` — `sync_payment_methods` cleanup
+- Cleanup expanded: any `auto_created=True` account whose `normalized_payment_method` is NOT in the current canonical group set AND has **zero transactions** is deleted. Catches both old Salla-sub rails AND old non-canonical spellings.
+
+### Verified on real user data
+- Pre-fix:  8 accounts, 97,071.17 ر.س total. Includes 3 stale rows.
+- Post-fix: 6 accounts, 96,820.48 ر.س total. Stale rows merged into سلة / الدفع عند الاستلام / dropped (\N).
+- "سلة" rollup correctly absorbed the credit-card 15,770 ر.س → now 56,045.73 ر.س with 4 sub-methods (مدى, بطاقة ائتمانية, STC Pay, Apple Pay).
+
+> ℹ️ **Remaining diff (Dashboard 87,529 vs Accounts 96,820 = +9,291)**: Dashboard's `parsed_all["total_sales"]` excludes some order statuses; sync sums every unified_order regardless. Will be addressed in a follow-up by applying the same filter to sync (or showing both numbers side-by-side in UI).
+
+---
+
 ## ✅ ITERATION 62 — Unified Payment-Method Names (قاموس موحّد)
 
 **User pain**: Same payment method had different spellings across pages — "تابي (Tabby)" in Accounts vs "تابي" in Settings; "بطاقات ائتمانية" (plural) in Accounts vs "بطاقة ائتمانية" (singular) in Settings; "مدفوعات سلة" in Settlements vs "سلة" in Accounts. Also: محفظة سلة / بطاقة بنكية / STC Pay / Visa / MasterCard were referenced in the parser but absent from Settings, so the merchant couldn't edit their commission.

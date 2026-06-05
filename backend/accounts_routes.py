@@ -488,21 +488,29 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             sub_slot["amount"] += amount
             sub_slot["count"] += count
 
-        # 2. Cleanup: remove auto-created accounts whose key is now a Salla
-        #    sub-rail (only if they hold no transactions). This catches
-        #    accounts created by iter-60 before rollup existed.
+        # 2. Cleanup: remove auto-created accounts that no longer map to a
+        #    current canonical group. Covers two cases:
+        #      a) Salla sub-rails that were once standalone (mada, Apple Pay…)
+        #      b) Stale accounts named after raw payment_method spellings
+        #         we couldn't normalise before iter-63 (e.g. "البطاقة الإئتمانية"
+        #         with hamza, or "\N" null markers).
+        #    Only deletes when the account has zero transactions, so we
+        #    never destroy any manual settlement entries.
         salla_subs = {sk for sk, _, _, p in _PAYMENT_ALIASES if p == "salla"}
-        stale = await db.accounts.find(
-            {
-                "user_id": uid,
-                "auto_created": True,
-                "source": "orders_payment_method",
-                "normalized_payment_method": {"$in": list(salla_subs)},
-            },
-            {"_id": 0, "id": 1, "name": 1},
-        ).to_list(50)
-        removed_subs = []
-        for s in stale:
+        current_keys = set(groups.keys())
+        stale_query = {
+            "user_id": uid,
+            "auto_created": True,
+            "source": "orders_payment_method",
+        }
+        removed_subs: list[str] = []
+        async for s in db.accounts.find(stale_query, {"_id": 0, "id": 1, "name": 1, "normalized_payment_method": 1}):
+            key = s.get("normalized_payment_method")
+            # Keep if it's a current canonical top-level account
+            if key in current_keys:
+                continue
+            # Otherwise it's stale (legacy sub-rail OR an old non-canonical
+            # spelling that the new normalization no longer produces).
             tx_count = await db.account_transactions.count_documents(
                 {"user_id": uid, "account_id": s["id"]}
             )
