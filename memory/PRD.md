@@ -1,6 +1,45 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 72 — Unified Shipping-Company Dictionary + Excel apostrophe scrub
+
+User reported duplicates between e.g. `'iMile للتوصيل'` (with literal
+single quotes from Excel force-text exports) and `iMile للتوصيل` (clean).
+Each Excel-style row was actually 1,799 orders that would have collided
+with the next Make.com webhook payload had it landed.
+
+### New files
+- **`/app/backend/shipping_companies.py`** — central alias dictionary +
+  `normalize_shipping_company(raw) → (canonical_key, display)` +
+  `scrub_shipping_company(raw) → display_only`. Covers iMile, مندوب /
+  مندوب الرياض, SMSA, Aramex, DHL, FedEx, Naqel, Zajil, Bosta, J&T,
+  pickup, plus null/unknown markers.
+- **`/app/backend/shipping_migrations.py`** — idempotent one-shot scrub
+  for `unified_orders.shipping_company` + `user_settings
+  .deferred_shipping_companies`. Wired into startup so a fresh deploy
+  cleans the DB automatically (3,864/7,091 docs fixed on first run).
+
+### Write-boundary hardening
+- `excel_parser.py` — every Excel row now scrubs `shipping_company`.
+- `webhook_routes.py` — Make.com payload scrubs at insert time.
+- `import_jobs.py` — async batch upsert path scrubs as well.
+
+### Verified
+- 10 new pytest cases (`test_shipping_companies_iter72.py`) covering
+  apostrophes / BOM / zero-width / aliases / order-of-aliases / unknown
+  slug stability / migration idempotency.
+- 35/35 total backend tests green.
+- Dashboard shipping_breakdown drops from N+ "dirty" rows to **4 clean
+  canonical rows** on real merchant data.
+
+### Numbers untouched
+- 0.00 SAR change to total_sales / expected_orders_balance.
+- 0 ghost accounts created.
+- All canonical balances preserved.
+
+---
+
+
 ## ✅ ITERATION 71b — Reconciliation transparency accepts date filters
 
 Caught a regression in iter71 before redeploy: the Reports KPI was about

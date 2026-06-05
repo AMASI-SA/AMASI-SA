@@ -33,6 +33,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from orders_db import upsert_order
+from shipping_companies import scrub_shipping_company as _scrub_ship  # iter-72
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +201,7 @@ async def run_excel_job(
                     "customer_name": o.get("customer_name") or "",
                     "customer_mobile": o.get("customer_mobile") or "",
                     "payment_method": o.get("payment_method") or "",
-                    "shipping_company": o.get("shipping_company") or "",
+                    "shipping_company": _scrub_ship(o.get("shipping_company") or ""),
                     "shipping_cost": float(o.get("shipping_cost") or 0),
                     "subtotal": float(o.get("subtotal") or 0),
                     "discount": float(o.get("discount") or 0),

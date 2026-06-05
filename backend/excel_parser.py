@@ -209,8 +209,10 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
             if col_payment is not None and col_payment < len(row) and row[col_payment]
             else "غير محدد"
         )
+        # iter-72: scrub apostrophes / zero-width chars so DB stays clean.
+        from shipping_companies import scrub_shipping_company
         shipping_name = (
-            str(row[col_shipping]).strip()
+            scrub_shipping_company(str(row[col_shipping]))
             if col_shipping is not None and col_shipping < len(row) and row[col_shipping]
             else "غير محدد"
         )

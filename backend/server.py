@@ -2851,6 +2851,13 @@ async def on_startup():
     _bf = await backfill_settlement_provenance(db)
     if _bf:
         logger.info("iter-70.1: backfilled detection_source on %d legacy settlements", _bf)
+    # iter-72 — clean up legacy shipping_company values
+    from shipping_migrations import migrate_shipping_company_values
+    _ship_mig = await migrate_shipping_company_values(db)
+    _uo = _ship_mig.get("unified_orders", {})
+    if _uo.get("updated"):
+        logger.info("iter-72: scrubbed %d/%d shipping_company values in unified_orders",
+                    _uo["updated"], _uo["scanned"])
     await db.snapchat_connections.create_index("user_id", unique=True)
     # Multi-account Snapchat selection (iteration 15) — one doc per
     # (user_id, ad_account_id). `enabled` toggles whether the account

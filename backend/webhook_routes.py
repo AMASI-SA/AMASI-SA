@@ -28,6 +28,10 @@ from typing import Optional, Union, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 
+# iter-72: scrub apostrophes / BOM / zero-width chars on every webhook
+# payload so Make.com data never adds duplicate rows to shipping_breakdown.
+from shipping_companies import scrub_shipping_company as _scrub_shipping
+
 from report_builder import build_report
 from orders_db import upsert_order, orders_to_parsed
 from product_costs import attach_cost_to_order_doc
@@ -486,8 +490,8 @@ def _build_router(db) -> APIRouter:
                 "customer_mobile": (payload.customer_mobile or "").strip(),
                 # Payment
                 "payment_method": (payload.payment_method or "").strip(),
-                # Shipping
-                "shipping_company": (payload.shipping_company or "").strip(),
+                # Shipping — iter-72 scrub apostrophes / BOM at write boundary
+                "shipping_company": _scrub_shipping(payload.shipping_company),
                 "shipping_cost": round(_to_float(payload.shipping_cost), 2),
                 # Amounts
                 "subtotal": round(_to_float(payload.subtotal), 2),
