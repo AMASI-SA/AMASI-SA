@@ -151,6 +151,24 @@ class TransactionIn(BaseModel):
         return v
 
 
+class TransferIn(BaseModel):
+    """Internal transfer between two of the user's own accounts.
+
+    Generates TWO linked `internal_transfer` rows in `account_transactions`:
+      • one OUT from `from_account_id`
+      • one IN  to  `to_account_id`
+    Both share the same `transfer_id` so the UI can render them as a single
+    movement and the API can undo the pair atomically.
+    """
+    from_account_id: str
+    to_account_id: str
+    amount: float = Field(..., gt=0)
+    transfer_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    reference: Optional[str] = Field("", max_length=120)
+    notes: Optional[str] = Field("", max_length=500)
+    attachment_url: Optional[str] = None
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -621,5 +639,57 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                 for a in result_accounts
             ],
         }
+
+    @router.post("/ensure-default-banks")
+    async def ensure_default_banks(user: dict = Depends(current_user)):
+        """Create the 3 default Saudi bank accounts if they don't exist yet.
+
+        Idempotent — only inserts banks the user hasn't already added (matches
+        on `name` case-insensitively). Returns what was created vs already-there.
+        """
+        DEFAULTS = [
+            {"name": "بنك الإنماء",  "provider_name": "بنك الإنماء"},
+            {"name": "بنك الأهلي",   "provider_name": "البنك الأهلي السعودي"},
+            {"name": "بنك الراجحي",  "provider_name": "مصرف الراجحي"},
+        ]
+        uid = user["id"]
+        now = _now()
+        created: list[dict] = []
+        existing_names: list[str] = []
+        for bank in DEFAULTS:
+            # Case-insensitive match — catches "بنك الراجحي" vs "الراجحي" too.
+            exists = await db.accounts.find_one(
+                {
+                    "user_id": uid,
+                    "account_type": "bank",
+                    "name": {"$regex": f"^{re.escape(bank['name'])}$", "$options": "i"},
+                },
+                {"_id": 0, "id": 1, "name": 1},
+            )
+            if exists:
+                existing_names.append(exists["name"])
+                continue
+            doc = {
+                "id": str(uuid.uuid4()),
+                "user_id": uid,
+                "name": bank["name"],
+                "account_type": "bank",
+                "provider_name": bank["provider_name"],
+                "currency": "SAR",
+                "opening_balance": 0.0,
+                "opening_balance_date": now[:10],
+                "current_balance": 0.0,
+                "default_bank_account_id": None,
+                "status": "active",
+                "notes": "تم إنشاؤه تلقائياً عند فتح شاشة التحويلات.",
+                "auto_created": True,
+                "source": "default_banks",
+                "created_at": now,
+                "updated_at": now,
+            }
+            await db.accounts.insert_one(doc)
+            doc.pop("_id", None)
+            created.append({"id": doc["id"], "name": doc["name"]})
+        return {"ok": True, "created": created, "existing": existing_names}
 
     parent_router.include_router(router)

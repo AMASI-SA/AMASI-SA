@@ -73,6 +73,7 @@ from settlements_routes import (
     SALLA_PAYOUT_DAYS,
 )
 from accounts_routes import attach_accounts_routes
+from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
 from diagnostics_routes import attach_diagnostics_routes
 from orders_db import upsert_order, orders_to_parsed
 from import_jobs import (
@@ -2808,6 +2809,7 @@ attach_webhook_routes(api, db)
 attach_operating_expenses_routes(api, db)
 attach_settlements_routes(api, db)
 attach_accounts_routes(api, db)
+attach_transfers_routes(api, db)
 attach_diagnostics_routes(api, db)
 attach_import_jobs_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
@@ -2839,6 +2841,7 @@ async def on_startup():
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
     await db.analyses.create_index([("user_id", 1), ("created_at", -1)])
     await ensure_import_jobs_indexes(db)
+    await ensure_transfers_indexes(db)
     await db.snapchat_connections.create_index("user_id", unique=True)
     # Multi-account Snapchat selection (iteration 15) — one doc per
     # (user_id, ad_account_id). `enabled` toggles whether the account

@@ -1,5 +1,39 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+## ✅ ITERATION 66 — Phase 2.1 Internal Transfers (تحويلات بين الحسابات)
+
+**Scope (deliberately small)**: record bank transfers between user's own accounts. NO automatic reconciliation, NO 14-day alerts, NO bank-statement matching, NO debt tracking — those come later.
+
+### Backend
+- **NEW `/app/backend/transfers_routes.py`**:
+  - `POST /api/transfers` — creates ONE `transfers` envelope doc + TWO linked `account_transactions` rows (`internal_transfer`, direction `out` + `in`), then recomputes both account balances. All three share `transfer_id`.
+  - `GET /api/transfers?from_date=&to_date=&account_id=&limit=200` — list with filters.
+  - `DELETE /api/transfers/{id}` — atomic undo: deletes both ledger rows + envelope, recomputes both sides.
+  - `ensure_transfers_indexes` adds `(user_id, transfer_date desc)` + unique `id` + sparse `transfer_id` on transactions.
+  - Server registers under `/api/transfers`.
+- **NEW endpoint** `POST /api/accounts/ensure-default-banks` (in `accounts_routes.py`):
+  - Idempotently creates 3 banks (بنك الإنماء / بنك الأهلي / بنك الراجحي) with `account_type="bank"`, `opening_balance=0`, `auto_created=true`, `source="default_banks"`.
+  - Case-insensitive name match prevents duplicates.
+
+### Frontend
+- **NEW `/app/frontend/src/pages/Transfers.jsx`**:
+  - Header + "تحويل جديد" button.
+  - Balance cards strip — every bank + payment_platform with current_balance (clickable → account details).
+  - Transfers log table: التاريخ | من حساب | إلى حساب | المبلغ | المرجع | المرفق | المستخدم | وقت الإنشاء | حذف.
+  - Modal with: from select, vertical arrow, to select (auto-filters out source), amount, date, reference, attachment URL, notes. Live preview: source balance + destination balance-after.
+  - On page load → POSTs `/accounts/ensure-default-banks` once (idempotent).
+- **Sidebar**: new entry "التحويلات بين الحسابات" with `ArrowsLeftRight` icon, route `/transfers`.
+- **`AccountDetails.jsx`**: `internal_transfer` rows now render as colored pills — emerald "تحويل وارد · من {peer}" or rose "تحويل صادر · إلى {peer}".
+
+### Verified live (amasi.jewelery@gmail.com Preview)
+- Ensure-default-banks created 3 banks.
+- Transfer 50,000 ر.س from سلة → بنك الإنماء:
+  - سلة current_balance: 51,321.40 → **1,321.40** ✓
+  - بنك الإنماء: 0 → **50,000.00** ✓
+  - `expected_orders_balance` of سلة stays 51,321.40 (gap = uncollected/pending part — useful KPI for future reconciliation).
+
+---
+
 ## ✅ ITERATION 65 — Dashboard payment_breakdown Rollup (تجميع الجدول)
 
 **User pain after iter-64**: KPI buckets (تحويل بنكي = 5,507) were already merged using `normalize_payment_method`, but the **payment_breakdown TABLE** on the Dashboard still showed each raw spelling ("حوالة بنكيةمصرف الراجحي", "حوالة بنكيةمصرف الإنماء", "حوالة بنكيةالبنك الأهلي التجاري") as 3 separate rows. The table totals matched but the visual presentation drifted from the Accounts page.

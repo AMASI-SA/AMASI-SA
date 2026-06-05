@@ -309,7 +309,24 @@ export default function AccountDetails() {
                             {transactions.map((tx) => (
                                 <tr key={tx.id} className="border-t border-border hover:bg-slate-50/50" data-testid={`tx-row-${tx.id}`}>
                                     <td className="px-4 py-2.5 text-xs text-muted-foreground">{tx.transaction_date}</td>
-                                    <td className="px-4 py-2.5 font-semibold text-xs">{tx.type_label || tx.transaction_type}</td>
+                                    <td className="px-4 py-2.5 font-semibold text-xs">
+                                        {tx.transaction_type === "internal_transfer" ? (
+                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                                tx.direction === "in"
+                                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                                    : "bg-rose-50 text-rose-800 border-rose-200"
+                                            }`}>
+                                                {tx.direction === "in" ? "تحويل وارد" : "تحويل صادر"}
+                                                {tx.peer_account_name && (
+                                                    <span className="text-muted-foreground font-normal">
+                                                        · {tx.direction === "in" ? "من" : "إلى"} {tx.peer_account_name}
+                                                    </span>
+                                                )}
+                                            </span>
+                                        ) : (
+                                            tx.type_label || tx.transaction_type
+                                        )}
+                                    </td>
                                     <td className="px-4 py-2.5 text-xs text-foreground max-w-[20ch] truncate" title={tx.description}>
                                         {tx.description || "—"}
                                     </td>
