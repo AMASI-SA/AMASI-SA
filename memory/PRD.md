@@ -1,5 +1,51 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+
+## ✅ ITERATION 68 — Phase 2.2 Reconciliation Screen (شاشة المطابقة والتسويات)
+
+Read-only view comparing Expected vs Transferred vs Pending per payment platform.
+Deliberately small first version — NO charts/timeline, NO 14-day alerts, NO statement matching, NO order-level breakdown.
+
+### Backend
+- **NEW `/app/backend/reconciliation_routes.py`** (registered in `server.py:77,2814`):
+  - `GET /api/reconciliation/summary` → `{ totals, platforms[] }`.
+    - `totals` = grand `expected / transferred / pending / collection_rate`.
+    - Each `platforms[]` row: `account_id, name, normalized_payment_method, orders_count, expected, transferred, pending, current_balance, collection_rate, transfers_count, last_transfer_at, last_transfer_to_bank, currency`.
+    - `transferred` = Σ outgoing `internal_transfer` rows from the platform whose peer is `account_type='bank'` (single batched accounts lookup, no N+1).
+    - `pending = expected − transferred`, `collection_rate = transferred/expected*100`.
+  - `GET /api/reconciliation/platform/{account_id}` → `{ summary, transfers[] }` where `transfers` is hydrated from the `transfers` envelope (keeps `reference`, `notes`, `attachment_url`) and filtered to bank destinations only. 404 if not a payment_platform.
+
+### Frontend
+- **NEW `/app/frontend/src/pages/Reconciliation.jsx`** at `/reconciliation`:
+  - 4 KPI cards (Total Expected / Transferred / Pending / Collection Rate).
+  - One row per platform with 9 columns: المنصة، المتوقع، المحوّل، المعلّق، الرصيد الحالي، نسبة التحصيل، آخر تحويل، عدد التحويلات، إجراء.
+  - Per-row `RateBar` progress bar (emerald/amber/rose tier coloring).
+  - Totals row at the bottom recomputed in the UI.
+- **NEW `/app/frontend/src/pages/ReconciliationDetail.jsx`** at `/reconciliation/:accountId`:
+  - 4 KPIs + simple stacked horizontal bar visualizing distribution (Transferred / Pending / Expected).
+  - Outgoing transfers-to-bank table (date, bank, amount, reference, attachment).
+- Wired routes in `App.js` (lines 30-32, 66-68) and Sidebar link `nav-reconciliation` with `Scales` icon (Sidebar.jsx line 20, 29).
+
+### Verified numbers (real merchant amasi.jewelery@gmail.com)
+- Total Expected: **87,529.49 ر.س** (matches Σ expected_orders_balance from /api/accounts)
+- Total Transferred: **40,000.00 ر.س** (1 transfer: Salla → بنك الإنماء, TRX-002, 2026-02-15)
+- Total Pending: **47,529.49 ر.س** · Collection rate **45.7%**
+- Salla row: 51,321.40 expected / 40,000 transferred / 11,321.40 pending / 77.9%, 255 طلب
+- Per-platform numbers reconcile 1:1 between `/api/accounts` ↔ `/api/reconciliation/summary` ↔ `/api/reconciliation/platform/{id}`.
+
+### Testing (iter_39)
+- New pytest file `/app/backend/tests/test_reconciliation_phase22.py` (8/8 PASS).
+- Frontend: 12/12 review checks PASS (sidebar, navigation, KPIs, table columns, drill-down, back link).
+- Zero defects found; no auto-fixes applied.
+
+### Deferred (still out of scope per user)
+- 14-day Salla rule alerts.
+- Automated bank statement import / matching.
+- Orders-level breakdown inside detail page.
+- Treating "تحويل بنكي" payment method differently from Salla/Tabby/Tamara (user said: leave it for now, address later as "direct collection source" instead of settlement platform).
+
+---
+
 ## ✅ ITERATION 67 — Phase 2.1 Polish (تحسينات قبل المرحلة 2.2)
 
 Four fixes user requested before moving to reconciliation:
