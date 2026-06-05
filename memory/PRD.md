@@ -1,6 +1,25 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 71 — Reports KPI uses reconciliation.transparency.total_sales
+
+User saw a 128.60 SAR discrepancy between the "إجمالي المبيعات" KPI at the top of /reports (sourced from `dashboard.totals.total_sales`) and the new transparency card (sourced from `reconciliation.transparency.total_sales`). Root cause: Dashboard's `_matches_any` does bi-directional substring matching while sync uses MongoDB regex (one-directional), so Dashboard included a couple of orders with shorter statuses.
+
+### Change (frontend-only, 1 line)
+`/app/frontend/src/pages/Reports.jsx` — the "إجمالي المبيعات" KPI now reads `reconciliation?.transparency?.total_sales ?? agg.total_sales` (graceful fallback if the recon endpoint is unreachable).
+
+Dashboard backend left untouched per user's explicit request.
+
+### Verified on Preview
+- KPI top of /reports: 87,529.49 (clean dataset)
+- Transparency card "إجمالي المبيعات (التقارير)": 87,529.49
+- Transparency card "داخل الأصول": 87,529.49
+- Gap card: 0.00 — "الأرقام متطابقة"
+All three numbers now consistent. Awaits Redeploy → expected Production value will be ~583,686 across all surfaces.
+
+---
+
+
 ## ✅ ITERATION 70 — Reports ↔ Accounts Parity & Transparency Card
 
 User reported Reports total (583,686.39) ≠ Accounts total (584,040.78). Root cause was **two divergent filters**: Dashboard applied `hide_inferred_date_orders`, sync did not; AND Dashboard payment_breakdown used `normalize_payment_method` (slug fallback) while sync used the stricter `resolve_account_key`.

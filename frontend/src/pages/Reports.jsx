@@ -224,7 +224,9 @@ export default function Reports() {
                     {/* Aggregate KPIs */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         {[
-                            { label: "إجمالي المبيعات", value: agg.total_sales, accent: true },
+                            // iter-71: use reconciliation.transparency.total_sales as the
+                            // source of truth so the KPI matches the Reports↔Accounts card.
+                            { label: "إجمالي المبيعات", value: reconciliation?.transparency?.total_sales ?? agg.total_sales, accent: true },
                             { label: "إجمالي الطلبات", value: agg.total_orders, isInt: true },
                             { label: "رسوم الدفع", value: agg.total_fees },
                             { label: "الشحن", value: agg.total_ship },
