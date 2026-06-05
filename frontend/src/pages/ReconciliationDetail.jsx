@@ -6,8 +6,11 @@ import {
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 
-const fmtMoney = (v, ccy = "SAR") =>
-    `${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ccy === "SAR" ? "ر.س" : ccy}`;
+const fmtMoney = (v, ccy = "SAR") => {
+    const num = Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const cc = ccy === "SAR" ? "ر.س" : ccy;
+    return `\u2068${num}\u00A0${cc}\u2069`;
+};
 const fmtDate = (s) => {
     if (!s) return "—";
     const [y, m, d] = String(s).split("-");

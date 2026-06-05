@@ -6,8 +6,14 @@ import {
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 
-const fmtMoney = (v, ccy = "SAR") =>
-    `${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ccy === "SAR" ? "ر.س" : ccy}`;
+const fmtMoney = (v, ccy = "SAR") => {
+    const num = Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const cc = ccy === "SAR" ? "ر.س" : ccy;
+    // U+2068..U+2069 FSI/PDI keep the number+currency rendered as a single
+    // bidi-isolated atomic unit, so the browser never splits it onto two
+    // visual lines in an RTL table cell.
+    return `\u2068${num}\u00A0${cc}\u2069`;
+};
 const fmtDate = (s) => {
     if (!s) return "—";
     const [y, m, d] = String(s).split("-");
@@ -128,37 +134,37 @@ export default function Reconciliation() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="w-full text-sm" style={{ minWidth: 1100 }}>
                             <thead className="bg-slate-50/50 text-xs text-muted-foreground">
                                 <tr>
-                                    <th className="text-right px-4 py-2.5 font-bold">المنصة</th>
-                                    <th className="text-right px-4 py-2.5 font-bold">المتوقع</th>
-                                    <th className="text-right px-4 py-2.5 font-bold">المحوّل</th>
-                                    <th className="text-right px-4 py-2.5 font-bold">المعلّق</th>
-                                    <th className="text-right px-4 py-2.5 font-bold">الرصيد الحالي</th>
-                                    <th className="text-right px-4 py-2.5 font-bold">نسبة التحصيل</th>
-                                    <th className="text-right px-4 py-2.5 font-bold">آخر تحويل</th>
-                                    <th className="text-right px-4 py-2.5 font-bold">عدد التحويلات</th>
-                                    <th className="text-right px-4 py-2.5 font-bold"></th>
+                                    <th className="text-right px-3 py-2.5 font-bold whitespace-nowrap">المنصة</th>
+                                    <th className="text-right px-3 py-2.5 font-bold whitespace-nowrap">المتوقع</th>
+                                    <th className="text-right px-3 py-2.5 font-bold whitespace-nowrap">المحوّل</th>
+                                    <th className="text-right px-3 py-2.5 font-bold whitespace-nowrap">المعلّق</th>
+                                    <th className="text-right px-3 py-2.5 font-bold whitespace-nowrap">الرصيد الحالي</th>
+                                    <th className="text-right px-3 py-2.5 font-bold whitespace-nowrap">نسبة التحصيل</th>
+                                    <th className="text-right px-3 py-2.5 font-bold whitespace-nowrap">آخر تحويل</th>
+                                    <th className="text-right px-3 py-2.5 font-bold whitespace-nowrap">عدد التحويلات</th>
+                                    <th className="text-right px-3 py-2.5 font-bold"></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {data.platforms.map((p) => (
                                     <tr key={p.account_id} className="border-t border-border hover:bg-accent/20 transition" data-testid={`recon-row-${p.normalized_payment_method}`}>
-                                        <td className="px-4 py-3">
+                                        <td className="px-3 py-3 whitespace-nowrap">
                                             <Link to={`/reconciliation/${p.account_id}`} className="font-bold text-foreground hover:text-brand">
                                                 {p.name}
                                             </Link>
                                             <div className="text-[11px] text-muted-foreground">{p.orders_count} طلب</div>
                                         </td>
-                                        <td className="px-4 py-3 num font-bold">{fmtMoney(p.expected, p.currency)}</td>
-                                        <td className="px-4 py-3 num font-bold text-emerald-700">{fmtMoney(p.transferred, p.currency)}</td>
-                                        <td className={`px-4 py-3 num font-bold ${p.pending > 0 ? "text-amber-700" : p.pending < 0 ? "text-rose-700" : "text-muted-foreground"}`}>
+                                        <td className="px-3 py-3 num font-bold whitespace-nowrap">{fmtMoney(p.expected, p.currency)}</td>
+                                        <td className="px-3 py-3 num font-bold text-emerald-700 whitespace-nowrap">{fmtMoney(p.transferred, p.currency)}</td>
+                                        <td className={`px-3 py-3 num font-bold whitespace-nowrap ${p.pending > 0 ? "text-amber-700" : p.pending < 0 ? "text-rose-700" : "text-muted-foreground"}`}>
                                             {fmtMoney(p.pending, p.currency)}
                                         </td>
-                                        <td className="px-4 py-3 num font-bold text-sky-700">{fmtMoney(p.current_balance, p.currency)}</td>
-                                        <td className="px-4 py-3"><RateBar pct={p.collection_rate} /></td>
-                                        <td className="px-4 py-3 text-xs">
+                                        <td className="px-3 py-3 num font-bold text-sky-700 whitespace-nowrap">{fmtMoney(p.current_balance, p.currency)}</td>
+                                        <td className="px-3 py-3 whitespace-nowrap" style={{ minWidth: 130 }}><RateBar pct={p.collection_rate} /></td>
+                                        <td className="px-3 py-3 text-xs whitespace-nowrap">
                                             {p.last_transfer_at ? (
                                                 <div>
                                                     <div className="num font-bold text-foreground">{fmtDate(p.last_transfer_at)}</div>
@@ -166,8 +172,8 @@ export default function Reconciliation() {
                                                 </div>
                                             ) : <span className="text-muted-foreground">لا يوجد</span>}
                                         </td>
-                                        <td className="px-4 py-3 num text-center font-bold text-foreground">{p.transfers_count || 0}</td>
-                                        <td className="px-4 py-3">
+                                        <td className="px-3 py-3 num text-center font-bold text-foreground whitespace-nowrap">{p.transfers_count || 0}</td>
+                                        <td className="px-3 py-3 whitespace-nowrap">
                                             <Link to={`/reconciliation/${p.account_id}`} className="inline-flex items-center gap-1 text-xs text-brand hover:underline font-bold" data-testid={`recon-detail-${p.normalized_payment_method}`}>
                                                 التفاصيل <ArrowRight size={12} />
                                             </Link>
@@ -176,14 +182,14 @@ export default function Reconciliation() {
                                 ))}
                                 {/* Totals row */}
                                 <tr className="border-t-2 border-border bg-slate-50/70 font-bold">
-                                    <td className="px-4 py-3">الإجمالي</td>
-                                    <td className="px-4 py-3 num">{fmtMoney(t.expected)}</td>
-                                    <td className="px-4 py-3 num text-emerald-700">{fmtMoney(t.transferred)}</td>
-                                    <td className="px-4 py-3 num text-amber-700">{fmtMoney(t.pending)}</td>
-                                    <td className="px-4 py-3 num text-sky-700">{fmtMoney(data.platforms.reduce((s, p) => s + (p.current_balance || 0), 0))}</td>
-                                    <td className="px-4 py-3"><RateBar pct={t.collection_rate} /></td>
+                                    <td className="px-3 py-3 whitespace-nowrap">الإجمالي</td>
+                                    <td className="px-3 py-3 num whitespace-nowrap">{fmtMoney(t.expected)}</td>
+                                    <td className="px-3 py-3 num text-emerald-700 whitespace-nowrap">{fmtMoney(t.transferred)}</td>
+                                    <td className="px-3 py-3 num text-amber-700 whitespace-nowrap">{fmtMoney(t.pending)}</td>
+                                    <td className="px-3 py-3 num text-sky-700 whitespace-nowrap">{fmtMoney(data.platforms.reduce((s, p) => s + (p.current_balance || 0), 0))}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap" style={{ minWidth: 130 }}><RateBar pct={t.collection_rate} /></td>
                                     <td></td>
-                                    <td className="px-4 py-3 num text-center">{data.platforms.reduce((s, p) => s + (p.transfers_count || 0), 0)}</td>
+                                    <td className="px-3 py-3 num text-center whitespace-nowrap">{data.platforms.reduce((s, p) => s + (p.transfers_count || 0), 0)}</td>
                                     <td></td>
                                 </tr>
                             </tbody>
