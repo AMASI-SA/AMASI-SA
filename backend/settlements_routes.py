@@ -58,34 +58,21 @@ from auth import get_current_user_from_db
 # ── Provider classification ────────────────────────────────────────────────
 PROVIDERS = ("salla", "tamara", "tabby", "emkan", "bank_transfer", "cod", "other")
 
-PROVIDER_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "tamara":        ("تمارا", "tamara"),
-    "tabby":         ("تابي", "tabby"),
-    "emkan":         ("إمكان", "امكان", "emkan", "amkan"),
-    "cod":           ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery"),
-    "bank_transfer": (
-        "تحويل بنكي", "حوالة بنكية", "تحويل البنك", "تحويل بنوك",
-        "bank transfer", "bank_transfer", "wire transfer", "bank",
-    ),
-}
+from payment_methods import detect_settlement_provider as _detect_settlement_provider
+
+
+# Kept for backward-compat with callers that import `detect_provider` from
+# this module. All classification logic now lives in payment_methods.py.
+PROVIDER_KEYWORDS: dict[str, tuple[str, ...]] = {}
 
 
 def detect_provider(payment_method: str) -> str:
     """Map a free-text payment method to one of our provider buckets.
 
-    Order matters: BNPL providers and COD/Bank are checked first; anything
-    not matching falls into "salla" (Salla Payments — the default electronic
-    rail), and pure-unknown strings become "other".
+    Thin wrapper around `payment_methods.detect_settlement_provider` so the
+    whole app shares a single classifier (iter-68).
     """
-    n = (payment_method or "").strip().lower()
-    if not n:
-        return "other"
-    for provider, kws in PROVIDER_KEYWORDS.items():
-        if any(k in n for k in kws):
-            return provider
-    # Salla Payments doesn't have a distinguishing keyword — anything else
-    # electronic (mada/visa/apple_pay/stc_pay/…) is treated as Salla.
-    return "salla"
+    return _detect_settlement_provider(payment_method or "")
 
 
 # ── Adjustment types ───────────────────────────────────────────────────────

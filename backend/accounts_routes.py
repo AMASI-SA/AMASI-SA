@@ -65,8 +65,32 @@ ACCOUNT_STATUSES = ("active", "hidden", "inactive")
 from payment_methods import (
     PAYMENT_ALIASES as _PAYMENT_ALIASES,
     PARENT_LABELS as _PARENT_LABELS,
+    CANONICAL_TOP_LEVEL_KEYS,
     normalize_payment_method,
+    resolve_account_key,
 )
+
+
+async def ensure_accounts_indexes(db) -> None:
+    """Guarantee a unique partial index on (user_id, normalized_payment_method)
+    for auto-created accounts, so even a bug in the sync code can't insert
+    two ghost rows for the same canonical payment method. Idempotent — safe
+    to call on every startup.
+    """
+    try:
+        await db.accounts.create_index(
+            [("user_id", 1), ("normalized_payment_method", 1)],
+            name="uniq_auto_user_normalized_pm",
+            unique=True,
+            partialFilterExpression={
+                "auto_created": True,
+                "normalized_payment_method": {"$type": "string"},
+            },
+        )
+    except Exception:  # noqa: BLE001
+        # Older Mongo (<3.2) doesn't support partial indexes — we still get
+        # value from the cleanup pass + resolve_account_key gate. Don't crash.
+        pass
 
 
 # Movement vocabulary — kept intentionally small for iter-57; phase 2 will
@@ -330,6 +354,17 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
 
         return await _account_with_meta(db, user["id"], account)
 
+    @router.get("/unclassified-payment-methods")
+    async def list_unclassified_payment_methods(user: dict = Depends(current_user)):
+        """Diagnostic — list raw payment_method values the normalizer could
+        NOT map to a canonical account. These are NEVER turned into accounts.
+        Useful for the operator to add new aliases to payment_methods.py.
+        """
+        rows = await db.unclassified_payment_methods.find(
+            {"user_id": user["id"]}, {"_id": 0},
+        ).sort("count", -1).to_list(500)
+        return {"rows": rows, "count": len(rows)}
+
     @router.get("/{account_id}")
     async def get_account(account_id: str, user: dict = Depends(current_user)):
         doc = await db.accounts.find_one(
@@ -483,13 +518,28 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         #     display, parent_key, amount, count, raw_names[], sub_methods{}
         #   }
         groups: dict[str, dict] = {}
+        # Track raw payment-method strings we could NOT classify so the
+        # operator can fix the alias table later. Never becomes an account.
+        unclassified: dict[str, dict] = {}
         async for row in db.unified_orders.aggregate(pipeline):
             raw = (row.get("_id") or "").strip()
-            sub_key, sub_display, parent_key = normalize_payment_method(raw)
-            if not sub_key:
+            amount = float(row.get("amount") or 0)
+            count = int(row.get("count") or 0)
+
+            # The single classification gate for the whole app. If the raw
+            # value is empty / "\N" / "غير محدد" / unknown → log + skip.
+            account_key, account_display = resolve_account_key(raw)
+            if account_key is None:
+                slot = unclassified.setdefault(raw or "(empty)", {
+                    "raw": raw or "(empty)",
+                    "amount": 0.0,
+                    "count": 0,
+                })
+                slot["amount"] += amount
+                slot["count"] += count
                 continue
-            account_key = parent_key or sub_key
-            account_display = _PARENT_LABELS.get(parent_key, sub_display) if parent_key else sub_display
+
+            sub_key, sub_display, parent_key = normalize_payment_method(raw)
             slot = groups.setdefault(account_key, {
                 "key": account_key,
                 "display": account_display,
@@ -499,8 +549,6 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                 "raw_names": [],
                 "sub_methods": {},  # sub_key → {key, display, amount, count}
             })
-            amount = float(row.get("amount") or 0)
-            count = int(row.get("count") or 0)
             slot["amount"] += amount
             slot["count"] += count
             if raw and raw not in slot["raw_names"]:
@@ -514,35 +562,60 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             sub_slot["amount"] += amount
             sub_slot["count"] += count
 
-        # 2. Cleanup: remove auto-created accounts that no longer map to a
-        #    current canonical group. Covers two cases:
+        # Persist the unclassified report so the operator can see it later.
+        await db.unclassified_payment_methods.delete_many({"user_id": uid})
+        if unclassified:
+            await db.unclassified_payment_methods.insert_many([
+                {
+                    "id": str(uuid.uuid4()),
+                    "user_id": uid,
+                    "raw_payment_method": u["raw"],
+                    "amount": round(u["amount"], 2),
+                    "count": u["count"],
+                    "logged_at": now,
+                }
+                for u in unclassified.values()
+            ])
+
+        # 2. Cleanup: remove auto-created payment_platform accounts that are
+        #    NOT in the canonical top-level set OR no longer map to a current
+        #    group. Covers:
         #      a) Salla sub-rails that were once standalone (mada, Apple Pay…)
         #      b) Stale accounts named after raw payment_method spellings
         #         we couldn't normalise before iter-63 (e.g. "البطاقة الإئتمانية"
         #         with hamza, or "\N" null markers).
+        #      c) Ghost accounts created by older builds when normalize_payment_method
+        #         fell back to a slug (e.g. unknown_method_xyz).
         #    Only deletes when the account has zero transactions, so we
         #    never destroy any manual settlement entries.
-        salla_subs = {sk for sk, _, _, p in _PAYMENT_ALIASES if p == "salla"}
         current_keys = set(groups.keys())
         stale_query = {
             "user_id": uid,
+            "account_type": "payment_platform",
             "auto_created": True,
-            "source": "orders_payment_method",
         }
         removed_subs: list[str] = []
+        kept_with_tx: list[str] = []
         async for s in db.accounts.find(stale_query, {"_id": 0, "id": 1, "name": 1, "normalized_payment_method": 1}):
             key = s.get("normalized_payment_method")
-            # Keep if it's a current canonical top-level account
-            if key in current_keys:
+            # Keep if it's a current canonical top-level account that also
+            # appears in this sync. Anything else is stale OR non-canonical.
+            if key in CANONICAL_TOP_LEVEL_KEYS and key in current_keys:
                 continue
-            # Otherwise it's stale (legacy sub-rail OR an old non-canonical
-            # spelling that the new normalization no longer produces).
             tx_count = await db.account_transactions.count_documents(
                 {"user_id": uid, "account_id": s["id"]}
             )
             if tx_count == 0:
                 await db.accounts.delete_one({"id": s["id"], "user_id": uid})
                 removed_subs.append(s["name"])
+            else:
+                # Has manual transactions — hide instead of delete so the
+                # ledger stays intact but it stops polluting the asset total.
+                await db.accounts.update_one(
+                    {"id": s["id"], "user_id": uid},
+                    {"$set": {"status": "hidden", "updated_at": now}},
+                )
+                kept_with_tx.append(s["name"])
 
         # 3. Upsert one account per top-level key.
         created = 0
@@ -565,13 +638,13 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                 {"_id": 0},
             )
             if existing:
-                # Refresh balance + sub-method breakdown. Also keep the
+                # Refresh expected + sub-method breakdown. Also keep the
                 # canonical display name in sync so renames in
                 # payment_methods.py propagate to existing auto-accounts.
+                # IMPORTANT: do NOT overwrite `current_balance` here — let
+                # `_recompute_balance` derive it from the ledger so any
+                # internal_transfer rows (Phase 2.1) keep their effect.
                 update_fields = {
-                    "current_balance": round(
-                        float(existing.get("opening_balance") or 0) + expected, 2
-                    ),
                     "expected_orders_balance": expected,
                     "orders_count": orders_count,
                     "raw_payment_names": data["raw_names"][:20],
@@ -586,6 +659,8 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                     {"id": existing["id"], "user_id": uid},
                     {"$set": update_fields},
                 )
+                # Recompute current_balance from ledger so transfers stay applied.
+                await _recompute_balance(db, uid, existing["id"])
                 updated += 1
                 fresh = await db.accounts.find_one(
                     {"id": existing["id"], "user_id": uid}, {"_id": 0}
@@ -627,6 +702,12 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             "created": created,
             "updated": updated,
             "removed_legacy": removed_subs,
+            "hidden_with_transactions": kept_with_tx,
+            "unclassified_count": len(unclassified),
+            "unclassified": [
+                {"raw": u["raw"], "amount": round(u["amount"], 2), "count": u["count"]}
+                for u in unclassified.values()
+            ],
             "accounts": [
                 {
                     "id": a["id"],

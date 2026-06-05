@@ -1,6 +1,49 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 69 — P0 Ghost-Accounts Hard Fix (منع رجوع الحسابات الوهمية)
+
+User reported ghost accounts (`\N`, "البطاقة الإئتمانية" as a standalone asset, COD duplicates, etc.) returning after recent edits.
+Root cause: `normalize_payment_method()` was slug-fallbacking unknown raw values, AND `sync-payment-methods` was overwriting `current_balance` so Phase 2.1 transfers got wiped on every sync (which the user saw as "balance went back up = ghost returned").
+
+### Backend hardening
+- **`payment_methods.py`**:
+  - Added `CANONICAL_TOP_LEVEL_KEYS = {salla, tabby, tamara, emkan, bank_transfer, cash_on_delivery}`.
+  - New `resolve_account_key(raw) → (account_key | None, display | None)` — single classification gate the whole app must use.
+  - New `detect_settlement_provider(raw)` (replaces the keyword list in settlements_routes).
+  - Added raw "سلة" / "salla payments" aliases → roll up under Salla.
+- **`accounts_routes.py`**:
+  - `sync_payment_methods` now uses `resolve_account_key`. Unknown / null raw values are **never** turned into accounts — instead logged to a new `unclassified_payment_methods` collection.
+  - Cleanup pass now hard-deletes auto-created accounts whose `normalized_payment_method` ∉ canonical set AND has 0 transactions; hides (not deletes) those with manual transactions.
+  - **Regression fix**: `current_balance` is no longer overwritten by `opening_balance + expected` — `_recompute_balance` is called instead, so internal transfers from Phase 2.1 stay applied across syncs.
+  - New `ensure_accounts_indexes(db)` creates a **partial unique index** on `(user_id, normalized_payment_method)` for `auto_created=True` accounts. Even direct double-inserts are now refused at the DB level.
+  - New diagnostic `GET /api/accounts/unclassified-payment-methods` returns raw payment_method strings that couldn't be classified (NEVER auto-promoted to accounts).
+- **`settlements_routes.py`**:
+  - Replaced local `PROVIDER_KEYWORDS` keyword list with central `detect_settlement_provider`.
+- **`server.py`**:
+  - `ensure_accounts_indexes` wired into startup.
+
+### Tests (8/8 + 14/14 regression)
+New `/app/backend/tests/test_payment_method_idempotency_iter68.py` (7 tests):
+1. Every reported spelling (`مدى`, `Apple Pay`, `البطاقة الإئتمانية`, `بطاقة بنكية`, COD variants, `حوالة بنكيةمصرف الراجحي`, `EmkanInstallment`, …) routes to its correct canonical key/parent.
+2. `resolve_account_key` refuses every shape of null / unknown.
+3. 3 successive sync calls keep count stable + zero unclassified.
+4. Sync preserves Salla's 11,321.40 current_balance across calls (transfer no longer wiped).
+5. Unclassified diagnostic endpoint reachable (route ordering fix).
+6. Direct double-insert blocked by partial unique index.
+7. Pre-seeded ghost account ("normalized_payment_method=credit_card_legacy_slug") gets hard-deleted by sync.
+
+Plus existing `test_reconciliation_phase22.py` (8) and `test_accounts_iter57.py` (6) all still green.
+
+### Verified DB state (amasi.jewelery@gmail.com)
+- Indexes: `uniq_auto_user_normalized_pm` created with `partialFilterExpression={auto_created:true, normalized_payment_method:{$type:'string'}}`.
+- 9 accounts total: 3 banks + 6 payment platforms (سلة 11,321.40 · تمارا 16,090.72 · تابي 12,320.78 · تحويل بنكي 5,507.43 · الدفع عند الاستلام 2,057.96 · إمكان 231.20).
+- Total assets: **87,529.49 ر.س** (matches /api/reconciliation/summary totals.expected).
+- 0 ghosts. 0 unclassified rows.
+
+---
+
+
 ## ✅ ITERATION 68 — Phase 2.2 Reconciliation Screen (شاشة المطابقة والتسويات)
 
 Read-only view comparing Expected vs Transferred vs Pending per payment platform.

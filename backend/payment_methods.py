@@ -134,6 +134,10 @@ PAYMENT_ALIASES: list[tuple[str, str, str, str | None]] = [
     ("emkan",            EMKAN,            "emkan",                  None),
     ("emkan",            EMKAN,            "إمكان",                   None),
     ("emkan",            EMKAN,            "امكان",                   None),
+    # Raw "سلة" as a payment method → rolls up under Salla.
+    ("salla_generic",    SALLA,            "سلة",                     "salla"),
+    ("salla_generic",    SALLA,            "salla payments",         "salla"),
+    ("salla_generic",    SALLA,            "salla_payments",         "salla"),
     ("cash_on_delivery", CASH_ON_DELIVERY, "cash on delivery",       None),
     ("cash_on_delivery", CASH_ON_DELIVERY, "cash_on_delivery",       None),
     ("cash_on_delivery", CASH_ON_DELIVERY, "cod",                    None),
@@ -147,6 +151,53 @@ PARENT_LABELS = {
     "salla": SALLA,
     "bank_transfer": BANK_TRANSFER,
 }
+
+# Canonical TOP-LEVEL account keys — these are the ONLY values allowed as
+# `normalized_payment_method` on an auto-created `payment_platform` account.
+# Anything outside this set means the raw payment_method couldn't be classified
+# and MUST NOT become an account (it gets logged to `unclassified_payment_methods`).
+CANONICAL_TOP_LEVEL_KEYS: frozenset[str] = frozenset({
+    "salla",            # rollup for mada/Apple Pay/Visa/etc.
+    "tabby",
+    "tamara",
+    "emkan",
+    "bank_transfer",    # rollup for specific banks
+    "cash_on_delivery",
+})
+
+
+def resolve_account_key(raw: str) -> tuple[str | None, str | None]:
+    """High-level helper for the sync pipeline.
+
+    Returns `(account_key, account_display)` where `account_key` is ALWAYS
+    one of CANONICAL_TOP_LEVEL_KEYS, or `(None, None)` if the raw string is
+    null/unknown and should be logged as unclassified.
+
+    The whole app (accounts sync, reconciliation, dashboard breakdown,
+    reports, settlements) should rely on this single helper instead of
+    re-implementing classification logic.
+    """
+    sub_key, sub_display, parent_key = normalize_payment_method(raw)
+    if not sub_key:
+        return (None, None)
+    account_key = parent_key or sub_key
+    if account_key not in CANONICAL_TOP_LEVEL_KEYS:
+        return (None, None)
+    account_display = PARENT_LABELS.get(parent_key, sub_display) if parent_key else sub_display
+    return (account_key, account_display)
+
+
+# Provider buckets for settlements (kept as a thin alias of CANONICAL_TOP_LEVEL_KEYS
+# but with "cod" instead of "cash_on_delivery" for backward compatibility with
+# existing settlement docs).
+def detect_settlement_provider(raw: str) -> str:
+    """Map a raw payment method to a settlements-table provider bucket."""
+    key, _ = resolve_account_key(raw)
+    if key is None:
+        return "other"
+    if key == "cash_on_delivery":
+        return "cod"
+    return key
 
 
 def _normalize_arabic(s: str) -> str:
