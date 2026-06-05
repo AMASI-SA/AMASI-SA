@@ -93,7 +93,10 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
 
     @router.get("/summary")
     async def reconciliation_summary(user: dict = Depends(current_user)):
-        """Powers the main /reconciliation page — grand totals + per-platform rows."""
+        """Powers the main /reconciliation page — grand totals + per-platform rows
+        + a `transparency` block that explains any gap between Reports total
+        sales and Accounts total assets (waiting, empty payment_method, …).
+        """
         uid = user["id"]
         accs = await db.accounts.find(
             {"user_id": uid, "account_type": "payment_platform", "status": {"$ne": "hidden"}},
@@ -108,6 +111,61 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
             round(total_transferred / total_expected * 100, 2) if total_expected > 0 else 0.0
         )
 
+        # ── Transparency: compute Reports total_sales vs Accounts total
+        # using IDENTICAL filters (status whitelist + hide_inferred_date_orders).
+        # Then break down the gap into named buckets the user can verify.
+        from auth import ensure_user_settings  # local import to avoid cycle
+        from payment_methods import resolve_account_key as _resolve
+        import re as _re
+        settings = await ensure_user_settings(db, uid)
+        included = settings.get("report_included_statuses") or []
+        match_stage: dict = {"user_id": uid}
+        if included:
+            match_stage["$or"] = [
+                {"order_status": {"$regex": _re.escape(s), "$options": "i"}}
+                for s in included if s
+            ]
+        if settings.get("hide_inferred_date_orders"):
+            match_stage["order_date_inferred"] = {"$ne": True}
+
+        pipeline = [
+            {"$match": match_stage},
+            {"$group": {
+                "_id": {"$ifNull": ["$payment_method", ""]},
+                "amount": {"$sum": {"$ifNull": ["$total_amount", 0]}},
+                "count":  {"$sum": 1},
+            }},
+        ]
+        in_accounts_amount = 0.0
+        in_accounts_orders = 0
+        unclassified_buckets: dict[str, dict] = {}
+        empty_payment_amount = 0.0
+        empty_payment_orders = 0
+        async for r in db.unified_orders.aggregate(pipeline):
+            raw = (r.get("_id") or "").strip()
+            amt = float(r.get("amount") or 0)
+            cnt = int(r.get("count") or 0)
+            if not raw:
+                empty_payment_amount += amt
+                empty_payment_orders += cnt
+                continue
+            key, _disp = _resolve(raw)
+            if key is None:
+                slot = unclassified_buckets.setdefault(raw, {"raw": raw, "amount": 0.0, "count": 0})
+                slot["amount"] += amt
+                slot["count"] += cnt
+            else:
+                in_accounts_amount += amt
+                in_accounts_orders += cnt
+
+        unclassified_amount = round(sum(b["amount"] for b in unclassified_buckets.values()), 2)
+        empty_payment_amount = round(empty_payment_amount, 2)
+        in_accounts_amount = round(in_accounts_amount, 2)
+        total_sales = round(
+            in_accounts_amount + unclassified_amount + empty_payment_amount, 2
+        )
+        gap = round(total_sales - in_accounts_amount, 2)
+
         return {
             "totals": {
                 "expected": total_expected,
@@ -116,6 +174,31 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
                 "collection_rate": overall_rate,
             },
             "platforms": rows,
+            # User-facing transparency block — explains every riyal that's
+            # in Reports total_sales but NOT in Accounts total_assets.
+            "transparency": {
+                "total_sales": total_sales,
+                "in_accounts": in_accounts_amount,
+                "in_accounts_orders": in_accounts_orders,
+                "unclassified_amount": unclassified_amount,
+                "unclassified_orders": sum(b["count"] for b in unclassified_buckets.values()),
+                "unclassified_buckets": sorted(
+                    [
+                        {"raw": b["raw"], "amount": round(b["amount"], 2), "count": b["count"]}
+                        for b in unclassified_buckets.values()
+                    ],
+                    key=lambda x: -x["amount"],
+                ),
+                "empty_payment_method_amount": empty_payment_amount,
+                "empty_payment_method_orders": empty_payment_orders,
+                "gap": gap,
+                "filters_applied": {
+                    "report_included_statuses": included,
+                    "hide_inferred_date_orders": bool(
+                        settings.get("hide_inferred_date_orders")
+                    ),
+                },
+            },
         }
 
     @router.get("/platform/{account_id}")

@@ -21,6 +21,7 @@ function formatRelative(ms) {
 
 export default function Reports() {
     const [dashboard, setDashboard] = useState(null);
+    const [reconciliation, setReconciliation] = useState(null);
     const [allDaily, setAllDaily] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(defaultFilters());
@@ -33,12 +34,14 @@ export default function Reports() {
         if (loud) setLoading(true);
         try {
             const qs = filtersToQueryString(filters);
-            const [dashRes, dailyRes] = await Promise.all([
+            const [dashRes, dailyRes, reconRes] = await Promise.all([
                 api.get(`/dashboard${qs ? "?" + qs : ""}`),
                 api.get("/daily-costs"),
+                api.get("/reconciliation/summary").catch(() => ({ data: null })),
             ]);
             setDashboard(dashRes.data || null);
             setAllDaily(dailyRes.data || []);
+            setReconciliation(reconRes.data || null);
             setLastUpdated(Date.now());
         } catch {
             /* silent on background refresh */
@@ -238,6 +241,96 @@ export default function Reports() {
                             </div>
                         ))}
                     </div>
+
+                    {/* Reports vs Accounts transparency card (iter-70) */}
+                    {reconciliation?.transparency && (
+                        <div className="rounded-xl border border-border bg-white p-5" data-testid="reports-vs-accounts-card">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="text-base font-bold" style={{ fontFamily: "Tajawal" }}>
+                                        المبيعات ↔ الأصول — توضيح الفرق
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        التقارير تجيب على "كم بعت؟" والأصول على "أين الأموال؟" — هنا تفصيل الفارق.
+                                    </p>
+                                </div>
+                                <Link to="/reconciliation" className="text-xs text-brand font-bold hover:underline" data-testid="reports-goto-reconciliation">
+                                    شاشة المطابقة →
+                                </Link>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                                <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4" data-testid="trx-total-sales">
+                                    <div className="text-[11px] font-bold text-emerald-700">إجمالي المبيعات (التقارير)</div>
+                                    <div className="num text-xl font-extrabold text-emerald-900 mt-1">
+                                        {formatMoney(reconciliation.transparency.total_sales)}
+                                    </div>
+                                    <div className="text-[10px] text-emerald-700/70 mt-1">
+                                        {formatInt(reconciliation.transparency.in_accounts_orders +
+                                            reconciliation.transparency.unclassified_orders +
+                                            reconciliation.transparency.empty_payment_method_orders)} طلب
+                                    </div>
+                                </div>
+                                <div className="rounded-lg bg-sky-50 border border-sky-200 p-4" data-testid="trx-in-accounts">
+                                    <div className="text-[11px] font-bold text-sky-700">داخل الأصول (المنصات الـ 6)</div>
+                                    <div className="num text-xl font-extrabold text-sky-900 mt-1">
+                                        {formatMoney(reconciliation.transparency.in_accounts)}
+                                    </div>
+                                    <div className="text-[10px] text-sky-700/70 mt-1">
+                                        {formatInt(reconciliation.transparency.in_accounts_orders)} طلب
+                                    </div>
+                                </div>
+                                <div className={`rounded-lg p-4 border ${reconciliation.transparency.gap === 0 ? "bg-slate-50 border-slate-200" : "bg-amber-50 border-amber-200"}`} data-testid="trx-gap">
+                                    <div className={`text-[11px] font-bold ${reconciliation.transparency.gap === 0 ? "text-slate-700" : "text-amber-700"}`}>الفرق المُفسَّر</div>
+                                    <div className={`num text-xl font-extrabold mt-1 ${reconciliation.transparency.gap === 0 ? "text-slate-900" : "text-amber-900"}`}>
+                                        {formatMoney(reconciliation.transparency.gap)}
+                                    </div>
+                                    <div className={`text-[10px] mt-1 ${reconciliation.transparency.gap === 0 ? "text-slate-700/70" : "text-amber-700/70"}`}>
+                                        {reconciliation.transparency.gap === 0 ? "الأرقام متطابقة" : "موضّح أدناه"}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {(reconciliation.transparency.unclassified_amount > 0 ||
+                                reconciliation.transparency.empty_payment_method_amount > 0) && (
+                                <div className="rounded-lg border border-border overflow-hidden">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50/70 text-xs text-muted-foreground">
+                                            <tr>
+                                                <th className="text-right px-4 py-2 font-bold">السبب</th>
+                                                <th className="text-right px-4 py-2 font-bold">القيمة الخام</th>
+                                                <th className="text-right px-4 py-2 font-bold">عدد الطلبات</th>
+                                                <th className="text-right px-4 py-2 font-bold">المبلغ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {reconciliation.transparency.unclassified_buckets.map((b) => (
+                                                <tr key={b.raw} className="border-t border-border" data-testid={`trx-row-${b.raw}`}>
+                                                    <td className="px-4 py-2.5 text-muted-foreground">طريقة دفع غير مُصنَّفة</td>
+                                                    <td className="px-4 py-2.5 font-mono text-xs">{b.raw}</td>
+                                                    <td className="px-4 py-2.5 num">{formatInt(b.count)}</td>
+                                                    <td className="px-4 py-2.5 num font-bold text-amber-700">{formatMoney(b.amount)}</td>
+                                                </tr>
+                                            ))}
+                                            {reconciliation.transparency.empty_payment_method_amount > 0 && (
+                                                <tr className="border-t border-border" data-testid="trx-row-empty">
+                                                    <td className="px-4 py-2.5 text-muted-foreground">طلبات بدون طريقة دفع</td>
+                                                    <td className="px-4 py-2.5 font-mono text-xs">—</td>
+                                                    <td className="px-4 py-2.5 num">{formatInt(reconciliation.transparency.empty_payment_method_orders)}</td>
+                                                    <td className="px-4 py-2.5 num font-bold text-amber-700">{formatMoney(reconciliation.transparency.empty_payment_method_amount)}</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            <div className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
+                                الفلاتر المطبَّقة: حالات الطلبات المُعتمدة ({reconciliation.transparency.filters_applied.report_included_statuses?.length || 0})
+                                {reconciliation.transparency.filters_applied.hide_inferred_date_orders && " · إخفاء الطلبات مستنتجة التاريخ"}
+                                · نفس الفلاتر تماماً مُطبَّقة على المزامنة لضمان توافق الأرقام.
+                            </div>
+                        </div>
+                    )}
 
                     {/* Ads breakdown by platform */}
                     <div className="rounded-xl border border-border bg-white p-6">

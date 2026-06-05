@@ -1,6 +1,37 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 70 — Reports ↔ Accounts Parity & Transparency Card
+
+User reported Reports total (583,686.39) ≠ Accounts total (584,040.78). Root cause was **two divergent filters**: Dashboard applied `hide_inferred_date_orders`, sync did not; AND Dashboard payment_breakdown used `normalize_payment_method` (slug fallback) while sync used the stricter `resolve_account_key`.
+
+### Backend
+- **`accounts_routes.sync_payment_methods`**: now also honours `hide_inferred_date_orders` so Dashboard and Sync see the SAME order universe.
+- **`reconciliation_routes.summary`**: now returns a `transparency` block:
+  - `total_sales` (recomputed with identical filters)
+  - `in_accounts` + `in_accounts_orders` (sum of canonical platforms)
+  - `unclassified_amount` + per-bucket breakdown (`waiting`, …)
+  - `empty_payment_method_amount` + `empty_payment_method_orders`
+  - `gap` = total_sales − in_accounts
+  - `filters_applied` (statuses list + hide_inferred toggle) — surfaced so the operator can verify parity at a glance.
+
+### Frontend
+- **`Reports.jsx`**: new card "المبيعات ↔ الأصول — توضيح الفرق" right under the KPI grid. Three KPIs (Reports total / In accounts / Gap) + a detail table per unclassified bucket + per-empty-method row. Includes deep link to `/reconciliation`.
+
+### Verified on Preview (clean data)
+- `total_sales = in_accounts = 87,529.49` (433 طلب)
+- gap = 0.00, no unclassified rows, no empty payment methods.
+- Card UI renders correctly (data-testid="reports-vs-accounts-card").
+
+### Tests
+- 16/16 pytest still green (`test_payment_method_idempotency_iter68.py` + `test_reconciliation_phase22.py`).
+
+### Production note
+Awaits Redeploy. After deploy, the gap on Production should be **fully attributable** to `waiting` (255.12) + empty payment_method (~128.60) and reflected in the new transparency table.
+
+---
+
+
 ## ✅ ITERATION 69 — P0 Ghost-Accounts Hard Fix (منع رجوع الحسابات الوهمية)
 
 User reported ghost accounts (`\N`, "البطاقة الإئتمانية" as a standalone asset, COD duplicates, etc.) returning after recent edits.

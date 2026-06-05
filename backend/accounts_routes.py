@@ -488,6 +488,9 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         Dashboard uses, so total assets line up with total sales for the
         same status whitelist. Without this, sync counted refunded /
         cancelled orders the dashboard already excluded.
+
+        iter-70: also honours `hide_inferred_date_orders` so the two
+        sources stay in lock-step on which orders count.
         """
         uid = user["id"]
         now = _now()
@@ -504,6 +507,10 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                         for s in included if s]
             if patterns:
                 match_stage["$or"] = patterns
+        # Mirror the Dashboard's optional "hide inferred date" toggle so
+        # /api/dashboard and /api/accounts agree on the universe of orders.
+        if settings.get("hide_inferred_date_orders"):
+            match_stage["order_date_inferred"] = {"$ne": True}
 
         pipeline = [
             {"$match": match_stage},
