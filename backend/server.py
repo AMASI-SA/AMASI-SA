@@ -71,6 +71,8 @@ from settlements_routes import (
     detect_provider as detect_settlement_provider,
     classify_14d_window,
     SALLA_PAYOUT_DAYS,
+    ensure_settlements_indexes,
+    backfill_settlement_provenance,
 )
 from accounts_routes import attach_accounts_routes, ensure_accounts_indexes
 from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
@@ -2845,6 +2847,10 @@ async def on_startup():
     await ensure_import_jobs_indexes(db)
     await ensure_transfers_indexes(db)
     await ensure_accounts_indexes(db)
+    await ensure_settlements_indexes(db)
+    _bf = await backfill_settlement_provenance(db)
+    if _bf:
+        logger.info("iter-70.1: backfilled detection_source on %d legacy settlements", _bf)
     await db.snapchat_connections.create_index("user_id", unique=True)
     # Multi-account Snapchat selection (iteration 15) — one doc per
     # (user_id, ad_account_id). `enabled` toggles whether the account

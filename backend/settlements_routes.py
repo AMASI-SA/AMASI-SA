@@ -84,6 +84,17 @@ ADJUSTMENT_TYPES = {
     "manual_adjustment",   # تسوية يدوية أخرى
 }
 
+# iter-70.1 — explicit data-source provenance.
+#   "manual"  → user typed it into the /settlements UI
+#   "auto"    → detected by upsert_unified_order diff (iter-70.2, not active yet)
+DETECTION_SOURCES = {"manual", "auto"}
+
+# Where the upsert that fired an auto-detection came from. Kept None for
+# manual entries. Used for diagnostics & traceability.
+TRIGGER_SOURCES = {"excel_upsert", "make_webhook", "salla_oauth", "manual"}
+
+# Legacy "source" values still accepted on inbound POSTs for backward
+# compatibility with the existing UI / older API consumers.
 SOURCES = {"manual_sync", "salla_webhook", "make_webhook"}
 
 
@@ -149,14 +160,168 @@ class SettlementUpdate(BaseModel):
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 def _to_public(doc: dict) -> dict:
-    """Strip Mongo internals + add derived fields (`provider`, `window`)."""
+    """Strip Mongo internals + add derived fields (`provider`, `window`).
+
+    iter-70.1: also surface the new provenance fields (`detection_source`,
+    `trigger`, `detection_metadata`) so the frontend can distinguish manual
+    vs auto entries. Defaults to `"manual"` for any legacy doc that
+    pre-dates iter-70.1 (covered by the backfill at startup).
+    """
     out = {k: v for k, v in doc.items() if not k.startswith("_")}
     out["provider"] = detect_provider(out.get("payment_method", ""))
     if out["provider"] == "salla":
         out["window"] = classify_14d_window(out.get("order_created_at", ""))
     else:
         out["window"] = None  # not applicable for non-Salla providers
+    # Backward-compatible provenance defaults
+    out.setdefault("detection_source", "manual")
+    out.setdefault("trigger", "manual")
+    out.setdefault("detection_metadata", None)
     return out
+
+
+async def ensure_settlements_indexes(db) -> None:
+    """iter-70.1 — partial unique index that prevents duplicate AUTO
+    settlements for the same (order, original→new) tuple.
+
+    Safe to call on every startup. Manual entries are NOT subject to this
+    constraint — a merchant may want to log two settlements with the same
+    amounts for different reasons.
+    """
+    try:
+        await db.payment_adjustments.create_index(
+            [
+                ("user_id", 1),
+                ("order_number", 1),
+                ("original_amount", 1),
+                ("new_amount", 1),
+            ],
+            name="uniq_auto_settlement_per_diff",
+            unique=True,
+            partialFilterExpression={"detection_source": "auto"},
+        )
+    except Exception:  # noqa: BLE001
+        # Older Mongo (<3.2) doesn't support partial indexes — Layer 1
+        # (in-app diff guard) is still enough to dedupe; don't crash boot.
+        pass
+
+
+async def backfill_settlement_provenance(db) -> int:
+    """iter-70.1 — one-shot, idempotent backfill so every existing row
+    has the new provenance fields. All entries that exist today are by
+    definition manual (no detection code ran yet).
+
+    Returns the number of documents updated.
+    """
+    res = await db.payment_adjustments.update_many(
+        {"detection_source": {"$exists": False}},
+        {"$set": {
+            "detection_source": "manual",
+            "trigger": "manual",
+            "detection_metadata": None,
+        }},
+    )
+    return int(res.modified_count or 0)
+
+
+async def record_auto_settlement(
+    db,
+    *,
+    user_id: str,
+    order_number: str,
+    payment_method: str,
+    original_amount: float,
+    new_amount: float,
+    adjustment_type: str,
+    order_created_at: str,
+    adjusted_at: str,
+    trigger: str,
+    detection_metadata: dict | None = None,
+    reason: str = "",
+    order_id: str = "",
+) -> dict | None:
+    """iter-70.1 — internal helper for the (future) detection pipeline
+    in 70.2. Inserts an auto-detected settlement, dedup-guarded by the
+    partial unique index. Returns the inserted doc, or `None` if a
+    duplicate already exists for the same diff.
+
+    NOT WIRED UP IN 70.1 — the function exists so the schema, types and
+    index can be unit-tested in isolation before 70.2 actually starts
+    calling it from `upsert_unified_order()`.
+    """
+    if adjustment_type not in ADJUSTMENT_TYPES:
+        raise ValueError(f"invalid adjustment_type: {adjustment_type!r}")
+    if trigger not in TRIGGER_SOURCES:
+        raise ValueError(f"invalid trigger: {trigger!r}")
+    adj_amount = round(float(original_amount) - float(new_amount), 2)
+    if adj_amount <= 0:
+        return None  # not a settlement — diff is zero or negative
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "order_id": order_id or "",
+        "order_number": order_number,
+        "payment_method": payment_method,
+        "provider": detect_provider(payment_method),
+        "original_amount": round(float(original_amount), 2),
+        "new_amount": round(float(new_amount), 2),
+        "adjustment_amount": adj_amount,
+        "adjustment_type": adjustment_type,
+        "order_created_at": order_created_at,
+        "adjusted_at": adjusted_at,
+        "reason": (reason or "").strip(),
+        "source": "manual_sync",   # legacy field — kept for backward compat
+        "detection_source": "auto",
+        "trigger": trigger,
+        "detection_metadata": detection_metadata or {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": user_id,
+    }
+    try:
+        await db.payment_adjustments.insert_one(doc)
+        # Re-fetch via UUID id (NOT the mutated _id) so callers never see
+        # the ObjectId — and lint stays happy (EB001).
+        return await db.payment_adjustments.find_one(
+            {"id": doc["id"]}, {"_id": 0}
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Likely DuplicateKeyError from the partial unique index → already
+        # logged. Treat as no-op so callers stay idempotent.
+        if "DuplicateKeyError" in type(exc).__name__:
+            return None
+        raise
+
+
+async def stamp_order_amount_history(
+    db,
+    *,
+    user_id: str,
+    order_number: str,
+    prev_amount: float,
+    new_amount: float,
+    settlement_id: str | None,
+    source: str,
+    trigger: str,
+) -> None:
+    """iter-70.1 — append a lightweight history entry on `unified_orders`
+    capturing a single amount change. Used by the (future) detection
+    pipeline so the merchant can audit every diff and revert it.
+
+    NOT WIRED UP IN 70.1 — schema-only helper.
+    """
+    entry = {
+        "prev_amount": round(float(prev_amount), 2),
+        "new_amount": round(float(new_amount), 2),
+        "diff": round(float(prev_amount) - float(new_amount), 2),
+        "detected_at": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+        "trigger": trigger,
+        "settlement_id": settlement_id,
+    }
+    await db.unified_orders.update_one(
+        {"user_id": user_id, "order_number": order_number},
+        {"$push": {"amount_history": entry}},
+    )
 
 
 async def aggregate_settlements_by_provider(
@@ -274,6 +439,12 @@ def attach_settlements_routes(parent_router: APIRouter, db) -> None:
             "adjusted_at": payload.adjusted_at,
             "reason": (payload.reason or "").strip(),
             "source": payload.source,
+            # iter-70.1 — new provenance fields. Every entry from this UI
+            # endpoint is by definition manual. Auto entries will arrive
+            # via the internal `record_auto_settlement()` helper.
+            "detection_source": "manual",
+            "trigger": "manual",
+            "detection_metadata": None,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "created_by": user["id"],
         }
