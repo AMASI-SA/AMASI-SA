@@ -1858,6 +1858,25 @@ async def dashboard(
     bank_adj          = settlements_by_provider["bank_transfer"]["total_adjustment"]
     cod_adj           = settlements_by_provider["cod"]["total_adjustment"]
     other_adj         = settlements_by_provider["other"]["total_adjustment"]
+
+    # iter-73 — surface refunded_amount + refunds_count per provider on the
+    # payment_breakdown rows so the Reports commission cards can show how
+    # much was reversed via settlements for each gateway. The keys of
+    # `settlements_by_provider` are the same canonical names used by the
+    # rollup ('salla', 'tamara', 'tabby', 'emkan', 'bank_transfer', 'cod').
+    _settlement_key_map = {
+        "salla": "salla",
+        "tamara": "tamara",
+        "tabby": "tabby",
+        "emkan": "emkan",
+        "bank_transfer": "bank_transfer",
+        "cash_on_delivery": "cod",
+    }
+    for _b in payment_breakdown_merged:
+        _sk = _settlement_key_map.get(_b.get("key"))
+        _agg = settlements_by_provider.get(_sk) if _sk else None
+        _b["refunded_amount"] = round(float(_agg.get("total_adjustment") or 0), 2) if _agg else 0.0
+        _b["refunds_count"]   = int(_agg.get("count") or 0) if _agg else 0
     total_adjustments = round(
         salla_adj + tamara_adj + tabby_adj + emkan_adj + bank_adj + cod_adj + other_adj, 2,
     )

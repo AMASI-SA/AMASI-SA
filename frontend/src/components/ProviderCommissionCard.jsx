@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CaretDown, CaretUp, CreditCard, Wallet, Receipt, Percent } from "@phosphor-icons/react";
+import { CaretDown, CaretUp, CreditCard, Wallet, Receipt, Percent, ArrowUUpLeft } from "@phosphor-icons/react";
 import { formatMoney, formatInt } from "../lib/format";
 
 /**
@@ -27,7 +27,11 @@ export default function ProviderCommissionCard({ provider, accent, Icon = Credit
 
     const gross = Number(provider.total_sales || 0);
     const fee = Number(provider.fee_amount || provider.base_commission || 0);
-    const net = gross - fee;
+    const refunded = Number(provider.refunded_amount || 0);
+    const refundsCount = Number(provider.refunds_count || 0);
+    // Net after BOTH commission and refunds — matches what actually lands
+    // in the merchant's wallet for this provider in this period.
+    const net = gross - fee - refunded;
     const orders = Number(provider.orders_count || 0);
     const pct = Number(provider.commission_percent || 0);
     const vat = Number(provider.vat_percent || 0);
@@ -108,8 +112,25 @@ export default function ProviderCommissionCard({ provider, accent, Icon = Credit
                             )}
                         </div>
                     </div>
+                    <div className="rounded-lg bg-white/70 p-3 border border-white/40">
+                        <div className="flex items-center gap-1.5 text-[11px] text-rose-700">
+                            <ArrowUUpLeft size={12} /> المبالغ المسترجعة
+                        </div>
+                        <div className="num text-lg font-extrabold text-rose-700 mt-1" data-testid={`${testid}-refunded`}>
+                            {formatMoney(refunded)}
+                        </div>
+                        <div className="text-[10px] text-rose-700/70 mt-0.5">
+                            {refundsCount > 0 ? `${formatInt(refundsCount)} عملية تسوية` : "لا توجد تسويات"}
+                        </div>
+                    </div>
                     <div className="col-span-2 text-[10px] text-muted-foreground border-t border-white/40 pt-2">
                         العمولة المخصومة: <span className="num font-bold">{formatMoney(fee)}</span>
+                        {refunded > 0 && (
+                            <>
+                                {" · "}
+                                المبالغ المسترجعة: <span className="num font-bold text-rose-700">{formatMoney(refunded)}</span>
+                            </>
+                        )}
                         {" · "}
                         مصدر النسبة: إعدادات طرق الدفع
                     </div>
