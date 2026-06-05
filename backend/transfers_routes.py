@@ -97,11 +97,11 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
         # Validate both accounts exist and belong to the user.
         from_acc = await db.accounts.find_one(
             {"id": payload.from_account_id, "user_id": uid},
-            {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1},
+            {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1, "current_balance": 1},
         )
         to_acc = await db.accounts.find_one(
             {"id": payload.to_account_id, "user_id": uid},
-            {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1},
+            {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1, "current_balance": 1},
         )
         if not from_acc:
             raise HTTPException(404, "حساب المصدر غير موجود.")
@@ -111,9 +111,18 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
             if a.get("status") == "inactive":
                 raise HTTPException(400, f"حساب {label} موقوف ولا يمكن استخدامه.")
 
+        # Guard: refuse to overdraw the source account. Compare against the
+        # current_balance (which already accounts for prior transfers).
+        amount = round(float(payload.amount), 2)
+        from_bal = round(float(from_acc.get("current_balance") or 0), 2)
+        if amount > from_bal + 0.001:  # tiny epsilon for float noise
+            raise HTTPException(
+                400,
+                f"المبلغ ({amount:,.2f}) أكبر من الرصيد المتاح في {from_acc['name']} ({from_bal:,.2f}).",
+            )
+
         now = _now()
         transfer_id = str(uuid.uuid4())
-        amount = round(float(payload.amount), 2)
         description = (
             f"تحويل من {from_acc['name']} إلى {to_acc['name']}"
             + (f" — {payload.reference}" if payload.reference else "")

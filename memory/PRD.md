@@ -1,5 +1,28 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+## ✅ ITERATION 67 — Phase 2.1 Polish (تحسينات قبل المرحلة 2.2)
+
+Four fixes user requested before moving to reconciliation:
+
+### 1. Date display
+`Transfers.jsx` — replaced `toLocaleDateString("ar-SA-u-nu-latn")` (returned junk like `152026/2/`) with manual `DD/MM/YYYY` from the raw "YYYY-MM-DD" string. Same for `fmtDateTime` (now `DD/MM/YYYY HH:mm`).
+
+### 2. Pending-collection breakdown card
+`AccountDetails.jsx` — for `auto_created` payment platforms, new 3-metric card shows:
+- **المتوقع من الطلبات** = `expected_orders_balance` (+ orders_count)
+- **المحوّل للبنوك** = `expected_orders_balance − current_balance` (cap ≥ 0)
+- **المتبقي المعلّق** = `current_balance`
+- Progress bar = % collected. Result on سلة: 51,321.40 expected / 40,000 transferred / 11,321.40 pending / 77.9% bar.
+
+### 3. Overdraft guard
+- Backend: `POST /api/transfers` refuses when `amount > from_acc.current_balance` (epsilon 0.001 for float). Returns Arabic message including both numbers.
+- Frontend: `TransferFormModal` computes `overdraft` live, paints the amount input rose, disables submit button, and shows ⚠ warning under the input.
+
+### 4. Delete reverses both sides
+Confirmed already-working: `DELETE /api/transfers/{id}` deletes both linked `account_transactions` rows + envelope, then recomputes both account balances. End-to-end test: سلة 1,321.40 → 51,321.40 ; الإنماء 50,000 → 0.00 after delete.
+
+---
+
 ## ✅ ITERATION 66 — Phase 2.1 Internal Transfers (تحويلات بين الحسابات)
 
 **Scope (deliberately small)**: record bank transfers between user's own accounts. NO automatic reconciliation, NO 14-day alerts, NO bank-statement matching, NO debt tracking — those come later.

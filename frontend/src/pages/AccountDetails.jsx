@@ -239,6 +239,46 @@ export default function AccountDetails() {
                 </div>
             </div>
 
+            {/* Pending-collection breakdown — only for auto-created payment platforms */}
+            {account.auto_created && account.account_type === "payment_platform" && (
+                (() => {
+                    const expected   = Number(account.expected_orders_balance || 0);
+                    const transferredOut = Math.max(0, expected - Number(account.current_balance || 0));
+                    const pending    = Number(account.current_balance || 0);
+                    const pct = expected > 0 ? (transferredOut / expected) * 100 : 0;
+                    return (
+                        <div className="bg-white rounded-xl border border-border p-5" data-testid="pending-collection-card">
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="font-bold text-foreground">حالة التحصيل من الطلبات</h2>
+                                <span className="text-xs text-muted-foreground num">
+                                    تم تحصيل {pct.toFixed(1)}% من المتوقع
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                                <div className="rounded-lg bg-slate-50 border border-slate-200 p-3" data-testid="metric-expected">
+                                    <div className="text-[11px] text-muted-foreground mb-1">المتوقع من الطلبات</div>
+                                    <div className="num text-xl font-extrabold text-slate-900">{fmt(expected, account.currency)}</div>
+                                    <div className="text-[10px] text-muted-foreground mt-1">{Number(account.orders_count || 0).toLocaleString("en-US")} طلب</div>
+                                </div>
+                                <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3" data-testid="metric-transferred">
+                                    <div className="text-[11px] text-emerald-900 mb-1">المحوّل للبنوك</div>
+                                    <div className="num text-xl font-extrabold text-emerald-700">{fmt(transferredOut, account.currency)}</div>
+                                    <div className="text-[10px] text-emerald-800 mt-1">إجمالي التحويلات الصادرة</div>
+                                </div>
+                                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3" data-testid="metric-pending">
+                                    <div className="text-[11px] text-amber-900 mb-1">المتبقي المعلّق</div>
+                                    <div className={`num text-xl font-extrabold ${pending < 0 ? "text-rose-700" : "text-amber-700"}`}>{fmt(pending, account.currency)}</div>
+                                    <div className="text-[10px] text-amber-800 mt-1">في انتظار التحويل البنكي</div>
+                                </div>
+                            </div>
+                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, pct)).toFixed(1)}%` }} />
+                            </div>
+                        </div>
+                    );
+                })()
+            )}
+
             {/* Sub-methods breakdown — only for rollup accounts like سلة */}
             {account.sub_methods?.length > 0 && (
                 <div className="bg-white rounded-xl border border-border overflow-hidden" data-testid="sub-methods-card">

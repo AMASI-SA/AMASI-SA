@@ -9,9 +9,19 @@ import api, { formatApiErrorDetail } from "../lib/api";
 const fmtMoney = (v, ccy = "SAR") =>
     `${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ccy === "SAR" ? "ر.س" : ccy}`;
 
-const fmtDate = (s) => (s ? new Date(s).toLocaleDateString("ar-SA-u-nu-latn") : "—");
-const fmtDateTime = (s) =>
-    s ? new Date(s).toLocaleString("ar-SA-u-nu-latn", { hour12: false }) : "—";
+const fmtDate = (s) => {
+    if (!s) return "—";
+    // s is "YYYY-MM-DD" — render as DD/MM/YYYY without locale calendar quirks.
+    const [y, m, d] = String(s).split("-");
+    return y && m && d ? `${d}/${m}/${y}` : s;
+};
+const fmtDateTime = (s) => {
+    if (!s) return "—";
+    const dt = new Date(s);
+    if (isNaN(dt)) return s;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(dt.getDate())}/${pad(dt.getMonth() + 1)}/${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+};
 
 const inputCls =
     "w-full px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition";
@@ -47,6 +57,9 @@ function TransferFormModal({ accounts, onClose, onSaved }) {
 
     const fromAcc = accounts.find((a) => a.id === form.from_account_id);
     const toAcc = accounts.find((a) => a.id === form.to_account_id);
+    const amountNum = parseFloat(form.amount) || 0;
+    const fromBalance = Number(fromAcc?.current_balance || 0);
+    const overdraft = fromAcc && amountNum > fromBalance + 0.001;
 
     // Don't allow choosing the same account twice; filter the to-list.
     const toOptions = accounts.filter((a) => a.id !== form.from_account_id);
@@ -55,20 +68,24 @@ function TransferFormModal({ accounts, onClose, onSaved }) {
         e.preventDefault();
         if (!form.from_account_id) return toast.error("اختر حساب المصدر");
         if (!form.to_account_id) return toast.error("اختر حساب الوجهة");
-        const amt = parseFloat(form.amount);
-        if (!amt || amt <= 0) return toast.error("أدخل مبلغاً صحيحاً");
+        if (!amountNum || amountNum <= 0) return toast.error("أدخل مبلغاً صحيحاً");
+        if (overdraft) {
+            return toast.error(
+                `المبلغ ${amountNum.toLocaleString("en-US")} أكبر من الرصيد المتاح في ${fromAcc.name} (${fromBalance.toLocaleString("en-US")}).`
+            );
+        }
         setBusy(true);
         try {
             const { data } = await api.post("/transfers", {
                 from_account_id: form.from_account_id,
                 to_account_id: form.to_account_id,
-                amount: amt,
+                amount: amountNum,
                 transfer_date: form.transfer_date,
                 reference: form.reference.trim(),
                 notes: form.notes.trim(),
                 attachment_url: form.attachment_url.trim() || null,
             });
-            toast.success(`تم تسجيل التحويل: ${fmtMoney(amt)} من ${data.from_account_name} إلى ${data.to_account_name}`);
+            toast.success(`تم تسجيل التحويل: ${fmtMoney(amountNum)} من ${data.from_account_name} إلى ${data.to_account_name}`);
             onSaved(data);
             onClose();
         } catch (err) {
@@ -152,13 +169,19 @@ function TransferFormModal({ accounts, onClose, onSaved }) {
                                 type="number"
                                 step="0.01"
                                 min="0.01"
-                                className={inputCls}
+                                max={fromBalance || undefined}
+                                className={`${inputCls} ${overdraft ? "border-rose-400 focus:ring-rose-500 focus:border-rose-500" : ""}`}
                                 value={form.amount}
                                 onChange={(e) => set("amount", e.target.value)}
                                 placeholder="0.00"
                                 data-testid="transfer-amount"
                                 required
                             />
+                            {overdraft && (
+                                <div className="text-[11px] text-rose-700 mt-1 pr-1 font-bold" data-testid="overdraft-warning">
+                                    ⚠ المبلغ أكبر من رصيد {fromAcc.name} المتاح ({fromBalance.toLocaleString("en-US")}).
+                                </div>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-muted-foreground mb-1.5">تاريخ التحويل *</label>
@@ -213,7 +236,7 @@ function TransferFormModal({ accounts, onClose, onSaved }) {
                         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold rounded-lg border border-border hover:bg-slate-50">
                             إلغاء
                         </button>
-                        <button type="submit" disabled={busy} className="px-5 py-2 text-sm font-bold rounded-lg bg-brand text-white bg-brand-hover disabled:opacity-60" data-testid="transfer-submit">
+                        <button type="submit" disabled={busy || overdraft} className="px-5 py-2 text-sm font-bold rounded-lg bg-brand text-white bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed" data-testid="transfer-submit">
                             {busy ? "جاري الحفظ..." : "تسجيل التحويل"}
                         </button>
                     </div>
