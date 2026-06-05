@@ -18,6 +18,7 @@ import {
     MagnifyingGlass,
     Queue,
     ArrowsLeftRight,
+    Scales,
     X,
 } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
@@ -26,6 +27,7 @@ const baseLinks = [
     { to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" },
     { to: "/accounts", label: "الأصول والحسابات", icon: Wallet, testid: "nav-accounts" },
     { to: "/transfers", label: "التحويلات بين الحسابات", icon: ArrowsLeftRight, testid: "nav-transfers" },
+    { to: "/reconciliation", label: "المطابقة والتسويات", icon: Scales, testid: "nav-reconciliation" },
     { to: "/upload", label: "رفع ملف Excel", icon: UploadSimple, testid: "nav-upload" },
     { to: "/import-jobs", label: "حالة الاستيراد", icon: Queue, testid: "nav-import-jobs" },
     { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },

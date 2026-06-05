@@ -1,0 +1,52 @@
+{
+  "summary": "Phase 2.2 Reconciliation Screen — full backend + frontend validation against the real merchant account (amasi.jewelery@gmail.com). 8/8 pytest backend tests PASS and every UI/integration assertion from the review request is satisfied. Numbers cross-check perfectly between /api/accounts, /api/reconciliation/summary, and the Reconciliation table.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_reconciliation_phase22.py",
+    "/app/test_reports/pytest/iteration_39_reconciliation.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "reconciliation_routes.py: _platform_row correctly excludes peers that aren't bank accounts by batching a single accounts lookup (good O(1) per row, no N+1).",
+    "Sort on expected_orders_balance descending makes Salla / Tamara / Tabby naturally surface first — UX is consistent.",
+    "/api/reconciliation/platform/{id} hydrates transfers from the `transfers` envelope (gets reference/notes/attachment_url) AND filters to bank destinations via account_type lookup — keeps detail page in sync with summary's `transferred` figure. Verified: detail.summary.transferred == sum(transfers.amount where to_account_type=='bank').",
+    "Arabic 404 detail returned correctly: 'حساب منصة الدفع غير موجود.' — matches spec.",
+    "Reconciliation.jsx: KPI tones (slate/emerald/amber/sky) align semantically with the four totals; numbers render with .num font class for consistent latin-numeral display in an RTL layout.",
+    "ReconciliationDetail.jsx: stacked bar uses Math.max(2, pct) so 0% slices still render a sliver — small but nice touch. Negative pending correctly recolors to rose.",
+    "Minor (non-blocking): /api/reconciliation/platform/{id} does not exclude non-bank transfers BEFORE the to_account_id list lookup — slight extra IO if a platform ever transfers to another platform. Today there is none, so impact is zero. Not worth changing.",
+    "Minor (non-blocking): on the detail page, the 'Total' row in the transfers table shows summary.transferred which already excludes non-bank rows — correct, but if a row sum from the visible transfers diverges in some edge state, it would be invisible. Today they always match because both come from the same source filter."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_reconciliation_phase22.py (new — 8 tests)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (12/12 review checks)"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (real merchant — read-only verification; no writes performed).",
+  "seed_data_creation": "None. Existing data used: 6 payment_platform accounts, 1 transfer (Salla→Inma 40,000 SAR, TRX-002, 2026-02-15).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "verified_flows": [
+    "Backend GET /api/reconciliation/summary → totals {expected:87529.49, transferred:40000.00, pending:47529.49, collection_rate:45.7} and 6 platforms with all 13 required fields each.",
+    "Backend: totals.expected (87,529.49) === Σ expected_orders_balance over non-hidden payment_platform accounts from /api/accounts (87,529.49). Exact match.",
+    "Backend: totals.transferred (40,000.00) === Σ outgoing internal_transfer rows from payment_platform → bank accounts; also === Σ platforms[].transferred.",
+    "Backend: per-platform pending == round(expected - transferred, 2) and collection_rate == round(transferred/expected*100, 2). Verified on all 6 rows.",
+    "Backend GET /api/reconciliation/platform/94342064-ecfe-4419-8890-fa99f6cdc0be → summary.name='سلة', transferred=40000, 1 transfer to 'بنك الإنماء' amount=40000, all transfers have to_account_type='bank'.",
+    "Backend GET /api/reconciliation/platform/this-does-not-exist → 404 with Arabic detail 'حساب منصة الدفع غير موجود.'",
+    "Backend: unauthenticated calls to both endpoints → 403 (FastAPI Depends short-circuits before route).",
+    "Frontend: login → Sidebar [data-testid=nav-reconciliation] visible → click navigates to /reconciliation.",
+    "Frontend: 4 KPI cards render with exact values (87,529.49 ر.س / 40,000.00 ر.س / 47,529.49 ر.س / 45.7%).",
+    "Frontend: reconciliation-table has 9 columns and 6 platform rows; each row testid recon-row-{salla,tamara,tabby,bank_transfer,cash_on_delivery,emkan}.",
+    "Frontend: numbers in table match /api/reconciliation/summary AND match /api/accounts expected_orders_balance for each payment_platform.",
+    "Frontend: click recon-detail-salla → /reconciliation/{salla_account_id} loads → detail KPIs (51,321.40 / 40,000.00 / 11,321.40 / 77.9%) + 1 transfer row '15-02-2026 | بنك الإنماء | 40,000.00 ر.س | TRX-002'.",
+    "Frontend: 'رجوع إلى المطابقة' link returns to /reconciliation correctly."
+  ],
+  "context_for_next_testing_agent": "Reconciliation Phase 2.2 is READ-ONLY and verified end-to-end. The single existing transfer is TRX-002 (Salla→Inma 40,000 SAR on 2026-02-15) — if any future test creates additional transfers from a payment_platform to a bank for this user, totals.transferred WILL increase. Tests use approximate matches (delta<0.05) so small floating-point drift won't break them, but exact-amount cross-checks against /api/accounts will. The 8 tests live in /app/backend/tests/test_reconciliation_phase22.py and can be re-run as regression: `pytest backend/tests/test_reconciliation_phase22.py -v`.",
+  "rca of the issue": "N/A — no defects found. Implementation matches spec exactly: read-only reconciliation surface, no alerts/14-day/auto-match logic, bank-only transfer filter on detail view, Arabic UI throughout, all numbers reconcile across /api/accounts ↔ /api/reconciliation/summary ↔ /api/reconciliation/platform/{id}."
+}

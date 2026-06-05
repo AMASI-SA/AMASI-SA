@@ -74,6 +74,7 @@ from settlements_routes import (
 )
 from accounts_routes import attach_accounts_routes
 from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
+from reconciliation_routes import attach_reconciliation_routes
 from diagnostics_routes import attach_diagnostics_routes
 from orders_db import upsert_order, orders_to_parsed
 from import_jobs import (
@@ -2810,6 +2811,7 @@ attach_operating_expenses_routes(api, db)
 attach_settlements_routes(api, db)
 attach_accounts_routes(api, db)
 attach_transfers_routes(api, db)
+attach_reconciliation_routes(api, db)
 attach_diagnostics_routes(api, db)
 attach_import_jobs_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
