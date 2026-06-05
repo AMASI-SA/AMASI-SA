@@ -25,6 +25,7 @@ Design principles
 """
 
 from __future__ import annotations
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Literal
@@ -430,22 +431,29 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         """Scan `unified_orders` for distinct payment_method values and
         sync `payment_platform` accounts.
 
-        Aggregation rules (iter-61):
-        - Salla card rails (mada / Apple Pay / STC Pay / Visa / MasterCard /
-          credit cards) collapse into ONE account called "سلة". Its details
-          page shows the per-rail breakdown.
-        - Tabby, Tamara, Emkan, COD, Bank Transfer each get their own
-          standalone account.
-        - Any sub-account auto-created by an earlier sync that's now a Salla
-          rail is removed (only if it has no manual transactions) so the
-          accounts list stays clean.
+        iter-64: applies the SAME `report_included_statuses` filter the
+        Dashboard uses, so total assets line up with total sales for the
+        same status whitelist. Without this, sync counted refunded /
+        cancelled orders the dashboard already excluded.
         """
         uid = user["id"]
         now = _now()
 
-        # 1. Aggregate distinct payment_method + sum + count from unified_orders.
+        # Apply user's dashboard status whitelist if configured.
+        from auth import ensure_user_settings
+        settings = await ensure_user_settings(db, uid)
+        included = settings.get("report_included_statuses") or []
+        match_stage: dict = {"user_id": uid}
+        if included:
+            # Case-insensitive partial match — same semantics as
+            # server._matches_any used by the Dashboard.
+            patterns = [{"order_status": {"$regex": re.escape(s), "$options": "i"}}
+                        for s in included if s]
+            if patterns:
+                match_stage["$or"] = patterns
+
         pipeline = [
-            {"$match": {"user_id": uid}},
+            {"$match": match_stage},
             {"$group": {
                 "_id": {"$ifNull": ["$payment_method", ""]},
                 "amount": {"$sum": {"$ifNull": ["$total_amount", 0]}},

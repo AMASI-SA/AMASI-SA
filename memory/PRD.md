@@ -1,5 +1,23 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
+## ✅ ITERATION 64 — Full Cross-Page Unification (الأرقام موحّدة في كل صفحة)
+
+**Real impact (amasi.jewelery@gmail.com Preview)**: Dashboard 87,529.49 ↔ Accounts 87,529.49 — **exact match**, was 9,541 ر.س off before this iter.
+
+### Changes
+1. **Bank sub-rollup** (`payment_methods.py`): added 9 specific bank aliases (الراجحي, الإنماء, الأهلي, الرياض, ساب, البلاد, العربي, الجزيرة, الأول) with `parent_key="bank_transfer"`. PARENT_LABELS now maps `bank_transfer → "تحويل بنكي"`. "حوالة بنكيةمصرف الراجحي" et al. now roll into a single تحويل بنكي account with per-bank sub_methods. Ordering matters: specific bank aliases come BEFORE generic "حوالة بنكية".
+2. **Status filter parity** (`accounts_routes.py:sync_payment_methods`): now applies the SAME `settings.report_included_statuses` filter the Dashboard uses (case-insensitive partial-match via regex). Without this, sync was counting refunded/cancelled orders the dashboard had already excluded.
+3. **Single classifier** (`server.py:dashboard`): `tamara_keywords`, `tabby_keywords`, `cod_keywords`, `bank_keywords`, the `_is_electronic_method` helper — all replaced with `normalize_payment_method(name)`. `_is_electronic_method` is now: `parent_key == "salla"`.
+4. **Null filter** (`payment_methods.py`): `\N`, `\n`, `null`, `nan`, `غير محدد`, `غير معروف` → returns empty tuple, sync skips.
+
+### Verified on real data
+- 6 canonical accounts, zero stale entries.
+- تحويل بنكي = 5,507.43 (25 طلب) with sub-rows: الراجحي 4,923 (89.4%), الإنماء 343 (6.2%), الأهلي 241 (4.4%).
+- سلة = 51,321.40 (255 طلب) with mada + بطاقة ائتمانية + STC Pay + Apple Pay.
+- Dashboard payment_breakdown classification now agrees with Accounts buckets.
+
+---
+
 ## ✅ ITERATION 63 — Arabic Letter Folding + Null Filtering (إصلاح المطابقة)
 
 **Real user impact (amasi.jewelery@gmail.com)**: 3 stale auto-accounts cluttering the assets page — "البطاقة الإئتمانية" (15,770 ر.س, hamza-bearing alef), "دفع عند الإستلام" (3,200 ر.س, ditto), "\N" (250 ر.س, literal CSV null).

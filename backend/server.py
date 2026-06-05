@@ -1373,40 +1373,33 @@ async def dashboard(
     total_shipping = matched_all["total_shipping_cost"]
     deferred_shipping = matched_all.get("deferred_shipping_cost", 0.0)
 
-    # BNPL / electronic / COD split
+    # BNPL / electronic / COD split — iter-64 uses the unified
+    # normalize_payment_method() so the same classification logic powers
+    # Dashboard, Accounts, and Reports.
+    from payment_methods import normalize_payment_method as _npm
     total_vat = 0.0
     bnpl_fees = tamara_fees = tabby_fees = emkan_fees = 0.0
     other_payment_fees = 0.0
     bnpl_sales = other_payment_sales = cod_sales = cod_fees = 0.0
     # iter-47 — Bank transfer split into its own KPI card.
     bank_sales = bank_fees = 0.0
-    tamara_keywords = ("تمارا", "tamara")
-    tabby_keywords = ("تابي", "tabby")
-    emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
-    cod_keywords = ("عند الاستلام", "عند الاستلم", "cod", "cash on delivery", "cash_on_delivery")
-    # Bank-transfer detection (intentionally specific to avoid matching
-    # generic words like "card"). Covers Salla's Arabic + standard English.
-    bank_keywords = (
-        "تحويل بنكي", "حوالة بنكية", "تحويل البنك", "تحويل بنوك",
-        "bank transfer", "bank_transfer", "wire transfer",
-    )
     for p in matched_all.get("payment_breakdown", []):
         total_vat += float(p.get("vat_amount", 0) or 0)
-        name_lc = (p.get("name", "") or "").strip().lower()
+        raw_name = p.get("name", "") or ""
         fee = float(p.get("fee_amount", 0) or 0)
         sales = float(p.get("total_sales", 0) or 0)
-        if any(k in name_lc for k in tamara_keywords):
-            tamara_fees += fee; bnpl_fees += fee; bnpl_sales += sales
-        elif any(k in name_lc for k in tabby_keywords):
-            tabby_fees += fee; bnpl_fees += fee; bnpl_sales += sales
-        elif any(k in name_lc for k in emkan_keywords):
-            emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
-        elif any(k in name_lc for k in cod_keywords):
-            cod_fees += fee; cod_sales += sales
-        elif any(k in name_lc for k in bank_keywords) or name_lc == "bank":
-            # Bare "bank" is treated as bank too — merchants sometimes
-            # name the method literally "Bank" in their store.
+        sub_key, _disp, parent = _npm(raw_name)
+        # Effective bucket: bank rails / salla rails collapse to their parent.
+        if parent == "bank_transfer" or sub_key == "bank_transfer":
             bank_fees += fee; bank_sales += sales
+        elif sub_key == "tamara":
+            tamara_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+        elif sub_key == "tabby":
+            tabby_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+        elif sub_key == "emkan":
+            emkan_fees += fee; bnpl_fees += fee; bnpl_sales += sales
+        elif sub_key == "cash_on_delivery":
+            cod_fees += fee; cod_sales += sales
         else:
             other_payment_fees += fee; other_payment_sales += sales
     for sh in matched_all.get("shipping_breakdown", []):
@@ -1426,17 +1419,13 @@ async def dashboard(
         elec_excluded_terms = DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES
 
     def _is_electronic_method(payment_method: str) -> bool:
-        n = (payment_method or "").strip().lower()
-        if not n:
+        """Electronic = Salla card rails (mada, Apple Pay, STC Pay, cards,
+        wallet). Bank transfer, BNPL providers, and COD are NOT electronic."""
+        sub_key, _disp, parent = _npm(payment_method or "")
+        if not sub_key:
             return False
-        if any(k in n for k in tamara_keywords): return False
-        if any(k in n for k in tabby_keywords):  return False
-        if any(k in n for k in emkan_keywords):  return False
-        if any(k in n for k in cod_keywords):    return False
-        # iter-47 — Bank transfer has its own KPI card; exclude here.
-        if any(k in n for k in bank_keywords):   return False
-        if n == "bank":                          return False
-        return True
+        # The 'salla' parent groups all electronic card rails.
+        return parent == "salla"
 
     # Build a filtered electronic-only order list.
     electronic_orders_included: list[dict] = []

@@ -97,7 +97,36 @@ PAYMENT_ALIASES: list[tuple[str, str, str, str | None]] = [
     ("salla_wallet",  SALLA_WALLET,  "محفظة",                 "salla"),
     ("salla_wallet",  SALLA_WALLET,  "wallet",                "salla"),
 
-    # ── Standalone payment platforms ────────────────────────────────────
+    # ── Bank transfer — specific banks (rolled up under "تحويل بنكي") ──
+    # ORDER MATTERS: specific bank aliases come BEFORE the generic
+    # "حوالة بنكية" / "تحويل بنكي" catch-alls.
+    ("bank_rajhi",    "بنك الراجحي",     "الراجحي",         "bank_transfer"),
+    ("bank_rajhi",    "بنك الراجحي",     "rajhi",          "bank_transfer"),
+    ("bank_inma",     "بنك الإنماء",     "الإنماء",         "bank_transfer"),
+    ("bank_inma",     "بنك الإنماء",     "alinma",         "bank_transfer"),
+    ("bank_inma",     "بنك الإنماء",     "inma",           "bank_transfer"),
+    ("bank_ahli",     "البنك الأهلي",     "الأهلي",          "bank_transfer"),
+    ("bank_ahli",     "البنك الأهلي",     "ahli",           "bank_transfer"),
+    ("bank_ahli",     "البنك الأهلي",     "ncb",            "bank_transfer"),
+    ("bank_riyad",    "بنك الرياض",      "الرياض",          "bank_transfer"),
+    ("bank_riyad",    "بنك الرياض",      "riyad bank",     "bank_transfer"),
+    ("bank_sab",      "البنك السعودي البريطاني", "ساب",      "bank_transfer"),
+    ("bank_sab",      "البنك السعودي البريطاني", "sab",      "bank_transfer"),
+    ("bank_albilad",  "بنك البلاد",      "البلاد",          "bank_transfer"),
+    ("bank_albilad",  "بنك البلاد",      "albilad",        "bank_transfer"),
+    ("bank_anb",      "البنك العربي",    "العربي",          "bank_transfer"),
+    ("bank_anb",      "البنك العربي",    "anb",            "bank_transfer"),
+    ("bank_aljazira", "بنك الجزيرة",    "الجزيرة",         "bank_transfer"),
+    ("bank_alawwal",  "البنك الأول",    "الأول",           "bank_transfer"),
+    ("bank_alawwal",  "البنك الأول",    "saudi awwal",    "bank_transfer"),
+
+    # ── Generic bank transfer (no specific bank in the payment_method) ──
+    ("bank_transfer",    BANK_TRANSFER,    "حوالة بنكية",            None),
+    ("bank_transfer",    BANK_TRANSFER,    "تحويل بنكي",              None),
+    ("bank_transfer",    BANK_TRANSFER,    "wire transfer",          None),
+    ("bank_transfer",    BANK_TRANSFER,    "bank transfer",          None),
+
+    # ── Other standalone payment platforms ──────────────────────────────
     ("tabby",            TABBY,            "tabby",                  None),
     ("tabby",            TABBY,            "تابي",                    None),
     ("tamara",           TAMARA,           "tamara",                 None),
@@ -110,15 +139,13 @@ PAYMENT_ALIASES: list[tuple[str, str, str, str | None]] = [
     ("cash_on_delivery", CASH_ON_DELIVERY, "cod",                    None),
     ("cash_on_delivery", CASH_ON_DELIVERY, "الدفع عند الاستلام",      None),
     ("cash_on_delivery", CASH_ON_DELIVERY, "دفع عند الاستلام",         None),
-    ("bank_transfer",    BANK_TRANSFER,    "bank transfer",          None),
-    ("bank_transfer",    BANK_TRANSFER,    "تحويل بنكي",              None),
-    ("bank_transfer",    BANK_TRANSFER,    "حوالة بنكية",             None),
-    ("bank_transfer",    BANK_TRANSFER,    "wire transfer",          None),
+    ("cash_on_delivery", CASH_ON_DELIVERY, "عند الاستلام",            None),
 ]
 
 # Display label for each rollup parent.
 PARENT_LABELS = {
     "salla": SALLA,
+    "bank_transfer": BANK_TRANSFER,
 }
 
 
