@@ -83,7 +83,7 @@ def test_resolve_account_key_refuses_unknown():
 
     # Refused
     for bad in ["\\N", "", "null", "nan", "غير محدد", "unknown_xyz_random",
-                "some bizarre vendor name 123", "زبدة وعسل"]:
+                "some bizarre vendor name 123", "زبدة وعسل", "waiting"]:
         assert resolve_account_key(bad) == (None, None), \
             f"{bad!r} should be unclassified"
 
@@ -95,6 +95,48 @@ def test_resolve_account_key_refuses_unknown():
         assert key in CANONICAL_TOP_LEVEL_KEYS, \
             f"{raw!r} resolved to non-canonical {key!r}"
         assert display, f"{raw!r} resolved to empty display"
+
+
+def test_iter69_underscore_and_bank_aliases():
+    """Iter-69 production fix: 4 raw values observed on production were
+    not being classified. Verify they now resolve correctly.
+
+    - apple_pay / stc_pay: underscore → space conversion missing before.
+    - bank: bare "bank" was not aliased to bank_transfer.
+    - waiting: NOT a payment method — must stay unclassified.
+    """
+    from payment_methods import normalize_payment_method, resolve_account_key
+
+    # apple_pay → Salla sub-rail
+    sub_key, display, parent = normalize_payment_method("apple_pay")
+    assert sub_key == "apple_pay" and display == "Apple Pay" and parent == "salla"
+    key, top_display = resolve_account_key("apple_pay")
+    assert (key, top_display) == ("salla", "سلة")
+
+    # stc_pay → Salla sub-rail
+    sub_key, display, parent = normalize_payment_method("stc_pay")
+    assert sub_key == "stc_pay" and display == "STC Pay" and parent == "salla"
+    key, top_display = resolve_account_key("stc_pay")
+    assert (key, top_display) == ("salla", "سلة")
+
+    # Bare "bank" → تحويل بنكي
+    sub_key, display, parent = normalize_payment_method("bank")
+    assert sub_key == "bank_transfer" and display == "تحويل بنكي" and parent is None
+    key, top_display = resolve_account_key("bank")
+    assert (key, top_display) == ("bank_transfer", "تحويل بنكي")
+
+    # "waiting" is a status, NOT a payment method — must stay unclassified.
+    # normalize_payment_method falls back to slug, but resolve_account_key
+    # (the gate) MUST refuse it.
+    assert resolve_account_key("waiting") == (None, None), \
+        "waiting should NOT become an account"
+
+    # Specific banks still win over bare "bank" (order in PAYMENT_ALIASES).
+    _, _, parent = normalize_payment_method("rajhi")
+    assert parent == "bank_transfer"
+    # The display must be the SPECIFIC bank, not the generic one.
+    sub_key, display, _ = normalize_payment_method("الراجحي")
+    assert sub_key == "bank_rajhi" and display == "بنك الراجحي"
 
 
 # ── Integration: full sync flow against the merchant account ────────────

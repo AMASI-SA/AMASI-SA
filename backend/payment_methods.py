@@ -125,6 +125,11 @@ PAYMENT_ALIASES: list[tuple[str, str, str, str | None]] = [
     ("bank_transfer",    BANK_TRANSFER,    "تحويل بنكي",              None),
     ("bank_transfer",    BANK_TRANSFER,    "wire transfer",          None),
     ("bank_transfer",    BANK_TRANSFER,    "bank transfer",          None),
+    # Bare "bank" — Salla sometimes uses this as the raw payment_method
+    # for generic bank-transfer orders. Must come AFTER every specific
+    # bank alias above so "rajhi" wins over bare "bank" when both match.
+    ("bank_transfer",    BANK_TRANSFER,    " bank ",                 None),
+    ("bank_transfer",    BANK_TRANSFER,    "bank",                   None),
 
     # ── Other standalone payment platforms ──────────────────────────────
     ("tabby",            TABBY,            "tabby",                  None),
@@ -240,7 +245,7 @@ def normalize_payment_method(raw: str) -> tuple[str, str, str | None]:
     if raw_stripped.lower() in _NULL_MARKERS or raw_stripped in {"\\N", "\\n"}:
         return ("", "", None)
     s = raw_stripped.lower()
-    for ch in (".", ",", "،", "(", ")", "/", "\\"):
+    for ch in (".", ",", "،", "(", ")", "/", "\\", "_"):
         s = s.replace(ch, " ")
     s = " ".join(s.split())
     if not s or s in _NULL_MARKERS:
