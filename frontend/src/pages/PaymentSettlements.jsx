@@ -374,24 +374,32 @@ export default function PaymentSettlements() {
                         <p className="text-xs mt-1">ارفع أول ملف تسوية من سلة أو تمارا أو تابي للبدء.</p>
                     </div>
                 ) : (
-                    <table className="w-full text-xs" data-testid="settlements-files-table">
-                        <thead className="bg-slate-50 text-slate-600 text-[11px] border-b border-slate-200">
-                            <tr>
-                                <th className="text-right px-4 py-2">البوابة</th>
-                                <th className="text-right px-4 py-2">اسم الملف</th>
-                                <th className="text-right px-4 py-2">مرجع التسوية</th>
-                                <th className="text-right px-4 py-2">مطابقة / إجمالي</th>
-                                <th className="text-right px-4 py-2">الإجمالي</th>
-                                <th className="text-right px-4 py-2">العمولة</th>
-                                <th className="text-right px-4 py-2">الصافي</th>
-                                <th className="text-right px-4 py-2">المرتجع</th>
-                                <th className="text-right px-4 py-2 bg-amber-50" title="مبالغ شُحنت من محفظتك في سلة (مثلاً لبوليصة شحن)">
-                                    مشتريات سله
-                                </th>
-                                <th className="text-right px-4 py-2">رُفع في</th>
-                                {allowDelete && <th className="text-right px-4 py-2" data-testid="settlements-delete-col-header">حذف</th>}
-                            </tr>
-                        </thead>
+                    <div className="overflow-x-auto" data-testid="settlements-table-scroll">
+                        <table className="w-full min-w-[1100px] text-xs" data-testid="settlements-files-table">
+                            <thead className="bg-slate-50 text-slate-600 text-[11px] border-b border-slate-200">
+                                <tr>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap">البوابة</th>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap">اسم الملف</th>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap">مرجع التسوية</th>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap">مطابقة / إجمالي</th>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap">الإجمالي</th>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap">العمولة</th>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap">الصافي</th>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap">المرتجع</th>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap bg-amber-50" title="مبالغ شُحنت من محفظتك في سلة (مثلاً لبوليصة شحن)">
+                                        مشتريات سله
+                                    </th>
+                                    <th className="text-right px-4 py-2 whitespace-nowrap">رُفع في</th>
+                                    {allowDelete && (
+                                        <th
+                                            className="text-center px-4 py-2 whitespace-nowrap sticky left-0 bg-rose-50 text-rose-700 border-l border-rose-200 z-10"
+                                            data-testid="settlements-delete-col-header"
+                                        >
+                                            حذف
+                                        </th>
+                                    )}
+                                </tr>
+                            </thead>
                         <tbody className="divide-y divide-slate-100">
                             {files.map((f) => {
                                 const meta = PROVIDER_META[f.provider] || {};
@@ -447,15 +455,16 @@ export default function PaymentSettlements() {
                                             {f.uploaded_at ? new Date(f.uploaded_at).toLocaleString("ar-SA") : "—"}
                                         </td>
                                         {allowDelete && (
-                                            <td className="px-4 py-2">
+                                            <td className="px-4 py-2 sticky left-0 bg-white border-l border-rose-200 text-center" data-testid={`delete-cell-${f.id}`}>
                                                 <button
                                                     type="button"
                                                     onClick={() => setPendingDelete(f)}
-                                                    className="p-1 rounded hover:bg-rose-100 text-rose-600"
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] shadow-sm"
                                                     title="حذف الملف وإرجاع الطلبات إلى النسب التقديرية"
                                                     data-testid={`delete-settlement-${f.id}`}
                                                 >
-                                                    <Trash size={14} weight="bold" />
+                                                    <Trash size={13} weight="bold" />
+                                                    حذف
                                                 </button>
                                             </td>
                                         )}
@@ -464,6 +473,7 @@ export default function PaymentSettlements() {
                             })}
                         </tbody>
                     </table>
+                    </div>
                 )}
             </div>
 
