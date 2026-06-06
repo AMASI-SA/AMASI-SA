@@ -1,6 +1,80 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 73 — Salla Direct Phase 2 (OAuth UI + Sync + Sources Comparison)
+
+User asked: "ابدأ الآن بتكامل سلة المباشر باستخدام Salla Partners OAuth الرسمي (Client ID / Secret / Redirect URI / Access Token / Refresh Token). زر يدوي 'مزامنة الآن' في البداية. أدخل البيانات من واجهة الإعدادات. لا توقف Make.com أو Excel أو PDF. أنشئ Salla Direct كمصدر إضافي باسم `salla_direct`. أضف سجل مزامنة وشاشة مقارنة بين المصادر."
+
+### Backend
+- **`/app/backend/salla_integration/config_store.py`** (NEW) — DB-backed
+  OAuth credentials store. Client Secret encrypted with the same Fernet
+  key that protects tokens. `save_config()` treats empty client_secret
+  as "no change" so the UI can update client_id alone.
+- **`/app/backend/salla_integration/sync.py`** (NEW) — `_salla_order_to_doc`
+  maps Salla REST payload → unified_orders shape; `run_orders_sync()`
+  pulls up to 2000 orders/run with rate-limit-aware pagination;
+  `run_products_sync()` populates the `salla_products` cache;
+  `compute_sources_comparison()` buckets unified_orders by (make/excel/
+  salla) presence so the merchant sees overlap + missing-from-each diff.
+- **`/app/backend/salla_integration/service.py`** — Added in-process
+  `_CREDS_CACHE` + `update_credentials_cache()`. `is_configured/get_client_id/
+  get_client_secret` now resolve in this order: DB → cache → .env.
+- **`/app/backend/salla_integration/routes.py`** — 7 new endpoints:
+  - `GET /api/salla/config` — read OAuth creds (no secret leak).
+  - `PUT /api/salla/config` — save Client ID/Secret/Redirect URI.
+  - `DELETE /api/salla/config` — wipe.
+  - `POST /api/salla/sync/orders` — manual orders pull.
+  - `POST /api/salla/sync/products` — manual products pull.
+  - `GET /api/salla/sync/logs` — sync log feed.
+  - `GET /api/salla/sources-comparison` — by_combination + per_source totals.
+- **`/app/backend/orders_db.py`** — Extended merge rule: salla_direct
+  follows the same "fill empty only" contract as Excel when Make has
+  already touched the order, so Make stays authoritative until the
+  merchant verifies parity. New `last_salla_direct_sync_at` timestamp.
+
+### Frontend
+- **`/app/frontend/src/pages/SallaIntegration.jsx`** — Inline credentials
+  form (no .env editing required). New Sync section with two buttons
+  (Sync Orders / Sync Products), a "Compare Sources" link, and a sync
+  log table (kind, status, created/updated/errors, started_at). Edit
+  credentials button appears once connected.
+- **`/app/frontend/src/pages/SallaSourceComparison.jsx`** (NEW) — Route
+  `/salla-sources`. Date range filter, 3 per-source cards (Make / Excel
+  / Salla Direct), full by_combination breakdown table, diff lists
+  ("in Salla Direct but missing in Make" / vice versa).
+- **`/app/frontend/src/components/Sidebar.jsx`** — Added Storefront
+  icon import + 2 nav links: "ربط متجر سلة" + "مقارنة مصادر البيانات".
+- **`/app/frontend/src/App.js`** — New route `/salla-sources`.
+
+### Verified — 51/51 tests pass (testing agent iter_40.json)
+- 16 NEW review-driven tests covering all 14 review_request items.
+- 9 NEW unit tests in `test_salla_direct_iter73.py` (mapper + merge
+  rule + endpoint smoke tests).
+- 26 regression tests (iter68 payment idempotency, iter72 shipping
+  companies, reconciliation phase22) all still PASS.
+
+### Safety guarantees (per merchant's explicit asks)
+- Make.com webhook flow, Excel uploads, and PDF imports continue to
+  work unchanged. salla_direct is purely additive.
+- salla_direct CANNOT overwrite Make-authored fields (total_amount /
+  order_status / payment_method) — only fills empty fields and creates
+  brand-new orders not seen by Make/Excel.
+- All credentials encrypted at rest (Fernet, same key as tokens).
+- No scheduler enabled in Phase 2 — manual button only, per user.
+- `/api/salla/config` GET never echoes the raw client_secret; only
+  `has_client_secret: bool`.
+
+### Pending follow-ups (Phase 3+)
+- Refunds/Transactions sync (Salla `PUT /transactions/{id}` is the
+  refund endpoint per playbook).
+- Auto-scheduler at 15 min once merchant verifies parity.
+- Auto-settlement detection logic (Phase 70.2 — paused while Salla
+  Direct lands).
+
+
+---
+
+
 ## ✅ ITERATION 72 — Unified Shipping-Company Dictionary + Excel apostrophe scrub
 
 User reported duplicates between e.g. `'iMile للتوصيل'` (with literal

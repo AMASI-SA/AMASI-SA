@@ -103,8 +103,8 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    "Salla OAuth ليس مُعدّاً بعد. الرجاء إضافة SALLA_CLIENT_ID و "
-                    "SALLA_CLIENT_SECRET في backend/.env من Salla Partners → My Apps."
+                    "Salla OAuth ليس مُعدّاً بعد. الرجاء إضافة Client ID و Client Secret "
+                    "من صفحة الإعدادات → ربط متجر سلة (أو في backend/.env)."
                 ),
             )
         state = secrets.token_urlsafe(32)
@@ -284,9 +284,6 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             "env_client_id_present": bool(os.environ.get("SALLA_CLIENT_ID")),
             "env_client_secret_present": bool(os.environ.get("SALLA_CLIENT_SECRET")),
         }
-
-    class SallaConfigIn:  # lightweight, validated manually below
-        pass
 
     @router.put("/config")
     async def put_config(payload: dict, user: dict = Depends(current_user)):
