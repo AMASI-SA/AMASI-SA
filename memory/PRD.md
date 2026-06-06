@@ -1,6 +1,59 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 81 — Payment-Gateway Metrics UNIFIED across all pages
+
+User asked: "أريد توحيد المقاييس بالكامل في كل الصفحات (لوحة التحكم،
+التقارير، الحسابات، المطابقة) عبر نقطة نهاية مركزية واحدة بحيث
+تتطابق الأرقام تمامًا."
+
+### Backend
+- **`payment_gateway_metrics.py`** — added `_fold()` Arabic-letter
+  normalizer (أ/إ/آ/ٱ → ا، ى → ي، ة → ه، ـ deleted) and rebuilt the
+  alias index so هاء variants like "البطاقة الإئتمانية" /
+  "دفع عند الإستلام" / "حوالة بنكية…" resolve correctly.
+- **`reconciliation_routes.py`** — new `ACCOUNT_KEY_TO_CENTRAL_KEYS`
+  map (salla account aggregates mada/applepay/stcpay/credit_card)
+  and `_central_expected_for_account()` helper.
+  `/reconciliation/summary` and `/reconciliation/platform/{id}` now
+  call `compute_metrics()` and override per-platform `expected` from
+  the central response. Each row exposes `expected_source`
+  ('central' | 'stored') and `actual_orders_count`.
+- **`accounts_routes.py`** — POST `/accounts/sync-payment-methods`
+  reuses the same helper to seed `expected_orders_balance` from the
+  central endpoint, so clicking «مزامنة طرق الدفع من الطلبات»
+  produces numbers that match Reports / Reconciliation 1:1.
+
+### Frontend
+- **`components/UnifiedPaymentGatewaysCard.jsx`** — NEW reusable
+  component that reads `/api/payment-gateway-metrics`, renders the
+  per-gateway breakdown (orders / gross / fees / VAT / refunds /
+  net) and totals. Accepts `qs` (passes through any date filter)
+  and `periodLabel` (chip next to title).
+- **`pages/Dashboard.jsx`** — mounts `<UnifiedPaymentGatewaysCard
+  testid="dashboard-unified-gateways" qs={filtersToQueryString(...)} />`
+  under the KPI grid.
+- **`pages/Accounts.jsx`** — mounts the card with `testid=
+  "accounts-unified-gateways" periodLabel="كل الفترة"` above the
+  accounts table.
+- **`pages/Reconciliation.jsx`** — header now carries
+  `data-testid="reconciliation-central-source-note"` explaining the
+  single source.
+
+### Verified
+- 12/12 new pytests pass (`tests/test_payment_gateway_unification_iter81.py`).
+- Real merchant data: salla=346,801.86, tamara=86,888.23,
+  tabby=73,128.73, bank_transfer=51,363.55, cod=17,003.50,
+  emkan=787.92 — identical across Accounts, Reconciliation and the
+  central endpoint.
+- Cross-page: numbers match when the SAME date filter is applied
+  (Accounts card runs «كل الفترة», Dashboard/Reports apply the
+  active filter — labelled accordingly to avoid confusion).
+
+---
+
+
+
 ## ✅ ITERATION 80 — Sidebar instant-search bar
 
 User asked: "نعم" (agreeing to the proposed "شريط بحث صغير في أعلى القائمة الجانبية يفلتر الصفحات فورياً عند الكتابة" enhancement).

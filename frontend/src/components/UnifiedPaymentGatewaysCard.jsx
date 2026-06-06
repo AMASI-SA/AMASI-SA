@@ -13,7 +13,7 @@ import { CreditCard, Info } from "@phosphor-icons/react";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 
-export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-gateways-card" }) {
+export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-gateways-card", periodLabel = null }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -48,11 +48,13 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
 
     if (rows.length === 0) {
         return (
-            <div className="rounded-xl border border-dashed border-border bg-white p-6 text-center" data-testid={`${testid}-empty`}>
-                <CreditCard size={28} weight="duotone" className="text-muted-foreground mx-auto mb-2" />
-                <div className="font-bold text-sm" style={{ fontFamily: "Tajawal" }}>بوابات الدفع — مصدر موحَّد</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                    لا توجد طلبات في هذه الفترة لعرض تفاصيل البوابات.
+            <div className="rounded-xl border border-dashed border-border bg-white p-6 text-center" data-testid={testid}>
+                <div data-testid={`${testid}-empty`}>
+                    <CreditCard size={28} weight="duotone" className="text-muted-foreground mx-auto mb-2" />
+                    <div className="font-bold text-sm" style={{ fontFamily: "Tajawal" }}>بوابات الدفع — مصدر موحَّد</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                        لا توجد طلبات في هذه الفترة لعرض تفاصيل البوابات.
+                    </div>
                 </div>
             </div>
         );
@@ -66,8 +68,13 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                         <CreditCard size={22} weight="duotone" />
                     </div>
                     <div className="min-w-0">
-                        <h3 className="text-lg sm:text-xl font-bold" style={{ fontFamily: "Tajawal" }}>
-                            بوابات الدفع — مصدر موحَّد
+                        <h3 className="text-lg sm:text-xl font-bold flex items-center gap-2 flex-wrap" style={{ fontFamily: "Tajawal" }}>
+                            <span>بوابات الدفع — مصدر موحَّد</span>
+                            {periodLabel && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200" data-testid={`${testid}-period`}>
+                                    {periodLabel}
+                                </span>
+                            )}
                         </h3>
                         <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
                             <Info size={12} />

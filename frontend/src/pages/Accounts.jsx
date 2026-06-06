@@ -314,7 +314,7 @@ export default function Accounts() {
                 expected per-platform numbers to Dashboard / Reports /
                 Reconciliation. Clicking "مزامنة طرق الدفع" reconciles the
                 stored expected_orders_balance with these live values. */}
-            <UnifiedPaymentGatewaysCard testid="accounts-unified-gateways" />
+            <UnifiedPaymentGatewaysCard testid="accounts-unified-gateways" periodLabel="كل الفترة" />
 
             {/* Tabs */}
             <div className="flex flex-wrap gap-1 border-b border-border" data-testid="accounts-tabs">
