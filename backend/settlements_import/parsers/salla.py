@@ -146,12 +146,36 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             f"ملف Salla يفتقد الأعمدة: {missing}. تم العثور على: {list(cols.keys())}"
         )
 
+    # ── Pre-pass: accumulate sum of POSITIVE gross per order_number ──
+    # We need this to classify refund rows as full vs partial. A refund
+    # is "full" when |refund_gross| >= 99% of the order's total positive
+    # payments in this same file. Otherwise it's a partial refund.
+    positive_gross_by_order: dict[str, float] = {}
+    for r in rows[1:]:
+        if not r or cols.get("order_number") is None:
+            continue
+        ono_raw = r[cols["order_number"]]
+        gross_v = r[cols["gross_amount"]] if cols.get("gross_amount") is not None else None
+        method_v = r[cols["payment_method"]] if cols.get("payment_method") is not None else ""
+        ono = re.sub(r"\.0+$", "", to_str(ono_raw))
+        if not ono:
+            continue
+        g = to_float(gross_v)
+        # Exclude wallet-recharge rows from "positive gross" because
+        # they're internal balance moves, not customer payments.
+        if _is_wallet_recharge(to_str(method_v), g, to_float(r[cols["net_amount"]] if cols.get("net_amount") is not None else 0)):
+            continue
+        if g > 0:
+            positive_gross_by_order[ono] = positive_gross_by_order.get(ono, 0.0) + g
+
     entries: list[dict] = []
     total_gross = 0.0
     total_fees = 0.0
     total_vat = 0.0
     total_net = 0.0
-    salla_purchases_total = 0.0   # sum of |net| for wallet-recharge rows
+    total_refund_full = 0.0
+    total_refund_partial = 0.0
+    salla_purchases_total = 0.0
     salla_purchases_count = 0
 
     for r in rows[1:]:
@@ -160,8 +184,6 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         order_no = to_str(r[cols["order_number"]] if cols.get("order_number") is not None else "")
         if not order_no or order_no.lower() in ("total", "الإجمالي", "المجموع"):
             continue
-        # Salla treats order numbers as integers — strip ".0" if openpyxl
-        # parsed a numeric cell.
         order_no = re.sub(r"\.0+$", "", order_no)
 
         gross = to_float(r[cols["gross_amount"]])
@@ -170,12 +192,7 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         net = to_float(r[cols["net_amount"]])
         method = to_str(r[cols["payment_method"]])
 
-        # ── Wallet-recharge / Salla-purchase rows ────────────────────
-        # These have negative gross/net + an untranslated method key.
-        # Tag them, aggregate separately, and DO NOT push actual_*
-        # fields into unified_orders (service.py skips event_type ==
-        # "salla_purchase"). We check BEFORE the generic negative-row
-        # filter below so wallet rows survive.
+        # ── Wallet-recharge rows (مشتريات سله) ──────────────────────
         if _is_wallet_recharge(method, gross, net):
             entries.append({
                 "provider": "salla",
@@ -198,11 +215,49 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             salla_purchases_count += 1
             continue
 
-        # Skip negative / blank rows whose method is NOT wallet — these
-        # are typically customer refunds via the same gateway and are
-        # out of scope for this iteration. We preserve the historical
-        # behavior so existing tests stay green.
-        if gross <= 0 and net <= 0 and fee <= 0:
+        # ── Customer refund rows ─────────────────────────────────────
+        # Negative amount on a normal payment method (مدى / credit card
+        # / etc.) means the merchant refunded the customer back via
+        # the same gateway. Classify as full vs partial by comparing
+        # |refund_gross| to the order's total positive payments in
+        # this file.
+        if gross < 0:
+            refund_amount = abs(gross)
+            order_total_paid = positive_gross_by_order.get(order_no, 0.0)
+            # Tolerance: 1% (≥99% → full). Falls back to "partial"
+            # when the original payment isn't in this file (we'd be
+            # comparing against 0).
+            is_full = (
+                order_total_paid > 0
+                and refund_amount >= order_total_paid * 0.99
+            )
+            refund_full = refund_amount if is_full else 0.0
+            refund_partial = refund_amount if not is_full else 0.0
+            entries.append({
+                "provider": "salla",
+                "order_number": order_no,
+                "actual_payment_method": normalize_payment_method(method),
+                "actual_gross_amount": gross,
+                "actual_payment_fee": fee,
+                "actual_payment_vat": vat,
+                "actual_net_amount": net,
+                "actual_fee_rate": 0.0,
+                "actual_refund_amount": refund_full,
+                "actual_partial_refund_amount": refund_partial,
+                "event_type": "refund",
+                "settlement_reference": invoice_number,
+                "settlement_date": None,
+                "raw_payment_method": method,
+            })
+            if is_full:
+                total_refund_full += refund_amount
+            else:
+                total_refund_partial += refund_amount
+            total_net += net  # negative — drags the net total down
+            continue
+
+        # Skip rows with no positive gross AND no fee (defensive — true blanks)
+        if gross == 0 and fee == 0 and net == 0:
             continue
 
         fee_rate = round((fee / gross) * 100, 4) if gross > 0 else 0.0
@@ -242,9 +297,8 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             "fees": round(total_fees, 2),
             "fees_vat": round(total_vat, 2),
             "net": round(total_net, 2),
-            "refund_full": 0.0,
-            "refund_partial": 0.0,
-            # NEW — Salla-only buckets surfaced in the UI history
+            "refund_full": round(total_refund_full, 2),
+            "refund_partial": round(total_refund_partial, 2),
             "salla_purchases_total": round(salla_purchases_total, 2),
             "salla_purchases_count": salla_purchases_count,
         },

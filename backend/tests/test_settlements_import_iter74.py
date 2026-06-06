@@ -76,18 +76,28 @@ def test_salla_parser_totals():
     finally:
         wb.close()
     assert res["provider"] == "salla"
-    assert res["totals"]["rows"] == 140
-    assert abs(res["totals"]["gross"] - 26686.32) < 0.05
+    # Iter-75 — refund rows (negative amounts on normal methods) are
+    # now tagged as event_type="refund" and aggregated under
+    # refund_partial / refund_full. The file has 143 total entries
+    # (140 sales + 3 refunds). Sale-only totals exclude refunds.
+    assert res["totals"]["rows"] == 143
+    assert abs(res["totals"]["gross"] - 26686.32) < 0.05  # gross sums positives only
     assert abs(res["totals"]["fees"] - 500.38) < 0.05
     assert abs(res["totals"]["fees_vat"] - 74.97) < 0.05
-    assert abs(res["totals"]["net"] - 26110.97) < 0.05
+    # net here is the sum across all rows incl. negative refunds:
+    # 26110.97 (positive sales) + (-312.20 + -208.59 + -89.43) = 25500.75
+    assert abs(res["totals"]["net"] - 25500.75) < 0.05
+    # Refund total: 312.20 + 208.59 + 89.43 = 610.22 (all partial)
+    assert abs(res["totals"]["refund_partial"] - 610.22) < 0.05
     # Header captures invoice number
     assert res["header"]["invoice_number"] == "6320306"
     # Sample row maps mada → mada and BTC card → credit_card
-    sample = res["entries"][0]
-    assert sample["actual_payment_method"] == "mada"
-    assert sample["event_type"] == "sale"
-    assert sample["actual_fee_rate"] > 0
+    sales = [e for e in res["entries"] if e["event_type"] == "sale"]
+    assert sales[0]["actual_payment_method"] == "mada"
+    assert sales[0]["actual_fee_rate"] > 0
+    # And the file has 3 refund entries
+    refunds = [e for e in res["entries"] if e["event_type"] == "refund"]
+    assert len(refunds) == 3
 
 
 # ── 3. Tamara parser handles refunds + statement metadata ─────────────

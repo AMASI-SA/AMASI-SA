@@ -1,6 +1,59 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 76 — Salla customer-refund rows handling
+
+User asked: "الطلب 263864673 المبلغ -89.43 لما يكون بالسالب هذا الطلب يعتبر مسترجع منه مبلغ وليس تحصيل طلب جديد." Order 263864673 in the new sample file has 3 rows: R47 (+407.02 sale), R54 (+89.43 sale), R118 (-89.43 partial refund).
+
+### Backend
+- **`parsers/salla.py`** — Now distinguishes 3 row types:
+  - **`event_type="salla_purchase"`** — wallet recharge (strict method match)
+  - **`event_type="refund"`** — negative amount on a NORMAL payment method (مدى / credit_card / etc)
+  - **`event_type="sale"`** — everything else
+- **Two-pass parser**: First pass accumulates `positive_gross_by_order`
+  so we can correctly classify refunds as **full** vs **partial**:
+  - `|refund_gross| >= total_positive_paid * 0.99` → `refund_full`
+  - Otherwise → `refund_partial`
+- File totals: now includes `refund_full` + `refund_partial` for Salla
+  (previously always 0).
+- The refund row is upserted to `unified_orders` via the existing
+  consolidate path, so the matched order ends up with:
+  - `actual_net_amount` reflecting `Σ sales − Σ refunds`
+  - `actual_refund_amount` or `actual_partial_refund_amount` populated
+
+### Verified — 63/63 tests pass
+- 2 NEW tests in `test_salla_wallet_iter75.py`:
+  - `test_partial_refund_detected_on_credit_card` — uses real
+    `salla_refund.xlsx`; expects 3 partial refunds totaling 610.22,
+    and 263864673 specifically with `actual_partial_refund_amount=89.43`
+  - `test_full_refund_classified_when_amount_equals_paid` — synthetic
+    workbook with paid=100, refund=-100 → expects `refund_full=100`
+- iter74 expectations updated to reflect refunds-as-tagged-entries
+  (rows=143 with 140 sales + 3 refunds, net=25500.75, refund_partial=610.22)
+- All 12 wallet/refund + 16 iter74 + 9 iter73 + 8 iter68 + 10 iter72
+  + 8 phase22 = **63 tests still PASS**
+
+### Real-data verification (Invoice # 6320306)
+| Order | Type | Gross | Net | Notes |
+|-------|------|-------|-----|-------|
+| 261685845 | refund (مدى) | -312.20 | -312.20 | partial vs total paid for this order |
+| 258530841 | refund (مدى) | -208.59 | -208.59 | partial |
+| 263864673 | refund (credit) | -89.43 | -89.43 | partial (vs 407.02+89.43 total paid) |
+| **Total** | | | | `refund_partial=610.22 ر.س` |
+
+Order **263864673** consolidated final state in DB:
+```
+actual_gross_amount: 407.02
+actual_net_amount: 392.16  (481.59 captured − 89.43 refunded)
+actual_partial_refund_amount: 89.43
+actual_payment_fee: 12.92
+payment_fee_status: actual
+```
+
+
+---
+
+
 ## ✅ ITERATION 75 — Salla "شحن محفظة" (مشتريات سله) handling
 
 User asked: "اذا كان طريقة الدفع شحن محفظة يتم احتساب المبلغ مشتريات سله، يضاف في سجل ملفات التسويات المرفوعة عمود باسم مشتريات سله وتخصم من إجمالي المبيعات." Sample order 257396516 has payment_method `order.payment_method.` (untranslated i18n key from Salla), gross/net = -34.5, note "شحن محفظة (لبوليصة شحن)".

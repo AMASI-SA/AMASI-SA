@@ -125,18 +125,75 @@ def test_wallet_entries_have_correct_shape():
 
 # ── 4. Original samples are NOT affected ──────────────────────────────
 def test_original_salla_file_has_no_wallet_purchases():
-    """The first Salla file (without wallet rows) must keep its totals
-    unchanged after the wallet-detection feature is added."""
+    """The first Salla file (without wallet rows on real customer
+    methods) must keep its salla_purchases bucket empty after the
+    wallet-detection feature is added."""
     wb = openpyxl.load_workbook(f"{SAMPLES}/salla.xlsx", data_only=True)
     try:
         res = parse_salla(wb)
     finally:
         wb.close()
     t = res["totals"]
+    # One row in the original file uses 'order.payment_method.' but
+    # has order_number=None so it's filtered as blank before wallet
+    # detection. The result: 0 wallet purchases.
     assert t["salla_purchases_count"] == 0
     assert t["salla_purchases_total"] == 0.0
-    assert t["rows"] == 140
+    # And the gross total stays the same (refunds are tagged separately
+    # but don't change positive gross).
     assert abs(t["gross"] - 26686.32) < 0.05
+
+
+# ── 6. Customer-refund detection (negative on normal method) ──────────
+def test_partial_refund_detected_on_credit_card():
+    """Order 263864673 in salla_refund.xlsx has 2 sales (407.02 + 89.43)
+    plus a partial refund (-89.43). The partial refund must be tagged
+    under refund_partial, NOT refund_full or salla_purchases."""
+    wb = openpyxl.load_workbook(f"{SAMPLES}/salla_refund.xlsx", data_only=True)
+    try:
+        res = parse_salla(wb)
+    finally:
+        wb.close()
+    t = res["totals"]
+    # 3 negative rows: 312.20 (mada) + 208.59 (mada) + 89.43 (cc) = 610.22
+    assert abs(t["refund_partial"] - 610.22) < 0.05
+    # None of them is full refund (each is partial relative to total
+    # paid on the same order).
+    assert t["refund_full"] == 0.0
+    # Wallet bucket stays untouched
+    assert t["salla_purchases_count"] == 0
+
+    # The 263864673 entry is tagged as a partial refund of 89.43
+    refunds_263 = [e for e in res["entries"]
+                   if e["order_number"] == "263864673" and e["event_type"] == "refund"]
+    assert len(refunds_263) == 1
+    assert abs(refunds_263[0]["actual_partial_refund_amount"] - 89.43) < 0.01
+    assert refunds_263[0]["actual_refund_amount"] == 0.0
+    assert refunds_263[0]["actual_payment_method"] == "credit_card"
+
+
+def test_full_refund_classified_when_amount_equals_paid():
+    """Synthetic check using the consolidate helper: when an order's
+    total positive gross equals the refund amount, it should classify
+    as refund_full (≥99% tolerance)."""
+    import openpyxl as ox
+    wb = ox.Workbook()
+    ws = wb.active
+    ws.title = "Invoice # 9999999"
+    ws.append(["رقم الطلب", "إجمالي الطلب (ر.س)", "طريقة الدفع",
+               "الرسوم (ر.س)", "المُستحق قبل الضريبة (ر.س)",
+               "الضريبة", "المُستحق بعد الضريبة (ر.س)"])
+    # Order paid 100, refunded -100 → full refund
+    ws.append(["999000001", 100.00, "مدى", 1.50, 98.50, 0.23, 98.27])
+    ws.append(["999000001", -100.00, "مدى", 0.0, -100.00, 0.0, -100.00])
+    res = parse_salla(wb)
+    refunds = [e for e in res["entries"] if e["event_type"] == "refund"]
+    assert len(refunds) == 1
+    # 100 >= 100 * 0.99 → full
+    assert abs(refunds[0]["actual_refund_amount"] - 100.00) < 0.01
+    assert refunds[0]["actual_partial_refund_amount"] == 0.0
+    assert res["totals"]["refund_full"] == 100.0
+    assert res["totals"]["refund_partial"] == 0.0
 
 
 # ── 5. End-to-end upload: salla_purchases surface in /api ─────────────
