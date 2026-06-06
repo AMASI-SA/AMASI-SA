@@ -10,6 +10,7 @@ import { formatMoney, formatInt } from "../lib/format";
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import ProductSalesReport from "../components/ProductSalesReport";
 import ProviderCommissionCard from "../components/ProviderCommissionCard";
+import RefundsAlert from "../components/RefundsAlert";
 
 const COLORS = ["#0A3622", "#D4AF37", "#16A34A", "#D97706", "#0EA5E9", "#7C3AED", "#DC2626", "#0891B2"];
 
@@ -192,12 +193,14 @@ export default function Reports() {
                 </Link>
             </div>
 
+            {/* Smart refund-monitor alert (Iter-77) */}
+            <RefundsAlert />
+
             {/* Advanced filters: date preset + payment + shipping */}
             <div className="flex items-stretch gap-2">
                 <div className="flex-1">
                     <AdvancedFilters value={filters} onChange={setFilters} />
-                </div>
-                <button
+                </div>                <button
                     type="button"
                     onClick={() => fetchAll(true)}
                     disabled={loading}

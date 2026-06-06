@@ -1,6 +1,49 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 77 — Smart Refund-Monitor Alert (Reports page)
+
+User asked: "نعم اخر 30 يوم مع إضافة البحث بالتاريخ اخر شهر الشهر الماضي اليوم بالأمس السنه الحاليه وتحديد الفتره مخصصه."
+
+### Backend — `/app/backend/refunds_alert_routes.py` (NEW)
+- New endpoint `GET /api/reports/refunds-alert?period={today|yesterday|
+  this_month|last_month|last_30d|this_year|custom}&from_date=&to_date=`
+- `_resolve_period()` helper maps each preset to ISO date bounds with
+  Arabic labels (اليوم / بالأمس / هذا الشهر / الشهر الماضي / آخر 30
+  يوم / السنة الحالية / فترة مخصّصة).
+- Aggregation pipeline returns:
+  - `summary` — orders_count, total_orders_in_period, refund_rate_pct,
+    total_refund_full, total_refund_partial, total_refund_amount,
+    total_gross_affected
+  - `orders` — top 200 rows with order_number, customer, method,
+    amounts, settlement_date, settlement_source
+  - `by_payment_method` — bucketed refund total per gateway
+
+### Frontend — `/app/frontend/src/components/RefundsAlert.jsx` (NEW)
+- 7 period chips (Arabic labels) with active-state styling
+- Custom from/to date inputs revealed only when `period=custom`
+- 4 summary cells with severity-based coloring:
+  - refund_rate >= 5% → high (rose tint)
+  - refund_rate >= 2% → medium (amber tint)
+  - else → low (emerald tint)
+- Per-payment-method chips with refund amount
+- Expandable details modal showing all matched orders (sortable table)
+- Wired into `Reports.jsx` directly under the Advanced Filters
+
+### Verified — 77/77 tests pass
+- 14 NEW tests in `test_refunds_alert_iter77.py`:
+  - 9 unit tests on `_resolve_period()` covering every preset + custom
+    validation + invalid input
+  - 5 live endpoint tests including the full upload→alert flow that
+    confirms order **263864673** appears with `actual_partial_refund_amount=89.43`,
+    methods bucket includes mada + credit_card
+- 63 regression tests still PASS (iter76, iter75, iter74, iter73,
+  iter72, iter68, phase22)
+
+
+---
+
+
 ## ✅ ITERATION 76 — Salla customer-refund rows handling
 
 User asked: "الطلب 263864673 المبلغ -89.43 لما يكون بالسالب هذا الطلب يعتبر مسترجع منه مبلغ وليس تحصيل طلب جديد." Order 263864673 in the new sample file has 3 rows: R47 (+407.02 sale), R54 (+89.43 sale), R118 (-89.43 partial refund).
