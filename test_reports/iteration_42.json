@@ -1,0 +1,43 @@
+{
+  "summary": "Iter-81 Payment-Gateway Metrics Unification — full backend + frontend verification on PREVIEW with amasi.jewelery@gmail.com. 12/12 new backend tests pass: central /api/payment-gateway-metrics returns canonical rows + totals, Arabic hamza/alef folding correctly maps 'البطاقة الإئتمانية'→credit_card / 'دفع عند الإستلام'→cod / 'حوالة بنكية…'→bank_transfer, /api/reconciliation/summary now exposes expected_source='central' on every platform with central data, salla account expected (346,801.86) equals sum of central salla+mada+applepay+stcpay+credit_card rows, tamara/tabby/emkan/bank_transfer per-account expected_orders_balance matches the corresponding central net after POST /api/accounts/sync-payment-methods. Frontend: Accounts page renders accounts-unified-gateways card with all 9 gateways + grand totals 598,253.77 gross / 577,909.29 net / 2,923 orders; Reconciliation page renders reconciliation-central-source-note + per-platform expected equals central net for every account; Reports page renders provider-card-salla / -tamara / -tabby / -emkan and the numbers match central /payment-gateway-metrics WITH THE SAME DATE FILTER (Reports defaults to 'هذا الشهر' so its absolute values differ from all-time Accounts numbers — this is by design, NOT a bug).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Dashboard/UnifiedPaymentGatewaysCard",
+        "issues": [
+          "When the active date filter has 0 rows the component renders the empty state under data-testid='{testid}-empty' (e.g. dashboard-unified-gateways-empty) instead of just '{testid}'. Cross-page automated tests that target the documented selector miss it. Recommendation: keep `data-testid={testid}` on the empty-state wrapper too (or add both attributes) so tooling can rely on a single stable hook.",
+          "Accounts page renders the unified card WITHOUT a date filter (always all-time), while Dashboard / Reports / Reconciliation pass the page-level date filter to /payment-gateway-metrics. Users comparing screens with different filters will still see different absolute numbers. Consider adding a small note on the Accounts card stating 'كل الفترة' or letting it inherit a global filter."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_payment_gateway_unification_iter81.py",
+    "/app/test_reports/pytest/iter81_unification.xml"
+  ],
+  "action_items": [
+    "Minor: add data-testid={testid} (or both {testid} and {testid}-empty) on the empty-state branch of UnifiedPaymentGatewaysCard.jsx so QA selectors stay stable when a filter has 0 rows.",
+    "UX nit: clarify on the Accounts unified card that it is always all-time (no date filter) so merchants don't get confused when comparing with the filtered Reports / Dashboard cards."
+  ],
+  "critical_code_review_comments": [
+    "payment_gateway_metrics.py:_fold() correctly folds Arabic hamza/alef/yaa/taa-marbuta + lowercases — covers every observed user variant.",
+    "compute_metrics() honours the documented priority chain: when payment_fee_status='actual' it reads actual_payment_fee/vat/net/refund_*, otherwise estimates from registry rates. Cancelled orders correctly skip gross/refund accumulation but still increment cancelled_orders_count.",
+    "reconciliation_routes.ACCOUNT_KEY_TO_CENTRAL_KEYS correctly maps salla→[salla,mada,applepay,stcpay,credit_card] and 1:1 for the other accounts. The override in _platform_row only kicks in when central has data (otherwise expected_source='stored'), so the page never blanks out when central has no rows.",
+    "accounts_routes.sync-payment-methods now seeds expected_orders_balance from central → verified for tamara/tabby/emkan/bank_transfer accounts (post-sync expected equals central net within rounding).",
+    "UnifiedPaymentGatewaysCard.jsx reuses /api/payment-gateway-metrics via the standard api client and forwards `qs` so date-filtered pages stay consistent. _other bucket is filtered from the UI table which is the right call.",
+    "Reports.jsx (lines 27,44,49) fetches central metrics in parallel with /dashboard and /reconciliation/summary — no waterfall."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_payment_gateway_unification_iter81.py (NEW — 12 tests, all PASS)"
+  ],
+  "success_rate": { "backend": "100% (12/12)", "frontend": "100% rendering on Accounts/Reports/Reconciliation; Dashboard works but uses '{testid}-empty' when 0 orders in selected period" },
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917",
+  "seed_data_creation": "None. POST /api/accounts/sync-payment-methods is idempotent against this merchant's real data and was called inside a test — accounts pre-existed and only had expected_orders_balance refreshed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Cross-page numbers ARE consistent provided the SAME date filter is applied. Accounts unified card is always all-time, so when comparing pixel-perfectly to Reports/Dashboard you must remove their date filter (or set period to 'كل الفترة' equivalent). Merchant amasi data: all-time totals are 598,253.77 gross / 577,909.29 net / 2,923 orders across 9 canonical gateways. Per-platform expected on Reconciliation: salla=346,801.86 (=mada+applepay+stcpay+credit_card central), tamara=86,888.23, tabby=73,128.73, bank_transfer=51,363.55, cod=17,003.50, emkan=787.92. expected_source='central' on every row. POST /api/accounts/sync-payment-methods aligned account.expected_orders_balance with these values.",
+  "rca of the issue": "No bug to RCA — unification is implemented correctly. Only minor polish items in action_items."
+}

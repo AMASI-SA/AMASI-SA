@@ -20,6 +20,43 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from auth import get_current_user_from_db
+from payment_gateway_metrics import compute_metrics
+
+
+# Map account-level CANONICAL_TOP_LEVEL_KEYS → central registry keys
+# (one account may aggregate multiple central rows; e.g. "salla" account
+# covers all card rails). Used to keep Reconciliation/Accounts numbers
+# perfectly aligned with the /payment-gateway-metrics endpoint.
+ACCOUNT_KEY_TO_CENTRAL_KEYS: dict[str, list[str]] = {
+    "salla":            ["salla", "mada", "applepay", "stcpay", "credit_card"],
+    "tamara":           ["tamara"],
+    "tabby":            ["tabby"],
+    "emkan":            ["emkan"],
+    "bank_transfer":    ["bank_transfer"],
+    "cash_on_delivery": ["cod"],
+}
+
+
+def _central_expected_for_account(
+    central_rows: list[dict], account_key: str | None
+) -> tuple[float, int, int]:
+    """Sum (net, orders_count, actual_orders_count) for an account's
+    canonical key by aggregating matching rows from the central metrics
+    response. Returns (0.0, 0, 0) if account_key isn't mapped."""
+    if not account_key:
+        return 0.0, 0, 0
+    central_keys = ACCOUNT_KEY_TO_CENTRAL_KEYS.get(account_key, [])
+    if not central_keys:
+        return 0.0, 0, 0
+    net = 0.0
+    orders = 0
+    actual_orders = 0
+    for r in central_rows:
+        if r.get("key") in central_keys:
+            net += float(r.get("net") or 0)
+            orders += int(r.get("orders_count") or 0)
+            actual_orders += int(r.get("actual_orders_count") or 0)
+    return round(net, 2), orders, actual_orders
 
 
 def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
@@ -28,7 +65,9 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
     async def current_user(request: Request) -> dict:
         return await get_current_user_from_db(request, db)
 
-    async def _platform_row(uid: str, acc: dict) -> dict:
+    async def _platform_row(
+        uid: str, acc: dict, central_rows: list[dict] | None = None
+    ) -> dict:
         """Compute reconciliation numbers for ONE payment_platform account.
 
         `transferred` = sum of internal_transfer OUT rows whose peer is a bank.
@@ -70,6 +109,22 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
                     last_transfer_to_bank = r.get("peer_account_name")
 
         expected = round(float(acc.get("expected_orders_balance") or 0), 2)
+        orders_count = int(acc.get("orders_count") or 0)
+        actual_orders_count = 0
+        expected_source = "stored"
+        # Iter-81 — central /payment-gateway-metrics is the single source
+        # of truth. Override the stored `expected_orders_balance` whenever
+        # the central endpoint has data for this account's canonical key.
+        if central_rows is not None:
+            c_expected, c_orders, c_actual = _central_expected_for_account(
+                central_rows, acc.get("normalized_payment_method")
+            )
+            if c_expected > 0 or c_orders > 0:
+                expected = c_expected
+                orders_count = c_orders
+                actual_orders_count = c_actual
+                expected_source = "central"
+
         current_balance = round(float(acc.get("current_balance") or 0), 2)
         transferred = round(transferred, 2)
         pending = round(expected - transferred, 2)
@@ -79,8 +134,10 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
             "account_id": acc["id"],
             "name": acc["name"],
             "normalized_payment_method": acc.get("normalized_payment_method"),
-            "orders_count": int(acc.get("orders_count") or 0),
+            "orders_count": orders_count,
+            "actual_orders_count": actual_orders_count,
             "expected": expected,
+            "expected_source": expected_source,
             "transferred": transferred,
             "pending": pending,
             "current_balance": current_balance,
@@ -111,7 +168,11 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
             {"_id": 0},
         ).sort("expected_orders_balance", -1).to_list(1000)
 
-        rows = [await _platform_row(uid, a) for a in accs]
+        # Iter-81 — single source of truth for expected per platform.
+        central = await compute_metrics(db, uid, from_date=from_date, to_date=to_date)
+        central_rows = central.get("rows") or []
+
+        rows = [await _platform_row(uid, a, central_rows=central_rows) for a in accs]
         total_expected = round(sum(r["expected"] for r in rows), 2)
         total_transferred = round(sum(r["transferred"] for r in rows), 2)
         total_pending = round(total_expected - total_transferred, 2)
@@ -231,7 +292,10 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
         )
         if not acc:
             raise HTTPException(404, "حساب منصة الدفع غير موجود.")
-        summary = await _platform_row(uid, acc)
+        # Pull live central metrics so single-platform view uses the same
+        # source of truth as the summary page.
+        central = await compute_metrics(db, uid)
+        summary = await _platform_row(uid, acc, central_rows=central.get("rows") or [])
 
         # Fetch every outgoing internal_transfer + enrich with destination
         # bank name. We hydrate from the `transfers` envelope so the user

@@ -148,6 +148,7 @@ function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide, o
 }
 
 import AdvancedFilters, { filtersToQueryString, defaultFilters } from "../components/AdvancedFilters";
+import UnifiedPaymentGatewaysCard from "../components/UnifiedPaymentGatewaysCard";
 
 export default function Dashboard() {
     const { user } = useAuth();
@@ -647,6 +648,14 @@ export default function Dashboard() {
                             عدد البطاقات المخفية: {hiddenCards.length} — إدارة من الإعدادات
                         </Link>
                     )}
+
+                    {/* Iter-81 — Central Payment Gateways breakdown. Reads
+                        from /api/payment-gateway-metrics so Dashboard shows
+                        IDENTICAL numbers to Reports / Accounts / Reconciliation. */}
+                    <UnifiedPaymentGatewaysCard
+                        qs={filtersToQueryString(filters)}
+                        testid="dashboard-unified-gateways"
+                    />
 
                     {/* Snapchat Ads dedicated section — always visible so the
                         "تحديث صرف الشهر" button is reachable even when daily_costs

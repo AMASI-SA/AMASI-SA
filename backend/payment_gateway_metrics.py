@@ -95,7 +95,7 @@ PAYMENT_METHOD_REGISTRY: dict[str, dict] = {
         "name_ar": "تحويل بنكي",
         "type": "bank",
         "aliases": ["bank transfer", "bank_transfer", "تحويل بنكي",
-                    "حوالة بنكية", "wire transfer"],
+                    "حوالة بنكية", "حواله بنكيه", "wire transfer"],
         "estimated_fee_rate": 0.0,
         "estimated_vat_rate": 0.0,
     },
@@ -114,10 +114,25 @@ def _build_alias_index() -> dict[str, str]:
     """Reverse-lookup table: normalized alias → canonical_key."""
     out: dict[str, str] = {}
     for key, meta in PAYMENT_METHOD_REGISTRY.items():
-        out[key.lower()] = key
+        out[_fold(key)] = key
         for alias in meta["aliases"]:
-            out[alias.strip().lower()] = key
+            out[_fold(alias)] = key
     return out
+
+
+def _fold(s: str) -> str:
+    """Lowercase + strip + fold Arabic letter variants so 'البطاقة الإئتمانية'
+    matches 'البطاقة الائتمانية'. Mirrors payment_methods._normalize_arabic."""
+    if not s:
+        return ""
+    s = s.strip().lower()
+    table = str.maketrans({
+        "أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا",
+        "ى": "ي",
+        "ة": "ه",
+        "ـ": "",
+    })
+    return s.translate(table)
 
 
 _ALIAS_INDEX = _build_alias_index()
@@ -128,7 +143,7 @@ def resolve_canonical(raw: Optional[str]) -> Optional[str]:
     None if unrecognized (caller can bucket those under '_other')."""
     if not raw:
         return None
-    s = str(raw).strip().lower()
+    s = _fold(str(raw))
     if not s:
         return None
     # Exact alias match first

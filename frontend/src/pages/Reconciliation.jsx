@@ -84,6 +84,9 @@ export default function Reconciliation() {
                 <p className="text-muted-foreground mt-1 text-sm">
                     قارن المتوقع من الطلبات مع المحوّل الفعلي لكل منصة دفع. النسبة العامة الحالية: <span className="font-bold text-foreground num">{t.collection_rate.toFixed(1)}%</span>
                 </p>
+                <p className="text-[11px] text-sky-700 mt-1.5 inline-flex items-center gap-1" data-testid="reconciliation-central-source-note">
+                    <CreditCard size={12} weight="duotone" /> «المتوقع» يُحسب من خدمة بوابات الدفع المركزية (نفس أرقام التقارير والحسابات).
+                </p>
             </header>
 
             {/* Summary cards */}

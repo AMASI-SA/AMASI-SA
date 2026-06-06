@@ -6,6 +6,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import UnifiedPaymentGatewaysCard from "../components/UnifiedPaymentGatewaysCard";
 
 const TYPE_META = {
     bank:             { label: "حساب بنكي",   icon: Bank,       cls: "bg-emerald-100 text-emerald-800 border-emerald-200" },
@@ -308,6 +309,12 @@ export default function Accounts() {
                     <SummaryCard title="الإعلانات"    value={summary.by_type.ads_platform} icon={Megaphone} tone="amber" testid="summary-ads" />
                 </div>
             )}
+
+            {/* Iter-81 — central gateways card so the merchant sees IDENTICAL
+                expected per-platform numbers to Dashboard / Reports /
+                Reconciliation. Clicking "مزامنة طرق الدفع" reconciles the
+                stored expected_orders_balance with these live values. */}
+            <UnifiedPaymentGatewaysCard testid="accounts-unified-gateways" />
 
             {/* Tabs */}
             <div className="flex flex-wrap gap-1 border-b border-border" data-testid="accounts-tabs">

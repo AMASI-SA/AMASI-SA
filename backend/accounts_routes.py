@@ -34,6 +34,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, validator
 
 from auth import get_current_user_from_db
+from payment_gateway_metrics import compute_metrics
+from reconciliation_routes import (
+    ACCOUNT_KEY_TO_CENTRAL_KEYS,
+    _central_expected_for_account,
+)
 
 
 # ── Catalogue ──────────────────────────────────────────────────────────────
@@ -642,13 +647,31 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                 )
                 kept_with_tx.append(s["name"])
 
+        # Iter-81 — single source of truth. The central
+        # /payment-gateway-metrics applies the SAME priority chain
+        # (actual settlement > estimated) and is what Reports /
+        # Reconciliation read. Use it to populate
+        # `expected_orders_balance` so the three pages always agree.
+        central = await compute_metrics(db, uid)
+        central_rows = central.get("rows") or []
+
         # 3. Upsert one account per top-level key.
         created = 0
         updated = 0
         result_accounts = []
         for key, data in groups.items():
-            expected = round(float(data["amount"]), 2)
-            orders_count = int(data["count"])
+            # Prefer central net for the canonical account key. Falls back
+            # to local pipeline amount when central has nothing for this
+            # rail (e.g. very fresh data not in unified_orders yet).
+            c_net, c_orders, c_actual = _central_expected_for_account(
+                central_rows, key
+            )
+            if c_orders > 0:
+                expected = c_net
+                orders_count = c_orders
+            else:
+                expected = round(float(data["amount"]), 2)
+                orders_count = int(data["count"])
             # Sub-methods list sorted by amount desc for nicer detail UI.
             sub_list = sorted(
                 data["sub_methods"].values(), key=lambda x: x["amount"], reverse=True
