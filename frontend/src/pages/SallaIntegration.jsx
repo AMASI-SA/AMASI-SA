@@ -100,8 +100,9 @@ export default function SallaIntegration() {
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState(null);
     const [config, setConfig] = useState(null);
-    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false, saveConfig: false, syncOrders: false, syncProducts: false });
+    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false, saveConfig: false, syncOrders: false, syncProducts: false, reset: false });
     const [showDisconnect, setShowDisconnect] = useState(false);
+    const [showReset, setShowReset] = useState(false);
     const [liveStoreInfo, setLiveStoreInfo] = useState(null);
     const [showConfigForm, setShowConfigForm] = useState(false);
     const [cfgInputs, setCfgInputs] = useState({ client_id: "", client_secret: "", redirect_uri: "" });
@@ -270,6 +271,28 @@ export default function SallaIntegration() {
             await load();
         } finally {
             setBusy(b => ({ ...b, syncProducts: false }));
+        }
+    };
+
+    const handleReset = async () => {
+        setShowReset(false);
+        setBusy(b => ({ ...b, reset: true }));
+        try {
+            const { data } = await api.post("/salla/reset");
+            setLiveStoreInfo(null);
+            setCfgInputs({ client_id: "", client_secret: "", redirect_uri: "" });
+            const parts = [];
+            if (data.tokens_removed) parts.push("الـ tokens");
+            if (data.config_removed) parts.push("بيانات OAuth");
+            if (data.pending_states_removed) parts.push(`${data.pending_states_removed} محاولات معلّقة`);
+            toast.success(parts.length
+                ? `تم إلغاء الربط بنجاح وحذف: ${parts.join("، ")}. Make.com و Excel و PDF لم تتأثر.`
+                : "لا توجد محاولات ربط قائمة — كل شيء نظيف.");
+            await load();
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل الإلغاء");
+        } finally {
+            setBusy(b => ({ ...b, reset: false }));
         }
     };
 
@@ -624,6 +647,34 @@ export default function SallaIntegration() {
                 </div>
             )}
 
+            {/* Danger zone — full reset (always visible) */}
+            {!loading && (config?.client_id || connected || syncLogs.length > 0) && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-4" data-testid="salla-danger-zone">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="flex items-start gap-2 flex-1 min-w-0">
+                            <Warning size={18} weight="bold" className="text-rose-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <h4 className="font-extrabold text-rose-900 text-sm">إلغاء جميع محاولات الربط</h4>
+                                <p className="text-[12px] text-rose-800 mt-1 leading-relaxed">
+                                    يحذف <span className="font-bold">بيانات OAuth + الـ tokens + المحاولات المعلّقة</span> دفعة واحدة لتبدأ من الصفر.
+                                    لن يتأثر Make.com أو Excel أو PDF أو أي بيانات حسابية مخزّنة.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowReset(true)}
+                            disabled={busy.reset}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-sm flex-shrink-0"
+                            data-testid="salla-reset-btn"
+                        >
+                            <LinkBreak size={14} weight="bold" />
+                            {busy.reset ? "جاري الإلغاء…" : "إعادة ضبط الربط"}
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Phase 2/3/4 preview */}
             {!loading && connected && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4" data-testid="salla-roadmap">
@@ -655,6 +706,22 @@ export default function SallaIntegration() {
                 confirmLabel="نعم، الغِ الربط"
                 onConfirm={handleDisconnect}
                 onCancel={() => setShowDisconnect(false)}
+                danger
+            />
+
+            <ConfirmModal
+                open={showReset}
+                title="إعادة ضبط الربط بالكامل"
+                description={
+                    "سيتم حذف:\n" +
+                    "• بيانات OAuth (Client ID و Client Secret)\n" +
+                    "• Access Token و Refresh Token\n" +
+                    "• جميع محاولات OAuth المعلّقة\n\n" +
+                    "Make.com و Excel و PDF لن تتأثر. الحسابات والطلبات المخزّنة لن تُمسح."
+                }
+                confirmLabel="نعم، أعد الضبط"
+                onConfirm={handleReset}
+                onCancel={() => setShowReset(false)}
                 danger
             />
         </div>

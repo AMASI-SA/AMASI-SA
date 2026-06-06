@@ -309,6 +309,29 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         update_credentials_cache("", "")
         return {"ok": True, "removed": n}
 
+    # ── 7b. Full reset — wipe OAuth config + tokens + pending states ──
+    # Convenience endpoint for the merchant to "start over" with one
+    # click. Idempotent: safe to call even when nothing is saved.
+    @router.post("/reset")
+    async def reset_salla(user: dict = Depends(current_user)):
+        # 1. Disconnect (removes the connected merchant row + tokens)
+        tokens_removed = await disconnect_integration(db, user["id"])
+        # 2. Wipe OAuth credentials (Client ID / Secret)
+        config_removed = await delete_oauth_config(db)
+        # 3. Clear any pending OAuth state rows belonging to this user.
+        #    These are CSRF guards created by /oauth/login; they auto-
+        #    expire after 10 min but we wipe them now for a clean slate.
+        states_res = await db.salla_oauth_states.delete_many({"user_id": user["id"]})
+        # 4. Refresh the in-process credentials cache so the very next
+        #    /status call reports configured=false.
+        update_credentials_cache("", "")
+        return {
+            "ok": True,
+            "tokens_removed": tokens_removed,
+            "config_removed": config_removed,
+            "pending_states_removed": states_res.deleted_count,
+        }
+
     # ── 8. Manual sync — orders / products ────────────────────────────
     @router.post("/sync/orders")
     async def sync_orders(payload: Optional[dict] = None, user: dict = Depends(current_user)):
