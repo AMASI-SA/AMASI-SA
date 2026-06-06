@@ -1,0 +1,43 @@
+{
+  "summary": "Iter-82 Status-Driven Refunds — end-to-end verification on PREVIEW with amasi.jewelery@gmail.com. Backend 14/14 PASS (7 review + 7 extra regression). Tamara/Tabby exact spec values match: Tamara gross=94,483.27, fees=6,419.25 (no fee on refunded), refund_full=2,648.43, net=84,452.70, refunded_orders_count=11. Tabby refund_full=352.27, net=72,804.78, refunded_orders_count=1. Per-row identity (gross - fees - vat - refund_full - refund_partial == net) holds for every gateway row. Reconciliation /api/reconciliation/summary returns expected_source='central' for tamara & tabby with expected exactly equal to central net. Refund Monitor /api/reports/refunds-alert?period=this_year returns 39 refund orders / 8,838.44 ر.س; by_payment_method surfaces تمارا (2,648.43/11), تابي (352.27/1), مدى (2,777.28/10), البطاقة الإئتمانية (1,594.71/7), دفع عند الإستلام (1,019.42/5), STC Pay (189.13/1), حوالة بنكية entries — all status-driven, no settlement file required. Frontend: Reports refunds-alert-card renders all the right rows under 'السنة الحالية' chip; refunds-view-details-btn opens the modal which shows orders with 'من حالة الطلب' badge in Source column. Accounts /accounts shows accounts-unified-gateways with Tamara net 84,452.70 and Tabby net 72,804.78. Reconciliation /reconciliation shows the same 84,452.70 / 72,804.78 as expected per platform. Cross-page consistency for Tamara=84,452.70 and Tabby=72,804.78 confirmed across Accounts ↔ Reconciliation ↔ Reports (refund part). Regression on cancelled orders verified (cancelled_orders_count populated, not summed in gross).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Dashboard / UnifiedPaymentGatewaysCard",
+        "issues": [
+          "Pre-existing from iter-42: when the Dashboard date filter (default 'اليوم' = today, currently 2026-06-06) returns 0 orders, the card renders under data-testid='dashboard-unified-gateways-empty' instead of 'dashboard-unified-gateways'. Not a regression — same behaviour as iter-42 noted. Recommend keeping BOTH testids on the empty branch for stable QA selectors."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_status_refunds_iter82.py",
+    "/app/backend/tests/test_status_refunds_iter82_extra.py",
+    "/app/test_reports/pytest/iter82_status_refunds.xml",
+    "/app/test_reports/pytest/iter82_extra.xml"
+  ],
+  "action_items": [
+    "None blocking — feature works as specified end-to-end.",
+    "Optional polish (carry-over from iter-42): add data-testid='dashboard-unified-gateways' on the empty-state wrapper so QA selectors work regardless of whether the current filter has orders."
+  ],
+  "critical_code_review_comments": [
+    "payment_gateway_metrics.py compute_metrics() correctly detects is_status_refunded via regex 'مسترج|refund' on order_status; when triggered in estimated mode sets fee=0, vat=0, refund_full=gross, net=0 — yielding the expected Tamara/Tabby numbers exactly.",
+    "Cancelled orders still excluded from gross and only feed cancelled_orders_count — verified via test_cancelled_orders_still_excluded.",
+    "refunds_alert_routes.py builds _effective_refund_full = actual_refund_amount > 0 ? actual : (status_refunded ? total_amount : 0) — by_payment_method now surfaces Tamara/Tabby refunds even with no settlement file uploaded.",
+    "RefundsAlert.jsx Source column shows 'من حالة الطلب' badge when _is_status_refund && !settlement_source — confirmed visually in modal.",
+    "Reconciliation expected_source='central' for tamara/tabby/all rows that have central data — verified in test_reconciliation_expected_source_central."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_status_refunds_iter82_extra.py (NEW — 7 extra regression tests, all PASS)"
+  ],
+  "success_rate": { "backend": "100% (14/14)", "frontend": "100% (Reports + Accounts + Reconciliation all render correct numbers; Dashboard empty due to today-filter has 0 orders — same /api/payment-gateway-metrics source so will show correct numbers once user picks this_year filter)" },
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (real Salla data: 11 Tamara + 1 Tabby + 10 mada + 7 credit_card + 5 COD + 1 STC Pay + 4 bank-transfer refunds in 2026 = 39 status-driven refunds totalling 8,838.44 ر.س)",
+  "seed_data_creation": "None — used existing real merchant data only.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-82 feature 'status-driven refunds detection' is FULLY WORKING. Backend numbers exactly match the spec for 2026. Cross-page consistency is preserved because every page goes through the same /api/payment-gateway-metrics central source (Accounts is always all-time; Dashboard/Reconciliation/Reports inherit the page-level date filter). When verifying Dashboard manually, REMEMBER to switch the period chip away from 'اليوم' (which has 0 orders today) to 'السنة الحالية' before comparing Tamara/Tabby — otherwise the card renders the empty state.",
+  "rca of the issue": "Not applicable — implementation is correct. Pre-existing Dashboard empty-state testid quirk (carry-over from iter-42) is not in scope for iter-82."
+}

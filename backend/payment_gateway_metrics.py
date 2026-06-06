@@ -225,7 +225,17 @@ async def compute_metrics(
         bkt["orders_count"] += 1
 
         order_status = (row.get("order_status") or "").strip()
-        if "ملغ" in order_status or "cancel" in order_status.lower():
+        status_lower = order_status.lower()
+        is_cancelled = ("ملغ" in order_status) or ("cancel" in status_lower)
+        # Iter-82 — detect refunded orders from Salla status so we surface
+        # them in net + Refund Monitor even when no settlement file was
+        # uploaded for this gateway yet.
+        is_status_refunded = (
+            "مسترج" in order_status
+            or "refund" in status_lower
+        )
+
+        if is_cancelled:
             bkt["cancelled_orders_count"] += 1
             # Cancelled orders contribute neither gross nor refunds.
             continue
@@ -249,11 +259,21 @@ async def compute_metrics(
             meta = PAYMENT_METHOD_REGISTRY.get(canon)
             rate = (meta or {}).get("estimated_fee_rate", 0.0)
             vat_rate = (meta or {}).get("estimated_vat_rate", 0.0)
-            fee = round(gross * rate / 100, 4)
-            vat = round(fee * vat_rate / 100, 4)
-            rfull = 0.0
-            rpart = 0.0
-            net = gross - fee - vat
+            if is_status_refunded:
+                # Status-driven full refund (Iter-82). Gateways typically
+                # waive the commission on refunded orders, so we set
+                # fees=vat=0 and book the full amount under refund_full.
+                fee = 0.0
+                vat = 0.0
+                rfull = gross
+                rpart = 0.0
+                net = 0.0
+            else:
+                fee = round(gross * rate / 100, 4)
+                vat = round(fee * vat_rate / 100, 4)
+                rfull = 0.0
+                rpart = 0.0
+                net = gross - fee - vat
 
         if rfull > 0 or rpart > 0:
             bkt["refunded_orders_count"] += 1

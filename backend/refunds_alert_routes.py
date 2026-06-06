@@ -94,17 +94,18 @@ def attach_refunds_alert_routes(api_router: APIRouter, db) -> None:
         from_iso, to_iso, label = _resolve_period(period, from_date, to_date)
 
         # Build the match criteria — an order qualifies for the refund
-        # alert when it has either:
+        # alert when ANY of these hold:
         #   • actual_refund_amount > 0  (full refund from settlement file)
         #   • actual_partial_refund_amount > 0  (partial)
-        # The date filter targets settlement_date when available (from
-        # the settlement file) otherwise falls back to order_date so
-        # orders without uploaded settlement files still surface.
+        #   • order_status indicates refund (Iter-82) — surfaces Salla
+        #     "مسترجع" orders even before a settlement file is uploaded.
         match: dict = {
             "user_id": user["id"],
             "$or": [
                 {"actual_refund_amount": {"$gt": 0}},
                 {"actual_partial_refund_amount": {"$gt": 0}},
+                {"order_status": {"$regex": "مسترج", "$options": ""}},
+                {"order_status": {"$regex": "refund", "$options": "i"}},
             ],
         }
 
@@ -120,15 +121,42 @@ def attach_refunds_alert_routes(api_router: APIRouter, db) -> None:
         }
         match = {"$and": [match, date_filter]}
 
-        # Aggregate summary + sample orders in one round-trip
+        # Aggregate summary + sample orders in one round-trip.
+        # Iter-82: when actual_refund_amount is missing (no settlement
+        # file yet) but the order has a "مسترجع" status, we treat the
+        # full total_amount as the refund (status-driven refund), so the
+        # Refund Monitor reflects reality even before the merchant
+        # uploads Tamara/Tabby settlement files.
+        is_status_refund_expr = {
+            "$or": [
+                {"$regexMatch": {"input": {"$ifNull": ["$order_status", ""]}, "regex": "مسترج"}},
+                {"$regexMatch": {"input": {"$ifNull": ["$order_status", ""]}, "regex": "refund", "options": "i"}},
+            ]
+        }
+        effective_refund_full_expr = {
+            "$cond": [
+                {"$gt": [{"$ifNull": ["$actual_refund_amount", 0]}, 0]},
+                {"$ifNull": ["$actual_refund_amount", 0]},
+                {"$cond": [
+                    is_status_refund_expr,
+                    {"$ifNull": ["$total_amount", 0]},
+                    0,
+                ]},
+            ]
+        }
+
         pipeline = [
             {"$match": match},
+            {"$addFields": {
+                "_effective_refund_full": effective_refund_full_expr,
+                "_is_status_refund": is_status_refund_expr,
+            }},
             {"$facet": {
                 "summary": [
                     {"$group": {
                         "_id": None,
                         "orders_count": {"$sum": 1},
-                        "total_refund_full": {"$sum": {"$ifNull": ["$actual_refund_amount", 0]}},
+                        "total_refund_full": {"$sum": "$_effective_refund_full"},
                         "total_refund_partial": {"$sum": {"$ifNull": ["$actual_partial_refund_amount", 0]}},
                         "total_gross_affected": {"$sum": {"$ifNull": ["$total_amount", 0]}},
                     }},
@@ -151,6 +179,8 @@ def attach_refunds_alert_routes(api_router: APIRouter, db) -> None:
                         "actual_payment_method": 1,
                         "payment_method": 1,
                         "order_status": 1,
+                        "_effective_refund_full": 1,
+                        "_is_status_refund": 1,
                     }},
                 ],
                 "by_payment_method": [
@@ -158,7 +188,7 @@ def attach_refunds_alert_routes(api_router: APIRouter, db) -> None:
                         "_id": {"$ifNull": ["$actual_payment_method", {"$ifNull": ["$payment_method", "—"]}]},
                         "orders": {"$sum": 1},
                         "amount": {"$sum": {"$add": [
-                            {"$ifNull": ["$actual_refund_amount", 0]},
+                            "$_effective_refund_full",
                             {"$ifNull": ["$actual_partial_refund_amount", 0]},
                         ]}},
                     }},

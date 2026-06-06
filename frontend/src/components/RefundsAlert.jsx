@@ -271,10 +271,16 @@ export default function RefundsAlert() {
                                             </td>
                                             <td className="px-3 py-2 font-mono">{fmtMoney(o.total_amount || o.actual_gross_amount || 0)}</td>
                                             <td className="px-3 py-2 font-mono text-amber-700 font-bold">{fmtMoney(o.actual_partial_refund_amount || 0)}</td>
-                                            <td className="px-3 py-2 font-mono text-rose-700 font-bold">{fmtMoney(o.actual_refund_amount || 0)}</td>
+                                            <td className="px-3 py-2 font-mono text-rose-700 font-bold">{fmtMoney(o._effective_refund_full || o.actual_refund_amount || 0)}</td>
                                             <td className="px-3 py-2 font-mono text-emerald-700">{fmtMoney(o.actual_net_amount || 0)}</td>
                                             <td className="px-3 py-2 text-slate-500 text-[11px]">{fmtDate(o.settlement_date)}</td>
-                                            <td className="px-3 py-2 text-[10px] text-slate-500">{o.settlement_source || "—"}</td>
+                                            <td className="px-3 py-2 text-[10px] text-slate-500">
+                                                {o._is_status_refund && !o.settlement_source ? (
+                                                    <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold" title="مستنتج من حالة الطلب — لم يتم رفع ملف تسوية بعد">
+                                                        من حالة الطلب
+                                                    </span>
+                                                ) : (o.settlement_source || "—")}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
