@@ -350,22 +350,30 @@ export default function Reports() {
                         const centralRows = gatewayMetrics?.rows || [];
                         const fallback = dashboard?.payment_breakdown || [];
 
-                        // Build a unified provider object that ProviderCommissionCard
-                        // understands. The central row already contains gross/fees/
-                        // refunds/net so we just adapt the field names.
-                        const adapt = (row) => row && ({
-                            name: row.name_ar,
-                            normalized_payment_method: row.key,
-                            orders_count: row.orders_count,
-                            total: row.gross,
-                            commission_amount: row.fees,
-                            commission_vat: row.fees_vat,
-                            net_after_commission: row.net,
-                            refund_amount: row.refund_total,
-                            actual_orders_count: row.actual_orders_count,
-                            coverage_pct: row.coverage_pct,
-                            is_actual: row.actual_orders_count > 0,
-                        });
+                        // Adapt central row → fields ProviderCommissionCard expects.
+                        // The card reads total_sales / fee_amount / refunded_amount /
+                        // commission_percent / vat_percent / fixed_fee / orders_count /
+                        // refunds_count — names predate the central service.
+                        const adapt = (row) => {
+                            if (!row) return null;
+                            const pct = row.gross > 0 ? (row.fees / row.gross) * 100 : 0;
+                            return {
+                                name: row.name_ar,
+                                normalized_payment_method: row.key,
+                                orders_count: row.orders_count,
+                                total_sales: row.gross,
+                                fee_amount: row.fees,
+                                base_commission: row.fees,
+                                refunded_amount: row.refund_total,
+                                refunds_count: row.refunded_orders_count,
+                                commission_percent: Number(pct.toFixed(3)),
+                                vat_percent: 15,
+                                fixed_fee: 0,
+                                actual_orders_count: row.actual_orders_count,
+                                coverage_pct: row.coverage_pct,
+                                is_actual: row.actual_orders_count > 0,
+                            };
+                        };
                         const findCentral = (k) => adapt(centralRows.find((r) => r.key === k));
                         const findLegacy = (rx) => fallback.find(
                             (p) => rx.test(p?.name || "") || rx.test(p?.normalized_payment_method || "")
