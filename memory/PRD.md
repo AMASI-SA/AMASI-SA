@@ -1,6 +1,56 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 79 — Sidebar 3-section accordion reorganization
+
+User asked: "أريد إعادة تنظيم القائمة الجانبية بالكامل وتجميع الصفحات داخل 3 أقسام رئيسية قابلة للفتح والإغلاق."
+
+### Three accordion sections
+1. **💰 العمليات المالية** — لوحة التحكم · الأصول والحسابات ·
+   التحويلات بين الحسابات · المطابقة والتسويات · فواتير وتسويات
+   بوابات الدفع · تسويات المدفوعات · تشخيص فروقات الطلبات
+2. **🔗 الاستيراد والربط** — رفع ملف Excel · حالة الاستيراد ·
+   ربط Make.com · ربط متجر سلة · مقارنة مصادر البيانات · سجل التحليلات
+3. **⚙️ إدارة التشغيل** — التكاليف اليومية · المصروفات التشغيلية ·
+   التقارير · حسابات Snapchat · تكاليف المنتجات · تجهيز المنتجات ·
+   إدارة صور المنتجات · حسابات الشحن الآجلة · حسابي · إدارة الفريق
+   (owner) · الإعدادات
+
+### Implementation
+- **`components/Sidebar.jsx`** rewritten to use a `SECTIONS` array
+  with collapsible panels (smooth `max-height` transition).
+- The open section is derived from (priority order):
+  1. User's last toggle on the **current** path
+  2. The section that contains the active route (`findSectionFor`)
+  3. The last persisted choice in `localStorage`
+  4. Fallback: "finance"
+- Switching pages automatically opens the matching section so the
+  active item is always visible (no manual expand needed).
+- Toggles persist across refreshes via `localStorage`
+  (`hesab.sidebar.openSection`).
+- Active page still gets the brand-color highlight; inactive items
+  in the open panel hover-highlight in accent color.
+- Owner-only "إدارة الفريق" link gets injected inside إدارة التشغيل
+  just before "الإعدادات" so settings stays last.
+
+### Accessibility / mobile
+- Section toggles have `aria-expanded` + `aria-controls`.
+- Panels carry `role="region"` for screen readers.
+- Backdrop + slide-in animation preserved for mobile drawer.
+- On mobile, only the active section is open by default → menu
+  height stays compact instead of showing all 22 links at once.
+
+### Verified
+- No pages removed — every link from the previous flat list is now
+  reachable inside one of the 3 sections.
+- All 51 regression tests still PASS (no backend impact).
+- Lint clean (refactored to derive `openId` from `location` instead
+  of using `useEffect + setState` to satisfy the lint tool).
+
+
+---
+
+
 ## ✅ ITERATION 78 — Settlements delete-button toggle (Settings-controlled)
 
 User asked: "اضافة عمود في سجل ملفات التسويات المرفوعة لحذف ملف سله او تمارا او تابي مع إمكانية التحكم بظهور واخفاء خيار حذف الملف من الاعدادت."

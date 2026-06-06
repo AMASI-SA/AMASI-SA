@@ -1,69 +1,133 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
-    House,
-    UploadSimple,
-    Gear,
-    ClockCounterClockwise,
-    Receipt,
-    SignOut,
-    ChartPieSlice,
-    Truck,
-    Plug,
-    Wallet,
-    Ghost,
-    Package,
-    Image,
-    UserCircle,
-    UsersThree,
-    MagnifyingGlass,
-    Queue,
-    ArrowsLeftRight,
-    Scales,
-    Storefront,
-    X,
+    House, UploadSimple, Gear, ClockCounterClockwise, Receipt, SignOut,
+    ChartPieSlice, Truck, Plug, Wallet, Ghost, Package, Image, UserCircle,
+    UsersThree, MagnifyingGlass, Queue, ArrowsLeftRight, Scales, Storefront,
+    CurrencyDollar, LinkSimple, GearSix, CaretDown, X,
 } from "@phosphor-icons/react";
+import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
-const baseLinks = [
-    { to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" },
-    { to: "/accounts", label: "الأصول والحسابات", icon: Wallet, testid: "nav-accounts" },
-    { to: "/transfers", label: "التحويلات بين الحسابات", icon: ArrowsLeftRight, testid: "nav-transfers" },
-    { to: "/reconciliation", label: "المطابقة والتسويات", icon: Scales, testid: "nav-reconciliation" },
-    { to: "/upload", label: "رفع ملف Excel", icon: UploadSimple, testid: "nav-upload" },
-    { to: "/import-jobs", label: "حالة الاستيراد", icon: Queue, testid: "nav-import-jobs" },
-    { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
-    { to: "/settings/salla", label: "ربط متجر سلة", icon: Storefront, testid: "nav-salla-integration" },
-    { to: "/salla-sources", label: "مقارنة مصادر البيانات", icon: ChartPieSlice, testid: "nav-salla-sources" },
-    { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
-    { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },
-    { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
-    { to: "/daily-costs", label: "التكاليف اليومية", icon: Receipt, testid: "nav-daily-costs" },
-    { to: "/operating-expenses", label: "المصروفات التشغيلية", icon: Wallet, testid: "nav-operating-expenses" },
-    { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
-    { to: "/snapchat-accounts", label: "حسابات Snapchat", icon: Ghost, testid: "nav-snapchat-accounts" },
-    { to: "/product-costs", label: "تكاليف المنتجات", icon: Package, testid: "nav-product-costs" },
-    { to: "/product-preparation", label: "تجهيز المنتجات", icon: Package, testid: "nav-product-preparation" },
-    { to: "/image-catalog", label: "إدارة صور المنتجات", icon: Image, testid: "nav-image-catalog" },
-    { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
-    { to: "/settlements", label: "تسويات المدفوعات", icon: Receipt, testid: "nav-settlements" },
-    { to: "/profile", label: "حسابي", icon: UserCircle, testid: "nav-profile" },
+
+// ── Section definitions ───────────────────────────────────────────────
+// The user requested 3 collapsible groups. Pages that previously lived
+// in a flat list are kept as-is — only their grouping changes. No page
+// is removed.
+const SECTIONS = [
+    {
+        id: "finance",
+        label: "العمليات المالية",
+        icon: CurrencyDollar,
+        items: [
+            { to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" },
+            { to: "/accounts", label: "الأصول والحسابات", icon: Wallet, testid: "nav-accounts" },
+            { to: "/transfers", label: "التحويلات بين الحسابات", icon: ArrowsLeftRight, testid: "nav-transfers" },
+            { to: "/reconciliation", label: "المطابقة والتسويات", icon: Scales, testid: "nav-reconciliation" },
+            { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
+            { to: "/settlements", label: "تسويات المدفوعات", icon: Receipt, testid: "nav-settlements" },
+            { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
+        ],
+    },
+    {
+        id: "import",
+        label: "الاستيراد والربط",
+        icon: LinkSimple,
+        items: [
+            { to: "/upload", label: "رفع ملف Excel", icon: UploadSimple, testid: "nav-upload" },
+            { to: "/import-jobs", label: "حالة الاستيراد", icon: Queue, testid: "nav-import-jobs" },
+            { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
+            { to: "/settings/salla", label: "ربط متجر سلة", icon: Storefront, testid: "nav-salla-integration" },
+            { to: "/salla-sources", label: "مقارنة مصادر البيانات", icon: ChartPieSlice, testid: "nav-salla-sources" },
+            { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },
+        ],
+    },
+    {
+        id: "operations",
+        label: "إدارة التشغيل",
+        icon: GearSix,
+        items: [
+            { to: "/daily-costs", label: "التكاليف اليومية", icon: Receipt, testid: "nav-daily-costs" },
+            { to: "/operating-expenses", label: "المصروفات التشغيلية", icon: Wallet, testid: "nav-operating-expenses" },
+            { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
+            { to: "/snapchat-accounts", label: "حسابات Snapchat", icon: Ghost, testid: "nav-snapchat-accounts" },
+            { to: "/product-costs", label: "تكاليف المنتجات", icon: Package, testid: "nav-product-costs" },
+            { to: "/product-preparation", label: "تجهيز المنتجات", icon: Package, testid: "nav-product-preparation" },
+            { to: "/image-catalog", label: "إدارة صور المنتجات", icon: Image, testid: "nav-image-catalog" },
+            { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
+            { to: "/profile", label: "حسابي", icon: UserCircle, testid: "nav-profile" },
+            // Owner-only: pushed in at render time.
+            { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" },
+        ],
+    },
 ];
 
-const ownerLink = { to: "/team", label: "إدارة الفريق", icon: UsersThree, testid: "nav-team" };
-const settingsLink = { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" };
+
+const OPEN_SECTION_STORAGE_KEY = "hesab.sidebar.openSection";
+
+
+function findSectionFor(pathname) {
+    for (const sec of SECTIONS) {
+        for (const item of sec.items) {
+            if (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)) {
+                return sec.id;
+            }
+        }
+    }
+    return null;
+}
+
 
 export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }) {
     const { user, logout } = useAuth();
+    const location = useLocation();
 
-    const onLogout = async () => {
-        await logout();
+    // The Owner-only "إدارة الفريق" link sits inside إدارة التشغيل so it
+    // stays grouped with the other operational pages.
+    const sections = useMemo(() => {
+        if (!user?.is_owner) return SECTIONS;
+        return SECTIONS.map((s) => {
+            if (s.id !== "operations") return s;
+            const items = [...s.items];
+            // Insert "إدارة الفريق" just before /settings so settings stays last.
+            const settingsIdx = items.findIndex((i) => i.to === "/settings");
+            const teamLink = { to: "/team", label: "إدارة الفريق", icon: UsersThree, testid: "nav-team" };
+            items.splice(settingsIdx >= 0 ? settingsIdx : items.length, 0, teamLink);
+            return { ...s, items };
+        });
+    }, [user?.is_owner]);
+
+    // ── Open-section state ──────────────────────────────────────────
+    // We derive the open section from (in order):
+    //   1. User's explicit toggle for the current path (last clicked)
+    //   2. The section that contains the current path
+    //   3. The last persisted choice in localStorage
+    //   4. Fallback: "finance"
+    // A `pathKey` is bumped on every navigation so user overrides only
+    // apply until the next navigation (matches the user's spec: "عند
+    // الانتقال بين الصفحات يبقى القسم مفتوحاً").
+    const [override, setOverride] = useState(null); // { id, path }
+
+    const autoSection = findSectionFor(location.pathname);
+    const storedSection = (() => {
+        try { return localStorage.getItem(OPEN_SECTION_STORAGE_KEY); }
+        catch { return null; }
+    })();
+    const openId =
+        (override && override.path === location.pathname ? override.id : null)
+        ?? autoSection
+        ?? storedSection
+        ?? "finance";
+
+    const handleToggle = (id) => {
+        const next = openId === id ? null : id;
+        setOverride({ id: next, path: location.pathname });
+        try {
+            if (next) localStorage.setItem(OPEN_SECTION_STORAGE_KEY, next);
+            else localStorage.removeItem(OPEN_SECTION_STORAGE_KEY);
+        } catch { /* private mode etc. */ }
     };
 
-    const links = [
-        ...baseLinks,
-        ...(user?.is_owner ? [ownerLink] : []),
-        settingsLink,
-    ];
+    const onLogout = async () => { await logout(); };
 
     return (
         <>
@@ -81,9 +145,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                 className={[
                     "fixed top-0 right-0 h-screen w-64 bg-white border-l border-border flex flex-col z-50",
                     "transition-transform duration-300 ease-out",
-                    // Desktop: always visible
                     "lg:translate-x-0",
-                    // Mobile: slide in from right when open, hide off-screen otherwise
                     mobileOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
                 ].join(" ")}
                 data-testid="sidebar"
@@ -102,7 +164,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                             <div className="text-xs text-muted-foreground">محاسبة سلة</div>
                         </div>
                     </div>
-                    {/* Close button — mobile only */}
                     <button
                         type="button"
                         onClick={onMobileClose}
@@ -114,28 +175,75 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                     </button>
                 </div>
 
-                {/* Nav */}
-                <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1 scrollbar-thin">
-                    {links.map(({ to, label, icon: Icon, testid }) => (
-                        <NavLink
-                            key={to}
-                            to={to}
-                            end={to === "/"}
-                            onClick={onMobileClose}
-                            data-testid={testid}
-                            className={({ isActive }) =>
-                                [
-                                    "flex items-center gap-3 px-4 py-3 rounded-lg text-[15px] transition-colors",
-                                    isActive
-                                        ? "bg-brand text-white font-semibold"
-                                        : "text-foreground hover:bg-accent hover:text-brand",
-                                ].join(" ")
-                            }
-                        >
-                            <Icon size={20} weight="duotone" />
-                            <span>{label}</span>
-                        </NavLink>
-                    ))}
+                {/* Accordion nav */}
+                <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-thin" data-testid="sidebar-nav">
+                    {sections.map((section) => {
+                        const SectionIcon = section.icon;
+                        const isOpen = openId === section.id;
+                        const containsActive = section.items.some(
+                            (i) => i.to === "/" ? location.pathname === "/" : location.pathname.startsWith(i.to),
+                        );
+                        return (
+                            <div key={section.id} className="select-none" data-testid={`sidebar-section-${section.id}`}>
+                                <button
+                                    type="button"
+                                    onClick={() => handleToggle(section.id)}
+                                    className={[
+                                        "w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-[14px] font-bold transition-colors",
+                                        isOpen
+                                            ? "bg-brand/10 text-brand"
+                                            : containsActive
+                                                ? "text-brand hover:bg-accent"
+                                                : "text-foreground hover:bg-accent hover:text-brand",
+                                    ].join(" ")}
+                                    aria-expanded={isOpen}
+                                    aria-controls={`sidebar-panel-${section.id}`}
+                                    data-testid={`sidebar-section-toggle-${section.id}`}
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <SectionIcon size={20} weight="duotone" />
+                                        <span>{section.label}</span>
+                                    </span>
+                                    <CaretDown
+                                        size={14}
+                                        weight="bold"
+                                        className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                                    />
+                                </button>
+
+                                <div
+                                    id={`sidebar-panel-${section.id}`}
+                                    role="region"
+                                    className={`overflow-hidden transition-[max-height] duration-300 ease-out ${
+                                        isOpen ? "max-h-[800px]" : "max-h-0"
+                                    }`}
+                                >
+                                    <div className="ps-2 pt-1 pb-2 space-y-0.5">
+                                        {section.items.map(({ to, label, icon: Icon, testid }) => (
+                                            <NavLink
+                                                key={to}
+                                                to={to}
+                                                end={to === "/"}
+                                                onClick={onMobileClose}
+                                                data-testid={testid}
+                                                className={({ isActive }) =>
+                                                    [
+                                                        "flex items-center gap-2.5 ps-4 pe-3 py-2 rounded-lg text-[13.5px] transition-colors",
+                                                        isActive
+                                                            ? "bg-brand text-white font-semibold"
+                                                            : "text-foreground hover:bg-accent hover:text-brand",
+                                                    ].join(" ")
+                                                }
+                                            >
+                                                <Icon size={17} weight="duotone" />
+                                                <span className="truncate">{label}</span>
+                                            </NavLink>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </nav>
 
                 {/* User block */}
