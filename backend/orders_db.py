@@ -80,6 +80,13 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
     # `make_has_touched` controls whether Excel writes can override.
     make_has_touched = bool((existing or {}).get("last_make_update_at"))
     excel_only_fills_empty = (source == "excel" and make_has_touched)
+    # Iter-73 (Salla Direct, Phase 2) — Salla Direct is being validated
+    # against Make/Excel. Until the merchant confirms parity, we treat
+    # salla_direct exactly like Excel: it never overwrites a field that
+    # Make has already populated. It can still create brand-new orders
+    # and fill empty fields on Excel-only orders.
+    salla_direct_only_fills_empty = (source == "salla_direct" and make_has_touched)
+    fills_empty_only = excel_only_fills_empty or salla_direct_only_fills_empty
 
     # First-time insert path
     if not existing:
@@ -113,8 +120,8 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                 merged[f] = new_val
                 field_sources[f] = source
                 continue
-            if excel_only_fills_empty:
-                # Excel is only allowed to fill blanks once Make has been here.
+            if fills_empty_only:
+                # Excel/Salla-direct only fill blanks once Make has been here.
                 continue
             if f in CRITICAL_FIELDS and new_val != old_val:
                 merged[f] = new_val
@@ -143,11 +150,11 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
         # and this is an Excel write (Excel exports rarely carry products[]
         # but we never want a sparser Excel list to clobber Make's full list).
         new_prods = incoming.get("products") or []
-        if new_prods and not excel_only_fills_empty:
+        if new_prods and not fills_empty_only:
             if len(new_prods) >= len(merged.get("products") or []):
                 merged["products"] = new_prods
                 field_sources["products"] = source
-        elif new_prods and excel_only_fills_empty and not (merged.get("products") or []):
+        elif new_prods and fills_empty_only and not (merged.get("products") or []):
             merged["products"] = new_prods
             field_sources["products"] = source
         new_tags = incoming.get("tags") or []
@@ -168,6 +175,8 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
         merged["last_make_update_at"] = now
     elif source == "excel":
         merged["last_excel_import_at"] = now
+    elif source == "salla_direct":
+        merged["last_salla_direct_sync_at"] = now
     merged["last_source"] = source
     merged["updated_by_source"] = source
     # Iteration 31 — data_source precedence: make > excel.

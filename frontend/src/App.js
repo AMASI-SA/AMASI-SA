@@ -20,6 +20,7 @@ import ProductCosts from "./pages/ProductCosts";
 import ProductPreparation from "./pages/ProductPreparation";
 import ImageCatalog from "./pages/ImageCatalog";
 import SallaIntegration from "./pages/SallaIntegration";
+import SallaSourceComparison from "./pages/SallaSourceComparison";
 import Profile from "./pages/Profile";
 import TeamManagement from "./pages/TeamManagement";
 import Settlements from "./pages/Settlements";
@@ -58,6 +59,7 @@ function AppRoutes() {
             <Route path="/product-preparation" element={<ProtectedRoute><Layout><ProductPreparation /></Layout></ProtectedRoute>} />
             <Route path="/image-catalog" element={<ProtectedRoute><Layout><ImageCatalog /></Layout></ProtectedRoute>} />
             <Route path="/settings/salla" element={<ProtectedRoute><Layout><SallaIntegration /></Layout></ProtectedRoute>} />
+            <Route path="/salla-sources" element={<ProtectedRoute><Layout><SallaSourceComparison /></Layout></ProtectedRoute>} />
             <Route path="/shipping-accounts" element={<ProtectedRoute><Layout><ShippingAccounts /></Layout></ProtectedRoute>} />
             <Route path="/make-webhook" element={<ProtectedRoute><Layout><MakeWebhook /></Layout></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />

@@ -19,6 +19,7 @@ import {
     Queue,
     ArrowsLeftRight,
     Scales,
+    Storefront,
     X,
 } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
@@ -31,6 +32,8 @@ const baseLinks = [
     { to: "/upload", label: "رفع ملف Excel", icon: UploadSimple, testid: "nav-upload" },
     { to: "/import-jobs", label: "حالة الاستيراد", icon: Queue, testid: "nav-import-jobs" },
     { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
+    { to: "/settings/salla", label: "ربط متجر سلة", icon: Storefront, testid: "nav-salla-integration" },
+    { to: "/salla-sources", label: "مقارنة مصادر البيانات", icon: ChartPieSlice, testid: "nav-salla-sources" },
     { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },
     { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
     { to: "/daily-costs", label: "التكاليف اليومية", icon: Receipt, testid: "nav-daily-costs" },

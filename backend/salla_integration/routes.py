@@ -46,6 +46,18 @@ from .service import (
     integration_to_public,
     is_configured,
     store_token_response,
+    update_credentials_cache,
+)
+from .config_store import (
+    delete_config as delete_oauth_config,
+    get_config as get_oauth_config,
+    save_config as save_oauth_config,
+)
+from .sync import (
+    compute_sources_comparison,
+    ensure_sync_indexes,
+    run_orders_sync,
+    run_products_sync,
 )
 
 
@@ -257,6 +269,108 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         n = await disconnect_integration(db, user["id"])
         return {"ok": True, "removed": n}
 
+    # ── 7. OAuth credentials (UI-managed Client ID / Secret) ──────────
+    @router.get("/config")
+    async def get_config(user: dict = Depends(current_user)):
+        cfg = await get_oauth_config(db) or {}
+        # Never echo the raw secret back. We just say whether it exists.
+        return {
+            "client_id": cfg.get("client_id") or "",
+            "redirect_uri": cfg.get("redirect_uri") or "",
+            "has_client_secret": bool(cfg.get("has_client_secret")),
+            "updated_at": (cfg.get("updated_at").isoformat()
+                           if hasattr(cfg.get("updated_at"), "isoformat") else None),
+            "configured": is_configured(),
+            "env_client_id_present": bool(os.environ.get("SALLA_CLIENT_ID")),
+            "env_client_secret_present": bool(os.environ.get("SALLA_CLIENT_SECRET")),
+        }
+
+    class SallaConfigIn:  # lightweight, validated manually below
+        pass
+
+    @router.put("/config")
+    async def put_config(payload: dict, user: dict = Depends(current_user)):
+        client_id = (payload.get("client_id") or "").strip()
+        client_secret = (payload.get("client_secret") or "").strip() or None
+        redirect_uri = (payload.get("redirect_uri") or "").strip()
+        if not client_id:
+            raise HTTPException(status_code=400, detail="Client ID مطلوب.")
+        await save_oauth_config(
+            db, client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri,
+        )
+        # Reload in-process cache so the very next OAuth call sees the new values.
+        fresh = await get_oauth_config(db) or {}
+        update_credentials_cache(
+            fresh.get("client_id") or "",
+            fresh.get("client_secret") or "",
+        )
+        return {"ok": True, "configured": is_configured()}
+
+    @router.delete("/config")
+    async def delete_config(user: dict = Depends(current_user)):
+        n = await delete_oauth_config(db)
+        update_credentials_cache("", "")
+        return {"ok": True, "removed": n}
+
+    # ── 8. Manual sync — orders / products ────────────────────────────
+    @router.post("/sync/orders")
+    async def sync_orders(payload: Optional[dict] = None, user: dict = Depends(current_user)):
+        payload = payload or {}
+        try:
+            result = await run_orders_sync(
+                db, user["id"],
+                from_date=payload.get("from_date"),
+                to_date=payload.get("to_date"),
+                updated_since_hours=payload.get("updated_since_hours"),
+            )
+        except SallaError as e:
+            raise HTTPException(
+                status_code=e.status_code if e.status_code != 200 else 400,
+                detail={"message": str(e), "needs_reauth": e.needs_reauth},
+            )
+        return {"ok": True, **result}
+
+    @router.post("/sync/products")
+    async def sync_products(user: dict = Depends(current_user)):
+        try:
+            result = await run_products_sync(db, user["id"])
+        except SallaError as e:
+            raise HTTPException(
+                status_code=e.status_code if e.status_code != 200 else 400,
+                detail={"message": str(e), "needs_reauth": e.needs_reauth},
+            )
+        return {"ok": True, **result}
+
+    # ── 9. Sync logs ──────────────────────────────────────────────────
+    @router.get("/sync/logs")
+    async def list_sync_logs(
+        user: dict = Depends(current_user),
+        limit: int = Query(default=50, ge=1, le=200),
+        kind: Optional[str] = Query(default=None),
+    ):
+        q: dict = {"user_id": user["id"]}
+        if kind:
+            q["kind"] = kind
+        cursor = db.salla_sync_logs.find(q, {"_id": 0}).sort("started_at", -1).limit(limit)
+        logs = []
+        async for row in cursor:
+            for k in ("started_at", "ended_at"):
+                v = row.get(k)
+                if hasattr(v, "isoformat"):
+                    row[k] = v.isoformat()
+            logs.append(row)
+        return {"logs": logs}
+
+    # ── 10. Sources comparison (salla_direct vs make vs excel) ────────
+    @router.get("/sources-comparison")
+    async def sources_comparison(
+        user: dict = Depends(current_user),
+        from_date: Optional[str] = Query(default=None),
+        to_date: Optional[str] = Query(default=None),
+    ):
+        data = await compute_sources_comparison(db, user["id"], from_date=from_date, to_date=to_date)
+        return data
+
     api_router.include_router(router)
 
 
@@ -267,3 +381,9 @@ async def ensure_salla_indexes(db) -> None:
     # Auto-expire stale OAuth states after 10 min so the collection
     # doesn't grow forever.
     await db.salla_oauth_states.create_index("expires_at", expireAfterSeconds=0)
+    # Phase 2 — sync indexes
+    await ensure_sync_indexes(db)
+    # Warm up the credentials cache from DB so the very first OAuth
+    # attempt after a restart already sees the UI-saved values.
+    cfg = await get_oauth_config(db) or {}
+    update_credentials_cache(cfg.get("client_id") or "", cfg.get("client_secret") or "")

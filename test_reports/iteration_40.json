@@ -1,0 +1,62 @@
+{
+  "summary": "Iter-73 Salla Direct Phase-2 (UI-managed OAuth + Sync + Sources Comparison) — full backend verification. 16 NEW review-driven tests + 9 existing iter73 unit tests + 18 regression tests (iter68 payment-method idempotency + iter72 shipping companies + reconciliation phase22) = 51/51 PASS. All 14 items from the review_request are explicitly covered and green. No defects found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_salla_phase2_iter73_review.py",
+    "/app/backend/tests/test_salla_direct_iter73.py",
+    "/app/test_reports/pytest/iter73_review.xml",
+    "/app/test_reports/pytest/iter73_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes.py /status uses integration_to_public(doc) which by construction never echoes access_token/refresh_token — verified test_status_does_not_leak_tokens.",
+    "routes.py /config GET intentionally omits the raw client_secret and only exposes has_client_secret bool — good. The shape now includes the four env_*_present flags that the UI needs to render the 'env fallback' badges.",
+    "config_store.save_config correctly treats an empty/None client_secret as 'no change' so the UI 'Save' button works for client_id-only updates without forcing the merchant to re-enter the secret. Verified by test_config_put_without_secret_preserves_existing.",
+    "routes.py put_config validates client_id with .strip() before length check — empty string returns 400 with Arabic message 'Client ID مطلوب.' as required.",
+    "After PUT /config, the in-process credentials cache is reloaded via update_credentials_cache(...) — confirmed by test_oauth_login_200_after_config_saved which sees authorize_url immediately on the very next request without a restart.",
+    "routes.py /oauth/login HTTPException 503 detail message is in Arabic and instructs the merchant where to obtain Client ID/Secret — matches UX spec.",
+    "routes.py /sync/orders + /sync/products both wrap SallaError into HTTPException with detail={message, needs_reauth} — the frontend can therefore reliably switch UI to 'Reconnect Salla' state. Both branches verified.",
+    "compute_sources_comparison returns all 8 by_combination keys (make_only/excel_only/salla_only/make_and_salla/excel_and_salla/make_excel_and_salla/make_and_excel/unknown) — full coverage matrix, no missing combination. per_source_totals keys (make/excel/salla_direct) present.",
+    "orders_db._merge_into honours the fills_empty_only contract when source='salla_direct' and an existing make-tagged field is present — confirmed both via unit test (test_merge_rule_unit_does_not_overwrite_make) AND the existing test_salla_direct_does_not_overwrite_make_critical_fields. Make.com remains authoritative as required by the merchant.",
+    "disconnect endpoint is idempotent (returns ok:true even when nothing was removed). Two consecutive calls succeed — important because the frontend re-issues this on retry.",
+    "Regression — /api/reconciliation/summary still returns the full totals structure with non-negative expected; Phase-2 changes did not affect Phase-1 reconciliation math.",
+    "Regression — POST /api/accounts/sync-payment-methods still returns 200 with a structured body; merge changes did not break the canonical-account sync.",
+    "Minor (non-blocking): /salla/oauth/login still references SALLA_CLIENT_ID/SECRET in .env in its Arabic 503 message even though the UI flow is now the primary path. Consider updating the message to direct the merchant to Settings → Salla in the UI. Functional correctness is fine.",
+    "Minor (non-blocking): routes.py defines `class SallaConfigIn: pass` placeholder that is never used — dead code, can be removed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_salla_phase2_iter73_review.py (new — 16 tests covering full review_request matrix)"
+  ],
+  "success_rate": {"backend": "100% (51/51 — 16 new + 9 existing iter73 + 8 iter68 + 10 iter72 + 8 reconciliation)", "frontend": "not tested (per request: backend only)"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (real merchant — read-only; all writes used junk values 'test_cid_iter73_v2' / 'test_secret_iter73_v2' with autouse cleanup fixture that DELETEs /api/salla/config before and after every test).",
+  "seed_data_creation": "None. The autouse _cleanup_config fixture guarantees the DB is left in its pre-test state — no residual OAuth credentials, no production data touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "verified_review_request_items": [
+    "(1) GET /api/salla/status — valid shape (connected/configured/status), no access_token/refresh_token/client_secret leak — PASS",
+    "(2) GET /api/salla/config — returns {client_id, redirect_uri, has_client_secret, configured, env_client_id_present, env_client_secret_present}; no raw client_secret — PASS",
+    "(3) PUT then GET then DELETE /api/salla/config with junk 'test_cid_iter73_v2' — full roundtrip — PASS",
+    "(4) PUT /api/salla/config without client_secret preserves previous secret (has_client_secret stays true) — PASS",
+    "(5) PUT /api/salla/config with empty client_id → 400 with Arabic message 'Client ID مطلوب.' — PASS",
+    "(6) GET /api/salla/sync/logs returns {logs:[]} and supports ?limit= + ?kind=orders|products filters — PASS",
+    "(7) POST /api/salla/sync/orders without OAuth → 400/401/404/503 with detail={message, needs_reauth} — PASS",
+    "(8) POST /api/salla/sync/products without OAuth → same shape, needs_reauth=true — PASS",
+    "(9) GET /api/salla/sources-comparison — all required by_combination + per_source_totals keys present, accepts from_date/to_date — PASS",
+    "(10) POST /api/salla/disconnect idempotent twice in a row — PASS",
+    "(11) GET /api/salla/oauth/login → 503 Arabic when not configured — PASS",
+    "(12) After PUT /config GET /api/salla/oauth/login → 200 with authorize_url starting 'https://accounts.salla.sa/oauth2/auth?' and qs has client_id+redirect_uri+scope+state+response_type=code — PASS",
+    "(13) REGRESSION /api/reconciliation/summary unaffected — PASS",
+    "(14) REGRESSION /api/accounts/sync-payment-methods unaffected — PASS",
+    "(15) MERGE RULE — pytest tests/test_salla_direct_iter73.py::test_salla_direct_does_not_overwrite_make_critical_fields green AND independently re-verified in new test_merge_rule_unit_does_not_overwrite_make — PASS"
+  ],
+  "context_for_next_testing_agent": "Phase-2 is fully green and production-safe. The next testing iteration likely targets either (a) the actual OAuth callback with a real Salla sandbox merchant (requires valid Client ID/Secret in /config + visiting the authorize_url in a browser — outside CI scope), or (b) the Sources Comparison UI screen. The merge protection invariant (salla_direct never overwrites make-tagged fields in total_amount/order_status/payment_method) is covered by two independent tests — preserve them. The merchant's real .env still has SALLA_CLIENT_ID/SECRET EMPTY so any future test that assumes /oauth/login returns 200 without first PUT /config will FAIL — always PUT then test then DELETE.",
+  "rca of the issue": "N/A — no defects found. All 51 tests pass on first run against the live preview backend (https://salla-analytics.preview.emergentagent.com). The fills_empty_only protection in orders_db._merge_into correctly keeps Make.com authoritative as required by the merchant. The UI-managed OAuth credentials flow works end-to-end: empty config → 503 → PUT /config → cache reload in-process → /oauth/login returns valid authorize URL → DELETE /config restores empty state for next test."
+}

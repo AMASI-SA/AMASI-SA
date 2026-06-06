@@ -76,28 +76,54 @@ def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
     return dt
 
 
+# In-process cache for OAuth credentials. Populated at startup from
+# `salla_oauth_config` collection (DB) with `.env` as fallback. Refreshed
+# whenever the user saves new values via the Settings UI.
+_CREDS_CACHE: dict = {"client_id": "", "client_secret": "", "loaded": False}
+
+
+def _env(key: str) -> str:
+    return (os.environ.get(key) or "").strip()
+
+
+def update_credentials_cache(client_id: str, client_secret: str) -> None:
+    """Called by routes.py whenever the user updates config via the UI,
+    and once at startup with DB-resolved values."""
+    _CREDS_CACHE["client_id"] = (client_id or "").strip()
+    _CREDS_CACHE["client_secret"] = (client_secret or "").strip()
+    _CREDS_CACHE["loaded"] = True
+
+
+def _client_id() -> str:
+    if _CREDS_CACHE["loaded"] and _CREDS_CACHE["client_id"]:
+        return _CREDS_CACHE["client_id"]
+    return _env("SALLA_CLIENT_ID")
+
+
+def _client_secret() -> str:
+    if _CREDS_CACHE["loaded"] and _CREDS_CACHE["client_secret"]:
+        return _CREDS_CACHE["client_secret"]
+    return _env("SALLA_CLIENT_SECRET")
+
+
 def is_configured() -> bool:
-    """The /api/salla/auth/login route surfaces a 400 with a helpful
-    message when the merchant has not yet pasted Client ID / Secret
-    into backend/.env. We never want to attempt an OAuth flow with an
-    empty client_id (Salla returns a confusing error)."""
-    return bool(
-        (os.environ.get("SALLA_CLIENT_ID") or "").strip()
-        and (os.environ.get("SALLA_CLIENT_SECRET") or "").strip(),
-    )
+    """True when both Client ID + Client Secret have been provided
+    (UI or .env). Surfaces a clear error to the merchant before any
+    OAuth attempt is made."""
+    return bool(_client_id() and _client_secret())
 
 
 def get_client_id() -> str:
-    cid = (os.environ.get("SALLA_CLIENT_ID") or "").strip()
+    cid = _client_id()
     if not cid:
-        raise SallaError("SALLA_CLIENT_ID is not configured. Add it to backend/.env.", status_code=503)
+        raise SallaError("SALLA_CLIENT_ID is not configured. Add it via Settings → Salla or in backend/.env.", status_code=503)
     return cid
 
 
 def get_client_secret() -> str:
-    cs = (os.environ.get("SALLA_CLIENT_SECRET") or "").strip()
+    cs = _client_secret()
     if not cs:
-        raise SallaError("SALLA_CLIENT_SECRET is not configured. Add it to backend/.env.", status_code=503)
+        raise SallaError("SALLA_CLIENT_SECRET is not configured. Add it via Settings → Salla or in backend/.env.", status_code=503)
     return cs
 
 

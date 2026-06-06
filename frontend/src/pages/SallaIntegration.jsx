@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
     Storefront, CheckCircle, Warning, ArrowsClockwise, LinkBreak,
     PlugsConnected, ShieldCheck, Info, ArrowSquareOut, Lock,
-    Globe, EnvelopeSimple, Hash, Clock, Plus,
+    Globe, EnvelopeSimple, Hash, Clock, Plus, Package, ChartPieSlice,
+    PencilSimple,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api from "../lib/api";
@@ -98,15 +99,30 @@ export default function SallaIntegration() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState(null);
-    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false });
+    const [config, setConfig] = useState(null);
+    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false, saveConfig: false, syncOrders: false, syncProducts: false });
     const [showDisconnect, setShowDisconnect] = useState(false);
     const [liveStoreInfo, setLiveStoreInfo] = useState(null);
+    const [showConfigForm, setShowConfigForm] = useState(false);
+    const [cfgInputs, setCfgInputs] = useState({ client_id: "", client_secret: "", redirect_uri: "" });
+    const [syncLogs, setSyncLogs] = useState([]);
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const { data } = await api.get("/salla/status");
-            setStatus(data);
+            const [statusRes, cfgRes, logsRes] = await Promise.all([
+                api.get("/salla/status"),
+                api.get("/salla/config"),
+                api.get("/salla/sync/logs?limit=20"),
+            ]);
+            setStatus(statusRes.data);
+            setConfig(cfgRes.data);
+            setSyncLogs(logsRes.data?.logs || []);
+            setCfgInputs((prev) => ({
+                client_id: cfgRes.data?.client_id || prev.client_id,
+                client_secret: "",
+                redirect_uri: cfgRes.data?.redirect_uri || prev.redirect_uri,
+            }));
         } catch (e) {
             toast.error(e?.response?.data?.detail || "تعذّر تحميل حالة الربط");
         } finally {
@@ -198,6 +214,65 @@ export default function SallaIntegration() {
         }
     };
 
+    const handleSaveConfig = async () => {
+        if (!cfgInputs.client_id.trim()) {
+            toast.error("Client ID مطلوب");
+            return;
+        }
+        setBusy(b => ({ ...b, saveConfig: true }));
+        try {
+            await api.put("/salla/config", {
+                client_id: cfgInputs.client_id.trim(),
+                client_secret: cfgInputs.client_secret.trim() || undefined,
+                redirect_uri: cfgInputs.redirect_uri.trim(),
+            });
+            toast.success("تم حفظ بيانات تطبيق سلة. يمكنك الآن الضغط على ربط متجر سلة.");
+            setShowConfigForm(false);
+            setCfgInputs(prev => ({ ...prev, client_secret: "" }));
+            await load();
+        } catch (e) {
+            const det = e?.response?.data?.detail;
+            const msg = typeof det === "string" ? det : (det?.message || "فشل الحفظ");
+            toast.error(msg);
+        } finally {
+            setBusy(b => ({ ...b, saveConfig: false }));
+        }
+    };
+
+    const handleSyncOrders = async () => {
+        setBusy(b => ({ ...b, syncOrders: true }));
+        try {
+            const { data } = await api.post("/salla/sync/orders", {
+                updated_since_hours: 24 * 30, // last 30 days by default
+            });
+            toast.success(`مزامنة الطلبات: ${data.created} جديد · ${data.updated} محدّث · ${data.errors_count} خطأ`);
+            await load();
+        } catch (e) {
+            const det = e?.response?.data?.detail;
+            const msg = typeof det === "string" ? det : (det?.message || "فشل مزامنة الطلبات");
+            toast.error(msg);
+            await load();
+        } finally {
+            setBusy(b => ({ ...b, syncOrders: false }));
+        }
+    };
+
+    const handleSyncProducts = async () => {
+        setBusy(b => ({ ...b, syncProducts: true }));
+        try {
+            const { data } = await api.post("/salla/sync/products");
+            toast.success(`مزامنة المنتجات: ${data.created} جديد · ${data.updated} محدّث`);
+            await load();
+        } catch (e) {
+            const det = e?.response?.data?.detail;
+            const msg = typeof det === "string" ? det : (det?.message || "فشل مزامنة المنتجات");
+            toast.error(msg);
+            await load();
+        } finally {
+            setBusy(b => ({ ...b, syncProducts: false }));
+        }
+    };
+
     const connected = status?.connected;
     const configured = status?.configured;
 
@@ -229,32 +304,118 @@ export default function SallaIntegration() {
                 </div>
             </div>
 
-            {/* Not configured (no Client ID / Secret in .env) */}
+            {/* Not configured (no Client ID / Secret) — show inline form */}
             {!loading && !configured && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-5" data-testid="salla-not-configured">
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3 mb-3">
                         <Lock size={22} weight="bold" className="text-amber-700 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
-                            <h3 className="font-extrabold text-amber-900 text-lg mb-1">Client ID و Client Secret غير مُعدّين بعد</h3>
+                            <h3 className="font-extrabold text-amber-900 text-lg mb-1">إعداد تطبيق سلة Partners</h3>
                             <p className="text-sm text-amber-900 leading-relaxed">
-                                لتفعيل الربط، يجب أولاً إنشاء تطبيق في
-                                {" "}
+                                لتفعيل الربط، أنشئ تطبيقاً في{" "}
                                 <a href="https://salla.partners" target="_blank" rel="noreferrer" className="font-bold underline inline-flex items-center gap-0.5">
                                     Salla Partners <ArrowSquareOut size={11} weight="bold" />
-                                </a>
-                                {" "}والحصول على <span className="font-bold">Client ID</span> و <span className="font-bold">Client Secret</span>، ثم إضافتهما في ملف <code className="bg-amber-100 px-1 rounded font-mono text-xs">backend/.env</code>:
+                                </a>{" "}
+                                ثم انسخ القيم التالية في تطبيقك:
                             </p>
-                            <pre className="mt-2 text-[11px] bg-slate-900 text-emerald-300 rounded-lg p-3 font-mono overflow-x-auto" data-testid="salla-env-snippet">
-{`SALLA_CLIENT_ID=...your-client-id-from-partners
-SALLA_CLIENT_SECRET=...your-client-secret-from-partners`}
-                            </pre>
-                            <p className="text-[11px] text-amber-800 mt-2 leading-relaxed">
-                                وأضف Redirect URI التالي في تطبيقك على Partners Portal:
-                            </p>
-                            <pre className="mt-1 text-[11px] bg-slate-900 text-cyan-300 rounded-lg p-3 font-mono overflow-x-auto" data-testid="salla-redirect-uri-snippet">
+                            <p className="text-[11px] text-amber-800 mt-2 mb-1">Redirect URI (انسخه إلى صفحة "Configurations" في Partners):</p>
+                            <pre className="text-[11px] bg-slate-900 text-cyan-300 rounded-lg p-3 font-mono overflow-x-auto" data-testid="salla-redirect-uri-snippet">
 {`${window.location.origin}/api/salla/oauth/callback`}
                             </pre>
                         </div>
+                    </div>
+
+                    {/* Inline credentials form */}
+                    <div className="bg-white rounded-lg border border-amber-200 p-4 space-y-3" data-testid="salla-config-form">
+                        <h4 className="font-extrabold text-slate-900 text-sm mb-1">بيانات OAuth الخاصة بتطبيقك</h4>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Client ID</label>
+                            <input
+                                type="text"
+                                value={cfgInputs.client_id}
+                                onChange={(e) => setCfgInputs({ ...cfgInputs, client_id: e.target.value })}
+                                placeholder="مثال: 1234567890abcdef"
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 font-mono"
+                                data-testid="salla-input-client-id"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                                Client Secret {config?.has_client_secret && <span className="text-emerald-600 font-normal">(محفوظ بالفعل — اتركه فارغاً للإبقاء على القيمة الحالية)</span>}
+                            </label>
+                            <input
+                                type="password"
+                                value={cfgInputs.client_secret}
+                                onChange={(e) => setCfgInputs({ ...cfgInputs, client_secret: e.target.value })}
+                                placeholder={config?.has_client_secret ? "•••••••• (محفوظ)" : "أدخل Client Secret"}
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 font-mono"
+                                data-testid="salla-input-client-secret"
+                                autoComplete="off"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Redirect URI (اختياري — يُحسب تلقائياً)</label>
+                            <input
+                                type="text"
+                                value={cfgInputs.redirect_uri}
+                                onChange={(e) => setCfgInputs({ ...cfgInputs, redirect_uri: e.target.value })}
+                                placeholder={`${window.location.origin}/api/salla/oauth/callback`}
+                                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 font-mono"
+                                data-testid="salla-input-redirect-uri"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleSaveConfig}
+                            disabled={busy.saveConfig || !cfgInputs.client_id.trim()}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm"
+                            data-testid="salla-save-config-btn"
+                        >
+                            <CheckCircle size={14} weight="bold" />
+                            {busy.saveConfig ? "جاري الحفظ…" : "حفظ بيانات التطبيق"}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Inline edit credentials (when configured + connected to allow updates) */}
+            {!loading && configured && showConfigForm && (
+                <div className="bg-slate-50 border border-slate-300 rounded-xl p-4 space-y-3" data-testid="salla-edit-config">
+                    <h4 className="font-extrabold text-slate-900 text-sm">تعديل بيانات تطبيق سلة</h4>
+                    <input
+                        type="text"
+                        value={cfgInputs.client_id}
+                        onChange={(e) => setCfgInputs({ ...cfgInputs, client_id: e.target.value })}
+                        placeholder="Client ID"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono"
+                        data-testid="salla-edit-client-id"
+                    />
+                    <input
+                        type="password"
+                        value={cfgInputs.client_secret}
+                        onChange={(e) => setCfgInputs({ ...cfgInputs, client_secret: e.target.value })}
+                        placeholder={config?.has_client_secret ? "•••••••• (محفوظ — اتركه فارغاً)" : "Client Secret"}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono"
+                        data-testid="salla-edit-client-secret"
+                        autoComplete="off"
+                    />
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={handleSaveConfig}
+                            disabled={busy.saveConfig}
+                            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm disabled:opacity-50"
+                            data-testid="salla-save-config-btn-edit"
+                        >
+                            {busy.saveConfig ? "حفظ…" : "حفظ"}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowConfigForm(false)}
+                            className="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-bold text-sm"
+                        >
+                            إلغاء
+                        </button>
                     </div>
                 </div>
             )}
@@ -347,6 +508,16 @@ SALLA_CLIENT_SECRET=...your-client-secret-from-partners`}
                         </button>
                         <button
                             type="button"
+                            onClick={() => setShowConfigForm(true)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm border border-slate-200"
+                            data-testid="salla-edit-config-btn"
+                            title="تعديل Client ID / Secret"
+                        >
+                            <PencilSimple size={14} weight="bold" />
+                            تعديل بيانات التطبيق
+                        </button>
+                        <button
+                            type="button"
                             onClick={() => setShowDisconnect(true)}
                             disabled={busy.disconnect}
                             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-700 font-bold text-sm border border-rose-200 ms-auto"
@@ -355,6 +526,100 @@ SALLA_CLIENT_SECRET=...your-client-secret-from-partners`}
                             <LinkBreak size={14} weight="bold" />
                             إلغاء الربط
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Sync section + logs — shown whenever connected */}
+            {!loading && connected && (
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden" data-testid="salla-sync-card">
+                    <div className="bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-slate-200 px-5 py-3">
+                        <h3 className="font-extrabold text-slate-900 flex items-center gap-2">
+                            <ArrowsClockwise size={18} weight="bold" className="text-indigo-600" />
+                            مزامنة البيانات من سلة (Salla Direct)
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                            مصدر جديد بجانب Make.com و Excel — يتم حفظه باسم <code className="font-mono bg-slate-100 px-1 rounded">salla_direct</code>. لا يُلغي أي مصدر سابق، ولا يستبدل بيانات Make.com لحماية البيانات الفورية.
+                        </p>
+                    </div>
+                    <div className="p-5 flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={handleSyncOrders}
+                            disabled={busy.syncOrders}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm"
+                            data-testid="salla-sync-orders-btn"
+                        >
+                            <ArrowsClockwise size={14} weight="bold" className={busy.syncOrders ? "animate-spin" : ""} />
+                            {busy.syncOrders ? "جاري المزامنة…" : "مزامنة الطلبات الآن (آخر 30 يوماً)"}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSyncProducts}
+                            disabled={busy.syncProducts}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold text-sm"
+                            data-testid="salla-sync-products-btn"
+                        >
+                            <Package size={14} weight="bold" className={busy.syncProducts ? "animate-spin" : ""} />
+                            {busy.syncProducts ? "جاري المزامنة…" : "مزامنة المنتجات"}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => navigate("/salla-sources")}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm border border-slate-300 ms-auto"
+                            data-testid="salla-compare-sources-btn"
+                        >
+                            <ChartPieSlice size={14} weight="bold" />
+                            مقارنة المصادر (Excel / Make / Salla Direct)
+                        </button>
+                    </div>
+
+                    {/* Sync logs */}
+                    <div className="border-t border-slate-100 bg-slate-50">
+                        <div className="px-5 py-3 flex items-center justify-between">
+                            <h4 className="font-bold text-sm text-slate-700">سجل عمليات المزامنة</h4>
+                            <span className="text-[11px] text-slate-500">{syncLogs.length} عملية</span>
+                        </div>
+                        {syncLogs.length === 0 ? (
+                            <div className="text-center py-6 text-xs text-slate-400" data-testid="salla-sync-empty">
+                                لا توجد عمليات مزامنة بعد. اضغط "مزامنة الطلبات الآن" للبدء.
+                            </div>
+                        ) : (
+                            <div className="max-h-96 overflow-y-auto">
+                                <table className="w-full text-xs" data-testid="salla-sync-logs">
+                                    <thead className="bg-slate-100 text-slate-600 text-[11px] sticky top-0">
+                                        <tr>
+                                            <th className="text-right px-3 py-2">النوع</th>
+                                            <th className="text-right px-3 py-2">الحالة</th>
+                                            <th className="text-right px-3 py-2">جديد</th>
+                                            <th className="text-right px-3 py-2">محدّث</th>
+                                            <th className="text-right px-3 py-2">أخطاء</th>
+                                            <th className="text-right px-3 py-2">صفحات</th>
+                                            <th className="text-right px-3 py-2">بدأت</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200">
+                                        {syncLogs.map((log) => (
+                                            <tr key={log.id} className="hover:bg-white">
+                                                <td className="px-3 py-2 font-bold">{log.kind === "orders" ? "طلبات" : log.kind === "products" ? "منتجات" : log.kind}</td>
+                                                <td className="px-3 py-2">
+                                                    {log.status === "completed" && <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold">✓ مكتمل</span>}
+                                                    {log.status === "running" && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">⏳ جارٍ</span>}
+                                                    {log.status === "failed" && <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold" title={log.last_error || ""}>✗ فشل</span>}
+                                                </td>
+                                                <td className="px-3 py-2 text-emerald-700 font-bold">{log.created || 0}</td>
+                                                <td className="px-3 py-2 text-sky-700 font-bold">{log.updated || 0}</td>
+                                                <td className="px-3 py-2 text-rose-700 font-bold">{log.errors_count || 0}</td>
+                                                <td className="px-3 py-2 text-slate-500">{log.pages_fetched || 0}</td>
+                                                <td className="px-3 py-2 text-slate-500 text-[11px]" dir="ltr">
+                                                    {log.started_at ? new Date(log.started_at).toLocaleString("ar-SA") : "—"}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
