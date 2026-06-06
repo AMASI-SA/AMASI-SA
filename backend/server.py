@@ -369,6 +369,11 @@ class SettingsIn(BaseModel):
     # the gap between our computed net and the merchant's actual Salla
     # "غير المفوترة" total. Pure UX — not used in any calculation.
     salla_electronic_net_reference: Optional[float] = None
+    # Iter-78 — whether the delete button on the Payment Settlements
+    # history table is shown. Defaults to False so the merchant doesn't
+    # accidentally roll back a settlement file. Can be toggled from the
+    # Settings page.
+    settlements_allow_delete: Optional[bool] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -713,6 +718,8 @@ async def get_settings(user: dict = Depends(current_user)):
             "electronic_net_excluded_statuses", DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES,
         ),
         "salla_electronic_net_reference": s.get("salla_electronic_net_reference"),
+        # Iter-78 — payment-settlements delete-button visibility
+        "settlements_allow_delete": bool(s.get("settlements_allow_delete", False)),
     }
 
 
@@ -745,6 +752,8 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         # Allow 0 to mean "clear the reference" (settable to None via JSON null).
         ref = float(payload.salla_electronic_net_reference)
         update_doc["salla_electronic_net_reference"] = ref if ref > 0 else None
+    if payload.settlements_allow_delete is not None:
+        update_doc["settlements_allow_delete"] = bool(payload.settlements_allow_delete)
     await db.settings.update_one(
         {"user_id": user["id"]},
         {"$set": update_doc},

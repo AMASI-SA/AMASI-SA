@@ -1,6 +1,48 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 78 — Settlements delete-button toggle (Settings-controlled)
+
+User asked: "اضافة عمود في سجل ملفات التسويات المرفوعة لحذف ملف سله او تمارا او تابي مع إمكانية التحكم بظهور واخفاء خيار حذف الملف من الاعدادت."
+
+### Backend
+- **`server.py`** — `SettingsIn` model gains `settlements_allow_delete:
+  Optional[bool]` (default False). `/api/settings` GET returns it as a
+  boolean, PUT persists it. Stored per-user in `settings` collection.
+
+### Frontend
+- **`pages/Settings.jsx`** — New toggle under "إعدادات الطلبات" section
+  labeled "إظهار زر حذف ملفات التسويات (سله / تمارا / تابي)". When OFF
+  (default), the delete column is fully hidden in `/payment-settlements`,
+  preventing accidental rollback of settlement files. Includes an
+  explanation that toggling ON re-enables the per-file Trash button
+  and reminds that delete rolls back the orders to estimated rates.
+- **`pages/PaymentSettlements.jsx`**:
+  - Reads `settlements_allow_delete` via `/api/settings` on mount + on
+    every reload.
+  - Delete column header is conditionally rendered.
+  - Per-row Trash button is conditionally rendered.
+  - When delete is hidden AND there are uploaded files, a discreet
+    Lock icon hint near "تحديث" links to `/settings` so the merchant
+    can find the toggle without searching.
+
+### Verified
+- Backend roundtrip: `/api/settings` GET defaults to `false`, PUT
+  with `{settlements_allow_delete: true}` persists and is returned
+  on next GET; reverting to `false` works the same.
+- All 77 regression tests still PASS (iter77, iter76, iter75, iter74,
+  iter73, iter72, iter68, phase22).
+
+### Safety
+- Default OFF — merchant must explicitly enable to see delete buttons.
+- The DELETE API endpoint itself is unchanged — only the UI affordance
+  is gated. So power-users/scripts can still call the API directly if
+  needed.
+
+
+---
+
+
 ## ✅ ITERATION 77 — Smart Refund-Monitor Alert (Reports page)
 
 User asked: "نعم اخر 30 يوم مع إضافة البحث بالتاريخ اخر شهر الشهر الماضي اليوم بالأمس السنه الحاليه وتحديد الفتره مخصصه."

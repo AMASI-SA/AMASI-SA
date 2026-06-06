@@ -34,6 +34,7 @@ export default function Settings() {
         deduct_operating_expenses: true,
     });
     const [hideInferred, setHideInferred] = useState(false);
+    const [settlementsAllowDelete, setSettlementsAllowDelete] = useState(false);
     // iter-45 — Electronic Net status filter overrides
     const [electronicNetExcluded, setElectronicNetExcluded] = useState([]);
     const [sallaElectronicNetRef, setSallaElectronicNetRef] = useState("");
@@ -551,6 +552,7 @@ export default function Settings() {
                 dashboard_hidden_cards: hiddenCards,
                 net_sales_config: netSalesConfig,
                 hide_inferred_date_orders: hideInferred,
+                settlements_allow_delete: settlementsAllowDelete,
                 // iter-45 — Electronic Net overrides
                 electronic_net_excluded_statuses: electronicNetExcluded,
                 salla_electronic_net_reference: sallaElectronicNetRef.trim()
@@ -999,6 +1001,27 @@ export default function Settings() {
                         <div className="text-sm font-semibold">إخفاء الطلبات ذات التاريخ التقريبي من Dashboard و Reports</div>
                         <div className="text-xs text-muted-foreground mt-0.5">
                             عند التفعيل، يتم استبعاد هذه الطلبات من جميع حسابات لوحة التحكم والتقارير حتى يتم تصحيح تاريخها (مثلاً برفع ملف Excel من سلة).
+                        </div>
+                    </div>
+                </label>
+
+                {/* Iter-78 — toggle visibility of the delete column in
+                    /payment-settlements. Defaults to OFF so the merchant
+                    doesn't accidentally roll back a settlement file. */}
+                <label
+                    className={`flex items-start gap-3 px-4 py-3 rounded-lg cursor-pointer transition-colors border mt-3 ${settlementsAllowDelete ? "border-rose-300 bg-rose-50/60" : "border-border bg-white"}`}
+                    data-testid="toggle-settlements-allow-delete"
+                >
+                    <input
+                        type="checkbox"
+                        className="w-4 h-4 mt-1 accent-brand"
+                        checked={settlementsAllowDelete}
+                        onChange={(e) => setSettlementsAllowDelete(e.target.checked)}
+                    />
+                    <div className="flex-1">
+                        <div className="text-sm font-semibold">إظهار زر حذف ملفات التسويات (سله / تمارا / تابي)</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                            عند التفعيل، يظهر زر حذف بجوار كل ملف في صفحة <code className="bg-accent px-1 py-0.5 rounded">/payment-settlements</code>. عند الحذف يتم إرجاع الطلبات المرتبطة إلى النسب التقديرية. يُترك مخفياً افتراضياً لمنع الحذف العَرَضي.
                         </div>
                     </div>
                 </label>

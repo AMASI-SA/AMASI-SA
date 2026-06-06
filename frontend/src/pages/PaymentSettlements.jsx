@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
     Receipt, CloudArrowUp, FileXls, Trash, ArrowsClockwise, CheckCircle,
     Warning, ArrowRight, XCircle, ChartPieSlice, MagnifyingGlass,
-    Info, FileText,
+    Info, FileText, Lock,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api from "../lib/api";
@@ -79,16 +79,20 @@ export default function PaymentSettlements() {
     const [recentUpload, setRecentUpload] = useState(null);
     const [pendingDelete, setPendingDelete] = useState(null);
     const [unmatchedView, setUnmatchedView] = useState(null);
+    // Iter-78 — delete-button visibility controlled by a Settings toggle.
+    const [allowDelete, setAllowDelete] = useState(false);
 
     const reload = async () => {
         setLoading(true);
         try {
-            const [filesRes, analyticsRes] = await Promise.all([
+            const [filesRes, analyticsRes, settingsRes] = await Promise.all([
                 api.get("/payment-settlements"),
                 api.get("/payment-settlements/_analytics/coverage"),
+                api.get("/settings").catch(() => ({ data: {} })),
             ]);
             setFiles(filesRes.data?.files || []);
             setAnalytics(analyticsRes.data);
+            setAllowDelete(!!settingsRes.data?.settlements_allow_delete);
         } catch (e) {
             toast.error(e?.response?.data?.detail || "تعذّر تحميل البيانات");
         } finally {
@@ -100,13 +104,15 @@ export default function PaymentSettlements() {
         let cancelled = false;
         (async () => {
             try {
-                const [filesRes, analyticsRes] = await Promise.all([
+                const [filesRes, analyticsRes, settingsRes] = await Promise.all([
                     api.get("/payment-settlements"),
                     api.get("/payment-settlements/_analytics/coverage"),
+                    api.get("/settings").catch(() => ({ data: {} })),
                 ]);
                 if (cancelled) return;
                 setFiles(filesRes.data?.files || []);
                 setAnalytics(analyticsRes.data);
+                setAllowDelete(!!settingsRes.data?.settlements_allow_delete);
             } catch (e) {
                 if (!cancelled) toast.error(e?.response?.data?.detail || "تعذّر تحميل البيانات");
             } finally {
@@ -313,7 +319,7 @@ export default function PaymentSettlements() {
                                 <div className="mt-3 text-xs text-orange-900 bg-orange-50 border border-orange-200 rounded p-2 flex items-start gap-2" data-testid="recent-salla-purchases">
                                     <Warning size={14} weight="bold" className="text-orange-600 flex-shrink-0 mt-0.5" />
                                     <span>
-                                        تم اكتشاف <strong>{recentUpload.totals.salla_purchases_count}</strong> عملية "شحن محفظة" بمجموع
+                                        تم اكتشاف <strong>{recentUpload.totals.salla_purchases_count}</strong> عملية «شحن محفظة» بمجموع
                                         {" "}<strong className="font-mono">{fmtMoney(recentUpload.totals.salla_purchases_total)} ر.س</strong> — هذه مبالغ مدفوعة لـ سلة (مثلاً لبوليصة شحن) وتم خصمها من إجمالي المبيعات.
                                     </span>
                                 </div>
@@ -334,14 +340,27 @@ export default function PaymentSettlements() {
 
             {/* Files history */}
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden" data-testid="settlements-history">
-                <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
                     <h3 className="font-extrabold text-slate-900 flex items-center gap-2">
                         <FileText size={18} weight="bold" className="text-slate-600" />
                         سجل ملفات التسويات المرفوعة
                     </h3>
-                    <button type="button" onClick={reload} className="text-xs text-indigo-600 hover:text-indigo-700 font-bold inline-flex items-center gap-1" data-testid="settlements-refresh-btn">
-                        <ArrowsClockwise size={12} weight="bold" /> تحديث
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {!allowDelete && files.length > 0 && (
+                            <a
+                                href="/settings"
+                                className="text-[10px] text-slate-500 hover:text-indigo-600 font-bold inline-flex items-center gap-1"
+                                title="فعّل خيار &laquo;إظهار زر حذف ملفات التسويات&raquo; من الإعدادات"
+                                data-testid="settlements-enable-delete-hint"
+                            >
+                                <Lock size={11} weight="bold" />
+                                زر الحذف مخفي — فعّله من الإعدادات
+                            </a>
+                        )}
+                        <button type="button" onClick={reload} className="text-xs text-indigo-600 hover:text-indigo-700 font-bold inline-flex items-center gap-1" data-testid="settlements-refresh-btn">
+                            <ArrowsClockwise size={12} weight="bold" /> تحديث
+                        </button>
+                    </div>
                 </div>
                 {loading ? (
                     <div className="text-center py-8 text-slate-400">
@@ -370,7 +389,7 @@ export default function PaymentSettlements() {
                                     مشتريات سله
                                 </th>
                                 <th className="text-right px-4 py-2">رُفع في</th>
-                                <th className="text-right px-4 py-2"></th>
+                                {allowDelete && <th className="text-right px-4 py-2" data-testid="settlements-delete-col-header">حذف</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -427,17 +446,19 @@ export default function PaymentSettlements() {
                                         <td className="px-4 py-2 text-slate-500 text-[11px]" dir="ltr">
                                             {f.uploaded_at ? new Date(f.uploaded_at).toLocaleString("ar-SA") : "—"}
                                         </td>
-                                        <td className="px-4 py-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => setPendingDelete(f)}
-                                                className="p-1 rounded hover:bg-rose-100 text-rose-600"
-                                                title="حذف الملف وإرجاع الطلبات إلى النسب التقديرية"
-                                                data-testid={`delete-settlement-${f.id}`}
-                                            >
-                                                <Trash size={14} weight="bold" />
-                                            </button>
-                                        </td>
+                                        {allowDelete && (
+                                            <td className="px-4 py-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPendingDelete(f)}
+                                                    className="p-1 rounded hover:bg-rose-100 text-rose-600"
+                                                    title="حذف الملف وإرجاع الطلبات إلى النسب التقديرية"
+                                                    data-testid={`delete-settlement-${f.id}`}
+                                                >
+                                                    <Trash size={14} weight="bold" />
+                                                </button>
+                                            </td>
+                                        )}
                                     </tr>
                                 );
                             })}
