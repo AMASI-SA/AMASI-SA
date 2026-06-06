@@ -1,6 +1,57 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 82 — Status-driven refunds (Tamara/Tabby accuracy)
+
+User reported the «المطابقة» and «تقارير سلة» pages were overstating
+Tamara/Tabby net for the current year because orders with
+`order_status = "مسترجع"` were being counted as sales.
+
+### Backend
+- **`payment_gateway_metrics.py`** — `compute_metrics()` now detects
+  `is_status_refunded` via regex (`مسترج` / `refund`). In estimated
+  mode such orders set fee=0, vat=0, refund_full=gross, net=0 —
+  so they:
+  • are excluded from net,
+  • feed `refund_full` and `refunded_orders_count`,
+  • surface in totals and refund summaries.
+  Cancellation logic unchanged.
+- **`refunds_alert_routes.py`** — `/api/reports/refunds-alert` match
+  clause includes `order_status` regex. New `_effective_refund_full`
+  field = `actual_refund_amount` when populated, otherwise
+  `total_amount` for status-driven refunds, otherwise 0. by_payment_method
+  now surfaces Tamara/Tabby refunds even with NO settlement file.
+
+### Frontend
+- **`RefundsAlert.jsx`** — detail-modal refund column reads
+  `_effective_refund_full || actual_refund_amount`; «من حالة الطلب»
+  amber badge appears in the Source column when `_is_status_refund`
+  and no settlement_source.
+- Dashboard / Accounts / Reconciliation / Reports inherit the new
+  numbers automatically via the central endpoint.
+
+### Numbers (real merchant data — year 2026)
+| البوابة | gross | refund_full | refunded_count | **net** |
+|---|---:|---:|---:|---:|
+| Tamara | 94,483.27 | 2,648.43 | 11 | **84,452.70** |
+| Tabby  | 79,521.03 | 352.27   | 1  | **72,804.78** |
+
+Refund Monitor (this_year): 39 orders / 8,838.44 ر.س across
+9 gateways (Tamara, Tabby, مدى, البطاقة الإئتمانية, COD, STC Pay,
+3 banks…).
+
+### Verified
+- 14/14 new pytests PASS (`test_status_refunds_iter82.py` +
+  `test_status_refunds_iter82_extra.py`).
+- `testing_agent_v3_fork` iteration 43: backend 100% / frontend 100%.
+- Per-row identity holds: `gross − fees − vat − refund_full − refund_partial == net`.
+- Cross-page: Tamara=84,452.70 and Tabby=72,804.78 identical
+  on Accounts ↔ Reconciliation ↔ Reports.
+
+---
+
+
+
 ## ✅ ITERATION 81 — Payment-Gateway Metrics UNIFIED across all pages
 
 User asked: "أريد توحيد المقاييس بالكامل في كل الصفحات (لوحة التحكم،
