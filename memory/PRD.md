@@ -1,6 +1,34 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 80 — Sidebar instant-search bar
+
+User asked: "نعم" (agreeing to the proposed "شريط بحث صغير في أعلى القائمة الجانبية يفلتر الصفحات فورياً عند الكتابة" enhancement).
+
+### Implementation
+- **`components/Sidebar.jsx`** — New search input above the accordion
+  sections with:
+  - Magnifying-glass icon, Arabic placeholder "ابحث في القائمة…"
+  - Clear button (`X`) on the trailing edge when query is non-empty
+  - Live result count line ("X نتيجة" or "لا توجد نتائج")
+- **`normalizeAr()`** helper strips tashkeel and unifies Arabic
+  variants (أ/إ/آ → ا, ة → ه, ى → ي) so typing "سله" matches
+  "سلّة", "السلة", "متجر سلة" etc.
+- When search is active:
+  - Every section is **force-opened** so all matches are visible at
+    once (no need to click headers)
+  - Sections with zero matches are hidden entirely
+  - Section toggle buttons become non-interactive
+  - Clearing the search restores the normal accordion behavior
+
+### Verified
+- Lint clean; no runtime errors; all 42 regression tests still PASS.
+- No backend impact — purely frontend filter.
+
+
+---
+
+
 ## ✅ ITERATION 79 — Sidebar 3-section accordion reorganization
 
 User asked: "أريد إعادة تنظيم القائمة الجانبية بالكامل وتجميع الصفحات داخل 3 أقسام رئيسية قابلة للفتح والإغلاق."

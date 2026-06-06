@@ -9,6 +9,21 @@ import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
 
+// Normalize Arabic text for search — strip tashkeel and unify variants
+// of ا/أ/إ/آ + ة/ه + ى/ي so typing "سله" still matches "سلّة".
+const TASHKEEL_RE = /[\u064B-\u0652\u0670\u0640]/g;
+function normalizeAr(s) {
+    if (!s) return "";
+    return String(s)
+        .toLowerCase()
+        .replace(TASHKEEL_RE, "")
+        .replace(/[أإآا]/g, "ا")
+        .replace(/ة/g, "ه")
+        .replace(/ى/g, "ي")
+        .trim();
+}
+
+
 // ── Section definitions ───────────────────────────────────────────────
 // The user requested 3 collapsible groups. Pages that previously lived
 // in a flat list are kept as-is — only their grouping changes. No page
@@ -127,6 +142,30 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
         } catch { /* private mode etc. */ }
     };
 
+    // ── Search filter ───────────────────────────────────────────────
+    // When a query is present, we (a) filter items by normalized
+    // Arabic match, (b) force all sections open so the merchant sees
+    // every result, and (c) hide section headers whose items all got
+    // filtered out.
+    const [search, setSearch] = useState("");
+    const searchActive = search.trim().length > 0;
+    const normalizedQuery = normalizeAr(search);
+
+    const filteredSections = useMemo(() => {
+        if (!searchActive) return sections;
+        return sections
+            .map((s) => ({
+                ...s,
+                items: s.items.filter((it) => normalizeAr(it.label).includes(normalizedQuery)),
+            }))
+            .filter((s) => s.items.length > 0);
+    }, [sections, searchActive, normalizedQuery]);
+
+    const totalMatches = useMemo(
+        () => filteredSections.reduce((n, s) => n + s.items.length, 0),
+        [filteredSections],
+    );
+
     const onLogout = async () => { await logout(); };
 
     return (
@@ -175,11 +214,49 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                     </button>
                 </div>
 
+                {/* Search bar (Iter-80) */}
+                <div className="px-3 pt-3 pb-1" data-testid="sidebar-search-wrapper">
+                    <div className="relative">
+                        <MagnifyingGlass
+                            size={15}
+                            weight="bold"
+                            className="absolute top-1/2 -translate-y-1/2 right-3 text-muted-foreground"
+                        />
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="ابحث في القائمة…"
+                            className="w-full ps-3 pe-9 py-2 text-[13px] rounded-lg border border-border bg-slate-50 focus:bg-white focus:border-brand outline-none transition-colors"
+                            data-testid="sidebar-search-input"
+                            aria-label="ابحث في القائمة"
+                        />
+                        {searchActive && (
+                            <button
+                                type="button"
+                                onClick={() => setSearch("")}
+                                className="absolute top-1/2 -translate-y-1/2 left-2 p-0.5 rounded hover:bg-accent text-muted-foreground"
+                                data-testid="sidebar-search-clear"
+                                aria-label="مسح البحث"
+                            >
+                                <X size={13} weight="bold" />
+                            </button>
+                        )}
+                    </div>
+                    {searchActive && (
+                        <p className="text-[10px] text-muted-foreground mt-1.5 px-1" data-testid="sidebar-search-count">
+                            {totalMatches > 0 ? `${totalMatches} نتيجة` : "لا توجد نتائج"}
+                        </p>
+                    )}
+                </div>
+
                 {/* Accordion nav */}
-                <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-thin" data-testid="sidebar-nav">
-                    {sections.map((section) => {
+                <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-1 scrollbar-thin" data-testid="sidebar-nav">
+                    {filteredSections.map((section) => {
                         const SectionIcon = section.icon;
-                        const isOpen = openId === section.id;
+                        // When searching, force every section open so all
+                        // matches are visible without clicking.
+                        const isOpen = searchActive || openId === section.id;
                         const containsActive = section.items.some(
                             (i) => i.to === "/" ? location.pathname === "/" : location.pathname.startsWith(i.to),
                         );
@@ -187,9 +264,11 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                             <div key={section.id} className="select-none" data-testid={`sidebar-section-${section.id}`}>
                                 <button
                                     type="button"
-                                    onClick={() => handleToggle(section.id)}
+                                    onClick={() => !searchActive && handleToggle(section.id)}
+                                    disabled={searchActive}
                                     className={[
                                         "w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-[14px] font-bold transition-colors",
+                                        searchActive ? "cursor-default" : "",
                                         isOpen
                                             ? "bg-brand/10 text-brand"
                                             : containsActive
