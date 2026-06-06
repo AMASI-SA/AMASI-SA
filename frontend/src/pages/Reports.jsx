@@ -24,6 +24,7 @@ function formatRelative(ms) {
 export default function Reports() {
     const [dashboard, setDashboard] = useState(null);
     const [reconciliation, setReconciliation] = useState(null);
+    const [gatewayMetrics, setGatewayMetrics] = useState(null); // Iter-81 — central source
     const [allDaily, setAllDaily] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(defaultFilters());
@@ -36,16 +37,16 @@ export default function Reports() {
         if (loud) setLoading(true);
         try {
             const qs = filtersToQueryString(filters);
-            const [dashRes, dailyRes, reconRes] = await Promise.all([
+            const [dashRes, dailyRes, reconRes, metricsRes] = await Promise.all([
                 api.get(`/dashboard${qs ? "?" + qs : ""}`),
                 api.get("/daily-costs"),
-                // Pass the same date filter so the transparency block + KPI
-                // honour the user's selected period (iter-71b).
                 api.get(`/reconciliation/summary${qs ? "?" + qs : ""}`).catch(() => ({ data: null })),
+                api.get(`/payment-gateway-metrics${qs ? "?" + qs : ""}`).catch(() => ({ data: null })),
             ]);
             setDashboard(dashRes.data || null);
             setAllDaily(dailyRes.data || []);
             setReconciliation(reconRes.data || null);
+            setGatewayMetrics(metricsRes.data || null);
             setLastUpdated(Date.now());
         } catch {
             /* silent on background refresh */
@@ -340,16 +341,40 @@ export default function Reports() {
                         </div>
                     )}
 
-                    {/* iter-73 — Per-provider commission cards (collapsible) */}
+                    {/* Iter-81 — Provider commission cards now read from the
+                        CENTRAL /payment-gateway-metrics endpoint so the same
+                        numbers appear identically in Dashboard / Reports /
+                        Accounts / Reconciliation. Falls back to dashboard
+                        breakdown when the central endpoint hasn't loaded yet. */}
                     {(() => {
-                        const breakdown = dashboard?.payment_breakdown || [];
-                        const findBy = (rx) => breakdown.find(
+                        const centralRows = gatewayMetrics?.rows || [];
+                        const fallback = dashboard?.payment_breakdown || [];
+
+                        // Build a unified provider object that ProviderCommissionCard
+                        // understands. The central row already contains gross/fees/
+                        // refunds/net so we just adapt the field names.
+                        const adapt = (row) => row && ({
+                            name: row.name_ar,
+                            normalized_payment_method: row.key,
+                            orders_count: row.orders_count,
+                            total: row.gross,
+                            commission_amount: row.fees,
+                            commission_vat: row.fees_vat,
+                            net_after_commission: row.net,
+                            refund_amount: row.refund_total,
+                            actual_orders_count: row.actual_orders_count,
+                            coverage_pct: row.coverage_pct,
+                            is_actual: row.actual_orders_count > 0,
+                        });
+                        const findCentral = (k) => adapt(centralRows.find((r) => r.key === k));
+                        const findLegacy = (rx) => fallback.find(
                             (p) => rx.test(p?.name || "") || rx.test(p?.normalized_payment_method || "")
                         );
-                        const salla  = findBy(/سلة|salla/i);
-                        const tamara = findBy(/تمارا|tamara/i);
-                        const tabby  = findBy(/تابي|تابى|tabby/i);
-                        const emkan  = findBy(/إمكان|امكان|emkan/i);
+
+                        const salla  = findCentral("salla")        || findLegacy(/سلة|salla/i);
+                        const tamara = findCentral("tamara")       || findLegacy(/تمارا|tamara/i);
+                        const tabby  = findCentral("tabby")        || findLegacy(/تابي|tabby/i);
+                        const emkan  = findCentral("emkan")        || findLegacy(/إمكان|امكان|emkan/i);
                         const cards = [
                             { p: salla,  accent: "emerald", testid: "provider-card-salla" },
                             { p: tamara, accent: "violet",  testid: "provider-card-tamara" },

@@ -63,6 +63,7 @@ from preparation_routes import attach_preparation_routes, ensure_preparation_ind
 from salla_integration import attach_salla_routes, ensure_salla_indexes
 from settlements_import import attach_payment_settlements_routes, ensure_settlements_indexes as ensure_payment_settlements_indexes
 from refunds_alert_routes import attach_refunds_alert_routes
+from payment_gateway_metrics import attach_payment_gateway_metrics_routes
 from expenses_routes import (
     attach_operating_expenses_routes,
     compute_operating_expenses_for_range,
@@ -2851,6 +2852,7 @@ attach_preparation_routes(api, db)
 attach_salla_routes(api, db)
 attach_payment_settlements_routes(api, db)
 attach_refunds_alert_routes(api, db)
+attach_payment_gateway_metrics_routes(api, db)
 app.include_router(api)
 
 # CORS
