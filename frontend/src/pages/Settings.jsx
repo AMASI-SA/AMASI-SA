@@ -184,6 +184,7 @@ export default function Settings() {
                 setHiddenCards(settings.dashboard_hidden_cards || []);
                 if (settings.net_sales_config) setNetSalesConfig(settings.net_sales_config);
                 setHideInferred(!!settings.hide_inferred_date_orders);
+                setSettlementsAllowDelete(!!settings.settlements_allow_delete);
                 // iter-45 — Electronic Net status overrides
                 setElectronicNetExcluded(settings.electronic_net_excluded_statuses || []);
                 setSallaElectronicNetRef(
