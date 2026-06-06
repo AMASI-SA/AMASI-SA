@@ -1,6 +1,97 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 74 — Phase 80: Payment-Gateway Settlement File Imports
+
+User asked: "أريد تطوير النظام ليعتمد على ملفات التسويات والفواتير الفعلية من سلة وتمارا وتابي بدلاً من الاعتماد الكامل على النسب التقديرية. الطلبات المطابقة تستخدم الرسوم والصافي الفعلي، وغير المطابقة تبقى بالنسب التقديرية. لا يتم إنشاء تحويلات بنكية تلقائية ولا تعديل تسويات قديمة ولا إنشاء صفوف تلقائية في payment_adjustments. فقط تحديث expected_orders_balance بناء على actual_net_amount."
+
+### Backend — `/app/backend/settlements_import/`
+- **`parsers/salla.py`** — Reads Salla `Invoice # XXXXXXX` xlsx. 7 cols
+  (رقم الطلب / إجمالي / طريقة الدفع / الرسوم / مستحق قبل / الضريبة / مستحق بعد).
+  Handles Arabic tashkeel (damma) in headers, longest-match column
+  resolver to avoid "الضريبة" mismatching "المستحق قبل الضريبة".
+- **`parsers/tamara.py`** — Tamara Merchant Statement. Skips 26-row
+  preamble, finds detail header by scanning for "Merchant Order ID",
+  emits one entry per Captured/Refunded event row, attaches statement
+  metadata (statement_id, statement_period, tamara_merchant_id).
+- **`parsers/tabby.py`** — Tabby Settlement Report. 11-row preamble,
+  18-col detail header, infers full vs partial refund by net vs gross.
+- **`registry.py`** — Provider sniffer (`detect_provider`) based on
+  sheet title + cell-content heuristics.
+- **`service.py`** — `import_file()` with sha256 dedup, `_apply_entries()`
+  groups by order_number (handles sale+refund pairs), `_consolidate_rows`
+  collapses multiple events per order into one set of `actual_*` fields,
+  `delete_file()` rolls back actual_* on every related order,
+  `coverage_analytics()` aggregates orders by payment_fee_status +
+  per-provider totals.
+- **`routes.py`** — 5 endpoints under `/api/payment-settlements`:
+  - `POST /upload` — multipart xlsx, auto-detects provider.
+  - `GET ""` — list audit rows (most-recent first).
+  - `GET /{file_id}` — full detail incl. unmatched_orders (capped 200).
+  - `DELETE /{file_id}` — rolls back actual_* on N orders, deletes row.
+  - `GET /_analytics/coverage` — estimated vs actual breakdown.
+- **`accounts_routes.py`** — `sync-payment-methods` aggregation now
+  uses `$cond` to pick `actual_net_amount` when
+  `payment_fee_status == 'actual'`, else falls back to `total_amount`.
+  Result: `expected_orders_balance` reflects actual fees automatically
+  for matched orders.
+
+### New unified_orders fields (set only by the importer)
+`actual_payment_method`, `actual_gross_amount`, `actual_payment_fee`,
+`actual_payment_vat`, `actual_net_amount`, `actual_refund_amount`,
+`actual_partial_refund_amount`, `actual_fee_rate`, `settlement_source`,
+`settlement_date`, `settlement_reference`, `payment_fee_status`,
+`last_settlement_file_id`, `last_settlement_applied_at`.
+
+### New collections
+- **`settlement_files`** — audit log (sha256-deduped per user). Stores
+  file metadata + totals + matched/unmatched counts.
+- **`settlement_entries`** — per-row trace of every parsed entry for
+  later drill-down and analytics screens.
+
+### Frontend
+- **`/app/frontend/src/pages/PaymentSettlements.jsx`** — Drop zone +
+  click-to-browse. Live coverage cards (orders_total / orders_actual /
+  orders_estimated / actual_net total). Per-provider breakdown panel.
+  History table with provider chip, totals, matched/unmatched counts,
+  delete-with-rollback. ConfirmModal for delete + unmatched-orders
+  modal. Arabic labels throughout.
+- Route `/payment-settlements`, sidebar entry "فواتير وتسويات بوابات
+  الدفع" with Receipt icon.
+
+### Verified — 57/57 tests pass (testing agent iter_41.json)
+- 16 NEW tests in `test_settlements_import_iter74.py` covering: 3
+  parsers against REAL merchant samples (140 / 131 / 82 rows),
+  dedup, upload→match→rollback, bad-file rejection, coverage analytics.
+- 6 review-driven tests covering: list/detail endpoints, no-auto-
+  adjustments invariant, expected_orders_balance switching to
+  actual_net_amount, reconciliation regression, Salla header invoice#.
+- 35 regression tests across Salla Direct (iter73), payment
+  idempotency (iter68), shipping companies (iter72), reconciliation
+  phase22 — all still PASS.
+- Frontend E2E: page loads, all testids present, upload flow + delete
+  with confirm work end-to-end, no console errors.
+
+### Safety guarantees (per merchant's explicit asks)
+- ✅ Estimated rates remain the source of truth for orders NOT in any
+  settlement file.
+- ✅ NO automatic bank transfers created.
+- ✅ NO movement from `expected_orders_balance` → `current_balance`.
+- ✅ NO automatic rows in `payment_adjustments` (verified via test).
+- ✅ Old settlements / transfers are NEVER modified.
+- ✅ Re-uploading the same file → silent no-op (sha256 dedup).
+- ✅ Delete fully rolls back the actual_* fields on every affected
+  order (orders_rolled_back count returned to caller).
+
+### Real-data parser verification (merchant's own files)
+- Salla: 140 rows → gross=26,686.32 fees=500.38 VAT=74.97 net=26,110.97
+- Tamara: 131 rows → gross=25,213.54 refunds_full=1,581.20 refunds_partial=128.36
+- Tabby: 82 rows → gross=15,771.96 fees=1,180.45 net=13,815.78
+
+
+---
+
+
 ## ✅ ITERATION 73 — Salla Direct Phase 2 (OAuth UI + Sync + Sources Comparison)
 
 User asked: "ابدأ الآن بتكامل سلة المباشر باستخدام Salla Partners OAuth الرسمي (Client ID / Secret / Redirect URI / Access Token / Refresh Token). زر يدوي 'مزامنة الآن' في البداية. أدخل البيانات من واجهة الإعدادات. لا توقف Make.com أو Excel أو PDF. أنشئ Salla Direct كمصدر إضافي باسم `salla_direct`. أضف سجل مزامنة وشاشة مقارنة بين المصادر."
