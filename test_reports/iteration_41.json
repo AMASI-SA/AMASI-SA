@@ -1,0 +1,40 @@
+{
+  "summary": "Phase 80 / Iter-74 Payment Gateway Settlements — full backend + frontend verification. All 16 existing tests in test_settlements_import_iter74.py PASS. Added 6 new tests in test_settlements_iter74_review.py covering list/detail endpoints, no-auto-adjustments invariant, expected_orders_balance switching to actual_net_amount, reconciliation summary regression, and Salla header invoice_number — all PASS. Regression suite (35 tests across iter73 Salla direct, iter68 payment idempotency, iter72 shipping companies, phase22 reconciliation) all PASS. Frontend /payment-settlements page loads, all data-testid hooks present, Excel upload → history row creation → delete via ConfirmModal all work, no console errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_settlements_import_iter74.py",
+    "/app/backend/tests/test_settlements_iter74_review.py",
+    "/app/test_reports/pytest/iter74_all.xml",
+    "/app/test_reports/pytest/iter74_regression.xml",
+    "/app/test_reports/pytest/iter74_settlements.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "settlements_import/service.py + accounts_routes.py honour all merchant hard constraints: NO auto-rows in payment_adjustments, NO new transfers, NO touching current_balance, NO modification of pre-existing settlements. Verified via DB count diff before/after triple upload (salla+tamara+tabby).",
+    "sha256 dedup in routes.py works correctly — second upload of identical bytes returns {status:'duplicate', file_id:<same>} with no DB side-effect.",
+    "Rollback on DELETE properly reverts unified_orders.actual_* + payment_fee_status back to 'estimated' and removes settlement_source/reference (covered by test_delete_rolls_back_actual_fields).",
+    "accounts_routes.py:515-540 $cond aggregation correctly switches to actual_net_amount only when payment_fee_status='actual' — verified expected_orders_balance for تمارا account dropped from 87,033.13 (gross) to actual_net post-upload.",
+    "PaymentSettlements.jsx has comprehensive data-testid coverage on all interactive elements (page, coverage cards, upload zone, browse button, file input, history table, per-row delete, refresh, confirm modal). No issues found."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_settlements_iter74_review.py (NEW — 6 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 settlements + 35/35 regression)",
+    "frontend": "100% (page load, upload, delete flows)"
+  },
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917",
+  "seed_data_creation": "None. Test fixtures auto-clean uploaded settlement files before and after each test so merchant data is restored.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 80 is fully working. The 6 new review tests in test_settlements_iter74_review.py exercise the list/detail endpoints + the expected_orders_balance integration + the no-side-effects invariants. Note: amasi user's accounts collection stores account.name in Arabic ('تمارا', 'سلة', 'تابي') without payment_method_key — so lookups by key fail; use account.name. unified_orders for this user use Arabic payment_method values too ('تمارا' not 'tamara'); the importer correctly matches them by order_number and the resolve_account_key alias table handles the mapping during sync-payment-methods.",
+  "rca of the issue": "None — implementation is correct on first pass. The only test adjustment needed was to look up tamara account by name (Arabic) rather than payment_method_key field because this merchant's accounts pre-date the payment_method_key column."
+}

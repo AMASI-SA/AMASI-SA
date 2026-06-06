@@ -514,9 +514,27 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
 
         pipeline = [
             {"$match": match_stage},
+            # Phase 80 — prefer actual_net_amount (from settlement files
+            # uploaded via /payment-settlements) when present. Orders not
+            # yet matched against any settlement file fall back to the
+            # estimated total_amount so the expected balance stays
+            # populated. payment_fee_status='actual' is the flag set by
+            # the settlement importer.
+            {"$addFields": {
+                "_settlement_net": {
+                    "$cond": [
+                        {"$and": [
+                            {"$eq": ["$payment_fee_status", "actual"]},
+                            {"$ne": ["$actual_net_amount", None]},
+                        ]},
+                        "$actual_net_amount",
+                        {"$ifNull": ["$total_amount", 0]},
+                    ],
+                },
+            }},
             {"$group": {
                 "_id": {"$ifNull": ["$payment_method", ""]},
-                "amount": {"$sum": {"$ifNull": ["$total_amount", 0]}},
+                "amount": {"$sum": "$_settlement_net"},
                 "count":  {"$sum": 1},
             }},
         ]

@@ -34,6 +34,7 @@ const baseLinks = [
     { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
     { to: "/settings/salla", label: "ربط متجر سلة", icon: Storefront, testid: "nav-salla-integration" },
     { to: "/salla-sources", label: "مقارنة مصادر البيانات", icon: ChartPieSlice, testid: "nav-salla-sources" },
+    { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
     { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },
     { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
     { to: "/daily-costs", label: "التكاليف اليومية", icon: Receipt, testid: "nav-daily-costs" },

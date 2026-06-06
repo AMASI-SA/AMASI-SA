@@ -61,6 +61,7 @@ from webhook_routes import attach_webhook_routes
 from product_costs import attach_product_costs_routes, attach_cost_to_order_doc
 from preparation_routes import attach_preparation_routes, ensure_preparation_indexes
 from salla_integration import attach_salla_routes, ensure_salla_indexes
+from settlements_import import attach_payment_settlements_routes, ensure_settlements_indexes as ensure_payment_settlements_indexes
 from expenses_routes import (
     attach_operating_expenses_routes,
     compute_operating_expenses_for_range,
@@ -2838,6 +2839,7 @@ attach_import_jobs_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
 attach_preparation_routes(api, db)
 attach_salla_routes(api, db)
+attach_payment_settlements_routes(api, db)
 app.include_router(api)
 
 # CORS
@@ -2926,6 +2928,7 @@ async def on_startup():
     # Indexes for the "تجهيز المنتجات" feature (iteration 34).
     await ensure_preparation_indexes(db)
     await ensure_salla_indexes(db)
+    await ensure_payment_settlements_indexes(db)
     # Backfill: older salaries created before the country column existed are
     # treated as Saudi by default (most common merchant home country).
     legacy_country = await db.operating_salaries.update_many(
