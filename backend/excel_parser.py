@@ -39,6 +39,22 @@ SHIPPING_COST_COLS = ["تكلفة الشحن", "رسوم الشحن", "shipping 
 DISCOUNT_COLS = ["الخصم", "قيمة الخصم", "discount", "coupon"]
 CURRENCY_COLS = ["العملة", "currency"]
 
+
+def _normalize_currency(v) -> str:
+    """Salla Excel exports sometimes write the currency as the integer
+    code "1" or as a literal string "None" or as empty. The merchant
+    sells exclusively in SAR, so we coerce any non-recognized value to
+    "SAR" instead of letting garbage values pollute the database."""
+    if v is None:
+        return "SAR"
+    s = str(v).strip()
+    if not s or s in ("1", "None", "none", "null"):
+        return "SAR"
+    u = s.upper()
+    if u in ("SAR", "USD", "EUR", "AED", "EGP", "KWD", "BHD", "QAR", "OMR"):
+        return u
+    return "SAR"
+
 # Salla exports place the order source at column BA (index 52, 0-indexed) by default.
 SALLA_SOURCE_COL_INDEX = 52  # Excel column "BA"
 ORDER_ID_COLS = ["رقم الطلب", "order id", "order number", "id", "#"]
@@ -275,7 +291,7 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
                 "subtotal": _to_float(_cell(col_subtotal, row) or 0),
                 "discount": _to_float(_cell(col_discount, row) or 0),
                 "total_amount": amount,
-                "currency": str(_cell(col_currency, row) or "").strip(),
+                "currency": _normalize_currency(_cell(col_currency, row)),
                 "source": source_name if source_name != "غير محدد" else "",
             })
 
