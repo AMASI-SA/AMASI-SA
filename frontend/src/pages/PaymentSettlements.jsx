@@ -309,6 +309,15 @@ export default function PaymentSettlements() {
                                     <div className="font-extrabold text-slate-900 text-sm">{fmtMoney(recentUpload.totals?.net || 0)} ر.س</div>
                                 </div>
                             </div>
+                            {(recentUpload.totals?.salla_purchases_count || 0) > 0 && (
+                                <div className="mt-3 text-xs text-orange-900 bg-orange-50 border border-orange-200 rounded p-2 flex items-start gap-2" data-testid="recent-salla-purchases">
+                                    <Warning size={14} weight="bold" className="text-orange-600 flex-shrink-0 mt-0.5" />
+                                    <span>
+                                        تم اكتشاف <strong>{recentUpload.totals.salla_purchases_count}</strong> عملية "شحن محفظة" بمجموع
+                                        {" "}<strong className="font-mono">{fmtMoney(recentUpload.totals.salla_purchases_total)} ر.س</strong> — هذه مبالغ مدفوعة لـ سلة (مثلاً لبوليصة شحن) وتم خصمها من إجمالي المبيعات.
+                                    </span>
+                                </div>
+                            )}
                             {recentUpload.unmatched > 0 && (
                                 <div className="mt-3 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 flex items-start gap-1.5">
                                     <Warning size={13} weight="bold" className="flex-shrink-0 mt-0.5" />
@@ -357,6 +366,9 @@ export default function PaymentSettlements() {
                                 <th className="text-right px-4 py-2">العمولة</th>
                                 <th className="text-right px-4 py-2">الصافي</th>
                                 <th className="text-right px-4 py-2">المرتجع</th>
+                                <th className="text-right px-4 py-2 bg-amber-50" title="مبالغ شُحنت من محفظتك في سلة (مثلاً لبوليصة شحن)">
+                                    مشتريات سله
+                                </th>
                                 <th className="text-right px-4 py-2">رُفع في</th>
                                 <th className="text-right px-4 py-2"></th>
                             </tr>
@@ -394,6 +406,24 @@ export default function PaymentSettlements() {
                                         <td className="px-4 py-2 font-mono text-rose-600">{fmtMoney(f.totals?.fees || 0)}</td>
                                         <td className="px-4 py-2 font-mono font-bold text-emerald-700">{fmtMoney(f.totals?.net || 0)}</td>
                                         <td className="px-4 py-2 font-mono text-amber-700">{refundTotal > 0 ? fmtMoney(refundTotal) : "—"}</td>
+                                        <td
+                                            className="px-4 py-2 font-mono text-orange-700 bg-amber-50/40"
+                                            title={f.totals?.salla_purchases_count
+                                                ? `${f.totals.salla_purchases_count} عملية شحن محفظة — مخصومة من إجمالي المبيعات`
+                                                : "لا توجد عمليات شحن محفظة في هذا الملف"}
+                                            data-testid={`salla-purchases-${f.id}`}
+                                        >
+                                            {(f.totals?.salla_purchases_total || 0) > 0 ? (
+                                                <span className="font-bold">
+                                                    -{fmtMoney(f.totals.salla_purchases_total)}
+                                                    <span className="block text-[10px] text-orange-500 font-normal">
+                                                        {f.totals.salla_purchases_count} عملية
+                                                    </span>
+                                                </span>
+                                            ) : (
+                                                <span className="text-slate-300">—</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-2 text-slate-500 text-[11px]" dir="ltr">
                                             {f.uploaded_at ? new Date(f.uploaded_at).toLocaleString("ar-SA") : "—"}
                                         </td>

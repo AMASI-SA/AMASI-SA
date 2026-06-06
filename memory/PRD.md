@@ -1,6 +1,63 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 75 — Salla "شحن محفظة" (مشتريات سله) handling
+
+User asked: "اذا كان طريقة الدفع شحن محفظة يتم احتساب المبلغ مشتريات سله، يضاف في سجل ملفات التسويات المرفوعة عمود باسم مشتريات سله وتخصم من إجمالي المبيعات." Sample order 257396516 has payment_method `order.payment_method.` (untranslated i18n key from Salla), gross/net = -34.5, note "شحن محفظة (لبوليصة شحن)".
+
+### Backend
+- **`parsers/salla.py`** — Detects wallet-recharge rows by STRICT
+  payment_method matching against needles: `"order.payment_method."`,
+  `"شحن محفظة"`, `"wallet recharge"`, `"wallet_recharge"`. Tagged with
+  `event_type="salla_purchase"`. Negative-amount rows on normal methods
+  (مدى / credit card) are NOT flagged — they are customer refunds and
+  stay in the existing sale aggregation.
+- **`parsers/salla.py`** — New file-level totals: `salla_purchases_total`,
+  `salla_purchases_count`. Wallet rows are EXCLUDED from `totals.gross`
+  / `totals.net` / `totals.fees` so the file's main totals represent
+  real customer sales only.
+- **`service.py`** — `_apply_entries` skips `event_type=="salla_purchase"`
+  rows so the wallet deductions DON'T pollute `unified_orders.actual_*`
+  fields on the referenced order (the order_number may belong to a
+  real customer order whose actual_net is unrelated).
+
+### Frontend
+- **`pages/PaymentSettlements.jsx`** — New column "مشتريات سله" in the
+  history table (amber-tinted) showing `-{salla_purchases_total}` with
+  the operation count as a sub-line. Empty rows show "—".
+- New inline notice on the recent-upload card: when wallet rows are
+  detected, an amber callout explains the deduction and total.
+
+### Verified — 61/61 tests pass
+- 10 NEW tests in `test_salla_wallet_iter75.py` covering: strict
+  detection (only explicit method match), parser totals on the real
+  wallet-file sample (3 rows / 109.25 ر.س / 114 sales / 117 entries),
+  entry shape, original-file backward compat (no wallet rows ⇒ counts
+  stay 0), end-to-end upload via API, and the safety invariant that
+  wallet rows do NOT pollute unified_orders.actual_*.
+- All 16 iter74 + 9 iter73 + 8 iter68 + 10 iter72 + 8 phase22 = 51
+  regression tests still PASS.
+
+### Real wallet-file verification (merchant's own file)
+- Invoice # 6233377: 117 rows total
+- 114 real sales → gross=21,818.59 fees=427.81 vat=64.13 net=21,326.65
+- 3 wallet recharges → salla_purchases_total=109.25 ر.س
+  - order 259635319: -34.50
+  - order 259392433: -40.25
+  - order 257396516: -34.50
+
+### Safety guarantees
+- ✅ Wallet rows excluded from sale totals (gross / net / fees / vat).
+- ✅ Wallet rows NEVER write to unified_orders.actual_* fields.
+- ✅ Negative customer refunds via مدى / credit card are NOT flagged
+  as wallet recharges (preserved as part of sale aggregation).
+- ✅ Original Salla invoices that have no wallet rows continue to
+  parse identically (backward compat verified via test).
+
+
+---
+
+
 ## ✅ ITERATION 74 — Phase 80: Payment-Gateway Settlement File Imports
 
 User asked: "أريد تطوير النظام ليعتمد على ملفات التسويات والفواتير الفعلية من سلة وتمارا وتابي بدلاً من الاعتماد الكامل على النسب التقديرية. الطلبات المطابقة تستخدم الرسوم والصافي الفعلي، وغير المطابقة تبقى بالنسب التقديرية. لا يتم إنشاء تحويلات بنكية تلقائية ولا تعديل تسويات قديمة ولا إنشاء صفوف تلقائية في payment_adjustments. فقط تحديث expected_orders_balance بناء على actual_net_amount."

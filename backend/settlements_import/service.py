@@ -154,7 +154,15 @@ async def _apply_entries(
     """Group entries by order_number, aggregate per order (sale + refunds),
     then update unified_orders with the consolidated `actual_*` fields."""
     by_order: dict[str, list[dict]] = {}
+    salla_purchase_orders: list[str] = []
     for e in entries:
+        # Wallet-recharge / Salla purchase rows are aggregated at the
+        # file level only — never written to unified_orders.actual_*
+        # because they're internal Salla balance deductions and don't
+        # represent the real net of the order they reference.
+        if e.get("event_type") == "salla_purchase":
+            salla_purchase_orders.append(_normalize_order_number(e.get("order_number")))
+            continue
         key = _normalize_order_number(e.get("order_number"))
         if not key:
             continue

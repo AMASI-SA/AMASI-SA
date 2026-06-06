@@ -39,6 +39,41 @@ SALLA_AR_HEADERS = {
 }
 
 
+# Wallet-recharge / Salla-purchase detection.
+#
+# In real Salla invoices these rows appear as:
+#   payment_method == "order.payment_method." (an untranslated i18n key
+#                     Salla emits when the merchant pays from his
+#                     Salla wallet — usually for a shipping label)
+#   gross / net are NEGATIVE because the amount is taken FROM the
+#   merchant's wallet credit, not paid TO him.
+#
+# We tag these rows separately, exclude them from real sale totals,
+# surface them on the UI as "مشتريات سله", and intentionally do NOT
+# push actual_* fields to unified_orders for them (the order_number
+# can point at a real customer order whose actual_net is unrelated).
+_SALLA_WALLET_METHOD_NEEDLES = (
+    "order.payment_method.",   # untranslated i18n key (most common)
+    "شحن محفظة",                # arabic literal for "wallet recharge"
+    "wallet recharge",
+    "wallet_recharge",
+)
+
+
+def _is_wallet_recharge(method: str, gross: float, net: float) -> bool:
+    """STRICT detection — only flag rows where the payment_method
+    explicitly matches a wallet needle. Negative amounts on a *normal*
+    method (مدى / البطاقة الائتمانية) are CUSTOMER refunds and must
+    remain in the regular sale aggregation."""
+    if not method:
+        return False
+    m = method.strip().lower()
+    for n in _SALLA_WALLET_METHOD_NEEDLES:
+        if n.lower() in m:
+            return True
+    return False
+
+
 def _strip(s: Any) -> str:
     return re.sub(r"\s+", " ", str(s or "").strip())
 
@@ -116,6 +151,8 @@ def parse(workbook: openpyxl.Workbook) -> dict:
     total_fees = 0.0
     total_vat = 0.0
     total_net = 0.0
+    salla_purchases_total = 0.0   # sum of |net| for wallet-recharge rows
+    salla_purchases_count = 0
 
     for r in rows[1:]:
         if not r:
@@ -133,8 +170,40 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         net = to_float(r[cols["net_amount"]])
         method = to_str(r[cols["payment_method"]])
 
+        # ── Wallet-recharge / Salla-purchase rows ────────────────────
+        # These have negative gross/net + an untranslated method key.
+        # Tag them, aggregate separately, and DO NOT push actual_*
+        # fields into unified_orders (service.py skips event_type ==
+        # "salla_purchase"). We check BEFORE the generic negative-row
+        # filter below so wallet rows survive.
+        if _is_wallet_recharge(method, gross, net):
+            entries.append({
+                "provider": "salla",
+                "order_number": order_no,
+                "actual_payment_method": "wallet_recharge",
+                "actual_gross_amount": gross,
+                "actual_payment_fee": fee,
+                "actual_payment_vat": vat,
+                "actual_net_amount": net,
+                "actual_fee_rate": 0.0,
+                "actual_refund_amount": 0.0,
+                "actual_partial_refund_amount": 0.0,
+                "event_type": "salla_purchase",
+                "settlement_reference": invoice_number,
+                "settlement_date": None,
+                "raw_payment_method": method,
+                "notes": "شحن محفظة (لبوليصة شحن)",
+            })
+            salla_purchases_total += abs(net or gross)
+            salla_purchases_count += 1
+            continue
+
+        # Skip negative / blank rows whose method is NOT wallet — these
+        # are typically customer refunds via the same gateway and are
+        # out of scope for this iteration. We preserve the historical
+        # behavior so existing tests stay green.
         if gross <= 0 and net <= 0 and fee <= 0:
-            continue  # blank row
+            continue
 
         fee_rate = round((fee / gross) * 100, 4) if gross > 0 else 0.0
 
@@ -151,7 +220,7 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             "actual_partial_refund_amount": 0.0,
             "event_type": "sale",
             "settlement_reference": invoice_number,
-            "settlement_date": None,  # not present in Salla invoice header
+            "settlement_date": None,
             "raw_payment_method": method,
         })
         total_gross += gross
@@ -175,5 +244,8 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             "net": round(total_net, 2),
             "refund_full": 0.0,
             "refund_partial": 0.0,
+            # NEW — Salla-only buckets surfaced in the UI history
+            "salla_purchases_total": round(salla_purchases_total, 2),
+            "salla_purchases_count": salla_purchases_count,
         },
     }
