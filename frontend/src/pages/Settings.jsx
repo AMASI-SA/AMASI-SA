@@ -6,6 +6,7 @@ import api, { formatApiErrorDetail } from "../lib/api";
 import { KPI_GROUPS, SPECIAL_DASHBOARD_CARDS } from "../lib/dashboardCards";
 import SecretField, { StatusBadge } from "../components/SecretField";
 import OrderStatusPolicySection from "../components/OrderStatusPolicySection";
+import SettlementCycleSection from "../components/SettlementCycleSection";
 import { useAuth } from "../context/AuthContext";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -1263,6 +1264,9 @@ export default function Settings() {
             {/* Phase 1: Order Status Approval settings */}
             {/* Iter-83 — Order Status Policy: drives /api/payment-gateway-metrics */}
             <OrderStatusPolicySection />
+
+            {/* Iter-90 — Settlement Cycle settings per gateway */}
+            <SettlementCycleSection />
 
             <div className="rounded-xl border border-border bg-white p-6" data-testid="status-approval-section">
                 <div className="mb-5">

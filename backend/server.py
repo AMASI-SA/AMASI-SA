@@ -66,6 +66,7 @@ from refunds_alert_routes import attach_refunds_alert_routes
 from payment_gateway_metrics import attach_payment_gateway_metrics_routes
 from order_status_policy import attach_order_status_policy_routes
 from orders_explorer_routes import attach_orders_explorer_routes
+from settlement_cycle import attach_settlement_cycle_routes
 from expenses_routes import (
     attach_operating_expenses_routes,
     compute_operating_expenses_for_range,
@@ -2884,6 +2885,7 @@ attach_refunds_alert_routes(api, db)
 attach_payment_gateway_metrics_routes(api, db)
 attach_order_status_policy_routes(api, db)
 attach_orders_explorer_routes(api, db)
+attach_settlement_cycle_routes(api, db)
 app.include_router(api)
 
 # CORS
