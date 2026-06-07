@@ -345,17 +345,27 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
     manual "re-check" path the merchant can trigger from the Orders
     page when they suspect Make.com missed an update event.
 
-    Returns: { ok, found, created, updated, before, after, doc }.
+    Iter-91 Phase 2 — additionally:
+      • Snapshot total_amount + products items list BEFORE the upsert.
+      • Call attach_cost_to_order_doc after upsert so COGS reflects the
+        new product list immediately (Dashboard/Reports stay accurate).
+      • If total_amount changed OR the items list changed, write a diff
+        row to the `order_adjustments` collection so we have a paper
+        trail of every Salla-side modification.
+
+    Returns: { ok, found, created, updated, before, after, adjustment }.
     """
     order_number = str(order_number).strip()
     if not order_number:
         return {"ok": False, "found": False, "error": "missing order_number"}
 
-    # Snapshot current state so we can show before/after on the UI
+    # Snapshot current state so we can show before/after on the UI +
+    # detect order-value / product-list changes (Iter-91 Phase 2).
     before = await db.unified_orders.find_one(
         {"user_id": user_id, "order_number": order_number},
         {"_id": 0, "order_status": 1, "payment_status": 1,
-         "total_amount": 1, "payment_method": 1, "updated_at": 1},
+         "total_amount": 1, "payment_method": 1, "updated_at": 1,
+         "products": 1, "total_product_cost": 1},
     )
 
     # Salla supports keyword search on reference_id
@@ -394,6 +404,33 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
         source="salla_direct", raw=raw,
     )
 
+    # Iter-91 Phase 2 — recompute COGS from the (possibly mutated)
+    # products[] array so total_product_cost reflects current items.
+    post = await db.unified_orders.find_one(
+        {"user_id": user_id, "order_number": order_number},
+        {"_id": 0, "order_number": 1, "products": 1, "total_amount": 1,
+         "total_product_cost": 1},
+    )
+    adjustment = None
+    if post is not None:
+        try:
+            from product_costs import attach_cost_to_order_doc
+            cost_patch = await attach_cost_to_order_doc(db, user_id, post)
+            await db.unified_orders.update_one(
+                {"user_id": user_id, "order_number": order_number},
+                {"$set": cost_patch},
+            )
+            post["total_product_cost"] = cost_patch.get("total_product_cost")
+        except Exception:
+            pass  # never fail resync if COGS recompute fails
+
+        # Compare BEFORE vs AFTER → write an `order_adjustments` row when
+        # total_amount changed OR the items list changed (item added,
+        # removed, qty/price modified).
+        adjustment = await _record_order_adjustment(
+            db, user_id, order_number, before, post, reason="resync"
+        )
+
     # Refresh snapshot
     after = await db.unified_orders.find_one(
         {"user_id": user_id, "order_number": order_number},
@@ -406,7 +443,116 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
         "updated": not bool(res.get("created")),
         "before": before,
         "after": after,
+        "adjustment": adjustment,
     }
+
+
+def _summarise_items(products) -> list[dict]:
+    """Compact representation of an order's items used for diffing.
+
+    Each entry: { key, name, sku, product_id, quantity, price }.
+    `key` = first non-empty of (sku, product_id, name) — used to align
+    rows between two snapshots.
+    """
+    out: list[dict] = []
+    for p in (products or []):
+        sku = str(p.get("sku") or "").strip()
+        pid = str(p.get("product_id") or p.get("id") or "").strip()
+        name = str(p.get("name") or "").strip()
+        key = sku or pid or name
+        if not key:
+            continue
+        try:
+            qty = float(p.get("quantity") or 0)
+        except (TypeError, ValueError):
+            qty = 0.0
+        try:
+            price = float(p.get("price") or 0)
+        except (TypeError, ValueError):
+            price = 0.0
+        out.append({
+            "key": key, "name": name, "sku": sku, "product_id": pid,
+            "quantity": qty, "price": price,
+        })
+    return out
+
+
+def _diff_items(old_items: list[dict], new_items: list[dict]) -> dict:
+    """Return { added, removed, modified } between two item snapshots."""
+    by_key_old = {it["key"]: it for it in old_items}
+    by_key_new = {it["key"]: it for it in new_items}
+    added: list[dict] = []
+    removed: list[dict] = []
+    modified: list[dict] = []
+    for k, n in by_key_new.items():
+        if k not in by_key_old:
+            added.append(n)
+        else:
+            o = by_key_old[k]
+            if (round(float(o.get("quantity") or 0), 4)
+                    != round(float(n.get("quantity") or 0), 4)
+                    or round(float(o.get("price") or 0), 2)
+                    != round(float(n.get("price") or 0), 2)):
+                modified.append({
+                    "key": k, "name": n.get("name") or o.get("name"),
+                    "before": {"quantity": o.get("quantity"),
+                               "price": o.get("price")},
+                    "after":  {"quantity": n.get("quantity"),
+                               "price": n.get("price")},
+                })
+    for k, o in by_key_old.items():
+        if k not in by_key_new:
+            removed.append(o)
+    return {"added": added, "removed": removed, "modified": modified}
+
+
+async def _record_order_adjustment(
+    db, user_id: str, order_number: str,
+    before: dict | None, after: dict | None, reason: str = "resync",
+) -> dict | None:
+    """Iter-91 Phase 2 — persist a diff row in `order_adjustments` whenever
+    a resync (or any future hook) detects a meaningful change.
+
+    Meaningful change = total_amount differs OR items list differs.
+    Returns the stored row dict (or None when no change was detected).
+    """
+    if before is None or after is None:
+        return None
+
+    old_total = round(float(before.get("total_amount") or 0), 2)
+    new_total = round(float(after.get("total_amount") or 0), 2)
+    old_items = _summarise_items(before.get("products"))
+    new_items = _summarise_items(after.get("products"))
+    items_diff = _diff_items(old_items, new_items)
+    items_changed = bool(
+        items_diff["added"] or items_diff["removed"] or items_diff["modified"]
+    )
+    total_changed = (old_total != new_total)
+    if not total_changed and not items_changed:
+        return None
+
+    old_cogs = round(float(before.get("total_product_cost") or 0), 2)
+    new_cogs = round(float(after.get("total_product_cost") or 0), 2)
+
+    row = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "order_number": order_number,
+        "reason": reason,
+        "old_total": old_total,
+        "new_total": new_total,
+        "delta_total": round(new_total - old_total, 2),
+        "old_cogs": old_cogs,
+        "new_cogs": new_cogs,
+        "delta_cogs": round(new_cogs - old_cogs, 2),
+        "items_changed": items_changed,
+        "total_changed": total_changed,
+        "items_diff": items_diff,
+        "created_at": _now(),
+    }
+    await db.order_adjustments.insert_one(row)
+    row.pop("_id", None)
+    return row
 
 
 async def run_products_sync(db, user_id: str) -> dict:

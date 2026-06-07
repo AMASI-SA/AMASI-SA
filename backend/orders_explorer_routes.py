@@ -333,4 +333,48 @@ def attach_orders_explorer_routes(parent_router: APIRouter, db) -> None:
             )
         return result
 
+    # Iter-91 Phase 2 — order adjustments audit log
+    adj_router = APIRouter(prefix="/order-adjustments", tags=["orders"])
+
+    @adj_router.get("")
+    async def list_order_adjustments(
+        order_number: Optional[str] = Query(None),
+        reason: Optional[str] = Query(None),
+        from_date: Optional[str] = Query(None),
+        to_date: Optional[str] = Query(None),
+        page: int = Query(1, ge=1),
+        limit: int = Query(100, ge=1, le=500),
+        user: dict = Depends(current_user),
+    ):
+        """Paginated list of recorded order modifications detected during
+        resync (Iter-91 Phase 2). Each row captures total/COGS deltas
+        plus the items added/removed/modified."""
+        q: dict = {"user_id": user["id"]}
+        if order_number:
+            q["order_number"] = str(order_number).strip()
+        if reason:
+            q["reason"] = reason
+        if from_date or to_date:
+            d: dict = {}
+            if from_date:
+                d["$gte"] = from_date
+            if to_date:
+                d["$lte"] = to_date + "T23:59:59"
+            q["created_at"] = d
+        total = await db.order_adjustments.count_documents(q)
+        skip = (page - 1) * limit
+        items = await (
+            db.order_adjustments
+            .find(q, {"_id": 0})
+            .sort([("created_at", -1)])
+            .skip(skip).limit(limit)
+            .to_list(limit)
+        )
+        return {
+            "items": items, "total": total, "page": page, "limit": limit,
+            "pages": max(1, (total + limit - 1) // limit),
+        }
+
+    parent_router.include_router(adj_router)
+
     parent_router.include_router(router)

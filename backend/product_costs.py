@@ -1036,14 +1036,22 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     stale_today_healed += 1
             except Exception:
                 pass  # never fail summary if heal fails on one row
-        # Today / month: sum total_product_cost on orders in that range.
+        # Today / month: sum effective_product_cost (Iter-91 Phase 1)
+        # so refunded/cancelled orders don't inflate COGS totals.
+        from order_status_policy import (
+            effective_product_cost as _eff_pc,
+            get_policy_map as _get_pol,
+        )
+        policy_pc = await _get_pol(db, uid)
         today_total = 0.0
         month_total = 0.0
         async for o in db.unified_orders.find(
             {"user_id": uid, "order_date": {"$gte": month_start, "$lte": today_str}},
-            {"_id": 0, "order_date": 1, "total_product_cost": 1},
+            {"_id": 0, "order_date": 1, "total_product_cost": 1,
+             "order_status": 1, "total_amount": 1,
+             "actual_refund_amount": 1, "actual_partial_refund_amount": 1},
         ):
-            cost = float(o.get("total_product_cost") or 0)
+            cost = _eff_pc(o, policy_pc)
             if o.get("order_date") == today_str:
                 today_total += cost
             month_total += cost

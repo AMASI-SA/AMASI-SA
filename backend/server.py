@@ -1624,8 +1624,16 @@ async def dashboard(
     # as a fallback so single-merchant flows without per-SKU costs still
     # work. We take max() per the same dedupe-via-bigger pattern used for
     # TikTok webhook vs daily_costs.
+    # Iter-91 Phase 1: subtract COGS for cancelled/refunded orders and
+    # scale partial-refund orders proportionally so the profit KPI no
+    # longer over-charges product cost on returned goods.
+    from order_status_policy import (
+        effective_product_cost as _effective_pc,
+        get_policy_map as _get_policy_map,
+    )
+    policy_overrides_pc = await _get_policy_map(db, user["id"])
     computed_product_cost = round(sum(
-        float(o.get("total_product_cost") or 0) for o in all_orders
+        _effective_pc(o, policy_overrides_pc) for o in all_orders
     ), 2)
     # Distinct missing-cost lines across the filtered orders (UI badge).
     missing_cost_skus: set = set()

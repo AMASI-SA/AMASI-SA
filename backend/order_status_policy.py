@@ -126,6 +126,51 @@ def resolve_category(
     return default_category_for(s)
 
 
+def effective_product_cost(
+    order: dict, overrides: dict[str, str]
+) -> float:
+    """Iter-91 Phase 1: Adjust an order's `total_product_cost` to reflect
+    refunds and cancellations.
+
+    Rules:
+      - cancelled  → 0 (no goods delivered, no cost realised).
+      - refunded (full)  → 0 (goods returned, cost reversed).
+      - partial refund  → proportional reduction:
+            cost * (1 - actual_partial_refund_amount / total_amount)
+      - confirmed/pending → full `total_product_cost`.
+
+    Notes:
+      - We do NOT have product-level refund detail, so partial refunds
+        scale COGS proportionally to the refund's share of gross. This
+        is the best-effort accounting heuristic (consistent with how
+        gross is reduced in the same proportion).
+      - If `total_product_cost` is missing/None we return 0 (caller's
+        existing behaviour).
+    """
+    base = float(order.get("total_product_cost") or 0)
+    if base <= 0:
+        return 0.0
+
+    category = resolve_category(order.get("order_status"), overrides)
+    if category in ("cancelled", "refunded"):
+        return 0.0
+
+    # Full refund detected via actual fields (even when status didn't flip).
+    rfull = float(order.get("actual_refund_amount") or 0)
+    if rfull > 0:
+        return 0.0
+
+    # Partial refund — scale proportionally to refunded share of gross.
+    rpart = float(order.get("actual_partial_refund_amount") or 0)
+    if rpart > 0:
+        gross = float(order.get("total_amount") or 0)
+        if gross > 0:
+            share = max(0.0, min(1.0, rpart / gross))
+            return round(base * (1 - share), 2)
+
+    return round(base, 2)
+
+
 class PolicyRow(BaseModel):
     status: str = Field(..., min_length=1, max_length=120)
     category: str
