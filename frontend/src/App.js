@@ -33,6 +33,7 @@ import ImportJobs from "./pages/ImportJobs";
 import Transfers from "./pages/Transfers";
 import Reconciliation from "./pages/Reconciliation";
 import ReconciliationDetail from "./pages/ReconciliationDetail";
+import FinancialPosition from "./pages/FinancialPosition";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -72,6 +73,7 @@ function AppRoutes() {
             <Route path="/accounts/:id" element={<ProtectedRoute><Layout><AccountDetails /></Layout></ProtectedRoute>} />
             <Route path="/transfers" element={<ProtectedRoute><Layout><Transfers /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation" element={<ProtectedRoute><Layout><Reconciliation /></Layout></ProtectedRoute>} />
+            <Route path="/financial-position" element={<ProtectedRoute><Layout><FinancialPosition /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />

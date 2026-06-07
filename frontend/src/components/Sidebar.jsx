@@ -40,6 +40,7 @@ const SECTIONS = [
             { to: "/accounts", label: "الأصول والحسابات", icon: Wallet, testid: "nav-accounts" },
             { to: "/transfers", label: "التحويلات بين الحسابات", icon: ArrowsLeftRight, testid: "nav-transfers" },
             { to: "/reconciliation", label: "المطابقة والتسويات", icon: Scales, testid: "nav-reconciliation" },
+            { to: "/financial-position", label: "المركز المالي", icon: CurrencyDollar, testid: "nav-financial-position" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
             { to: "/settlements", label: "تسويات المدفوعات", icon: Receipt, testid: "nav-settlements" },
             { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },

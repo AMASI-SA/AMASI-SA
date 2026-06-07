@@ -10,6 +10,43 @@
 
 ---
 
+## ✅ ITERATION 93 — Financial Position screen (Feb 2026)
+
+### Scope
+Read-only frontend page that aggregates existing endpoints. Zero new
+collections, zero new logic, zero new calculations.
+
+### Files added/edited
+- `frontend/src/pages/FinancialPosition.jsx` — NEW (~270 LOC).
+- `frontend/src/App.js` — +import +route `/financial-position`.
+- `frontend/src/components/Sidebar.jsx` — +nav entry under
+  "العمليات المالية" between `/reconciliation` and
+  `/payment-settlements`.
+
+### Data sources (existing endpoints only)
+- `GET /api/liabilities/summary` → assets, liabilities, net_position,
+  ad_provider breakdown, overdue_total.
+- `GET /api/reconciliation/summary` → collection_rate, total pending,
+  total expected, total transferred.
+- `GET /api/liabilities?status=unpaid|partial` (count-only) → open
+  liabilities count.
+
+### KPIs shown
+1. Net position banner (assets − liabilities = net).
+2. Assets (banks / payment platforms / total).
+3. Liabilities (salaries / ad accounts with by-provider hint / total).
+4. Quick indicators (collection rate / pending / open count + overdue
+   hint).
+5. Quick links to Accounts, Reconciliation, Operating Expenses pages.
+
+### Verified
+- All 12 data-testids render on Preview.
+- Numbers match `/api/liabilities/summary` exactly:
+  net 432,214.24 = assets 455,314.24 − liabilities 23,100 (Preview env).
+- No new backend code → no regression.
+
+---
+
 ## ✅ ITERATION 92 — Liabilities Center Phase 1 (Feb 2026)
 
 ### Scope
