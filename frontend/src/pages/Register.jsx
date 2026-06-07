@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { User, EnvelopeSimple, LockKey } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
+import { LogoIcon } from "../components/MezanLogo";
 
 const AUTH_BG = "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/9126576d79013e8b54614eb6ef7268db1c88914c10825a71376e455fc32c7233.png";
 
@@ -33,12 +34,13 @@ export default function Register() {
             <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
                 <div className="w-full max-w-md animate-fade-in-up">
                     <div className="flex items-center gap-3 mb-10">
-                        <div className="w-12 h-12 rounded-xl bg-brand flex items-center justify-center">
-                            <span className="text-white text-2xl font-black">ح</span>
-                        </div>
+                        <LogoIcon size={52} />
                         <div>
-                            <div className="text-brand text-2xl font-extrabold" style={{ fontFamily: "Tajawal" }}>حساب</div>
-                            <div className="text-sm text-muted-foreground">محاسبة سلة الذكية</div>
+                            <div className="text-brand text-2xl font-extrabold tracking-wider" style={{ fontFamily: "Tajawal", letterSpacing: "0.08em" }}>
+                                <span>MEZ</span><span className="text-accent-green">AN</span>
+                            </div>
+                            <div className="text-base font-bold text-foreground" style={{ fontFamily: "Tajawal" }}>ميزان</div>
+                            <div className="text-xs text-muted-foreground">منصة التحليلات والمحاسبة للتجارة الإلكترونية</div>
                         </div>
                     </div>
 

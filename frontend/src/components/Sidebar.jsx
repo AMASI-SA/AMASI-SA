@@ -7,6 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { LogoIcon } from "./MezanLogo";
 
 
 // Normalize Arabic text for search — strip tashkeel and unify variants
@@ -192,15 +193,13 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
             >
                 {/* Brand + Mobile close */}
                 <div className="px-6 py-5 border-b border-border flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center">
-                            <span className="text-white text-xl font-black">ح</span>
-                        </div>
+                    <div className="flex items-center gap-3" data-testid="sidebar-brand">
+                        <LogoIcon size={42} />
                         <div>
-                            <div className="text-brand text-xl font-extrabold tracking-tight" style={{ fontFamily: "Tajawal" }}>
-                                حساب
+                            <div className="text-brand text-xl font-extrabold tracking-wider" style={{ fontFamily: "Tajawal", letterSpacing: "0.08em" }} data-testid="sidebar-brand-en">
+                                <span>MEZ</span><span className="text-accent-green">AN</span>
                             </div>
-                            <div className="text-xs text-muted-foreground">محاسبة سلة</div>
+                            <div className="text-xs text-muted-foreground font-bold" data-testid="sidebar-brand-ar">ميزان · تحليلات التجارة</div>
                         </div>
                     </div>
                     <button

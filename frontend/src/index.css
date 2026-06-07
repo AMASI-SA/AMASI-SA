@@ -36,28 +36,28 @@ code, pre {
 
 @layer base {
     :root {
-        --background: 0 0% 98%;
-        --foreground: 222 47% 11%;
+        --background: 210 40% 98%;          /* #F8FAFC */
+        --foreground: 215 28% 17%;          /* #111827 */
         --card: 0 0% 100%;
-        --card-foreground: 222 47% 11%;
+        --card-foreground: 215 28% 17%;
         --popover: 0 0% 100%;
-        --popover-foreground: 222 47% 11%;
-        --primary: 155 70% 13%;            /* #0A3622 deep green */
+        --popover-foreground: 215 28% 17%;
+        --primary: 156 71% 21%;             /* #0F5D46 deep green (MEZAN) */
         --primary-foreground: 0 0% 100%;
-        --secondary: 48 67% 52%;           /* #D4AF37 gold */
-        --secondary-foreground: 0 0% 9%;
-        --muted: 90 6% 95%;                /* #F3F4F1 */
+        --secondary: 42 86% 47%;            /* #D4A017 gold (MEZAN) */
+        --secondary-foreground: 215 28% 17%;
+        --muted: 210 40% 96%;               /* #F1F5F9 */
         --muted-foreground: 215 16% 40%;
-        --accent: 90 6% 95%;
-        --accent-foreground: 155 70% 13%;
+        --accent: 142 71% 45%;              /* #16A34A vibrant green */
+        --accent-foreground: 0 0% 100%;
         --destructive: 0 72% 51%;
         --destructive-foreground: 0 0% 100%;
         --border: 214 14% 91%;
         --input: 214 14% 91%;
-        --ring: 155 70% 13%;
-        --chart-1: 155 70% 13%;
-        --chart-2: 48 67% 52%;
-        --chart-3: 142 64% 30%;
+        --ring: 156 71% 21%;
+        --chart-1: 156 71% 21%;             /* primary */
+        --chart-2: 42 86% 47%;              /* gold */
+        --chart-3: 142 71% 45%;             /* secondary green */
         --chart-4: 24 90% 55%;
         --chart-5: 217 70% 47%;
         --radius: 0.75rem;
@@ -92,13 +92,15 @@ code, pre {
     mix-blend-mode: multiply;
 }
 
-/* Brand colors as Tailwind utility shortcuts */
-.bg-brand { background-color: #0A3622; }
+/* MEZAN brand colors as Tailwind utility shortcuts */
+.bg-brand { background-color: #0F5D46; }
 .bg-brand-hover:hover { background-color: #134E36; }
-.text-brand { color: #0A3622; }
-.bg-gold { background-color: #D4AF37; }
-.text-gold { color: #D4AF37; }
-.border-brand { border-color: #0A3622; }
+.text-brand { color: #0F5D46; }
+.bg-gold { background-color: #D4A017; }
+.text-gold { color: #D4A017; }
+.bg-accent-green { background-color: #16A34A; }
+.text-accent-green { color: #16A34A; }
+.border-brand { border-color: #0F5D46; }
 
 /* Fade-in & stagger animations for entrance */
 @keyframes fadeInUp {
@@ -113,7 +115,7 @@ code, pre {
 
 /* Selection */
 ::selection {
-    background: #0A3622;
+    background: #0F5D46;
     color: #fff;
 }
 

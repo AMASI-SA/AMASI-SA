@@ -1,0 +1,72 @@
+{
+  "summary": "MEZAN rebrand (Iter-84) verified end-to-end on /login, /register, post-login sidebar, mobile header, cross-page navigation, document <title>, meta tags (theme-color, apple, og:title), favicon.svg endpoint, and primary button color. All required testids resolve to the expected MEZAN/ميزان brand block and the new green #0F5D46 is applied. No remnants of the old 'حساب' brand element found in brand surfaces.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Mobile header (≤1024px) — data-testid='mobile-header-brand'",
+        "issues": ["Text content reads as 'MEZANميزان · تحليلات' with no whitespace between English and Arabic when scraped (visually OK because they are on separate <div> lines, but a screen reader would concatenate). Cosmetic only — not blocking."]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "MezanLogo.jsx: LogoFull renders an extra inner data-testid='mezan-logo-icon' for the SVG — fine, but be aware multiple icons exist per page (LogoIcon used standalone in Login/Register/Sidebar/Layout already provides the testid). Tests should use .first if querying app-wide.",
+    "Sidebar.jsx still references storage key 'hesab.sidebar.openSection' — harmless but a leftover of the previous brand; consider renaming to 'mezan.sidebar.openSection' (with backward migration) on a future pass.",
+    "Login page hero copy still reads 'منصة سلة • تحليل ذكي' which is fine (Salla is an integration partner, not the product name), but verify with product if 'MEZAN • منصة سلة • تحليل ذكي' is the intended marketing phrasing.",
+    "/settings route logged 403 in console for one merchant endpoint during the rebrand smoke (unrelated to rebrand; pre-existing permissions guard). Not actioned here per scope."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100%"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter-84 rebrand fully verified. Validated artifacts: data-testid mezan-logo-icon, login-brand-en (MEZAN), login-brand-ar (ميزان), tagline, register brand block, sidebar-brand/sidebar-brand-en (MEZAN)/sidebar-brand-ar (ميزان · تحليلات التجارة), mobile-header-brand (mobile @ 390x844). Document <title> = 'MEZAN — ميزان · منصة التحليلات والمحاسبة للتجارة الإلكترونية'. theme-color=#0F5D46, apple-mobile-web-app-title=MEZAN, og:title='MEZAN — ميزان'. /favicon.svg returned 200 with <svg> body. Login submit button computed bg = rgb(15,93,70) = #0F5D46. Cross-page sidebar persistence confirmed on /, /accounts, /reports, /reconciliation, /settings.",
+  "validation_details": {
+    "title": "MEZAN — ميزان · منصة التحليلات والمحاسبة للتجارة الإلكترونية",
+    "theme_color": "#0F5D46",
+    "apple_mobile_web_app_title": "MEZAN",
+    "og_title": "MEZAN — ميزان",
+    "favicon_status": 200,
+    "favicon_has_svg": true,
+    "login": {
+      "mezan_logo_icon_visible": true,
+      "login_brand_en": "MEZAN",
+      "login_brand_ar": "ميزان",
+      "tagline_visible": true,
+      "brand_block_contains_old_name": false,
+      "submit_button_bg": "rgb(15, 93, 70)"
+    },
+    "register": {
+      "logo_visible": true,
+      "mezan_text_visible": true,
+      "arabic_text_visible": true,
+      "tagline_visible": true
+    },
+    "sidebar": {
+      "brand_visible": true,
+      "sidebar_brand_en": "MEZAN",
+      "sidebar_brand_ar": "ميزان · تحليلات التجارة",
+      "logo_visible": true
+    },
+    "cross_page_sidebar_persistence": {
+      "/": "MEZAN",
+      "/accounts": "MEZAN",
+      "/reports": "MEZAN",
+      "/reconciliation": "MEZAN",
+      "/settings": "MEZAN"
+    },
+    "mobile_header": {
+      "visible": true,
+      "logo_visible": true,
+      "text": "MEZANميزان · تحليلات"
+    }
+  }
+}

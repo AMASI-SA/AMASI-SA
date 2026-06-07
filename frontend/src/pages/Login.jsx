@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import api from "../lib/api";
 import ForgotPasswordModal from "../components/ForgotPasswordModal";
+import { LogoIcon } from "../components/MezanLogo";
 
 const AUTH_BG = "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/9126576d79013e8b54614eb6ef7268db1c88914c10825a71376e455fc32c7233.png";
 
@@ -55,12 +56,13 @@ export default function Login() {
             <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
                 <div className="w-full max-w-md animate-fade-in-up">
                     <div className="flex items-center gap-3 mb-10">
-                        <div className="w-12 h-12 rounded-xl bg-brand flex items-center justify-center">
-                            <span className="text-white text-2xl font-black">ح</span>
-                        </div>
+                        <LogoIcon size={52} />
                         <div>
-                            <div className="text-brand text-2xl font-extrabold" style={{ fontFamily: "Tajawal" }}>حساب</div>
-                            <div className="text-sm text-muted-foreground">محاسبة سلة الذكية</div>
+                            <div className="text-brand text-2xl font-extrabold tracking-wider" style={{ fontFamily: "Tajawal", letterSpacing: "0.08em" }} data-testid="login-brand-en">
+                                <span>MEZ</span><span className="text-accent-green">AN</span>
+                            </div>
+                            <div className="text-base font-bold text-foreground" style={{ fontFamily: "Tajawal" }} data-testid="login-brand-ar">ميزان</div>
+                            <div className="text-xs text-muted-foreground">منصة التحليلات والمحاسبة للتجارة الإلكترونية</div>
                         </div>
                     </div>
 
@@ -157,13 +159,13 @@ export default function Login() {
             <div
                 className="hidden lg:flex w-1/2 relative items-end p-12"
                 style={{
-                    backgroundImage: `linear-gradient(135deg, rgba(10,54,34,0.92), rgba(10,54,34,0.7)), url(${AUTH_BG})`,
+                    backgroundImage: `linear-gradient(135deg, rgba(15,93,70,0.95), rgba(15,93,70,0.75)), url(${AUTH_BG})`,
                     backgroundSize: "cover",
                     backgroundPosition: "center",
                 }}
             >
                 <div className="text-white max-w-md animate-fade-in-up">
-                    <div className="text-gold text-sm font-bold tracking-wider mb-3">منصة سلة • تحليل ذكي</div>
+                    <div className="text-gold text-sm font-bold tracking-wider mb-3">MEZAN • منصة سلة • تحليل ذكي</div>
                     <h2 className="text-4xl font-black mb-4 leading-tight" style={{ fontFamily: "Tajawal" }}>
                         افهم أرباحك الحقيقية في دقائق، لا أيام.
                     </h2>

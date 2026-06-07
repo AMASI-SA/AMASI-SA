@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { List } from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
 import { Toaster } from "../components/ui/sonner";
+import { LogoIcon } from "./MezanLogo";
 
 export default function Layout({ children }) {
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -35,15 +36,13 @@ export default function Layout({ children }) {
                 data-testid="mobile-header"
             >
                 <div className="flex items-center justify-between px-4 h-14">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center">
-                            <span className="text-white text-base font-black">ح</span>
-                        </div>
+                    <div className="flex items-center gap-2.5" data-testid="mobile-header-brand">
+                        <LogoIcon size={32} />
                         <div>
-                            <div className="text-brand text-base font-extrabold leading-tight" style={{ fontFamily: "Tajawal" }}>
-                                حساب
+                            <div className="text-brand text-base font-extrabold leading-tight tracking-wider" style={{ fontFamily: "Tajawal", letterSpacing: "0.08em" }}>
+                                <span>MEZ</span><span className="text-accent-green">AN</span>
                             </div>
-                            <div className="text-[10px] text-muted-foreground leading-tight">محاسبة سلة</div>
+                            <div className="text-[10px] text-muted-foreground leading-tight font-bold">ميزان · تحليلات</div>
                         </div>
                     </div>
                     <button
