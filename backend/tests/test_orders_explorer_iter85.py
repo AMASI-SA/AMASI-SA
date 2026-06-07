@@ -127,3 +127,27 @@ def test_combined_filters_dont_clobber(auth):
         assert "2643" in (o.get("order_number") or "") \
             or "2643" in (o.get("customer_name") or "") \
             or "2643" in (o.get("customer_phone") or ""), o
+
+
+def test_export_xlsx_returns_filtered_workbook(auth, tmp_path):
+    """Iter-86 — export honours filters and contains both sheets."""
+    from openpyxl import load_workbook
+    r = auth.get(
+        f"{BASE_URL}/api/orders/export.xlsx?category=cancelled",
+        timeout=20,
+    )
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument"
+    )
+    p = tmp_path / "out.xlsx"
+    p.write_bytes(r.content)
+    wb = load_workbook(p)
+    assert "الطلبات" in wb.sheetnames
+    assert "ملخّص" in wb.sheetnames
+    ws = wb["الطلبات"]
+    # 59 cancelled orders + 1 header row
+    assert ws.max_row == 60
+    # all rows are cancelled
+    for row_idx in range(2, ws.max_row + 1):
+        assert ws.cell(row_idx, 9).value == "ملغاة"

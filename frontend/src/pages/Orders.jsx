@@ -8,10 +8,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
     Package, MagnifyingGlass, FunnelSimple, X, CaretLeft, CaretRight,
-    CheckCircle, Hourglass, ArrowUUpLeft, XCircle,
+    CheckCircle, Hourglass, ArrowUUpLeft, XCircle, DownloadSimple,
 } from "@phosphor-icons/react";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
+import { toast } from "sonner";
 
 const CAT_META = {
     confirmed: { label: "مؤكدة",   Icon: CheckCircle,   color: "emerald" },
@@ -129,17 +130,56 @@ export default function Orders() {
     const byCat = summary?.by_category || {};
     const grandTotal = summary?.totals?.orders_count || 0;
 
+    const [exporting, setExporting] = useState(false);
+    const exportXlsx = async () => {
+        setExporting(true);
+        try {
+            const u = qs ? `/orders/export.xlsx?${qs}` : "/orders/export.xlsx";
+            const resp = await api.get(u, { responseType: "blob" });
+            const blob = new Blob([resp.data], {
+                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            });
+            const ts = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `mezan_orders_${ts}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success(`تم تصدير ${formatInt(data.total)} طلب`);
+        } catch {
+            toast.error("تعذّر تصدير الملف");
+        } finally {
+            setExporting(false);
+        }
+    };
+
     return (
         <div className="space-y-6" data-testid="orders-page">
-            <header>
-                <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground flex items-center gap-3" style={{ fontFamily: "Tajawal" }}>
-                    <Package size={32} className="text-brand" weight="duotone" />
-                    الطلبات
-                </h1>
-                <p className="text-muted-foreground mt-1 text-sm">
-                    استعرض جميع الطلبات حسب الحالة، الفئة، التاريخ. المجموع الكلي:{" "}
-                    <span className="font-bold num text-foreground">{formatInt(grandTotal)}</span> طلب.
-                </p>
+            <header className="flex items-start justify-between flex-wrap gap-3">
+                <div>
+                    <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground flex items-center gap-3" style={{ fontFamily: "Tajawal" }}>
+                        <Package size={32} className="text-brand" weight="duotone" />
+                        الطلبات
+                    </h1>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                        استعرض جميع الطلبات حسب الحالة، الفئة، التاريخ. المجموع الكلي:{" "}
+                        <span className="font-bold num text-foreground">{formatInt(grandTotal)}</span> طلب.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={exportXlsx}
+                    disabled={exporting || data.total === 0}
+                    className="px-4 py-2 rounded-lg bg-brand text-white text-sm font-bold inline-flex items-center gap-2 hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                    data-testid="orders-export-btn"
+                    title={`تصدير ${formatInt(data.total)} طلب وفق الفلاتر الحالية`}
+                >
+                    <DownloadSimple size={16} weight="bold" />
+                    {exporting ? "جارٍ التصدير…" : `تصدير إلى Excel (${formatInt(data.total)})`}
+                </button>
             </header>
 
             {/* 4 category cards */}

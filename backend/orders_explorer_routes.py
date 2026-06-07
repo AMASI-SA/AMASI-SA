@@ -1,13 +1,16 @@
-"""Orders explorer (Iter-85)
+"""Orders explorer (Iter-85 + Iter-86 export)
 
 Endpoints:
   GET /api/orders                  → paginated list with filters
   GET /api/orders/status-summary   → historical counts + totals per status
+  GET /api/orders/export.xlsx      → Excel export honouring same filters
 """
 
+from io import BytesIO
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 
 from auth import get_current_user_from_db
 from order_status_policy import default_category_for, get_policy_map, resolve_category
@@ -91,24 +94,18 @@ def attach_orders_explorer_routes(parent_router: APIRouter, db) -> None:
             },
         }
 
-    @router.get("")
-    async def list_orders(
-        from_date: Optional[str] = Query(None),
-        to_date: Optional[str] = Query(None),
-        status: Optional[str] = Query(None, description="exact order_status or __none__"),
-        category: Optional[str] = Query(None, description="policy category filter"),
-        payment_method: Optional[str] = Query(None),
-        search: Optional[str] = Query(None, description="order_number / customer_name / customer_phone"),
-        page: int = Query(1, ge=1),
-        limit: int = Query(50, ge=1, le=500),
-        user: dict = Depends(current_user),
-    ):
-        uid = user["id"]
-        overrides = await get_policy_map(db, uid)
-
+    async def _build_query(
+        uid: str,
+        from_date: Optional[str],
+        to_date: Optional[str],
+        status: Optional[str],
+        category: Optional[str],
+        payment_method: Optional[str],
+        search: Optional[str],
+        overrides: dict,
+    ) -> dict:
+        """Shared Mongo query builder used by list + export."""
         q: dict = {"user_id": uid}
-        # Collect AND-able sub-conditions that themselves use $or so we
-        # don't clobber them when multiple filters are active.
         and_clauses: list[dict] = []
 
         if from_date or to_date:
@@ -127,12 +124,7 @@ def attach_orders_explorer_routes(parent_router: APIRouter, db) -> None:
             else:
                 q["order_status"] = status
 
-        # Iter-85 fix — category filter is FIRST-CLASS now. Map the
-        # category to the concrete list of order_status values whose
-        # policy resolves to that bucket. This way count_documents()
-        # and skip/limit operate on the filtered set.
         if category:
-            # Build status→category mapping from observed values
             distinct_statuses = await db.unified_orders.distinct(
                 "order_status", {"user_id": uid}
             )
@@ -150,9 +142,6 @@ def attach_orders_explorer_routes(parent_router: APIRouter, db) -> None:
                     {"order_status": {"$in": matching + [None, "", "\\N"]}},
                 ]})
             else:
-                # No statuses match — fall through with an impossible
-                # condition so the result-set is empty (rather than
-                # silently returning everything).
                 q["order_status"] = {"$in": matching or ["__none_match__"]}
 
         if payment_method:
@@ -168,6 +157,24 @@ def attach_orders_explorer_routes(parent_router: APIRouter, db) -> None:
 
         if and_clauses:
             q["$and"] = and_clauses
+        return q
+
+    @router.get("")
+    async def list_orders(
+        from_date: Optional[str] = Query(None),
+        to_date: Optional[str] = Query(None),
+        status: Optional[str] = Query(None, description="exact order_status or __none__"),
+        category: Optional[str] = Query(None, description="policy category filter"),
+        payment_method: Optional[str] = Query(None),
+        search: Optional[str] = Query(None, description="order_number / customer_name / customer_phone"),
+        page: int = Query(1, ge=1),
+        limit: int = Query(50, ge=1, le=500),
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        overrides = await get_policy_map(db, uid)
+        q = await _build_query(uid, from_date, to_date, status, category,
+                               payment_method, search, overrides)
 
         skip = (page - 1) * limit
         total = await db.unified_orders.count_documents(q)
@@ -193,5 +200,115 @@ def attach_orders_explorer_routes(parent_router: APIRouter, db) -> None:
             "total": total,
             "pages": (total + limit - 1) // limit if total > 0 else 1,
         }
+
+    CATEGORY_LABEL_AR = {
+        "confirmed": "مؤكدة",
+        "pending":   "معلّقة",
+        "refunded":  "مسترجعة",
+        "cancelled": "ملغاة",
+    }
+
+    @router.get("/export.xlsx")
+    async def export_orders_xlsx(
+        from_date: Optional[str] = Query(None),
+        to_date: Optional[str] = Query(None),
+        status: Optional[str] = Query(None),
+        category: Optional[str] = Query(None),
+        payment_method: Optional[str] = Query(None),
+        search: Optional[str] = Query(None),
+        user: dict = Depends(current_user),
+    ):
+        """Iter-86 — Excel export of the currently-filtered orders."""
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from datetime import datetime, timezone
+
+        uid = user["id"]
+        overrides = await get_policy_map(db, uid)
+        q = await _build_query(uid, from_date, to_date, status, category,
+                               payment_method, search, overrides)
+
+        cursor = db.unified_orders.find(q, {
+            "_id": 0,
+            "raw_by_source": 0,
+            "raw_by_user": 0,
+        }).sort("order_date", -1).limit(50_000)
+
+        rows: list[dict] = []
+        async for o in cursor:
+            o["category"] = resolve_category(o.get("order_status"), overrides)
+            rows.append(o)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "الطلبات"
+        ws.sheet_view.rightToLeft = True
+
+        headers = [
+            "رقم الطلب", "تاريخ الطلب", "اسم العميل", "جوال العميل",
+            "طريقة الدفع", "شركة الشحن", "الإجمالي (ر.س)",
+            "حالة الطلب", "الفئة", "المدينة", "ملاحظات",
+        ]
+        ws.append(headers)
+        header_fill = PatternFill("solid", fgColor="0F5D46")
+        header_font = Font(bold=True, color="FFFFFF", name="Tajawal")
+        for col_idx, _ in enumerate(headers, 1):
+            c = ws.cell(row=1, column=col_idx)
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[1].height = 24
+
+        for o in rows:
+            ws.append([
+                o.get("order_number") or "",
+                o.get("order_date") or "",
+                o.get("customer_name") or "",
+                o.get("customer_phone") or "",
+                o.get("payment_method") or "",
+                o.get("shipping_company") or "",
+                float(o.get("total_amount") or 0),
+                o.get("order_status") or "",
+                CATEGORY_LABEL_AR.get(o.get("category"), o.get("category") or ""),
+                o.get("city") or "",
+                o.get("notes") or "",
+            ])
+
+        # Column widths
+        widths = [16, 14, 26, 18, 22, 18, 14, 22, 12, 16, 30]
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[chr(64 + i) if i <= 26 else "A" + chr(64 + i - 26)].width = w
+
+        # Summary sheet
+        ws2 = wb.create_sheet("ملخّص")
+        ws2.sheet_view.rightToLeft = True
+        ws2.append(["الإجمالي", len(rows), "طلب"])
+        ws2.append(["المجموع المالي", round(sum(float(o.get("total_amount") or 0) for o in rows), 2), "ر.س"])
+        ws2.append([])
+        ws2.append(["الفئة", "عدد الطلبات", "المجموع"])
+        cat_agg: dict[str, dict] = {}
+        for o in rows:
+            c = o.get("category") or "_"
+            b = cat_agg.setdefault(c, {"count": 0, "amount": 0.0})
+            b["count"] += 1
+            b["amount"] += float(o.get("total_amount") or 0)
+        for c, b in cat_agg.items():
+            ws2.append([CATEGORY_LABEL_AR.get(c, c), b["count"], round(b["amount"], 2)])
+        ws2.column_dimensions["A"].width = 18
+        ws2.column_dimensions["B"].width = 14
+        ws2.column_dimensions["C"].width = 18
+
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+        filename = f"mezan_orders_{ts}.xlsx"
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+        )
 
     parent_router.include_router(router)
