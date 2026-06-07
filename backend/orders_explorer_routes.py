@@ -9,7 +9,7 @@ Endpoints:
 from io import BytesIO
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from auth import get_current_user_from_db
@@ -310,5 +310,27 @@ def attach_orders_explorer_routes(parent_router: APIRouter, db) -> None:
                 "Content-Disposition": f'attachment; filename="{filename}"',
             },
         )
+
+    @router.post("/{order_number}/resync")
+    async def resync_order(order_number: str, user: dict = Depends(current_user)):
+        """Iter-87 — Manual re-fetch from Salla for a single order. Picks
+        up missed `order.updated` events from Make.com / Salla webhooks
+        (e.g. order paid after being created with pending_payment)."""
+        from salla_integration.sync import resync_single_order
+        from salla_integration.service import SallaError
+        try:
+            result = await resync_single_order(db, user["id"], order_number)
+        except SallaError as e:
+            raise HTTPException(
+                status_code=e.status_code if e.status_code != 200 else 400,
+                detail={"message": str(e), "needs_reauth": e.needs_reauth},
+            )
+        # Attach the resolved policy category for convenience
+        if result.get("after"):
+            overrides = await get_policy_map(db, user["id"])
+            result["after"]["category"] = resolve_category(
+                result["after"].get("order_status"), overrides
+            )
+        return result
 
     parent_router.include_router(router)

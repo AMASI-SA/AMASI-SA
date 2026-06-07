@@ -1,6 +1,52 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 87 — Order status update + Manual Resync
+
+User reported: order #264753863 was created as «بانتظار الدفع» (not
+counted, correct). When the customer paid and Salla updated it to
+«بانتظار المراجعة», the system kept the stale state because Make.com
+never fired the `order.updated` event for it.
+
+### Backend
+- **`orders_db.upsert_order()`** — already idempotent + `order_status`
+  is in `CRITICAL_FIELDS` so it always wins on update. Verified with
+  a dedicated pytest (pending_payment → under_review without dup).
+- **`salla_integration/sync.py`** — new `resync_single_order(db,
+  uid, order_number)` that fetches one order from Salla using
+  `GET /orders?keyword=<reference_id>` and re-upserts it via the
+  same merge path. Returns `before` / `after` snapshot so the UI
+  can show what changed.
+- **`orders_explorer_routes.py`** — new `POST /api/orders/{order_number}/resync`
+  exposes the helper. Auto-recomputes policy `category` on the
+  returned doc so the merchant sees the new bucket immediately.
+
+### Frontend (`pages/Orders.jsx`)
+- **«إعادة فحص طلب من سلة»** banner — manual input where the merchant
+  types any `order_number` and hits «إعادة الفحص». Toast shows the
+  before/after status transition.
+- **Per-row resync icon** in every table row (last column ⟳) — quick
+  one-click recheck on a specific order without typing.
+- Both refresh the table+summary automatically on success.
+
+### Eligibility / accounting recompute
+- No explicit recomputation needed: every dashboard / report endpoint
+  reads `unified_orders` live and applies the current order_status
+  policy each call. Updating `order_status` automatically flips the
+  category → the order joins or leaves net / pending buckets
+  immediately, propagating through `/payment-gateway-metrics`,
+  `/reconciliation/summary`, `/orders/status-summary`, etc.
+
+### Verified
+- 3/3 new pytests in `test_order_status_update_iter87.py` PASS.
+- Combined regression: **20/20 pytests** across Iter-83, 85, 87 PASS.
+- Manual resync endpoint smoke-tested via curl — graceful
+  «Salla store is not connected» response when OAuth is not linked.
+
+---
+
+
+
 ## ✅ ITERATION 85 — Orders Explorer page
 
 User asked: «صفحة الطلبات تظهر الطلبات حسب حالة الطلب والتاريخ مع ملخص

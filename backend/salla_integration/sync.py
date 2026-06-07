@@ -339,6 +339,76 @@ async def run_orders_sync(
     }
 
 
+async def resync_single_order(db, user_id: str, order_number: str) -> dict:
+    """Iter-87 — Pull a single order from Salla by its reference_id
+    (order_number) and re-upsert it into unified_orders. This is the
+    manual "re-check" path the merchant can trigger from the Orders
+    page when they suspect Make.com missed an update event.
+
+    Returns: { ok, found, created, updated, before, after, doc }.
+    """
+    order_number = str(order_number).strip()
+    if not order_number:
+        return {"ok": False, "found": False, "error": "missing order_number"}
+
+    # Snapshot current state so we can show before/after on the UI
+    before = await db.unified_orders.find_one(
+        {"user_id": user_id, "order_number": order_number},
+        {"_id": 0, "order_status": 1, "payment_status": 1,
+         "total_amount": 1, "payment_method": 1, "updated_at": 1},
+    )
+
+    # Salla supports keyword search on reference_id
+    try:
+        resp = await call_salla(
+            db, user_id, "GET", "/orders",
+            params={"keyword": order_number, "expanded": "true", "per_page": 10},
+        )
+    except SallaError as e:
+        return {"ok": False, "found": False, "error": str(e),
+                "needs_reauth": e.needs_reauth}
+
+    data = resp.get("data") or []
+    # Find exact match (keyword can return partials)
+    raw = None
+    for o in data:
+        if str(o.get("reference_id") or o.get("id")) == order_number:
+            raw = o
+            break
+    if raw is None and data:
+        # Some Salla tenants only return id-based matches when reference_id
+        # is searched; accept the single result if it's a unique hit.
+        if len(data) == 1:
+            raw = data[0]
+
+    if raw is None:
+        return {"ok": True, "found": False, "before": before,
+                "error": "not_found_in_salla"}
+
+    doc = _salla_order_to_doc(raw)
+    if not doc.get("order_number"):
+        return {"ok": False, "found": False, "error": "order_number missing in payload"}
+
+    res = await upsert_order(
+        db, user_id, doc["order_number"], doc,
+        source="salla_direct", raw=raw,
+    )
+
+    # Refresh snapshot
+    after = await db.unified_orders.find_one(
+        {"user_id": user_id, "order_number": order_number},
+        {"_id": 0, "raw_by_source": 0, "raw_by_user": 0, "products": 0},
+    )
+    return {
+        "ok": True,
+        "found": True,
+        "created": bool(res.get("created")),
+        "updated": not bool(res.get("created")),
+        "before": before,
+        "after": after,
+    }
+
+
 async def run_products_sync(db, user_id: str) -> dict:
     """Pull products into salla_products collection (cached metadata).
 

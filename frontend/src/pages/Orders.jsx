@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
     Package, MagnifyingGlass, FunnelSimple, X, CaretLeft, CaretRight,
-    CheckCircle, Hourglass, ArrowUUpLeft, XCircle, DownloadSimple,
+    CheckCircle, Hourglass, ArrowUUpLeft, XCircle, DownloadSimple, ArrowsClockwise,
 } from "@phosphor-icons/react";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
@@ -131,6 +131,8 @@ export default function Orders() {
     const grandTotal = summary?.totals?.orders_count || 0;
 
     const [exporting, setExporting] = useState(false);
+    const [resyncing, setResyncing] = useState(null);   // order_number currently resyncing
+    const [manualResync, setManualResync] = useState(""); // input value for manual resync
     const exportXlsx = async () => {
         setExporting(true);
         try {
@@ -153,6 +155,41 @@ export default function Orders() {
             toast.error("تعذّر تصدير الملف");
         } finally {
             setExporting(false);
+        }
+    };
+
+    const resyncOrder = async (orderNumber) => {
+        const num = String(orderNumber || "").trim();
+        if (!num) { toast.error("الرجاء كتابة رقم الطلب"); return; }
+        setResyncing(num);
+        try {
+            const { data } = await api.post(`/orders/${encodeURIComponent(num)}/resync`);
+            if (!data?.ok) {
+                const msg = data?.error || data?.detail?.message || "تعذّرت إعادة الفحص";
+                toast.error(`#${num}: ${msg}${data?.needs_reauth ? " — يحتاج إعادة ربط متجر سلة" : ""}`);
+                return;
+            }
+            if (!data.found) {
+                toast.warning(`#${num}: الطلب غير موجود في سلة`);
+                return;
+            }
+            const after = data.after || {};
+            const before = data.before || {};
+            const statusChanged = before?.order_status !== after?.order_status;
+            if (data.created) {
+                toast.success(`#${num}: تم إضافته (${after.order_status || "بدون حالة"})`);
+            } else if (statusChanged) {
+                toast.success(`#${num}: تحديث الحالة — ${before?.order_status || "—"} → ${after?.order_status || "—"}`);
+            } else {
+                toast.info(`#${num}: محدَّث بالفعل (${after.order_status || "—"})`);
+            }
+            // refresh list + summary
+            setFilters((f) => ({ ...f }));
+        } catch (e) {
+            const msg = e?.response?.data?.detail?.message || e?.response?.data?.error || "خطأ في الاتصال";
+            toast.error(`#${num}: ${msg}`);
+        } finally {
+            setResyncing(null);
         }
     };
 
@@ -181,6 +218,48 @@ export default function Orders() {
                     {exporting ? "جارٍ التصدير…" : `تصدير إلى Excel (${formatInt(data.total)})`}
                 </button>
             </header>
+
+            {/* Manual resync — Iter-87 */}
+            <div className="rounded-xl border border-sky-200 bg-sky-50/40 p-4" data-testid="orders-manual-resync">
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 text-sky-800 min-w-0">
+                        <ArrowsClockwise size={18} weight="duotone" />
+                        <div className="text-sm font-bold" style={{ fontFamily: "Tajawal" }}>
+                            إعادة فحص طلب من سلة
+                        </div>
+                    </div>
+                    <form
+                        onSubmit={(e) => { e.preventDefault(); resyncOrder(manualResync); }}
+                        className="flex flex-1 items-center gap-2 min-w-[260px]"
+                    >
+                        <input
+                            type="text"
+                            value={manualResync}
+                            onChange={(e) => setManualResync(e.target.value)}
+                            placeholder="رقم الطلب — مثال: 264753863"
+                            className="flex-1 px-3 py-2 text-sm border border-sky-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                            data-testid="orders-manual-resync-input"
+                            disabled={!!resyncing}
+                        />
+                        <button
+                            type="submit"
+                            disabled={!manualResync.trim() || !!resyncing}
+                            className="px-3 py-2 rounded-lg bg-sky-700 text-white text-xs font-bold inline-flex items-center gap-1 disabled:opacity-50 hover:bg-sky-800"
+                            data-testid="orders-manual-resync-btn"
+                        >
+                            {resyncing === manualResync.trim() ? (
+                                <ArrowsClockwise size={14} className="animate-spin" />
+                            ) : (
+                                <ArrowsClockwise size={14} weight="bold" />
+                            )}
+                            إعادة الفحص
+                        </button>
+                    </form>
+                    <p className="text-[11px] text-sky-700/80 basis-full lg:basis-auto">
+                        يُحدِّث الحالة والمبلغ من سلة مباشرة (مفيد عند فقدان حدث order.updated).
+                    </p>
+                </div>
+            </div>
 
             {/* 4 category cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="orders-category-cards">
@@ -321,11 +400,13 @@ export default function Orders() {
                                 <th className="text-right px-3 py-2 font-semibold">الإجمالي</th>
                                 <th className="text-right px-3 py-2 font-semibold">الحالة</th>
                                 <th className="text-right px-3 py-2 font-semibold">الفئة</th>
+                                <th className="text-right px-3 py-2 font-semibold">⟳</th>
                             </tr>
                         </thead>
                         <tbody>
                             {data.items.map((o, idx) => {
                                 const catMeta = CAT_META[o.category] || CAT_META.pending;
+                                const isResyncing = resyncing === String(o.order_number);
                                 return (
                                     <tr key={`${o.order_number || "x"}-${o.order_date || idx}`} className="border-t border-border hover:bg-accent/10" data-testid={`orders-row-${o.order_number}`}>
                                         <td className="px-3 py-2 font-bold num">{o.order_number || "—"}</td>
@@ -339,12 +420,24 @@ export default function Orders() {
                                             </span>
                                         </td>
                                         <td className="px-3 py-2 text-[10px] font-bold">{catMeta.label}</td>
+                                        <td className="px-3 py-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => resyncOrder(o.order_number)}
+                                                disabled={isResyncing || !o.order_number}
+                                                className="p-1.5 rounded-md text-sky-700 hover:bg-sky-100 disabled:opacity-40"
+                                                title="إعادة الفحص من سلة"
+                                                data-testid={`orders-resync-${o.order_number}`}
+                                            >
+                                                <ArrowsClockwise size={14} weight="bold" className={isResyncing ? "animate-spin" : ""} />
+                                            </button>
+                                        </td>
                                     </tr>
                                 );
                             })}
                             {data.items.length === 0 && !listLoading && (
                                 <tr>
-                                    <td colSpan="7" className="text-center py-12 text-muted-foreground text-sm">
+                                    <td colSpan="8" className="text-center py-12 text-muted-foreground text-sm">
                                         لا توجد طلبات مطابقة للفلاتر.
                                     </td>
                                 </tr>
