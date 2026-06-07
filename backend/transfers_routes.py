@@ -40,6 +40,12 @@ class TransferIn(BaseModel):
     reference: Optional[str] = Field("", max_length=120)
     notes: Optional[str] = Field("", max_length=500)
     attachment_url: Optional[str] = None
+    # Iter-96 — when the source account is "الدفع عند الاستلام"
+    # (normalized_payment_method=cash_on_delivery), the UI must collect
+    # which shipping company physically remitted the cash. Stored on the
+    # transfer envelope + both linked transactions so reports can group by
+    # carrier later (SMSA / Aramex / مندوب الرياض / ...).
+    shipping_company: Optional[str] = Field(None, max_length=120)
 
 
 def attach_transfers_routes(parent_router: APIRouter, db) -> None:
@@ -97,11 +103,13 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
         # Validate both accounts exist and belong to the user.
         from_acc = await db.accounts.find_one(
             {"id": payload.from_account_id, "user_id": uid},
-            {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1, "current_balance": 1},
+            {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1,
+             "current_balance": 1, "normalized_payment_method": 1},
         )
         to_acc = await db.accounts.find_one(
             {"id": payload.to_account_id, "user_id": uid},
-            {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1, "current_balance": 1},
+            {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1,
+             "current_balance": 1, "normalized_payment_method": 1},
         )
         if not from_acc:
             raise HTTPException(404, "حساب المصدر غير موجود.")
@@ -123,9 +131,15 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
 
         now = _now()
         transfer_id = str(uuid.uuid4())
+
+        # Iter-96 — capture shipping company only for COD-source transfers.
+        is_cod_source = (from_acc.get("normalized_payment_method") == "cash_on_delivery")
+        shipping_company = (payload.shipping_company or "").strip() if is_cod_source else ""
+
         description = (
             f"تحويل من {from_acc['name']} إلى {to_acc['name']}"
             + (f" — {payload.reference}" if payload.reference else "")
+            + (f" — شركة الشحن: {shipping_company}" if shipping_company else "")
         )
 
         # 1. Persist the transfer envelope (1 doc per transfer).
@@ -139,6 +153,7 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
             "reference": (payload.reference or "").strip(),
             "notes": (payload.notes or "").strip(),
             "attachment_url": payload.attachment_url,
+            "shipping_company": shipping_company or None,
             "created_by_user_id": uid,
             "created_by_name": user.get("name") or user.get("email") or "",
             "created_at": now,
@@ -163,6 +178,7 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
             "peer_account_id": payload.to_account_id,
             "peer_account_name": to_acc["name"],
             "reference": (payload.reference or "").strip(),
+            "shipping_company": shipping_company or None,
             "created_at": now,
             "updated_at": now,
         }

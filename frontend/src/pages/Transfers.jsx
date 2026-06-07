@@ -51,6 +51,7 @@ function TransferFormModal({ accounts, onClose, onSaved }) {
         reference: "",
         notes: "",
         attachment_url: "",
+        shipping_company: "",
     });
     const [busy, setBusy] = useState(false);
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -60,6 +61,9 @@ function TransferFormModal({ accounts, onClose, onSaved }) {
     const amountNum = parseFloat(form.amount) || 0;
     const fromBalance = Number(fromAcc?.current_balance || 0);
     const overdraft = fromAcc && amountNum > fromBalance + 0.001;
+    // Iter-96 — shipping company is required only when transferring out of
+    // the COD bucket (cash physically remitted by a courier).
+    const isCodSource = fromAcc?.normalized_payment_method === "cash_on_delivery";
 
     // Don't allow choosing the same account twice; filter the to-list.
     const toOptions = accounts.filter((a) => a.id !== form.from_account_id);
@@ -74,6 +78,9 @@ function TransferFormModal({ accounts, onClose, onSaved }) {
                 `المبلغ ${amountNum.toLocaleString("en-US")} أكبر من الرصيد المتاح في ${fromAcc.name} (${fromBalance.toLocaleString("en-US")}).`
             );
         }
+        if (isCodSource && !form.shipping_company.trim()) {
+            return toast.error("اختر شركة الشحن التي حوّلت مبالغ الدفع عند الاستلام");
+        }
         setBusy(true);
         try {
             const { data } = await api.post("/transfers", {
@@ -84,6 +91,7 @@ function TransferFormModal({ accounts, onClose, onSaved }) {
                 reference: form.reference.trim(),
                 notes: form.notes.trim(),
                 attachment_url: form.attachment_url.trim() || null,
+                shipping_company: isCodSource ? form.shipping_company.trim() : null,
             });
             toast.success(`تم تسجيل التحويل: ${fmtMoney(amountNum)} من ${data.from_account_name} إلى ${data.to_account_name}`);
             onSaved(data);
@@ -195,6 +203,37 @@ function TransferFormModal({ accounts, onClose, onSaved }) {
                             />
                         </div>
                     </div>
+
+                    {isCodSource && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3" data-testid="shipping-company-section">
+                            <label className="block text-xs font-bold text-amber-900 mb-1.5">
+                                شركة الشحن التي حوّلت المبلغ
+                                <span className="text-rose-600 mr-1">*</span>
+                            </label>
+                            <input
+                                list="cod-shipping-companies"
+                                type="text"
+                                className={inputCls}
+                                value={form.shipping_company}
+                                onChange={(e) => set("shipping_company", e.target.value)}
+                                placeholder="سمسا، أيميل، مندوب الرياض…"
+                                data-testid="transfer-shipping-company"
+                                required
+                            />
+                            <datalist id="cod-shipping-companies">
+                                <option value="سمسا" />
+                                <option value="أيميل" />
+                                <option value="مندوب الرياض" />
+                                <option value="Aramex" />
+                                <option value="SPL" />
+                                <option value="DHL" />
+                                <option value="J&T Express" />
+                            </datalist>
+                            <div className="text-[11px] text-amber-800 mt-1.5">
+                                يحدِّد كم تم تحصيله من كل شركة شحن لمقارنته بالمتوقَّع لاحقاً.
+                            </div>
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-xs font-bold text-muted-foreground mb-1.5">رقم المرجع</label>
@@ -363,6 +402,11 @@ export default function Transfers() {
                                             <Link to={`/accounts/${t.from_account_id}`} className="font-bold text-rose-700 hover:underline">
                                                 {t.from_account_name}
                                             </Link>
+                                            {t.shipping_company && (
+                                                <div className="text-[10px] text-amber-700 mt-0.5 inline-block bg-amber-50 rounded px-1.5 py-0.5 font-bold" data-testid={`transfer-shipping-${t.id}`}>
+                                                    🚚 {t.shipping_company}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-4 py-2.5">
                                             <Link to={`/accounts/${t.to_account_id}`} className="font-bold text-emerald-700 hover:underline">

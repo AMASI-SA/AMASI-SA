@@ -10,6 +10,40 @@
 
 ---
 
+## ✅ ITERATION 96 — Tag COD → Bank transfers with the shipping company
+
+### Scope
+Capture which courier (سمسا / أيميل / مندوب الرياض / Aramex / …) remitted
+the cash when transferring out of the COD bucket. No new collection.
+
+### Files changed (3)
+- `backend/transfers_routes.py` — `TransferIn` gains optional
+  `shipping_company`. The field is persisted **only** when the source
+  account's `normalized_payment_method == "cash_on_delivery"`. Stored
+  on the `transfers` envelope and on both linked
+  `account_transactions` rows (out + in) for full traceability.
+- `frontend/src/pages/Transfers.jsx` — conditional amber section that
+  appears only when source is COD, with an Arabic carrier datalist
+  (سمسا / أيميل / مندوب الرياض / Aramex / SPL / DHL / J&T) +
+  client-side required check + 🚚 chip under the source column in the
+  list table.
+- `backend/tests/test_cod_transfer_shipping_tag_iter96.py` — NEW,
+  4 tests, all PASS.
+
+### Verified
+- 4/4 pytest PASS.
+- For non-COD sources the field is silently dropped (ledger semantics
+  preserved).
+- For COD sources, list view shows by-courier amounts directly:
+  `{ سمسا: 1000, أيميل: 2000, مندوب الرياض: 500 }`.
+
+### What the merchant gains
+"كم حوّلت سمسا هذا الشهر؟" is now answerable by filtering
+`/api/transfers` rows where `shipping_company == "سمسا"`. No double
+entry — the same transfer doc carries the tag.
+
+---
+
 ## ✅ ITERATION 95 — Shipping payments linked to bank accounts (F2 fix)
 
 ### Scope
