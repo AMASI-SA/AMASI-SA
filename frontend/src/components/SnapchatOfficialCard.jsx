@@ -185,7 +185,7 @@ export default function SnapchatOfficialCard() {
                 <div className="text-xs font-bold text-indigo-800 mb-2 flex items-center gap-1.5">
                     <Lightning size={12} weight="fill" /> آخر يوم مكتمل (PDT): {y.date || "—"}
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3" data-testid="snap-official-yesterday">
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3" data-testid="snap-official-yesterday">
                     <MetricTile label="Spend (USD)" value={`$${formatMoney(y.spend_usd || 0)}`} testid="snap-official-yest-spend-usd" />
                     <MetricTile label="Spend (SAR)" value={formatMoney(y.spend_sar || 0)} suffix="ر.س" testid="snap-official-yest-spend-sar"
                         delta={sysY.delta_spend_pct}
@@ -202,6 +202,7 @@ export default function SnapchatOfficialCard() {
                         delta={sysY.delta_roas_pct}
                         deltaLabel={sysY.roas != null ? `vs النظام ${Number(sysY.roas).toFixed(2)}x` : ""}
                     />
+                    <MetricTile label="⚡ CPO" value={y.cost_per_order != null ? formatMoney(y.cost_per_order) : "—"} suffix="ر.س" testid="snap-official-yest-cpo" />
                 </div>
             </div>
 
@@ -210,7 +211,7 @@ export default function SnapchatOfficialCard() {
                 <div className="text-xs font-bold text-indigo-800 mb-2 flex items-center gap-1.5">
                     <Lightning size={12} weight="fill" /> الشهر الحالي (PDT): {m.start || "—"} → {m.end || "—"}
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3" data-testid="snap-official-month">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3" data-testid="snap-official-month">
                     <MetricTile label="Month Spend (USD)" value={`$${formatMoney(m.spend_usd || 0)}`} testid="snap-official-month-spend-usd" />
                     <MetricTile label="Month Spend (SAR)" value={formatMoney(m.spend_sar || 0)} suffix="ر.س" testid="snap-official-month-spend-sar"
                         delta={sysM.delta_spend_pct}
@@ -225,6 +226,7 @@ export default function SnapchatOfficialCard() {
                         delta={sysM.delta_roas_pct}
                         deltaLabel={sysM.roas != null ? `vs النظام ${Number(sysM.roas).toFixed(2)}x` : ""}
                     />
+                    <MetricTile label="⚡ Month CPO" value={m.cost_per_order != null ? formatMoney(m.cost_per_order) : "—"} suffix="ر.س" testid="snap-official-month-cpo" />
                 </div>
             </div>
 

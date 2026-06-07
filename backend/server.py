@@ -2400,6 +2400,13 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     def _roas(rev: float, spend: float) -> float:
         return round(rev / spend, 2) if spend > 0 else 0.0
 
+    def _cpo(spend: float, orders: int) -> Optional[float]:
+        """Iter-89 — Cost per order = spend / orders.
+        Returns None when either is zero so the UI shows '—'."""
+        if not orders or not spend:
+            return None
+        return round(spend / orders, 2)
+
     return {
         "today": {
             "date": today_str,
@@ -2408,6 +2415,7 @@ async def snapchat_summary(user: dict = Depends(current_user)):
             "orders": orders_today,
             "revenue": revenue_today,
             "roas": _roas(revenue_today, spend_today),
+            "cost_per_order": _cpo(spend_today, orders_today),
         },
         "month": {
             "start": month_start_str,
@@ -2416,6 +2424,7 @@ async def snapchat_summary(user: dict = Depends(current_user)):
             "orders": orders_month,
             "revenue": revenue_month,
             "roas": _roas(revenue_month, spend_month),
+            "cost_per_order": _cpo(spend_month, orders_month),
         },
         "last_30d": {
             "start": d30_start_str,
@@ -2424,6 +2433,7 @@ async def snapchat_summary(user: dict = Depends(current_user)):
             "orders": orders_30d,
             "revenue": revenue_30d,
             "roas": _roas(revenue_30d, spend_30d),
+            "cost_per_order": _cpo(spend_30d, orders_30d),
         },
         "usd_rate": USD_RATE,
         "last_fetched_at": last_fetched_at,
@@ -2477,6 +2487,10 @@ async def meta_summary(user: dict = Depends(current_user)):
             "clicks": clicks,
             "roas": round(revenue / spend, 2) if spend > 0 else 0.0,
             "cpa": round(spend / purchases, 2) if purchases > 0 else 0.0,
+            "cost_per_order": (
+                round(spend / purchases, 2)
+                if spend > 0 and purchases > 0 else None
+            ),
             # CPC = spend / clicks
             "cpc": round(spend / clicks, 2) if clicks > 0 else 0.0,
             # CPM = (spend / impressions) * 1000
@@ -2552,6 +2566,10 @@ async def meta_summary(user: dict = Depends(current_user)):
                 b["revenue"] = attr_rev
                 b["roas"] = round(attr_rev / b["spend"], 2) if b["spend"] > 0 else 0.0
                 b["cpa"] = round(b["spend"] / attr_orders, 2) if attr_orders > 0 else 0.0
+                b["cost_per_order"] = (
+                    round(b["spend"] / attr_orders, 2)
+                    if b["spend"] > 0 and attr_orders > 0 else None
+                )
         return b
 
     return {
@@ -2636,8 +2654,13 @@ async def tiktok_summary(user: dict = Depends(current_user)):
             revenue += float(row.get("revenue") or 0)
         roas = round(revenue / spend, 2) if spend > 0 else 0.0
         cpa = round(spend / purchases, 2) if purchases > 0 else 0.0
+        cost_per_order = (
+            round(spend / purchases, 2)
+            if spend > 0 and purchases > 0 else None
+        )
         return {"spend": round(spend, 2), "orders": int(purchases),
-                "revenue": round(revenue, 2), "roas": roas, "cpa": cpa}
+                "revenue": round(revenue, 2), "roas": roas, "cpa": cpa,
+                "cost_per_order": cost_per_order}
 
     # 30-day spend history (for the sparkline)
     history: list = []
@@ -2671,6 +2694,10 @@ async def tiktok_summary(user: dict = Depends(current_user)):
                 b["revenue"] = attr_rev
                 b["roas"] = round(attr_rev / b["spend"], 2) if b["spend"] > 0 else 0.0
                 b["cpa"] = round(b["spend"] / attr_orders, 2) if attr_orders > 0 else 0.0
+                b["cost_per_order"] = (
+                    round(b["spend"] / attr_orders, 2)
+                    if b["spend"] > 0 and attr_orders > 0 else None
+                )
         return b
 
     return {

@@ -1551,6 +1551,10 @@ def _build_router(db) -> APIRouter:
                 "purchases": int(agg_yest["purchases"]),
                 "revenue_sar": round(agg_yest["revenue_sar"], 2),
                 "roas": yest_roas,
+                "cost_per_order": (
+                    round(agg_yest["spend_sar"] / agg_yest["purchases"], 2)
+                    if agg_yest["spend_sar"] > 0 and agg_yest["purchases"] > 0 else None
+                ),
             },
             "month": {
                 "start": month_start_str,
@@ -1560,6 +1564,10 @@ def _build_router(db) -> APIRouter:
                 "purchases": int(agg_month["purchases"]),
                 "revenue_sar": round(agg_month["revenue_sar"], 2),
                 "roas": month_roas,
+                "cost_per_order": (
+                    round(agg_month["spend_sar"] / agg_month["purchases"], 2)
+                    if agg_month["spend_sar"] > 0 and agg_month["purchases"] > 0 else None
+                ),
             },
             # ── System-side comparison (NOT used in any other calculation) ─
             # Riyadh-day numbers from snapchat_account_daily for the matching

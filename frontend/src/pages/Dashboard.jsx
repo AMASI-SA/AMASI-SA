@@ -810,7 +810,7 @@ export default function Dashboard() {
                                     <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
                                         اليوم ({snapSummary.today.date})
                                     </div>
-                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                                         <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-today">
                                             <div className="text-xs text-muted-foreground mb-1">صرف اليوم (ر.س)</div>
                                             <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.today.spend)}</div>
@@ -827,6 +827,12 @@ export default function Dashboard() {
                                             <div className="text-xs text-muted-foreground mb-1">ROAS اليوم</div>
                                             <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: snapSummary.today.roas >= 2 ? "#047857" : "#B45309" }}>
                                                 {snapSummary.today.spend > 0 ? `${snapSummary.today.roas}x` : "—"}
+                                            </div>
+                                        </div>
+                                        <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-cpo-today" title={`متوسط تكلفة الطلب = ${formatMoney(snapSummary.today.spend)} ÷ ${formatInt(snapSummary.today.orders)}`}>
+                                            <div className="text-xs text-muted-foreground mb-1">⚡ متوسط تكلفة الطلب (ر.س)</div>
+                                            <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>
+                                                {snapSummary.today.cost_per_order != null ? formatMoney(snapSummary.today.cost_per_order) : "—"}
                                             </div>
                                         </div>
                                     </div>
@@ -883,7 +889,7 @@ export default function Dashboard() {
                                         <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
                                             هذا الشهر (منذ {snapSummary.month.start})
                                         </div>
-                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                                             <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-spend-month">
                                                 <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
                                                 <div className="num text-2xl font-extrabold text-yellow-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(snapSummary.month.spend)}</div>
@@ -900,6 +906,12 @@ export default function Dashboard() {
                                                 <div className="text-xs text-muted-foreground mb-1">ROAS الشهر</div>
                                                 <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: snapSummary.month.roas >= 2 ? "#047857" : "#B45309" }}>
                                                     {snapSummary.month.spend > 0 ? `${snapSummary.month.roas}x` : "—"}
+                                                </div>
+                                            </div>
+                                            <div className="bg-white border border-yellow-200 rounded-lg p-4" data-testid="snap-cpo-month" title={`متوسط تكلفة الطلب = ${formatMoney(snapSummary.month.spend)} ÷ ${formatInt(snapSummary.month.orders)}`}>
+                                                <div className="text-xs text-muted-foreground mb-1">⚡ متوسط تكلفة الطلب (ر.س)</div>
+                                                <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>
+                                                    {snapSummary.month.cost_per_order != null ? formatMoney(snapSummary.month.cost_per_order) : "—"}
                                                 </div>
                                             </div>
                                         </div>
@@ -1003,7 +1015,7 @@ export default function Dashboard() {
                                 <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
                                     اليوم ({tiktokSummary.today.date})
                                 </div>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                                     <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-spend-today">
                                         <div className="text-xs text-muted-foreground mb-1">صرف اليوم (ر.س)</div>
                                         <div className="num text-2xl font-extrabold text-pink-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(tiktokSummary.today.spend)}</div>
@@ -1022,6 +1034,12 @@ export default function Dashboard() {
                                             {tiktokSummary.today.spend > 0 ? `${tiktokSummary.today.roas}x` : "—"}
                                         </div>
                                     </div>
+                                    <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-cpo-today" title={`متوسط تكلفة الطلب = ${formatMoney(tiktokSummary.today.spend)} ÷ ${formatInt(tiktokSummary.today.orders)}`}>
+                                        <div className="text-xs text-muted-foreground mb-1">⚡ متوسط تكلفة الطلب (ر.س)</div>
+                                        <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>
+                                            {tiktokSummary.today.cost_per_order != null ? formatMoney(tiktokSummary.today.cost_per_order) : "—"}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1030,7 +1048,7 @@ export default function Dashboard() {
                                 <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
                                     هذا الشهر (منذ {tiktokSummary.month.start})
                                 </div>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                                     <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-spend-month">
                                         <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
                                         <div className="num text-2xl font-extrabold text-pink-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(tiktokSummary.month.spend)}</div>
@@ -1047,6 +1065,12 @@ export default function Dashboard() {
                                         <div className="text-xs text-muted-foreground mb-1">ROAS الشهر</div>
                                         <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: tiktokSummary.month.roas >= 2 ? "#047857" : "#B45309" }}>
                                             {tiktokSummary.month.spend > 0 ? `${tiktokSummary.month.roas}x` : "—"}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white border border-pink-100 rounded-lg p-4" data-testid="tiktok-cpo-month" title={`متوسط تكلفة الطلب = ${formatMoney(tiktokSummary.month.spend)} ÷ ${formatInt(tiktokSummary.month.orders)}`}>
+                                        <div className="text-xs text-muted-foreground mb-1">⚡ متوسط تكلفة الطلب (ر.س)</div>
+                                        <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>
+                                            {tiktokSummary.month.cost_per_order != null ? formatMoney(tiktokSummary.month.cost_per_order) : "—"}
                                         </div>
                                     </div>
                                 </div>
@@ -1203,7 +1227,7 @@ export default function Dashboard() {
                                             <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
                                                 اليوم ({metaSummary.today.date})
                                             </div>
-                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                                                 <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-spend-today">
                                                     <div className="text-xs text-muted-foreground mb-1">صرف اليوم (ر.س)</div>
                                                     <div className="num text-2xl font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(metaSummary.today.spend)}</div>
@@ -1222,6 +1246,12 @@ export default function Dashboard() {
                                                         {metaSummary.today.spend > 0 ? `${metaSummary.today.roas}x` : "—"}
                                                     </div>
                                                 </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-cpo-today" title={`متوسط تكلفة الطلب = ${formatMoney(metaSummary.today.spend)} ÷ ${formatInt(metaSummary.today.orders)}`}>
+                                                    <div className="text-xs text-muted-foreground mb-1">⚡ متوسط تكلفة الطلب (ر.س)</div>
+                                                    <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>
+                                                        {metaSummary.today.cost_per_order != null ? formatMoney(metaSummary.today.cost_per_order) : "—"}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -1230,7 +1260,7 @@ export default function Dashboard() {
                                             <div className="text-xs text-muted-foreground font-bold mb-2" style={{ fontFamily: "Tajawal" }}>
                                                 هذا الشهر (منذ {metaSummary.month.start})
                                             </div>
-                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                                                 <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-spend-month">
                                                     <div className="text-xs text-muted-foreground mb-1">الصرف الشهري (ر.س)</div>
                                                     <div className="num text-2xl font-extrabold text-blue-700" style={{ fontFamily: "Tajawal" }}>{formatMoney(metaSummary.month.spend)}</div>
@@ -1247,6 +1277,12 @@ export default function Dashboard() {
                                                     <div className="text-xs text-muted-foreground mb-1">ROAS الشهر</div>
                                                     <div className="num text-2xl font-extrabold" style={{ fontFamily: "Tajawal", color: metaSummary.month.roas >= 2 ? "#047857" : "#B45309" }}>
                                                         {metaSummary.month.spend > 0 ? `${metaSummary.month.roas}x` : "—"}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white border border-blue-200 rounded-lg p-4" data-testid="meta-cpo-month" title={`متوسط تكلفة الطلب = ${formatMoney(metaSummary.month.spend)} ÷ ${formatInt(metaSummary.month.orders)}`}>
+                                                    <div className="text-xs text-muted-foreground mb-1">⚡ متوسط تكلفة الطلب (ر.س)</div>
+                                                    <div className="num text-2xl font-extrabold text-foreground" style={{ fontFamily: "Tajawal" }}>
+                                                        {metaSummary.month.cost_per_order != null ? formatMoney(metaSummary.month.cost_per_order) : "—"}
                                                     </div>
                                                 </div>
                                             </div>

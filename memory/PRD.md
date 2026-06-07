@@ -1,6 +1,49 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 89 — Cost Per Order (CPO) on platform cards
+
+User: «أضف متوسط تكلفة الطلب في بطاقات المنصات الإعلانية =
+إجمالي صرف المنصة ÷ عدد الطلبات من المنصة».
+
+### Backend
+- **`server.py`** — `/api/dashboard/snapchat-summary` now exposes
+  `cost_per_order` for `today` / `month` / `last_30d` periods.
+  Helper `_cpo(spend, orders) → None` when either is zero.
+- **`server.py`** — `/api/dashboard/meta-summary` and `tiktok-summary`
+  `_agg()` returns `cost_per_order` alongside the existing `cpa`.
+  `_agg_with_fallback()` also refreshes it when filling from
+  attributed orders.
+- **`snapchat_routes.py`** — `/api/snapchat/reference-stats`
+  yesterday + month blocks now include `cost_per_order`
+  (USD-spend → SAR-spend / purchases).
+
+### Frontend
+- **`Dashboard.jsx`** — 3 platform cards (Snap / Meta / TikTok)
+  switched from `grid-cols-4` to `grid-cols-5`. New tile:
+  `⚡ متوسط تكلفة الطلب (ر.س)` with tooltip showing the formula
+  «spend ÷ orders». testids: `snap-cpo-today`, `snap-cpo-month`,
+  `meta-cpo-today`, `meta-cpo-month`, `tiktok-cpo-today`,
+  `tiktok-cpo-month`.
+- **`SnapchatOfficialCard.jsx`** — Yesterday grid grew from 6 →
+  7 cols and Month from 4 → 5 cols. New tiles
+  `snap-official-yest-cpo` and `snap-official-month-cpo`.
+- Displays «—» whenever spend=0 or orders=0 (prevents division
+  by zero).
+
+### Verified
+- **7/7 pytests pass** (`test_cpo_platform_cards_iter89.py`).
+- Live numbers (merchant data):
+  - Meta this month: 4,429.43 ر.س ÷ 85 طلب = **52.11 ر.س** ✓
+  - Meta last 30 days: 19,870.62 ÷ 2,492 = **7.97 ر.س** ✓
+  - Snap last 30 days: 94,598.46 ÷ 2,352 = **40.22 ر.س** ✓
+- UI smoke: 6 CPO tiles render (2 per platform), tooltip shows
+  formula on hover.
+
+---
+
+
+
 ## ✅ ITERATION 88 — Webhook Token Health diagnostics
 
 User reported Make.com error:
