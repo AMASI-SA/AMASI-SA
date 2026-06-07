@@ -10,6 +10,48 @@
 
 ---
 
+## ✅ ITERATION 97 — Financial Input Hub (one-stop data entry)
+
+### Scope
+Single new page `/financial-input-hub` consolidating 7 daily operations
+into one tabbed UI. Plus 2 new `liabilities` kinds (`supplier`,
+`receivable`) so the existing collection covers every flow the
+merchant listed — no new collections, no extra screens beyond the hub.
+
+### Files changed (4)
+- `backend/liabilities_routes.py` — extended `LIABILITY_KINDS` with
+  `supplier` and `receivable`; `LiabilityCreate` accepts them with the
+  appropriate metadata (`supplier_name`, `counterparty_name`,
+  `counterparty_type`); `/summary` aggregates `suppliers_unpaid` (under
+  liabilities) and `receivables` (under assets — current receivables).
+- `frontend/src/pages/FinancialInputHub.jsx` — NEW (~570 LOC). 7 tabs
+  reusing existing endpoints:
+    1. التزام جديد            → POST /api/liabilities
+    2. سداد التزام            → POST /api/liabilities/{id}/pay
+    3. مصروف يومي             → POST /api/operating-expenses/daily
+    4. مديونية على الغير      → POST /api/liabilities (kind=receivable)
+    5. سلفة موظف              → POST /api/liabilities (kind=salary_advance)
+    6. دفعة شركة شحن          → POST /api/shipping-accounts/{co}/payments
+    7. تحويل COD              → POST /api/transfers (with shipping_company)
+- `frontend/src/App.js` + `frontend/src/components/Sidebar.jsx` —
+  +route + nav entry "مركز الإدخال المالي" (testid `nav-financial-input-hub`).
+- `backend/tests/test_liabilities_supplier_receivable_iter97.py` —
+  NEW, 5 tests, all PASS.
+
+### Verified
+- 5/5 pytest PASS (supplier + receivable + summary math + guards).
+- UI: all 7 tab testids present; navigation entry present; forms
+  render correctly in RTL Arabic.
+- Live screenshot confirms tabs + form layout on Preview.
+
+### What the merchant gains
+- مدخل بيانات واحد بدلاً من التنقّل بين 4 صفحات.
+- المديونيات على الغير (receivables) أصبحت تظهر كأصل مستحق التحصيل
+  في `/api/liabilities/summary` وفي شاشة المركز المالي تلقائياً.
+- موردون عامون (مطبعة، تغليف، خدمات) لهم تصنيف رسمي.
+
+---
+
 ## ✅ ITERATION 96 — Tag COD → Bank transfers with the shipping company
 
 ### Scope

@@ -40,9 +40,16 @@ from auth import get_current_user_from_db
 
 
 # ── Catalogue ──────────────────────────────────────────────────────────────
-LIABILITY_KINDS = ("salary", "ad_account", "salary_advance")
+# Iter-97 — added "supplier" (generic third-party invoices like landlords,
+# contractors, packaging vendors) and "receivable" (money owed TO the
+# merchant by customers, employees, third parties — a current asset).
+LIABILITY_KINDS = (
+    "salary", "ad_account", "salary_advance",
+    "supplier", "receivable",
+)
 LIABILITY_STATUSES = ("unpaid", "partial", "paid")
 AD_PROVIDERS = ("snapchat", "tiktok", "meta")
+RECEIVABLE_PARTY_TYPES = ("customer", "employee", "person", "company")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -115,16 +122,10 @@ async def ensure_liabilities_indexes(db) -> None:
 
 # ── Pydantic ───────────────────────────────────────────────────────────────
 class LiabilityCreate(BaseModel):
-    """Manual creation — primarily for `ad_account` bills or
-    `salary_advance` entries. Salaries are created via
-    /generate-salaries to enforce idempotency per period.
-
-    For salary_advance: pass employee_salary_id and amount. The advance
-    will be recorded with paid_amount = expected_amount = amount so the
-    bank movement reflects the cash leaving immediately. paid_from_account_id
-    is required for advances to update the bank balance.
-    """
-    kind: Literal["ad_account", "salary_advance"]
+    """Manual creation. Salaries are still created via /generate-salaries
+    for idempotency; everything else (ad/supplier/advance/receivable)
+    goes through here."""
+    kind: Literal["ad_account", "salary_advance", "supplier", "receivable"]
     expected_amount: float = Field(..., gt=0)
     due_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     description: str = Field("", max_length=300)
@@ -135,6 +136,11 @@ class LiabilityCreate(BaseModel):
     # salary_advance
     employee_salary_id: Optional[str] = None
     paid_from_account_id: Optional[str] = None  # required for advances
+    # supplier
+    supplier_name: Optional[str] = Field(None, max_length=160)
+    # receivable
+    counterparty_name: Optional[str] = Field(None, max_length=160)
+    counterparty_type: Optional[str] = None  # customer / employee / person / company
 
     @validator("ad_provider")
     def _v_prov(cls, v, values):
@@ -155,6 +161,18 @@ class LiabilityCreate(BaseModel):
             raise ValueError(
                 "paid_from_account_id required for salary_advance"
             )
+        return v
+
+    @validator("supplier_name")
+    def _v_supp(cls, v, values):
+        if values.get("kind") == "supplier" and not (v and v.strip()):
+            raise ValueError("supplier_name required for supplier")
+        return v
+
+    @validator("counterparty_name")
+    def _v_cp(cls, v, values):
+        if values.get("kind") == "receivable" and not (v and v.strip()):
+            raise ValueError("counterparty_name required for receivable")
         return v
 
 
@@ -430,6 +448,55 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             await db.liabilities.insert_one(row)
             return _enrich(row)
 
+        if kind == "supplier":
+            if not (payload.supplier_name and payload.supplier_name.strip()):
+                raise HTTPException(400, "اسم المورد/الجهة مطلوب")
+            row = {
+                "id": liab_id,
+                "user_id": user["id"],
+                "kind": "supplier",
+                "supplier_name": payload.supplier_name.strip(),
+                "expected_amount": _round(payload.expected_amount),
+                "paid_amount": 0.0,
+                "advance_deducted": 0.0,
+                "due_date": payload.due_date,
+                "status": "unpaid",
+                "description": payload.description or "",
+                "notes": payload.notes or "",
+                "auto_generated": False,
+                "created_at": now,
+                "updated_at": now,
+            }
+            await db.liabilities.insert_one(row)
+            return _enrich(row)
+
+        if kind == "receivable":
+            if not (payload.counterparty_name and payload.counterparty_name.strip()):
+                raise HTTPException(400, "اسم الجهة المدينة مطلوب")
+            # Iter-97 — money OWED TO the merchant. Same row schema; lives
+            # on the assets side of the financial-position summary.
+            row = {
+                "id": liab_id,
+                "user_id": user["id"],
+                "kind": "receivable",
+                "counterparty_name": payload.counterparty_name.strip(),
+                "counterparty_type": payload.counterparty_type
+                    if payload.counterparty_type in RECEIVABLE_PARTY_TYPES
+                    else "person",
+                "expected_amount": _round(payload.expected_amount),
+                "paid_amount": 0.0,
+                "advance_deducted": 0.0,
+                "due_date": payload.due_date,
+                "status": "unpaid",   # "unpaid" = uncollected
+                "description": payload.description or "",
+                "notes": payload.notes or "",
+                "auto_generated": False,
+                "created_at": now,
+                "updated_at": now,
+            }
+            await db.liabilities.insert_one(row)
+            return _enrich(row)
+
         # salary_advance — money OUT of bank to employee, no salary yet
         # to deduct from. Recorded as expected=paid (it's already paid)
         # with advance_status=open for later consumption.
@@ -572,13 +639,14 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         agg = {
             "salaries_unpaid": 0.0,
             "ad_accounts_unpaid": 0.0,
+            "suppliers_unpaid": 0.0,
             "overdue_total": 0.0,
         }
         by_provider = {p: 0.0 for p in AD_PROVIDERS}
         async for r in db.liabilities.find(
             {
                 "user_id": uid,
-                "kind": {"$in": ["salary", "ad_account"]},
+                "kind": {"$in": ["salary", "ad_account", "supplier"]},
                 "status": {"$ne": "paid"},
             },
             {"_id": 0, "kind": 1, "expected_amount": 1, "paid_amount": 1,
@@ -596,22 +664,40 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 prov = r.get("ad_provider")
                 if prov in by_provider:
                     by_provider[prov] += remaining
+            elif r["kind"] == "supplier":
+                agg["suppliers_unpaid"] += remaining
             if r.get("due_date") and r["due_date"] < today:
                 agg["overdue_total"] += remaining
 
         liabilities_total = _round(
-            agg["salaries_unpaid"] + agg["ad_accounts_unpaid"]
+            agg["salaries_unpaid"] + agg["ad_accounts_unpaid"] + agg["suppliers_unpaid"]
         )
+
+        # Iter-97 — receivables = money owed TO the merchant; count as a
+        # current asset (المديونيات على الغير).
+        receivables_total = 0.0
+        async for r in db.liabilities.find(
+            {"user_id": uid, "kind": "receivable", "status": {"$ne": "paid"}},
+            {"_id": 0, "expected_amount": 1, "paid_amount": 1},
+        ):
+            receivables_total += max(
+                0.0,
+                _round(r.get("expected_amount")) - _round(r.get("paid_amount")),
+            )
+        receivables_total = _round(receivables_total)
+        assets_total = _round(assets_total + receivables_total)
 
         return {
             "assets": {
                 "banks": _round(banks_total),
                 "payment_platforms_expected": _round(platforms_total),
+                "receivables": receivables_total,
                 "total": assets_total,
             },
             "liabilities": {
                 "salaries_unpaid": _round(agg["salaries_unpaid"]),
                 "ad_accounts_unpaid": _round(agg["ad_accounts_unpaid"]),
+                "suppliers_unpaid": _round(agg["suppliers_unpaid"]),
                 "overdue_total": _round(agg["overdue_total"]),
                 "total": liabilities_total,
                 "by_ad_provider": {k: _round(v) for k, v in by_provider.items()},
