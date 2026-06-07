@@ -716,6 +716,39 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             agg["salaries_unpaid"] + agg["ad_accounts_unpaid"] + agg["suppliers_unpaid"]
         )
 
+        # Iter-101 — shipping liabilities (deferred couriers).
+        # Owed is computed ONLY from orders with delivered/completed
+        # statuses; cancelled / in-transit / refunded orders create no
+        # courier obligation. Paid amounts come from `shipping_payments`
+        # (both manual payments and COD-net fee deductions land there),
+        # so the liability decreases automatically.
+        from shipping_accounts import compute_owed_per_company, compute_paid_per_company
+        owed_ship = await compute_owed_per_company(db, uid)
+        paid_ship = await compute_paid_per_company(db, uid)
+        by_shipping_company: dict[str, dict] = {}
+        shipping_total = 0.0
+        for name, data in owed_ship.items():
+            paid_amt = float(paid_ship.get(name, 0.0))
+            remaining = max(0.0, _round(data["owed"] - paid_amt))
+            by_shipping_company[name] = {
+                "owed": _round(data["owed"]),
+                "paid": _round(paid_amt),
+                "remaining": remaining,
+                "orders_count": int(data.get("orders_count", 0)),
+            }
+            shipping_total += remaining
+        # Also surface any company that ONLY appears in paid_ship (overpayment / legacy) as info.
+        for name, paid_amt in paid_ship.items():
+            if name not in by_shipping_company:
+                by_shipping_company[name] = {
+                    "owed": 0.0,
+                    "paid": _round(paid_amt),
+                    "remaining": 0.0,
+                    "orders_count": 0,
+                }
+        shipping_total = _round(shipping_total)
+        liabilities_total = _round(liabilities_total + shipping_total)
+
         # Iter-97 — receivables = money owed TO the merchant; count as a
         # current asset (المديونيات على الغير).
         receivables_total = 0.0
@@ -748,6 +781,9 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 "salaries_unpaid": _round(agg["salaries_unpaid"]),
                 "ad_accounts_unpaid": _round(agg["ad_accounts_unpaid"]),
                 "suppliers_unpaid": _round(agg["suppliers_unpaid"]),
+                # Iter-101 — shipping accrued from delivered orders only.
+                "shipping_unpaid": shipping_total,
+                "by_shipping_company": by_shipping_company,
                 "overdue_total": _round(agg["overdue_total"]),
                 "total": liabilities_total,
                 "by_ad_provider": {k: _round(v) for k, v in by_provider.items()},

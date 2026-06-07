@@ -27,6 +27,15 @@ from pydantic import BaseModel, Field
 from auth import get_current_user_from_db, ensure_user_settings, DEFAULT_SHIPPING_COMPANIES
 
 
+# Iter-101 — orders are an accrued shipping liability ONLY when they
+# actually got delivered (or completed). Anything still in-transit,
+# cancelled, or refunded creates NO obligation toward the courier.
+DELIVERED_STATUSES_DEFAULT = [
+    "تم التوصيل", "تم الاستلام", "تم التنفيذ",
+    "delivered", "completed",
+]
+
+
 class PaymentIn(BaseModel):
     amount: float = Field(gt=0)
     payment_date: str = Field(min_length=10, max_length=10)  # YYYY-MM-DD
@@ -110,6 +119,116 @@ async def _delete_shipping_payment_tx(
     await _recompute_shipping_account_balance(db, user_id, account_id)
 
 
+def _matches_any_sync(value: str, allowed: list[str]) -> bool:
+    if not allowed:
+        return True
+    v = (value or "").strip().lower()
+    for a in allowed:
+        a_lc = a.strip().lower()
+        if a_lc and (a_lc == v or a_lc in v or v in a_lc):
+            return True
+    return False
+
+
+def _resolve_company_sync(name: str, cfg_map: dict[str, dict]) -> tuple[str, dict] | tuple[None, None]:
+    v = (name or "").strip().lower()
+    if not v:
+        return None, None
+    if v in cfg_map:
+        cfg = cfg_map[v]
+        return cfg.get("name", "").strip(), cfg
+    for k, cfg in cfg_map.items():
+        if k and (k in v or v in k):
+            return cfg.get("name", "").strip(), cfg
+    return None, None
+
+
+async def _deferred_company_names_db(db, user_id: str) -> list[str]:
+    settings = await ensure_user_settings(db, user_id)
+    return [
+        (s.get("name") or "").strip()
+        for s in settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES)
+        if s.get("is_deferred") and (s.get("name") or "").strip()
+    ]
+
+
+async def _shipping_config_map_db(db, user_id: str) -> dict[str, dict]:
+    settings = await ensure_user_settings(db, user_id)
+    out: dict[str, dict] = {}
+    for s in settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES):
+        n = (s.get("name") or "").strip()
+        if not n:
+            continue
+        out[n.lower()] = s
+    return out
+
+
+async def compute_owed_per_company(db, user_id: str) -> dict[str, dict]:
+    """Module-level reusable version. Iter-101 — strict status filter:
+    only orders matching delivered/completed statuses ever accrue a
+    shipping liability. Defaults to DELIVERED_STATUSES_DEFAULT when the
+    user hasn't customised `report_included_statuses` in settings.
+
+    The legacy `analyses.report.shipping_breakdown` path lacks per-order
+    statuses and so can ONLY be trusted if the user has not overridden
+    the default delivered filter AND there is no fresh unified_orders
+    data. We unconditionally prefer `unified_orders` here (single source
+    of truth) and skip the legacy path to avoid double-counting and to
+    enforce the delivered-only rule.
+    """
+    settings = await ensure_user_settings(db, user_id)
+    included_statuses = (
+        settings.get("report_included_statuses")
+        or DELIVERED_STATUSES_DEFAULT
+    )
+    cfg_map = await _shipping_config_map_db(db, user_id)
+    deferred_set = set(await _deferred_company_names_db(db, user_id))
+
+    out: dict[str, dict] = {}
+
+    async for o in db.unified_orders.find(
+        {"user_id": user_id},
+        {"_id": 0, "order_status": 1, "shipping_company": 1, "shipping_cost": 1},
+    ):
+        if not _matches_any_sync(o.get("order_status", ""), included_statuses):
+            continue
+        canonical, cfg = _resolve_company_sync(o.get("shipping_company", ""), cfg_map)
+        if not cfg or not cfg.get("is_deferred"):
+            continue
+        order_cost = float(o.get("shipping_cost") or 0)
+        cfg_cost = float(cfg.get("cost") or 0)
+        vat = float(cfg.get("vat_rate") or 0)
+        cost = order_cost if order_cost > 0 else cfg_cost
+        entry = out.setdefault(canonical, {
+            "owed": 0.0,
+            "orders_count": 0,
+            "cost_per_order": cost,
+        })
+        entry["owed"] += round(cost * (1 + vat), 4)
+        entry["orders_count"] += 1
+        if cost > 0:
+            entry["cost_per_order"] = cost
+
+    for k in out:
+        out[k]["owed"] = round(out[k]["owed"], 2)
+    for n in deferred_set:
+        out.setdefault(n, {"owed": 0.0, "orders_count": 0, "cost_per_order": 0.0})
+    return out
+
+
+async def compute_paid_per_company(db, user_id: str) -> dict[str, float]:
+    """Total amount already paid (or deducted via COD net method) to each
+    courier. Aggregated from `shipping_payments` keyed by `company_name`."""
+    pipeline = [
+        {"$match": {"user_id": user_id}},
+        {"$group": {"_id": "$company_name", "paid": {"$sum": "$amount"}}},
+    ]
+    out: dict[str, float] = {}
+    async for doc in db.shipping_payments.aggregate(pipeline):
+        out[(doc.get("_id") or "").strip()] = round(float(doc.get("paid", 0) or 0), 2)
+    return out
+
+
 def _build_router(db) -> APIRouter:
     router = APIRouter(prefix="/shipping-accounts", tags=["shipping-accounts"])
 
@@ -162,95 +281,11 @@ def _build_router(db) -> APIRouter:
         return None, None
 
     async def _owed_per_company(user_id: str) -> dict[str, dict]:
-        """Aggregate {company_name: {owed, orders_count, cost_per_order}} from
-        BOTH legacy `analyses.report.shipping_breakdown` AND live `unified_orders`.
-
-        For unified_orders: we look up each order's shipping_company against the
-        user's shipping_companies settings; only deferred companies are counted.
-        The cost per order comes from the settings entry (cost + VAT included).
-
-        Respects `report_included_statuses` if set in settings.
-        """
-        settings = await ensure_user_settings(db, user_id)
-        included_statuses = settings.get("report_included_statuses") or []
-        cfg_map = await _shipping_config_map(user_id)
-        deferred_set = {n for n in (await _deferred_company_names(user_id))}
-
-        out: dict[str, dict] = {}
-
-        # ── Legacy analyses path ────────────────────────────────────────────
-        # Skip when statuses filter is on (legacy lacks per-order data)
-        if not included_statuses:
-            pipeline = [
-                {"$match": {"user_id": user_id}},
-                {"$unwind": "$report.shipping_breakdown"},
-                {"$match": {"report.shipping_breakdown.is_deferred": True}},
-                {"$group": {
-                    "_id": "$report.shipping_breakdown.name",
-                    "owed": {"$sum": "$report.shipping_breakdown.total_cost"},
-                    "orders_count": {"$sum": "$report.shipping_breakdown.orders_count"},
-                    "cost_per_order": {"$last": "$report.shipping_breakdown.cost_per_order"},
-                }},
-            ]
-            async for doc in db.analyses.aggregate(pipeline):
-                name = (doc.get("_id") or "").strip()
-                if not name:
-                    continue
-                out[name] = {
-                    "owed": round(float(doc.get("owed", 0) or 0), 2),
-                    "orders_count": int(doc.get("orders_count", 0) or 0),
-                    "cost_per_order": float(doc.get("cost_per_order", 0) or 0),
-                }
-
-        # ── Live unified_orders path ────────────────────────────────────────
-        # Pull the order's actual `shipping_cost` so we don't underprice when
-        # the user hasn't filled `cost` in settings. Order data wins, settings
-        # cost is the fallback.
-        async for o in db.unified_orders.find(
-            {"user_id": user_id},
-            {"_id": 0, "order_status": 1, "shipping_company": 1, "shipping_cost": 1},
-        ):
-            if included_statuses and not await _matches_any(o.get("order_status", ""), included_statuses):
-                continue
-            canonical, cfg = _resolve_company(o.get("shipping_company", ""), cfg_map)
-            if not cfg or not cfg.get("is_deferred"):
-                continue
-            order_cost = float(o.get("shipping_cost") or 0)
-            cfg_cost = float(cfg.get("cost") or 0)
-            vat = float(cfg.get("vat_rate") or 0)
-            # Prefer the actual shipping cost on the order (most accurate).
-            # When the order has none, fall back to the configured per-order
-            # cost from settings. Anything > 0 wins over 0.
-            cost = order_cost if order_cost > 0 else cfg_cost
-            entry = out.setdefault(canonical, {
-                "owed": 0.0,
-                "orders_count": 0,
-                "cost_per_order": cost,
-            })
-            entry["owed"] += round(cost * (1 + vat), 4)
-            entry["orders_count"] += 1
-            # Show the latest known cost_per_order (running last); UI uses it
-            # only as a hint when there are 0 orders.
-            if cost > 0:
-                entry["cost_per_order"] = cost
-
-        # Round final owed (avoid floating drift)
-        for k in out:
-            out[k]["owed"] = round(out[k]["owed"], 2)
-        # Make sure all configured deferred companies appear even if zero
-        for n in deferred_set:
-            out.setdefault(n, {"owed": 0.0, "orders_count": 0, "cost_per_order": 0.0})
-        return out
+        # Iter-101 — delegate to module-level reusable helper.
+        return await compute_owed_per_company(db, user_id)
 
     async def _paid_per_company(user_id: str) -> dict[str, float]:
-        pipeline = [
-            {"$match": {"user_id": user_id}},
-            {"$group": {"_id": "$company_name", "paid": {"$sum": "$amount"}}},
-        ]
-        out: dict[str, float] = {}
-        async for doc in db.shipping_payments.aggregate(pipeline):
-            out[(doc.get("_id") or "").strip()] = round(float(doc.get("paid", 0) or 0), 2)
-        return out
+        return await compute_paid_per_company(db, user_id)
 
     @router.get("")
     async def list_accounts(user: dict = Depends(current_user)):

@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     Scales, Wallet, Receipt, CurrencyDollar, ChartLineUp,
-    ClipboardText, Clock, ArrowRight,
+    ClipboardText, Clock, ArrowRight, Truck,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
@@ -238,9 +238,24 @@ export default function FinancialPosition() {
                     testid="kpi-liab-ads"
                 />
                 <Card
+                    title="مستحقات شركات الشحن"
+                    value={fmtMoney(l.shipping_unpaid)}
+                    sub={(() => {
+                        const by = l.by_shipping_company || {};
+                        const rows = Object.entries(by)
+                            .filter(([, v]) => Number(v?.remaining || 0) > 0)
+                            .map(([name, v]) => `${name}: ${fmtMoney(v.remaining)}`);
+                        if (rows.length === 0) return "لا مستحقات قيد السداد — تُحسب من الطلبات المسلّمة فقط";
+                        return rows.slice(0, 3).join(" · ") + (rows.length > 3 ? " …" : "");
+                    })()}
+                    tone="amber"
+                    Icon={Truck}
+                    testid="kpi-liab-shipping"
+                />
+                <Card
                     title="إجمالي الالتزامات"
                     value={fmtMoney(l.total)}
-                    sub="الرواتب + الإعلانات"
+                    sub="الرواتب + الإعلانات + الشحن + الموردين"
                     tone="rose"
                     Icon={CurrencyDollar}
                     testid="kpi-liab-total"
@@ -297,6 +312,12 @@ export default function FinancialPosition() {
                     value={fmtPct(totals.collection_rate)}
                     hint={`متوقَّع ${fmtMoney(totals.expected)} · محوَّل ${fmtMoney(totals.transferred)}`}
                     link="/reconciliation"
+                />
+                <MiniRow
+                    label="عرض حسابات شركات الشحن"
+                    value={fmtMoney(l.shipping_unpaid)}
+                    hint="مستحقات مُحتسبة من الطلبات المسلّمة فقط"
+                    link="/shipping-accounts"
                 />
                 <MiniRow
                     label="عرض المصروفات التشغيلية والرواتب"

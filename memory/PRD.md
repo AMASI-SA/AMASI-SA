@@ -10,6 +10,41 @@
 
 ---
 
+## ✅ ITERATION 101 — Shipping liability in Financial Position (Feb 2026)
+
+### Bug
+The Financial Position screen showed `0` for shipping liabilities even when many delivered orders were waiting to be settled with deferred couriers (سمسا, جندل …). Also, `_owed_per_company` defaulted to **no status filter** when the user hadn't customised `report_included_statuses`, which would have inflated the figure if it were exposed.
+
+### Fix
+- **`backend/shipping_accounts.py`**:
+  - New `DELIVERED_STATUSES_DEFAULT = ["تم التوصيل","تم الاستلام","تم التنفيذ","delivered","completed"]`.
+  - `compute_owed_per_company(db, uid)` extracted to module level and **always** filters by delivered status (defaulting to `DELIVERED_STATUSES_DEFAULT` when the user has no custom filter).
+  - Legacy `analyses.report.shipping_breakdown` path removed (it lacked per-order status and would have leaked non-delivered orders into the figure).
+  - `compute_paid_per_company(db, uid)` extracted likewise.
+- **`backend/liabilities_routes.py`**:
+  - `/api/liabilities/summary` now imports the two helpers and adds:
+    - `liabilities.shipping_unpaid` (total remaining across all deferred couriers).
+    - `liabilities.by_shipping_company` (per-courier breakdown: owed / paid / remaining / orders_count).
+    - `liabilities.total` and `net_position` updated accordingly.
+
+### Frontend (`FinancialPosition.jsx`)
+- New KPI card **"مستحقات شركات الشحن"** (Truck icon, amber tone) — shows total + per-company breakdown.
+- Updated subtitle on total liabilities: "الرواتب + الإعلانات + الشحن + الموردين".
+- New quick-link row to `/shipping-accounts`: "مستحقة فعلياً من الطلبات المسلَّمة فقط".
+
+### Live verification
+Admin account shows سمسا = 19,323 ر.س (matches `/shipping-accounts`). ✅
+
+### Tests — `tests/test_shipping_liability_in_fp_iter101.py` (5/5 ✅)
+1. **Status filter strict**: 9 orders (4 delivered + 5 of various other statuses) → only 4 counted. cancelled / in-transit / refunded ignored.
+2. **Summary exposes shipping**: `shipping_unpaid` appears + included in `liabilities.total` + reduces `net_position`.
+3. **Payment reduces liability**: inserting a `shipping_payments` row of 30 cuts the remaining from 100 → 70 automatically.
+4. **Cross-source agreement**: `liabilities.summary.by_shipping_company[X].remaining == /shipping-accounts[X].remaining`.
+5. **COD-net method end-to-end**: a 40-fee deducted via the Iter-98 atomic transfer reduces shipping liability from 100 → 60 (single ledger).
+
+---
+
+
 ## ✅ ITERATION 100 — Financial-Position double-counting fix (Feb 2026)
 
 ### Bug
