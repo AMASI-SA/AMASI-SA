@@ -197,9 +197,9 @@ export default function FinancialPosition() {
                     testid="kpi-assets-banks"
                 />
                 <Card
-                    title="إجمالي المنصات"
-                    value={fmtMoney(a.payment_platforms_expected)}
-                    sub="مبالغ متوقَّعة لم تُحوَّل بعد"
+                    title="رصيد المنصات (لم يُحوَّل بعد)"
+                    value={fmtMoney(a.payment_platforms_remaining ?? a.payment_platforms_expected)}
+                    sub="الرصيد المتبقي على بوابات الدفع — بعد خصم ما تم تحويله للبنوك"
                     tone="violet"
                     Icon={Receipt}
                     testid="kpi-assets-platforms"
@@ -207,7 +207,7 @@ export default function FinancialPosition() {
                 <Card
                     title="إجمالي الأصول"
                     value={fmtMoney(a.total)}
-                    sub="البنوك + المنصات"
+                    sub="البنوك + المنصات + المديونيات (بدون تكرار)"
                     tone="emerald"
                     Icon={CurrencyDollar}
                     testid="kpi-assets-total"

@@ -10,6 +10,31 @@
 
 ---
 
+## ✅ ITERATION 100 — Financial-Position double-counting fix (Feb 2026)
+
+### Bug
+`/api/liabilities/summary` was summing `expected_orders_balance` (the GROSS historical order amount, never decremented) for `payment_platform` accounts.
+That caused **double-counting**: e.g., Tamara orders 100k + a 90k transfer to bank showed both as platform (100k) AND bank (90k) → total assets = 190k.
+
+### Fix (`backend/liabilities_routes.py`)
+- `payment_platform` accounts now contribute their **`current_balance`** (running ledger balance after every transfer/refund/settlement via `account_transactions`).
+- New, clearer key in the response: **`assets.payment_platforms_remaining`**.
+- Legacy key `assets.payment_platforms_expected` is kept with the **SAME (new) value** for backward compatibility.
+
+### Frontend (`FinancialPosition.jsx`)
+- KPI card renamed to "رصيد المنصات (لم يُحوَّل بعد)".
+- Reads `payment_platforms_remaining` with fallback to legacy key.
+- "إجمالي الأصول" subtitle updated to "البنوك + المنصات + المديونيات (بدون تكرار)".
+
+### Tests — `tests/test_financial_position_double_counting_iter100.py` (4/4 ✅)
+1. **Tamara example**: Sales 100k − transfer 90k ⇒ `payment_platforms_remaining = 10k`, banks = 90k, total = 100k (no inflation).
+2. **Cross-check**: `assets.total` from `/liabilities/summary` equals `grand_total` from `/accounts/summary` (single source of truth).
+3. **Invariance**: Bank↔platform transfers do NOT change `net_position` (it stays 80k before and after a 60k transfer).
+4. **Reconciliation agreement**: `payment_platforms_remaining` equals `accounts/{id}.current_balance` for the same platform.
+
+---
+
+
 ## ✅ ITERATION 99 — Counterparties registry + list-pollution fix (Feb 2026)
 
 ### Phase 1 — Frontend list filtering (FinancialInputHub.jsx)

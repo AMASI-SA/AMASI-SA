@@ -642,9 +642,16 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         """Assets − Liabilities = Net financial position.
 
         Assets reused from existing `accounts` collection:
-          - banks:     SUM(current_balance) where account_type=bank
-          - platforms: SUM(expected_orders_balance) where
-                       account_type=payment_platform AND status != hidden
+          - banks:                       SUM(current_balance) where account_type=bank
+          - payment_platforms_remaining: SUM(current_balance) where
+                                         account_type=payment_platform AND status != hidden
+                                         (Iter-100: was `expected_orders_balance` which
+                                         caused double-counting because that field stores
+                                         the GROSS historical order amount and is never
+                                         decremented when funds move to the bank. Switched
+                                         to `current_balance` which is the running balance
+                                         after all transfers, refunds and settlements via
+                                         `account_transactions`.)
 
         Liabilities = SUM(remaining_amount) over open `liabilities` rows.
         salary_advance rows are EXCLUDED from the liability total because
@@ -666,7 +673,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             if t == "bank":
                 banks_total += float(a.get("current_balance") or 0)
             elif t == "payment_platform":
-                platforms_total += float(a.get("expected_orders_balance") or 0)
+                # Iter-100 — REMAINING (un-transferred) balance only.
+                platforms_total += float(a.get("current_balance") or 0)
         assets_total = _round(banks_total + platforms_total)
 
         # Liabilities ──────────────────────────────────────────────
@@ -725,6 +733,13 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         return {
             "assets": {
                 "banks": _round(banks_total),
+                # Iter-100 — `payment_platforms_remaining` is the new,
+                # clearer name (only un-transferred balance). The old
+                # `payment_platforms_expected` key is kept with the SAME
+                # value for backward compatibility with the existing
+                # /financial-position UI; it no longer reflects the gross
+                # historical figure.
+                "payment_platforms_remaining": _round(platforms_total),
                 "payment_platforms_expected": _round(platforms_total),
                 "receivables": receivables_total,
                 "total": assets_total,
