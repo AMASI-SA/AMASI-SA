@@ -1,6 +1,50 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 84 — Brand Identity rebrand to MEZAN / ميزان
+
+User requested: full rebrand from «حساب» to **MEZAN / ميزان** with new
+geometric logo (M + scales + ascending bars), new color palette, and
+unified tagline.
+
+### New Brand
+- **Name (EN)**: `MEZAN` · **Name (AR)**: `ميزان`
+- **Tagline**: «منصة التحليلات والمحاسبة للتجارة الإلكترونية»
+- **Colors**:
+  - Primary `#0F5D46` (deep green)
+  - Secondary `#16A34A` (vibrant green / growth)
+  - Gold `#D4A017` (accent / scales)
+  - Background `#F8FAFC` · Text `#111827`
+
+### Changes
+- **`components/MezanLogo.jsx`** (NEW) — two variants `LogoIcon` (square
+  mark) and `LogoFull` (with MEZAN + ميزان wordmarks + tagline).
+  Geometric M built from balance-scale crossbar + 5 ascending bars.
+- **`public/favicon.svg`** (NEW) — standalone SVG icon used as favicon
+  + apple-touch-icon.
+- **`public/index.html`** — new `<title>`, `theme-color=#0F5D46`, OG +
+  Twitter + Apple meta tags, Tajawal 400/500/700/800 weights.
+- **`index.css`** — updated CSS variables (primary/secondary/accent/
+  ring/chart-*) and `.bg-brand` / `.text-brand` / `.bg-accent-green`
+  utility shortcuts. Selection highlight = new green.
+- **Login.jsx / Register.jsx** — replaced «ح» avatar with `<LogoIcon />`
+  + MEZAN/ميزان wordmarks (testids: `login-brand-en`, `login-brand-ar`).
+- **Sidebar.jsx** — same swap (testids: `sidebar-brand-en`, `-ar`).
+- **Layout.jsx** — mobile header brand updated (`mobile-header-brand`).
+
+### Verified
+- `testing_agent_v3_fork` iter-45: **Frontend 100% / 0 bugs**.
+- Cross-page persistence verified on `/`, `/accounts`, `/reports`,
+  `/reconciliation`, `/settings`.
+- `<title>` = «MEZAN — ميزان · منصة التحليلات والمحاسبة للتجارة الإلكترونية».
+- `theme-color = #0F5D46` · `apple-mobile-web-app-title = MEZAN`.
+- `/favicon.svg` returns 200 with `<svg>` body.
+- Login submit button computed bg = `rgb(15, 93, 70)` = `#0F5D46`.
+
+---
+
+
+
 ## ✅ ITERATION 83 — Order Status Policy + Pending bucket
 
 User requested: «أضف في إعدادات النظام طريقة اعتماد الطلبات التي تدخل بالأصول
