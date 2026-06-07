@@ -37,6 +37,9 @@ import FinancialPosition from "./pages/FinancialPosition";
 import FinancialInputHub from "./pages/FinancialInputHub";
 import Counterparties from "./pages/Counterparties";
 import PurchaseInvoices from "./pages/PurchaseInvoices";
+import Advances from "./pages/Advances";
+import Receivables from "./pages/Receivables";
+import OperationsDashboard from "./pages/OperationsDashboard";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -80,6 +83,9 @@ function AppRoutes() {
             <Route path="/financial-input-hub" element={<ProtectedRoute><Layout><FinancialInputHub /></Layout></ProtectedRoute>} />
             <Route path="/counterparties" element={<ProtectedRoute><Layout><Counterparties /></Layout></ProtectedRoute>} />
             <Route path="/purchase-invoices" element={<ProtectedRoute><Layout><PurchaseInvoices /></Layout></ProtectedRoute>} />
+            <Route path="/advances" element={<ProtectedRoute><Layout><Advances /></Layout></ProtectedRoute>} />
+            <Route path="/receivables" element={<ProtectedRoute><Layout><Receivables /></Layout></ProtectedRoute>} />
+            <Route path="/operations-dashboard" element={<ProtectedRoute><Layout><OperationsDashboard /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />

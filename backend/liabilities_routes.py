@@ -996,6 +996,73 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             "transaction_id": tx["id"],
         }
 
+    # ── POST /{id}/collect ───────────────────────────────────────────
+    # Iter-104 — opposite of /pay. For `kind=receivable` only.
+    # When a debtor pays us, our bank goes UP and the receivable goes
+    # DOWN. Mirrors /pay but with direction="in" on the bank tx.
+    @router.post("/{liab_id}/collect")
+    async def collect_receivable(
+        liab_id: str, payload: PaymentIn,
+        user: dict = Depends(current_user),
+    ):
+        liab = await db.liabilities.find_one(
+            {"id": liab_id, "user_id": user["id"]}, {"_id": 0},
+        )
+        if not liab:
+            raise HTTPException(404, "Liability not found")
+        if liab.get("kind") != "receivable":
+            raise HTTPException(
+                400, "التحصيل ينطبق فقط على الذمم المدينة (kind=receivable)",
+            )
+
+        amount = _round(payload.amount)
+        expected = _round(liab.get("expected_amount"))
+        already_collected = _round(liab.get("paid_amount"))
+        remaining = _round(expected - already_collected)
+        if amount > remaining + 0.01:
+            raise HTTPException(
+                400,
+                f"المبلغ المحصَّل ({amount}) أكبر من المتبقي ({remaining})",
+            )
+
+        acc = await db.accounts.find_one(
+            {"id": payload.paid_from_account_id, "user_id": user["id"]},
+            {"_id": 0, "id": 1, "name": 1, "account_type": 1},
+        )
+        if not acc:
+            raise HTTPException(404, "Destination account not found")
+
+        # 1) Add to bank
+        tx = await _post_bank_tx(
+            db, user["id"],
+            account_id=payload.paid_from_account_id,
+            amount=amount, direction="in",
+            transaction_date=payload.payment_date,
+            description=f"تحصيل من — {liab.get('counterparty_name') or liab.get('description', '')}",
+            peer_liability_id=liab_id,
+            transaction_type="receivable_collection",
+        )
+
+        # 2) Reduce receivable
+        new_collected = _round(already_collected + amount)
+        new_status = _compute_status(expected, new_collected)
+        await db.liabilities.update_one(
+            {"id": liab_id, "user_id": user["id"]},
+            {"$set": {
+                "paid_amount": new_collected,
+                "status": new_status,
+                "updated_at": _now(),
+            }},
+        )
+        fresh = await db.liabilities.find_one(
+            {"id": liab_id, "user_id": user["id"]}, {"_id": 0},
+        )
+        return {
+            "ok": True,
+            "liability": _enrich(fresh),
+            "transaction_id": tx["id"],
+        }
+
     # ── DELETE /{id} ──────────────────────────────────────────────────
     @router.delete("/{liab_id}")
     async def delete_liability(

@@ -10,6 +10,46 @@
 
 ---
 
+## ✅ ITERATION 104 — Procurement, Advances & Receivables Section (Feb 2026)
+
+### Why
+Group the daily operational workflows (purchases, employee advances, customer receivables) into one dedicated sidebar section "إدارة المشتريات والعهد والتحصيلات" — reusing existing collections, no duplicated balance math.
+
+### Backend
+- New endpoint **`POST /api/liabilities/{id}/collect`** (Iter-104) — opposite of `/pay`:
+  - Only valid for `kind=receivable`.
+  - Increases the chosen bank's `current_balance` via `account_transactions` (direction=in, transaction_type=`receivable_collection`).
+  - Decreases the receivable's `remaining_amount`, flips `status` unpaid → partial → paid.
+- Salary advances (`POST /api/liabilities` kind=salary_advance) and supplier liabilities already exist — these pages are thin UIs on top of them.
+
+### Frontend — new pages (in NEW sidebar section)
+- `/operations-dashboard` (NEW) — aggregator: 3 panels (المشتريات / العهد / الذمم) with 10 KPIs all pulled live from `/purchase-invoices` and `/liabilities?kind=...`.
+- `/purchase-invoices` (from Iter-103) — moved into the new section.
+- `/advances` (NEW) — list/filter/create over `liabilities(kind=salary_advance)`. Creating deducts from the chosen bank immediately and recovery happens automatically when the next salary is paid (existing back-end logic).
+- `/receivables` (NEW) — list/filter/create over `liabilities(kind=receivable)`. Each open row has a **تحصيل** button → opens dialog → adds to chosen bank via the new collect endpoint.
+
+### Sidebar reorganisation
+- New top-level section **"إدارة المشتريات والعهد والتحصيلات"** between "العمليات المالية" and "الاستيراد والربط".
+- Contains: لوحة العمليات / فواتير المشتريات / عهد الموظفين والمندوبين / الذمم والتحصيلات.
+
+### Architectural rule respected
+ALL 4 pages use existing collections only:
+- `counterparties(kind=supplier)` — supplier registry.
+- `liabilities` — supplier debt + advances + receivables (all kinds).
+- `purchase_invoices` (from Iter-103) — invoice headers linked to liabilities.
+- `accounts` + `account_transactions` — every cash movement.
+No duplicated balances. No new collections in this iteration.
+
+### Tests — `tests/test_receivable_collect_iter104.py` (3/3 ✅)
+1. Collect 400 then 600 on a 1000 receivable → bank goes 0 → 400 → 1000, status flips unpaid → partial → paid.
+2. Collect rejected on non-receivable (e.g., supplier) liabilities.
+3. Over-collection (250 on 200 remaining) rejected with Arabic error.
+
+Plus regression: all Iter-100/101/103 tests still pass (21/21).
+
+---
+
+
 ## ✅ ITERATION 103 — Purchase invoices (no inventory) (Feb 2026)
 
 ### Scope (Option B chosen by user)

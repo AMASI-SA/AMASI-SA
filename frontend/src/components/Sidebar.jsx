@@ -4,6 +4,7 @@ import {
     ChartPieSlice, Truck, Plug, Wallet, Ghost, Package, Image, UserCircle,
     UsersThree, MagnifyingGlass, Queue, ArrowsLeftRight, Scales, Storefront,
     CurrencyDollar, LinkSimple, GearSix, CaretDown, X, PaperPlaneRight,
+    HandCoins, Coin, Briefcase,
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -43,10 +44,20 @@ const SECTIONS = [
             { to: "/financial-position", label: "المركز المالي", icon: CurrencyDollar, testid: "nav-financial-position" },
             { to: "/financial-input-hub", label: "مركز الإدخال المالي", icon: PaperPlaneRight, testid: "nav-financial-input-hub" },
             { to: "/counterparties", label: "قائمة الأطراف الموحَّدة", icon: UsersThree, testid: "nav-counterparties" },
-            { to: "/purchase-invoices", label: "فواتير المشتريات", icon: Receipt, testid: "nav-purchase-invoices" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
             { to: "/settlements", label: "تسويات المدفوعات", icon: Receipt, testid: "nav-settlements" },
             { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
+        ],
+    },
+    {
+        id: "procurement",
+        label: "إدارة المشتريات والعهد والتحصيلات",
+        icon: Briefcase,
+        items: [
+            { to: "/operations-dashboard", label: "لوحة العمليات", icon: Briefcase, testid: "nav-operations-dashboard" },
+            { to: "/purchase-invoices", label: "فواتير المشتريات", icon: Receipt, testid: "nav-purchase-invoices" },
+            { to: "/advances", label: "عهد الموظفين والمندوبين", icon: HandCoins, testid: "nav-advances" },
+            { to: "/receivables", label: "الذمم والتحصيلات", icon: Coin, testid: "nav-receivables" },
         ],
     },
     {
