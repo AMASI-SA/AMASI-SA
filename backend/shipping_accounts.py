@@ -32,6 +32,82 @@ class PaymentIn(BaseModel):
     payment_date: str = Field(min_length=10, max_length=10)  # YYYY-MM-DD
     invoice_number: Optional[str] = ""
     note: Optional[str] = ""
+    # Iter-95: optional link to a bank/cash account. When set, the payment
+    # auto-posts an out-flowing account_transactions row so the bank
+    # balance and the financial-position screen stay in sync.
+    paid_from_account_id: Optional[str] = None
+
+
+# Iter-95 — bank movement helpers (mirrors expenses_routes Iter-94 pattern).
+async def _recompute_shipping_account_balance(db, user_id: str, account_id: str) -> None:
+    """Walk all transactions of `account_id` chronologically and refresh
+    `balance_after` + `current_balance`."""
+    acc = await db.accounts.find_one(
+        {"id": account_id, "user_id": user_id},
+        {"_id": 0, "expected_orders_balance": 1},
+    ) or {}
+    running = float(acc.get("expected_orders_balance") or 0)
+    docs = await db.account_transactions.find(
+        {"user_id": user_id, "account_id": account_id},
+        {"_id": 0, "id": 1, "amount": 1, "direction": 1, "balance_after": 1},
+    ).sort([("transaction_date", 1), ("created_at", 1)]).to_list(50000)
+    now = datetime.now(timezone.utc).isoformat()
+    for d in docs:
+        amt = float(d.get("amount", 0) or 0)
+        running += amt if d.get("direction") == "in" else -amt
+        new_balance = round(running, 2)
+        if d.get("balance_after") != new_balance:
+            await db.account_transactions.update_one(
+                {"id": d["id"], "user_id": user_id},
+                {"$set": {"balance_after": new_balance, "updated_at": now}},
+            )
+    final = round(running, 2)
+    await db.accounts.update_one(
+        {"id": account_id, "user_id": user_id},
+        {"$set": {"current_balance": final, "updated_at": now}},
+    )
+
+
+async def _post_shipping_payment_tx(
+    db, user_id: str, *,
+    payment_id: str, account_id: str,
+    amount: float, payment_date: str,
+    company_name: str, invoice: str,
+) -> str:
+    """Insert an out-flowing account_transactions row tied to a shipping
+    payment. Returns the new transaction id."""
+    tx_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    desc = f"سداد مستحقات شركة الشحن — {company_name}"
+    if invoice:
+        desc += f" (فاتورة {invoice})"
+    await db.account_transactions.insert_one({
+        "id": tx_id,
+        "user_id": user_id,
+        "account_id": account_id,
+        "transaction_type": "shipping_debt_payment",
+        "amount": round(float(amount), 2),
+        "direction": "out",
+        "description": desc[:280],
+        "transaction_date": payment_date,
+        "balance_after": 0.0,    # set by recompute below
+        "status": "posted",
+        "reference": invoice or "",
+        "peer_shipping_payment_id": payment_id,
+        "created_at": now,
+        "updated_at": now,
+    })
+    await _recompute_shipping_account_balance(db, user_id, account_id)
+    return tx_id
+
+
+async def _delete_shipping_payment_tx(
+    db, user_id: str, *, transaction_id: str, account_id: str,
+) -> None:
+    await db.account_transactions.delete_one(
+        {"id": transaction_id, "user_id": user_id}
+    )
+    await _recompute_shipping_account_balance(db, user_id, account_id)
 
 
 def _build_router(db) -> APIRouter:
@@ -223,14 +299,44 @@ def _build_router(db) -> APIRouter:
             raise HTTPException(status_code=400, detail="صيغة التاريخ يجب أن تكون YYYY-MM-DD")
         if not company.strip():
             raise HTTPException(status_code=400, detail="اسم الشركة مطلوب")
+
+        # Iter-95: validate the optional bank account if linked.
+        linked_tx_id = None
+        if payload.paid_from_account_id:
+            acc = await db.accounts.find_one(
+                {"id": payload.paid_from_account_id, "user_id": user["id"]},
+                {"_id": 0, "id": 1, "name": 1},
+            )
+            if not acc:
+                raise HTTPException(status_code=404, detail="الحساب المختار للدفع غير موجود")
+
+        payment_id = str(uuid.uuid4())
+        amount = round(float(payload.amount), 2)
+        company_name = company.strip()
+        invoice = (payload.invoice_number or "").strip()
+
+        # Iter-95: post the bank movement first; if it fails, no payment row is left dangling.
+        if payload.paid_from_account_id:
+            linked_tx_id = await _post_shipping_payment_tx(
+                db, user["id"],
+                payment_id=payment_id,
+                account_id=payload.paid_from_account_id,
+                amount=amount,
+                payment_date=payload.payment_date,
+                company_name=company_name,
+                invoice=invoice,
+            )
+
         doc = {
-            "id": str(uuid.uuid4()),
+            "id": payment_id,
             "user_id": user["id"],
-            "company_name": company.strip(),
-            "amount": round(float(payload.amount), 2),
+            "company_name": company_name,
+            "amount": amount,
             "payment_date": payload.payment_date,
-            "invoice_number": (payload.invoice_number or "").strip(),
+            "invoice_number": invoice,
             "note": (payload.note or "").strip(),
+            "paid_from_account_id": payload.paid_from_account_id,
+            "linked_transaction_id": linked_tx_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.shipping_payments.insert_one(doc)
@@ -239,9 +345,22 @@ def _build_router(db) -> APIRouter:
 
     @router.delete("/payments/{payment_id}")
     async def delete_payment(payment_id: str, user: dict = Depends(current_user)):
-        res = await db.shipping_payments.delete_one({"id": payment_id, "user_id": user["id"]})
-        if res.deleted_count == 0:
+        # Iter-95: roll back the linked bank movement if any.
+        existing = await db.shipping_payments.find_one(
+            {"id": payment_id, "user_id": user["id"]},
+            {"_id": 0, "linked_transaction_id": 1, "paid_from_account_id": 1},
+        )
+        if not existing:
             raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+        if existing.get("linked_transaction_id") and existing.get("paid_from_account_id"):
+            await _delete_shipping_payment_tx(
+                db, user["id"],
+                transaction_id=existing["linked_transaction_id"],
+                account_id=existing["paid_from_account_id"],
+            )
+        await db.shipping_payments.delete_one(
+            {"id": payment_id, "user_id": user["id"]}
+        )
         return {"ok": True}
 
     return router

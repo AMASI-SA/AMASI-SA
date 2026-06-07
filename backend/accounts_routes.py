@@ -108,6 +108,7 @@ TRANSACTION_TYPES = (
     "settlement",
     "debt",
     "debt_payment",
+    "shipping_debt_payment",
     "manual_adjustment",
 )
 
@@ -119,6 +120,7 @@ TRANSACTION_TYPE_LABELS = {
     "settlement":        "تسوية",
     "debt":              "دين",
     "debt_payment":      "سداد دين",
+    "shipping_debt_payment": "سداد مستحقات شحن",
     "manual_adjustment": "تسوية يدوية",
 }
 

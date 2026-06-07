@@ -7,18 +7,24 @@ import DateInput from "../components/DateInput";
 
 export default function ShippingAccounts() {
     const [data, setData] = useState({ accounts: [], totals: { total_owed: 0, total_paid: 0, remaining: 0 } });
+    const [accounts, setAccounts] = useState([]);   // Iter-95: bank accounts for payment source
     const [loading, setLoading] = useState(true);
     const [expanded, setExpanded] = useState(null);  // company name currently expanded
     const [payments, setPayments] = useState({});    // {companyName: [...]}
     const [modal, setModal] = useState(null);        // {company} | null
-    const [form, setForm] = useState({ amount: "", payment_date: todayISO(), invoice_number: "", note: "" });
+    const [form, setForm] = useState({ amount: "", payment_date: todayISO(), invoice_number: "", note: "", paid_from_account_id: "" });
     const [submitting, setSubmitting] = useState(false);
 
     const load = async () => {
         setLoading(true);
         try {
-            const { data: d } = await api.get("/shipping-accounts");
-            setData(d);
+            const [shipRes, accRes] = await Promise.all([
+                api.get("/shipping-accounts"),
+                api.get("/accounts"),
+            ]);
+            setData(shipRes.data);
+            const raw = accRes.data?.accounts || accRes.data?.items || (Array.isArray(accRes.data) ? accRes.data : []);
+            setAccounts(raw.filter((a) => a.account_type === "bank" && a.status !== "hidden" && a.status !== "inactive"));
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail));
         } finally { setLoading(false); }
@@ -43,7 +49,7 @@ export default function ShippingAccounts() {
     };
 
     const openModal = (company) => {
-        setForm({ amount: "", payment_date: todayISO(), invoice_number: "", note: "" });
+        setForm({ amount: "", payment_date: todayISO(), invoice_number: "", note: "", paid_from_account_id: "" });
         setModal({ company });
     };
 
@@ -59,8 +65,16 @@ export default function ShippingAccounts() {
                 payment_date: form.payment_date,
                 invoice_number: form.invoice_number || "",
                 note: form.note || "",
+                paid_from_account_id: form.paid_from_account_id || null,
             });
-            toast.success("تم تسجيل الدفعة");
+            // Iter-95: explicit warning when no bank account is linked
+            if (!form.paid_from_account_id) {
+                toast.warning(
+                    "تم تسجيل الدفعة بدون ربطها بحساب بنكي، لذلك لن تؤثر على رصيد البنك."
+                );
+            } else {
+                toast.success("تم تسجيل الدفعة وخصم المبلغ من رصيد الحساب البنكي");
+            }
             setModal(null);
             // refresh: invalidate cache for this company + reload totals
             setPayments((prev) => { const c = { ...prev }; delete c[modal.company]; return c; });
@@ -269,6 +283,33 @@ export default function ShippingAccounts() {
                                     onChange={(e) => setForm({ ...form, payment_date: e.target.value })}
                                     data-testid="payment-date"
                                 />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold mb-1.5">
+                                    الحساب المدفوع منه
+                                    <span className="text-rose-600 mr-1">*</span>
+                                </label>
+                                <select
+                                    value={form.paid_from_account_id}
+                                    onChange={(e) => setForm({ ...form, paid_from_account_id: e.target.value })}
+                                    className="w-full px-3 py-2.5 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                                    data-testid="payment-paid-from-account"
+                                >
+                                    <option value="">— بدون ربط بحساب (لن تؤثر على رصيد البنك) —</option>
+                                    {accounts.map((a) => (
+                                        <option key={a.id} value={a.id}>
+                                            {a.name}
+                                            {typeof a.current_balance === "number"
+                                                ? `  (الرصيد: ${a.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س)`
+                                                : ""}
+                                        </option>
+                                    ))}
+                                </select>
+                                {!form.paid_from_account_id && (
+                                    <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2" data-testid="no-account-warning">
+                                        ⚠️ بدون اختيار حساب لن يَنقص رصيد أي بنك، والمركز المالي لن يعكس هذه الدفعة.
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold mb-1.5">رقم الفاتورة (اختياري)</label>

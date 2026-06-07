@@ -10,6 +10,53 @@
 
 ---
 
+## ✅ ITERATION 95 — Shipping payments linked to bank accounts (F2 fix)
+
+### Scope
+Same pattern as Iter-94 (F1) applied to shipping company deferred debts.
+
+### Files changed (3)
+- `backend/accounts_routes.py` — +`shipping_debt_payment` to
+  `TRANSACTION_TYPES` and label catalogue.
+- `backend/shipping_accounts.py` — `PaymentIn` gains optional
+  `paid_from_account_id`; POST/DELETE keep an `account_transactions`
+  row in sync via 3 new helpers (`_post_shipping_payment_tx`,
+  `_delete_shipping_payment_tx`,
+  `_recompute_shipping_account_balance`).
+- `frontend/src/pages/ShippingAccounts.jsx` — modal gains bank
+  selector + amber warning banner when no account chosen + dynamic
+  success/warning toast.
+- `backend/tests/test_shipping_payments_bank_link_iter95.py` — NEW,
+  6 tests, all PASS.
+
+### Posted bank movement schema
+```
+{
+  transaction_type: "shipping_debt_payment",
+  direction: "out",
+  amount: <payment.amount>,
+  description: "سداد مستحقات شركة الشحن — <name> (فاتورة <inv>)",
+  reference: <invoice_number>,
+  peer_shipping_payment_id: <shipping_payment.id>,
+}
+```
+
+### Behaviour
+- With bank: payment recorded + bank debited + financial position
+  reflects the drop. Success toast confirms the deduction.
+- Without bank: payment still recorded (paper-only). Warning toast
+  shows: "تم تسجيل الدفعة بدون ربطها بحساب بنكي، لذلك لن تؤثر على
+  رصيد البنك." The modal also shows an amber inline banner.
+- Delete: rolls back the linked tx and restores the bank balance.
+
+### Verified
+- 6/6 pytest PASS.
+- Live curl: bank 10,000 → 9,250 after 750 SAR linked payment;
+  delete restores to 10,000.
+- Financial-position summary deduction = exact payment amount.
+
+---
+
 ## ✅ ITERATION 94 — Daily expenses linked to bank accounts (F1 fix)
 
 ### Scope (minimum-change F1 closure)
