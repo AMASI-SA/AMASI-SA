@@ -72,6 +72,36 @@ export default function MakeWebhook() {
         } finally { setRotating(false); }
     };
 
+    const [testing, setTesting] = useState(false);
+    const testWebhook = async () => {
+        if (!settings?.webhook_url) {
+            toast.error("لا يوجد Token مُولَّد بعد");
+            return;
+        }
+        // Extract token from the URL (last path segment)
+        const tok = String(settings.webhook_url).split("/").pop();
+        setTesting(true);
+        try {
+            // Hit the SAME public URL that Make.com would call, so we
+            // test the network path end-to-end (not just the database).
+            const base = settings.webhook_url.replace(/\/api\/.*$/, "");
+            const u = `${base}/api/webhook/ping/${encodeURIComponent(tok)}`;
+            const resp = await fetch(u, { method: "POST" });
+            const data = await resp.json().catch(() => ({}));
+            if (resp.ok && data.ok) {
+                toast.success(
+                    `✓ الرابط يعمل في هذه البيئة: ${data.environment}`,
+                    { duration: 6000 }
+                );
+            } else {
+                const reason = data?.detail?.hint || data?.detail?.reason || `HTTP ${resp.status}`;
+                toast.error(`✗ ${reason}`, { duration: 8000 });
+            }
+        } catch (e) {
+            toast.error(`تعذّر الاتصال: ${e.message}`);
+        } finally { setTesting(false); }
+    };
+
     const disconnect = async () => {
         if (!window.confirm("سيتم حذف الـ Token وكل الطلبات المخزّنة من Make.com. متابعة؟")) return;
         try {
@@ -224,7 +254,22 @@ export default function MakeWebhook() {
                         >
                             <Copy size={16} weight="bold" /> نسخ
                         </button>
+                        <button
+                            type="button"
+                            onClick={testWebhook}
+                            disabled={testing}
+                            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg bg-sky-700 text-white text-sm font-semibold hover:bg-sky-800 disabled:opacity-50 transition-colors"
+                            data-testid="test-webhook-btn"
+                            title="يستدعي رابط الـ webhook من المتصفح ويتحقّق من القبول في هذه البيئة"
+                        >
+                            {testing ? "جارٍ الاختبار…" : "اختبر الآن"}
+                        </button>
                     </div>
+                    <p className="text-[11px] text-muted-foreground mt-2" data-testid="webhook-env-hint">
+                        🔒 هذا الرابط يعمل فقط على البيئة التي أُنشئ فيها.
+                        إذا غيّرت الدومين (مثل التحويل بين <code className="bg-slate-100 px-1 rounded">المعاينة</code> و
+                        <code className="bg-slate-100 px-1 rounded">الإنتاج</code>) فيلزم توليد رمز جديد وتحديث Make.com.
+                    </p>
                 </div>
 
                 {/* TikTok Ads webhook (uses same token, different path) */}

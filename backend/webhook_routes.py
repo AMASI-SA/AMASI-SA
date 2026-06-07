@@ -624,6 +624,72 @@ def _build_router(db) -> APIRouter:
         )
         return {"token": new_token, "webhook_url": _public_webhook_url(new_token)}
 
+    # ── PUBLIC TOKEN HEALTH ─────────────────────────────────────────────
+    # No auth — Make.com / the merchant can probe these to diagnose
+    # "service rejected the webhook token" errors before re-binding.
+    @router.get("/validate-token/{token}")
+    async def validate_token(token: str):
+        """Iter-88 — Health check used by the Settings UI (and Make
+        scenario debugger) to confirm a token is recognised by THIS
+        environment. Returns 200 with valid=False instead of 401 so
+        the caller doesn't have to parse error codes."""
+        tok_doc = await db.webhook_tokens.find_one(
+            {"token": token},
+            {"_id": 0, "token": 1, "created_at": 1, "last_sync_at": 1,
+             "total_received": 1, "user_id": 1},
+        )
+        if not tok_doc:
+            return {
+                "valid": False,
+                "reason": "token_not_found_in_this_environment",
+                "environment": (os.environ.get("FRONTEND_URL") or "").rstrip("/"),
+            }
+        return {
+            "valid": True,
+            "environment": (os.environ.get("FRONTEND_URL") or "").rstrip("/"),
+            "created_at": tok_doc.get("created_at"),
+            "last_sync_at": tok_doc.get("last_sync_at"),
+            "total_received": tok_doc.get("total_received", 0),
+            "webhook_url": _public_webhook_url(token),
+        }
+
+    @router.post("/ping/{token}")
+    async def webhook_ping(token: str):
+        """Iter-88 — Simulates a Make.com call without ingesting an
+        order. Lets the merchant click 'Test webhook' from Settings
+        and immediately see whether the token is accepted by THIS
+        environment (preview vs production)."""
+        tok_doc = await db.webhook_tokens.find_one({"token": token})
+        if not tok_doc:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "ok": False,
+                    "reason": "token_not_found",
+                    "environment": (os.environ.get("FRONTEND_URL") or "").rstrip("/"),
+                    "hint": (
+                        "هذا الرمز غير معروف في هذه البيئة. على الأرجح "
+                        "أنشأت الرمز في بيئة أخرى (Preview/Production). "
+                        "افتح صفحة الإعدادات → بوابة Make.com وأنشئ رمزًا جديدًا "
+                        "هنا، ثم انسخه إلى سيناريو Make."
+                    ),
+                },
+            )
+        # bump a ping counter
+        await db.webhook_tokens.update_one(
+            {"user_id": tok_doc["user_id"]},
+            {"$set": {"last_ping_at": _now_iso()},
+             "$inc": {"ping_count": 1}},
+        )
+        return {
+            "ok": True,
+            "valid": True,
+            "user_id": tok_doc["user_id"],
+            "environment": (os.environ.get("FRONTEND_URL") or "").rstrip("/"),
+            "webhook_url": _public_webhook_url(token),
+            "received_at": _now_iso(),
+        }
+
     @router.delete("/settings")
     async def disconnect(user: dict = Depends(current_user)):
         await db.webhook_tokens.delete_many({"user_id": user["id"]})

@@ -1,6 +1,51 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 88 — Webhook Token Health diagnostics
+
+User reported Make.com error:
+> *Could not reach the webhook in this module. The service rejected
+> the webhook token.*
+
+### Root-cause analysis
+The token `5c172bcaf12e4d71ae5324e7b90fc2f0` is **VALID on preview**
+(200 OK) but **REJECTED on production** (`mezansalla.com` returns
+401). The two environments use different MongoDB instances, so
+tokens minted in one env don't exist in the other. The user needs
+to log into mezansalla.com and regenerate, OR change the Make.com
+URL to the preview domain.
+
+### Backend (`webhook_routes.py`)
+- **`GET /api/webhook/validate-token/{token}`** (public) — Returns
+  `{valid, environment, created_at, last_sync_at, total_received,
+  webhook_url}` for a known token, or `{valid:false,
+  reason:"token_not_found_in_this_environment", environment}`
+  otherwise. **Never 401** so the UI can render a friendly
+  diagnostic instead of parsing error codes.
+- **`POST /api/webhook/ping/{token}`** (public) — Mimics a real
+  Make.com hit without ingesting an order. Bumps `last_ping_at` /
+  `ping_count`. 401 with structured Arabic hint when unknown.
+
+### Frontend (`pages/MakeWebhook.jsx`)
+- **«اختبر الآن»** button next to the webhook URL — calls
+  `/webhook/ping/<token>` end-to-end (same network path Make would
+  use), shows green toast «✓ الرابط يعمل في هذه البيئة: …» on
+  success or red toast with the Arabic hint on failure.
+- New explanatory note: «هذا الرابط يعمل فقط على البيئة التي أُنشئ
+  فيها. إذا غيّرت الدومين (مثل التحويل بين المعاينة و الإنتاج)
+  فيلزم توليد رمز جديد وتحديث Make.com.»
+
+### Verified
+- **5/5 pytests pass** (`test_webhook_token_health_iter88.py`).
+- Tested manually:
+  - Valid token → `{ok:true, environment:"…preview…"}`.
+  - Fake token → 401 with `hint` containing "هذا الرمز" + "Make".
+  - UI button click → green toast with environment URL.
+
+---
+
+
+
 ## ✅ ITERATION 87 — Order status update + Manual Resync
 
 User reported: order #264753863 was created as «بانتظار الدفع» (not
