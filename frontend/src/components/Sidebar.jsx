@@ -43,6 +43,7 @@ const SECTIONS = [
             { to: "/financial-position", label: "المركز المالي", icon: CurrencyDollar, testid: "nav-financial-position" },
             { to: "/financial-input-hub", label: "مركز الإدخال المالي", icon: PaperPlaneRight, testid: "nav-financial-input-hub" },
             { to: "/counterparties", label: "قائمة الأطراف الموحَّدة", icon: UsersThree, testid: "nav-counterparties" },
+            { to: "/purchase-invoices", label: "فواتير المشتريات", icon: Receipt, testid: "nav-purchase-invoices" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
             { to: "/settlements", label: "تسويات المدفوعات", icon: Receipt, testid: "nav-settlements" },
             { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },

@@ -10,6 +10,53 @@
 
 ---
 
+## ✅ ITERATION 103 — Purchase invoices (no inventory) (Feb 2026)
+
+### Scope (Option B chosen by user)
+Track supplier purchase invoices with line items WITHOUT inventory, stock_movements, FIFO/AVG, or `product_costs` auto-update. Quantities are recorded for the paper trail only.
+
+### Backend (`backend/purchase_invoices_routes.py` — NEW)
+- New collection `purchase_invoices`:
+  ```
+  { id, user_id, supplier_counterparty_id, supplier_name,
+    invoice_number?, invoice_date, due_date?,
+    lines: [{ id, product_name, sku?, quantity, unit_price, line_total }],
+    subtotal, tax_amount, total,
+    liability_id  → linked supplier liability (single source of truth for payment),
+    notes, created_at, updated_at }
+  ```
+- Endpoints (`/api/purchase-invoices`):
+  - `POST /` — create invoice + auto-create `liabilities` (kind=supplier) row with `expected_amount = total`. Source supplier name from counterparties.
+  - `GET /` — list with filters (`supplier_id`, `status`, `from`/`to`, `limit`).
+  - `GET /{id}` — single enriched with live payment state.
+  - `PUT /{id}` — edit; refused if any payment was recorded. Resyncs liability total.
+  - `DELETE /{id}` — refused if any payment was recorded; otherwise removes both invoice and unpaid liability.
+  - `GET /supplier/{cp_id}/statement` — aggregated totals (invoiced, paid, balance_owed) + per-invoice rows.
+- Status (`unpaid/partial/paid`) and `paid_amount`/`remaining_amount` come from the linked liability — no duplicated balance math.
+
+### Frontend (`PurchaseInvoices.jsx` — NEW)
+- New page `/purchase-invoices` with:
+  - Three KPI cards (after filter): إجمالي / مسدَّد / متبقي للموردين.
+  - Filters: search, supplier picker, status buttons.
+  - Table with status pills + actions (سداد → routes to Financial Input Hub, edit/delete disabled when paid_amount > 0).
+  - Create/edit dialog with multi-line editor and live total calculation.
+  - Supplier statement dialog (opens from clicking supplier name).
+- Sidebar entry "فواتير المشتريات" under "العمليات المالية".
+
+### Tests — `tests/test_purchase_invoices_iter103.py` (9/9 ✅)
+1. Create → linked liability with correct supplier name & total (qty × price + tax).
+2. Unknown supplier → 404.
+3. Zero-total invoice rejected.
+4. Paying linked liability flips invoice status (unpaid → partial → paid) and shows correct paid/remaining.
+5. Edit refused after payment.
+6. Edit (lines/tax) resyncs the liability expected_amount.
+7. Delete lifecycle: OK unpaid (removes both rows), rejected when paid.
+8. Supplier statement: 3 invoices + 2 payments → correct invoiced / paid / balance_owed.
+9. List filters (by supplier).
+
+---
+
+
 ## ✅ ITERATION 102 — Pro-rata salary by days worked (Feb 2026)
 
 ### Why
