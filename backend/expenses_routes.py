@@ -100,6 +100,10 @@ class DailyExpenseIn(BaseModel):
     amount: float = Field(gt=0)
     payment_method: Optional[str] = ""
     notes: Optional[str] = ""
+    # Iter-94: optional link to a bank/cash account. When set, the daily
+    # expense automatically posts an out-flowing account_transactions row
+    # so the bank balance and the financial-position screen stay in sync.
+    paid_from_account_id: Optional[str] = None
 
 
 class DailyExpenseUpdate(BaseModel):
@@ -109,6 +113,7 @@ class DailyExpenseUpdate(BaseModel):
     amount: Optional[float] = None
     payment_method: Optional[str] = None
     notes: Optional[str] = None
+    paid_from_account_id: Optional[str] = None  # null = unlink from account
 
 
 class PrepaidExpenseIn(BaseModel):
@@ -211,6 +216,80 @@ def _daily_from_prepaid(p: dict) -> float:
     if amount <= 0:
         return 0.0
     return round(amount / _prepaid_period_days(p), 4)
+
+
+# Iter-94 — bank movement helpers for daily expenses paid from accounts.
+async def _recompute_account_balance_for_expense(db, user_id: str, account_id: str) -> None:
+    """Re-walk all transactions of `account_id` in chronological order so
+    `balance_after` and `current_balance` stay correct after any insert/delete.
+    Mirrors `accounts_routes._recompute_balance` but kept local to avoid a
+    cross-module import cycle."""
+    acc = await db.accounts.find_one(
+        {"id": account_id, "user_id": user_id},
+        {"_id": 0, "expected_orders_balance": 1},
+    ) or {}
+    running = float(acc.get("expected_orders_balance") or 0)
+    docs = await db.account_transactions.find(
+        {"user_id": user_id, "account_id": account_id},
+        {"_id": 0, "id": 1, "amount": 1, "direction": 1, "balance_after": 1},
+    ).sort([("transaction_date", 1), ("created_at", 1)]).to_list(50000)
+    now = datetime.now(timezone.utc).isoformat()
+    for d in docs:
+        amt = float(d.get("amount", 0) or 0)
+        running += amt if d.get("direction") == "in" else -amt
+        new_balance = round(running, 2)
+        if d.get("balance_after") != new_balance:
+            await db.account_transactions.update_one(
+                {"id": d["id"], "user_id": user_id},
+                {"$set": {"balance_after": new_balance, "updated_at": now}},
+            )
+    final = round(running, 2)
+    await db.accounts.update_one(
+        {"id": account_id, "user_id": user_id},
+        {"$set": {"current_balance": final, "updated_at": now}},
+    )
+
+
+async def _post_daily_expense_tx(
+    db, user_id: str, expense_id: str, account_id: str,
+    amount: float, transaction_date: str,
+    expense_type: str, description: str,
+) -> str:
+    """Insert an out-flowing `account_transactions` row tied to a daily
+    expense. Returns the new transaction id."""
+    tx_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    desc = f"مصروف يومي: {expense_type}"
+    if description:
+        desc += f" — {description}"
+    await db.account_transactions.insert_one({
+        "id": tx_id,
+        "user_id": user_id,
+        "account_id": account_id,
+        "transaction_type": "expense",
+        "amount": round(float(amount), 2),
+        "direction": "out",
+        "description": desc[:280],
+        "transaction_date": transaction_date,
+        "balance_after": 0.0,    # set by recompute below
+        "status": "posted",
+        "peer_daily_expense_id": expense_id,
+        "created_at": now,
+        "updated_at": now,
+    })
+    await _recompute_account_balance_for_expense(db, user_id, account_id)
+    return tx_id
+
+
+async def _delete_daily_expense_tx(
+    db, user_id: str, transaction_id: str, account_id: Optional[str],
+) -> None:
+    """Remove a daily-expense-linked transaction and refresh balances."""
+    await db.account_transactions.delete_one(
+        {"id": transaction_id, "user_id": user_id}
+    )
+    if account_id:
+        await _recompute_account_balance_for_expense(db, user_id, account_id)
 
 
 async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dict:
@@ -569,18 +648,38 @@ def _build_router(db) -> APIRouter:
     async def create_daily(payload: DailyExpenseIn, user: dict = Depends(current_user)):
         if _parse_iso(payload.date) is None:
             raise HTTPException(status_code=400, detail="صيغة التاريخ يجب أن تكون YYYY-MM-DD")
+        # Validate the account if linked (Iter-94)
+        if payload.paid_from_account_id:
+            acc = await db.accounts.find_one(
+                {"id": payload.paid_from_account_id, "user_id": user["id"]},
+                {"_id": 0, "id": 1, "name": 1},
+            )
+            if not acc:
+                raise HTTPException(status_code=404, detail="الحساب المختار للدفع غير موجود")
+        amount = round(float(payload.amount), 2)
+        expense_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
         doc = {
-            "id": str(uuid.uuid4()),
+            "id": expense_id,
             "user_id": user["id"],
             "date": payload.date,
             "expense_type": payload.expense_type.strip(),
             "description": (payload.description or "").strip(),
-            "amount": round(float(payload.amount), 2),
+            "amount": amount,
             "payment_method": (payload.payment_method or "").strip(),
             "notes": (payload.notes or "").strip(),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "paid_from_account_id": payload.paid_from_account_id,
+            "linked_transaction_id": None,
+            "created_at": now,
+            "updated_at": now,
         }
+        # Auto-post the bank movement if a source account is linked
+        if payload.paid_from_account_id:
+            tx_id = await _post_daily_expense_tx(
+                db, user["id"], expense_id, payload.paid_from_account_id,
+                amount, payload.date, doc["expense_type"], doc["description"],
+            )
+            doc["linked_transaction_id"] = tx_id
         await db.operating_daily_expenses.insert_one(doc)
         doc.pop("_id", None)
         return doc
@@ -611,6 +710,51 @@ def _build_router(db) -> APIRouter:
             update["payment_method"] = payload.payment_method.strip()
         if payload.notes is not None:
             update["notes"] = payload.notes.strip()
+
+        # Iter-94 — handle the linked bank transaction in sync.
+        sent_fields = payload.__fields_set__ if hasattr(payload, "__fields_set__") else set(payload.model_dump(exclude_unset=True).keys())
+        explicit_account = "paid_from_account_id" in sent_fields
+        new_account_id = payload.paid_from_account_id if explicit_account else existing.get("paid_from_account_id")
+        new_amount = update.get("amount", existing.get("amount"))
+        new_date = update.get("date", existing.get("date"))
+        new_type = update.get("expense_type", existing.get("expense_type"))
+        new_desc = update.get("description", existing.get("description"))
+
+        old_account_id = existing.get("paid_from_account_id")
+        old_tx_id = existing.get("linked_transaction_id")
+
+        account_changed = new_account_id != old_account_id
+        amount_changed = payload.amount is not None and update.get("amount") != existing.get("amount")
+        date_changed = payload.date is not None and update.get("date") != existing.get("date")
+
+        if old_tx_id and (account_changed or amount_changed or date_changed
+                          or payload.expense_type is not None or payload.description is not None):
+            # Drop the old tx (and recompute the old account's balance)
+            await _delete_daily_expense_tx(db, user["id"], old_tx_id, old_account_id)
+            update["linked_transaction_id"] = None
+
+        if new_account_id:
+            # Validate the (new or same) account before re-posting
+            acc = await db.accounts.find_one(
+                {"id": new_account_id, "user_id": user["id"]},
+                {"_id": 0, "id": 1},
+            )
+            if not acc:
+                raise HTTPException(status_code=404, detail="الحساب المختار للدفع غير موجود")
+            if account_changed or amount_changed or date_changed \
+                    or payload.expense_type is not None or payload.description is not None \
+                    or (old_account_id and not old_tx_id):
+                tx_id = await _post_daily_expense_tx(
+                    db, user["id"], expense_id, new_account_id,
+                    new_amount, new_date, new_type, new_desc,
+                )
+                update["linked_transaction_id"] = tx_id
+            update["paid_from_account_id"] = new_account_id
+        elif old_account_id and not new_account_id:
+            # Explicitly unlinked
+            update["paid_from_account_id"] = None
+            update["linked_transaction_id"] = None
+
         await db.operating_daily_expenses.update_one(
             {"id": expense_id, "user_id": user["id"]}, {"$set": update}
         )
@@ -620,11 +764,21 @@ def _build_router(db) -> APIRouter:
 
     @router.delete("/daily/{expense_id}")
     async def delete_daily(expense_id: str, user: dict = Depends(current_user)):
-        res = await db.operating_daily_expenses.delete_one(
+        # Iter-94 — roll back the linked bank movement if any.
+        existing = await db.operating_daily_expenses.find_one(
+            {"id": expense_id, "user_id": user["id"]},
+            {"_id": 0, "linked_transaction_id": 1, "paid_from_account_id": 1},
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="سجل المصروف غير موجود")
+        if existing.get("linked_transaction_id") and existing.get("paid_from_account_id"):
+            await _delete_daily_expense_tx(
+                db, user["id"], existing["linked_transaction_id"],
+                existing["paid_from_account_id"],
+            )
+        await db.operating_daily_expenses.delete_one(
             {"id": expense_id, "user_id": user["id"]}
         )
-        if res.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="سجل المصروف غير موجود")
         return {"ok": True}
 
     # ─── Prepaid expenses CRUD (المصروفات المدفوعة مقدماً) ────────────────────

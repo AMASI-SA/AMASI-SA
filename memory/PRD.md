@@ -10,6 +10,49 @@
 
 ---
 
+## ✅ ITERATION 94 — Daily expenses linked to bank accounts (F1 fix)
+
+### Scope (minimum-change F1 closure)
+- Daily operating expenses now accept `paid_from_account_id`. When set,
+  the system auto-posts an `account_transactions` row (type=expense,
+  direction=out) so the bank balance, accounts page, and
+  financial-position screen all stay in sync.
+- Backward-compatible: a daily expense without an account remains a
+  cash entry (no bank impact) — existing rows untouched.
+
+### Files changed (4)
+- `backend/expenses_routes.py` — +2 fields on schemas, +2 helpers
+  (`_post_daily_expense_tx`, `_delete_daily_expense_tx`,
+  `_recompute_account_balance_for_expense`), POST/PUT/DELETE handle
+  the linked tx in lock-step. Update detects explicit null via
+  `__fields_set__` to support unlinking.
+- `frontend/src/pages/OperatingExpenses.jsx` — +accounts fetch,
+  +select in `DailyFormFields`, +column in `DailyPanel` table.
+- `backend/tests/test_daily_expenses_bank_link_iter94.py` — NEW, 8 tests.
+
+### Behaviour
+| Action | Bank balance impact | account_transactions row |
+|---|---|---|
+| Create cash daily expense (no account) | none | none |
+| Create linked daily expense | −amount | inserted (type=expense) |
+| Update amount/date/type | reposted | old removed, new inserted |
+| Switch from bank A → bank B | A +restored, B −amount | old removed from A, new on B |
+| Unlink (set null) | restored | removed |
+| Delete | restored | removed |
+
+### Verified
+- 8/8 pytest PASS on Preview.
+- Live curl: 40,000 → 39,850 after creating 150 SAR expense → 40,000
+  after deleting → exact penny-perfect rollback.
+- UI: account selector with live balances + cash fallback + hint.
+
+### F1 closed
+The financial position screen now correctly reflects daily expenses
+paid from bank accounts (assets total drops by exactly the amount).
+The cash-payment path remains supported for paper-only expenses.
+
+---
+
 ## ✅ ITERATION 93 — Financial Position screen (Feb 2026)
 
 ### Scope

@@ -57,6 +57,7 @@ export default function OperatingExpenses() {
     const [rentals, setRentals] = useState([]);
     const [prepaids, setPrepaids] = useState([]);
     const [dailyItems, setDailyItems] = useState([]);
+    const [accounts, setAccounts] = useState([]);   // Iter-94: bank/cash accounts
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null);
@@ -66,13 +67,14 @@ export default function OperatingExpenses() {
     const refresh = async () => {
         setLoading(true);
         try {
-            const [sumRes, salRes, rentRes, prepRes, dailyRes, reportRes] = await Promise.all([
+            const [sumRes, salRes, rentRes, prepRes, dailyRes, reportRes, accRes] = await Promise.all([
                 api.get("/operating-expenses/summary"),
                 api.get("/operating-expenses/salaries"),
                 api.get("/operating-expenses/rentals"),
                 api.get("/operating-expenses/prepaid"),
                 api.get("/operating-expenses/daily"),
                 api.get("/operating-expenses/report"),
+                api.get("/accounts"),
             ]);
             setSummary(sumRes.data);
             setSalaries(salRes.data.items || []);
@@ -80,6 +82,10 @@ export default function OperatingExpenses() {
             setPrepaids(prepRes.data.items || []);
             setDailyItems(dailyRes.data.items || []);
             setReport(reportRes.data);
+            // Iter-94: keep only bank accounts (the user pays daily expenses
+            // from a real cash/bank account, not from a payment platform).
+            const raw = accRes.data?.accounts || accRes.data?.items || (Array.isArray(accRes.data) ? accRes.data : []);
+            setAccounts(raw.filter((a) => a.account_type === "bank" && a.status !== "hidden" && a.status !== "inactive"));
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail));
         } finally { setLoading(false); }
@@ -177,6 +183,7 @@ export default function OperatingExpenses() {
             {!loading && tab === "daily" && (
                 <DailyPanel
                     items={dailyItems}
+                    accounts={accounts}
                     onAdd={() => setModal({ kind: "daily", mode: "create", row: { date: todayISO() } })}
                     onEdit={(r) => setModal({ kind: "daily", mode: "edit", row: r })}
                     onDelete={async (r) => {
@@ -197,6 +204,7 @@ export default function OperatingExpenses() {
             {modal && (
                 <Modal
                     state={modal}
+                    accounts={accounts}
                     onClose={() => setModal(null)}
                     onSaved={async () => { setModal(null); await refresh(); }}
                 />
@@ -430,7 +438,8 @@ function PrepaidPanel({ items, onAdd, onEdit, onDelete }) {
 }
 
 // ── Daily expenses panel ────────────────────────────────────────────────────
-function DailyPanel({ items, onAdd, onEdit, onDelete }) {
+function DailyPanel({ items, accounts = [], onAdd, onEdit, onDelete }) {
+    const accountNameById = Object.fromEntries(accounts.map((a) => [a.id, a.name]));
     return (
         <Section
             title="المصروفات اليومية الأخرى"
@@ -448,6 +457,7 @@ function DailyPanel({ items, onAdd, onEdit, onDelete }) {
                             <Th>النوع</Th>
                             <Th>الوصف</Th>
                             <Th>المبلغ</Th>
+                            <Th>الحساب المدفوع منه</Th>
                             <Th>طريقة الدفع</Th>
                             <Th>ملاحظات</Th>
                             <Th />
@@ -460,6 +470,13 @@ function DailyPanel({ items, onAdd, onEdit, onDelete }) {
                                 <Td>{r.expense_type}</Td>
                                 <Td className="text-muted-foreground">{r.description || "—"}</Td>
                                 <Td className="num">{formatMoney(r.amount)}</Td>
+                                <Td>
+                                    {r.paid_from_account_id ? (
+                                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                                            🏦 {accountNameById[r.paid_from_account_id] || "حساب"}
+                                        </span>
+                                    ) : <span className="text-muted-foreground">—</span>}
+                                </Td>
                                 <Td>{r.payment_method || "—"}</Td>
                                 <Td className="text-muted-foreground">{r.notes || "—"}</Td>
                                 <Td><RowActions onEdit={() => onEdit(r)} onDelete={() => onDelete(r)} /></Td>
@@ -549,7 +566,7 @@ function ReportPanel({ report }) {
 }
 
 // ── Modal (add/edit) ────────────────────────────────────────────────────────
-function Modal({ state, onClose, onSaved }) {
+function Modal({ state, accounts, onClose, onSaved }) {
     const isEdit = state.mode === "edit";
     const row = state.row || {};
     const [saving, setSaving] = useState(false);
@@ -594,6 +611,7 @@ function Modal({ state, onClose, onSaved }) {
             description: row.description || "",
             amount: row.amount ?? "",
             payment_method: row.payment_method || "",
+            paid_from_account_id: row.paid_from_account_id || "",
             notes: row.notes || "",
         };
     });
@@ -607,7 +625,12 @@ function Modal({ state, onClose, onSaved }) {
             if (state.kind === "salary")    body.monthly_amount = Number(body.monthly_amount);
             if (state.kind === "rental")    body.annual_amount  = Number(body.annual_amount);
             if (state.kind === "prepaid")   body.amount         = Number(body.amount);
-            if (state.kind === "daily")     body.amount         = Number(body.amount);
+            if (state.kind === "daily") {
+                body.amount = Number(body.amount);
+                // Iter-94: empty string → null so the backend treats it as
+                // an unlinked cash expense.
+                body.paid_from_account_id = body.paid_from_account_id || null;
+            }
 
             const base = state.kind === "salary"
                 ? "/operating-expenses/salaries"
@@ -669,7 +692,7 @@ function Modal({ state, onClose, onSaved }) {
                     <PrepaidFormFields form={form} setForm={setForm} />
                 )}
                 {state.kind === "daily" && (
-                    <DailyFormFields form={form} setForm={setForm} />
+                    <DailyFormFields form={form} setForm={setForm} accounts={accounts || []} />
                 )}
 
                 <div className="mt-6 flex justify-end gap-2">
@@ -819,7 +842,7 @@ function PrepaidFormFields({ form, setForm }) {
     );
 }
 
-function DailyFormFields({ form, setForm }) {
+function DailyFormFields({ form, setForm, accounts = [] }) {
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="التاريخ">
@@ -833,6 +856,27 @@ function DailyFormFields({ form, setForm }) {
             </Field>
             <Field label="المبلغ (ر.س)">
                 <input type="number" required min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="oe-input num" data-testid="oe-daily-amount" />
+            </Field>
+            <Field label="الحساب المدفوع منه">
+                <select
+                    value={form.paid_from_account_id || ""}
+                    onChange={(e) => setForm({ ...form, paid_from_account_id: e.target.value })}
+                    className="oe-input"
+                    data-testid="oe-daily-paid-from-account"
+                >
+                    <option value="">— نقدي / غير مرتبط بحساب —</option>
+                    {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                            {a.name}
+                            {typeof a.current_balance === "number"
+                                ? `  (الرصيد: ${a.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س)`
+                                : ""}
+                        </option>
+                    ))}
+                </select>
+                <div className="text-xs text-muted-foreground mt-1">
+                    عند اختيار حساب يُخصم المبلغ تلقائياً من رصيده وينعكس على المركز المالي.
+                </div>
             </Field>
             <Field label="طريقة الدفع">
                 <input type="text" placeholder="نقدي، بطاقة، تحويل…" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} className="oe-input" data-testid="oe-daily-payment-method" />
