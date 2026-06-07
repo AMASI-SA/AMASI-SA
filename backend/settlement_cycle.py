@@ -385,4 +385,82 @@ def attach_settlement_cycle_routes(parent_router: APIRouter, db) -> None:
             "rows": rows,
         }
 
+    @router.get("/platform/{gateway}/orders")
+    async def platform_orders(
+        gateway: str,
+        state: Optional[str] = None,   # in_cycle | awaiting | due_today | overdue
+        sort: str = "due_date",        # due_date | amount | days_late
+        order: str = "asc",
+        page: int = 1, limit: int = 100,
+        user: dict = Depends(current_user),
+    ):
+        if gateway not in GATEWAYS:
+            raise HTTPException(404, "بوابة غير معروفة")
+        uid = user["id"]
+        cycles = await _load_cycles(uid)
+        cycle = cycles[gateway]
+        today = _today_utc()
+        policy_overrides = await get_policy_map(db, uid)
+        central_keys = ACCOUNT_KEY_TO_CENTRAL_KEYS[gateway]
+
+        # Fetch confirmed orders for this gateway
+        rows = []
+        async for o in db.unified_orders.find(
+            {"user_id": uid},
+            {"_id": 0, "order_number": 1, "order_date": 1, "total_amount": 1,
+             "order_status": 1, "payment_method": 1, "actual_payment_method": 1,
+             "customer_name": 1},
+        ).sort("order_date", 1):
+            if resolve_category(o.get("order_status"), policy_overrides) != "confirmed":
+                continue
+            canon = resolve_canonical(
+                o.get("actual_payment_method") or o.get("payment_method")
+            )
+            if canon not in central_keys:
+                continue
+            od = _parse_date(o.get("order_date"))
+            if od is None:
+                continue
+            gross = float(o.get("total_amount") or 0)
+            if gross <= 0:
+                continue
+            meta = PAYMENT_METHOD_REGISTRY.get(canon) or {}
+            fee = gross * meta.get("estimated_fee_rate", 0.0) / 100
+            vat = fee * meta.get("estimated_vat_rate", 0.0) / 100
+            net = round(gross - fee - vat, 2)
+            settle = od + timedelta(days=int(cycle["issuance_days"]))
+            trf = _next_transfer_day(settle, cycle["transfer_weekdays"])
+            arrival = trf + timedelta(days=int(cycle["transfer_days"]))
+            st = _bucket(arrival, today, settle, trf)
+            rows.append({
+                "order_number": o.get("order_number") or "—",
+                "order_date": od.isoformat(),
+                "customer_name": o.get("customer_name") or "—",
+                "amount": net,
+                "due_date": arrival.isoformat(),
+                "days_late": max(0, (today - arrival).days) if st == "overdue" else 0,
+                "state": st,
+            })
+
+        if state:
+            rows = [r for r in rows if r["state"] == state]
+        rev = (order == "desc")
+        if sort == "amount":
+            rows.sort(key=lambda r: r["amount"], reverse=rev)
+        elif sort == "days_late":
+            rows.sort(key=lambda r: r["days_late"], reverse=rev)
+        else:
+            rows.sort(key=lambda r: r["due_date"], reverse=rev)
+
+        total = len(rows)
+        start = (page - 1) * limit
+        next_transfer = _next_transfer_day(today, cycle["transfer_weekdays"]).isoformat()
+        return {
+            "items": rows[start:start + limit],
+            "page": page, "limit": limit, "total": total,
+            "pages": max(1, (total + limit - 1) // limit),
+            "next_transfer_date": next_transfer,
+            "gateway": gateway,
+        }
+
     parent_router.include_router(router)
