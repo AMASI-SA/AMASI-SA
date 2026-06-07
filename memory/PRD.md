@@ -1,6 +1,48 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 85 — Orders Explorer page
+
+User asked: «صفحة الطلبات تظهر الطلبات حسب حالة الطلب والتاريخ مع ملخص
+لعدد الطلبات التاريخية لجميع حالات الطلبات».
+
+### Backend
+- **`orders_explorer_routes.py`** (NEW):
+  - `GET /api/orders/status-summary` → counts + totals per status,
+    aggregated `by_category` (4 buckets), respects `from_date`/`to_date`.
+  - `GET /api/orders` → paginated list. Filters: `from_date`, `to_date`,
+    `status` (exact, supports `__none__`), `category` (FIRST-CLASS:
+    maps category → list of statuses via policy and pushes into Mongo
+    query), `payment_method`, `search` (order_number / customer_name /
+    customer_phone). AND-combines all sub-`$or`s via `$and` so filters
+    don't clobber each other.
+  - Each item is enriched with its policy `category`.
+
+### Frontend
+- **`pages/Orders.jsx`** (NEW):
+  - 4 category cards (مؤكدة / معلّقة / مسترجعة / ملغاة) — clickable to
+    filter the table.
+  - 14 status chips with counts (تم التوصيل 1,901 / تم المراجعة 303 /
+    جاري التوصيل 246 / تم التنفيذ 156 / قيد التنفيذ 83 …).
+  - Filter bar: from_date, to_date, search (Enter to submit) +
+    «مسح كل الفلاتر».
+  - Paginated table: order_number / order_date / customer_name /
+    payment_method / total_amount / status chip / category label.
+- **`App.js`** mounts `/orders` route. **`Sidebar.jsx`** adds
+  `nav-orders` between «لوحة التحكم» and «الأصول والحسابات».
+
+### Verified
+- 9/9 new pytests PASS (`test_orders_explorer_iter85.py`).
+- **Category fix**: total returned matches `by_category` exactly:
+  confirmed=2,057 / pending=768 / refunded=39 / cancelled=59.
+- Combined filters (status + search) AND-combine correctly.
+- `testing_agent_v3_fork` iter-46 found and reported the category
+  post-pagination bug — **fixed** before finishing.
+
+---
+
+
+
 ## ✅ ITERATION 84 — Brand Identity rebrand to MEZAN / ميزان
 
 User requested: full rebrand from «حساب» to **MEZAN / ميزان** with new

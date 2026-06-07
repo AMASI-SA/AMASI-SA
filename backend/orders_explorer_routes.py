@@ -104,33 +104,71 @@ def attach_orders_explorer_routes(parent_router: APIRouter, db) -> None:
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
+        overrides = await get_policy_map(db, uid)
+
         q: dict = {"user_id": uid}
+        # Collect AND-able sub-conditions that themselves use $or so we
+        # don't clobber them when multiple filters are active.
+        and_clauses: list[dict] = []
+
         if from_date or to_date:
             q["order_date"] = {}
             if from_date:
                 q["order_date"]["$gte"] = from_date
             if to_date:
                 q["order_date"]["$lte"] = to_date
+
         if status:
             if status == "__none__":
-                q["$or"] = [
+                and_clauses.append({"$or": [
                     {"order_status": {"$in": [None, ""]}},
                     {"order_status": "\\N"},
-                ]
+                ]})
             else:
                 q["order_status"] = status
+
+        # Iter-85 fix — category filter is FIRST-CLASS now. Map the
+        # category to the concrete list of order_status values whose
+        # policy resolves to that bucket. This way count_documents()
+        # and skip/limit operate on the filtered set.
+        if category:
+            # Build status→category mapping from observed values
+            distinct_statuses = await db.unified_orders.distinct(
+                "order_status", {"user_id": uid}
+            )
+            matching: list = []
+            include_none = False
+            for s in distinct_statuses:
+                cat = resolve_category(s, overrides)
+                if cat == category:
+                    if s in (None, "", "\\N"):
+                        include_none = True
+                    else:
+                        matching.append(s)
+            if include_none:
+                and_clauses.append({"$or": [
+                    {"order_status": {"$in": matching + [None, "", "\\N"]}},
+                ]})
+            else:
+                # No statuses match — fall through with an impossible
+                # condition so the result-set is empty (rather than
+                # silently returning everything).
+                q["order_status"] = {"$in": matching or ["__none_match__"]}
+
         if payment_method:
             q["payment_method"] = payment_method
+
         if search:
             s = search.strip()
-            q["$or"] = [
+            and_clauses.append({"$or": [
                 {"order_number": {"$regex": s, "$options": "i"}},
                 {"customer_name": {"$regex": s, "$options": "i"}},
                 {"customer_phone": {"$regex": s, "$options": "i"}},
-            ]
+            ]})
 
-        # Optional category filter — apply post-query using policy map
-        # (cheap because we already paged the result).
+        if and_clauses:
+            q["$and"] = and_clauses
+
         skip = (page - 1) * limit
         total = await db.unified_orders.count_documents(q)
         cursor = (
@@ -144,20 +182,16 @@ def attach_orders_explorer_routes(parent_router: APIRouter, db) -> None:
             .limit(limit)
         )
         items = []
-        overrides = await get_policy_map(db, uid)
         async for o in cursor:
             o["category"] = resolve_category(o.get("order_status"), overrides)
             items.append(o)
-
-        if category:
-            items = [o for o in items if o.get("category") == category]
 
         return {
             "items": items,
             "page": page,
             "limit": limit,
             "total": total,
-            "pages": (total + limit - 1) // limit,
+            "pages": (total + limit - 1) // limit if total > 0 else 1,
         }
 
     parent_router.include_router(router)

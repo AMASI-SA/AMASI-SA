@@ -243,7 +243,7 @@ export default function Orders() {
                                 data-testid="orders-search-input"
                             />
                             {searchInput && (
-                                <button type="button" onClick={() => { setSearchInput(""); setFilters((f) => ({ ...f, search: "" })); }} className="absolute top-1/2 -translate-y-1/2 left-2 text-muted-foreground hover:text-rose-700" data-testid="orders-search-clear">
+                                <button type="button" onClick={() => { setSearchInput(""); setFilters((f) => ({ ...f, search: "" })); setPage(1); }} className="absolute top-1/2 -translate-y-1/2 left-2 text-muted-foreground hover:text-rose-700" data-testid="orders-search-clear">
                                     <X size={14} />
                                 </button>
                             )}
@@ -284,10 +284,10 @@ export default function Orders() {
                             </tr>
                         </thead>
                         <tbody>
-                            {data.items.map((o) => {
+                            {data.items.map((o, idx) => {
                                 const catMeta = CAT_META[o.category] || CAT_META.pending;
                                 return (
-                                    <tr key={o.order_number || o.id || Math.random()} className="border-t border-border hover:bg-accent/10" data-testid={`orders-row-${o.order_number}`}>
+                                    <tr key={`${o.order_number || "x"}-${o.order_date || idx}`} className="border-t border-border hover:bg-accent/10" data-testid={`orders-row-${o.order_number}`}>
                                         <td className="px-3 py-2 font-bold num">{o.order_number || "—"}</td>
                                         <td className="px-3 py-2 num text-[11px]">{fmtDate(o.order_date)}</td>
                                         <td className="px-3 py-2 truncate max-w-[200px]" title={o.customer_name}>{o.customer_name || "—"}</td>

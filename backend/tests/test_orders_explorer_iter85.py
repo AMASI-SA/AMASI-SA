@@ -99,3 +99,31 @@ def test_summary_respects_date_window(auth):
     ).json()
     # narrow window must be ≤ full
     assert narrow["totals"]["orders_count"] <= full["totals"]["orders_count"]
+
+
+def test_category_filter_matches_summary_buckets(auth):
+    """Iter-85 regression: clicking a category card must return EXACTLY
+    the same count as the corresponding summary bucket."""
+    s = auth.get(f"{BASE_URL}/api/orders/status-summary", timeout=15).json()
+    for cat in ("confirmed", "pending", "refunded", "cancelled"):
+        expected = s["by_category"][cat]["count"]
+        r = auth.get(
+            f"{BASE_URL}/api/orders?category={cat}&limit=5", timeout=15,
+        ).json()
+        assert r["total"] == expected, (cat, r["total"], expected)
+        # every returned item must belong to that category
+        for o in r["items"]:
+            assert o["category"] == cat, (cat, o)
+
+
+def test_combined_filters_dont_clobber(auth):
+    """status + search together should AND-combine (not lose one)."""
+    r = auth.get(
+        f"{BASE_URL}/api/orders?status=%D8%AA%D9%85%20%D8%A7%D9%84%D8%AA%D9%88%D8%B5%D9%8A%D9%84&search=2643&limit=5",
+        timeout=15,
+    ).json()
+    for o in r["items"]:
+        assert o["order_status"] == "تم التوصيل"
+        assert "2643" in (o.get("order_number") or "") \
+            or "2643" in (o.get("customer_name") or "") \
+            or "2643" in (o.get("customer_phone") or ""), o
