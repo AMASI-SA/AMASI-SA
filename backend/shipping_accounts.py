@@ -300,6 +300,10 @@ def _build_router(db) -> APIRouter:
         if not company.strip():
             raise HTTPException(status_code=400, detail="اسم الشركة مطلوب")
 
+        # Iter-98 — normalise so SMSA / سمسا / smsa all collapse to "سمسا"
+        from shipping_companies import scrub_shipping_company
+        company_name = scrub_shipping_company(company.strip()) or company.strip()
+
         # Iter-95: validate the optional bank account if linked.
         linked_tx_id = None
         if payload.paid_from_account_id:
@@ -312,7 +316,7 @@ def _build_router(db) -> APIRouter:
 
         payment_id = str(uuid.uuid4())
         amount = round(float(payload.amount), 2)
-        company_name = company.strip()
+        # Iter-98 — use the normalised company_name resolved above.
         invoice = (payload.invoice_number or "").strip()
 
         # Iter-95: post the bank movement first; if it fails, no payment row is left dangling.
@@ -362,6 +366,72 @@ def _build_router(db) -> APIRouter:
             {"id": payment_id, "user_id": user["id"]}
         )
         return {"ok": True}
+
+    # Iter-98 — return the canonical list of shipping companies the merchant
+    # has actually used, sorted by usage frequency. Drawn from THREE sources
+    # already in the DB (no new collection):
+    #   • unified_orders.shipping_company   (the most authoritative source)
+    #   • shipping_payments.company_name
+    #   • transfers.shipping_company
+    # All are pushed through `normalize_shipping_company()` so duplicate
+    # spellings (SMSA / سمسا / smsa) collapse into the same canonical key.
+    @router.get("/companies")
+    async def list_shipping_companies(user: dict = Depends(current_user)):
+        from shipping_companies import normalize_shipping_company
+        from collections import Counter
+
+        uid = user["id"]
+        counter: Counter = Counter()
+        display_by_key: dict[str, str] = {}
+
+        async def _collect(coll, field):
+            async for doc in db[coll].find(
+                {"user_id": uid, field: {"$ne": None}},
+                {"_id": 0, field: 1},
+            ):
+                raw = (doc.get(field) or "").strip()
+                if not raw:
+                    continue
+                key, display = normalize_shipping_company(raw)
+                counter[key] += 1
+                # Prefer the canonical display name; fall back to the raw
+                # value only when normalization couldn't classify it.
+                display_by_key.setdefault(key, display)
+                if display and not display.startswith("غير"):
+                    display_by_key[key] = display
+
+        await _collect("unified_orders", "shipping_company")
+        await _collect("shipping_payments", "company_name")
+        await _collect("transfers", "shipping_company")
+
+        rows = [
+            {
+                "canonical": key,
+                "display": display_by_key.get(key) or key,
+                "usage_count": count,
+            }
+            for key, count in counter.most_common()
+        ]
+
+        # Add curated defaults that the user hasn't used yet so the
+        # dropdown is never empty on a fresh account.
+        from shipping_companies import (
+            SMSA, IMILE, MANDOOB_RIYADH, ARAMEX, DHL, JT_EXPRESS,
+        )
+        DEFAULTS = [
+            ("smsa", SMSA),
+            ("imile", IMILE),
+            ("mandoob_riyadh", MANDOOB_RIYADH),
+            ("aramex", ARAMEX),
+            ("dhl", DHL),
+            ("jt_express", JT_EXPRESS),
+        ]
+        seen = {r["canonical"] for r in rows}
+        for k, name in DEFAULTS:
+            if k not in seen:
+                rows.append({"canonical": k, "display": name, "usage_count": 0})
+
+        return {"items": rows}
 
     return router
 

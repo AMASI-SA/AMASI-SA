@@ -10,6 +10,61 @@
 
 ---
 
+## ✅ ITERATION 98 — COD net method + shipping company unification
+
+### Three improvements (all live-tested on Preview)
+
+#### 1) Auto-populated shipping companies list
+- New endpoint `GET /api/shipping-accounts/companies` aggregates
+  `unified_orders.shipping_company` + `shipping_payments.company_name`
+  + `transfers.shipping_company`, runs each through
+  `normalize_shipping_company()`, dedupes via canonical key, sorts by
+  usage frequency, and appends curated defaults.
+- Live result on Preview merchant: 7 companies discovered
+  (iMile 1799× / مندوب الرياض 870× / سمسا 235× / Aramex 19× / …).
+
+#### 2) Normalisation on save + one-off migration
+- `transfers_routes.py` + `shipping_accounts.py` now call
+  `scrub_shipping_company()` on every save → SMSA / سمسا / smsa all
+  collapse to canonical "سمسا" going forward.
+- `scripts/migrate_shipping_company_names.py` (dry-run by default).
+  Applied to Production-style data on Preview: 1 row updated
+  (Aramex → أرامكس). 12 transfers + 222 shipping_payments already
+  canonical thanks to webhook flow.
+
+#### 3) Net-COD method (gross − fee = net)
+- `POST /api/transfers` accepts 3 new optional fields:
+  `cod_gross_collected`, `shipping_fee_deducted`,
+  `shipping_fee_settles_against` (`shipping_payable` default | `expense`).
+- Validates the math: `gross − fee == amount` (±0.01).
+- Atomic writes when the math holds:
+  - OUT from COD = **gross** (full cash the courier collected)
+  - IN to bank = **net** (what actually arrived)
+  - Fee leg:
+    - `shipping_payable` → row in `shipping_payments` with
+      `paid_from_account_id=null`, `settled_via_cod_withholding=true`
+      → reduces the courier's outstanding shipping debt.
+    - `expense` → row in `operating_daily_expenses` (no bank link).
+
+### Files changed (3 prod + 2 new)
+- `backend/transfers_routes.py` — schema + validation + 3-leg write +
+  `_post_shipping_fee_leg()` helper.
+- `backend/shipping_accounts.py` — normalize on save + new `/companies`
+  endpoint.
+- `frontend/src/pages/FinancialInputHub.jsx` — COD tab now drives from
+  the new endpoint + 3 input fields with auto-calculated net + fee
+  settlement selector.
+- `backend/tests/test_cod_net_and_dedupe_iter98.py` — NEW, 6 tests.
+- `backend/scripts/migrate_shipping_company_names.py` — NEW.
+
+### Verified
+- 6/6 pytest PASS.
+- Live: 10,000 gross − 2,000 fee = 8,000 net flows correctly across
+  COD account (−10,000) + bank (+8,000) + shipping_payable settlement
+  (−2,000 debt). Net position unchanged ✓.
+
+---
+
 ## ✅ ITERATION 97 — Financial Input Hub (one-stop data entry)
 
 ### Scope

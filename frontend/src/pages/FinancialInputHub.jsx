@@ -485,37 +485,58 @@ function ShippingPaymentForm({ banks, onSaved }) {
 // ── Tab 7: COD transfer ─────────────────────────────────────────────
 function CodTransferForm({ accounts, banks, onSaved }) {
     const codAccounts = accounts.filter((a) => a.normalized_payment_method === "cash_on_delivery");
+    const [companies, setCompanies] = useState([]);
     const [form, setForm] = useState({
-        from_account_id: "", to_account_id: "", amount: "", transfer_date: today(),
+        from_account_id: "", to_account_id: "", transfer_date: today(),
         reference: "", shipping_company: "", notes: "",
+        // Iter-98 Net-COD
+        cod_gross_collected: "", shipping_fee_deducted: "",
+        shipping_fee_settles_against: "shipping_payable",
     });
     const [busy, setBusy] = useState(false);
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+    useEffect(() => {
+        api.get("/shipping-accounts/companies")
+            .then((r) => setCompanies(r.data?.items || []))
+            .catch(() => setCompanies([]));
+    }, []);
+
+    const gross = Number(form.cod_gross_collected) || 0;
+    const fee = Number(form.shipping_fee_deducted) || 0;
+    const net = Math.max(0, Math.round((gross - fee) * 100) / 100);
+    const useNet = gross > 0;
+
     const submit = async () => {
-        if (!form.from_account_id) { toast.error("اختر حساب الدفع عند الاستلام"); return; }
-        if (!form.to_account_id) { toast.error("اختر البنك الوجهة"); return; }
-        if (!Number(form.amount)) { toast.error("أدخل المبلغ"); return; }
-        if (!form.shipping_company.trim()) { toast.error("اختر شركة الشحن"); return; }
+        if (!form.from_account_id) return toast.error("اختر حساب الدفع عند الاستلام");
+        if (!form.to_account_id) return toast.error("اختر البنك الوجهة");
+        if (!form.shipping_company.trim()) return toast.error("اختر شركة الشحن");
+        if (!gross) return toast.error("أدخل إجمالي COD المحصَّل");
+        if (fee > gross) return toast.error("الرسوم أكبر من الإجمالي");
         setBusy(true);
         try {
             await api.post("/transfers", {
                 from_account_id: form.from_account_id,
                 to_account_id: form.to_account_id,
-                amount: Number(form.amount),
+                amount: net,
                 transfer_date: form.transfer_date,
                 reference: form.reference,
                 shipping_company: form.shipping_company.trim(),
                 notes: form.notes,
+                cod_gross_collected: gross,
+                shipping_fee_deducted: fee,
+                shipping_fee_settles_against: form.shipping_fee_settles_against,
             });
-            toast.success("تم تسجيل تحويل COD مع تصنيف شركة الشحن");
-            setForm({ ...form, amount: "", reference: "", notes: "" });
+            toast.success(`تم: COD ${gross} − رسوم ${fee} = صافي ${net} ر.س محوَّل للبنك`);
+            setForm({ ...form, cod_gross_collected: "", shipping_fee_deducted: "", reference: "", notes: "" });
             onSaved();
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail));
         } finally { setBusy(false); }
     };
+
     return (
-        <SectionCard title="تحويل من الدفع عند الاستلام إلى بنك" Icon={ArrowsLeftRight} hint="ينقل المبلغ من رصيد COD المتوقَّع إلى البنك مع تحديد شركة الشحن التي حوّلت" onSubmit={submit} busy={busy}>
+        <SectionCard title="تحويل من الدفع عند الاستلام إلى بنك" Icon={ArrowsLeftRight} hint="إجمالي ما حصَّلته شركة الشحن، رسومها المخصومة، والصافي المحوَّل" onSubmit={submit} busy={busy}>
             <Field label="من حساب الدفع عند الاستلام" required>
                 <select value={form.from_account_id} onChange={(e) => set("from_account_id", e.target.value)} className={inputCls} data-testid="cod-from">
                     <option value="">— اختر حساب COD —</option>
@@ -528,21 +549,36 @@ function CodTransferForm({ accounts, banks, onSaved }) {
                     {banks.map((b) => <option key={b.id} value={b.id}>{b.name} ({fmt(b.current_balance)} ر.س)</option>)}
                 </select>
             </Field>
-            <Field label="المبلغ (ر.س)" required>
-                <input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => set("amount", e.target.value)} className={`${inputCls} num`} data-testid="cod-amount" />
+            <Field label="شركة الشحن" required full>
+                <select value={form.shipping_company} onChange={(e) => set("shipping_company", e.target.value)} className={inputCls} data-testid="cod-shipping">
+                    <option value="">— اختر شركة شحن —</option>
+                    {companies.map((c) => (
+                        <option key={c.canonical} value={c.display}>
+                            {c.display}{c.usage_count > 0 ? `  (${c.usage_count} مرة)` : ""}
+                        </option>
+                    ))}
+                </select>
+                <div className="text-[11px] text-slate-500 mt-1">القائمة موحَّدة تلقائياً — لا تكرار في الأسماء.</div>
             </Field>
+            <Field label="إجمالي COD المحصَّل (ر.س)" required hint="ما حصَّلته شركة الشحن من العملاء فعلاً">
+                <input type="number" step="0.01" min="0" value={form.cod_gross_collected} onChange={(e) => set("cod_gross_collected", e.target.value)} className={`${inputCls} num`} data-testid="cod-gross" />
+            </Field>
+            <Field label="رسوم شركة الشحن المخصومة (ر.س)" hint="اتركها 0 إذا لم تخصم شركة الشحن أي رسوم">
+                <input type="number" step="0.01" min="0" value={form.shipping_fee_deducted} onChange={(e) => set("shipping_fee_deducted", e.target.value)} className={`${inputCls} num`} data-testid="cod-fee" />
+            </Field>
+            <Field label="صافي المحوَّل للبنك (ر.س)" hint="يُحسب تلقائياً">
+                <input type="number" value={net.toFixed(2)} readOnly className={`${inputCls} num bg-slate-100 font-bold`} data-testid="cod-net" />
+            </Field>
+            {fee > 0 && (
+                <Field label="معالجة الرسوم" full>
+                    <select value={form.shipping_fee_settles_against} onChange={(e) => set("shipping_fee_settles_against", e.target.value)} className={inputCls} data-testid="cod-settle-mode">
+                        <option value="shipping_payable">يخصم من ديون شركة الشحن (الافتراضي — الأصح محاسبياً)</option>
+                        <option value="expense">مصروف شحن جديد (إذا لم تكن هناك فاتورة سابقة)</option>
+                    </select>
+                </Field>
+            )}
             <Field label="تاريخ التحويل" required>
                 <input type="date" value={form.transfer_date} onChange={(e) => set("transfer_date", e.target.value)} className={inputCls} data-testid="cod-date" />
-            </Field>
-            <Field label="شركة الشحن" required full>
-                <input list="cod-ships" value={form.shipping_company} onChange={(e) => set("shipping_company", e.target.value)} className={inputCls} placeholder="سمسا، أيميل، مندوب الرياض…" data-testid="cod-shipping" />
-                <datalist id="cod-ships">
-                    <option value="سمسا" />
-                    <option value="أيميل" />
-                    <option value="مندوب الرياض" />
-                    <option value="Aramex" />
-                    <option value="SPL" />
-                </datalist>
             </Field>
             <Field label="رقم المرجع">
                 <input value={form.reference} onChange={(e) => set("reference", e.target.value)} className={inputCls} data-testid="cod-ref" />

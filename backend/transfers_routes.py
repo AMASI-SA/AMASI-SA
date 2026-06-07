@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_from_db
+from shipping_companies import scrub_shipping_company
 
 
 def _now() -> str:
@@ -40,16 +41,80 @@ class TransferIn(BaseModel):
     reference: Optional[str] = Field("", max_length=120)
     notes: Optional[str] = Field("", max_length=500)
     attachment_url: Optional[str] = None
-    # Iter-96 — when the source account is "الدفع عند الاستلام"
-    # (normalized_payment_method=cash_on_delivery), the UI must collect
-    # which shipping company physically remitted the cash. Stored on the
-    # transfer envelope + both linked transactions so reports can group by
-    # carrier later (SMSA / Aramex / مندوب الرياض / ...).
+    # Iter-96 — for COD-source transfers: which courier remitted the cash.
+    # Normalised via shipping_companies.scrub_shipping_company() so
+    # SMSA/سمسا/smsa all collapse to the canonical display name.
     shipping_company: Optional[str] = Field(None, max_length=120)
+    # Iter-98 — Net-COD method:
+    #   cod_gross_collected = total cash the courier physically collected
+    #   shipping_fee_deducted = courier fees withheld before remittance
+    #   amount               = the net actually deposited to the bank
+    #   (Constraint: amount = cod_gross_collected − shipping_fee_deducted)
+    # When shipping_fee_deducted > 0, an additional bookkeeping entry is
+    # generated against the courier's shipping_payable OR as a courier
+    # fee expense, depending on `shipping_fee_settles_against`.
+    cod_gross_collected: Optional[float] = Field(None, ge=0)
+    shipping_fee_deducted: Optional[float] = Field(None, ge=0)
+    shipping_fee_settles_against: Optional[str] = Field(
+        "shipping_payable", pattern=r"^(shipping_payable|expense)$"
+    )
 
 
 def attach_transfers_routes(parent_router: APIRouter, db) -> None:
     from accounts_routes import _recompute_balance, _strip
+
+    async def _post_shipping_fee_leg(
+        db, uid: str, *,
+        transfer_id: str, shipping_company: str,
+        fee_amount: float, transfer_date: str,
+        settle_mode: str,
+    ) -> None:
+        """Iter-98 — record the courier fee leg of a Net-COD transfer.
+
+        Two settle modes are supported:
+          • shipping_payable: the fee reduces the courier's payable in
+            `shipping_payments` (treated as a partial payment paid from
+            "withheld COD" — no bank movement). This is the default and
+            is correct when a prior shipping invoice exists.
+          • expense: the fee is booked as an operating_daily_expenses row
+            (no bank link — the cash never reached the bank). Use when
+            there is no prior shipping invoice to settle.
+        """
+        now = _now()
+        if settle_mode == "shipping_payable":
+            await db.shipping_payments.insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": uid,
+                "company_name": shipping_company,
+                "amount": round(fee_amount, 2),
+                "payment_date": transfer_date,
+                "invoice_number": f"COD-NET-{transfer_id[:8]}",
+                "note": (
+                    f"رسوم شحن مخصومة من COD (Iter-98) — "
+                    f"transfer_id={transfer_id}"
+                ),
+                "paid_from_account_id": None,     # withheld, not from bank
+                "linked_transaction_id": None,
+                "linked_transfer_id": transfer_id,
+                "settled_via_cod_withholding": True,
+                "created_at": now,
+            })
+        else:    # expense
+            await db.operating_daily_expenses.insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": uid,
+                "date": transfer_date,
+                "expense_type": "رسوم شحن",
+                "description": f"رسوم {shipping_company} مخصومة من COD",
+                "amount": round(fee_amount, 2),
+                "payment_method": "خصم من COD",
+                "notes": f"transfer_id={transfer_id}",
+                "paid_from_account_id": None,
+                "linked_transaction_id": None,
+                "linked_transfer_id": transfer_id,
+                "created_at": now,
+                "updated_at": now,
+            })
 
     router = APIRouter(prefix="/transfers", tags=["transfers"])
 
@@ -133,8 +198,27 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
         transfer_id = str(uuid.uuid4())
 
         # Iter-96 — capture shipping company only for COD-source transfers.
+        # Iter-98 — normalise to canonical display name (SMSA/سمسا/smsa → سمسا).
         is_cod_source = (from_acc.get("normalized_payment_method") == "cash_on_delivery")
-        shipping_company = (payload.shipping_company or "").strip() if is_cod_source else ""
+        raw_company = (payload.shipping_company or "").strip() if is_cod_source else ""
+        shipping_company = scrub_shipping_company(raw_company) if raw_company else ""
+
+        # Iter-98 — Net COD method: validate the gross/fee math when provided
+        cod_gross = float(payload.cod_gross_collected or 0)
+        ship_fee = float(payload.shipping_fee_deducted or 0)
+        use_net_cod = is_cod_source and (cod_gross > 0 or ship_fee > 0)
+        if use_net_cod:
+            expected_net = round(cod_gross - ship_fee, 2)
+            if expected_net < 0:
+                raise HTTPException(400, "رسوم الشحن أكبر من إجمالي COD المحصَّل")
+            if abs(expected_net - amount) > 0.01:
+                raise HTTPException(
+                    400,
+                    f"الصافي ({amount}) لا يطابق الإجمالي ({cod_gross}) "
+                    f"− الرسوم ({ship_fee}) = {expected_net}",
+                )
+            if not shipping_company:
+                raise HTTPException(400, "شركة الشحن مطلوبة عند خصم الرسوم")
 
         description = (
             f"تحويل من {from_acc['name']} إلى {to_acc['name']}"
@@ -154,6 +238,10 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
             "notes": (payload.notes or "").strip(),
             "attachment_url": payload.attachment_url,
             "shipping_company": shipping_company or None,
+            "cod_gross_collected": cod_gross if use_net_cod else None,
+            "shipping_fee_deducted": ship_fee if use_net_cod else None,
+            "shipping_fee_settles_against":
+                payload.shipping_fee_settles_against if use_net_cod else None,
             "created_by_user_id": uid,
             "created_by_name": user.get("name") or user.get("email") or "",
             "created_at": now,
@@ -162,14 +250,21 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
         await db.transfers.insert_one(transfer_doc)
 
         # 2. Two paired ledger rows — same transfer_id links them.
+        # Iter-98 — for Net-COD method, the OUT row reflects the GROSS that
+        # left the COD bucket (the courier physically collected the full
+        # amount); the IN row reflects the NET that actually arrived in the
+        # bank. The 2-leg integrity is preserved via a third entry below.
+        out_amount = round(cod_gross, 2) if use_net_cod else amount
         tx_out = {
             "id": str(uuid.uuid4()),
             "user_id": uid,
             "account_id": payload.from_account_id,
             "transaction_type": "internal_transfer",
-            "amount": amount,
+            "amount": out_amount,
             "direction": "out",
-            "description": description,
+            "description": description
+                + (f" (إجمالي {cod_gross} − رسوم {ship_fee} = صافي {amount})"
+                   if use_net_cod else ""),
             "transaction_date": payload.transfer_date,
             "balance_after": 0.0,
             "status": "posted",
@@ -186,6 +281,7 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
             **tx_out,
             "id": str(uuid.uuid4()),
             "account_id": payload.to_account_id,
+            "amount": amount,            # net to bank
             "direction": "in",
             "peer_account_id": payload.from_account_id,
             "peer_account_name": from_acc["name"],
@@ -195,6 +291,17 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
         # 3. Recompute both account balances.
         await _recompute_balance(db, uid, payload.from_account_id)
         await _recompute_balance(db, uid, payload.to_account_id)
+
+        # 4. Iter-98 — handle the shipping-fee leg (only when ship_fee > 0).
+        if use_net_cod and ship_fee > 0:
+            await _post_shipping_fee_leg(
+                db, uid,
+                transfer_id=transfer_id,
+                shipping_company=shipping_company,
+                fee_amount=ship_fee,
+                transfer_date=payload.transfer_date,
+                settle_mode=payload.shipping_fee_settles_against,
+            )
 
         transfer_doc.pop("_id", None)
         return await _enrich(transfer_doc)
