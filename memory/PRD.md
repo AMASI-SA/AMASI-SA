@@ -10,106 +10,102 @@
 
 ---
 
-## ✅ ITERATION 91 — Refund-Aware COGS + Order-Adjustments Audit (Feb 2026)
+## ✅ ITERATION 92 — Liabilities Center Phase 1 (Feb 2026)
 
-### Phase 1 — Effective Product Cost
-- New helper `effective_product_cost(order, policy_overrides)` in
-  `order_status_policy.py`. Rules:
-  - cancelled / refunded → 0 COGS
-  - full refund (actual_refund_amount > 0) → 0 COGS
-  - partial refund → proportional reduction
-  - confirmed / pending → unchanged
-- Used by `server.py` Dashboard (line 1627) and
-  `product_costs.py /summary` so refunded/cancelled orders no longer
-  inflate the "تكلفة المنتجات" KPI nor depress reported profit.
-- 12 pytests in `test_effective_product_cost_iter91.py`.
+### Scope
+- Single new collection `liabilities` modelling 3 obligation kinds:
+  `salary`, `ad_account`, `salary_advance`.
+- Reuses `operating_salaries`, `accounts`, `account_transactions`.
+- No frontend, no extra pages, no prepaid/subscription/insurance support
+  (deferred per merchant request).
 
-### Phase 2 — Resync Diff & Adjustments Log
-- `resync_single_order` now:
-  - snapshots `total_amount` + `products` before upsert,
-  - calls `attach_cost_to_order_doc` after upsert (COGS recompute),
-  - writes a row to a new `order_adjustments` collection when
-    total_amount or items list differ (added / removed / modified).
-- New endpoint `GET /api/order-adjustments` with pagination + filters
-  (`order_number`, `reason`, date range).
-- 12 pytests in `test_order_adjustments_iter91.py`.
+### Endpoints (`/api/liabilities`)
+- `POST /generate-salaries[?period=YYYY-MM]` — idempotent monthly generator.
+- `POST /` — manual create (ad_account bill or salary_advance).
+- `GET /` — list with filters (kind, status, ad_provider, period_key,
+  employee_salary_id, from_due, to_due, pagination).
+- `GET /summary` — Assets − Liabilities = Net financial position.
+- `PUT /{id}` — edit expected/due_date/notes/description/label.
+- `POST /{id}/pay` — record a payment, posts an `account_transactions`
+  row, updates the bank balance.
+- `DELETE /{id}` — safe delete (paid_amount must be 0 except for advances).
 
-### Phase 3 — Refund/Cancel deduction from expected_orders_balance
-- Verified the chain `compute_metrics → reconciliation/summary →
-  accounts.expected_orders_balance`. Refunds and cancellations are
-  correctly excluded from `net` at the central source, propagating to
-  every consumer (Reports / Reconciliation / Accounts).
-- 5 integration pytests in `test_refund_assets_deduction_iter91.py`
-  guard the behaviour against future regressions.
+### Key invariants
+- Idempotent salary generation via partial unique index
+  `(user_id, kind="salary", employee_salary_id, period_key)`.
+- Advances are recorded with `paid_amount = expected_amount` (cash left
+  the bank already) and `advance_status: open|fully_consumed`.
+- When a new salary obligation is generated for an employee, any open
+  advances for that employee are auto-deducted (treated as pre-paid on
+  the salary).
+- Every `pay()` creates an `account_transactions` row of type
+  `debt_payment` with `peer_liability_id` for traceability.
+
+### Net Position formula
+```
+assets       = banks(current_balance) + payment_platforms(expected_orders_balance)
+liabilities  = SUM(remaining_amount) over kind in {salary, ad_account}
+                AND status != paid
+net_position = assets - liabilities
+```
+
+### Files changed
+- `backend/liabilities_routes.py` — NEW (450 LOC).
+- `backend/server.py` — import + attach + index setup.
+- `backend/tests/test_liabilities_iter92.py` — NEW (17 tests, all PASS).
 
 ### Verified
-- 29/29 new pytests PASS.
-- Dashboard / Reconciliation / Orders / Adjustments / ProductCosts all
-  respond 200 OK on Preview.
-- No frontend changes — backend-only as requested by the merchant.
+- 17/17 pytest PASS.
+- Live test on merchant `amasi.jewelery@gmail.com`:
+  - Bank: 40,000 SAR + Platforms: 415,314.24 SAR = **Assets 455,314.24 SAR**
+  - Generated 7 salary obligations totalling 23,100 SAR
+  - **Net position: 432,214.24 SAR** ✓
 
-### New collection
-`order_adjustments { id, user_id, order_number, reason, old_total,
-new_total, delta_total, old_cogs, new_cogs, delta_cogs, items_changed,
-total_changed, items_diff{added,removed,modified}, created_at }`
+---
 
-### New endpoint
-`GET /api/order-adjustments?order_number=&reason=&from_date=&to_date=&page=&limit=`
+## ✅ ITERATION 91 — Refund-Aware COGS + Order-Adjustments Audit (Feb 2026)
+
+See prior PRD entries.
 
 ---
 
 ## ✅ Previous Iterations (Iter-81 → Iter-90)
 
-See git history + earlier PRD versions for full detail. Highlights:
-
-- **Iter-90**: Settlement Cycle Settings + Health endpoint (PAUSED by
-  user — diagnostic report task abandoned in favour of refund/COGS work).
-- **Iter-89**: CPO on platform ad cards (Snap/Meta/TikTok).
-- **Iter-88**: Webhook token health diagnostics + rotate UI.
-- **Iter-87**: Order status update + manual resync.
-- **Iter-86**: Orders Excel export with filters.
-- **Iter-85**: Orders Explorer page (`/orders`).
-- **Iter-84**: Rebranding to MEZAN.
-- **Iter-83**: Order Status Policy + 4-category bucketing.
-- **Iter-82**: Status-driven refunds (Tamara/Tabby).
-- **Iter-81**: Centralized Payment Gateway Metrics.
-- **Iter-74**: Phase 80 — Salla/Tamara/Tabby settlement file imports.
-- **Iter-73**: Salla Direct OAuth + Sync.
-- **Iter-68**: Phase 2.2 Reconciliation Screen.
+See git history + earlier PRD versions.
 
 ---
 
-## Backlog (User-Acknowledged Priority)
+## Backlog
 
 ### P0 — Active
 - None.
 
-### P1 — On hold
-- Smart Settlement Alerts UI (Phase C + D of Iter-90) — PAUSED by user.
-- Full diagnostic report comparing `/api/reconciliation/summary` vs
-  `/api/settlement-cycle/health` `transferred` data sources — PAUSED.
+### P1 — Deferred (user paused)
+- Smart Settlement Alerts UI Phase C/D (Iter-90).
+- Reconciliation/SettlementHealth diagnostic report.
 
-### P2 — Future
-- Import actual settlement files for Tamara/Tabby (Phase 80 extension).
-- UI for the new `order_adjustments` collection (currently API-only).
-- Auto-detect order changes from Make.com webhook (not only via manual
-  resync).
+### P2 — Liabilities Phase 2 (future)
+- Prepaid expenses with amortization (insurances, licenses, subscriptions).
+- Subscription cycles (recurring liabilities for hosting/SaaS).
+- Auto-fetch ad spend from Snap/TikTok/Meta APIs (currently manual).
+- Liabilities UI page (currently API-only).
 
-### P3 — Long-term
-- Refactor `/app/frontend/src/pages/Reports.jsx` into smaller modules.
+### P3
+- Refactor `frontend/src/pages/Reports.jsx`.
 
 ---
 
 ## Key Files Reference
 - `backend/server.py` — main FastAPI app
-- `backend/order_status_policy.py` — policy + `effective_product_cost`
+- `backend/liabilities_routes.py` — Iter-92 Liabilities Center
+- `backend/order_status_policy.py` — policy + effective_product_cost
 - `backend/payment_gateway_metrics.py` — single source of truth
 - `backend/reconciliation_routes.py` — reconciliation summary
 - `backend/orders_explorer_routes.py` — /orders + /order-adjustments
 - `backend/salla_integration/sync.py` — Salla API resync + diff
 - `backend/product_costs.py` — product cost catalog + recompute
 - `backend/accounts_routes.py` — payment platform account sync
-- `backend/settlement_cycle.py` — Iter-90 cycle health (paused)
+- `backend/expenses_routes.py` — operating_salaries / rentals / prepaids
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.

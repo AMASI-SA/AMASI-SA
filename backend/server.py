@@ -81,6 +81,7 @@ from settlements_routes import (
     backfill_settlement_provenance,
 )
 from accounts_routes import attach_accounts_routes, ensure_accounts_indexes
+from liabilities_routes import attach_liabilities_routes, ensure_liabilities_indexes
 from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
 from reconciliation_routes import attach_reconciliation_routes
 from diagnostics_routes import attach_diagnostics_routes
@@ -2894,6 +2895,7 @@ attach_payment_gateway_metrics_routes(api, db)
 attach_order_status_policy_routes(api, db)
 attach_orders_explorer_routes(api, db)
 attach_settlement_cycle_routes(api, db)
+attach_liabilities_routes(api, db)
 app.include_router(api)
 
 # CORS
@@ -2922,6 +2924,7 @@ async def on_startup():
     await ensure_import_jobs_indexes(db)
     await ensure_transfers_indexes(db)
     await ensure_accounts_indexes(db)
+    await ensure_liabilities_indexes(db)
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:
