@@ -224,27 +224,54 @@ def attach_settlement_cycle_routes(parent_router: APIRouter, db) -> None:
             od = _parse_date(o.get("order_date"))
             if od is None:
                 continue
-            amount = float(o.get("total_amount") or 0)
-            if amount <= 0:
+            gross = float(o.get("total_amount") or 0)
+            if gross <= 0:
                 continue
-            orders_by_gateway[gw].append((od, amount, o.get("order_number", "")))
+            # Mirror /payment-gateway-metrics: subtract estimated fees+VAT
+            # so the per-order amount matches the reconciliation `expected`.
+            meta = PAYMENT_METHOD_REGISTRY.get(canon) or {}
+            rate = meta.get("estimated_fee_rate", 0.0)
+            vat_rate = meta.get("estimated_vat_rate", 0.0)
+            fee = gross * rate / 100
+            vat = fee * vat_rate / 100
+            net_amount = round(gross - fee - vat, 2)
+            orders_by_gateway[gw].append((od, net_amount, o.get("order_number", "")))
 
-        # 2) Pull recorded transfers per gateway account
+        # 2) Pull recorded transfers per gateway account — must match
+        # /reconciliation/summary semantics EXACTLY: read from
+        # `account_transactions` collection, type=internal_transfer,
+        # direction=out, peer_account_type=bank.
         transfers_by_gateway: dict[str, float] = {g: 0.0 for g in GATEWAYS}
-        accs = {a["id"]: a async for a in db.accounts.find(
+        gw_accounts: dict[str, list[str]] = {g: [] for g in GATEWAYS}
+        async for a in db.accounts.find(
             {"user_id": uid, "account_type": "payment_platform"},
             {"_id": 0, "id": 1, "normalized_payment_method": 1},
-        )}
-        async for t in db.account_transfers.find(
-            {"user_id": uid, "from_account_id": {"$in": list(accs.keys())}},
-            {"_id": 0, "from_account_id": 1, "amount": 1},
         ):
-            acc = accs.get(t["from_account_id"])
-            if not acc:
-                continue
-            gw = acc.get("normalized_payment_method")
+            gw = a.get("normalized_payment_method")
             if gw in transfers_by_gateway:
-                transfers_by_gateway[gw] += float(t.get("amount") or 0)
+                gw_accounts[gw].append(a["id"])
+
+        # Build bank id set once
+        bank_ids: set[str] = set()
+        async for b in db.accounts.find(
+            {"user_id": uid, "account_type": "bank"}, {"_id": 0, "id": 1}
+        ):
+            bank_ids.add(b["id"])
+
+        for gw, acc_ids in gw_accounts.items():
+            if not acc_ids:
+                continue
+            async for tx in db.account_transactions.find(
+                {
+                    "user_id": uid,
+                    "account_id": {"$in": acc_ids},
+                    "transaction_type": "internal_transfer",
+                    "direction": "out",
+                },
+                {"_id": 0, "amount": 1, "peer_account_id": 1},
+            ):
+                if tx.get("peer_account_id") in bank_ids:
+                    transfers_by_gateway[gw] += float(tx.get("amount") or 0)
 
         # 3) For each gateway: FIFO-consume transferred amount, bucket the rest
         rows = []
