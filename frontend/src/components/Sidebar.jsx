@@ -36,6 +36,7 @@ const SECTIONS = [
         icon: CurrencyDollar,
         items: [
             { to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" },
+            { to: "/orders", label: "الطلبات", icon: Package, testid: "nav-orders" },
             { to: "/accounts", label: "الأصول والحسابات", icon: Wallet, testid: "nav-accounts" },
             { to: "/transfers", label: "التحويلات بين الحسابات", icon: ArrowsLeftRight, testid: "nav-transfers" },
             { to: "/reconciliation", label: "المطابقة والتسويات", icon: Scales, testid: "nav-reconciliation" },

@@ -1,0 +1,41 @@
+{
+  "summary": "Iter-85 Orders Explorer: Backend 7/7 pytest PASS. Frontend /orders page reachable via sidebar nav-orders, renders all expected testids (orders-page, orders-category-cards with 4 buckets, orders-status-chips with 14 chips, orders-filter-bar, orders-table, orders-prev/next, orders-clear-all). Real merchant counts validated: confirmed=2,057 / pending=768 / refunded=39 / cancelled=59 → sum=2,923 (matches total). All 5 user-mentioned statuses (تم التوصيل 1,901, تم المراجعة 303, جاري التوصيل 246, تم التنفيذ 156, قيد التنفيذ 83) appear with correct counts and colour categories. Status chip click and date filter (2026-05-01 → 2026-05-31 = 2,381 orders) work correctly. Pagination 59 pages, search by order_number works. MEZAN brand still present in sidebar. ONE CRITICAL BUG: clicking a category card sets `category=X` query param but backend applies it post-pagination → `total` stays at 2,923, table shows wrong/empty rows (e.g., ملغاة click → 0 visible rows, 59 pages of mostly-empty results).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/orders?category=X", "issue": "Category filter applied post-pagination AFTER count_documents — when category has few orders (e.g., cancelled=59), the first page returns 0 rows because no cancelled orders fall within the first 50 date-sorted docs; total still reports 2,923 and pages=59 instead of pages=2 with 59 cancelled orders. Backend must map category→list of statuses and add to the Mongo query (or pre-compute category field on the document) so count_documents + skip/limit operate on the filtered set.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Orders category cards (orders-cat-*)", "issue": "Clicking a card visually toggles aria-pressed=true and shows مسح كل الفلاتر, but the underlying API behaviour (above) renders the table mostly empty and the النتائج count + pagination are misleading. UI is correct; root cause is backend.", "selector": "[data-testid='orders-cat-cancelled']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Category card → table refresh", "issue": "Per the bug above, the categorical filter does not actually filter the result-set count; user sees 'النتائج: 2,923 طلب' while table is empty and pagination claims 59 pages.", "affected_selectors": ["[data-testid='orders-table']", "[data-testid='orders-pagination']", "[data-testid^='orders-cat-']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_orders_explorer_iter85.py",
+    "/app/test_reports/pytest/iter85_orders.xml"
+  ],
+  "action_items": [
+    "Fix backend /api/orders to treat `category` as a first-class query filter (map category → list of order_status values from order_status_policy, OR persist resolved category on unified_orders) so count_documents() + skip/limit operate on the filtered set. After fix, retest by clicking each category card and verifying النتائج matches the card count and table shows correct rows.",
+    "Add a backend test asserting GET /api/orders?category=cancelled returns total=59 (matches by_category.cancelled.count) and that items[].category == 'cancelled'."
+  ],
+  "critical_code_review_comments": [
+    "orders_explorer_routes.py L132-153: post-pagination category filter is the root cause — items are filtered AFTER skip/limit, so paging through a small category is broken. Either join with policy map at aggregation time or persist category on the order document during ingest.",
+    "orders_explorer_routes.py L116-119: `$or` for status='__none__' is fine, but later L124-130 builds another `$or` for search and overwrites the first one — combining status=__none__ with a search will silently lose the null-status branch. Use `$and` of two `$or` clauses.",
+    "Orders.jsx L156: clicking a category card resets status filter to empty (good), but UI does not warn user that pagination/total may be inaccurate while category filter is active — once backend bug is fixed this becomes a non-issue.",
+    "Orders.jsx L290: `key={o.order_number || o.id || Math.random()}` — Math.random() as React key causes remount churn; prefer a stable composite like `${o.order_number}-${o.order_date}` or skip the row entirely.",
+    "Orders.jsx L246: search-clear button does not reset `page` to 1; minor but can show empty page if user was on page>1."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% pytest (7/7) — but functional bug uncovered in category filter; effective: 85%", "frontend": "90% (category card filter visually works but data is wrong due to backend)"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Validated artifacts on /orders for merchant amasi: orders-page, orders-category-cards (مؤكدة 2,057 / معلّقة 768 / مسترجعة 39 / ملغاة 59), orders-status-chips (14 chips incl. تم التوصيل 1,901, تم المراجعة 303, جاري التوصيل 246, تم التنفيذ 156, قيد التنفيذ 83), orders-filter-bar with orders-from-date/orders-to-date/orders-search-input/orders-search-clear, orders-table with 7 columns, orders-prev/orders-next/orders-pagination (59 pages × 50 = 2,950 ≈ 2,923 total), orders-clear-all. Date filter narrows total to 2,381 for 2026-05-01..2026-05-31 and confirmed card to 1,964 — confirmed working. Chip click 'تم التوصيل' narrows total to 1,901 correctly. Search by order_number=264342287 returns 1 row. MEZAN sidebar brand persists from Iter-84. ONLY remaining bug to verify after main-agent fix: category card click must produce correct total/table/pagination — easiest repro is click 'ملغاة' (only 59 orders) and expect total=59 / 2 pages, not 2,923 / 59 pages.",
+  "rca of the issue": "RCA: backend/orders_explorer_routes.py:list_orders builds a Mongo query `q` that includes status/date/search/payment_method but NOT category. It then calls db.unified_orders.count_documents(q) and applies skip/limit, yielding a 'total' and a page of up to 50 items. Only AFTER fetching the page does it filter items in Python by category. Repro: GET /api/orders?category=cancelled → response.total=2923, response.items=[] (because no cancelled orders are within the first 50 date-sorted docs). Mitigation options: (1) Persist resolved `category` on unified_orders during ingest and add `q['category']=category` for first-class filtering; OR (2) at request time, build a list of order_status values whose category resolves to the requested bucket (using get_policy_map + default_category_for) and add `q['order_status']={'$in': statuses}` plus, for the 'pending' default bucket, an `$or` to also include None/empty/\\N statuses. Add regression test asserting equality between by_category[c].count (from /status-summary) and total (from /orders?category=c)."
+}

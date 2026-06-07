@@ -28,6 +28,7 @@ import Settlements from "./pages/Settlements";
 import Accounts from "./pages/Accounts";
 import AccountDetails from "./pages/AccountDetails";
 import OrdersDiagnostics from "./pages/OrdersDiagnostics";
+import Orders from "./pages/Orders";
 import ImportJobs from "./pages/ImportJobs";
 import Transfers from "./pages/Transfers";
 import Reconciliation from "./pages/Reconciliation";
@@ -73,6 +74,7 @@ function AppRoutes() {
             <Route path="/reconciliation" element={<ProtectedRoute><Layout><Reconciliation /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
+            <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />
             <Route path="/import-jobs" element={<ProtectedRoute><Layout><ImportJobs /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
 
