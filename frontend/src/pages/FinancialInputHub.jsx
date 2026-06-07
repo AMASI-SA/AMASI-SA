@@ -81,46 +81,81 @@ function SectionCard({ title, Icon, hint, children, onSubmit, busy, submitLabel 
 
 
 // ── Tab 1: New liability (ad / supplier) ────────────────────────────
-function NewLiabilityForm({ onSaved }) {
+function NewLiabilityForm({ counterparties, onSaved }) {
     const [form, setForm] = useState({
         kind: "supplier",
         ad_provider: "snapchat",
-        ad_account_label: "",
-        supplier_name: "",
+        counterparty_id: "",
         expected_amount: "",
         due_date: today(),
         description: "",
         notes: "",
     });
     const [busy, setBusy] = useState(false);
+    // inline create state
+    const [newName, setNewName] = useState("");
+    const [creating, setCreating] = useState(false);
+    const [duplicateSuggestion, setDuplicateSuggestion] = useState(null);
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+    const cpKind = form.kind === "ad_account" ? "ad_account" : "supplier";
+    const filteredCps = counterparties.filter((c) =>
+        c.kind === cpKind || (cpKind === "supplier" && c.kind === "general")
+    ).filter((c) =>
+        form.kind === "ad_account" ? c.ad_provider === form.ad_provider : true
+    );
+
+    const createCounterparty = async (force = false) => {
+        if (!newName.trim()) { toast.error("أدخل اسماً"); return; }
+        setCreating(true);
+        try {
+            const body = {
+                kind: cpKind,
+                name: newName.trim(),
+                force,
+            };
+            if (form.kind === "ad_account") body.ad_provider = form.ad_provider;
+            const { data } = await api.post("/counterparties", body);
+            toast.success(`تم إنشاء ${data.name}`);
+            setNewName(""); setDuplicateSuggestion(null);
+            set("counterparty_id", data.id);
+            onSaved();   // refresh parent list
+        } catch (e) {
+            const d = e.response?.data?.detail;
+            if (typeof d === "object" && d?.message === "similar_name_exists") {
+                setDuplicateSuggestion(d.suggestion);
+                toast.warning(`اسم مشابه موجود: ${d.suggestion?.name}`);
+            } else if (typeof d === "object" && d?.message === "duplicate") {
+                toast.error(`هذا الاسم موجود مسبقاً: ${d.existing?.name}`);
+                set("counterparty_id", d.existing.id);
+            } else {
+                toast.error(formatApiErrorDetail(d));
+            }
+        } finally { setCreating(false); }
+    };
+
     const submit = async () => {
-        if (!form.expected_amount || Number(form.expected_amount) <= 0) {
-            toast.error("أدخل مبلغاً صحيحاً");
+        if (!form.counterparty_id) {
+            toast.error("اختر طرفاً من القائمة أو أنشئ واحداً جديداً");
             return;
         }
-        if (form.kind === "supplier" && !form.supplier_name.trim()) {
-            toast.error("اسم المورد/الجهة مطلوب");
-            return;
+        if (!form.expected_amount || Number(form.expected_amount) <= 0) {
+            toast.error("أدخل مبلغاً صحيحاً"); return;
         }
         setBusy(true);
         try {
             const body = {
                 kind: form.kind,
+                counterparty_id: form.counterparty_id,
                 expected_amount: Number(form.expected_amount),
                 due_date: form.due_date,
                 description: form.description || "",
                 notes: form.notes || "",
             };
-            if (form.kind === "ad_account") {
-                body.ad_provider = form.ad_provider;
-                body.ad_account_label = form.ad_account_label || "";
-            }
-            if (form.kind === "supplier") body.supplier_name = form.supplier_name.trim();
+            if (form.kind === "ad_account") body.ad_provider = form.ad_provider;
             await api.post("/liabilities", body);
             toast.success("تم تسجيل الالتزام");
-            setForm({ ...form, expected_amount: "", supplier_name: "", ad_account_label: "", description: "", notes: "" });
+            setForm({ ...form, counterparty_id: "", expected_amount: "", description: "", notes: "" });
             onSaved();
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر الحفظ");
@@ -128,37 +163,60 @@ function NewLiabilityForm({ onSaved }) {
     };
 
     return (
-        <SectionCard
-            title="تسجيل التزام جديد"
-            Icon={Receipt}
-            hint="فاتورة إعلانية، مستحق لمورد أو شركة شحن، أي التزام مالي على الشركة"
-            onSubmit={submit}
-            busy={busy}
-        >
+        <SectionCard title="تسجيل التزام جديد" Icon={Receipt} hint="اختر الطرف من القائمة الموحَّدة — لا تكتب الاسم يدوياً" onSubmit={submit} busy={busy}>
             <Field label="نوع الالتزام" required>
-                <select value={form.kind} onChange={(e) => set("kind", e.target.value)} className={inputCls} data-testid="liab-kind">
+                <select value={form.kind} onChange={(e) => { set("kind", e.target.value); set("counterparty_id", ""); }} className={inputCls} data-testid="liab-kind">
                     <option value="supplier">مورد / جهة عامة</option>
-                    <option value="ad_account">حساب إعلاني (سناب/تيك توك/ميتا)</option>
+                    <option value="ad_account">حساب إعلاني</option>
                 </select>
             </Field>
-            {form.kind === "ad_account" ? (
-                <>
-                    <Field label="المنصة" required>
-                        <select value={form.ad_provider} onChange={(e) => set("ad_provider", e.target.value)} className={inputCls} data-testid="liab-ad-provider">
-                            <option value="snapchat">Snapchat</option>
-                            <option value="tiktok">TikTok</option>
-                            <option value="meta">Meta</option>
-                        </select>
-                    </Field>
-                    <Field label="اسم الحساب" full>
-                        <input value={form.ad_account_label} onChange={(e) => set("ad_account_label", e.target.value)} className={inputCls} data-testid="liab-ad-label" placeholder="حساب التايجر سناب" />
-                    </Field>
-                </>
-            ) : (
-                <Field label="اسم المورد / الجهة" required full>
-                    <input value={form.supplier_name} onChange={(e) => set("supplier_name", e.target.value)} className={inputCls} data-testid="liab-supplier-name" placeholder="مثلاً: مطبعة الأنوار، شركة التغليف..." />
+            {form.kind === "ad_account" && (
+                <Field label="المنصة" required>
+                    <select value={form.ad_provider} onChange={(e) => { set("ad_provider", e.target.value); set("counterparty_id", ""); }} className={inputCls} data-testid="liab-ad-provider">
+                        <option value="snapchat">Snapchat</option>
+                        <option value="tiktok">TikTok</option>
+                        <option value="meta">Meta</option>
+                    </select>
                 </Field>
             )}
+            <Field label={form.kind === "ad_account" ? "اختر الحساب الإعلاني" : "اختر المورد/الجهة"} required full>
+                <select value={form.counterparty_id} onChange={(e) => set("counterparty_id", e.target.value)} className={inputCls} data-testid="liab-counterparty">
+                    <option value="">— اختر من القائمة الموحَّدة —</option>
+                    {filteredCps.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+            </Field>
+            <div className="sm:col-span-2 border border-dashed border-slate-300 rounded-lg p-3 bg-slate-50">
+                <label className="block text-[11px] font-bold text-slate-700 mb-2">
+                    أو إضافة طرف جديد (يُحفظ في القائمة الموحَّدة)
+                </label>
+                <div className="flex gap-2">
+                    <input
+                        value={newName}
+                        onChange={(e) => { setNewName(e.target.value); setDuplicateSuggestion(null); }}
+                        placeholder={form.kind === "ad_account" ? "مثال: Snapchat Account 1" : "اسم المورد"}
+                        className={inputCls}
+                        data-testid="liab-new-cp-name"
+                    />
+                    <button type="button" onClick={() => createCounterparty(false)} disabled={creating}
+                            className="px-3 py-2 rounded-lg bg-violet-700 text-white text-sm font-bold disabled:opacity-50"
+                            data-testid="liab-new-cp-create">
+                        إضافة
+                    </button>
+                </div>
+                {duplicateSuggestion && (
+                    <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                        ⚠️ قد يكون هذا الطرف موجوداً مسبقاً: <b>{duplicateSuggestion.name}</b>.{" "}
+                        <button type="button" onClick={() => { set("counterparty_id", duplicateSuggestion.id); setDuplicateSuggestion(null); setNewName(""); }}
+                                className="text-violet-700 underline font-bold">
+                            استخدمه
+                        </button>{" "}
+                        أو{" "}
+                        <button type="button" onClick={() => createCounterparty(true)} className="text-rose-700 underline font-bold">
+                            أنشئ جديداً رغم التشابه
+                        </button>
+                    </div>
+                )}
+            </div>
             <Field label="المبلغ (ر.س)" required>
                 <input type="number" step="0.01" min="0" value={form.expected_amount} onChange={(e) => set("expected_amount", e.target.value)} className={`${inputCls} num`} data-testid="liab-amount" />
             </Field>
@@ -166,7 +224,7 @@ function NewLiabilityForm({ onSaved }) {
                 <input type="date" value={form.due_date} onChange={(e) => set("due_date", e.target.value)} className={inputCls} data-testid="liab-due-date" />
             </Field>
             <Field label="الوصف" full>
-                <input value={form.description} onChange={(e) => set("description", e.target.value)} className={inputCls} placeholder="فاتورة مارس، أو وصف مختصر" data-testid="liab-desc" />
+                <input value={form.description} onChange={(e) => set("description", e.target.value)} className={inputCls} data-testid="liab-desc" />
             </Field>
             <Field label="ملاحظات" full>
                 <input value={form.notes} onChange={(e) => set("notes", e.target.value)} className={inputCls} data-testid="liab-notes" />
@@ -608,6 +666,7 @@ export default function FinancialInputHub() {
     const [accounts, setAccounts] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [openLiabilities, setOpenLiabilities] = useState([]);
+    const [counterparties, setCounterparties] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const banks = useMemo(
@@ -618,20 +677,38 @@ export default function FinancialInputHub() {
     const load = async () => {
         setLoading(true);
         try {
-            const [accRes, empRes, unpaidRes, partialRes] = await Promise.all([
+            const [accRes, empRes, unpaidRes, partialRes, cpsRes] = await Promise.all([
                 api.get("/accounts"),
                 api.get("/operating-expenses/salaries"),
                 api.get("/liabilities?status=unpaid&limit=500"),
                 api.get("/liabilities?status=partial&limit=500"),
+                api.get("/counterparties"),
             ]);
             const raw = accRes.data?.accounts || accRes.data?.items || (Array.isArray(accRes.data) ? accRes.data : []);
             setAccounts(raw);
-            setEmployees((empRes.data?.items || []).filter((e) => e.status === "active"));
+            // Iter-99 — filter to ONLY real employees (exclude household/charity).
+            setEmployees((empRes.data?.items || []).filter(
+                (e) => e.status === "active" && e.category === "employee"
+            ));
+            // Iter-99 — exclude any liability whose underlying employee is
+            // household/charity from the "pay" picker.
+            const empById = Object.fromEntries(
+                (empRes.data?.items || []).map((e) => [e.id, e])
+            );
+            const isPayableKind = (l) => {
+                if (!["salary", "ad_account", "supplier"].includes(l.kind)) return false;
+                if (l.kind === "salary" && l.employee_salary_id) {
+                    const emp = empById[l.employee_salary_id];
+                    return emp ? emp.category === "employee" : true;
+                }
+                return true;
+            };
             const openL = [
                 ...(unpaidRes.data?.items || []),
                 ...(partialRes.data?.items || []),
-            ].filter((l) => ["salary", "ad_account", "supplier"].includes(l.kind));
+            ].filter(isPayableKind);
             setOpenLiabilities(openL);
+            setCounterparties(cpsRes.data?.items || []);
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر تحميل البيانات");
         } finally { setLoading(false); }
@@ -677,7 +754,7 @@ export default function FinancialInputHub() {
                 </div>
             ) : (
                 <>
-                    {tab === "new-liab"   && <NewLiabilityForm onSaved={load} />}
+                    {tab === "new-liab"   && <NewLiabilityForm counterparties={counterparties} onSaved={load} />}
                     {tab === "pay-liab"   && <PayLiabilityForm openLiabilities={openLiabilities} banks={banks} onSaved={load} />}
                     {tab === "daily-exp"  && <DailyExpenseForm banks={banks} onSaved={load} />}
                     {tab === "receivable" && <ReceivableForm onSaved={load} />}

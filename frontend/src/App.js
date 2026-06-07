@@ -35,6 +35,7 @@ import Reconciliation from "./pages/Reconciliation";
 import ReconciliationDetail from "./pages/ReconciliationDetail";
 import FinancialPosition from "./pages/FinancialPosition";
 import FinancialInputHub from "./pages/FinancialInputHub";
+import Counterparties from "./pages/Counterparties";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -76,6 +77,7 @@ function AppRoutes() {
             <Route path="/reconciliation" element={<ProtectedRoute><Layout><Reconciliation /></Layout></ProtectedRoute>} />
             <Route path="/financial-position" element={<ProtectedRoute><Layout><FinancialPosition /></Layout></ProtectedRoute>} />
             <Route path="/financial-input-hub" element={<ProtectedRoute><Layout><FinancialInputHub /></Layout></ProtectedRoute>} />
+            <Route path="/counterparties" element={<ProtectedRoute><Layout><Counterparties /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />

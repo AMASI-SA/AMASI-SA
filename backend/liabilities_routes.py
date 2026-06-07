@@ -136,6 +136,12 @@ class LiabilityCreate(BaseModel):
     # salary_advance
     employee_salary_id: Optional[str] = None
     paid_from_account_id: Optional[str] = None  # required for advances
+    # Iter-99 — preferred linkage: counterparty_id from counterparties table.
+    # When provided for supplier/ad_account, the row name is sourced from
+    # the counterparty record (single source of truth, no dupes).
+    # Declared BEFORE supplier_name so its value is available to the
+    # supplier_name validator below (pydantic v1 validates in declaration order).
+    counterparty_id: Optional[str] = None
     # supplier
     supplier_name: Optional[str] = Field(None, max_length=160)
     # receivable
@@ -165,8 +171,12 @@ class LiabilityCreate(BaseModel):
 
     @validator("supplier_name")
     def _v_supp(cls, v, values):
-        if values.get("kind") == "supplier" and not (v and v.strip()):
-            raise ValueError("supplier_name required for supplier")
+        # Iter-99 — supplier_name is required only if no counterparty_id
+        # was provided (counterparty supplies the name in that case).
+        if (values.get("kind") == "supplier"
+                and not (v and v.strip())
+                and not values.get("counterparty_id")):
+            raise ValueError("supplier_name or counterparty_id required for supplier")
         return v
 
     @validator("counterparty_name")
@@ -426,13 +436,27 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         liab_id = str(uuid.uuid4())
 
         if kind == "ad_account":
+            # Iter-99 — if counterparty_id provided, source the label from
+            # the registered ad account (supports "Snapchat Account 1/2/3").
+            ad_label = payload.ad_account_label or ""
+            ad_provider = payload.ad_provider
+            if payload.counterparty_id:
+                cp = await db.counterparties.find_one(
+                    {"id": payload.counterparty_id, "user_id": user["id"],
+                     "kind": "ad_account"}, {"_id": 0},
+                )
+                if not cp:
+                    raise HTTPException(404, "الحساب الإعلاني غير موجود في قائمة الأطراف")
+                ad_label = cp["name"]
+                ad_provider = cp.get("ad_provider") or ad_provider
             row = {
                 "id": liab_id,
                 "user_id": user["id"],
                 "kind": "ad_account",
                 "employee_salary_id": None,
-                "ad_provider": payload.ad_provider,
-                "ad_account_label": payload.ad_account_label or "",
+                "ad_provider": ad_provider,
+                "ad_account_label": ad_label,
+                "counterparty_id": payload.counterparty_id,
                 "period_key": None,
                 "expected_amount": _round(payload.expected_amount),
                 "paid_amount": 0.0,
@@ -449,13 +473,24 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             return _enrich(row)
 
         if kind == "supplier":
-            if not (payload.supplier_name and payload.supplier_name.strip()):
+            # Iter-99 — supplier name may be sourced from a counterparty.
+            supplier_name = (payload.supplier_name or "").strip()
+            if payload.counterparty_id:
+                cp = await db.counterparties.find_one(
+                    {"id": payload.counterparty_id, "user_id": user["id"],
+                     "kind": {"$in": ["supplier", "general"]}}, {"_id": 0},
+                )
+                if not cp:
+                    raise HTTPException(404, "المورد/الجهة غير موجود في قائمة الأطراف")
+                supplier_name = cp["name"]
+            if not supplier_name:
                 raise HTTPException(400, "اسم المورد/الجهة مطلوب")
             row = {
                 "id": liab_id,
                 "user_id": user["id"],
                 "kind": "supplier",
-                "supplier_name": payload.supplier_name.strip(),
+                "supplier_name": supplier_name,
+                "counterparty_id": payload.counterparty_id,
                 "expected_amount": _round(payload.expected_amount),
                 "paid_amount": 0.0,
                 "advance_deducted": 0.0,

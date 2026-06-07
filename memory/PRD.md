@@ -10,6 +10,37 @@
 
 ---
 
+## ✅ ITERATION 99 — Counterparties registry + list-pollution fix (Feb 2026)
+
+### Phase 1 — Frontend list filtering (FinancialInputHub.jsx)
+- Salary-advance dropdown now filters `category === "employee"` (excludes household / charity / contractor rows from `operating_salaries`).
+- "Pay liability" dropdown excludes any open salary whose linked employee is non-employee category.
+- No backend change required for Phase 1.
+
+### Phase 2 — Counterparties collection
+- New file `backend/counterparties_routes.py` (CRUD + check-duplicate).
+- Collection `counterparties` — `{ id, user_id, kind, name, name_lower, ad_provider?, notes, created_at, updated_at }`.
+- Unique index on `(user_id, kind, name_lower)`.
+- **Three kinds**: `supplier`, `ad_account` (with `ad_provider ∈ snapchat|tiktok|meta`), `general`.
+- **Fuzzy duplicate detection** via `difflib` (cutoff 0.82) — returns **WARNING ONLY** (409 `similar_name_exists`). Pass `force=true` to bypass and create a distinct row. **Never auto-merges.** This means "Snapchat Account 1", "Snapchat Account 2", "سناب الرئيسي" all remain SEPARATE counterparties when the user chooses.
+- `liabilities` POST now accepts `counterparty_id` (alternative to `supplier_name` / `ad_account_label`) for kinds `supplier` and `ad_account` — name is sourced from counterparty record.
+- Delete refuses if any unpaid liability still references the counterparty.
+
+### Frontend
+- New page `/counterparties` (`Counterparties.jsx`) — list + create with inline fuzzy warning, force-create, edit, delete + filter by kind + search.
+- Sidebar link "قائمة الأطراف الموحَّدة" under "العمليات المالية".
+- `FinancialInputHub.jsx` → new-liability tab loads counterparties and offers inline quick-add with same fuzzy warning UX.
+
+### Tests
+- `backend/tests/test_counterparties_iter99.py` — 7 tests, all passing:
+  CRUD basic, exact-dup blocked, fuzzy WARNING (no auto-merge), force-create separate, check-duplicate preview, supplier+ad_account creation via counterparty_id, delete refusal when in use.
+
+### Live verification (screenshot)
+- Created "Snapchat Account 1" → got fuzzy warning when adding "Snapchat Account 2" → clicked "أنشئ منفصلاً" → both kept as 2 distinct rows (verified in UI counter: حساب إعلاني (2)). ✅
+
+---
+
+
 ## ✅ ITERATION 98 — COD net method + shipping company unification
 
 ### Three improvements (all live-tested on Preview)
