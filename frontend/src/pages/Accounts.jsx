@@ -7,6 +7,7 @@ import {
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import UnifiedPaymentGatewaysCard from "../components/UnifiedPaymentGatewaysCard";
+import PendingOrdersCard from "../components/PendingOrdersCard";
 
 const TYPE_META = {
     bank:             { label: "حساب بنكي",   icon: Bank,       cls: "bg-emerald-100 text-emerald-800 border-emerald-200" },
@@ -315,6 +316,9 @@ export default function Accounts() {
                 Reconciliation. Clicking "مزامنة طرق الدفع" reconciles the
                 stored expected_orders_balance with these live values. */}
             <UnifiedPaymentGatewaysCard testid="accounts-unified-gateways" periodLabel="كل الفترة" />
+
+            {/* Iter-83 — Pending orders callout (NOT included in expected assets). */}
+            <PendingOrdersCard testid="accounts-pending-orders" />
 
             {/* Tabs */}
             <div className="flex flex-wrap gap-1 border-b border-border" data-testid="accounts-tabs">

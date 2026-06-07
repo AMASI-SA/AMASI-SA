@@ -1,0 +1,40 @@
+{
+  "summary": "Iter-83 Order Status Policy + Pending bucket — full end-to-end verification on PREVIEW with amasi.jewelery@gmail.com. Backend 7/7 NEW pytests PASS. Backend numbers confirm spec exactly: totals net=415,314.24, pending_gross=159,276.66 across 768 pending orders, refunded=37 (39 incl other), cancelled=59. Per-gateway live recompute verified via curl: PUT /api/order-status-policy moving 'تم المراجعة' → confirmed raised net to 482,423.61 (+67,109.37) and dropped pending_gross to 89,531.78 (-69,744.88); POST /reset restored baseline exactly. Invalid category correctly returns 400 with Arabic error message. Frontend: Settings shows order-status-policy-section with all 4 legend cards (مؤكدة 2,057·430,138.67 / معلّقة 768·159,276.66 / مسترجعة 39·8,838.44 / ملغاة 59·13,325.09). Click osp-cat-تم التوصيل-pending → row turns amber-50/60, save btn shows 'حفظ (1)', save persists, 'معدَّل' badge appears. osp-reset-btn opens confirm dialog and clears overrides. Dashboard /dashboard renders dashboard-pending-orders-empty correctly (filter is 'اليوم' = 2026-06-06 = 0 orders, same iter-43 carry-over). Accounts /accounts shows accounts-pending-orders card above the gateways table with 159,276.66 / 768 طلب and per-gateway breakdown (مدى 324/64,185.02 26.9%, البطاقة الائتمانية 107/25,867.35 24.1%, تمارا 119/25,110.94 25.9%, etc.) — matches backend exactly. UnifiedPaymentGatewaysCard on Accounts has the new 'معلَّق' column populated AND the 'معلَّق إضافي 159,276.66 (768 طلب)' hint near net total = 415,314.24. Cross-page consistency confirmed: Settings legend = Accounts pending card = Unified Gateways pending column = backend totals.pending_gross all = 159,276.66.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Dashboard",
+        "issues": [
+          "Pre-existing iter-42/43 carry-over: default filter 'اليوم' (today = 2026-06-06) has 0 orders so dashboard-pending-orders renders the empty state. Pending card itself is correctly mounted. User should switch period to 'السنة الحالية' to see pending numbers populate. Not an iter-83 regression."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_order_status_policy_iter83.py",
+    "/app/test_reports/pytest/iter83_osp.xml",
+    "/app/test_reports/pytest/iter83_regression.xml"
+  ],
+  "action_items": [
+    "Update /app/backend/tests/test_status_refunds_iter82_extra.py::test_tamara_exact_numbers and ::test_tabby_exact_numbers — they assert pre-iter-83 baselines (Tamara gross=94,483.27, net=84,452.70 / Tabby net=72,804.78). Under iter-83 semantics, pending statuses (تم الشحن/تم المراجعة/جاري التوصيل/قيد التنفيذ) are excluded from gross/net. New baselines: Tamara gross=69,372.33 net=61,360.30 pending_gross=25,110.94; Tabby net=55,264.41 pending_gross=19,073.60. Delta in each case equals pending_gross exactly — by design.",
+    "Unrelated fixture: /app/backend/tests/test_refunds_alert_iter77.py::test_alert_picks_up_uploaded_refunds expects /tmp/settlements_samples/salla_refund.xlsx which is missing in PREVIEW (pre-existing, not iter-83)."
+  ],
+  "critical_code_review_comments": [
+    "order_status_policy.py: clean separation — DEFAULT_POLICY map + _keyword_fallback + default_category_for/get_policy_map/resolve_category. PUT correctly deletes overrides that match defaults (collection stays tidy). All endpoints depend on get_current_user_from_db ✓. Pydantic validation rejects unknown category with 400 ✓.",
+    "compute_metrics dispatches each order to confirmed/pending/refunded/cancelled buckets via resolve_category — per-row identity (gross − fees − fees_vat − refund_full − refund_partial == net) still holds; pending tracked separately. Verified via test_per_row_identity_all_gateways still PASS.",
+    "Frontend UnifiedPaymentGatewaysCard 'معلَّق' column + 'معلَّق إضافي' hint render only when totals.pending_gross > 0 — correct conditional UX.",
+    "PendingOrdersCard: separate-state empty vs populated using two testids (dashboard-pending-orders / -empty + accounts-pending-orders) is good for QA selectors.",
+    "Consider: surface a small inline hint in OrderStatusPolicySection that the change propagates live to all reports (already documented in the section description text — OK)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100% (7/7 iter-83 + 37/40 regression — 3 expected baseline drifts/missing fixture documented above)", "frontend": "100% — Settings policy editor, Accounts pending card, Unified Gateways pending column all render correctly with backend-matching numbers" },
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (real Salla 2026 data: 2,923 total orders → 2,057 confirmed / 768 pending / 39 refunded / 59 cancelled; pending_gross=159,276.66 ر.س; net=415,314.24 ر.س)",
+  "seed_data_creation": "None — used existing real merchant data. POST /api/order-status-policy/reset called after each mutation to restore merchant baseline.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-83 feature 'Order Status Policy + separate Pending bucket' is FULLY WORKING. Settings UI lives at /settings under data-testid='order-status-policy-section'. Pending callouts live on /dashboard ('dashboard-pending-orders'/'-empty') and /accounts ('accounts-pending-orders'). UnifiedPaymentGatewaysCard now has a 'معلَّق' column. ALWAYS curl POST /api/order-status-policy/reset after mutation tests to restore the merchant's policy. For the 2 iter-82 exact-number assertions: re-baseline to the iter-83 numbers listed in action_items (this is correct behaviour, not a regression).",
+  "rca of the issue": "No bugs found. The 2 iter-82_extra failing tests assert pre-iter-83 Tamara/Tabby exact numbers that included shipped/pending orders in gross/net. Under iter-83 those orders moved into the new pending_gross bucket (Tamara: 25,110.94 / Tabby: 19,073.60). New gross/net are exactly old minus the pending bucket — confirming the feature works as designed. Tests need re-baselining; production code is correct."
+}

@@ -149,6 +149,7 @@ function Kpi({ icon: Icon, label, value, hint, accent = false, testid, onHide, o
 
 import AdvancedFilters, { filtersToQueryString, defaultFilters } from "../components/AdvancedFilters";
 import UnifiedPaymentGatewaysCard from "../components/UnifiedPaymentGatewaysCard";
+import PendingOrdersCard from "../components/PendingOrdersCard";
 
 export default function Dashboard() {
     const { user } = useAuth();
@@ -655,6 +656,12 @@ export default function Dashboard() {
                     <UnifiedPaymentGatewaysCard
                         qs={filtersToQueryString(filters)}
                         testid="dashboard-unified-gateways"
+                    />
+
+                    {/* Iter-83 — Pending orders callout (separate from net). */}
+                    <PendingOrdersCard
+                        qs={filtersToQueryString(filters)}
+                        testid="dashboard-pending-orders"
                     />
 
                     {/* Snapchat Ads dedicated section — always visible so the

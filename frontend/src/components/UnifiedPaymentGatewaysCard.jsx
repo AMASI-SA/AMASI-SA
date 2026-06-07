@@ -9,7 +9,7 @@
  * Use the `qs` prop to pass any date filters (e.g. ?from_date=...&to_date=...).
  */
 import { useEffect, useState } from "react";
-import { CreditCard, Info } from "@phosphor-icons/react";
+import { CreditCard, Info, Hourglass } from "@phosphor-icons/react";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 
@@ -83,10 +83,16 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                     </div>
                 </div>
                 <div className="text-end shrink-0">
-                    <div className="text-[11px] text-muted-foreground">الصافي الإجمالي (ر.س)</div>
+                    <div className="text-[11px] text-muted-foreground">الصافي المؤكَّد (ر.س)</div>
                     <div className="num text-2xl sm:text-3xl font-extrabold text-brand" data-testid={`${testid}-net-total`}>
                         {formatMoney(t.net)}
                     </div>
+                    {Number(t.pending_gross || 0) > 0 && (
+                        <div className="text-[11px] text-amber-700 mt-1 inline-flex items-center gap-1 justify-end" data-testid={`${testid}-pending-hint`}>
+                            <Hourglass size={11} weight="duotone" />
+                            معلَّق إضافي: <span className="num font-bold">{formatMoney(t.pending_gross)}</span> ({formatInt(t.pending_orders_count)} طلب)
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -100,6 +106,7 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                             <th className="text-right px-3 py-2 font-semibold">الرسوم</th>
                             <th className="text-right px-3 py-2 font-semibold">ض. الرسوم</th>
                             <th className="text-right px-3 py-2 font-semibold">المرتجع</th>
+                            <th className="text-right px-3 py-2 font-semibold">معلَّق</th>
                             <th className="text-right px-3 py-2 font-semibold">الصافي</th>
                             <th className="text-right px-3 py-2 font-semibold">المصدر</th>
                         </tr>
@@ -108,6 +115,8 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                         {rows.map((r) => {
                             const isActual = (r.actual_orders_count || 0) > 0;
                             const cov = isActual ? Number(r.coverage_pct || 0) : 0;
+                            const pending = Number(r.pending_gross || 0);
+                            const pendingCount = Number(r.pending_orders_count || 0);
                             return (
                                 <tr key={r.key} className="border-t border-border hover:bg-accent/20" data-testid={`${testid}-row-${r.key}`}>
                                     <td className="px-3 py-2 font-bold">{r.name_ar}</td>
@@ -117,6 +126,9 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                                     <td className="px-3 py-2 num text-rose-700/70">{formatMoney(r.fees_vat)}</td>
                                     <td className={`px-3 py-2 num ${r.refund_total > 0 ? "text-amber-700" : "text-muted-foreground"}`}>
                                         {formatMoney(r.refund_total)}
+                                    </td>
+                                    <td className={`px-3 py-2 num ${pending > 0 ? "text-amber-700" : "text-muted-foreground"}`} title={pending > 0 ? `${pendingCount} طلب بحالة معلَّقة` : ""}>
+                                        {formatMoney(pending)}
                                     </td>
                                     <td className="px-3 py-2 num font-extrabold text-emerald-700">{formatMoney(r.net)}</td>
                                     <td className="px-3 py-2">
@@ -140,6 +152,7 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                             <td className="px-3 py-2 num text-rose-700">{formatMoney(t.fees)}</td>
                             <td className="px-3 py-2 num text-rose-700/70">{formatMoney(t.fees_vat)}</td>
                             <td className="px-3 py-2 num text-amber-700">{formatMoney(t.refund_total)}</td>
+                            <td className="px-3 py-2 num text-amber-700">{formatMoney(t.pending_gross)}</td>
                             <td className="px-3 py-2 num text-emerald-700">{formatMoney(t.net)}</td>
                             <td className="px-3 py-2" />
                         </tr>

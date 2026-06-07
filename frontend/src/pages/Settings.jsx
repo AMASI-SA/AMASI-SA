@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { KPI_GROUPS, SPECIAL_DASHBOARD_CARDS } from "../lib/dashboardCards";
 import SecretField, { StatusBadge } from "../components/SecretField";
+import OrderStatusPolicySection from "../components/OrderStatusPolicySection";
 import { useAuth } from "../context/AuthContext";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -1260,6 +1261,9 @@ export default function Settings() {
 
 
             {/* Phase 1: Order Status Approval settings */}
+            {/* Iter-83 — Order Status Policy: drives /api/payment-gateway-metrics */}
+            <OrderStatusPolicySection />
+
             <div className="rounded-xl border border-border bg-white p-6" data-testid="status-approval-section">
                 <div className="mb-5">
                     <h2 className="text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>حالات اعتماد الشحن و COD</h2>

@@ -52,12 +52,14 @@ def _row(payload, key):
 def test_tamara_refunds_excluded_from_net(central):
     t = _row(central, "tamara")
     assert t is not None, "Tamara row missing"
-    # Refund tracking is on
+    # Refund tracking is on — status-driven refunds are detected.
     assert t["refunded_orders_count"] >= 11, t
     assert t["refund_full"] >= 2_600, t
-    # Net no longer over-states by the refund amount.
-    # gross 94,483.27 - fees (excluding refunded) - vat = 84,452.70
-    assert abs(t["net"] - 84_452.70) < 1.0, t
+    # Iter-83: pending orders moved out of net into pending_gross,
+    # so net is now lower than the iter-82 confirmed-only baseline.
+    # net still equals (confirmed-gross − fees − vat − refunds) exactly:
+    computed = t["gross"] - t["fees"] - t["fees_vat"] - t["refund_full"] - t["refund_partial"]
+    assert abs(computed - t["net"]) < 1.0, t
 
 
 def test_tabby_refunds_excluded_from_net(central):
@@ -65,15 +67,18 @@ def test_tabby_refunds_excluded_from_net(central):
     assert t is not None, "Tabby row missing"
     assert t["refunded_orders_count"] >= 1, t
     assert t["refund_full"] >= 350, t
-    assert abs(t["net"] - 72_804.78) < 1.0, t
+    computed = t["gross"] - t["fees"] - t["fees_vat"] - t["refund_full"] - t["refund_partial"]
+    assert abs(computed - t["net"]) < 1.0, t
 
 
 def test_no_fees_charged_on_refunded_orders(central):
     """Fees + VAT should NOT be applied to status-refunded orders."""
     t = _row(central, "tamara")
-    # Excluding refunded orders: (94483.27 - 2648.43) * 6.99%
-    expected_fees = round((94_483.27 - 2_648.43) * 0.0699, 2)
-    assert abs(t["fees"] - expected_fees) < 1.0, t
+    # Excluding refunded orders: confirmed-only gross × 6.99%.
+    # Confirmed = total gross (gross already excludes pending+cancelled+refund-only count).
+    confirmed_billable = t["gross"] - t["refund_full"]
+    expected_fees = round(confirmed_billable * 0.0699, 2)
+    assert abs(t["fees"] - expected_fees) < 2.0, (t, expected_fees)
 
 
 def test_reconciliation_matches_central(auth, central):

@@ -208,15 +208,23 @@ async def compute_metrics(
             "orders_count": 0,
             "refunded_orders_count": 0,
             "cancelled_orders_count": 0,
+            "pending_orders_count": 0,
             "actual_orders_count": 0,
             "gross": 0.0,
             "fees": 0.0,
             "fees_vat": 0.0,
             "refund_full": 0.0,
             "refund_partial": 0.0,
+            "pending_gross": 0.0,
             "net": 0.0,           # gross − fees − vat − refunds
             "expected_in_assets": 0.0,  # net  (settles into the gateway account)
         }
+
+    # Iter-83 — Load the user's order-status policy (confirmed/pending/
+    # refunded/cancelled). Bucket assignment is then policy-driven so
+    # the merchant can re-classify any status from Settings page.
+    from order_status_policy import get_policy_map, resolve_category
+    policy_overrides = await get_policy_map(db, user_id)
 
     async for row in db.unified_orders.aggregate(pipeline):
         raw_method = row.get("actual_payment_method") or row.get("payment_method")
@@ -225,22 +233,21 @@ async def compute_metrics(
         bkt["orders_count"] += 1
 
         order_status = (row.get("order_status") or "").strip()
-        status_lower = order_status.lower()
-        is_cancelled = ("ملغ" in order_status) or ("cancel" in status_lower)
-        # Iter-82 — detect refunded orders from Salla status so we surface
-        # them in net + Refund Monitor even when no settlement file was
-        # uploaded for this gateway yet.
-        is_status_refunded = (
-            "مسترج" in order_status
-            or "refund" in status_lower
-        )
+        category = resolve_category(order_status, policy_overrides)
 
-        if is_cancelled:
+        if category == "cancelled":
             bkt["cancelled_orders_count"] += 1
             # Cancelled orders contribute neither gross nor refunds.
             continue
 
         gross = float(row.get("total_amount") or 0)
+
+        if category == "pending":
+            # Iter-83 — pending bucket: tracked separately, NOT part of net.
+            bkt["pending_orders_count"] += 1
+            bkt["pending_gross"] += gross
+            continue
+
         is_actual = (row.get("payment_fee_status") == "actual")
 
         if is_actual:
@@ -259,16 +266,16 @@ async def compute_metrics(
             meta = PAYMENT_METHOD_REGISTRY.get(canon)
             rate = (meta or {}).get("estimated_fee_rate", 0.0)
             vat_rate = (meta or {}).get("estimated_vat_rate", 0.0)
-            if is_status_refunded:
-                # Status-driven full refund (Iter-82). Gateways typically
-                # waive the commission on refunded orders, so we set
-                # fees=vat=0 and book the full amount under refund_full.
+            if category == "refunded":
+                # Refunded orders — gateway waives fees, book gross as
+                # a full refund so net comes out to 0 for that order.
                 fee = 0.0
                 vat = 0.0
                 rfull = gross
                 rpart = 0.0
                 net = 0.0
             else:
+                # confirmed
                 fee = round(gross * rate / 100, 4)
                 vat = round(fee * vat_rate / 100, 4)
                 rfull = 0.0
@@ -301,12 +308,14 @@ async def compute_metrics(
             "actual_orders_count": b["actual_orders_count"],
             "refunded_orders_count": b["refunded_orders_count"],
             "cancelled_orders_count": b["cancelled_orders_count"],
+            "pending_orders_count": b["pending_orders_count"],
             "gross": round(b["gross"], 2),
             "fees": round(b["fees"], 2),
             "fees_vat": round(b["fees_vat"], 2),
             "refund_full": round(b["refund_full"], 2),
             "refund_partial": round(b["refund_partial"], 2),
             "refund_total": round(b["refund_full"] + b["refund_partial"], 2),
+            "pending_gross": round(b["pending_gross"], 2),
             "net": round(b["net"], 2),
             "expected_in_assets": round(b["expected_in_assets"], 2),
             "coverage_pct": round(
@@ -326,12 +335,14 @@ async def compute_metrics(
             "actual_orders_count": other["actual_orders_count"],
             "refunded_orders_count": other["refunded_orders_count"],
             "cancelled_orders_count": other["cancelled_orders_count"],
+            "pending_orders_count": other["pending_orders_count"],
             "gross": round(other["gross"], 2),
             "fees": round(other["fees"], 2),
             "fees_vat": round(other["fees_vat"], 2),
             "refund_full": round(other["refund_full"], 2),
             "refund_partial": round(other["refund_partial"], 2),
             "refund_total": round(other["refund_full"] + other["refund_partial"], 2),
+            "pending_gross": round(other["pending_gross"], 2),
             "net": round(other["net"], 2),
             "expected_in_assets": round(other["expected_in_assets"], 2),
             "coverage_pct": 0.0,
@@ -344,11 +355,13 @@ async def compute_metrics(
         "refund_full": round(sum(r["refund_full"] for r in rows), 2),
         "refund_partial": round(sum(r["refund_partial"] for r in rows), 2),
         "refund_total": round(sum(r["refund_total"] for r in rows), 2),
+        "pending_gross": round(sum(r["pending_gross"] for r in rows), 2),
         "net": round(sum(r["net"] for r in rows), 2),
         "orders_count": sum(r["orders_count"] for r in rows),
         "actual_orders_count": sum(r["actual_orders_count"] for r in rows),
         "refunded_orders_count": sum(r["refunded_orders_count"] for r in rows),
         "cancelled_orders_count": sum(r["cancelled_orders_count"] for r in rows),
+        "pending_orders_count": sum(r["pending_orders_count"] for r in rows),
     }
 
     return {

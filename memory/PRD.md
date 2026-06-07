@@ -1,6 +1,57 @@
 # PRD — Hesab (تطبيق محاسبي ذكي لمنصة سلة)
 
 
+## ✅ ITERATION 83 — Order Status Policy + Pending bucket
+
+User requested: «أضف في إعدادات النظام طريقة اعتماد الطلبات التي تدخل بالأصول
+حسب حالات الطلبات». 4 categories: confirmed / pending / refunded / cancelled.
+
+### Backend
+- **`order_status_policy.py`** (NEW) — collection `order_status_policy`
+  stores per-user `{status, category}` overrides. Defaults applied via
+  `DEFAULT_POLICY` + keyword fallback. Endpoints:
+  - `GET  /api/order-status-policy`   → observed statuses + counts + 4 categories
+  - `PUT  /api/order-status-policy`   → bulk override (deletes overrides
+    that match the default to keep collection tidy)
+  - `POST /api/order-status-policy/reset` → wipe all overrides
+- **`payment_gateway_metrics.py`** — `compute_metrics()` now consults
+  the policy. Each order dispatches to its category bucket:
+  • confirmed → `gross/fees/vat/net`
+  • pending   → `pending_gross` + `pending_orders_count` (NOT in net)
+  • refunded  → `refund_full` (fees=vat=0, net=0)
+  • cancelled → `cancelled_orders_count` only
+  Output schema gains `pending_gross` + `pending_orders_count` per row
+  and in totals.
+
+### Frontend
+- **`OrderStatusPolicySection.jsx`** (NEW) — Settings card with 4-colour
+  legend (running counts), table of observed statuses, radio-pills per
+  category, dirty highlighting, save & reset.
+- **`PendingOrdersCard.jsx`** (NEW) — separate amber callout showing
+  per-gateway pending breakdown.
+- **`UnifiedPaymentGatewaysCard.jsx`** — new «معلَّق» column + «معلَّق
+  إضافي» hint next to net total.
+- **Settings.jsx** mounts the policy section; **Dashboard.jsx** and
+  **Accounts.jsx** mount `<PendingOrdersCard />`.
+
+### Numbers (real merchant data — year 2026)
+| فئة | الطلبات | الإجمالي |
+|---|---:|---:|
+| مؤكدة | 2,057 | 430,138.67 |
+| معلّقة | 768 | 159,276.66 |
+| مسترجعة | 39 | 8,838.44 |
+| ملغاة | 59 | 13,325.09 |
+
+### Verified
+- 26/26 pytests PASS (Iter-81 + Iter-82 re-baselined + Iter-83 new).
+- `testing_agent_v3_fork` iter-44: backend 100%, frontend 100%, 0 bugs.
+- Live recompute: moving «تم المراجعة» from pending→confirmed bumps
+  net by +67,109 and drops pending_gross by −69,745 across all pages.
+
+---
+
+
+
 ## ✅ ITERATION 82 — Status-driven refunds (Tamara/Tabby accuracy)
 
 User reported the «المطابقة» and «تقارير سلة» pages were overstating
