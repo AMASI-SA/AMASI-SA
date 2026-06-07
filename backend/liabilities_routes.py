@@ -73,6 +73,8 @@ def _compute_status(expected: float, paid: float) -> str:
     """Recompute the status field from the amounts only."""
     expected = _round(expected)
     paid = _round(paid)
+    if expected <= 0:                # nothing owed → row is settled
+        return "paid"
     if paid <= 0:
         return "unpaid"
     if paid + 0.01 >= expected:
@@ -402,6 +404,13 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 "ad_provider": None,
                 "ad_account_label": None,
                 "period_key": period_key,
+                # Iter-102 — pro-rata salary support.
+                # Initial row assumes the employee worked the full month.
+                # The user can lower `days_worked` via PUT .../days-worked
+                # which recomputes expected_amount = base × worked / total.
+                "monthly_amount_base": _round(s.get("monthly_amount")),
+                "days_in_month": calendar.monthrange(y, m)[1],
+                "days_worked": calendar.monthrange(y, m)[1],
                 "expected_amount": _round(s.get("monthly_amount")),
                 "paid_amount": 0.0,
                 "advance_deducted": 0.0,
@@ -828,6 +837,88 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         if payload.ad_account_label is not None:
             upd["ad_account_label"] = payload.ad_account_label
 
+        await db.liabilities.update_one(
+            {"id": liab_id, "user_id": user["id"]}, {"$set": upd},
+        )
+        fresh = await db.liabilities.find_one(
+            {"id": liab_id, "user_id": user["id"]}, {"_id": 0},
+        )
+        return _enrich(fresh)
+
+    # ── PUT /{id}/days-worked (Iter-102) ──────────────────────────────
+    # Pro-rata salary: when the merchant edits the days an employee
+    # actually worked in a given month, we recompute the row's
+    # `expected_amount = monthly_amount_base × days_worked / days_in_month`.
+    # Constraints:
+    #   • Only `kind=salary` rows.
+    #   • Only when the linked operating_salaries row is `category=employee`
+    #     (household / charity payments are not day-based).
+    #   • `days_worked` must be in [0, days_in_month].
+    #   • The new expected_amount must not be < already-paid amount.
+    @router.put("/{liab_id}/days-worked")
+    async def set_days_worked(
+        liab_id: str,
+        payload: dict,                                     # {days_worked: int}
+        user: dict = Depends(current_user),
+    ):
+        liab = await db.liabilities.find_one(
+            {"id": liab_id, "user_id": user["id"]}, {"_id": 0},
+        )
+        if not liab:
+            raise HTTPException(404, "Liability not found")
+        if liab.get("kind") != "salary":
+            raise HTTPException(400, "أيام العمل تنطبق فقط على التزامات الرواتب")
+        if liab.get("status") == "paid":
+            raise HTTPException(400, "لا يمكن تعديل الأيام بعد سداد الراتب")
+
+        # Verify the underlying employee is in category=employee.
+        emp = await db.operating_salaries.find_one(
+            {"id": liab.get("employee_salary_id"), "user_id": user["id"]},
+            {"_id": 0, "category": 1, "monthly_amount": 1},
+        )
+        if not emp:
+            raise HTTPException(404, "Employee record not found")
+        if emp.get("category") != "employee":
+            raise HTTPException(
+                400, "أيام العمل لا تنطبق على فئة (مصاريف منزل / صدقات)",
+            )
+
+        try:
+            days_worked = int(payload.get("days_worked"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "days_worked يجب أن يكون رقماً صحيحاً")
+
+        # Backfill base/period info for rows created before Iter-102.
+        base = _round(liab.get("monthly_amount_base") or emp.get("monthly_amount"))
+        pk = liab.get("period_key") or _today_str()[:7]
+        try:
+            y, m = int(pk[:4]), int(pk[5:7])
+            days_in_month = calendar.monthrange(y, m)[1]
+        except Exception:
+            days_in_month = 30
+        days_in_month = int(liab.get("days_in_month") or days_in_month)
+
+        if days_worked < 0 or days_worked > days_in_month:
+            raise HTTPException(
+                400, f"أيام العمل يجب أن تكون بين 0 و {days_in_month}",
+            )
+
+        new_expected = _round(base * days_worked / days_in_month)
+        paid_amount = _round(liab.get("paid_amount"))
+        if new_expected + 0.01 < paid_amount:
+            raise HTTPException(
+                400,
+                f"المبلغ الجديد ({new_expected}) أقل من المسدَّد ({paid_amount})",
+            )
+
+        upd = {
+            "monthly_amount_base": base,
+            "days_in_month": days_in_month,
+            "days_worked": days_worked,
+            "expected_amount": new_expected,
+            "status": _compute_status(new_expected, paid_amount),
+            "updated_at": _now(),
+        }
         await db.liabilities.update_one(
             {"id": liab_id, "user_id": user["id"]}, {"$set": upd},
         )

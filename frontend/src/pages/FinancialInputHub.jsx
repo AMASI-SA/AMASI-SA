@@ -240,8 +240,35 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
         liability_id: "", paid_from_account_id: "", amount: "", payment_date: today(), notes: "",
     });
     const [busy, setBusy] = useState(false);
+    const [daysBusy, setDaysBusy] = useState(false);
+    const [daysInput, setDaysInput] = useState("");
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
     const selected = openLiabilities.find((l) => l.id === form.liability_id);
+    // Iter-102 — show inline days-worked editor for salary kind only.
+    const isSalary = selected?.kind === "salary";
+
+    // Initialise the days input when a salary liability is selected.
+    useEffect(() => {
+        if (isSalary) setDaysInput(String(selected?.days_worked ?? selected?.days_in_month ?? ""));
+        else setDaysInput("");
+    }, [selected?.id, isSalary, selected?.days_worked, selected?.days_in_month]);
+
+    const applyDays = async () => {
+        if (!selected) return;
+        const d = parseInt(daysInput, 10);
+        if (isNaN(d)) { toast.error("أدخل أيام صحيحة"); return; }
+        setDaysBusy(true);
+        try {
+            const { data } = await api.put(
+                `/liabilities/${selected.id}/days-worked`,
+                { days_worked: d },
+            );
+            toast.success(`تم احتساب الراتب: ${fmt(data.expected_amount)} ر.س`);
+            await onSaved();   // refresh parent list so dropdown shows updated remaining
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر الاحتساب");
+        } finally { setDaysBusy(false); }
+    };
 
     const submit = async () => {
         if (!form.liability_id) { toast.error("اختر الالتزام"); return; }
@@ -288,6 +315,45 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                     ))}
                 </select>
             </Field>
+
+            {isSalary && (
+                <div className="sm:col-span-2 p-3 rounded-lg bg-violet-50 border border-violet-200" data-testid="pay-days-worked-row">
+                    <div className="text-xs font-bold text-violet-900 mb-2">
+                        🗓️ احتساب الراتب على أيام العمل الفعلية
+                    </div>
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label className="block text-[11px] text-violet-900 mb-1">
+                                أيام العمل (من {selected.days_in_month || "—"} يوم)
+                            </label>
+                            <input
+                                type="number"
+                                min={0}
+                                max={selected.days_in_month || 31}
+                                step={1}
+                                value={daysInput}
+                                onChange={(e) => setDaysInput(e.target.value)}
+                                className={`${inputCls} num w-32`}
+                                data-testid="pay-days-input"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={applyDays}
+                            disabled={daysBusy}
+                            className="px-3 py-2 rounded-lg bg-violet-700 text-white text-xs font-bold hover:bg-violet-800 disabled:opacity-50"
+                            data-testid="pay-days-apply-btn"
+                        >
+                            {daysBusy ? "جاري…" : "احتساب وتحديث"}
+                        </button>
+                        <div className="text-[11px] text-violet-800">
+                            راتب أساسي: <b>{fmt(selected.monthly_amount_base ?? selected.expected_amount)} ر.س</b>
+                            {" "}· بعد الاحتساب الحالي: <b>{fmt(selected.expected_amount)} ر.س</b>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <Field label="الحساب البنكي" required>
                 <select value={form.paid_from_account_id} onChange={(e) => set("paid_from_account_id", e.target.value)} className={inputCls} data-testid="pay-account">
                     <option value="">— اختر بنكاً —</option>

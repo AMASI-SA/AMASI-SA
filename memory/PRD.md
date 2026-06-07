@@ -10,6 +10,40 @@
 
 ---
 
+## ✅ ITERATION 102 — Pro-rata salary by days worked (Feb 2026)
+
+### Why
+Merchant wants the monthly salary obligation to reflect the days actually worked (`days_in_month = 28 / 29 / 30 / 31`), so partial-month employees aren't over-paid in the books.
+
+### Backend
+- `liabilities` rows of `kind=salary` now carry three new fields:
+  - `monthly_amount_base` — the contractual monthly figure (immutable).
+  - `days_in_month`       — calendar days of `period_key` (28/29/30/31).
+  - `days_worked`         — defaults to `days_in_month`, editable.
+- New endpoint **`PUT /api/liabilities/{id}/days-worked`**:
+  - Validates `kind=salary`, status ≠ paid, employee in `category=employee` (household/charity rejected).
+  - `days_worked ∈ [0, days_in_month]`, must keep `expected_amount ≥ paid_amount`.
+  - Recomputes `expected_amount = monthly_amount_base × days_worked / days_in_month` and refreshes status.
+- Auto-generation (`/generate-salaries`) now persists the new fields for every new row.
+- `_compute_status` updated: when `expected ≤ 0` → `paid` (handles `days_worked = 0` cleanly).
+
+### Frontend (`FinancialInputHub.jsx` → "سداد التزام" tab)
+- When user selects a salary liability, a violet inline editor appears:
+  - "أيام العمل (من X يوم)" + "احتساب وتحديث" button.
+  - Displays both the contractual amount and the post-recomputation amount.
+- After applying, the parent list reloads so the dropdown shows the updated remaining.
+
+### Tests — `tests/test_salary_days_worked_iter102.py` (6/6 ✅)
+1. Generated rows carry correct `days_in_month` (Feb 28, Mar 31).
+2. Recompute on edit: 25/30 days of 3000 → 2500. 0 days → 0 (status flips to paid).
+3. Validation: negative / > days_in_month / non-numeric all rejected.
+4. Households / charity rejected (no day proration).
+5. Cannot reduce expected below already-paid.
+6. Net position drops by exactly the saved amount.
+
+---
+
+
 ## ✅ ITERATION 101 — Shipping liability in Financial Position (Feb 2026)
 
 ### Bug
