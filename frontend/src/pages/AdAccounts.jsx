@@ -496,9 +496,30 @@ export default function AdAccounts() {
                         رصيد المنصة الإعلانية = أصل · مديونية تلقائية تنشأ عند تجاوز الصرف للرصيد. الصرف يبقى مصروف إعلاني واحد دون تكرار.
                     </p>
                 </div>
-                <button onClick={() => setCreateOpen(true)} className="self-start px-4 py-2.5 rounded-lg bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 flex items-center gap-2" data-testid="adacc-add-btn">
-                    <Plus size={16} /> إضافة حساب إعلاني
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 self-start">
+                    <button onClick={async () => {
+                        const today = todayIso();
+                        try {
+                            const { data } = await api.post("/ad-accounts/sync-all", {
+                                from_date: today, to_date: today,
+                            });
+                            const processed = data.results.filter((r) => !r.skipped).length;
+                            const skipped   = data.results.filter((r) =>  r.skipped).length;
+                            toast.success(`المزامنة تمت: ${processed} حساب${skipped ? ` · ${skipped} مُتخطّى` : ""}`);
+                            load();
+                        } catch (e) {
+                            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل");
+                        }
+                    }} className="px-4 py-2.5 rounded-lg bg-violet-100 text-violet-800 text-sm font-bold hover:bg-violet-200 flex items-center gap-2" data-testid="adacc-sync-all-btn">
+                        <ArrowsClockwise size={16} /> مزامنة الكل الآن
+                    </button>
+                    <button onClick={() => setCreateOpen(true)} className="px-4 py-2.5 rounded-lg bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 flex items-center gap-2" data-testid="adacc-add-btn">
+                        <Plus size={16} /> إضافة حساب إعلاني
+                    </button>
+                </div>
+            </div>
+            <div className="text-[11px] text-slate-500 -mt-3 mb-1">
+                💡 المزامنة المجدولة تعمل تلقائياً كل يوم الساعة <b>11:55 مساءً</b> لكل الحسابات المدعومة (Snap / TikTok / Meta).
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

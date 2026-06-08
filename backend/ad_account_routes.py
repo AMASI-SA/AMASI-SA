@@ -591,4 +591,141 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         await db.counterparties.delete_one({"id": cp_id, "user_id": user["id"]})
         return {"ok": True}
 
+    # ── POST /sync-all (Iter-108) — manual trigger of the daily cron ──
+    @router.post("/sync-all")
+    async def sync_all_for_user(
+        payload: SyncFromPlatformIn,
+        user: dict = Depends(current_user),
+    ):
+        """Run sync-from-platform for EVERY ad account this user owns
+        that has a supported provider (snapchat/tiktok/meta). The same
+        endpoint is invoked by the daily cron at 23:55."""
+        results = await _run_sync_for_all(
+            db, user["id"], payload.from_date, payload.to_date,
+        )
+        return {"ok": True, "results": results}
+
     parent_router.include_router(router)
+
+
+# ── Module-level cron helpers (Iter-108) ───────────────────────────────
+async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> list[dict]:
+    """For each ad_account counterparty (supported providers only),
+    aggregate daily-platform spend in the range and post it as a /spend
+    via the same internal helpers. Idempotent per (account, to_date)
+    via `last_auto_sync_date` on the counterparty."""
+    SUPPORTED = {"snapchat": "snapchat_ads_daily",
+                 "tiktok":   "tiktok_ads_daily",
+                 "meta":     "meta_ads_daily"}
+    out = []
+    async for cp in db.counterparties.find(
+        {"user_id": user_id, "kind": "ad_account",
+         "ad_provider": {"$in": list(SUPPORTED)}},
+        {"_id": 0},
+    ):
+        # Skip if already synced for this `to_date` (idempotency).
+        if cp.get("last_auto_sync_date") == to_date:
+            out.append({"id": cp["id"], "name": cp["name"],
+                        "skipped": True, "reason": "already_synced"})
+            continue
+        col = SUPPORTED[cp["ad_provider"]]
+        total = 0.0
+        async for row in db[col].find(
+            {"user_id": user_id, "date": {"$gte": from_date, "$lte": to_date}},
+            {"_id": 0, "spend": 1},
+        ):
+            total += float(row.get("spend") or 0)
+        total = round(total, 2)
+        if total <= 0:
+            await db.counterparties.update_one(
+                {"id": cp["id"]},
+                {"$set": {"last_auto_sync_date": to_date,
+                          "last_auto_sync_at": _now()}},
+            )
+            out.append({"id": cp["id"], "name": cp["name"], "spend": 0.0})
+            continue
+
+        # Apply via the same internal logic as /spend.
+        balance_before = float(cp.get("balance") or 0)
+        covered = min(total, balance_before)
+        uncovered = round(total - covered, 2)
+        new_balance = round(balance_before - covered, 2)
+        await db.counterparties.update_one(
+            {"id": cp["id"]},
+            {"$set": {"balance": new_balance,
+                      "last_auto_sync_date": to_date,
+                      "last_auto_sync_at": _now(),
+                      "updated_at": _now()}},
+        )
+        mode = cp.get("debt_mode") or "auto"
+        liab_id = None
+        debt_after = 0.0
+        if uncovered > 0 and mode == "auto":
+            existing = await db.liabilities.find_one(
+                {"user_id": user_id, "kind": "ad_account",
+                 "counterparty_id": cp["id"],
+                 "status": {"$in": ["unpaid", "partial"]}},
+                {"_id": 0},
+            )
+            if existing:
+                new_exp = round((existing.get("expected_amount") or 0) + uncovered, 2)
+                await db.liabilities.update_one(
+                    {"id": existing["id"]},
+                    {"$set": {"expected_amount": new_exp, "updated_at": _now()}},
+                )
+                liab_id = existing["id"]
+                debt_after = round(new_exp - (existing.get("paid_amount") or 0), 2)
+            else:
+                liab_id = str(uuid.uuid4())
+                await db.liabilities.insert_one({
+                    "id": liab_id, "user_id": user_id, "kind": "ad_account",
+                    "ad_provider": cp["ad_provider"],
+                    "ad_account_label": cp["name"],
+                    "counterparty_id": cp["id"],
+                    "expected_amount": uncovered, "paid_amount": 0.0,
+                    "advance_deducted": 0.0,
+                    "due_date": to_date, "status": "unpaid",
+                    "description": f"مديونية تلقائية (cron) — {cp['name']}",
+                    "auto_generated": True, "source": "ad_account_cron",
+                    "created_at": _now(), "updated_at": _now(),
+                })
+                debt_after = uncovered
+
+        # Ledger
+        await db.ad_account_ledger.insert_one({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "counterparty_id": cp["id"], "type": "spend",
+            "amount": total, "balance_after": new_balance,
+            "debt_after": debt_after,
+            "related_liability_id": liab_id,
+            "description": f"مزامنة مجدولة من {cp['ad_provider']} ({from_date} → {to_date})",
+            "breakdown": {"from_balance": covered, "uncovered": uncovered,
+                          "mode": mode, "auto_cron": True,
+                          "created_debt": uncovered if mode == "auto" else 0.0},
+            "date": to_date, "created_at": _now(),
+        })
+        out.append({
+            "id": cp["id"], "name": cp["name"], "spend": total,
+            "covered": covered, "uncovered": uncovered,
+            "debt_created": uncovered if mode == "auto" else 0.0,
+        })
+    return out
+
+
+async def run_daily_cron(db) -> dict:
+    """Iterate ALL users with at least one ad-account counterparty and
+    sync today's spend. Designed to be called from a scheduler at 23:55."""
+    from datetime import date
+    today = date.today().isoformat()
+    users_done = []
+    seen_users = set()
+    async for cp in db.counterparties.find(
+        {"kind": "ad_account"}, {"_id": 0, "user_id": 1},
+    ):
+        if cp["user_id"] in seen_users:
+            continue
+        seen_users.add(cp["user_id"])
+        results = await _run_sync_for_all(db, cp["user_id"], today, today)
+        users_done.append({"user_id": cp["user_id"], "results": results})
+    return {"ran_at": _now(), "today": today,
+            "users_processed": len(users_done), "details": users_done}

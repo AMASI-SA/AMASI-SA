@@ -10,6 +10,29 @@
 
 ---
 
+## ✅ ITERATION 108 — Scheduled daily ad-account sync cron (Feb 2026)
+
+### Why
+بدلاً من تشغيل المزامنة يدوياً لكل حساب إعلاني، تعمل تلقائياً كل ليلة 11:55 مساءً لكل المستخدمين وكل حسابات Snap/TikTok/Meta.
+
+### Backend
+- **`POST /api/ad-accounts/sync-all`** — يشغّل المزامنة لكل حسابات إعلانية المستخدم في فترة محددة. مثالي للمستخدم لإطلاقها يدوياً وقت ما يريد.
+- **`run_daily_cron(db)`** — دالة موديول-ليفل تستدعي `_run_sync_for_all` لكل مستخدم لديه حساب إعلاني واحد على الأقل.
+- **Asyncio scheduler** داخل `server.py` على `on_startup` — حلقة لا نهائية تنام حتى 23:55 ثم تشغّل الـ cron.
+- **Idempotency** عبر حقل جديد `last_auto_sync_date` على counterparty — إذا حاول الـ cron (أو الـ user) المزامنة لنفس `to_date` يُرجع `skipped: true` بدون مضاعفة المديونية.
+- **Run log** في collection جديد `cron_runs` — تاريخ كل تشغيل + عدد المستخدمين المعالَجين + ملخص.
+
+### Frontend
+- زر **"🔄 مزامنة الكل الآن"** بنفسجي في رأس `/ad-accounts` بجانب "إضافة حساب".
+- بانر توعوي يوضّح أن الـ cron يعمل كل ليلة 11:55.
+
+### Tests — `tests/test_ad_account_cron_iter108.py` (2/2 ✅)
+1. `/sync-all` يعالج 3 حسابات (Snap/TT/Meta) بمكالمة واحدة، ينشئ المديونية لكل واحد.
+2. **Idempotency**: تشغيل `/sync-all` مرتين على نفس `to_date` يُرجع `skipped: true` في المرة الثانية ولا يُضاعف المديونية (لو كان الصرف 100، يبقى دين 100 وليس 200).
+
+---
+
+
 ## ✅ ITERATION 107 — Ad-account inline create + multi-provider + platform sync (Feb 2026)
 
 ### Why

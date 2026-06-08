@@ -2937,6 +2937,45 @@ async def on_startup():
     await ensure_purchase_invoices_indexes(db)
     await ensure_custom_app_indexes(db)
     await ensure_ad_account_indexes(db)
+    # Iter-108 — daily cron at 23:55 to sync ad-spend → debt engine.
+    from ad_account_routes import run_daily_cron
+    import asyncio as _asyncio
+    from datetime import datetime as _dt, timedelta as _td
+
+    async def _ad_account_daily_cron():
+        # Loop forever. Each iteration sleeps until the next 23:55 then runs.
+        while True:
+            now = _dt.now()
+            target = now.replace(hour=23, minute=55, second=0, microsecond=0)
+            if now >= target:
+                target = target + _td(days=1)
+            wait_s = (target - now).total_seconds()
+            try:
+                await _asyncio.sleep(wait_s)
+                logger.info("iter-108: starting daily ad-account cron")
+                result = await run_daily_cron(db)
+                logger.info(
+                    "iter-108: ad-account cron done — %d users processed",
+                    result.get("users_processed", 0),
+                )
+                # Persist run report (handy for /status UI)
+                try:
+                    await db.cron_runs.insert_one({
+                        "id": str(uuid.uuid4()),
+                        "type": "ad_account_daily_sync",
+                        "ran_at": result["ran_at"],
+                        "today": result["today"],
+                        "users_processed": result["users_processed"],
+                        "summary": result["details"][:50],   # cap
+                    })
+                except Exception as _e:
+                    logger.warning("iter-108: cron run-log insert failed: %s", _e)
+            except Exception as e:
+                logger.exception("iter-108: cron iteration failed: %s", e)
+                # Back off 60 s after a hard failure before next attempt.
+                await _asyncio.sleep(60)
+
+    _asyncio.create_task(_ad_account_daily_cron())
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:
