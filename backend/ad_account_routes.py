@@ -573,34 +573,23 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
     ):
         cp = await _get_account(db, user["id"], cp_id)
         provider = cp.get("ad_provider")
-        collection_map = {
-            "snapchat": "snapchat_ads_daily",
-            "tiktok":   "tiktok_ads_daily",
-            "meta":     "meta_ads_daily",
-        }
-        col_name = collection_map.get(provider)
-        if not col_name:
+        if provider not in PROVIDER_SOURCES:
             raise HTTPException(
                 400,
                 f"المزامنة التلقائية غير متاحة لمنصة {provider}. استخدم /spend يدوياً.",
             )
-        # Sum spend in the date range — filter by external_account_id
+        # Iter-110 — use the provider-source map so Snapchat reads from
+        # snapchat_account_daily (per-account), Meta from
+        # meta_ads_daily.account_id, etc. Filter by external_account_id
         # when set on the counterparty so multi-account users get
-        # independent per-account debt (Iter-109).
-        q = {
-            "user_id": user["id"],
-            "date": {"$gte": payload.from_date, "$lte": payload.to_date},
-        }
-        ext_id = (cp.get("external_account_id") or "").strip()
-        if ext_id:
-            q["ad_account_id"] = ext_id
-        cur = db[col_name].find(q, {"_id": 0, "spend": 1, "date": 1})
-        total_spend = 0.0
-        days_seen = set()
-        async for row in cur:
-            total_spend += float(row.get("spend") or 0)
-            days_seen.add(row.get("date"))
-        total_spend = _round(total_spend)
+        # independent per-account debt.
+        ext_id = (cp.get("external_account_id") or "").strip() or None
+        rows, _source = await _fetch_daily_spend(
+            db, user["id"], provider, ext_id,
+            payload.from_date, payload.to_date,
+        )
+        total_spend = _round(sum(r["spend"] for r in rows))
+        days_seen = {r["date"] for r in rows if r["spend"] > 0}
         if total_spend <= 0:
             return {
                 "ok": True, "spend": 0.0, "days_synced": 0,
@@ -1153,14 +1142,16 @@ async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> l
     """For each ad_account counterparty (supported providers only),
     aggregate daily-platform spend in the range and post it as a /spend
     via the same internal helpers. Idempotent per (account, to_date)
-    via `last_auto_sync_date` on the counterparty."""
-    SUPPORTED = {"snapchat": "snapchat_ads_daily",
-                 "tiktok":   "tiktok_ads_daily",
-                 "meta":     "meta_ads_daily"}
+    via `last_auto_sync_date` on the counterparty.
+
+    Iter-110 fix: uses PROVIDER_SOURCES so Snapchat reads
+    snapchat_account_daily by ad_account_id, Meta reads
+    meta_ads_daily by account_id, etc.
+    """
     out = []
     async for cp in db.counterparties.find(
         {"user_id": user_id, "kind": "ad_account",
-         "ad_provider": {"$in": list(SUPPORTED)}},
+         "ad_provider": {"$in": list(PROVIDER_SOURCES)}},
         {"_id": 0},
     ):
         # Skip if already synced for this `to_date` (idempotency).
@@ -1168,23 +1159,19 @@ async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> l
             out.append({"id": cp["id"], "name": cp["name"],
                         "skipped": True, "reason": "already_synced"})
             continue
-        col = SUPPORTED[cp["ad_provider"]]
-        # Iter-109 — per-account filter via external_account_id.
-        q = {"user_id": user_id, "date": {"$gte": from_date, "$lte": to_date}}
-        ext_id = (cp.get("external_account_id") or "").strip()
-        if ext_id:
-            q["ad_account_id"] = ext_id
-        total = 0.0
-        async for row in db[col].find(q, {"_id": 0, "spend": 1}):
-            total += float(row.get("spend") or 0)
-        total = round(total, 2)
+        ext_id = (cp.get("external_account_id") or "").strip() or None
+        rows, source = await _fetch_daily_spend(
+            db, user_id, cp["ad_provider"], ext_id, from_date, to_date,
+        )
+        total = round(sum(r["spend"] for r in rows), 2)
         if total <= 0:
             await db.counterparties.update_one(
                 {"id": cp["id"]},
                 {"$set": {"last_auto_sync_date": to_date,
                           "last_auto_sync_at": _now()}},
             )
-            out.append({"id": cp["id"], "name": cp["name"], "spend": 0.0})
+            out.append({"id": cp["id"], "name": cp["name"], "spend": 0.0,
+                        "source_collection": source})
             continue
 
         # Apply via the same internal logic as /spend.
@@ -1200,38 +1187,11 @@ async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> l
                       "updated_at": _now()}},
         )
         mode = cp.get("debt_mode") or "auto"
-        liab_id = None
-        debt_after = 0.0
-        if uncovered > 0 and mode == "auto":
-            existing = await db.liabilities.find_one(
-                {"user_id": user_id, "kind": "ad_account",
-                 "counterparty_id": cp["id"],
-                 "status": {"$in": ["unpaid", "partial"]}},
-                {"_id": 0},
-            )
-            if existing:
-                new_exp = round((existing.get("expected_amount") or 0) + uncovered, 2)
-                await db.liabilities.update_one(
-                    {"id": existing["id"]},
-                    {"$set": {"expected_amount": new_exp, "updated_at": _now()}},
-                )
-                liab_id = existing["id"]
-                debt_after = round(new_exp - (existing.get("paid_amount") or 0), 2)
-            else:
-                liab_id = str(uuid.uuid4())
-                await db.liabilities.insert_one({
-                    "id": liab_id, "user_id": user_id, "kind": "ad_account",
-                    "ad_provider": cp["ad_provider"],
-                    "ad_account_label": cp["name"],
-                    "counterparty_id": cp["id"],
-                    "expected_amount": uncovered, "paid_amount": 0.0,
-                    "advance_deducted": 0.0,
-                    "due_date": to_date, "status": "unpaid",
-                    "description": f"مديونية تلقائية (cron) — {cp['name']}",
-                    "auto_generated": True, "source": "ad_account_cron",
-                    "created_at": _now(), "updated_at": _now(),
-                })
-                debt_after = uncovered
+        liab_id, debt_after = await _apply_uncovered(
+            db, user_id, cp, uncovered, mode, to_date,
+            description=f"مديونية تلقائية (cron) — {cp['name']}",
+            source_tag="ad_account_cron",
+        )
 
         # Ledger
         await db.ad_account_ledger.insert_one({
@@ -1243,6 +1203,7 @@ async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> l
             "description": f"مزامنة مجدولة من {cp['ad_provider']} ({from_date} → {to_date})",
             "breakdown": {"from_balance": covered, "uncovered": uncovered,
                           "mode": mode, "auto_cron": True,
+                          "source_collection": source,
                           "created_debt": uncovered if mode == "auto" else 0.0},
             "date": to_date, "created_at": _now(),
         })
@@ -1250,6 +1211,7 @@ async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> l
             "id": cp["id"], "name": cp["name"], "spend": total,
             "covered": covered, "uncovered": uncovered,
             "debt_created": uncovered if mode == "auto" else 0.0,
+            "source_collection": source,
         })
     return out
 

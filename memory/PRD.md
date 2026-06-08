@@ -10,6 +10,23 @@
 
 ---
 
+## 🐛 BUGFIX 8-Feb-2026 — sync-all & sync-from-platform reading wrong collections
+**User report**: "عند مزامنه الكل الان لا يتم جلب مديونية الحسابات الإعلانية اليومية". After clicking "🔄 مزامنة الكل الآن" the UI showed "تمت المزامنة" but no liability was created for Snapchat counterparties that had `external_account_id` set.
+
+**Root cause**: Two endpoints had outdated collection mappings:
+- `_run_sync_for_all` (used by `/sync-all` + the daily cron) hard-coded `snapchat → snapchat_ads_daily` and filtered by `ad_account_id`. But the real per-account data lives in `snapchat_account_daily`, and `meta_ads_daily` uses field name `account_id` (NOT `ad_account_id`). The filter returned 0 rows → "no spend" branch → updated `last_auto_sync_date` and reported success with debt=0.
+- `sync_from_platform` (the per-account button) had the exact same bug.
+
+**Fix**: Both endpoints now delegate to the new `_fetch_daily_spend()` helper (introduced for Iter-110 historical migration), which uses the `PROVIDER_SOURCES` map → Snapchat hits `snapchat_account_daily.ad_account_id` (falling back to `snapchat_ads_daily` when no per-account rows exist), Meta hits `meta_ads_daily.account_id`. The response now also returns `source_collection` so the UI/logs can see which collection was actually used.
+
+**Tests added** — `tests/test_ad_account_sync_fix_iter110.py` (3/3 ✅) that would fail on the pre-fix code:
+- sync-all picks up `snapchat_account_daily` rows scoped by `ad_account_id` (no cross-account leak).
+- sync-all picks up Meta rows via `account_id`.
+- sync-from-platform (per-account button) works the same way.
+
+---
+
+
 ## ✅ ITERATION 110 — Historical migration + opening balance for ad-accounts (Feb 2026)
 
 ### Why
