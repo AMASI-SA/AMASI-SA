@@ -10,6 +10,20 @@
 
 ---
 
+## 🐛 BUGFIX 8-Feb-2026 (follow-up) — force re-sync to recover from buggy idempotency stamps
+**User report after first fix deployed**: "المزامنة تمت: 0 حساب · 7 مُتخطّى" — every account skipped. Cause: the previous buggy sync had already stamped `last_auto_sync_date = today` on all 7 counterparties, so even after the data-source fix the new code hits the idempotency guard and returns "already synced" without creating any debt.
+
+**Fix**:
+- New `force: bool` field on the `/sync-all` body (defaults to `false`).
+- When `force=true`, `_run_sync_for_all` skips the `last_auto_sync_date == to_date` check.
+- The daily cron at 23:55 still uses `force=false` so it can't double-charge.
+- UI: when "مزامنة الكل الآن" returns ALL skipped (processed=0, skipped>0), automatically prompt with `window.confirm` offering a force-resync. Also enriched the success toast to show the total new debt amount in SAR.
+
+**Test added** — `test_force_resync_bypasses_idempotency_after_buggy_run`: pre-stamp a counterparty's `last_auto_sync_date` to today (mimicking the bug), confirm normal call returns `skipped=true`, then call again with `force=true` and verify spend & liability were created.
+
+---
+
+
 ## 🐛 BUGFIX 8-Feb-2026 — sync-all & sync-from-platform reading wrong collections
 **User report**: "عند مزامنه الكل الان لا يتم جلب مديونية الحسابات الإعلانية اليومية". After clicking "🔄 مزامنة الكل الآن" the UI showed "تمت المزامنة" but no liability was created for Snapchat counterparties that had `external_account_id` set.
 

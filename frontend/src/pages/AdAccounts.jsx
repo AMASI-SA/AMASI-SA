@@ -944,17 +944,40 @@ export default function AdAccounts() {
                     </button>
                     <button onClick={async () => {
                         const today = todayIso();
-                        try {
-                            const { data } = await api.post("/ad-accounts/sync-all", {
-                                from_date: today, to_date: today,
-                            });
-                            const processed = data.results.filter((r) => !r.skipped).length;
-                            const skipped   = data.results.filter((r) =>  r.skipped).length;
-                            toast.success(`المزامنة تمت: ${processed} حساب${skipped ? ` · ${skipped} مُتخطّى` : ""}`);
-                            load();
-                        } catch (e) {
-                            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل");
-                        }
+                        const doSync = async (force = false) => {
+                            try {
+                                const { data } = await api.post("/ad-accounts/sync-all", {
+                                    from_date: today, to_date: today, force,
+                                });
+                                const processed = data.results.filter((r) => !r.skipped).length;
+                                const skipped   = data.results.filter((r) =>  r.skipped).length;
+                                const debt = data.results.reduce((s, r) => s + (r.debt_created || 0), 0);
+
+                                // Iter-110 — auto-offer a forced retry if EVERYTHING was skipped
+                                // (signals a stale `last_auto_sync_date` flag from a previous
+                                // run that did not actually create rows).
+                                if (!force && processed === 0 && skipped > 0) {
+                                    const ok = window.confirm(
+                                        `تم تخطّي كل الحسابات (${skipped}) لأن النظام يرى أنها مزامَنة سابقاً اليوم.\n` +
+                                        `هل تريد إعادة المزامنة بشكل إجباري (تجاوز التحقق التكراري)؟\n\n` +
+                                        `استخدم هذا الخيار فقط إذا كنت متأكداً أن المزامنة السابقة لم تنتج مديونية صحيحة.`
+                                    );
+                                    if (ok) return doSync(true);
+                                }
+
+                                if (processed > 0) {
+                                    toast.success(
+                                        `المزامنة تمت: ${processed} حساب${debt > 0 ? ` · مديونية ${fmt(debt)} ر.س` : ""}${skipped ? ` · ${skipped} مُتخطّى` : ""}`
+                                    );
+                                } else {
+                                    toast.info(`المزامنة تمت: ${processed} حساب${skipped ? ` · ${skipped} مُتخطّى` : ""}`);
+                                }
+                                load();
+                            } catch (e) {
+                                toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل");
+                            }
+                        };
+                        doSync(false);
                     }} className="px-4 py-2.5 rounded-lg bg-violet-100 text-violet-800 text-sm font-bold hover:bg-violet-200 flex items-center gap-2" data-testid="adacc-sync-all-btn">
                         <ArrowsClockwise size={16} /> مزامنة الكل الآن
                     </button>

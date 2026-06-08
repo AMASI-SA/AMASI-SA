@@ -97,6 +97,10 @@ class UpdateAdAccountIn(BaseModel):
 class SyncFromPlatformIn(BaseModel):
     from_date: str = Field(..., min_length=10, max_length=10)
     to_date:   str = Field(..., min_length=10, max_length=10)
+    # Iter-110 — when true, bypass the per-account `last_auto_sync_date`
+    # idempotency guard (used when a previous buggy sync set the flag
+    # but did not actually create the liability rows).
+    force: bool = False
 
 
 # ── Iter-110 — Historical Migration ────────────────────────────────────
@@ -718,9 +722,15 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
     ):
         """Run sync-from-platform for EVERY ad account this user owns
         that has a supported provider (snapchat/tiktok/meta). The same
-        endpoint is invoked by the daily cron at 23:55."""
+        endpoint is invoked by the daily cron at 23:55.
+
+        When `force=true` the per-account idempotency guard
+        (`last_auto_sync_date == to_date`) is bypassed — useful to
+        recover from a previous failed/buggy sync that already
+        stamped today's date."""
         results = await _run_sync_for_all(
             db, user["id"], payload.from_date, payload.to_date,
+            force=payload.force,
         )
         return {"ok": True, "results": results}
 
@@ -1138,11 +1148,15 @@ async def _apply_uncovered(
     return liab_id, round(uncovered, 2)
 
 
-async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> list[dict]:
+async def _run_sync_for_all(
+    db, user_id: str, from_date: str, to_date: str,
+    *, force: bool = False,
+) -> list[dict]:
     """For each ad_account counterparty (supported providers only),
     aggregate daily-platform spend in the range and post it as a /spend
     via the same internal helpers. Idempotent per (account, to_date)
-    via `last_auto_sync_date` on the counterparty.
+    via `last_auto_sync_date` on the counterparty — unless `force=True`
+    in which case the guard is bypassed.
 
     Iter-110 fix: uses PROVIDER_SOURCES so Snapchat reads
     snapchat_account_daily by ad_account_id, Meta reads
@@ -1154,8 +1168,9 @@ async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> l
          "ad_provider": {"$in": list(PROVIDER_SOURCES)}},
         {"_id": 0},
     ):
-        # Skip if already synced for this `to_date` (idempotency).
-        if cp.get("last_auto_sync_date") == to_date:
+        # Skip if already synced for this `to_date` (idempotency),
+        # unless the caller explicitly forced a re-sync.
+        if not force and cp.get("last_auto_sync_date") == to_date:
             out.append({"id": cp["id"], "name": cp["name"],
                         "skipped": True, "reason": "already_synced"})
             continue

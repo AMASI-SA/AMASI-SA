@@ -125,3 +125,38 @@ def test_sync_from_platform_endpoint_also_fixed(ctx):
     data = r.json()
     # record_spend wrapper returns the summary structure with open_debt
     assert data["ad_account"]["open_debt"] == 150.0
+
+
+def test_force_resync_bypasses_idempotency_after_buggy_run(ctx):
+    """Regression: previously buggy sync stamped `last_auto_sync_date`
+    even though it created no debt. Calling sync-all again normally
+    must SKIP (idempotency), but with `force=true` it must process
+    the account and create the actual debt this time."""
+    cp = _make_account(ctx, "Snap Forced", "snapchat", "acc_FORCED")
+    # 1) Pre-stamp last_auto_sync_date to today as the buggy code would
+    today = __import__("datetime").date.today().isoformat()
+    ctx["db"].counterparties.update_one(
+        {"id": cp, "user_id": ctx["uid"]},
+        {"$set": {"last_auto_sync_date": today}},
+    )
+    ctx["db"].snapchat_account_daily.insert_one({
+        "user_id": ctx["uid"], "ad_account_id": "acc_FORCED",
+        "date": today, "spend": 250.0,
+    })
+
+    # 2) Normal call must skip
+    r1 = requests.post(f"{BASE_URL}/api/ad-accounts/sync-all",
+                       json={"from_date": today, "to_date": today},
+                       headers=ctx["hdr"], timeout=15)
+    res1 = r1.json()["results"][0]
+    assert res1.get("skipped") is True
+    assert res1["reason"] == "already_synced"
+
+    # 3) Force call must process and create debt
+    r2 = requests.post(f"{BASE_URL}/api/ad-accounts/sync-all",
+                       json={"from_date": today, "to_date": today, "force": True},
+                       headers=ctx["hdr"], timeout=15)
+    res2 = r2.json()["results"][0]
+    assert "skipped" not in res2 or res2.get("skipped") is None
+    assert res2["spend"] == 250.0
+    assert res2["debt_created"] == 250.0
