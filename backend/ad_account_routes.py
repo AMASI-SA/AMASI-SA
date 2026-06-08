@@ -1174,6 +1174,83 @@ async def _run_sync_for_all(
             out.append({"id": cp["id"], "name": cp["name"],
                         "skipped": True, "reason": "already_synced"})
             continue
+
+        # ── Iter-110 fix B — when force=True we must REVERSE any prior
+        # auto-cron sync for the same date-range BEFORE applying the
+        # fresh figures, otherwise spend gets double-counted (the user
+        # reported "تراكميه" — cumulative debt). We:
+        #   1. find prior ledger rows tagged auto_cron=True in range,
+        #   2. restore the `from_balance` portion back to the balance,
+        #   3. reduce the open auto-generated liability by the
+        #      `uncovered` portion (deleting it if it drops to 0),
+        #   4. delete those ledger rows so they don't double-count.
+        if force:
+            prev_rows = await db.ad_account_ledger.find({
+                "user_id": user_id, "counterparty_id": cp["id"],
+                "type": "spend",
+                "breakdown.auto_cron": True,
+                "date": {"$gte": from_date, "$lte": to_date},
+            }, {"_id": 0}).to_list(2000)
+            if prev_rows:
+                prev_covered = round(sum(
+                    (r.get("breakdown") or {}).get("from_balance", 0)
+                    for r in prev_rows), 2)
+                prev_uncovered = round(sum(
+                    (r.get("breakdown") or {}).get("uncovered", 0)
+                    for r in prev_rows), 2)
+                # 1) Restore balance
+                if prev_covered > 0:
+                    await db.counterparties.update_one(
+                        {"id": cp["id"], "user_id": user_id},
+                        {"$inc": {"balance": prev_covered},
+                         "$set": {"updated_at": _now()}},
+                    )
+                    cp["balance"] = round(
+                        float(cp.get("balance") or 0) + prev_covered, 2,
+                    )
+                # 2) Reduce open auto-generated liability (source=ad_account_cron)
+                if prev_uncovered > 0 and (cp.get("debt_mode") or "auto") == "auto":
+                    existing_liab = await db.liabilities.find_one(
+                        {"user_id": user_id, "kind": "ad_account",
+                         "counterparty_id": cp["id"],
+                         "source": "ad_account_cron",
+                         "status": {"$in": ["unpaid", "partial"]}},
+                        {"_id": 0},
+                    )
+                    if existing_liab:
+                        new_exp = round(
+                            (existing_liab.get("expected_amount") or 0) - prev_uncovered, 2,
+                        )
+                        paid = float(existing_liab.get("paid_amount") or 0)
+                        if new_exp <= max(paid, 0.01):
+                            # Nothing left of the cron portion. If it
+                            # was partially paid we keep the paid_amount
+                            # by clamping the expected to paid; otherwise
+                            # delete the row entirely.
+                            if paid > 0:
+                                await db.liabilities.update_one(
+                                    {"id": existing_liab["id"], "user_id": user_id},
+                                    {"$set": {"expected_amount": paid,
+                                              "status": "paid",
+                                              "updated_at": _now()}},
+                                )
+                            else:
+                                await db.liabilities.delete_one(
+                                    {"id": existing_liab["id"], "user_id": user_id},
+                                )
+                        else:
+                            await db.liabilities.update_one(
+                                {"id": existing_liab["id"], "user_id": user_id},
+                                {"$set": {"expected_amount": new_exp,
+                                          "updated_at": _now()}},
+                            )
+                # 3) Drop the prior ledger rows
+                ids_to_delete = [r["id"] for r in prev_rows if r.get("id")]
+                if ids_to_delete:
+                    await db.ad_account_ledger.delete_many({
+                        "user_id": user_id, "id": {"$in": ids_to_delete},
+                    })
+
         ext_id = (cp.get("external_account_id") or "").strip() or None
         rows, source = await _fetch_daily_spend(
             db, user_id, cp["ad_provider"], ext_id, from_date, to_date,
