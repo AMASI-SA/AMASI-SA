@@ -351,6 +351,18 @@ function DocsTab({ settings }) {
     const baseUrl = settings?.base_url || "";
     const apiKey = settings?.api_key || "<your-api-key>";
 
+    const downloadPdf = () => {
+        // Use the browser's native print → PDF. A print-only stylesheet
+        // (injected once below) hides chrome and only prints the docs.
+        document.body.classList.add("print-docs-mode");
+        // Tiny defer so React renders the class before print() fires.
+        setTimeout(() => {
+            window.print();
+            // Remove the class after the dialog closes (regardless of save/cancel).
+            setTimeout(() => document.body.classList.remove("print-docs-mode"), 500);
+        }, 50);
+    };
+
     const CodeBlock = ({ children, lang = "json" }) => (
         <pre className="font-mono text-[11px] text-slate-700 bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-3 overflow-x-auto leading-5" dir="ltr">
             <div className="text-[10px] text-slate-500 mb-1">{lang}</div>
@@ -366,10 +378,52 @@ function DocsTab({ settings }) {
     );
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 docs-printable">
+            {/* Print-only stylesheet (single source of truth for the PDF look). */}
+            <style>{`
+                @media print {
+                    /* Hide everything by default in print-docs-mode. */
+                    body.print-docs-mode * { visibility: hidden !important; }
+                    /* Show ONLY the docs tree. */
+                    body.print-docs-mode .docs-printable,
+                    body.print-docs-mode .docs-printable * { visibility: visible !important; }
+                    /* Pin the docs to the top of the page. */
+                    body.print-docs-mode .docs-printable {
+                        position: absolute !important; left: 0; top: 0; right: 0;
+                        padding: 0 !important; margin: 0 !important;
+                    }
+                    /* Hide the toolbar (download button + TOC chips can stay). */
+                    body.print-docs-mode .docs-print-hide { display: none !important; }
+                    body.print-docs-mode section { page-break-inside: avoid; }
+                    body.print-docs-mode pre  { page-break-inside: avoid; }
+                    @page { size: A4; margin: 12mm; }
+                }
+            `}</style>
+
+            {/* Print header (only visible in PDF) */}
+            <div className="hidden print:block text-center pb-3 border-b border-slate-300 mb-4">
+                <div className="text-xl font-extrabold text-slate-900">MEZAN — دليل ربط API</div>
+                <div className="text-xs text-slate-500 mt-1">{baseUrl}</div>
+            </div>
+
+            {/* Toolbar (hidden in print) */}
+            <div className="docs-print-hide flex items-center justify-between bg-violet-50 border border-violet-200 rounded-xl p-4">
+                <div>
+                    <div className="font-bold text-violet-900 text-sm">دليل المطور الكامل</div>
+                    <div className="text-xs text-violet-700">حمّل نسخة PDF أنيقة وأرسلها لمطوّرك</div>
+                </div>
+                <button
+                    onClick={downloadPdf}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-700 text-white text-sm font-bold hover:bg-violet-800"
+                    data-testid="docs-download-pdf-btn"
+                >
+                    📄 تحميل PDF
+                </button>
+            </div>
+
             {/* Quick TOC */}
-            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 text-xs">
-                <div className="font-bold text-violet-900 mb-2">📚 محتوى الدليل</div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4 text-xs">
+                <div className="font-bold text-slate-900 mb-2">📚 محتوى الدليل</div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                     {[
                         ["overview", "1. نظرة عامة"],
