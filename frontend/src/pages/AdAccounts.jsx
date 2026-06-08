@@ -470,6 +470,421 @@ function LedgerDialog({ row, open, onClose }) {
 }
 
 
+// ── Migration Preview + Apply dialog (Iter-110) ─────────────────────
+function MigrationDialog({ open, onClose, onSaved }) {
+    const monthStart = () => new Date().toISOString().slice(0, 8) + "01";
+    const [step, setStep] = useState(1);            // 1 = pick dates · 2 = review · 3 = done
+    const [form, setForm] = useState({ from_date: monthStart(), to_date: todayIso() });
+    const [busy, setBusy] = useState(false);
+    const [preview, setPreview] = useState(null);   // { accounts, totals, ... }
+    const [selected, setSelected] = useState({});   // {cp_id: true|false}
+    const [mode, setMode] = useState("daily");      // "daily" | "lump"
+    const [result, setResult] = useState(null);
+    const [showDailyFor, setShowDailyFor] = useState(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setStep(1);
+        setForm({ from_date: monthStart(), to_date: todayIso() });
+        setPreview(null);
+        setSelected({});
+        setMode("daily");
+        setResult(null);
+        setShowDailyFor(null);
+    }, [open]);
+
+    if (!open) return null;
+
+    const fetchPreview = async (e) => {
+        e?.preventDefault?.();
+        if (!form.from_date || !form.to_date) { toast.error("اختر الفترة"); return; }
+        if (form.from_date > form.to_date) { toast.error("من تاريخ يجب أن يكون قبل إلى تاريخ"); return; }
+        setBusy(true);
+        try {
+            const { data } = await api.post("/ad-accounts/migration/preview", form);
+            setPreview(data);
+            // Pre-tick only the rows that are NOT blocked and have data
+            const tick = {};
+            (data.accounts || []).forEach((a) => {
+                tick[a.id] = !a.blocked_by_default && a.period_spend > 0;
+            });
+            setSelected(tick);
+            setStep(2);
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل تحميل المعاينة");
+        } finally { setBusy(false); }
+    };
+
+    const toggleAll = (val) => {
+        const next = {};
+        (preview?.accounts || []).forEach((a) => {
+            next[a.id] = val && !a.blocked_by_default && a.period_spend > 0;
+        });
+        setSelected(next);
+    };
+
+    const apply = async () => {
+        const ids = Object.entries(selected).filter(([, v]) => v).map(([k]) => k);
+        if (ids.length === 0) { toast.error("اختر حساباً واحداً على الأقل"); return; }
+        if (!window.confirm(
+            `سيتم ترحيل ${ids.length} حساب بوضع ${mode === "daily" ? "يومي (سطر لكل يوم)" : "إجمالي مجمّع"}. ` +
+            `لا يمكن التراجع تلقائياً — راجع المعاينة جيداً. هل أنت متأكد؟`
+        )) return;
+        setBusy(true);
+        try {
+            const { data } = await api.post("/ad-accounts/migration/apply", {
+                from_date: form.from_date, to_date: form.to_date,
+                mode, account_ids: ids,
+            });
+            setResult(data);
+            setStep(3);
+            onSaved();
+            toast.success(`تم الترحيل لـ ${data.results.filter((r) => r.ok).length} حساب`);
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل الترحيل");
+        } finally { setBusy(false); }
+    };
+
+    const totalSelected = preview?.accounts
+        ?.filter((a) => selected[a.id])
+        .reduce((s, a) => s + (a.period_spend || 0), 0) || 0;
+
+    return (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4" data-testid="adacc-migration-dialog">
+            <div dir="rtl" className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8">
+                <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                    <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                        <ArrowsClockwise size={22} weight="duotone" className="text-amber-700" />
+                        ترحيل المديونيات التاريخية
+                        <span className="text-[11px] font-normal text-slate-500">— الخطوة {step} من 3</span>
+                    </h2>
+                    <button onClick={onClose} className="text-slate-500 hover:text-slate-900 text-2xl">×</button>
+                </div>
+
+                {/* STEP 1 — pick dates */}
+                {step === 1 && (
+                    <form onSubmit={fetchPreview} className="p-5 space-y-4">
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-xs text-amber-900 space-y-1">
+                            <div className="font-bold">💡 كيف يعمل الترحيل؟</div>
+                            <ul className="list-disc pr-5 space-y-1">
+                                <li>نقرأ صرف كل حساب إعلاني من بيانات المنصة المخزّنة عندك.</li>
+                                <li>الحسابات غير المربوطة بـ <b>Ad Account ID</b> ستُمنع افتراضياً حتى لا تندمج مع غيرها.</li>
+                                <li>كل ترحيل ينشئ سجلاً منفصلاً في الـ ledger يمكنك مراجعته أو إلغاؤه يدوياً.</li>
+                            </ul>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1.5">من تاريخ *</label>
+                                <input type="date" value={form.from_date} onChange={(e) => setForm({ ...form, from_date: e.target.value })} className={inputCls} data-testid="adacc-mig-from" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1.5">إلى تاريخ *</label>
+                                <input type="date" value={form.to_date} onChange={(e) => setForm({ ...form, to_date: e.target.value })} className={inputCls} data-testid="adacc-mig-to" />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
+                            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-bold">إلغاء</button>
+                            <button type="submit" disabled={busy} className="px-4 py-2 rounded-lg bg-amber-700 text-white text-sm font-bold hover:bg-amber-800 disabled:opacity-50" data-testid="adacc-mig-preview-btn">
+                                {busy ? "جاري…" : "عرض المعاينة"}
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {/* STEP 2 — preview & select */}
+                {step === 2 && preview && (
+                    <div className="p-5 space-y-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                <div className="font-bold text-slate-600">الفترة</div>
+                                <div className="text-slate-900 mt-1 font-mono text-[11px]">{preview.from_date} → {preview.to_date}</div>
+                            </div>
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                                <div className="font-bold text-emerald-800">جاهز للترحيل</div>
+                                <div className="num text-emerald-900 text-base font-extrabold mt-1">{preview.totals.accounts_ready}</div>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                <div className="font-bold text-amber-800">يحتاج مراجعة</div>
+                                <div className="num text-amber-900 text-base font-extrabold mt-1">{preview.totals.accounts_warned}</div>
+                            </div>
+                            <div className="bg-violet-50 border border-violet-200 rounded-lg p-3">
+                                <div className="font-bold text-violet-800">إجمالي الصرف</div>
+                                <div className="num text-violet-900 text-base font-extrabold mt-1">{fmt(preview.totals.period_spend)}</div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                            <div className="text-xs font-bold text-slate-700">وضع الترحيل:</div>
+                            <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-xs font-bold ${mode === "daily" ? "bg-amber-100 border-amber-300 text-amber-900" : "bg-white border-slate-300 text-slate-600"}`}>
+                                <input type="radio" name="mode" value="daily" checked={mode === "daily"} onChange={() => setMode("daily")} data-testid="adacc-mig-mode-daily" />
+                                يومي — سطر لكل يوم (أدق ✓ افتراضي)
+                            </label>
+                            <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-xs font-bold ${mode === "lump" ? "bg-amber-100 border-amber-300 text-amber-900" : "bg-white border-slate-300 text-slate-600"}`}>
+                                <input type="radio" name="mode" value="lump" checked={mode === "lump"} onChange={() => setMode("lump")} data-testid="adacc-mig-mode-lump" />
+                                مجمّع — صرف واحد للفترة (أسرع)
+                            </label>
+                            <div className="ml-auto flex gap-2">
+                                <button onClick={() => toggleAll(true)} className="text-[11px] underline text-slate-700" data-testid="adacc-mig-select-all">حدد القابل للترحيل</button>
+                                <button onClick={() => toggleAll(false)} className="text-[11px] underline text-slate-700" data-testid="adacc-mig-clear">إلغاء التحديد</button>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-[420px] overflow-y-auto">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50 text-slate-600 text-[11px] sticky top-0">
+                                    <tr>
+                                        <th className="p-2 w-8"></th>
+                                        <th className="text-right p-2 font-bold">الحساب</th>
+                                        <th className="text-right p-2 font-bold">المنصة</th>
+                                        <th className="text-right p-2 font-bold">Ad Account ID</th>
+                                        <th className="text-right p-2 font-bold">صرف الفترة</th>
+                                        <th className="text-right p-2 font-bold">أيام</th>
+                                        <th className="text-right p-2 font-bold">الرصيد الحالي</th>
+                                        <th className="text-right p-2 font-bold">المديونية الحالية</th>
+                                        <th className="text-right p-2 font-bold">الوضع</th>
+                                        <th className="text-right p-2 font-bold">تنبيهات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {preview.accounts.map((a) => {
+                                        const disabled = a.blocked_by_default || a.period_spend === 0;
+                                        return (
+                                            <tr key={a.id} className={`border-t border-slate-100 ${a.blocked_by_default ? "bg-amber-50/30" : ""}`} data-testid={`adacc-mig-row-${a.id}`}>
+                                                <td className="p-2">
+                                                    <input type="checkbox" checked={!!selected[a.id]} disabled={disabled} onChange={(e) => setSelected({ ...selected, [a.id]: e.target.checked })} data-testid={`adacc-mig-check-${a.id}`} />
+                                                </td>
+                                                <td className="p-2 text-xs font-bold text-slate-900">{a.name}</td>
+                                                <td className="p-2 text-xs">
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                                                        {PROVIDER_LABEL[a.ad_provider] || a.ad_provider}
+                                                    </span>
+                                                </td>
+                                                <td className="p-2 text-[11px] font-mono text-slate-700" dir="ltr">
+                                                    {a.external_account_id || <span className="text-rose-500">— غير مربوط</span>}
+                                                </td>
+                                                <td className="p-2 num text-xs font-bold text-violet-900">{fmt(a.period_spend)}</td>
+                                                <td className="p-2 num text-xs text-slate-600">
+                                                    {a.days_with_data}
+                                                    {a.days_with_data > 0 && (
+                                                        <button onClick={() => setShowDailyFor(a)} className="ml-1 text-violet-600 underline text-[10px]" data-testid={`adacc-mig-daily-${a.id}`}>
+                                                            عرض
+                                                        </button>
+                                                    )}
+                                                </td>
+                                                <td className="p-2 num text-xs text-emerald-700">{fmt(a.current_balance)}</td>
+                                                <td className="p-2 num text-xs text-rose-700">{fmt(a.current_open_debt)}</td>
+                                                <td className="p-2 text-[11px]">
+                                                    <span className={`px-2 py-0.5 rounded font-bold ${a.debt_mode === "auto" ? "bg-violet-50 text-violet-800" : "bg-amber-50 text-amber-800"}`}>
+                                                        {a.debt_mode === "auto" ? "تلقائي" : "يدوي"}
+                                                    </span>
+                                                </td>
+                                                <td className="p-2 text-[11px]">
+                                                    {a.warnings.length === 0 ? (
+                                                        <span className="flex items-center gap-1 text-emerald-700"><CheckCircle size={12} /> سليم</span>
+                                                    ) : (
+                                                        <div className="space-y-1">
+                                                            {a.warnings.map((w, i) => (
+                                                                <div key={i} className="flex items-start gap-1 text-amber-800">
+                                                                    <Warning size={12} className="shrink-0 mt-0.5" /> <span>{w}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                            <div className="text-xs text-slate-600">
+                                المحدد للترحيل: <b className="num text-slate-900">{Object.values(selected).filter(Boolean).length}</b> حساب ·
+                                إجمالي الصرف: <b className="num text-violet-900">{fmt(totalSelected)}</b>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => setStep(1)} className="px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-bold">← رجوع</button>
+                                <button onClick={apply} disabled={busy || Object.values(selected).filter(Boolean).length === 0} className="px-4 py-2 rounded-lg bg-amber-700 text-white text-sm font-bold hover:bg-amber-800 disabled:opacity-50" data-testid="adacc-mig-apply-btn">
+                                    {busy ? "جاري الترحيل…" : `تنفيذ الترحيل (${mode === "daily" ? "يومي" : "مجمّع"})`}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* STEP 3 — done */}
+                {step === 3 && result && (
+                    <div className="p-5 space-y-3">
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-sm text-emerald-900">
+                            ✅ تمت العملية. أدناه تفاصيل ما تم.
+                        </div>
+                        <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50 text-slate-600 text-[11px]">
+                                    <tr>
+                                        <th className="text-right p-2 font-bold">الحساب</th>
+                                        <th className="text-right p-2 font-bold">الحالة</th>
+                                        <th className="text-right p-2 font-bold">سطور مُرحّلة</th>
+                                        <th className="text-right p-2 font-bold">إجمالي الصرف</th>
+                                        <th className="text-right p-2 font-bold">مديونية أُنشئت</th>
+                                        <th className="text-right p-2 font-bold">الرصيد بعد</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {result.results.map((r) => (
+                                        <tr key={r.id} className="border-t border-slate-100">
+                                            <td className="p-2 text-xs font-bold">{r.name || r.id}</td>
+                                            <td className="p-2 text-[11px]">
+                                                {r.ok ? (
+                                                    <span className="text-emerald-700 flex items-center gap-1"><CheckCircle size={12} /> تم</span>
+                                                ) : (
+                                                    <span className="text-rose-700 flex items-center gap-1"><Warning size={12} /> {r.error}</span>
+                                                )}
+                                            </td>
+                                            <td className="p-2 num text-xs">{r.rows_posted ?? "—"}</td>
+                                            <td className="p-2 num text-xs text-violet-900">{r.total_spend != null ? fmt(r.total_spend) : "—"}</td>
+                                            <td className="p-2 num text-xs text-rose-700">{r.debt_created != null ? fmt(r.debt_created) : "—"}</td>
+                                            <td className="p-2 num text-xs text-emerald-700">{r.balance_after != null ? fmt(r.balance_after) : "—"}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="flex justify-end pt-2">
+                            <button onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-bold" data-testid="adacc-mig-close-btn">إغلاق</button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Daily-rows preview popover */}
+                {showDailyFor && (
+                    <div className="fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center p-4" onClick={() => setShowDailyFor(null)}>
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm max-h-[70vh] overflow-y-auto" dir="rtl" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+                                <h3 className="font-bold text-slate-900 text-sm">صرف يومي — {showDailyFor.name}</h3>
+                                <button onClick={() => setShowDailyFor(null)} className="text-slate-500 text-xl">×</button>
+                            </div>
+                            <table className="w-full text-xs">
+                                <thead className="bg-slate-50 text-slate-600">
+                                    <tr><th className="text-right p-2">التاريخ</th><th className="text-right p-2">الصرف</th></tr>
+                                </thead>
+                                <tbody>
+                                    {showDailyFor.daily_rows.map((r) => (
+                                        <tr key={r.date} className="border-t border-slate-100">
+                                            <td className="p-2 font-mono">{r.date}</td>
+                                            <td className="p-2 num">{fmt(r.spend)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {showDailyFor.daily_rows_truncated && (
+                                <div className="text-[10px] text-slate-500 p-2 text-center">… مقتطع — لعرض الكل نفّذ الترحيل بوضع يومي.</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+
+// ── Opening Balance dialog (Iter-110) ───────────────────────────────
+function OpeningDialog({ row, open, onClose, onSaved }) {
+    const [form, setForm] = useState({
+        opening_balance: "", opening_debt: "",
+        start_date: todayIso(), method: "auto", notes: "",
+    });
+    const [busy, setBusy] = useState(false);
+
+    useEffect(() => {
+        if (!open || !row) return;
+        setForm({
+            opening_balance: row.balance != null ? String(row.balance) : "",
+            opening_debt:    row.open_debt != null ? String(row.open_debt) : "",
+            start_date:      row.opening_start_date || todayIso(),
+            method:          row.debt_mode || "auto",
+            notes:           row.opening_notes || "",
+        });
+    }, [open, row]);
+
+    if (!open || !row) return null;
+
+    const submit = async (e) => {
+        e?.preventDefault?.();
+        const payload = {
+            opening_balance: form.opening_balance === "" ? null : Number(form.opening_balance),
+            opening_debt:    form.opening_debt === "" ? null : Number(form.opening_debt),
+            start_date:      form.start_date || null,
+            method:          form.method,
+            notes:           form.notes || null,
+        };
+        setBusy(true);
+        try {
+            await api.put(`/ad-accounts/${row.id}/opening`, payload);
+            toast.success("تم حفظ الرصيد الافتتاحي");
+            onSaved();
+            onClose();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل الحفظ");
+        } finally { setBusy(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4" data-testid="adacc-opening-dialog">
+            <div dir="rtl" className="bg-white rounded-xl shadow-2xl w-full max-w-md my-8">
+                <form onSubmit={submit}>
+                    <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                        <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                            <Plus size={22} weight="duotone" className="text-amber-700" />
+                            رصيد افتتاحي — {row.name}
+                        </h2>
+                        <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-900 text-2xl">×</button>
+                    </div>
+                    <div className="p-5 space-y-3">
+                        <div className="bg-amber-50 border border-amber-200 rounded p-3 text-[11px] text-amber-900">
+                            💡 يُستخدم هذا الخيار عندما تفضّل البدء من اليوم بدل ترحيل بيانات تاريخية، أو لتعديل أرقام افتتاحية يدوياً. الرصيد الافتتاحي يُضاف فوراً، والمديونية الافتتاحية تُسجَّل كالتزام مفتوح منفصل (مصدر: ad_account_opening).
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1.5">الرصيد الافتتاحي</label>
+                                <input type="number" min="0" step="0.01" value={form.opening_balance} onChange={(e) => setForm({ ...form, opening_balance: e.target.value })} className={`${inputCls} num`} data-testid="adacc-opening-balance" placeholder="0.00" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1.5">المديونية الافتتاحية</label>
+                                <input type="number" min="0" step="0.01" value={form.opening_debt} onChange={(e) => setForm({ ...form, opening_debt: e.target.value })} className={`${inputCls} num`} data-testid="adacc-opening-debt" placeholder="0.00" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">تاريخ بداية الاحتساب</label>
+                            <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} className={inputCls} data-testid="adacc-opening-start" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">طريقة الاحتساب</label>
+                            <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} className={inputCls} data-testid="adacc-opening-method">
+                                <option value="auto">تلقائي من الصرف (recommended)</option>
+                                <option value="manual">يدوي فقط</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">ملاحظات</label>
+                            <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputCls} placeholder="مثال: رصيد افتتاحي من 2026-06-01" />
+                        </div>
+                    </div>
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-bold">إلغاء</button>
+                        <button type="submit" disabled={busy} className="px-4 py-2 rounded-lg bg-amber-700 text-white text-sm font-bold hover:bg-amber-800 disabled:opacity-50" data-testid="adacc-opening-submit">
+                            {busy ? "جاري…" : "حفظ"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+
 // ── Main page ───────────────────────────────────────────────────────
 export default function AdAccounts() {
     const [items, setItems] = useState([]);
@@ -481,6 +896,8 @@ export default function AdAccounts() {
     const [ledgerFor, setLedgerFor] = useState(null);
     const [syncFor, setSyncFor] = useState(null);
     const [createOpen, setCreateOpen] = useState(false);
+    const [migrationOpen, setMigrationOpen] = useState(false);
+    const [openingFor, setOpeningFor] = useState(null);
 
     const load = async () => {
         setLoading(true);
@@ -522,6 +939,9 @@ export default function AdAccounts() {
                     </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 self-start">
+                    <button onClick={() => setMigrationOpen(true)} className="px-4 py-2.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-bold hover:bg-amber-200 flex items-center gap-2" data-testid="adacc-migration-btn">
+                        <ArrowsClockwise size={16} /> ترحيل المديونيات التاريخية
+                    </button>
                     <button onClick={async () => {
                         const today = todayIso();
                         try {
@@ -638,6 +1058,9 @@ export default function AdAccounts() {
                                 <button onClick={() => setLedgerFor(row)} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200" data-testid={`adacc-ledger-btn-${row.id}`}>
                                     <ListBullets size={12} className="inline ml-1" /> السجل
                                 </button>
+                                <button onClick={() => setOpeningFor(row)} className="px-3 py-2 rounded-lg bg-amber-100 text-amber-800 text-xs font-bold hover:bg-amber-200" data-testid={`adacc-opening-btn-${row.id}`} title="رصيد افتتاحي يدوي">
+                                    ⚙️ افتتاحي
+                                </button>
                             </div>
                         </div>
                     ))}
@@ -649,6 +1072,8 @@ export default function AdAccounts() {
             <LedgerDialog row={ledgerFor} open={!!ledgerFor} onClose={() => setLedgerFor(null)} />
             <SyncDialog row={syncFor} open={!!syncFor} onClose={() => setSyncFor(null)} onSaved={load} />
             <CreateDialog open={createOpen} onClose={() => setCreateOpen(false)} onSaved={load} />
+            <MigrationDialog open={migrationOpen} onClose={() => setMigrationOpen(false)} onSaved={load} />
+            <OpeningDialog row={openingFor} open={!!openingFor} onClose={() => setOpeningFor(null)} onSaved={load} />
         </div>
     );
 }

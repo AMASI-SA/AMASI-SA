@@ -99,7 +99,96 @@ class SyncFromPlatformIn(BaseModel):
     to_date:   str = Field(..., min_length=10, max_length=10)
 
 
+# ── Iter-110 — Historical Migration ────────────────────────────────────
+class MigrationPreviewIn(BaseModel):
+    from_date: str = Field(..., min_length=10, max_length=10)
+    to_date:   str = Field(..., min_length=10, max_length=10)
+
+
+class MigrationApplyIn(BaseModel):
+    from_date: str = Field(..., min_length=10, max_length=10)
+    to_date:   str = Field(..., min_length=10, max_length=10)
+    mode: Literal["daily", "lump"] = "daily"
+    account_ids: list[str] = Field(default_factory=list, min_length=1)
+
+
+class OpeningIn(BaseModel):
+    """Manual opening figures for an ad account.
+
+    All fields are optional — pass only what you want to set. The
+    endpoint writes an `opening` ledger row + (if `opening_debt > 0`)
+    creates / refreshes a dedicated open liability tagged
+    source=ad_account_opening so it's auditable & non-conflicting with
+    the auto sync liabilities (source=ad_account_engine|ad_account_cron).
+    """
+    opening_balance: Optional[float] = Field(None, ge=0)
+    opening_debt: Optional[float] = Field(None, ge=0)
+    start_date: Optional[str] = Field(None, min_length=10, max_length=10)
+    method: Optional[Literal["auto", "manual"]] = None
+    notes: Optional[str] = Field(None, max_length=2000)
+
+
 # ── Helpers ────────────────────────────────────────────────────────────
+# Iter-110 — Per-provider source-of-truth collections + the column used
+# to scope a sub-account inside each collection.
+#   • snapchat → snapchat_account_daily.ad_account_id  (ALSO falls back
+#                to snapchat_ads_daily when no per-account rows exist).
+#   • meta     → meta_ads_daily.account_id
+#   • tiktok   → tiktok_ads_daily — has NO sub-account column. When the
+#                merchant has more than one TikTok counterparty without
+#                a discriminator, every account would otherwise see the
+#                full platform spend → we WARN and skip those.
+PROVIDER_SOURCES = {
+    "snapchat": [
+        {"collection": "snapchat_account_daily", "scope_field": "ad_account_id"},
+        {"collection": "snapchat_ads_daily",     "scope_field": None},
+    ],
+    "meta": [
+        {"collection": "meta_ads_daily", "scope_field": "account_id"},
+    ],
+    "tiktok": [
+        {"collection": "tiktok_ads_daily", "scope_field": None},
+    ],
+}
+
+
+async def _fetch_daily_spend(
+    db, user_id: str, provider: str, external_id: Optional[str],
+    from_date: str, to_date: str,
+) -> tuple[list[dict], str]:
+    """Return ([{date, spend}], source_collection_used).
+
+    For Snapchat we prefer `snapchat_account_daily` (per-account
+    granular). If that has zero rows for this user we transparently
+    fall back to the older `snapchat_ads_daily` (campaign-level only).
+    """
+    sources = PROVIDER_SOURCES.get(provider, [])
+    for src in sources:
+        col_name = src["collection"]
+        scope_field = src["scope_field"]
+        q = {
+            "user_id": user_id,
+            "date": {"$gte": from_date, "$lte": to_date},
+        }
+        if scope_field and external_id:
+            q[scope_field] = external_id
+        # If the source REQUIRES scoping (per-account) and there's no
+        # external_id, we still query it — the caller will surface a
+        # warning about "merged across accounts".
+        rows: dict[str, float] = {}
+        any_row = False
+        async for row in db[col_name].find(q, {"_id": 0, "date": 1, "spend": 1}):
+            any_row = True
+            d = row.get("date")
+            if not d:
+                continue
+            rows[d] = rows.get(d, 0.0) + float(row.get("spend") or 0)
+        if any_row:
+            ordered = [{"date": d, "spend": round(s, 2)} for d, s in sorted(rows.items())]
+            return ordered, col_name
+    return [], (sources[0]["collection"] if sources else "")
+
+
 async def _get_account(db, user_id: str, cp_id: str) -> dict:
     cp = await db.counterparties.find_one(
         {"id": cp_id, "user_id": user_id, "kind": "ad_account"}, {"_id": 0},
@@ -192,6 +281,7 @@ async def _ledger_write(
         "created_at": _now(),
     }
     await db.ad_account_ledger.insert_one(doc)
+    doc.pop("_id", None)
     return doc
 
 
@@ -645,10 +735,420 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         )
         return {"ok": True, "results": results}
 
+    # ── POST /migration/preview (Iter-110) ────────────────────────────
+    @router.post("/migration/preview")
+    async def migration_preview(
+        payload: MigrationPreviewIn,
+        user: dict = Depends(current_user),
+    ):
+        """Read-only audit of what a historical migration WOULD do.
+
+        For every ad-account counterparty owned by the user we report:
+          • period spend (aggregated from the right provider collection),
+          • whether the account is linked via `external_account_id`,
+          • whether a previous sync has already touched the to_date,
+          • the current balance/debt, and per-day rows (capped to 60 for
+            UI brevity).
+
+        No DB writes occur. The merchant uses this to decide which
+        accounts to actually migrate.
+        """
+        from_d, to_d = payload.from_date, payload.to_date
+        accounts_report = []
+        totals = {"period_spend": 0.0, "accounts_ready": 0, "accounts_warned": 0}
+
+        async for cp in db.counterparties.find(
+            {"user_id": user["id"], "kind": "ad_account"}, {"_id": 0},
+        ).sort([("name", 1)]):
+            provider = cp.get("ad_provider")
+            ext_id = (cp.get("external_account_id") or "").strip() or None
+            supported = provider in PROVIDER_SOURCES
+            warnings: list[str] = []
+            blocked = False
+
+            if not supported:
+                warnings.append(f"المنصة {provider} غير مدعومة للمزامنة التلقائية — استخدم الرصيد الافتتاحي يدوياً.")
+                blocked = True
+                rows, source = [], ""
+            else:
+                rows, source = await _fetch_daily_spend(
+                    db, user["id"], provider, ext_id, from_d, to_d,
+                )
+                if not ext_id:
+                    # When the collection has a scope field (per-account),
+                    # absence of external_id means we'd lump every
+                    # sub-account into this one — flag & block by default.
+                    has_scope = any(s["scope_field"] for s in PROVIDER_SOURCES[provider])
+                    if has_scope:
+                        warnings.append(
+                            "هذا الحساب غير مربوط بـ Ad Account ID — لو فعّلت الترحيل ستندمج كل صرف هذه المنصة على هذا الحساب."
+                        )
+                        blocked = True
+                    elif provider == "tiktok":
+                        # tiktok collection has no scope at all; warn but
+                        # still allow IF the user has only ONE tiktok cp.
+                        tiktok_cps = await db.counterparties.count_documents({
+                            "user_id": user["id"], "kind": "ad_account",
+                            "ad_provider": "tiktok",
+                        })
+                        if tiktok_cps > 1:
+                            warnings.append(
+                                "بيانات TikTok الحالية لا تميّز بين الحسابات الفرعية. لو عندك أكثر من حساب TikTok، الترحيل سيلمّ كل الصرف على حساب واحد. (موصى به: استخدم الرصيد الافتتاحي يدوياً)."
+                            )
+                            blocked = True
+
+            period_spend = round(sum(r["spend"] for r in rows), 2)
+            days_with_data = len([r for r in rows if r["spend"] > 0])
+
+            already_synced = cp.get("last_auto_sync_date")
+            already_within_range = bool(
+                already_synced
+                and from_d <= already_synced <= to_d
+            )
+            if already_within_range:
+                warnings.append(
+                    f"تمت مزامنة هذا الحساب سابقاً حتى {already_synced} — الترحيل قد يكرر الصرف. راجع السجل قبل التنفيذ."
+                )
+
+            debt = await _current_open_debt(db, user["id"], cp["id"])
+            current_open_debt = 0.0
+            if debt:
+                current_open_debt = _round(
+                    (debt.get("expected_amount") or 0)
+                    - (debt.get("paid_amount") or 0)
+                )
+
+            accounts_report.append({
+                "id": cp["id"],
+                "name": cp["name"],
+                "ad_provider": provider,
+                "external_account_id": ext_id,
+                "current_balance": _round(cp.get("balance") or 0),
+                "current_open_debt": current_open_debt,
+                "debt_mode": cp.get("debt_mode") or "auto",
+                "last_auto_sync_date": already_synced,
+                "supported": supported,
+                "source_collection": source,
+                "period_spend": period_spend,
+                "days_with_data": days_with_data,
+                "first_date": rows[0]["date"] if rows else None,
+                "last_date":  rows[-1]["date"] if rows else None,
+                "daily_rows": rows[:60],     # cap the response
+                "daily_rows_truncated": len(rows) > 60,
+                "warnings": warnings,
+                "blocked_by_default": blocked,
+            })
+            totals["period_spend"] += period_spend
+            if blocked or not supported:
+                totals["accounts_warned"] += 1
+            elif period_spend > 0:
+                totals["accounts_ready"] += 1
+
+        return {
+            "from_date": from_d,
+            "to_date":   to_d,
+            "accounts":  accounts_report,
+            "totals": {k: (round(v, 2) if isinstance(v, float) else v)
+                       for k, v in totals.items()},
+        }
+
+    # ── POST /migration/apply (Iter-110) ──────────────────────────────
+    @router.post("/migration/apply")
+    async def migration_apply(
+        payload: MigrationApplyIn,
+        user: dict = Depends(current_user),
+    ):
+        """Apply the historical migration for the EXPLICITLY chosen
+        account_ids in `payload.account_ids`. Each posted spend row
+        respects the account's debt_mode (auto vs manual) — auto creates
+        / extends a dedicated liability, manual records spend only.
+
+        Returns per-account: rows_posted, total_spend_applied, debt_created,
+        balance_after, debt_after.
+        """
+        if not payload.account_ids:
+            raise HTTPException(400, "يجب اختيار حساب واحد على الأقل")
+        results: list[dict] = []
+
+        for cp_id in payload.account_ids:
+            cp = await db.counterparties.find_one(
+                {"id": cp_id, "user_id": user["id"], "kind": "ad_account"},
+                {"_id": 0},
+            )
+            if not cp:
+                results.append({"id": cp_id, "ok": False, "error": "not_found"})
+                continue
+            provider = cp.get("ad_provider")
+            if provider not in PROVIDER_SOURCES:
+                results.append({"id": cp_id, "name": cp["name"], "ok": False,
+                                "error": f"provider {provider} not supported"})
+                continue
+
+            ext_id = (cp.get("external_account_id") or "").strip() or None
+            rows, source = await _fetch_daily_spend(
+                db, user["id"], provider, ext_id, payload.from_date, payload.to_date,
+            )
+            rows = [r for r in rows if r["spend"] > 0]
+            if not rows:
+                results.append({
+                    "id": cp_id, "name": cp["name"], "ok": True,
+                    "rows_posted": 0, "total_spend": 0.0,
+                    "message": "لا توجد بيانات صرف في الفترة المختارة",
+                })
+                continue
+
+            mode = cp.get("debt_mode") or "auto"
+            total_spend = 0.0
+            total_debt_created = 0.0
+            rows_posted = 0
+
+            # Snapshot starting balance once; we'll keep computing
+            # incrementally so we don't re-read the document each row.
+            balance_now = float(cp.get("balance") or 0)
+
+            if payload.mode == "lump":
+                lump_total = round(sum(r["spend"] for r in rows), 2)
+                covered = min(lump_total, balance_now)
+                uncovered = round(lump_total - covered, 2)
+                balance_now = round(balance_now - covered, 2)
+                liab_id, debt_after = await _apply_uncovered(
+                    db, user["id"], cp, uncovered, mode, payload.to_date,
+                    description=f"ترحيل تاريخي ({payload.from_date} → {payload.to_date})",
+                    source_tag="ad_account_migration",
+                )
+                if uncovered > 0 and mode == "auto":
+                    total_debt_created += uncovered
+                await db.ad_account_ledger.insert_one({
+                    "id": str(uuid.uuid4()), "user_id": user["id"],
+                    "counterparty_id": cp_id, "type": "spend",
+                    "amount": lump_total, "balance_after": balance_now,
+                    "debt_after": debt_after,
+                    "related_liability_id": liab_id,
+                    "description": f"ترحيل تاريخي (lump) {payload.from_date} → {payload.to_date}",
+                    "breakdown": {"from_balance": covered, "uncovered": uncovered,
+                                  "mode": mode, "migration": True,
+                                  "source_collection": source,
+                                  "days_count": len(rows)},
+                    "date": payload.to_date, "created_at": _now(),
+                })
+                rows_posted = 1
+                total_spend = lump_total
+            else:
+                # daily mode — one ledger row per day
+                for r in rows:
+                    amt = round(float(r["spend"]), 2)
+                    covered = min(amt, balance_now)
+                    uncovered = round(amt - covered, 2)
+                    balance_now = round(balance_now - covered, 2)
+                    liab_id, debt_after = await _apply_uncovered(
+                        db, user["id"], cp, uncovered, mode, r["date"],
+                        description=f"ترحيل تاريخي يوم {r['date']}",
+                        source_tag="ad_account_migration",
+                    )
+                    if uncovered > 0 and mode == "auto":
+                        total_debt_created += uncovered
+                    await db.ad_account_ledger.insert_one({
+                        "id": str(uuid.uuid4()), "user_id": user["id"],
+                        "counterparty_id": cp_id, "type": "spend",
+                        "amount": amt, "balance_after": balance_now,
+                        "debt_after": debt_after,
+                        "related_liability_id": liab_id,
+                        "description": f"ترحيل تاريخي — {r['date']}",
+                        "breakdown": {"from_balance": covered, "uncovered": uncovered,
+                                      "mode": mode, "migration": True,
+                                      "source_collection": source},
+                        "date": r["date"], "created_at": _now(),
+                    })
+                    total_spend += amt
+                    rows_posted += 1
+
+            # Persist final balance + mark migration sync date
+            await db.counterparties.update_one(
+                {"id": cp_id, "user_id": user["id"]},
+                {"$set": {
+                    "balance": round(balance_now, 2),
+                    "last_migration_at": _now(),
+                    "last_migration_range": {"from": payload.from_date,
+                                             "to":   payload.to_date,
+                                             "mode": payload.mode},
+                    "updated_at": _now(),
+                }},
+            )
+            results.append({
+                "id": cp_id, "name": cp["name"], "ok": True,
+                "rows_posted": rows_posted,
+                "total_spend": round(total_spend, 2),
+                "debt_created": round(total_debt_created, 2),
+                "balance_after": round(balance_now, 2),
+                "mode_used": payload.mode,
+                "source_collection": source,
+            })
+        return {"ok": True, "results": results}
+
+    # ── PUT /{cp_id}/opening (Iter-110) ───────────────────────────────
+    @router.put("/{cp_id}/opening")
+    async def set_opening(
+        cp_id: str, payload: OpeningIn,
+        user: dict = Depends(current_user),
+    ):
+        """Set / refresh the manual opening figures for an ad account.
+
+        Each fields is optional — only fields present in the payload are
+        applied. Writes a ledger entry of type=opening for full audit.
+        """
+        cp = await _get_account(db, user["id"], cp_id)
+        upd: dict = {"updated_at": _now()}
+        ledger_changes: dict = {}
+
+        # 1) Opening balance — overwrites the current balance & records
+        #    a manual movement for transparency.
+        if payload.opening_balance is not None:
+            new_bal = _round(payload.opening_balance)
+            old_bal = _round(cp.get("balance") or 0)
+            upd["balance"] = new_bal
+            upd["opening_balance"] = new_bal
+            ledger_changes["balance_from"] = old_bal
+            ledger_changes["balance_to"] = new_bal
+
+        # 2) Opening debt — find existing opening-liability row to update
+        #    or create a new one when amount > 0.
+        if payload.opening_debt is not None:
+            new_debt = _round(payload.opening_debt)
+            existing = await db.liabilities.find_one(
+                {"user_id": user["id"], "kind": "ad_account",
+                 "counterparty_id": cp_id, "source": "ad_account_opening"},
+                {"_id": 0},
+            )
+            if new_debt <= 0 and existing:
+                # User wants opening debt cleared
+                await db.liabilities.delete_one(
+                    {"id": existing["id"], "user_id": user["id"]},
+                )
+                ledger_changes["opening_debt"] = 0.0
+            elif new_debt > 0:
+                due_date = payload.start_date or _now()[:10]
+                if existing:
+                    await db.liabilities.update_one(
+                        {"id": existing["id"], "user_id": user["id"]},
+                        {"$set": {
+                            "expected_amount": new_debt,
+                            "due_date": due_date,
+                            "status": "partial" if (existing.get("paid_amount") or 0) > 0 else "unpaid",
+                            "updated_at": _now(),
+                        }},
+                    )
+                else:
+                    await db.liabilities.insert_one({
+                        "id": str(uuid.uuid4()),
+                        "user_id": user["id"], "kind": "ad_account",
+                        "ad_provider": cp.get("ad_provider"),
+                        "ad_account_label": cp["name"],
+                        "counterparty_id": cp_id,
+                        "expected_amount": new_debt, "paid_amount": 0.0,
+                        "advance_deducted": 0.0,
+                        "due_date": due_date, "status": "unpaid",
+                        "description": f"رصيد افتتاحي — {cp['name']}",
+                        "auto_generated": False,
+                        "source": "ad_account_opening",
+                        "created_at": _now(), "updated_at": _now(),
+                    })
+                ledger_changes["opening_debt"] = new_debt
+
+        if payload.start_date is not None:
+            upd["opening_start_date"] = payload.start_date
+        if payload.method is not None:
+            upd["debt_mode"] = payload.method  # method = auto|manual
+        if payload.notes is not None:
+            upd["opening_notes"] = payload.notes
+
+        if upd:
+            await db.counterparties.update_one(
+                {"id": cp_id, "user_id": user["id"]}, {"$set": upd},
+            )
+
+        if ledger_changes:
+            await db.ad_account_ledger.insert_one({
+                "id": str(uuid.uuid4()), "user_id": user["id"],
+                "counterparty_id": cp_id, "type": "opening",
+                "amount": _round(payload.opening_balance or 0),
+                "balance_after": upd.get("balance", _round(cp.get("balance") or 0)),
+                "debt_after": _round(payload.opening_debt or 0),
+                "description": f"تعيين رصيد افتتاحي يدوي — {cp['name']}",
+                "notes": payload.notes or "",
+                "breakdown": ledger_changes,
+                "date": payload.start_date or _now()[:10],
+                "created_at": _now(),
+            })
+
+        cp_fresh = await _get_account(db, user["id"], cp_id)
+        return await _summarise(db, user["id"], cp_fresh)
+
     parent_router.include_router(router)
 
 
 # ── Module-level cron helpers (Iter-108) ───────────────────────────────
+async def _apply_uncovered(
+    db, user_id: str, cp: dict, uncovered: float, mode: str,
+    due_date: str, *,
+    description: str = "",
+    source_tag: str = "ad_account_engine",
+) -> tuple[Optional[str], float]:
+    """Extend/create an open ad-account liability for the uncovered
+    portion of spend. Returns (liability_id_or_None, remaining_debt).
+
+    Only runs the writes when uncovered > 0 AND mode == 'auto'.
+    Used by both /spend and the historical migration endpoint.
+    """
+    if uncovered <= 0:
+        return None, 0.0
+    if mode != "auto":
+        # Manual mode — leave the uncovered amount un-tracked as debt.
+        existing = await db.liabilities.find_one(
+            {"user_id": user_id, "kind": "ad_account",
+             "counterparty_id": cp["id"],
+             "status": {"$in": ["unpaid", "partial"]}},
+            {"_id": 0},
+        )
+        if existing:
+            return existing["id"], round(
+                (existing.get("expected_amount") or 0)
+                - (existing.get("paid_amount") or 0), 2,
+            )
+        return None, 0.0
+    existing = await db.liabilities.find_one(
+        {"user_id": user_id, "kind": "ad_account",
+         "counterparty_id": cp["id"],
+         "status": {"$in": ["unpaid", "partial"]}},
+        {"_id": 0},
+    )
+    if existing:
+        new_exp = round((existing.get("expected_amount") or 0) + uncovered, 2)
+        await db.liabilities.update_one(
+            {"id": existing["id"], "user_id": user_id},
+            {"$set": {"expected_amount": new_exp,
+                      "status": "partial" if (existing.get("paid_amount") or 0) > 0 else "unpaid",
+                      "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        return existing["id"], round(
+            new_exp - (existing.get("paid_amount") or 0), 2,
+        )
+    liab_id = str(uuid.uuid4())
+    await db.liabilities.insert_one({
+        "id": liab_id, "user_id": user_id, "kind": "ad_account",
+        "ad_provider": cp.get("ad_provider"),
+        "ad_account_label": cp["name"],
+        "counterparty_id": cp["id"],
+        "expected_amount": round(uncovered, 2), "paid_amount": 0.0,
+        "advance_deducted": 0.0,
+        "due_date": due_date, "status": "unpaid",
+        "description": description or f"مديونية {cp['name']}",
+        "auto_generated": True, "source": source_tag,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return liab_id, round(uncovered, 2)
+
+
 async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> list[dict]:
     """For each ad_account counterparty (supported providers only),
     aggregate daily-platform spend in the range and post it as a /spend

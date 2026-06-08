@@ -10,6 +10,44 @@
 
 ---
 
+## ✅ ITERATION 110 — Historical migration + opening balance for ad-accounts (Feb 2026)
+
+### Why
+المستخدم لديه بيانات صرف تاريخية موجودة فعلياً في `snapchat_account_daily / snapchat_ads_daily / meta_ads_daily / tiktok_ads_daily` ويريد ترحيلها كمديونيات منفصلة لكل حساب إعلاني، مع ضمان عدم دمج حسابات سناب المتعددة في حساب واحد، وإمكانية إضافة رصيد افتتاحي يدوي للحسابات غير القابلة للترحيل.
+
+### Backend (`ad_account_routes.py`)
+- **`POST /api/ad-accounts/migration/preview`** — تقرير معاينة قراءة فقط: لكل حساب يعرض إجمالي صرف الفترة، عدد الأيام، أول/آخر يوم، الصرف اليومي (cap 60 سطر)، الرصيد/المديونية الحالية، حالة الربط بـ `external_account_id`، آخر مزامنة، تنبيهات (account بدون external_id يُحجب افتراضياً).
+- **`POST /api/ad-accounts/migration/apply`** — يُنفّذ الترحيل **فقط للحسابات الواردة في `account_ids`** (تحكم صريح). يدعم وضعين:
+   - `daily`: سطر ledger مستقل لكل يوم (افتراضي، أدق).
+   - `lump`: سطر واحد إجمالي للفترة.
+   يحترم `debt_mode` (auto ينشئ liability، manual يسجّل الصرف فقط بدون مديونية).
+- **`PUT /api/ad-accounts/{cp_id}/opening`** — تعيين رصيد افتتاحي / مديونية افتتاحية / تاريخ بداية الاحتساب / طريقة احتساب. ينشئ liability منفصل بمصدر `ad_account_opening` (لا يتعارض مع liabilities الـ engine). تمرير `opening_debt=0` يحذف liability الافتتاحي.
+- **`PROVIDER_SOURCES`** dict جديد يحدّد المصدر الصحيح لكل منصة:
+   - Snapchat: `snapchat_account_daily` (مع ad_account_id) → fallback إلى `snapchat_ads_daily` لو لا توجد بيانات per-account.
+   - Meta: `meta_ads_daily.account_id`.
+   - TikTok: `tiktok_ads_daily` (لا يحتوي scope field → يحذّر المستخدم في الحالات متعددة الحسابات).
+
+### Frontend (`AdAccounts.jsx`)
+- زر جديد **"🔄 ترحيل المديونيات التاريخية"** (amber) في رأس الصفحة.
+- **`MigrationDialog`** بـ 3 خطوات:
+   1. اختيار الفترة (with explanation banner).
+   2. جدول معاينة لكل الحسابات + checkbox + radio لـ daily/lump + popover للصرف اليومي + عداد المحدد للترحيل + إجمالي الصرف.
+   3. نتائج الترحيل (rows_posted, total_spend, debt_created, balance_after).
+- زر **"⚙️ افتتاحي"** في كل بطاقة حساب → **`OpeningDialog`** يحفظ الرصيد/المديونية الافتتاحية يدوياً.
+- **حماية تلقائية**: الحسابات غير المربوطة بـ Ad Account ID تظهر بخلفية amber + checkbox معطّل بشكل افتراضي + تنبيه نصي. يجب على المستخدم تحديدها صراحة.
+
+### Tests — `tests/test_ad_account_migration_iter110.py` (7/7 ✅)
+1. `preview` يفصل الصرف لكل ad_account حسب `external_account_id` (no leak).
+2. حساب بدون `external_account_id` يُعلَّم `blocked_by_default=true`.
+3. apply يومي → سطر ledger لكل يوم.
+4. apply مجمّع → سطر ledger واحد.
+5. apply يحترم `debt_mode=manual` (لا liability).
+6. opening ينشئ liability بمصدر `ad_account_opening` (1 صف فقط) — تعيين `opening_debt=0` يحذفه.
+7. apply يلمس فقط `account_ids` الواردة في payload (no cross-account writes).
+
+---
+
+
 ## ✅ ITERATION 108 — Scheduled daily ad-account sync cron (Feb 2026)
 
 ### Why
