@@ -24,8 +24,12 @@ const fmt = (v) =>
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const PROVIDER_LABEL = {
-    snapchat: "Snapchat", tiktok: "TikTok", meta: "Meta",
+    snapchat: "Snapchat", tiktok: "TikTok", meta: "Meta / Facebook",
+    google: "Google Ads", twitter: "X (Twitter)", other: "أخرى",
 };
+const PROVIDER_OPTIONS = Object.entries(PROVIDER_LABEL);
+
+const SYNC_SUPPORTED = new Set(["snapchat", "tiktok", "meta"]);
 
 const LEDGER_LABEL = {
     topup:   { label: "تعبئة",            tone: "bg-emerald-50 text-emerald-800 border-emerald-200" },
@@ -37,6 +41,171 @@ const LEDGER_LABEL = {
 
 const inputCls =
     "w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-500";
+
+
+// ── Create dialog (inline new ad account) ───────────────────────────
+function CreateDialog({ open, onClose, onSaved }) {
+    const [form, setForm] = useState({ name: "", ad_provider: "snapchat", notes: "" });
+    const [busy, setBusy] = useState(false);
+    const [warning, setWarning] = useState(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setForm({ name: "", ad_provider: "snapchat", notes: "" });
+        setWarning(null);
+    }, [open]);
+
+    if (!open) return null;
+
+    const submit = async (force = false) => {
+        if (!form.name.trim()) { toast.error("الاسم مطلوب"); return; }
+        setBusy(true);
+        try {
+            await api.post("/ad-accounts", { ...form, name: form.name.trim(), force });
+            toast.success(`تمت إضافة "${form.name}"`);
+            onSaved();
+            onClose();
+        } catch (e) {
+            const d = e.response?.data?.detail;
+            if (typeof d === "object" && d?.message === "similar_name_exists") {
+                setWarning({ suggestion: d.suggestion });
+                toast.warning(`اسم مشابه موجود: ${d.suggestion?.name}`);
+            } else if (typeof d === "object" && d?.message === "duplicate") {
+                toast.error(`الاسم موجود مسبقاً: ${d.existing?.name}`);
+            } else {
+                toast.error(formatApiErrorDetail(d) || "تعذّر الإضافة");
+            }
+        } finally { setBusy(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4" data-testid="adacc-create-dialog">
+            <div dir="rtl" className="bg-white rounded-xl shadow-2xl w-full max-w-md my-8">
+                <form onSubmit={(e) => { e.preventDefault(); submit(false); }}>
+                    <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                        <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                            <Plus size={22} weight="duotone" className="text-violet-700" />
+                            إضافة حساب إعلاني
+                        </h2>
+                        <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-900 text-2xl">×</button>
+                    </div>
+                    <div className="p-5 space-y-3">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">المنصة *</label>
+                            <select value={form.ad_provider} onChange={(e) => { setForm({ ...form, ad_provider: e.target.value }); setWarning(null); }} className={inputCls} data-testid="adacc-create-provider">
+                                {PROVIDER_OPTIONS.map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">الاسم *</label>
+                            <input value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setWarning(null); }} placeholder="مثال: TikTok Account 1" className={inputCls} data-testid="adacc-create-name" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">ملاحظات</label>
+                            <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputCls} />
+                        </div>
+                        {warning && (
+                            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs space-y-2" data-testid="adacc-create-warning">
+                                <div>⚠️ يوجد حساب مشابه باسم <b>{warning.suggestion?.name}</b>. لو حساباً منفصلاً اضغط "أنشئ منفصلاً".</div>
+                                <button type="button" onClick={() => submit(true)} disabled={busy}
+                                    className="px-3 py-1.5 rounded-lg bg-rose-700 text-white text-xs font-bold disabled:opacity-50" data-testid="adacc-create-force-btn">
+                                    أنشئ منفصلاً رغم التشابه
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-bold">إلغاء</button>
+                        <button type="submit" disabled={busy} className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50" data-testid="adacc-create-submit">
+                            {busy ? "جاري…" : "إضافة"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+
+// ── Sync dialog (pull spend from platform daily ads) ────────────────
+function SyncDialog({ row, open, onClose, onSaved }) {
+    const monthStart = () => new Date().toISOString().slice(0, 8) + "01";
+    const [form, setForm] = useState({ from_date: monthStart(), to_date: todayIso() });
+    const [busy, setBusy] = useState(false);
+
+    useEffect(() => {
+        if (!open) return;
+        setForm({ from_date: monthStart(), to_date: todayIso() });
+    }, [open]);
+
+    if (!open || !row) return null;
+    const supported = SYNC_SUPPORTED.has(row.ad_provider);
+
+    const submit = async (e) => {
+        e?.preventDefault?.();
+        setBusy(true);
+        try {
+            const { data } = await api.post(
+                `/ad-accounts/${row.id}/sync-from-platform`,
+                { from_date: form.from_date, to_date: form.to_date },
+            );
+            if (data.spend === 0) {
+                toast.info("لا توجد بيانات صرف في الفترة المختارة");
+            } else {
+                let msg = `تمت المزامنة: صرف ${fmt(data.amount)} ر.س`;
+                if (data.debt_created > 0) msg += ` + مديونية ${fmt(data.debt_created)}`;
+                toast.success(msg);
+            }
+            onSaved();
+            onClose();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل");
+        } finally { setBusy(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4" data-testid="adacc-sync-dialog">
+            <div dir="rtl" className="bg-white rounded-xl shadow-2xl w-full max-w-md my-8">
+                <form onSubmit={submit}>
+                    <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                        <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                            <ArrowsClockwise size={22} weight="duotone" className="text-violet-700" />
+                            مزامنة من {PROVIDER_LABEL[row.ad_provider]}
+                        </h2>
+                        <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-900 text-2xl">×</button>
+                    </div>
+                    <div className="p-5 space-y-3">
+                        {!supported ? (
+                            <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900">
+                                ⚠️ المزامنة التلقائية تعمل حالياً مع Snapchat / TikTok / Meta فقط. لـ {PROVIDER_LABEL[row.ad_provider]} استخدم "تسجيل صرف" يدوياً.
+                            </div>
+                        ) : (
+                            <div className="bg-violet-50 border border-violet-200 rounded p-3 text-xs text-violet-900">
+                                💡 سيتم جمع كل الصرف اليومي من بيانات {PROVIDER_LABEL[row.ad_provider]} في الفترة المختارة وتسجيله صرفاً واحداً على هذا الحساب.
+                            </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1.5">من تاريخ</label>
+                                <input type="date" value={form.from_date} onChange={(e) => setForm({ ...form, from_date: e.target.value })} className={inputCls} data-testid="adacc-sync-from" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1.5">إلى تاريخ</label>
+                                <input type="date" value={form.to_date} onChange={(e) => setForm({ ...form, to_date: e.target.value })} className={inputCls} data-testid="adacc-sync-to" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-bold">إلغاء</button>
+                        <button type="submit" disabled={busy || !supported} className="px-4 py-2 rounded-lg bg-violet-700 text-white text-sm font-bold hover:bg-violet-800 disabled:opacity-50" data-testid="adacc-sync-submit">
+                            {busy ? "جاري…" : "مزامنة الآن"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
 
 
 // ── Topup dialog ────────────────────────────────────────────────────
@@ -285,6 +454,8 @@ export default function AdAccounts() {
     const [topupFor, setTopupFor] = useState(null);
     const [spendFor, setSpendFor] = useState(null);
     const [ledgerFor, setLedgerFor] = useState(null);
+    const [syncFor, setSyncFor] = useState(null);
+    const [createOpen, setCreateOpen] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -315,14 +486,19 @@ export default function AdAccounts() {
 
     return (
         <div dir="rtl" data-testid="ad-accounts-page" className="space-y-5">
-            <div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 flex items-center gap-2">
-                    <ChartLineUp size={28} weight="duotone" className="text-violet-700" />
-                    الحسابات الإعلانية والمديونية
-                </h1>
-                <p className="text-sm text-slate-500 mt-1">
-                    رصيد المنصة الإعلانية = أصل · مديونية تلقائية تنشأ عند تجاوز الصرف للرصيد. الصرف يبقى مصروف إعلاني واحد دون تكرار.
-                </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 flex items-center gap-2">
+                        <ChartLineUp size={28} weight="duotone" className="text-violet-700" />
+                        الحسابات الإعلانية والمديونية
+                    </h1>
+                    <p className="text-sm text-slate-500 mt-1">
+                        رصيد المنصة الإعلانية = أصل · مديونية تلقائية تنشأ عند تجاوز الصرف للرصيد. الصرف يبقى مصروف إعلاني واحد دون تكرار.
+                    </p>
+                </div>
+                <button onClick={() => setCreateOpen(true)} className="self-start px-4 py-2.5 rounded-lg bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 flex items-center gap-2" data-testid="adacc-add-btn">
+                    <Plus size={16} /> إضافة حساب إعلاني
+                </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -420,6 +596,8 @@ export default function AdAccounts() {
             <TopupDialog row={topupFor} banks={banks} open={!!topupFor} onClose={() => setTopupFor(null)} onSaved={load} />
             <SpendDialog row={spendFor} open={!!spendFor} onClose={() => setSpendFor(null)} onSaved={load} />
             <LedgerDialog row={ledgerFor} open={!!ledgerFor} onClose={() => setLedgerFor(null)} />
+            <SyncDialog row={syncFor} open={!!syncFor} onClose={() => setSyncFor(null)} onSaved={load} />
+            <CreateDialog open={createOpen} onClose={() => setCreateOpen(false)} onSaved={load} />
         </div>
     );
 }

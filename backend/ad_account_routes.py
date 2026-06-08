@@ -73,6 +73,19 @@ class SettingsIn(BaseModel):
     debt_mode: Literal["auto", "manual"]
 
 
+# Iter-107 — inline ad-account create + daily-platform sync
+class CreateAdAccountIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=160)
+    ad_provider: Literal["snapchat", "tiktok", "meta", "google", "twitter", "other"]
+    notes: Optional[str] = ""
+    force: bool = False
+
+
+class SyncFromPlatformIn(BaseModel):
+    from_date: str = Field(..., min_length=10, max_length=10)
+    to_date:   str = Field(..., min_length=10, max_length=10)
+
+
 # ── Helpers ────────────────────────────────────────────────────────────
 async def _get_account(db, user_id: str, cp_id: str) -> dict:
     cp = await db.counterparties.find_one(
@@ -446,5 +459,136 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             "mode": mode,
             "ad_account": await _summarise(db, user["id"], cp_fresh),
         }
+
+    # ── POST /{id}/sync-from-platform (Iter-107) ──────────────────────
+    @router.post("/{cp_id}/sync-from-platform")
+    async def sync_from_platform(
+        cp_id: str, payload: SyncFromPlatformIn,
+        user: dict = Depends(current_user),
+    ):
+        cp = await _get_account(db, user["id"], cp_id)
+        provider = cp.get("ad_provider")
+        collection_map = {
+            "snapchat": "snapchat_ads_daily",
+            "tiktok":   "tiktok_ads_daily",
+            "meta":     "meta_ads_daily",
+        }
+        col_name = collection_map.get(provider)
+        if not col_name:
+            raise HTTPException(
+                400,
+                f"المزامنة التلقائية غير متاحة لمنصة {provider}. استخدم /spend يدوياً.",
+            )
+        # Sum spend in the date range
+        cur = db[col_name].find(
+            {
+                "user_id": user["id"],
+                "date": {"$gte": payload.from_date, "$lte": payload.to_date},
+            },
+            {"_id": 0, "spend": 1, "date": 1},
+        )
+        total_spend = 0.0
+        days_seen = set()
+        async for row in cur:
+            total_spend += float(row.get("spend") or 0)
+            days_seen.add(row.get("date"))
+        total_spend = _round(total_spend)
+        if total_spend <= 0:
+            return {
+                "ok": True, "spend": 0.0, "days_synced": 0,
+                "message": "لا توجد بيانات صرف في الفترة المختارة",
+                "ad_account": await _summarise(db, user["id"], cp),
+            }
+
+        # Reuse the existing /spend logic by calling record_spend manually.
+        spend_payload = SpendIn(
+            amount=total_spend,
+            spend_date=payload.to_date,
+            description=f"مزامنة تلقائية من {provider} "
+                        f"({payload.from_date} → {payload.to_date})",
+            notes=f"مدمج عبر sync-from-platform · {len(days_seen)} يوم",
+        )
+        return await record_spend(cp_id, spend_payload, user)
+
+    # ── POST / (create new ad account inline — Iter-107) ──────────────
+    @router.post("")
+    async def create_ad_account(
+        payload: CreateAdAccountIn,
+        user: dict = Depends(current_user),
+    ):
+        """Inline shortcut — creates a counterparty(kind=ad_account)
+        + initialises balance=0 and debt_mode=auto. Re-uses the
+        counterparties duplicate-guard helpers."""
+        from counterparties_routes import _norm, _fuzzy_match
+
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(400, "الاسم مطلوب")
+        name_lower = _norm(name)
+
+        # Exact duplicate inside the same provider
+        existing = await db.counterparties.find_one(
+            {"user_id": user["id"], "kind": "ad_account",
+             "ad_provider": payload.ad_provider, "name_lower": name_lower},
+            {"_id": 0},
+        )
+        if existing:
+            raise HTTPException(
+                409,
+                {"message": "duplicate",
+                 "existing": {"id": existing["id"], "name": existing["name"]}},
+            )
+
+        # Fuzzy warn (within same provider) unless force=True
+        if not payload.force:
+            candidates = []
+            async for d in db.counterparties.find(
+                {"user_id": user["id"], "kind": "ad_account",
+                 "ad_provider": payload.ad_provider},
+                {"_id": 0, "id": 1, "name": 1, "name_lower": 1, "ad_provider": 1},
+            ):
+                candidates.append(d)
+            match = _fuzzy_match(name, candidates)
+            if match:
+                raise HTTPException(
+                    409,
+                    {"message": "similar_name_exists",
+                     "suggestion": {"id": match["id"], "name": match["name"],
+                                    "ad_provider": match.get("ad_provider")}},
+                )
+
+        now = _now()
+        doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "kind": "ad_account",
+            "ad_provider": payload.ad_provider,
+            "name": name,
+            "name_lower": name_lower,
+            "notes": payload.notes or "",
+            "balance": 0.0,
+            "debt_mode": "auto",
+            "created_at": now,
+            "updated_at": now,
+        }
+        await db.counterparties.insert_one(doc)
+        return await _summarise(db, user["id"], doc)
+
+    # ── DELETE /{cp_id} ───────────────────────────────────────────────
+    @router.delete("/{cp_id}")
+    async def delete_ad_account(cp_id: str, user: dict = Depends(current_user)):
+        cp = await _get_account(db, user["id"], cp_id)
+        # Refuse delete when there's open debt or a non-zero balance.
+        debt = await _current_open_debt(db, user["id"], cp_id)
+        if debt:
+            raise HTTPException(
+                400, "لا يمكن الحذف. الحساب عليه مديونية مفتوحة — سدّدها أولاً.",
+            )
+        if _round(cp.get("balance") or 0) > 0:
+            raise HTTPException(
+                400, "لا يمكن الحذف. الحساب فيه رصيد متبقي.",
+            )
+        await db.counterparties.delete_one({"id": cp_id, "user_id": user["id"]})
+        return {"ok": True}
 
     parent_router.include_router(router)

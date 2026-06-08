@@ -27,7 +27,8 @@ from auth import get_current_user_from_db
 
 
 COUNTERPARTY_KINDS = ("supplier", "ad_account", "general")
-AD_PROVIDERS = ("snapchat", "tiktok", "meta")
+# Iter-107 — extended providers. Order matters for the UI dropdown.
+AD_PROVIDERS = ("snapchat", "tiktok", "meta", "google", "twitter", "other")
 
 
 def _now() -> str:

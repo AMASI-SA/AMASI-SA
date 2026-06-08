@@ -10,6 +10,41 @@
 
 ---
 
+## ✅ ITERATION 107 — Ad-account inline create + multi-provider + platform sync (Feb 2026)
+
+### Why
+1. السماح بإضافة حساب إعلاني جديد مباشرة من صفحة `/ad-accounts` بدون التنقل لـ counterparties.
+2. توسيع قائمة المنصات المدعومة لتشمل أي منصة إعلانية مستقبلية.
+3. ربط نظام المديونية مع بيانات الصرف اليومية الموجودة فعلياً في `*_ads_daily`.
+
+### Backend (`ad_account_routes.py`)
+- **`POST /api/ad-accounts`** — إنشاء حساب إعلاني inline مع fuzzy duplicate guard (تحذير لا دمج تلقائي).
+- **`DELETE /api/ad-accounts/{cp_id}`** — حذف مرفوض لو فيه رصيد أو مديونية مفتوحة.
+- **`POST /api/ad-accounts/{cp_id}/sync-from-platform`** — يجمع الصرف اليومي من collection المنصة المطابقة (`snapchat_ads_daily` / `tiktok_ads_daily` / `meta_ads_daily`) في فترة محددة ويُسجِّله كصرف واحد عبر منطق `/spend` الموجود (تطبق نفس قواعد المديونية auto/manual).
+- **`AD_PROVIDERS` extended**: snapchat, tiktok, meta, **google**, **twitter**, **other** (نفس الامتداد في `counterparties_routes` و `liabilities_routes` للتوافق التام).
+
+### Frontend (`AdAccounts.jsx`)
+- **زر "+ إضافة حساب إعلاني"** في رأس الصفحة → يفتح Dialog مع:
+  - قائمة المنصات الـ 6.
+  - حقل اسم + ملاحظات.
+  - Fuzzy warning مع زر "أنشئ منفصلاً" عند التشابه.
+- **زر "🔄 مزامنة"** يظهر فقط على كروت Snap/TikTok/Meta → يفتح Dialog لاختيار فترة وجمع الصرف.
+- لافتة "غير مدعومة" للمنصات بدون daily-spend collection (Google/X/Other) — يُطلب من المستخدم استخدام "تسجيل صرف" يدوياً.
+
+### Tests — `tests/test_ad_account_create_sync_iter107.py` (7/7 ✅)
+1. إنشاء inline لكل المنصات الـ 6.
+2. رفض الاسم المتطابق داخل نفس المنصة (409 duplicate).
+3. السماح بنفس الاسم في منصات مختلفة (مع توضيح أنه يجب تمييز الأسماء).
+4. مزامنة TikTok: 3 أيام × 100/150/50 → صرف 300 + مديونية 300.
+5. مزامنة بدون بيانات → 0 spend مع رسالة واضحة.
+6. منصة غير مدعومة (Google) → 400.
+7. الحذف مرفوض مع رصيد ومديونية، مقبول بعد التصفير.
+
+Plus full Iter-106 regression (8/8) — 15 tests pass together.
+
+---
+
+
 ## ✅ ITERATION 106 — Ad-Account Balance + Auto-Debt Engine (Feb 2026)
 
 ### Why

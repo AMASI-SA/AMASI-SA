@@ -48,7 +48,7 @@ LIABILITY_KINDS = (
     "supplier", "receivable",
 )
 LIABILITY_STATUSES = ("unpaid", "partial", "paid")
-AD_PROVIDERS = ("snapchat", "tiktok", "meta")
+AD_PROVIDERS = ("snapchat", "tiktok", "meta", "google", "twitter", "other")
 RECEIVABLE_PARTY_TYPES = ("customer", "employee", "person", "company")
 
 
