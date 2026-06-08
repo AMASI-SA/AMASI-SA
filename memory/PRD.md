@@ -10,6 +10,37 @@
 
 ---
 
+## ✅ ITERATION 112 — Edit existing topup (amount + date) (Feb 2026)
+
+### Why
+المستخدم يحتاج تعديل عمليات تعبئة سابقة (المبلغ والتاريخ) عند الخطأ، بدلاً من حذف+إعادة إنشاء يدوياً.
+
+### Backend
+- **`PUT /api/ad-accounts/{cp_id}/topup/{ledger_id}`** (`TopupEditIn` payload):
+  - يعكس الـ topup الأصلي (يستعيد رصيد البنك، يخفّض رصيد الحساب الإعلاني، يستعيد paid_amount على الـ liability).
+  - يعيد تطبيق المبلغ/التاريخ الجديد بنفس منطق POST /topup (نفس الـ debt allocation).
+  - يحدّث **نفس** الـ ledger row (يحفظ الـ id) ويسجّل `previous_amount` في الـ breakdown للـ audit.
+  - يرفض تعديل rows من نوع غير `topup` (400) أو ledger غير موجود (404).
+
+### Frontend (`LedgerDialog`)
+- زر "✏️ تعديل" inline على كل row من نوع topup فقط.
+- الضغط يحوّل الصف لحالة edit مع حقلي number + date inline.
+- زر "✓ حفظ" يستدعي PUT ويعيد تحميل السجل وبطاقة الحساب الإعلاني.
+- وسم "✏️ مُعدَّل (كان X ر.س)" يظهر بعد التعديل تحت الوصف.
+
+### Tests — `tests/test_ad_account_topup_edit_iter112.py` (5/5 ✅)
+1. زيادة المبلغ — يخفّض البنك إضافياً ويعكس على الحساب الإعلاني.
+2. تخفيض المبلغ — يرجّع الفرق للبنك ويخفّض الحساب الإعلاني.
+3. تغيير التاريخ فقط — ledger.date + bank_tx.transaction_date يتحدّثان.
+4. رفض تعديل سطر غير topup (مثل spend) برسالة 400.
+5. ledger_id غير موجود → 404.
+
+### Field-naming fix
+- اكتشاف bug ثانوي: `_ledger_write` يخزّن `related_transaction_id` لكن code جديد استخدم `related_tx_id`. تم توحيد القراءة على `related_transaction_id` مع fallback للاسم القديم للقوة.
+
+---
+
+
 ## ✅ ITERATION 111 — Auto-routing of bank-transfer revenue to actual banks (Feb 2026)
 
 ### Why

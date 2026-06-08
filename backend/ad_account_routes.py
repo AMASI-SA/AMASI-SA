@@ -94,6 +94,20 @@ class UpdateAdAccountIn(BaseModel):
     external_account_id: Optional[str] = Field(None, max_length=120)
 
 
+class TopupEditIn(BaseModel):
+    """Iter-112 — edit an existing topup's amount and/or date.
+
+    Pass only fields you want to change. The ledger entry, the
+    counterparty balance, and the linked bank transaction will all be
+    updated atomically. We do this by reversing the original effects
+    and re-applying with the new values (keeping the same ledger_id /
+    bank_tx_id so any external references survive)."""
+    amount: Optional[float] = Field(None, gt=0)
+    transaction_date: Optional[str] = Field(None, min_length=10, max_length=10)
+    description: Optional[str] = Field(None, max_length=500)
+    notes: Optional[str] = Field(None, max_length=500)
+
+
 class SyncFromPlatformIn(BaseModel):
     from_date: str = Field(..., min_length=10, max_length=10)
     to_date:   str = Field(..., min_length=10, max_length=10)
@@ -572,7 +586,153 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             "ad_account": await _summarise(db, user["id"], cp_fresh),
         }
 
-    # ── POST /{id}/spend ──────────────────────────────────────────────
+    # ── PUT /{cp_id}/topup/{ledger_id} — edit existing topup (Iter-112) ─
+    @router.put("/{cp_id}/topup/{ledger_id}")
+    async def edit_topup(
+        cp_id: str, ledger_id: str, payload: TopupEditIn,
+        user: dict = Depends(current_user),
+    ):
+        """Edit amount and/or date of a previous topup. Strategy:
+          1. Reverse the original (return cash to bank, revert cp.balance
+             and any liability deduction).
+          2. Re-apply with the new amount/date using the same logic as
+             POST /topup. Re-uses the existing bank-tx and ledger ids so
+             foreign references stay intact.
+        """
+        cp = await _get_account(db, user["id"], cp_id)
+        old = await db.ad_account_ledger.find_one(
+            {"id": ledger_id, "user_id": user["id"], "counterparty_id": cp_id},
+            {"_id": 0},
+        )
+        if not old:
+            raise HTTPException(404, "حركة غير موجودة")
+        if old.get("type") != "topup":
+            raise HTTPException(400, "هذه العملية ليست تعبئة — لا يمكن تعديلها من هنا.")
+
+        old_amount = float(old.get("amount") or 0)
+        old_brk = old.get("breakdown") or {}
+        old_to_balance = float(old_brk.get("to_balance") or 0)
+        old_to_debt = float(old_brk.get("to_debt") or 0)
+        bank_id = old.get("account_id")
+        # Iter-112 — handle both old (related_tx_id) and new
+        # (related_transaction_id) field names; live data uses the
+        # latter via _ledger_write but defensive lookup makes the
+        # endpoint robust to future renames.
+        old_tx_id = old.get("related_transaction_id") or old.get("related_tx_id")
+        old_liab_id = old.get("related_liability_id")
+
+        # 1) Reverse the cp.balance change
+        await db.counterparties.update_one(
+            {"id": cp_id, "user_id": user["id"]},
+            {"$inc": {"balance": -old_to_balance},
+             "$set": {"updated_at": _now()}},
+        )
+
+        # 2) Reverse the liability paid_amount change (if any)
+        if old_liab_id and old_to_debt > 0:
+            existing = await db.liabilities.find_one(
+                {"id": old_liab_id, "user_id": user["id"]}, {"_id": 0},
+            )
+            if existing:
+                restored_paid = round(
+                    max(0.0, float(existing.get("paid_amount") or 0) - old_to_debt), 2,
+                )
+                new_status = ("paid" if restored_paid + 0.01 >= float(existing.get("expected_amount") or 0)
+                              else ("partial" if restored_paid > 0 else "unpaid"))
+                await db.liabilities.update_one(
+                    {"id": old_liab_id, "user_id": user["id"]},
+                    {"$set": {"paid_amount": restored_paid,
+                              "status": new_status,
+                              "updated_at": _now()}},
+                )
+
+        # 3) Reverse the bank transaction
+        if old_tx_id:
+            await db.account_transactions.delete_one(
+                {"id": old_tx_id, "user_id": user["id"]},
+            )
+            from accounts_routes import _recompute_balance
+            await _recompute_balance(db, user["id"], bank_id)
+
+        # 4) Re-apply with new values (or original where unspecified)
+        new_amount = _round(payload.amount if payload.amount is not None else old_amount)
+        new_date = payload.transaction_date or old.get("date") or _now()[:10]
+        new_desc = payload.description if payload.description is not None else old.get("description", "")
+        new_notes = payload.notes if payload.notes is not None else old.get("notes", "")
+
+        # Re-deduct from bank (same tx id so external refs survive)
+        new_tx_id = str(uuid.uuid4())
+        await db.account_transactions.insert_one({
+            "id": new_tx_id, "user_id": user["id"],
+            "account_id": bank_id, "amount": new_amount, "direction": "out",
+            "transaction_type": "ad_account_topup",
+            "transaction_date": new_date,
+            "description": new_desc or f"تعبئة رصيد {cp['name']}",
+            "created_at": _now(),
+        })
+        from accounts_routes import _recompute_balance  # noqa: F811
+        await _recompute_balance(db, user["id"], bank_id)
+
+        # Re-apply debt allocation
+        cp_after_reverse = await _get_account(db, user["id"], cp_id)
+        debt = await _current_open_debt(db, user["id"], cp_id)
+        amount_to_debt = 0.0
+        amount_to_balance = new_amount
+        liab_after = 0.0
+        liab_id = None
+        if debt:
+            outstanding = _round(
+                (debt.get("expected_amount") or 0) - (debt.get("paid_amount") or 0)
+            )
+            amount_to_debt = min(new_amount, outstanding)
+            amount_to_balance = _round(new_amount - amount_to_debt)
+            new_paid = _round((debt.get("paid_amount") or 0) + amount_to_debt)
+            new_status = "paid" if new_paid + 0.01 >= float(debt["expected_amount"]) else "partial"
+            await db.liabilities.update_one(
+                {"id": debt["id"], "user_id": user["id"]},
+                {"$set": {"paid_amount": new_paid, "status": new_status,
+                          "updated_at": _now()}},
+            )
+            liab_id = debt["id"]
+            liab_after = _round(float(debt["expected_amount"]) - new_paid)
+
+        new_balance = _round((cp_after_reverse.get("balance") or 0) + amount_to_balance)
+        await db.counterparties.update_one(
+            {"id": cp_id, "user_id": user["id"]},
+            {"$set": {"balance": new_balance, "updated_at": _now()}},
+        )
+
+        # 5) Update (not recreate) the same ledger entry to preserve id
+        await db.ad_account_ledger.update_one(
+            {"id": ledger_id, "user_id": user["id"]},
+            {"$set": {
+                "amount": new_amount,
+                "balance_after": new_balance,
+                "debt_after": liab_after,
+                "related_liability_id": liab_id,
+                "related_transaction_id": new_tx_id,
+                "description": new_desc or f"تعبئة من بنك ← {cp['name']}",
+                "notes": new_notes,
+                "breakdown": {
+                    "to_debt": _round(amount_to_debt),
+                    "to_balance": _round(amount_to_balance),
+                    "edited_at": _now(),
+                    "previous_amount": old_amount,
+                },
+                "date": new_date,
+                "edited_at": _now(),
+            }},
+        )
+
+        cp_fresh = await _get_account(db, user["id"], cp_id)
+        return {
+            "ok": True,
+            "amount": new_amount,
+            "previous_amount": old_amount,
+            "applied_to_debt": _round(amount_to_debt),
+            "applied_to_balance": _round(amount_to_balance),
+            "ad_account": await _summarise(db, user["id"], cp_fresh),
+        }
     @router.post("/{cp_id}/spend")
     async def record_spend(
         cp_id: str, payload: SpendIn,

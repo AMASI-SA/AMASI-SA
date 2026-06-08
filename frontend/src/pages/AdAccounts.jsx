@@ -406,18 +406,55 @@ function SpendDialog({ row, open, onClose, onSaved }) {
 
 
 // ── Ledger viewer ────────────────────────────────────────────────────
-function LedgerDialog({ row, open, onClose }) {
+function LedgerDialog({ row, open, onClose, onSaved }) {
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState({ amount: "", transaction_date: "" });
+    const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        if (!open || !row) return;
+    const load = () => {
+        if (!row) return;
         setLoading(true);
         api.get(`/ad-accounts/${row.id}/ledger`)
             .then((r) => setRows(r.data?.items || []))
             .catch((e) => toast.error(formatApiErrorDetail(e.response?.data?.detail)))
             .finally(() => setLoading(false));
+    };
+
+    useEffect(() => {
+        if (!open || !row) return;
+        load();
+        setEditingId(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, row]);
+
+    const startEdit = (r) => {
+        setEditingId(r.id);
+        setEditForm({
+            amount: String(r.amount ?? ""),
+            transaction_date: r.date || todayIso(),
+        });
+    };
+
+    const saveEdit = async () => {
+        if (!editingId) return;
+        const amt = Number(editForm.amount);
+        if (!amt || amt <= 0) { toast.error("المبلغ يجب أن يكون أكبر من صفر"); return; }
+        setSaving(true);
+        try {
+            const { data } = await api.put(
+                `/ad-accounts/${row.id}/topup/${editingId}`,
+                { amount: amt, transaction_date: editForm.transaction_date }
+            );
+            toast.success(`تم التعديل (${fmt(data.previous_amount)} → ${fmt(data.amount)} ر.س)`);
+            setEditingId(null);
+            load();
+            onSaved?.();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التعديل");
+        } finally { setSaving(false); }
+    };
 
     if (!open || !row) return null;
     return (
@@ -443,19 +480,67 @@ function LedgerDialog({ row, open, onClose }) {
                                         <th className="text-right p-2 font-bold">الرصيد بعد</th>
                                         <th className="text-right p-2 font-bold">المديونية بعد</th>
                                         <th className="text-right p-2 font-bold">الوصف</th>
+                                        <th className="text-right p-2 font-bold w-20"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {rows.map((r) => {
                                         const t = LEDGER_LABEL[r.type] || LEDGER_LABEL.manual;
+                                        const isEditing = editingId === r.id;
+                                        const isEditableTopup = r.type === "topup";
                                         return (
-                                            <tr key={r.id} className="border-t border-slate-100" data-testid={`adacc-ledger-row-${r.id}`}>
-                                                <td className="p-2 text-xs">{r.date}</td>
-                                                <td className="p-2"><span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${t.tone}`}>{t.label}</span></td>
-                                                <td className="p-2 num text-xs font-bold text-slate-900">{fmt(r.amount)}</td>
-                                                <td className="p-2 num text-xs text-emerald-700">{fmt(r.balance_after)}</td>
-                                                <td className="p-2 num text-xs text-rose-700">{fmt(r.debt_after)}</td>
-                                                <td className="p-2 text-xs text-slate-600">{r.description || "—"}</td>
+                                            <tr key={r.id} className={`border-t border-slate-100 ${isEditing ? "bg-amber-50/40" : ""}`} data-testid={`adacc-ledger-row-${r.id}`}>
+                                                {isEditing ? (
+                                                    <>
+                                                        <td className="p-2">
+                                                            <input type="date" value={editForm.transaction_date}
+                                                                onChange={(e) => setEditForm({ ...editForm, transaction_date: e.target.value })}
+                                                                className="w-full px-2 py-1 text-xs rounded border border-slate-300"
+                                                                data-testid={`adacc-ledger-edit-date-${r.id}`} />
+                                                        </td>
+                                                        <td className="p-2"><span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${t.tone}`}>{t.label}</span></td>
+                                                        <td className="p-2">
+                                                            <input type="number" min="0.01" step="0.01" value={editForm.amount}
+                                                                onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                                                                className="w-24 px-2 py-1 text-xs rounded border border-slate-300 num"
+                                                                data-testid={`adacc-ledger-edit-amount-${r.id}`} />
+                                                        </td>
+                                                        <td className="p-2 num text-xs text-emerald-700">{fmt(r.balance_after)}</td>
+                                                        <td className="p-2 num text-xs text-rose-700">{fmt(r.debt_after)}</td>
+                                                        <td className="p-2 text-xs text-slate-600">{r.description || "—"}</td>
+                                                        <td className="p-2 flex gap-1">
+                                                            <button onClick={saveEdit} disabled={saving} className="px-2 py-1 rounded bg-emerald-600 text-white text-[10px] font-bold hover:bg-emerald-700 disabled:opacity-50" data-testid={`adacc-ledger-save-${r.id}`}>
+                                                                {saving ? "..." : "✓ حفظ"}
+                                                            </button>
+                                                            <button onClick={() => setEditingId(null)} className="px-2 py-1 rounded bg-slate-200 text-slate-700 text-[10px] font-bold hover:bg-slate-300" data-testid={`adacc-ledger-cancel-${r.id}`}>
+                                                                ✕
+                                                            </button>
+                                                        </td>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <td className="p-2 text-xs">{r.date}</td>
+                                                        <td className="p-2"><span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${t.tone}`}>{t.label}</span></td>
+                                                        <td className="p-2 num text-xs font-bold text-slate-900">{fmt(r.amount)}</td>
+                                                        <td className="p-2 num text-xs text-emerald-700">{fmt(r.balance_after)}</td>
+                                                        <td className="p-2 num text-xs text-rose-700">{fmt(r.debt_after)}</td>
+                                                        <td className="p-2 text-xs text-slate-600">
+                                                            {r.description || "—"}
+                                                            {r.breakdown?.edited_at && (
+                                                                <span className="block text-[10px] text-amber-700 mt-0.5">
+                                                                    ✏️ مُعدَّل (كان {fmt(r.breakdown.previous_amount)})
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-2">
+                                                            {isEditableTopup && (
+                                                                <button onClick={() => startEdit(r)} className="px-2 py-1 rounded bg-amber-100 text-amber-800 text-[10px] font-bold hover:bg-amber-200" data-testid={`adacc-ledger-edit-${r.id}`}>
+                                                                    ✏️ تعديل
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </>
+                                                )}
                                             </tr>
                                         );
                                     })}
@@ -1158,7 +1243,7 @@ export default function AdAccounts() {
 
             <TopupDialog row={topupFor} banks={banks} open={!!topupFor} onClose={() => setTopupFor(null)} onSaved={load} />
             <SpendDialog row={spendFor} open={!!spendFor} onClose={() => setSpendFor(null)} onSaved={load} />
-            <LedgerDialog row={ledgerFor} open={!!ledgerFor} onClose={() => setLedgerFor(null)} />
+            <LedgerDialog row={ledgerFor} open={!!ledgerFor} onClose={() => setLedgerFor(null)} onSaved={load} />
             <SyncDialog row={syncFor} open={!!syncFor} onClose={() => setSyncFor(null)} onSaved={load} />
             <CreateDialog open={createOpen} onClose={() => setCreateOpen(false)} onSaved={load} />
             <MigrationDialog open={migrationOpen} onClose={() => setMigrationOpen(false)} onSaved={load} />
