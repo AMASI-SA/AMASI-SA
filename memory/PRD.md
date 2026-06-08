@@ -10,6 +10,49 @@
 
 ---
 
+## ✅ ITERATION 113 — Daily-accrual mode for salary liabilities (Feb 2026)
+
+### Why
+المستخدم يريد أن لا تُسجَّل الرواتب كمصروف شهري كامل مباشرة، بل تتراكم يومياً (راتب اليوم = الشهري ÷ أيام الشهر). تعرض المركز المالي المتراكم حتى اليوم، ويتم خصم السداد من المتراكم. لو زاد السداد عن المتراكم → فرق يسجَّل كسلفة.
+
+### Backend (`liabilities_routes.py`)
+- حقول جديدة على salary liability: `accrual_mode: "monthly"|"daily"` (افتراضي monthly) و `accrual_start_date` (YYYY-MM-DD).
+- **`GET /api/liabilities/{id}/salary-status`** — view مباشرة:
+  - monthly_salary, days_in_month, daily_salary, days_accrued, accrued_total, paid_amount, remaining, advance.
+- **`PUT /api/liabilities/{id}/accrual-mode`** — تبديل بين monthly/daily مع `accrual_start_date` اختياري:
+  - في وضع daily: يحسب expected_amount = monthly × (today_day - start_day + 1) / days_in_month.
+  - في وضع monthly: يستعيد expected = monthly × days_worked / days_in_month.
+  - يحدِّث status (paid/partial/unpaid) ليطابق expected_amount الجديد vs paid_amount.
+- generate-salaries الآن يضع `accrual_mode="monthly"` (وراثي) و`accrual_start_date=1 من الشهر` افتراضياً.
+
+### Frontend (`FinancialInputHub.jsx` — Pay tab)
+- زر toggle "🔄 تبديل ليومي تراكمي" بجوار العنوان في قسم الرواتب.
+- عند التبديل لـ daily، يظهر "راتب اليوم: X.XX" في السطر التوضيحي.
+- المركز المالي يعرض المتراكم تلقائياً (لأن expected_amount يُعدَّل عند التبديل).
+
+### Tests — `tests/test_salary_daily_accrual_iter113.py` (7/7 ✅)
+1. monthly mode يعرض الراتب الشهري كامل.
+2. التبديل لـ daily يعيد حساب expected_amount = monthly × today_day / dim.
+3. accrual_start_date مخصص → days_accrued = (today - start + 1).
+4. سداد جزئي < المتراكم → remaining > 0، advance = 0.
+5. سداد > المتراكم → remaining = 0، advance = الفرق.
+6. التبديل back من daily لـ monthly يستعيد القيمة (بناءً على days_worked الحالي).
+7. الـ endpoint يرفض non-salary liabilities بـ 400.
+
+### المنطق:
+```
+راتب يومي = الراتب الشهري ÷ أيام الشهر الحالي
+المتراكم اليوم = راتب يومي × (today - accrual_start_date + 1)
+المتبقي = max(0, المتراكم − المسدد)
+السلفة = max(0, المسدد − المتراكم)
+```
+
+### Future enhancement
+حالياً التبديل يعمل لكل شهر بشكل منفصل. لو المستخدم يحتاج "صورة شاملة للموظف عبر كل الأشهر" (combined view across June + July + August)، يمكن إضافة endpoint `/employee-salary-summary/{employee_id}` يجمع كل liabilities الشهرية الخاصة بالموظف.
+
+---
+
+
 ## ✅ ITERATION 112 — Edit existing topup (amount + date) (Feb 2026)
 
 ### Why

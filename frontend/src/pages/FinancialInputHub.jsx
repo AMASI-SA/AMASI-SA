@@ -318,8 +318,36 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
 
             {isSalary && (
                 <div className="sm:col-span-2 p-3 rounded-lg bg-violet-50 border border-violet-200" data-testid="pay-days-worked-row">
-                    <div className="text-xs font-bold text-violet-900 mb-2">
-                        🗓️ احتساب الراتب على أيام العمل الفعلية
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs font-bold text-violet-900">
+                            🗓️ احتساب الراتب على أيام العمل الفعلية
+                        </div>
+                        {/* Iter-113 — toggle daily-accrual mode */}
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                const isDaily = selected.accrual_mode === "daily";
+                                const newMode = isDaily ? "monthly" : "daily";
+                                try {
+                                    await api.put(
+                                        `/liabilities/${selected.id}/accrual-mode`,
+                                        { accrual_mode: newMode },
+                                    );
+                                    toast.success(
+                                        newMode === "daily"
+                                            ? "تم التبديل لاحتساب تراكمي يومي (راتب اليوم × عدد الأيام منذ بداية الشهر)"
+                                            : "تم التبديل للاحتساب الشهري"
+                                    );
+                                    await onSaved();
+                                } catch (e) {
+                                    toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التبديل");
+                                }
+                            }}
+                            className={`px-2 py-1 rounded text-[10px] font-bold ${selected.accrual_mode === "daily" ? "bg-emerald-200 text-emerald-900" : "bg-white text-violet-700 border border-violet-300"}`}
+                            data-testid="pay-accrual-mode-toggle"
+                        >
+                            {selected.accrual_mode === "daily" ? "✓ يومي تراكمي" : "🔄 تبديل ليومي تراكمي"}
+                        </button>
                     </div>
                     <div className="flex flex-wrap items-end gap-3">
                         <div>
@@ -349,6 +377,9 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                         <div className="text-[11px] text-violet-800">
                             راتب أساسي: <b>{fmt(selected.monthly_amount_base ?? selected.expected_amount)} ر.س</b>
                             {" "}· بعد الاحتساب الحالي: <b>{fmt(selected.expected_amount)} ر.س</b>
+                            {selected.accrual_mode === "daily" && selected.days_in_month && selected.monthly_amount_base && (
+                                <span> · راتب اليوم: <b>{fmt(selected.monthly_amount_base / selected.days_in_month)}</b></span>
+                            )}
                         </div>
                     </div>
                 </div>

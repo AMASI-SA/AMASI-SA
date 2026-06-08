@@ -257,6 +257,7 @@ async def _post_bank_tx(
     }
     await db.account_transactions.insert_one(tx)
     await _recompute_account_balance(db, user_id, account_id)
+    tx.pop("_id", None)
     return tx
 
 
@@ -411,6 +412,15 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 "monthly_amount_base": _round(s.get("monthly_amount")),
                 "days_in_month": calendar.monthrange(y, m)[1],
                 "days_worked": calendar.monthrange(y, m)[1],
+                # Iter-113 — daily-accrual mode. When `accrual_mode='daily'`
+                # the salary-status endpoint returns the time-accrued amount
+                # only (monthly × days_passed_in_month / days_in_month).
+                # The stored `expected_amount` STILL equals the full
+                # monthly figure so legacy code continues to work; daily
+                # views computed live via _compute_accrued().
+                "accrual_mode": s.get("accrual_mode") or "monthly",
+                "accrual_start_date": s.get("accrual_start_date")
+                    or f"{y:04d}-{m:02d}-01",
                 "expected_amount": _round(s.get("monthly_amount")),
                 "paid_amount": 0.0,
                 "advance_deducted": 0.0,
@@ -855,6 +865,126 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
     #     (household / charity payments are not day-based).
     #   • `days_worked` must be in [0, days_in_month].
     #   • The new expected_amount must not be < already-paid amount.
+    # ── Iter-113 — Daily-accrual mode helpers ─────────────────────────
+    @router.get("/{liab_id}/salary-status")
+    async def salary_status(
+        liab_id: str, user: dict = Depends(current_user),
+    ):
+        """Live view of a salary liability with daily accrual computed
+        as_of today. Works for both `monthly` and `daily` modes.
+        """
+        liab = await db.liabilities.find_one(
+            {"id": liab_id, "user_id": user["id"]}, {"_id": 0},
+        )
+        if not liab:
+            raise HTTPException(404, "Liability not found")
+        if liab.get("kind") != "salary":
+            raise HTTPException(400, "هذا الـ endpoint للرواتب فقط")
+
+        monthly = float(liab.get("monthly_amount_base") or 0)
+        period_key = liab.get("period_key") or _now()[:7]
+        y, m = int(period_key[:4]), int(period_key[5:7])
+        dim = calendar.monthrange(y, m)[1] or 30
+        daily = round(monthly / dim, 4) if dim > 0 else 0.0
+
+        start = liab.get("accrual_start_date") or f"{y:04d}-{m:02d}-01"
+        start_d = date.fromisoformat(start)
+        today_d = date.today()
+        period_first = date(y, m, 1)
+        period_last  = date(y, m, dim)
+        eff_start = max(start_d, period_first)
+        eff_end   = min(today_d, period_last)
+        days_accrued = max(0, (eff_end - eff_start).days + 1) if eff_end >= eff_start else 0
+        days_accrued = min(days_accrued, dim)
+
+        accrual_mode = liab.get("accrual_mode") or "monthly"
+        if accrual_mode == "daily":
+            accrued = round(daily * days_accrued, 2)
+        else:
+            dw = liab.get("days_worked")
+            if dw is not None and dim > 0:
+                accrued = round(monthly * float(dw) / dim, 2)
+            else:
+                accrued = round(float(liab.get("expected_amount") or 0), 2)
+
+        paid = round(float(liab.get("paid_amount") or 0), 2)
+        remaining = round(max(0.0, accrued - paid), 2)
+        advance = round(max(0.0, paid - accrued), 2)
+
+        return {
+            "id": liab["id"],
+            "period_key": period_key,
+            "accrual_mode": accrual_mode,
+            "accrual_start_date": start,
+            "monthly_salary": round(monthly, 2),
+            "days_in_month": dim,
+            "daily_salary": round(daily, 2),
+            "days_accrued": days_accrued,
+            "accrued_total": accrued,
+            "paid_amount": paid,
+            "remaining": remaining,
+            "advance": advance,
+            "today": today_d.isoformat(),
+        }
+
+    @router.put("/{liab_id}/accrual-mode")
+    async def set_accrual_mode(
+        liab_id: str,
+        payload: dict,
+        user: dict = Depends(current_user),
+    ):
+        """Toggle a salary liability between monthly and daily accrual."""
+        liab = await db.liabilities.find_one(
+            {"id": liab_id, "user_id": user["id"]}, {"_id": 0},
+        )
+        if not liab:
+            raise HTTPException(404, "Liability not found")
+        if liab.get("kind") != "salary":
+            raise HTTPException(400, "هذا الـ endpoint للرواتب فقط")
+        mode = payload.get("accrual_mode")
+        if mode not in ("monthly", "daily"):
+            raise HTTPException(400, "accrual_mode يجب أن يكون 'monthly' أو 'daily'")
+        upd: dict = {"accrual_mode": mode, "updated_at": _now()}
+        if payload.get("accrual_start_date"):
+            try:
+                date.fromisoformat(payload["accrual_start_date"])
+            except (TypeError, ValueError):
+                raise HTTPException(400, "accrual_start_date يجب أن يكون YYYY-MM-DD")
+            upd["accrual_start_date"] = payload["accrual_start_date"]
+
+        monthly = float(liab.get("monthly_amount_base") or 0)
+        period_key = liab.get("period_key") or _now()[:7]
+        y, m = int(period_key[:4]), int(period_key[5:7])
+        dim = calendar.monthrange(y, m)[1] or 30
+        if mode == "daily":
+            start = upd.get("accrual_start_date") or liab.get("accrual_start_date") or f"{y:04d}-{m:02d}-01"
+            start_d = date.fromisoformat(start)
+            eff_start = max(start_d, date(y, m, 1))
+            eff_end   = min(date.today(), date(y, m, dim))
+            days_accrued = max(0, (eff_end - eff_start).days + 1) if eff_end >= eff_start else 0
+            days_accrued = min(days_accrued, dim)
+            upd["days_worked"] = days_accrued
+            upd["expected_amount"] = round(monthly * days_accrued / dim, 2)
+        else:
+            dw = int(liab.get("days_worked") or dim)
+            upd["expected_amount"] = round(monthly * dw / dim, 2)
+
+        paid = float(liab.get("paid_amount") or 0)
+        if upd["expected_amount"] <= paid + 0.01 and upd["expected_amount"] > 0:
+            upd["status"] = "paid"
+        elif paid > 0:
+            upd["status"] = "partial"
+        else:
+            upd["status"] = "unpaid"
+
+        await db.liabilities.update_one(
+            {"id": liab_id, "user_id": user["id"]}, {"$set": upd},
+        )
+        return await db.liabilities.find_one(
+            {"id": liab_id, "user_id": user["id"]}, {"_id": 0},
+        )
+
+
     @router.put("/{liab_id}/days-worked")
     async def set_days_worked(
         liab_id: str,
