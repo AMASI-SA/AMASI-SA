@@ -76,6 +76,34 @@ from payment_methods import (
 )
 
 
+# Iter-111 — Build the set of bank_transfer sub-keys (specific Saudi banks
+# that roll up under "تحويل بنكي"). The merchant can route each one to a
+# real bank account via `bank_transfer_aliases` on the account doc.
+def _known_bank_transfer_sub_keys() -> set[str]:
+    """Sub-keys whose parent is `bank_transfer` AND which are NOT the
+    generic catch-all itself. These are the only ones the routing UI
+    will surface and the only ones the validator accepts.
+    """
+    return {
+        sub
+        for sub, _display, _alias, parent in _PAYMENT_ALIASES
+        if parent == "bank_transfer" and sub != "bank_transfer"
+    }
+
+
+def _bank_transfer_sub_key_options() -> list[dict]:
+    """Routing dropdown options sorted by display name. Deduped — each
+    sub-key appears once with its first-seen display name."""
+    seen: dict[str, str] = {}
+    for sub, display, _alias, parent in _PAYMENT_ALIASES:
+        if parent == "bank_transfer" and sub != "bank_transfer":
+            seen.setdefault(sub, display)
+    return [
+        {"sub_key": k, "display": v}
+        for k, v in sorted(seen.items(), key=lambda kv: kv[1])
+    ]
+
+
 async def ensure_accounts_indexes(db) -> None:
     """Guarantee a unique partial index on (user_id, normalized_payment_method)
     for auto-created accounts, so even a bug in the sync code can't insert
@@ -152,6 +180,11 @@ class AccountUpdate(BaseModel):
     status: Optional[str] = None
     default_bank_account_id: Optional[str] = None
     notes: Optional[str] = Field(None, max_length=500)
+    # Iter-111 — bank-transfer routing. List of payment_methods.py sub-keys
+    # (e.g. ["bank_rajhi", "bank_ahli"]) whose order revenue this bank
+    # account should receive directly instead of the generic
+    # "تحويل بنكي" rollup. Only meaningful when account_type == "bank".
+    bank_transfer_aliases: Optional[list[str]] = None
 
     @validator("status")
     def _s(cls, v):
@@ -381,6 +414,132 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             raise HTTPException(404, "Account not found")
         return await _account_with_meta(db, user["id"], doc)
 
+    # ── Iter-111 — Bank-transfer routing helpers ──────────────────────
+    @router.get("/bank-transfer-routing/options")
+    async def list_routing_options(_: dict = Depends(current_user)):
+        """Return the canonical list of bank-transfer sub-keys the user
+        can assign to a bank account (Rajhi / Inma / Ahli / Riyad …)."""
+        return {"options": _bank_transfer_sub_key_options()}
+
+    @router.get("/bank-transfer-routing/map")
+    async def get_routing_map(user: dict = Depends(current_user)):
+        """Current routing: which sub-key is bound to which bank, plus
+        the per-bank aggregates so the user sees the impact at a glance.
+        """
+        out: list[dict] = []
+        async for b in db.accounts.find(
+            {"user_id": user["id"], "account_type": "bank"},
+            {"_id": 0},
+        ).sort("name", 1):
+            out.append({
+                "id": b["id"], "name": b["name"],
+                "bank_transfer_aliases": b.get("bank_transfer_aliases") or [],
+                "current_balance": b.get("current_balance") or 0.0,
+                "expected_orders_balance": b.get("expected_orders_balance") or 0.0,
+                "orders_count": b.get("orders_count") or 0,
+                "sub_methods": b.get("sub_methods") or [],
+                "last_synced_at": b.get("last_synced_at"),
+            })
+        return {"banks": out}
+
+    @router.get("/{account_id}/breakdown")
+    async def account_breakdown(
+        account_id: str, user: dict = Depends(current_user),
+    ):
+        """Iter-111 diagnostic — explain a bank's final balance.
+
+        Returns the components:
+          • opening_balance (manual seed at account creation)
+          • incoming_from_customer_bank_transfers (routed order revenue)
+          • incoming_from_payment_gateways (transfers IN from سلة / تمارا …)
+          • incoming_manual_deposits (other 'in' transactions)
+          • outgoing_liability_payments
+          • outgoing_expenses
+          • outgoing_to_other_accounts (transfers OUT)
+          • final_balance & recorded_balance — should match.
+        """
+        acc = await db.accounts.find_one(
+            {"id": account_id, "user_id": user["id"]}, {"_id": 0},
+        )
+        if not acc:
+            raise HTTPException(404, "Account not found")
+
+        opening = float(acc.get("opening_balance") or 0)
+        expected_orders = float(acc.get("expected_orders_balance") or 0)
+
+        # Walk ledger and bucket each transaction by transaction_type +
+        # direction. transaction_type comes from TRANSACTION_TYPES (see
+        # top of file): manual_deposit / liability_payment / expense /
+        # internal_transfer …
+        buckets = {
+            "incoming_from_payment_gateways": 0.0,    # transfers in
+            "incoming_manual_deposits": 0.0,
+            "outgoing_liability_payments": 0.0,
+            "outgoing_expenses": 0.0,
+            "outgoing_to_other_accounts": 0.0,
+            "incoming_other": 0.0,
+            "outgoing_other": 0.0,
+        }
+        tx_count = 0
+        async for t in db.account_transactions.find(
+            {"user_id": user["id"], "account_id": account_id},
+            {"_id": 0},
+        ):
+            tx_count += 1
+            ttype = t.get("transaction_type") or ""
+            direction = t.get("direction")
+            amt = float(t.get("amount") or 0)
+            if direction == "in":
+                if ttype == "internal_transfer":
+                    buckets["incoming_from_payment_gateways"] += amt
+                elif ttype in ("manual_deposit", "opening_balance"):
+                    buckets["incoming_manual_deposits"] += amt
+                else:
+                    buckets["incoming_other"] += amt
+            else:  # out
+                if ttype == "liability_payment":
+                    buckets["outgoing_liability_payments"] += amt
+                elif ttype == "expense":
+                    buckets["outgoing_expenses"] += amt
+                elif ttype == "internal_transfer":
+                    buckets["outgoing_to_other_accounts"] += amt
+                else:
+                    buckets["outgoing_other"] += amt
+
+        # final_balance computed from bottom-up: opening + expected_orders
+        # + incoming - outgoing.
+        computed = (
+            opening + expected_orders
+            + buckets["incoming_from_payment_gateways"]
+            + buckets["incoming_manual_deposits"]
+            + buckets["incoming_other"]
+            - buckets["outgoing_liability_payments"]
+            - buckets["outgoing_expenses"]
+            - buckets["outgoing_to_other_accounts"]
+            - buckets["outgoing_other"]
+        )
+        recorded = float(acc.get("current_balance") or 0)
+        return {
+            "id": acc["id"], "name": acc["name"],
+            "account_type": acc.get("account_type"),
+            "bank_transfer_aliases": acc.get("bank_transfer_aliases") or [],
+            "opening_balance": round(opening, 2),
+            "incoming_from_customer_bank_transfers": round(expected_orders, 2),
+            "orders_count": acc.get("orders_count") or 0,
+            "incoming_from_payment_gateways": round(buckets["incoming_from_payment_gateways"], 2),
+            "incoming_manual_deposits": round(buckets["incoming_manual_deposits"], 2),
+            "incoming_other": round(buckets["incoming_other"], 2),
+            "outgoing_liability_payments": round(buckets["outgoing_liability_payments"], 2),
+            "outgoing_expenses": round(buckets["outgoing_expenses"], 2),
+            "outgoing_to_other_accounts": round(buckets["outgoing_to_other_accounts"], 2),
+            "outgoing_other": round(buckets["outgoing_other"], 2),
+            "transactions_count": tx_count,
+            "final_balance": round(computed, 2),
+            "recorded_balance": round(recorded, 2),
+            "discrepancy": round(computed - recorded, 2),
+            "sub_methods": acc.get("sub_methods") or [],
+        }
+
     @router.put("/{account_id}")
     async def update_account(
         account_id: str, payload: AccountUpdate, user: dict = Depends(current_user)
@@ -396,6 +555,48 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             val = getattr(payload, fld, None)
             if val is not None:
                 update[fld] = val.strip() if isinstance(val, str) else val
+        # Iter-111 — bank_transfer_aliases (validated against the known
+        # sub-keys defined in payment_methods.py). Only set when the
+        # account is a bank; for other types we silently ignore the field
+        # so callers don't have to special-case.
+        if payload.bank_transfer_aliases is not None:
+            if existing.get("account_type") != "bank":
+                raise HTTPException(
+                    400,
+                    "توجيه التحويلات البنكية متاح فقط للحسابات من نوع `bank`.",
+                )
+            allowed = _known_bank_transfer_sub_keys()
+            cleaned = []
+            for k in payload.bank_transfer_aliases:
+                k = (k or "").strip()
+                if not k:
+                    continue
+                if k not in allowed:
+                    raise HTTPException(
+                        400,
+                        f"الـ alias `{k}` غير معروف. المتاح: {sorted(allowed)}",
+                    )
+                if k not in cleaned:
+                    cleaned.append(k)
+            # Reject double-binding: each sub-key can route to ONE bank
+            # only. Look for conflicts with OTHER banks' existing routing.
+            if cleaned:
+                clash = await db.accounts.find_one(
+                    {
+                        "user_id": user["id"],
+                        "account_type": "bank",
+                        "id": {"$ne": account_id},
+                        "bank_transfer_aliases": {"$in": cleaned},
+                    },
+                    {"_id": 0, "name": 1, "bank_transfer_aliases": 1},
+                )
+                if clash:
+                    dup = sorted(set(cleaned) & set(clash.get("bank_transfer_aliases") or []))
+                    raise HTTPException(
+                        400,
+                        f"الـ aliases {dup} موجَّهة بالفعل إلى البنك «{clash['name']}». فك الربط من هناك أولاً.",
+                    )
+            update["bank_transfer_aliases"] = cleaned
         await db.accounts.update_one(
             {"id": account_id, "user_id": user["id"]}, {"$set": update}
         )
@@ -545,6 +746,28 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                 "count":  {"$sum": 1},
             }},
         ]
+        # Iter-111 — Build routing map: { sub_key → bank_account_id }
+        # so any orders whose payment_method maps to that sub_key are
+        # credited DIRECTLY to the bank account instead of accumulating
+        # in the generic "تحويل بنكي" rollup.
+        bank_routing: dict[str, str] = {}
+        # Track aggregates per routed bank → {bank_id: {amount, count,
+        # raw_names, sub_methods}} so we can update each bank's
+        # expected_orders_balance below.
+        bank_aggregates: dict[str, dict] = {}
+        async for b in db.accounts.find(
+            {"user_id": uid, "account_type": "bank",
+             "bank_transfer_aliases": {"$exists": True, "$ne": []}},
+            {"_id": 0, "id": 1, "name": 1, "bank_transfer_aliases": 1},
+        ):
+            for sk in (b.get("bank_transfer_aliases") or []):
+                bank_routing[sk] = b["id"]
+            bank_aggregates[b["id"]] = {
+                "name": b["name"],
+                "amount": 0.0, "count": 0,
+                "raw_names": [], "sub_methods": {},
+            }
+
         # Two-level group:
         #   groups[account_key] = {
         #     display, parent_key, amount, count, raw_names[], sub_methods{}
@@ -572,6 +795,27 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                 continue
 
             sub_key, sub_display, parent_key = normalize_payment_method(raw)
+
+            # Iter-111 — if this sub_key is routed to a bank, divert the
+            # amount/count into the bank's aggregate and SKIP the rollup
+            # tally. The rollup ("تحويل بنكي") therefore only retains
+            # bank-transfer revenue that is NOT routed (e.g. orders with
+            # the generic "حوالة بنكية" string and no specific bank).
+            if sub_key in bank_routing:
+                bank_id = bank_routing[sub_key]
+                bagg = bank_aggregates[bank_id]
+                bagg["amount"] += amount
+                bagg["count"] += count
+                if raw and raw not in bagg["raw_names"]:
+                    bagg["raw_names"].append(raw)
+                sub_slot = bagg["sub_methods"].setdefault(sub_key, {
+                    "key": sub_key, "display": sub_display,
+                    "amount": 0.0, "count": 0,
+                })
+                sub_slot["amount"] += amount
+                sub_slot["count"] += count
+                continue
+
             slot = groups.setdefault(account_key, {
                 "key": account_key,
                 "display": account_display,
@@ -657,6 +901,13 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         central = await compute_metrics(db, uid)
         central_rows = central.get("rows") or []
 
+        # Iter-111 — the central metrics does its own aggregation pass
+        # over unified_orders and is unaware of our bank routing. For
+        # the `bank_transfer` rollup specifically, we must subtract the
+        # routed amount so the rollup only reflects unrouted revenue.
+        routed_total = round(sum(b["amount"] for b in bank_aggregates.values()), 2)
+        routed_count_total = sum(b["count"] for b in bank_aggregates.values())
+
         # 3. Upsert one account per top-level key.
         created = 0
         updated = 0
@@ -665,13 +916,25 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             # Prefer central net for the canonical account key. Falls back
             # to local pipeline amount when central has nothing for this
             # rail (e.g. very fresh data not in unified_orders yet).
+            #
+            # Iter-111 — when bank routing is active, the local pipeline
+            # (which uses payment_methods.normalize_payment_method) has
+            # a richer alias table than the central metrics. For the
+            # bank_transfer rollup specifically, always use local data
+            # so that routed sub-keys are correctly excluded (the local
+            # loop already `continue`d for them).
             c_net, c_orders, c_actual = _central_expected_for_account(
                 central_rows, key
             )
-            if c_orders > 0:
+            local_aware_bank_transfer = (
+                key == "bank_transfer" and routed_total > 0
+            )
+            if c_orders > 0 and not local_aware_bank_transfer:
                 expected = c_net
                 orders_count = c_orders
             else:
+                # Local data is already routing-aware (we `continue`d
+                # earlier for routed sub-keys).
                 expected = round(float(data["amount"]), 2)
                 orders_count = int(data["count"])
             # Sub-methods list sorted by amount desc for nicer detail UI.
@@ -746,6 +1009,60 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                 doc.pop("_id", None)
                 result_accounts.append(doc)
 
+        # Iter-111 — apply routed bank-transfer aggregates to the user's
+        # bank accounts. Every bank in the routing map gets its
+        # `expected_orders_balance` refreshed to reflect ONLY the routed
+        # sub-keys. Banks without routing remain untouched (0 by default
+        # — they only move via manual transfers).
+        routed_banks_synced: list[dict] = []
+        for bank_id, bagg in bank_aggregates.items():
+            sub_list = sorted(
+                bagg["sub_methods"].values(),
+                key=lambda x: x["amount"], reverse=True,
+            )
+            sub_list = [
+                {**s, "amount": round(float(s["amount"]), 2),
+                 "count": int(s["count"])}
+                for s in sub_list
+            ]
+            expected = round(float(bagg["amount"]), 2)
+            await db.accounts.update_one(
+                {"id": bank_id, "user_id": uid},
+                {"$set": {
+                    "expected_orders_balance": expected,
+                    "orders_count": int(bagg["count"]),
+                    "raw_payment_names": bagg["raw_names"][:20],
+                    "sub_methods": sub_list,
+                    "last_synced_at": now,
+                    "updated_at": now,
+                }},
+            )
+            await _recompute_balance(db, uid, bank_id)
+            fresh = await db.accounts.find_one(
+                {"id": bank_id, "user_id": uid}, {"_id": 0},
+            )
+            if fresh:
+                routed_banks_synced.append(fresh)
+
+        # Banks that USED to have routing but now don't (user cleared
+        # their `bank_transfer_aliases`) must also be reset so we don't
+        # leave stale `expected_orders_balance` from a previous sync.
+        async for stale in db.accounts.find(
+            {"user_id": uid, "account_type": "bank",
+             "expected_orders_balance": {"$gt": 0},
+             "id": {"$nin": list(bank_aggregates.keys())}},
+            {"_id": 0, "id": 1, "bank_transfer_aliases": 1},
+        ):
+            if stale.get("bank_transfer_aliases"):
+                continue  # has routing but no orders matched — keep at 0
+            await db.accounts.update_one(
+                {"id": stale["id"], "user_id": uid},
+                {"$set": {"expected_orders_balance": 0.0,
+                          "orders_count": 0, "sub_methods": [],
+                          "last_synced_at": now, "updated_at": now}},
+            )
+            await _recompute_balance(db, uid, stale["id"])
+
         return {
             "ok": True,
             "synced": len(groups),
@@ -757,6 +1074,14 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
             "unclassified": [
                 {"raw": u["raw"], "amount": round(u["amount"], 2), "count": u["count"]}
                 for u in unclassified.values()
+            ],
+            "routed_banks": [
+                {"id": b["id"], "name": b["name"],
+                 "expected_orders_balance": b.get("expected_orders_balance"),
+                 "orders_count": b.get("orders_count"),
+                 "bank_transfer_aliases": b.get("bank_transfer_aliases") or [],
+                 "sub_methods": b.get("sub_methods") or []}
+                for b in routed_banks_synced
             ],
             "accounts": [
                 {

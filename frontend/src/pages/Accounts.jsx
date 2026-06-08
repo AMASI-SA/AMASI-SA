@@ -27,6 +27,242 @@ const inputCls =
 const fmt = (v, ccy = "SAR") =>
     `${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ccy === "SAR" ? "ر.س" : ccy}`;
 
+// ── Iter-111 — Bank-transfer routing dialog ─────────────────────────
+function BankRoutingDialog({ open, onClose, onSaved }) {
+    const [options, setOptions] = useState([]);
+    const [banks, setBanks] = useState([]);
+    const [edits, setEdits] = useState({});     // {bank_id: [sub_key,…]}
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState({});   // {bank_id: bool}
+    const [breakdown, setBreakdown] = useState(null);
+
+    useEffect(() => {
+        if (!open) return;
+        (async () => {
+            setLoading(true);
+            try {
+                const [optRes, mapRes] = await Promise.all([
+                    api.get("/accounts/bank-transfer-routing/options"),
+                    api.get("/accounts/bank-transfer-routing/map"),
+                ]);
+                setOptions(optRes.data?.options || []);
+                const list = mapRes.data?.banks || [];
+                setBanks(list);
+                const initial = {};
+                list.forEach((b) => { initial[b.id] = b.bank_transfer_aliases || []; });
+                setEdits(initial);
+            } catch (e) {
+                toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التحميل");
+            } finally { setLoading(false); }
+        })();
+    }, [open]);
+
+    // Iter-111 — guess the right sub_key from the bank name (e.g.
+    // "الراجحي" → "bank_rajhi"). Returns null if no confident match.
+    const suggest = (bankName) => {
+        const n = (bankName || "").toLowerCase();
+        for (const opt of options) {
+            const display = (opt.display || "").toLowerCase();
+            // Find a 4-char substring of the display name in the bank name
+            if (display && n.includes(display.replace("بنك ", "").replace("ال", "").slice(0, 4))) {
+                return opt.sub_key;
+            }
+        }
+        // Heuristic by Latin name fallback
+        const map = {
+            "rajhi": "bank_rajhi", "الراجحي": "bank_rajhi",
+            "inma":  "bank_inma",  "الإنماء":  "bank_inma",  "الانماء": "bank_inma",
+            "ahli":  "bank_ahli",  "الأهلي":   "bank_ahli",  "الاهلي":  "bank_ahli",
+            "riyad": "bank_riyad", "الرياض":   "bank_riyad",
+            "sab":   "bank_sab",   "ساب":      "bank_sab",
+            "albilad": "bank_albilad", "البلاد": "bank_albilad",
+            "anb":   "bank_anb",   "العربي":   "bank_anb",
+        };
+        for (const [k, v] of Object.entries(map)) {
+            if (n.includes(k)) return v;
+        }
+        return null;
+    };
+
+    const toggle = (bankId, subKey) => {
+        setEdits((e) => {
+            const cur = e[bankId] || [];
+            return cur.includes(subKey)
+                ? { ...e, [bankId]: cur.filter((s) => s !== subKey) }
+                : { ...e, [bankId]: [...cur, subKey] };
+        });
+    };
+
+    const save = async (bankId) => {
+        setSaving((s) => ({ ...s, [bankId]: true }));
+        try {
+            await api.put(`/accounts/${bankId}`, { bank_transfer_aliases: edits[bankId] || [] });
+            toast.success("تم حفظ التوجيه — اضغط 'تطبيق التوجيه' أعلاه ليأخذ مفعوله على الأرصدة");
+            // Reload the map to show updated balances
+            const mapRes = await api.get("/accounts/bank-transfer-routing/map");
+            setBanks(mapRes.data?.banks || []);
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل الحفظ");
+        } finally { setSaving((s) => ({ ...s, [bankId]: false })); }
+    };
+
+    const applyAll = async () => {
+        try {
+            const { data } = await api.post("/accounts/sync-payment-methods");
+            const routed = data?.routed_banks || [];
+            const totalRouted = routed.reduce((s, b) => s + (b.expected_orders_balance || 0), 0);
+            toast.success(`تم التطبيق — ${routed.length} بنك يستقبل ${totalRouted.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})} ر.س من تحويلات بنكية`);
+            // Refresh the map
+            const mapRes = await api.get("/accounts/bank-transfer-routing/map");
+            setBanks(mapRes.data?.banks || []);
+            onSaved?.();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التطبيق");
+        }
+    };
+
+    const fetchBreakdown = async (bank) => {
+        try {
+            const { data } = await api.get(`/accounts/${bank.id}/breakdown`);
+            setBreakdown(data);
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التشخيص");
+        }
+    };
+
+    if (!open) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4" data-testid="bank-routing-dialog">
+            <div dir="rtl" className="bg-white rounded-xl shadow-2xl w-full max-w-4xl my-8">
+                <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                    <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                        🔀 توجيه التحويلات البنكية للبنوك الفعلية
+                    </h2>
+                    <button onClick={onClose} className="text-slate-500 hover:text-slate-900 text-2xl">×</button>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 text-xs text-sky-900 space-y-1">
+                        <div className="font-bold">💡 كيف يعمل؟</div>
+                        <ul className="list-disc pr-5 space-y-1">
+                            <li>اختر لكل بنك أي طرق دفع "تحويل بنكي" تذهب إليه مباشرة (مثلاً بنك الراجحي يستقبل "الراجحي").</li>
+                            <li>بعد الحفظ، اضغط <b>"تطبيق التوجيه"</b> ليُعيد النظام حساب أرصدة البنوك من كل البيانات التاريخية والجديدة.</li>
+                            <li>كل sub_key يمكن توجيهه لـ <b>بنك واحد فقط</b>. كرر التوجيه يكسر التطبيق.</li>
+                            <li>حساب "تحويل بنكي" الموحَّد سيتقلَّص تلقائياً ليحوي فقط الطلبات التي لم تطابق أي بنك محدد.</li>
+                        </ul>
+                    </div>
+
+                    {loading ? (
+                        <div className="text-center py-8 text-slate-500">جاري التحميل…</div>
+                    ) : banks.length === 0 ? (
+                        <div className="text-center py-8 text-slate-500">لا توجد حسابات بنكية. أضف بنكاً من شاشة الحسابات أولاً.</div>
+                    ) : (
+                        <div className="space-y-3">
+                            {banks.map((b) => {
+                                const suggested = suggest(b.name);
+                                const current = edits[b.id] || [];
+                                return (
+                                    <div key={b.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4" data-testid={`bank-routing-${b.id}`}>
+                                        <div className="flex items-start justify-between gap-3 mb-3">
+                                            <div>
+                                                <div className="font-extrabold text-slate-900 text-base">{b.name}</div>
+                                                <div className="text-[11px] text-slate-500 mt-0.5">
+                                                    الرصيد الحالي: <b className="num text-emerald-700">{fmt(b.current_balance)}</b>
+                                                    {b.orders_count > 0 && (
+                                                        <span> · يستقبل {b.orders_count} طلب · إجمالي <b className="num text-violet-700">{fmt(b.expected_orders_balance)}</b></span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <button onClick={() => fetchBreakdown(b)} className="px-3 py-1.5 rounded bg-sky-100 text-sky-800 text-xs font-bold hover:bg-sky-200" data-testid={`bank-routing-breakdown-${b.id}`}>
+                                                📊 تشخيص
+                                            </button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {options.map((opt) => {
+                                                const checked = current.includes(opt.sub_key);
+                                                const isSuggested = suggested === opt.sub_key;
+                                                return (
+                                                    <label key={opt.sub_key} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] cursor-pointer transition ${checked ? "bg-emerald-100 text-emerald-900 border border-emerald-300" : isSuggested ? "bg-amber-50 text-amber-900 border border-amber-200" : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"}`}>
+                                                        <input type="checkbox" checked={checked} onChange={() => toggle(b.id, opt.sub_key)} className="w-3 h-3" data-testid={`bank-routing-checkbox-${b.id}-${opt.sub_key}`} />
+                                                        <span className="font-bold">{opt.display}</span>
+                                                        {isSuggested && !checked && <span className="text-[9px]">💡 مقترح</span>}
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="flex justify-end mt-3">
+                                            <button onClick={() => save(b.id)} disabled={saving[b.id]} className="px-3 py-1.5 rounded bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 disabled:opacity-50" data-testid={`bank-routing-save-${b.id}`}>
+                                                {saving[b.id] ? "جاري الحفظ…" : "💾 حفظ التوجيه"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 flex items-center justify-between gap-3">
+                                <div className="text-xs text-violet-900">
+                                    <b>الخطوة الأخيرة:</b> بعد حفظ التوجيه لكل بنك، اضغط الزر لإعادة حساب الأرصدة من كل البيانات التاريخية.
+                                </div>
+                                <button onClick={applyAll} className="px-4 py-2 rounded bg-violet-700 text-white text-sm font-bold hover:bg-violet-800 whitespace-nowrap" data-testid="bank-routing-apply">
+                                    🔄 تطبيق التوجيه على البيانات
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Breakdown popover */}
+                {breakdown && (
+                    <div className="fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center p-4" onClick={() => setBreakdown(null)}>
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" dir="rtl" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+                                <h3 className="font-bold text-slate-900">📊 تشخيص الرصيد — {breakdown.name}</h3>
+                                <button onClick={() => setBreakdown(null)} className="text-slate-500 text-2xl">×</button>
+                            </div>
+                            <div className="p-4 space-y-2 text-sm">
+                                {[
+                                    { k: "opening_balance", lbl: "الرصيد الافتتاحي" },
+                                    { k: "incoming_from_customer_bank_transfers", lbl: `تحويلات العملاء البنكية (${breakdown.orders_count} طلب)` },
+                                    { k: "incoming_from_payment_gateways", lbl: "تحويلات داخلة من بوابات الدفع" },
+                                    { k: "incoming_manual_deposits", lbl: "إيداعات يدوية" },
+                                    { k: "incoming_other", lbl: "إيرادات أخرى" },
+                                    { k: "outgoing_liability_payments", lbl: "سداد التزامات" },
+                                    { k: "outgoing_expenses", lbl: "مصروفات" },
+                                    { k: "outgoing_to_other_accounts", lbl: "تحويلات صادرة" },
+                                    { k: "outgoing_other", lbl: "خصومات أخرى" },
+                                ].map(({ k, lbl }) => (
+                                    <div key={k} className={`flex justify-between p-2 rounded ${k.startsWith("incoming") ? "bg-emerald-50/50" : k.startsWith("outgoing") ? "bg-rose-50/50" : "bg-slate-50"}`}>
+                                        <span className="text-slate-700">{lbl}</span>
+                                        <span className={`num font-bold ${k.startsWith("outgoing") ? "text-rose-700" : "text-emerald-700"}`}>
+                                            {k.startsWith("outgoing") ? "-" : ""}{fmt(breakdown[k])}
+                                        </span>
+                                    </div>
+                                ))}
+                                <div className="border-t-2 border-slate-200 mt-3 pt-2 space-y-1">
+                                    <div className="flex justify-between p-2 bg-violet-100 rounded">
+                                        <span className="font-extrabold">الرصيد المحسوب (final_balance)</span>
+                                        <span className="num font-extrabold text-violet-900">{fmt(breakdown.final_balance)}</span>
+                                    </div>
+                                    <div className="flex justify-between p-2 bg-slate-100 rounded text-xs">
+                                        <span>المسجَّل (recorded_balance)</span>
+                                        <span className="num">{fmt(breakdown.recorded_balance)}</span>
+                                    </div>
+                                    {Math.abs(breakdown.discrepancy) > 0.01 && (
+                                        <div className="flex justify-between p-2 bg-amber-100 rounded text-xs text-amber-900">
+                                            <span>⚠️ فرق</span>
+                                            <span className="num font-bold">{fmt(breakdown.discrepancy)}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+
 // ── Add/Edit modal ───────────────────────────────────────────────────────────
 function AccountFormModal({ initial, catalogue, banks, onClose, onSaved }) {
     const isEdit = !!initial;
@@ -207,6 +443,7 @@ export default function Accounts() {
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState("all"); // all | bank | payment_platform | ads_platform | hidden
     const [modal, setModal] = useState(null);
+    const [routingOpen, setRoutingOpen] = useState(false);
     const [syncing, setSyncing] = useState(false);
 
     const syncPaymentMethods = async () => {
@@ -294,6 +531,9 @@ export default function Accounts() {
                 </div>
                 <button onClick={() => setModal({})} className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand text-white text-sm font-semibold rounded-lg bg-brand-hover" data-testid="accounts-add-btn">
                     <Plus size={18} weight="bold" /> إضافة حساب جديد
+                </button>
+                <button onClick={() => setRoutingOpen(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-violet-700 text-white text-sm font-semibold rounded-lg hover:bg-violet-800" data-testid="bank-routing-open-btn">
+                    🔀 توجيه التحويلات للبنوك
                 </button>
                 <button onClick={syncPaymentMethods} disabled={syncing} className="inline-flex items-center gap-2 px-4 py-2.5 bg-sky-700 text-white text-sm font-semibold rounded-lg hover:bg-sky-800 disabled:opacity-60" data-testid="accounts-sync-payment-methods-btn">
                     <ArrowsClockwise size={18} weight="bold" className={syncing ? "animate-spin" : ""} />
@@ -447,6 +687,12 @@ export default function Accounts() {
                     onSaved={() => load()}
                 />
             )}
+
+            <BankRoutingDialog
+                open={routingOpen}
+                onClose={() => setRoutingOpen(false)}
+                onSaved={() => load()}
+            />
         </div>
     );
 }

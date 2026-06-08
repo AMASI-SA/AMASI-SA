@@ -10,6 +10,57 @@
 
 ---
 
+## ✅ ITERATION 111 — Auto-routing of bank-transfer revenue to actual banks (Feb 2026)
+
+### Why
+Customer bank-transfer revenue (الراجحي / الأهلي / الإنماء) was rolling up into one generic "تحويل بنكي" `payment_platform` account, while the merchant's actual bank accounts stayed at 0. Result: when paying a liability, the bank dropdown showed 0 balances even though real money was sitting at Rajhi / Ahli / Inma.
+
+### Backend
+- **`bank_transfer_aliases: list[str]`** on bank accounts (in `AccountUpdate` + persisted). Validated against `payment_methods.py` sub-keys; conflicts across banks are blocked.
+- **`GET /accounts/bank-transfer-routing/options`** — returns the canonical Saudi bank sub-keys with display names.
+- **`GET /accounts/bank-transfer-routing/map`** — per-bank routing + current aggregates.
+- **`GET /accounts/{id}/breakdown`** — diagnostic explaining a bank's balance:
+  - opening_balance, incoming_from_customer_bank_transfers (routed order revenue),
+  - incoming_from_payment_gateways (internal transfers in), incoming_manual_deposits,
+  - outgoing_liability_payments, outgoing_expenses, outgoing_to_other_accounts,
+  - final_balance vs recorded_balance + discrepancy.
+- **`POST /accounts/sync-payment-methods`** modified to:
+  1. Load each bank's routing map.
+  2. Divert orders whose `sub_key` matches into per-bank aggregates (skipping the rollup).
+  3. Update each routed bank's `expected_orders_balance` so `_recompute_balance` picks it up.
+  4. Subtract routed amounts from the `bank_transfer` rollup (using local routing-aware aggregation, not central which has a sparser alias table).
+  5. Reset banks that lost their routing back to 0.
+
+### Frontend (`Accounts.jsx`)
+- Header button "🔀 توجيه التحويلات للبنوك" → opens `BankRoutingDialog`:
+  - Per-bank multi-checkbox of available bank sub-keys.
+  - **Auto-suggest** (Latin & Arabic name keywords) highlights the matching sub-key with 💡 badge.
+  - "💾 حفظ التوجيه" per bank + "🔄 تطبيق التوجيه على البيانات" footer that re-runs sync.
+  - "📊 تشخيص" per bank opens a popover with the breakdown components and discrepancy.
+
+### Tests — `tests/test_bank_routing_iter111.py` (8/8 ✅)
+1. options endpoint lists canonical banks.
+2. PUT saves aliases on a bank.
+3. PUT rejects routing on non-bank accounts.
+4. PUT rejects unknown sub-keys.
+5. PUT rejects duplicate aliases across two banks.
+6. sync diverts matching order revenue into the routed bank AND removes it from the rollup (verified with multiple variants including bare "الراجحي" which central can't classify but local can).
+7. Removing routing resets the bank's balance to 0.
+8. breakdown endpoint returns the correct components with discrepancy=0.
+
+### Production-Data Verification (preview DB)
+For `amasi.jewelery@gmail.com`:
+- بنك الراجحي → 36,319.84 ر.س (145 طلب)
+- بنك الأهلي → 2,742.99 ر.س (22 طلب)
+- بنك الإنماء → 45,940.59 ر.س (40,000 افتتاحي + 5,940.59 من 43 طلب)
+- Rollup "تحويل بنكي" → اختفى تلقائياً (كل بيانات بنكية موجَّهة).
+
+### Key Insight
+Because `expected_orders_balance` is recomputed on every sync, the historical data redistribution happens **automatically without any migration script**. The merchant configures routing once, clicks "تطبيق التوجيه", and every past + future order with a recognized bank alias lands in the right bank.
+
+---
+
+
 ## 🐛 BUGFIX 9-Feb-2026 — Bank dropdown empty on /ad-accounts dialogs
 **User report**: "عند تسديد المديونيه الاعلانيه لا تظهر اسماء البنوك" — bank names didn't show when opening the Top-up dialog (or any flow needing a bank account).
 
