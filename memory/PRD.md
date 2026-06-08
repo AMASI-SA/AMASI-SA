@@ -10,6 +10,53 @@
 
 ---
 
+## ✅ ITERATION 106 — Ad-Account Balance + Auto-Debt Engine (Feb 2026)
+
+### Why
+Track prepaid ad-platform balances (Snapchat, TikTok, Meta + any future provider) and automatically convert overspend into a recorded debt that flows into the Financial Position. Each `counterparties` row of kind=ad_account is now a self-contained ad wallet with its own balance, debt mode and movement ledger.
+
+### Backend (`backend/ad_account_routes.py` — NEW)
+- **2 new fields on `counterparties`**: `balance` (float, prepaid amount), `debt_mode` ("auto" | "manual", default "auto").
+- **New collection `ad_account_ledger`** — append-only history of every movement: `{type, amount, balance_after, debt_after, breakdown, account_id, related_liability_id, ...}`.
+- **Debt itself REUSES `liabilities(kind=ad_account)`** linked via `counterparty_id` — same row appears in the Financial Position's ad-debt KPI (no duplicated balance math).
+- **Endpoints** (all under `/api/ad-accounts/`):
+  - `GET /` — list with totals across all accounts.
+  - `GET /{cp_id}` — single account summary.
+  - `GET /{cp_id}/ledger` — movement history.
+  - `PUT /{cp_id}/settings` — toggle debt_mode (auto/manual).
+  - `POST /{cp_id}/topup` — atomic: bank ↓ amount → pay down open debt FIRST → remainder goes to balance.
+  - `POST /{cp_id}/spend` — atomic: balance covers what it can; in **auto** mode the uncovered piece creates / extends an open liability; in **manual** mode no auto-debt is created.
+
+### Business rules (verified by tests)
+1. **Spend ≤ balance** → balance ↓, no debt.
+2. **Spend > balance (auto)** → balance → 0, remainder becomes liability. (User's Snap example: balance 500, spend 800 → balance 0, debt 300.)
+3. **Top-up with open debt** → debt cleared first, remainder → balance. (User's example: debt 300, top-up 1000 → debt 0, balance 700.)
+4. **Manual mode** → uncovered spend is NEVER auto-converted to debt (user must add it manually).
+5. Top-up always deducts from the chosen bank (existing `account_transactions` ledger).
+6. Ledger captures `topup`, `spend`, `debt` with timestamp & breakdown.
+7. Daily ad spend collections (`snapchat_ads_daily` / `tiktok_ads_daily` / `meta_ads_daily`) UNCHANGED — they remain the source of truth for daily-cost reporting. /spend is a separate, optional ledger hook.
+
+### Frontend (`AdAccounts.jsx` — NEW page `/ad-accounts`)
+- 3 top KPIs (إجمالي الأرصدة + المديونيات + الصرف التراكمي).
+- Per-account card with: name + provider badge, mode toggle, 3 mini-KPIs (Balance / Debt / Spend), last topup/spend/debt timestamps, action buttons (تعبئة / تسجيل صرف / السجل).
+- **Topup dialog** — pick bank, amount, date. Shows current balance + debt and informs user that debt will be paid first.
+- **Spend dialog** — amount + date + description. Shows mode reminder.
+- **Ledger dialog** — chronological list with type badges + amount + balance_after + debt_after.
+- Sidebar entry "الحسابات الإعلانية والمديونية" under "إدارة المشتريات والعهد والتحصيلات".
+
+### Tests — `tests/test_ad_account_engine_iter106.py` (8/8 ✅)
+1. Covered spend → no debt.
+2. Spend > balance (auto) → balance=0, debt=remainder. Liability row exists.
+3. Top-up pays down debt first then adds balance.
+4. Exact-clear top-up.
+5. Manual mode never creates auto-debt.
+6. Ledger has topup + spend + debt rows.
+7. Top-up actually deducts the bank balance.
+8. List endpoint aggregates totals correctly across multiple accounts.
+
+---
+
+
 ## ✅ ITERATION 105 — Custom App Integration (Feb 2026)
 
 ### Why

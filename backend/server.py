@@ -85,6 +85,7 @@ from liabilities_routes import attach_liabilities_routes, ensure_liabilities_ind
 from counterparties_routes import attach_counterparties_routes, ensure_counterparties_indexes
 from purchase_invoices_routes import attach_purchase_invoice_routes, ensure_purchase_invoices_indexes
 from custom_app_routes import attach_custom_app_routes, ensure_custom_app_indexes
+from ad_account_routes import attach_ad_account_routes, ensure_ad_account_indexes
 from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
 from reconciliation_routes import attach_reconciliation_routes
 from diagnostics_routes import attach_diagnostics_routes
@@ -2902,6 +2903,7 @@ attach_liabilities_routes(api, db)
 attach_counterparties_routes(api, db)
 attach_purchase_invoice_routes(api, db)
 attach_custom_app_routes(api, db)
+attach_ad_account_routes(api, db)
 app.include_router(api)
 
 # CORS
@@ -2934,6 +2936,7 @@ async def on_startup():
     await ensure_counterparties_indexes(db)
     await ensure_purchase_invoices_indexes(db)
     await ensure_custom_app_indexes(db)
+    await ensure_ad_account_indexes(db)
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:

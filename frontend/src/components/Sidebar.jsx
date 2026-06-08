@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
     House, UploadSimple, Gear, ClockCounterClockwise, Receipt, SignOut,
-    ChartPieSlice, Truck, Plug, Wallet, Ghost, Package, Image, UserCircle,
+    ChartPieSlice, ChartLineUp, Truck, Plug, Wallet, Ghost, Package, Image, UserCircle,
     UsersThree, MagnifyingGlass, Queue, ArrowsLeftRight, Scales, Storefront,
     CurrencyDollar, LinkSimple, GearSix, CaretDown, X, PaperPlaneRight,
     HandCoins, Coin, Briefcase,
@@ -58,6 +58,7 @@ const SECTIONS = [
             { to: "/purchase-invoices", label: "فواتير المشتريات", icon: Receipt, testid: "nav-purchase-invoices" },
             { to: "/advances", label: "عهد الموظفين والمندوبين", icon: HandCoins, testid: "nav-advances" },
             { to: "/receivables", label: "الذمم والتحصيلات", icon: Coin, testid: "nav-receivables" },
+            { to: "/ad-accounts", label: "الحسابات الإعلانية والمديونية", icon: ChartLineUp, testid: "nav-ad-accounts" },
         ],
     },
     {
