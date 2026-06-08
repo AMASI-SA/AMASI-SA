@@ -10,6 +10,36 @@
 
 ---
 
+## ✅ ITERATION 110-c — Ad-account delete button + Settings toggle (Feb 2026)
+
+### Why
+المستخدم يريد القدرة على حذف حساب إعلاني، لكن مع التحكم في إظهار/إخفاء الزر من الإعدادات لمنع الحذف العَرَضي.
+
+### Backend
+- **`SettingsIn.ad_account_allow_delete: bool`** — حقل جديد افتراضي `False`.
+- **`GET /api/settings`** يُرجع الحقل، **`PUT /api/settings`** يقبله.
+- **`DELETE /api/ad-accounts/{cp_id}`** — كان موجوداً سابقاً من Iter-107 ويرفض الحذف عندما `balance > 0` أو يوجد مديونية مفتوحة. لم يُعدّل.
+
+### Frontend
+- **`/settings`**: toggle جديد "إظهار زر حذف الحسابات الإعلانية" — كروت rose-tinted تطابق نمط toggle حذف ملفات التسويات. يُحفظ مع باقي الإعدادات بنفس الـ PUT.
+- **`/ad-accounts`**: زر "🗑️ حذف" يظهر في كل بطاقة عندما `allowDelete=true` فقط. الزر:
+  - مُعطَّل بصرياً (opacity-40) عندما `balance > 0` أو `open_debt > 0` مع tooltip يشرح السبب.
+  - يطلب تأكيد مع رسالة عربية واضحة قبل استدعاء DELETE.
+  - بعد النجاح يُعيد تحميل القائمة.
+
+### Tests — `tests/test_ad_account_delete_iter110.py` (4/4 ✅)
+1. **`test_settings_toggle_round_trip`**: GET → False (default) → PUT True → GET → True. لا تتأثر الـ flags الأخرى.
+2. **`test_delete_zero_balance_zero_debt_account`**: حساب جديد بدون أي حركات يُحذف بنجاح ويُختفي من القائمة.
+3. **`test_delete_blocked_when_balance_positive`**: تعبئة الحساب من بنك → DELETE يعيد 400 "لا يمكن الحذف. الحساب فيه رصيد متبقي".
+4. **`test_delete_blocked_when_open_debt`**: تسجيل صرف يخلق مديونية → DELETE يعيد 400 "لا يمكن الحذف. الحساب عليه مديونية مفتوحة".
+
+### UI Verification (Screenshot)
+- قبل التفعيل: لا زر حذف في بطاقات `/ad-accounts`.
+- بعد التفعيل من `/settings`: زر "🗑️ حذف" يظهر مع باقي الأزرار.
+
+---
+
+
 ## 🐛 BUGFIX 8-Feb-2026 (follow-up) — force re-sync to recover from buggy idempotency stamps
 **User report after first fix deployed**: "المزامنة تمت: 0 حساب · 7 مُتخطّى" — every account skipped. Cause: the previous buggy sync had already stamped `last_auto_sync_date = today` on all 7 counterparties, so even after the data-source fix the new code hits the idempotency guard and returns "already synced" without creating any debt.
 

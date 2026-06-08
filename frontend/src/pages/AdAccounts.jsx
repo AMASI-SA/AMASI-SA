@@ -898,22 +898,48 @@ export default function AdAccounts() {
     const [createOpen, setCreateOpen] = useState(false);
     const [migrationOpen, setMigrationOpen] = useState(false);
     const [openingFor, setOpeningFor] = useState(null);
+    const [allowDelete, setAllowDelete] = useState(false);
 
     const load = async () => {
         setLoading(true);
         try {
-            const [adRes, accRes] = await Promise.all([
+            const [adRes, accRes, settingsRes] = await Promise.all([
                 api.get("/ad-accounts"),
                 api.get("/accounts?type=bank&limit=200"),
+                api.get("/settings"),
             ]);
             setItems(adRes.data?.items || []);
             setTotals(adRes.data?.totals || {});
             setBanks(accRes.data?.items || accRes.data?.accounts || []);
+            setAllowDelete(!!settingsRes.data?.ad_account_allow_delete);
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر التحميل");
         } finally { setLoading(false); }
     };
     useEffect(() => { load(); }, []);
+
+    const deleteAccount = async (row) => {
+        const balance = Number(row.balance || 0);
+        const debt = Number(row.open_debt || 0);
+        if (balance > 0 || debt > 0) {
+            toast.error(
+                `لا يمكن حذف "${row.name}" — الرصيد ${fmt(balance)} والمديونية ${fmt(debt)}. سدّد المديونية واصرف الرصيد أولاً.`
+            );
+            return;
+        }
+        if (!window.confirm(
+            `هل أنت متأكد من حذف الحساب "${row.name}"؟\n\n` +
+            `هذه العملية لا يمكن التراجع عنها — سيُحذف الحساب نهائياً من قائمة الحسابات الإعلانية.\n\n` +
+            `ملاحظة: لن تتأثر بيانات الصرف اليومي المخزّنة في جداول المنصة (snapchat/meta/tiktok daily).`
+        )) return;
+        try {
+            await api.delete(`/ad-accounts/${row.id}`);
+            toast.success(`تم حذف الحساب "${row.name}"`);
+            load();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل الحذف");
+        }
+    };
 
     const toggleMode = async (row) => {
         const next = row.debt_mode === "auto" ? "manual" : "auto";
@@ -1084,6 +1110,21 @@ export default function AdAccounts() {
                                 <button onClick={() => setOpeningFor(row)} className="px-3 py-2 rounded-lg bg-amber-100 text-amber-800 text-xs font-bold hover:bg-amber-200" data-testid={`adacc-opening-btn-${row.id}`} title="رصيد افتتاحي يدوي">
                                     ⚙️ افتتاحي
                                 </button>
+                                {allowDelete && (
+                                    <button
+                                        onClick={() => deleteAccount(row)}
+                                        disabled={Number(row.balance || 0) > 0 || Number(row.open_debt || 0) > 0}
+                                        className="px-3 py-2 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed border border-rose-200"
+                                        data-testid={`adacc-delete-btn-${row.id}`}
+                                        title={
+                                            Number(row.balance || 0) > 0 || Number(row.open_debt || 0) > 0
+                                                ? "غير متاح — الرصيد أو المديونية أكبر من 0"
+                                                : "حذف هذا الحساب الإعلاني"
+                                        }
+                                    >
+                                        🗑️ حذف
+                                    </button>
+                                )}
                             </div>
                         </div>
                     ))}

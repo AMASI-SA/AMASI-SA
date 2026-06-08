@@ -383,6 +383,11 @@ class SettingsIn(BaseModel):
     # accidentally roll back a settlement file. Can be toggled from the
     # Settings page.
     settlements_allow_delete: Optional[bool] = None
+    # Iter-110 — whether the delete button on each Ad-Account card is
+    # shown. Defaults to False (hidden) so the merchant doesn't
+    # accidentally delete an active counterparty. The DELETE endpoint
+    # itself still blocks deletion when balance>0 or open debt exists.
+    ad_account_allow_delete: Optional[bool] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -729,6 +734,8 @@ async def get_settings(user: dict = Depends(current_user)):
         "salla_electronic_net_reference": s.get("salla_electronic_net_reference"),
         # Iter-78 — payment-settlements delete-button visibility
         "settlements_allow_delete": bool(s.get("settlements_allow_delete", False)),
+        # Iter-110 — ad-account delete-button visibility
+        "ad_account_allow_delete": bool(s.get("ad_account_allow_delete", False)),
     }
 
 
@@ -763,6 +770,8 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["salla_electronic_net_reference"] = ref if ref > 0 else None
     if payload.settlements_allow_delete is not None:
         update_doc["settlements_allow_delete"] = bool(payload.settlements_allow_delete)
+    if payload.ad_account_allow_delete is not None:
+        update_doc["ad_account_allow_delete"] = bool(payload.ad_account_allow_delete)
     await db.settings.update_one(
         {"user_id": user["id"]},
         {"$set": update_doc},

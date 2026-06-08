@@ -37,6 +37,7 @@ export default function Settings() {
     });
     const [hideInferred, setHideInferred] = useState(false);
     const [settlementsAllowDelete, setSettlementsAllowDelete] = useState(false);
+    const [adAccountAllowDelete, setAdAccountAllowDelete] = useState(false);
     // iter-45 — Electronic Net status filter overrides
     const [electronicNetExcluded, setElectronicNetExcluded] = useState([]);
     const [sallaElectronicNetRef, setSallaElectronicNetRef] = useState("");
@@ -187,6 +188,7 @@ export default function Settings() {
                 if (settings.net_sales_config) setNetSalesConfig(settings.net_sales_config);
                 setHideInferred(!!settings.hide_inferred_date_orders);
                 setSettlementsAllowDelete(!!settings.settlements_allow_delete);
+                setAdAccountAllowDelete(!!settings.ad_account_allow_delete);
                 // iter-45 — Electronic Net status overrides
                 setElectronicNetExcluded(settings.electronic_net_excluded_statuses || []);
                 setSallaElectronicNetRef(
@@ -556,6 +558,7 @@ export default function Settings() {
                 net_sales_config: netSalesConfig,
                 hide_inferred_date_orders: hideInferred,
                 settlements_allow_delete: settlementsAllowDelete,
+                ad_account_allow_delete: adAccountAllowDelete,
                 // iter-45 — Electronic Net overrides
                 electronic_net_excluded_statuses: electronicNetExcluded,
                 salla_electronic_net_reference: sallaElectronicNetRef.trim()
@@ -1025,6 +1028,28 @@ export default function Settings() {
                         <div className="text-sm font-semibold">إظهار زر حذف ملفات التسويات (سله / تمارا / تابي)</div>
                         <div className="text-xs text-muted-foreground mt-0.5">
                             عند التفعيل، يظهر زر حذف بجوار كل ملف في صفحة <code className="bg-accent px-1 py-0.5 rounded">/payment-settlements</code>. عند الحذف يتم إرجاع الطلبات المرتبطة إلى النسب التقديرية. يُترك مخفياً افتراضياً لمنع الحذف العَرَضي.
+                        </div>
+                    </div>
+                </label>
+
+                {/* Iter-110 — toggle visibility of the delete button on each
+                    Ad-Account card in /ad-accounts. The DELETE endpoint itself
+                    still blocks the action when balance>0 or open debt exists,
+                    so this is purely a UI safety toggle. */}
+                <label
+                    className={`flex items-start gap-3 px-4 py-3 rounded-lg cursor-pointer transition-colors border mt-3 ${adAccountAllowDelete ? "border-rose-300 bg-rose-50/60" : "border-border bg-white"}`}
+                    data-testid="toggle-ad-account-allow-delete"
+                >
+                    <input
+                        type="checkbox"
+                        className="w-4 h-4 mt-1 accent-brand"
+                        checked={adAccountAllowDelete}
+                        onChange={(e) => setAdAccountAllowDelete(e.target.checked)}
+                    />
+                    <div className="flex-1">
+                        <div className="text-sm font-semibold">إظهار زر حذف الحسابات الإعلانية</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                            عند التفعيل، يظهر زر حذف 🗑️ بجوار كل بطاقة حساب إعلاني في صفحة <code className="bg-accent px-1 py-0.5 rounded">/ad-accounts</code>. الحذف مسموح <b>فقط</b> إذا كان الرصيد = 0 والمديونية المفتوحة = 0 (السيرفر يرفض غير ذلك). يُترك مخفياً افتراضياً لمنع الحذف العَرَضي.
                         </div>
                     </div>
                 </label>
