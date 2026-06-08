@@ -79,6 +79,19 @@ class CreateAdAccountIn(BaseModel):
     ad_provider: Literal["snapchat", "tiktok", "meta", "google", "twitter", "other"]
     notes: Optional[str] = ""
     force: bool = False
+    # Iter-109 — external ID on the ad platform itself (e.g. Snapchat
+    # ad_account_id "acc_SA_001"). When set the sync filters daily
+    # spend by this exact ID so multi-account users get independent
+    # debt per account.
+    external_account_id: Optional[str] = Field(None, max_length=120)
+
+
+class UpdateAdAccountIn(BaseModel):
+    """Iter-109 — edit name / notes / external_account_id (debt-mode
+    has its own dedicated endpoint)."""
+    name: Optional[str] = Field(None, min_length=1, max_length=160)
+    notes: Optional[str] = Field(None, max_length=2000)
+    external_account_id: Optional[str] = Field(None, max_length=120)
 
 
 class SyncFromPlatformIn(BaseModel):
@@ -136,6 +149,7 @@ async def _summarise(db, user_id: str, cp: dict) -> dict:
         "id": cp["id"],
         "name": cp["name"],
         "ad_provider": cp.get("ad_provider"),
+        "external_account_id": cp.get("external_account_id"),
         "balance": _round(cp.get("balance") or 0),
         "debt_mode": cp.get("debt_mode") or "auto",
         "open_debt": debt_remaining,
@@ -144,6 +158,7 @@ async def _summarise(db, user_id: str, cp: dict) -> dict:
         "last_topup": last_events["topup"],
         "last_spend": last_events["spend"],
         "last_debt": last_events["debt"],
+        "last_auto_sync_date": cp.get("last_auto_sync_date"),
         "notes": cp.get("notes"),
     }
 
@@ -479,14 +494,17 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
                 400,
                 f"المزامنة التلقائية غير متاحة لمنصة {provider}. استخدم /spend يدوياً.",
             )
-        # Sum spend in the date range
-        cur = db[col_name].find(
-            {
-                "user_id": user["id"],
-                "date": {"$gte": payload.from_date, "$lte": payload.to_date},
-            },
-            {"_id": 0, "spend": 1, "date": 1},
-        )
+        # Sum spend in the date range — filter by external_account_id
+        # when set on the counterparty so multi-account users get
+        # independent per-account debt (Iter-109).
+        q = {
+            "user_id": user["id"],
+            "date": {"$gte": payload.from_date, "$lte": payload.to_date},
+        }
+        ext_id = (cp.get("external_account_id") or "").strip()
+        if ext_id:
+            q["ad_account_id"] = ext_id
+        cur = db[col_name].find(q, {"_id": 0, "spend": 1, "date": 1})
         total_spend = 0.0
         days_seen = set()
         async for row in cur:
@@ -568,11 +586,33 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             "notes": payload.notes or "",
             "balance": 0.0,
             "debt_mode": "auto",
+            "external_account_id": (payload.external_account_id or "").strip() or None,
             "created_at": now,
             "updated_at": now,
         }
         await db.counterparties.insert_one(doc)
         return await _summarise(db, user["id"], doc)
+
+    # ── PATCH /{cp_id} — edit name / notes / external_account_id (Iter-109)
+    @router.patch("/{cp_id}")
+    async def update_ad_account(
+        cp_id: str, payload: UpdateAdAccountIn,
+        user: dict = Depends(current_user),
+    ):
+        await _get_account(db, user["id"], cp_id)
+        upd = {"updated_at": _now()}
+        if payload.name is not None:
+            upd["name"] = payload.name.strip()
+            upd["name_lower"] = payload.name.strip().lower()
+        if payload.notes is not None:
+            upd["notes"] = payload.notes
+        if payload.external_account_id is not None:
+            upd["external_account_id"] = payload.external_account_id.strip() or None
+        await db.counterparties.update_one(
+            {"id": cp_id, "user_id": user["id"]}, {"$set": upd},
+        )
+        cp = await _get_account(db, user["id"], cp_id)
+        return await _summarise(db, user["id"], cp)
 
     # ── DELETE /{cp_id} ───────────────────────────────────────────────
     @router.delete("/{cp_id}")
@@ -629,11 +669,13 @@ async def _run_sync_for_all(db, user_id: str, from_date: str, to_date: str) -> l
                         "skipped": True, "reason": "already_synced"})
             continue
         col = SUPPORTED[cp["ad_provider"]]
+        # Iter-109 — per-account filter via external_account_id.
+        q = {"user_id": user_id, "date": {"$gte": from_date, "$lte": to_date}}
+        ext_id = (cp.get("external_account_id") or "").strip()
+        if ext_id:
+            q["ad_account_id"] = ext_id
         total = 0.0
-        async for row in db[col].find(
-            {"user_id": user_id, "date": {"$gte": from_date, "$lte": to_date}},
-            {"_id": 0, "spend": 1},
-        ):
+        async for row in db[col].find(q, {"_id": 0, "spend": 1}):
             total += float(row.get("spend") or 0)
         total = round(total, 2)
         if total <= 0:

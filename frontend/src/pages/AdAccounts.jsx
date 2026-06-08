@@ -45,13 +45,15 @@ const inputCls =
 
 // ── Create dialog (inline new ad account) ───────────────────────────
 function CreateDialog({ open, onClose, onSaved }) {
-    const [form, setForm] = useState({ name: "", ad_provider: "snapchat", notes: "" });
+    const [form, setForm] = useState({
+        name: "", ad_provider: "snapchat", notes: "", external_account_id: "",
+    });
     const [busy, setBusy] = useState(false);
     const [warning, setWarning] = useState(null);
 
     useEffect(() => {
         if (!open) return;
-        setForm({ name: "", ad_provider: "snapchat", notes: "" });
+        setForm({ name: "", ad_provider: "snapchat", notes: "", external_account_id: "" });
         setWarning(null);
     }, [open]);
 
@@ -61,7 +63,11 @@ function CreateDialog({ open, onClose, onSaved }) {
         if (!form.name.trim()) { toast.error("الاسم مطلوب"); return; }
         setBusy(true);
         try {
-            await api.post("/ad-accounts", { ...form, name: form.name.trim(), force });
+            await api.post("/ad-accounts", {
+                ...form, name: form.name.trim(),
+                external_account_id: form.external_account_id.trim() || null,
+                force,
+            });
             toast.success(`تمت إضافة "${form.name}"`);
             onSaved();
             onClose();
@@ -98,8 +104,27 @@ function CreateDialog({ open, onClose, onSaved }) {
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-slate-700 mb-1.5">الاسم *</label>
-                            <input value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setWarning(null); }} placeholder="مثال: TikTok Account 1" className={inputCls} data-testid="adacc-create-name" />
+                            <input value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setWarning(null); }} placeholder="مثال: متجر أماسي سعودي / Self Service" className={inputCls} data-testid="adacc-create-name" />
                         </div>
+                        {SYNC_SUPPORTED.has(form.ad_provider) && (
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                                    معرّف الحساب على المنصة (Ad Account ID)
+                                    <span className="text-slate-400 font-normal mr-1">— مهم لربط المزامنة</span>
+                                </label>
+                                <input
+                                    value={form.external_account_id}
+                                    onChange={(e) => setForm({ ...form, external_account_id: e.target.value })}
+                                    placeholder="acc_SA_001"
+                                    className={`${inputCls} font-mono`}
+                                    dir="ltr"
+                                    data-testid="adacc-create-external-id"
+                                />
+                                <div className="text-[11px] text-slate-500 mt-1">
+                                    💡 لو عندك أكثر من حساب على نفس المنصة، اربط كل اسم بمعرّفه على {PROVIDER_LABEL[form.ad_provider]} حتى تنفصل المديونيات تلقائياً.
+                                </div>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-xs font-bold text-slate-700 mb-1.5">ملاحظات</label>
                             <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputCls} />
@@ -556,6 +581,11 @@ export default function AdAccounts() {
                                         </span>
                                     </div>
                                     {row.notes && <div className="text-xs text-slate-500 mt-1">{row.notes}</div>}
+                                    {row.external_account_id && (
+                                        <div className="text-[11px] text-slate-500 mt-1 font-mono" dir="ltr">
+                                            🔗 {row.external_account_id}
+                                        </div>
+                                    )}
                                 </div>
                                 <button onClick={() => toggleMode(row)} className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${row.debt_mode === "auto" ? "bg-violet-50 text-violet-800 border-violet-200" : "bg-amber-50 text-amber-800 border-amber-200"}`} title="غيِّر وضع احتساب المديونية" data-testid={`adacc-mode-toggle-${row.id}`}>
                                     {row.debt_mode === "auto" ? "تلقائي" : "يدوي"}
