@@ -345,7 +345,345 @@ function KPI({ title, value, sub, tone = "slate", Icon, testid }) {
 }
 
 
-// ── Main page ───────────────────────────────────────────────────────
+// ── Developer Docs tab ──────────────────────────────────────────────
+function DocsTab({ settings }) {
+    const ep = settings?.endpoints || {};
+    const baseUrl = settings?.base_url || "";
+    const apiKey = settings?.api_key || "<your-api-key>";
+
+    const CodeBlock = ({ children, lang = "json" }) => (
+        <pre className="font-mono text-[11px] text-slate-700 bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-3 overflow-x-auto leading-5" dir="ltr">
+            <div className="text-[10px] text-slate-500 mb-1">{lang}</div>
+            {children}
+        </pre>
+    );
+
+    const Section = ({ id, title, children }) => (
+        <section id={id} className="bg-white border border-slate-200 rounded-xl p-5 space-y-3 scroll-mt-24" data-testid={`docs-${id}`}>
+            <h3 className="font-extrabold text-base text-slate-900 border-b border-slate-100 pb-3">{title}</h3>
+            {children}
+        </section>
+    );
+
+    return (
+        <div className="space-y-4">
+            {/* Quick TOC */}
+            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 text-xs">
+                <div className="font-bold text-violet-900 mb-2">📚 محتوى الدليل</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {[
+                        ["overview", "1. نظرة عامة"],
+                        ["auth", "2. المصادقة"],
+                        ["orders", "3. إرسال الطلبات"],
+                        ["products", "4. مزامنة المنتجات"],
+                        ["customers", "5. مزامنة العملاء"],
+                        ["errors", "6. الأخطاء"],
+                        ["dedup", "7. منع التكرار"],
+                        ["examples", "8. أمثلة بلغات"],
+                    ].map(([id, label]) => (
+                        <a key={id} href={`#${id}`} className="text-violet-700 hover:underline">{label}</a>
+                    ))}
+                </div>
+            </div>
+
+            <Section id="overview" title="1. نظرة عامة">
+                <div className="text-sm text-slate-700 space-y-2 leading-7">
+                    <p>تطبيقك يرسل البيانات إلى MEZAN عبر <b>REST API</b> بصيغة JSON. النظام يستقبل ثلاث أنواع من البيانات:</p>
+                    <ul className="list-disc mr-5 space-y-1">
+                        <li><b>الطلبات</b> (مع بنودها) — تُحفظ في `unified_orders` + `order_items`.</li>
+                        <li><b>المنتجات</b> — كتالوج موحَّد.</li>
+                        <li><b>العملاء</b> — قاعدة بيانات موحَّدة للعملاء.</li>
+                    </ul>
+                    <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs">
+                        <b>🔑 مهم:</b> تطبيقك أصبح <b>المصدر الرئيسي</b> للبيانات (أعلى أولوية من Make/Excel/سلة). البيانات القادمة منه تتفوق على ما هو موجود في حال التعارض.
+                    </div>
+                    <div><b>Base URL:</b> <code className="bg-slate-100 px-2 py-0.5 rounded text-xs">{baseUrl}</code></div>
+                    <div><b>صيغة جميع الطلبات:</b> <code className="bg-slate-100 px-2 py-0.5 rounded text-xs">Content-Type: application/json</code></div>
+                </div>
+            </Section>
+
+            <Section id="auth" title="2. المصادقة (Authentication)">
+                <div className="text-sm text-slate-700 leading-7">
+                    <p>كل طلب يجب أن يحمل المفتاح في الهيدر التالي:</p>
+                </div>
+                <CodeBlock lang="HTTP header">{`X-API-Key: ${apiKey}`}</CodeBlock>
+                <div className="text-xs text-slate-600 space-y-1">
+                    <div>• المفتاح من تبويب <b>"الإعدادات"</b> — يبدأ بـ <code>mzn_</code>.</div>
+                    <div>• عند تدوير المفتاح، القديم يتوقف فوراً.</div>
+                    <div>• المفتاح يحدد المالك تلقائياً — لا حاجة لإرسال user_id.</div>
+                    <div>• ⚠️ <b>لا تشاركه</b> ولا ترفعه على Git.</div>
+                </div>
+            </Section>
+
+            <Section id="orders" title="3. إرسال الطلبات">
+                <div className="text-sm text-slate-700 space-y-2 leading-7">
+                    <p><b>Endpoint:</b> <code className="text-xs bg-slate-100 px-2 py-0.5 rounded" dir="ltr">POST {ep.orders}</code></p>
+                    <p>يقبل <b>طلباً واحداً</b> أو <b>مصفوفة (`orders`)</b> دفعةً واحدة.</p>
+                </div>
+
+                <div className="font-bold text-xs text-slate-700 mt-3">📋 الحقول المدعومة (جميعها اختيارية ما لم يُذكر عكس ذلك):</div>
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table className="w-full text-xs">
+                        <thead className="bg-slate-50 text-slate-600">
+                            <tr><th className="text-right p-2 font-bold">الحقل</th><th className="text-right p-2 font-bold">النوع</th><th className="text-right p-2 font-bold">الوصف</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {[
+                                ["order_number ⭐", "string", "المعرّف الرئيسي للطلب (مطلوب أو order_id)"],
+                                ["order_id", "string", "بديل لـ order_number"],
+                                ["reference_id", "string", "مرجع احتياطي للربط"],
+                                ["created_at", "ISO date", "تاريخ إنشاء الطلب (e.g. 2026-06-10T12:00:00Z)"],
+                                ["updated_at", "ISO date", "آخر تحديث"],
+                                ["order_status", "string", "تم التوصيل / قيد التنفيذ / ملغي …"],
+                                ["payment_status", "string", "paid / unpaid / partial / refunded"],
+                                ["payment_method", "string", "cash_on_delivery / mada / visa / apple_pay / tamara …"],
+                                ["currency", "string", "SAR (افتراضي)"],
+                                ["subtotal / discount / shipping_cost / tax / fees", "number", "أرقام بالعملة"],
+                                ["total_amount ⭐", "number", "الإجمالي النهائي"],
+                                ["paid_amount / refunded_amount", "number", "المسدَّد / المسترجع"],
+                                ["customer_id / customer_name / mobile / email / city / country", "string", "بيانات العميل"],
+                                ["shipping_company / tracking_number / shipment_status / shipping_address", "string", "بيانات الشحن"],
+                                ["utm_source / utm_medium / utm_campaign / utm_content / utm_term", "string", "UTM للتسويق"],
+                                ["device_type", "string", "mobile / desktop / tablet"],
+                                ["items[] ⭐", "array", "مصفوفة بنود الطلب (انظر أدناه)"],
+                            ].map(([f, t, d]) => (
+                                <tr key={f}><td className="p-2 font-bold text-slate-900" dir="ltr">{f}</td><td className="p-2 text-slate-600">{t}</td><td className="p-2 text-slate-700">{d}</td></tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="font-bold text-xs text-slate-700 mt-3">📦 حقول كل عنصر في items[]:</div>
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table className="w-full text-xs">
+                        <thead className="bg-slate-50 text-slate-600">
+                            <tr><th className="text-right p-2 font-bold">الحقل</th><th className="text-right p-2 font-bold">النوع</th><th className="text-right p-2 font-bold">الوصف</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {[
+                                ["product_name ⭐", "string", "اسم المنتج (مطلوب)"],
+                                ["sku / barcode", "string", "كود المنتج / الباركود"],
+                                ["product_id", "string", "معرّف المنتج في نظامك"],
+                                ["variant_name", "string", "نوع المتغيّر (مقاس/لون)"],
+                                ["quantity ⭐", "number > 0", "الكمية"],
+                                ["unit_price ⭐", "number ≥ 0", "سعر الوحدة"],
+                                ["total_price", "number", "اختياري — يُحسب تلقائياً (qty × price)"],
+                                ["cost_price", "number", "تكلفة المنتج (للأرباح)"],
+                                ["weight / image_url / category / brand", "—", "بيانات وصفية"],
+                            ].map(([f, t, d]) => (
+                                <tr key={f}><td className="p-2 font-bold text-slate-900" dir="ltr">{f}</td><td className="p-2 text-slate-600">{t}</td><td className="p-2 text-slate-700">{d}</td></tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="font-bold text-xs text-slate-700 mt-3">✅ مثال طلب كامل:</div>
+                <CodeBlock>{`POST ${ep.orders}
+X-API-Key: ${apiKey}
+Content-Type: application/json
+
+{
+  "order_number": "ORD-1001",
+  "created_at": "2026-06-10T12:00:00Z",
+  "order_status": "تم التوصيل",
+  "payment_status": "paid",
+  "payment_method": "cash_on_delivery",
+  "currency": "SAR",
+  "subtotal": 150, "discount": 10, "shipping_cost": 20,
+  "tax": 18, "total_amount": 178,
+  "customer_name": "أحمد محمد",
+  "mobile": "0555555555",
+  "city": "الرياض",
+  "shipping_company": "أرامكس",
+  "tracking_number": "TRK-AAA-123",
+  "utm_source": "snapchat",
+  "utm_campaign": "summer_sale",
+  "items": [
+    {"product_name": "كرتون 30×30", "sku": "K3030",
+     "quantity": 2, "unit_price": 50, "cost_price": 30},
+    {"product_name": "شريط لاصق", "sku": "TAPE",
+     "quantity": 1, "unit_price": 50}
+  ]
+}`}</CodeBlock>
+
+                <div className="font-bold text-xs text-slate-700 mt-3">📤 مثال إرسال دفعة:</div>
+                <CodeBlock>{`{
+  "orders": [
+    { "order_number": "ORD-001", "total_amount": 100, "items": [...] },
+    { "order_number": "ORD-002", "total_amount": 250, "items": [...] },
+    { "order_number": "ORD-003", "total_amount": 80,  "items": [...] }
+  ]
+}`}</CodeBlock>
+
+                <div className="font-bold text-xs text-slate-700 mt-3">📥 الاستجابة الناجحة (200):</div>
+                <CodeBlock>{`{
+  "ok": true,
+  "received": 3,
+  "created": 2,
+  "updated": 1,
+  "errors": 0,
+  "results": [
+    {"ok": true, "order_number": "ORD-001", "created": true,  "items": 2},
+    {"ok": true, "order_number": "ORD-002", "created": false, "items": 1},
+    {"ok": true, "order_number": "ORD-003", "created": true,  "items": 3}
+  ]
+}`}</CodeBlock>
+            </Section>
+
+            <Section id="products" title="4. مزامنة المنتجات">
+                <div className="text-sm text-slate-700 leading-7">
+                    <b>Endpoint:</b> <code className="text-xs bg-slate-100 px-2 py-0.5 rounded" dir="ltr">POST {ep.products}</code>
+                </div>
+                <div className="text-xs text-slate-600">الإرسال يدعم منتجاً واحداً أو مصفوفة `products`. النظام يبحث عن المنتج بـ <code>product_id</code> ثم <code>sku</code> ويحدّث إذا وجده، أو ينشئه.</div>
+                <CodeBlock>{`POST ${ep.products}
+X-API-Key: ${apiKey}
+
+{
+  "products": [
+    {
+      "product_id": "P-001",
+      "sku": "SKU-A",
+      "barcode": "1234567890",
+      "name": "كرتون 30×30",
+      "cost_price": 30,
+      "sale_price": 60,
+      "quantity": 150,
+      "category": "تغليف",
+      "brand": "ProBox",
+      "image_url": "https://example.com/p001.jpg"
+    }
+  ]
+}`}</CodeBlock>
+                <div className="text-xs text-slate-600">الاستجابة: <code dir="ltr">{`{"ok": true, "received": N, "created": X, "updated": Y}`}</code></div>
+            </Section>
+
+            <Section id="customers" title="5. مزامنة العملاء">
+                <div className="text-sm text-slate-700 leading-7">
+                    <b>Endpoint:</b> <code className="text-xs bg-slate-100 px-2 py-0.5 rounded" dir="ltr">POST {ep.customers}</code>
+                </div>
+                <div className="text-xs text-slate-600">يبحث بـ <code>customer_id</code> ثم <code>mobile</code> — يحدّث إذا وجد، أو ينشئ.</div>
+                <CodeBlock>{`POST ${ep.customers}
+X-API-Key: ${apiKey}
+
+{
+  "customers": [
+    {"customer_id": "C-001", "name": "أحمد",
+     "mobile": "0555555555", "city": "الرياض"},
+    {"customer_id": "C-002", "name": "خالد",
+     "mobile": "0566666666", "email": "k@example.com"}
+  ]
+}`}</CodeBlock>
+            </Section>
+
+            <Section id="errors" title="6. أكواد الأخطاء والاستجابات">
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table className="w-full text-xs">
+                        <thead className="bg-slate-50 text-slate-600">
+                            <tr><th className="text-right p-2 font-bold">الكود</th><th className="text-right p-2 font-bold">المعنى</th><th className="text-right p-2 font-bold">الحل</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            <tr><td className="p-2 font-bold text-emerald-700">200</td><td className="p-2">نجح (انظر `errors` في الـ body)</td><td className="p-2">—</td></tr>
+                            <tr><td className="p-2 font-bold text-rose-700">400</td><td className="p-2">payload غير صالح (حقل ناقص/نوع خاطئ)</td><td className="p-2">راجع تفاصيل الخطأ في `detail`</td></tr>
+                            <tr><td className="p-2 font-bold text-rose-700">401</td><td className="p-2">مفتاح API مفقود أو خاطئ أو متوقف</td><td className="p-2">تحقق من الهيدر X-API-Key</td></tr>
+                            <tr><td className="p-2 font-bold text-rose-700">500</td><td className="p-2">خطأ في النظام</td><td className="p-2">جرّب لاحقاً أو تواصل معنا</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div className="text-xs text-slate-600 mt-2">
+                    💡 <b>توصية:</b> طبّق منطق إعادة المحاولة (retry) مع تأخير exponential عند الحصول على 500.
+                </div>
+            </Section>
+
+            <Section id="dedup" title="7. منع التكرار (Idempotency)">
+                <div className="text-sm text-slate-700 space-y-2 leading-7">
+                    <ul className="list-disc mr-5 space-y-1 text-xs">
+                        <li>المفتاح الفريد للطلب: <code>(user_id, order_number)</code>. إعادة الإرسال = تحديث، لا تكرار.</li>
+                        <li>عند إعادة إرسال نفس الطلب، البنود (items) <b>تُستبدل بالكامل</b> بالقائمة الجديدة.</li>
+                        <li>المنتجات: مفتاح ثنائي — <code>product_id</code> أو <code>sku</code> (يفضل توفير الأول).</li>
+                        <li>العملاء: مفتاح ثنائي — <code>customer_id</code> أو <code>mobile</code>.</li>
+                        <li>إذا وصل نفس الطلب من Excel أو Make لاحقاً، النظام يحتفظ بمصدر <code>custom_app</code> (الأعلى أولوية) ولا يتراجع.</li>
+                    </ul>
+                </div>
+            </Section>
+
+            <Section id="examples" title="8. أمثلة كود بلغات مختلفة">
+                <div className="font-bold text-xs text-slate-700 mt-2">cURL</div>
+                <CodeBlock lang="bash">{`curl -X POST '${ep.orders}' \\
+  -H 'X-API-Key: ${apiKey}' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "order_number": "ORD-1001",
+    "total_amount": 178,
+    "items": [{"product_name": "x", "quantity": 1, "unit_price": 178}]
+  }'`}</CodeBlock>
+
+                <div className="font-bold text-xs text-slate-700 mt-3">JavaScript / Node.js (axios)</div>
+                <CodeBlock lang="javascript">{`const axios = require("axios");
+
+await axios.post(
+  "${ep.orders}",
+  {
+    order_number: "ORD-1001",
+    created_at: new Date().toISOString(),
+    order_status: "تم التوصيل",
+    total_amount: 178,
+    customer_name: "أحمد",
+    mobile: "0555555555",
+    items: [
+      { product_name: "كرتون", sku: "K1", quantity: 2, unit_price: 50 },
+      { product_name: "شريط",  sku: "T1", quantity: 1, unit_price: 78 },
+    ],
+  },
+  { headers: { "X-API-Key": "${apiKey}" } }
+);`}</CodeBlock>
+
+                <div className="font-bold text-xs text-slate-700 mt-3">Python (requests)</div>
+                <CodeBlock lang="python">{`import requests
+
+requests.post(
+    "${ep.orders}",
+    json={
+        "order_number": "ORD-1001",
+        "total_amount": 178,
+        "customer_name": "أحمد",
+        "items": [
+            {"product_name": "كرتون", "sku": "K1",
+             "quantity": 2, "unit_price": 50},
+        ],
+    },
+    headers={"X-API-Key": "${apiKey}"},
+    timeout=15,
+)`}</CodeBlock>
+
+                <div className="font-bold text-xs text-slate-700 mt-3">PHP (Laravel / Guzzle)</div>
+                <CodeBlock lang="php">{`use Illuminate\\Support\\Facades\\Http;
+
+Http::withHeaders(['X-API-Key' => '${apiKey}'])
+    ->post('${ep.orders}', [
+        'order_number' => 'ORD-1001',
+        'total_amount' => 178,
+        'customer_name' => 'أحمد',
+        'items' => [[
+            'product_name' => 'كرتون', 'sku' => 'K1',
+            'quantity' => 2, 'unit_price' => 50
+        ]],
+    ]);`}</CodeBlock>
+
+                <div className="font-bold text-xs text-slate-700 mt-3">اختبار سريع (Test connection)</div>
+                <CodeBlock lang="bash">{`curl -X POST '${ep.test}' \\
+  -H 'X-API-Key: ${apiKey}'
+
+# الاستجابة: {"ok": true, "user_email": "...", "now": "..."}`}</CodeBlock>
+            </Section>
+
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs text-emerald-900 leading-6">
+                ✅ <b>توصية للمطوّر:</b> ابدأ بإرسال طلب اختباري على endpoint الـ test-connection للتأكد من المفتاح، ثم أرسل طلباً واحداً بسيطاً، وراقب نتيجته من تبويب <b>"المراقبة والسجل"</b>. عند الجاهزية، فعّل دفعات أكبر أو webhook تلقائي من نظامك.
+            </div>
+        </div>
+    );
+}
+
+
 export default function CustomAppIntegration() {
     const [tab, setTab] = useState("settings");
     const [settings, setSettings] = useState(null);
@@ -374,13 +712,14 @@ export default function CustomAppIntegration() {
                 </p>
             </div>
 
-            <div className="flex gap-1 border-b border-slate-200">
+            <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
                 {[
                     { v: "settings",   label: "الإعدادات",        testid: "capi-tab-settings" },
                     { v: "monitoring", label: "المراقبة والسجل", testid: "capi-tab-monitoring" },
+                    { v: "docs",       label: "📘 دليل المطوّر",  testid: "capi-tab-docs" },
                 ].map((b) => (
                     <button key={b.v} onClick={() => setTab(b.v)} data-testid={b.testid}
-                        className={`px-4 py-2 text-sm font-bold border-b-2 transition ${tab === b.v ? "border-violet-700 text-violet-900" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+                        className={`px-4 py-2 text-sm font-bold border-b-2 transition whitespace-nowrap ${tab === b.v ? "border-violet-700 text-violet-900" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
                         {b.label}
                     </button>
                 ))}
@@ -392,6 +731,11 @@ export default function CustomAppIntegration() {
                 ) : <SettingsTab settings={settings} onChanged={setSettings} />
             )}
             {tab === "monitoring" && <MonitoringTab />}
+            {tab === "docs" && (
+                loading ? (
+                    <div className="text-center text-slate-500 text-sm py-8">جاري التحميل…</div>
+                ) : <DocsTab settings={settings} />
+            )}
         </div>
     );
 }
