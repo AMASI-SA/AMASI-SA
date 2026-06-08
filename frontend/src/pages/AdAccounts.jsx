@@ -917,12 +917,22 @@ export default function AdAccounts() {
         try {
             const [adRes, accRes, settingsRes] = await Promise.all([
                 api.get("/ad-accounts"),
-                api.get("/accounts?type=bank&limit=200"),
+                // Iter-110 fix — endpoint expects `account_type=` (not `type=`)
+                // and returns a plain list, not `{items: []}`. Filter to
+                // visible active bank accounts only.
+                api.get("/accounts?account_type=bank"),
                 api.get("/settings"),
             ]);
             setItems(adRes.data?.items || []);
             setTotals(adRes.data?.totals || {});
-            setBanks(accRes.data?.items || accRes.data?.accounts || []);
+            const rawAccounts = Array.isArray(accRes.data)
+                ? accRes.data
+                : (accRes.data?.items || accRes.data?.accounts || []);
+            setBanks(rawAccounts.filter(
+                (a) => a.account_type === "bank"
+                    && a.status !== "hidden"
+                    && a.status !== "inactive",
+            ));
             setAllowDelete(!!settingsRes.data?.ad_account_allow_delete);
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر التحميل");

@@ -10,6 +10,28 @@
 
 ---
 
+## 🐛 BUGFIX 9-Feb-2026 — Bank dropdown empty on /ad-accounts dialogs
+**User report**: "عند تسديد المديونيه الاعلانيه لا تظهر اسماء البنوك" — bank names didn't show when opening the Top-up dialog (or any flow needing a bank account).
+
+**Root cause** in `AdAccounts.jsx`:
+```js
+api.get("/accounts?type=bank&limit=200")  // backend ignores ?type=, expects ?account_type=
+...
+setBanks(accRes.data?.items || accRes.data?.accounts || []) // response is a plain list, so both are undefined → []
+```
+
+So `banks` was ALWAYS `[]`, even when the user had multiple bank accounts.
+
+**Fix**:
+1. Send the correct query param: `?account_type=bank`.
+2. Handle the plain-list response shape via `Array.isArray(accRes.data)` fallback.
+3. Filter to active visible banks (`status !== "hidden" && status !== "inactive"`) on the client too.
+
+**Verified via screenshot** with the production-shape user (`amasi.jewelery@gmail.com`): top-up dialog now lists all 3 bank accounts with their balances (بنك الإنماء 40,000.00 / بنك الأهلي 0.00 / بنك الراجحي 0.00).
+
+---
+
+
 ## ✅ ITERATION 110-d — Cumulative-debt fix + Diagnose UI (Feb 2026)
 
 ### Why
