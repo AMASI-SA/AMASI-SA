@@ -79,7 +79,13 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
 
     # `make_has_touched` controls whether Excel writes can override.
     make_has_touched = bool((existing or {}).get("last_make_update_at"))
-    excel_only_fills_empty = (source == "excel" and make_has_touched)
+    # Iter-105 — custom_app is the merchant's own application. It is
+    # treated as authoritative (same precedence as Make), since it is
+    # also a real-time push from the source-of-truth system.
+    excel_only_fills_empty = (
+        source == "excel"
+        and (make_has_touched or bool(merged.get("last_custom_app_update_at")))
+    )
     # Iter-73 (Salla Direct, Phase 2) — Salla Direct is being validated
     # against Make/Excel. Until the merchant confirms parity, we treat
     # salla_direct exactly like Excel: it never overwrites a field that
@@ -177,6 +183,8 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
         merged["last_excel_import_at"] = now
     elif source == "salla_direct":
         merged["last_salla_direct_sync_at"] = now
+    elif source == "custom_app":
+        merged["last_custom_app_update_at"] = now
     merged["last_source"] = source
     merged["updated_by_source"] = source
     # Iteration 31 — data_source precedence: make > excel.
@@ -195,7 +203,19 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
         or source == "make"
         or any((s or {}).get("source") == "make" for s in data_sources)
     )
-    merged["data_source"] = "make" if has_make else source
+    # Iter-105 — custom_app takes precedence over everything else
+    # (merchant's authoritative system). Falls back to make/source.
+    has_custom = (
+        existing_ds == "custom_app"
+        or source == "custom_app"
+        or any((s or {}).get("source") == "custom_app" for s in data_sources)
+    )
+    if has_custom:
+        merged["data_source"] = "custom_app"
+    elif has_make:
+        merged["data_source"] = "make"
+    else:
+        merged["data_source"] = source
     return merged
 
 

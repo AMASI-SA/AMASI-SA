@@ -10,6 +10,70 @@
 
 ---
 
+## ✅ ITERATION 105 — Custom App Integration (Feb 2026)
+
+### Why
+Add the merchant's own app as a primary, real-time data source while keeping ALL existing sources (Excel, Make.com, settlement files, Snap/TikTok/Meta ads, manual entries) untouched.
+
+### Backend (`backend/custom_app_routes.py` — NEW)
+- **API Key auth** (`X-API-Key` header) — per-user, stored in `settings.custom_app.api_key`. Auto-seeded with `mzn_<32-byte-token-urlsafe>` on first access.
+- **Endpoints** (all under `/api/integrations/custom-app/`):
+  - `POST /orders` — accepts single order or `{orders: [...]}` batch. Upserts into `unified_orders` via existing merge logic with `source="custom_app"`. Line items stored in NEW `order_items` collection. Raw payload saved in `integration_events` for audit.
+  - `POST /products` — upsert into NEW `custom_app_products`.
+  - `POST /customers` — upsert into NEW `custom_app_customers`.
+  - `POST /test-connection` — ping.
+  - `GET /status` (JWT) — counters + last order + recent events + recent errors.
+  - `GET /settings` (JWT) — current API key + endpoint URLs.
+  - `POST /settings/api-key/regenerate` (JWT) — rotates key, old key instantly invalidated.
+  - `POST /settings/toggle` (JWT) — enable/disable integration.
+
+### Source precedence updated (`orders_db.py`)
+- `custom_app` > `make` > `salla_direct` > `excel` (merchant's own app is the new authoritative source).
+- Existing sources keep working with the exact same fill-empty-fields rule when an order has been touched by Make or custom_app.
+
+### Captured fields (full spec from user)
+- Identity: order_id, order_number, reference_id, created_at, updated_at, order_status, payment_status, payment_method, source, currency.
+- Amounts: subtotal, discount, shipping_cost, tax, fees, total_amount, paid_amount, refunded_amount.
+- Customer: id, name, mobile, email, city, country.
+- Shipping: shipping_company, tracking_number, shipment_status, shipping_address.
+- Marketing: utm_source/medium/campaign/content/term, device_type.
+- Items: product_id, sku, barcode, name, variant, qty, unit_price, total_price, cost_price, weight, image_url, category, brand.
+
+### Dedup logic
+- Primary key: `(user_id, order_number)`. Repeats UPDATE the existing record. No new rows.
+- `data_source` set to `custom_app` once any custom-app payload touches it (sticks even if Excel re-uploads same period).
+- All write events appended to `data_sources[]` history (capped at 20).
+
+### Frontend (`CustomAppIntegration.jsx` — NEW page `/integrations/custom-app`)
+- **Tab 1 — الإعدادات**:
+  - Status banner (enabled / disabled) + toggle.
+  - API Key with mask/reveal/copy/regenerate.
+  - 4 endpoint URLs ready-to-paste (`orders`/`products`/`customers`/`test`).
+  - JSON example for the merchant's developer.
+- **Tab 2 — المراقبة والسجل**:
+  - Connection status banner (`connected` / `error` / `no_data`).
+  - 4 KPIs (orders / products / customers / errors).
+  - Last received order summary.
+  - Auto-refresh every 30s.
+  - Latest-20 events table (timestamp / type / status / summary).
+  - Recent-errors panel with raw error details.
+- Sidebar entry "ربط تطبيقي الخاص" under "الاستيراد والربط".
+
+### Tests — `tests/test_custom_app_integration_iter105.py` (10/10 ✅)
+1. Single order with 2 items → 1 unified_order + 2 order_items.
+2. Re-sending same order_number → updates, no dup.
+3. Batch of 3 orders → 3 created.
+4. Missing order identifier → graceful failure in results array.
+5. Products upsert: 2 created + 1 updated.
+6. Customers upsert: 2 created.
+7. Invalid / missing API key → 401.
+8. Regenerate key invalidates old key & enables new key.
+9. Existing `/api/orders` endpoint still responds (no shadowing).
+10. Test-connection endpoint returns user email.
+
+---
+
+
 ## ✅ ITERATION 104 — Procurement, Advances & Receivables Section (Feb 2026)
 
 ### Why
