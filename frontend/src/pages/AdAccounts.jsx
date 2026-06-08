@@ -899,6 +899,18 @@ export default function AdAccounts() {
     const [migrationOpen, setMigrationOpen] = useState(false);
     const [openingFor, setOpeningFor] = useState(null);
     const [allowDelete, setAllowDelete] = useState(false);
+    const [diagnose, setDiagnose] = useState(null);
+    const [diagBusy, setDiagBusy] = useState(false);
+
+    const runDiagnose = async () => {
+        setDiagBusy(true);
+        try {
+            const { data } = await api.get("/ad-accounts/diagnose");
+            setDiagnose(data);
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التشخيص");
+        } finally { setDiagBusy(false); }
+    };
 
     const load = async () => {
         setLoading(true);
@@ -965,6 +977,9 @@ export default function AdAccounts() {
                     </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 self-start">
+                    <button onClick={runDiagnose} disabled={diagBusy} className="px-4 py-2.5 rounded-lg bg-blue-100 text-blue-800 text-sm font-bold hover:bg-blue-200 flex items-center gap-2 disabled:opacity-50" data-testid="adacc-diagnose-btn">
+                        🩺 {diagBusy ? "جاري التشخيص…" : "تشخيص المزامنة"}
+                    </button>
                     <button onClick={() => setMigrationOpen(true)} className="px-4 py-2.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-bold hover:bg-amber-200 flex items-center gap-2" data-testid="adacc-migration-btn">
                         <ArrowsClockwise size={16} /> ترحيل المديونيات التاريخية
                     </button>
@@ -1138,6 +1153,100 @@ export default function AdAccounts() {
             <CreateDialog open={createOpen} onClose={() => setCreateOpen(false)} onSaved={load} />
             <MigrationDialog open={migrationOpen} onClose={() => setMigrationOpen(false)} onSaved={load} />
             <OpeningDialog row={openingFor} open={!!openingFor} onClose={() => setOpeningFor(null)} onSaved={load} />
+
+            {/* Iter-110 — Diagnose dialog for sync data-source mismatch */}
+            {diagnose && (
+                <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4" data-testid="adacc-diag-dialog">
+                    <div dir="rtl" className="bg-white rounded-xl shadow-2xl w-full max-w-4xl my-8">
+                        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                            <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                                🩺 تشخيص المزامنة
+                                <span className="text-xs font-normal text-slate-500">يكشف لماذا حساب لا يجلب الصرف</span>
+                            </h2>
+                            <button onClick={() => setDiagnose(null)} className="text-slate-500 hover:text-slate-900 text-2xl">×</button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            {(diagnose.accounts || []).map((a) => (
+                                <div key={a.id} className={`rounded-lg border-2 p-4 ${a.healthy ? "bg-emerald-50/40 border-emerald-200" : "bg-rose-50/40 border-rose-300"}`} data-testid={`adacc-diag-row-${a.id}`}>
+                                    <div className="flex items-start justify-between gap-3 mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-lg">{a.healthy ? "✅" : "❌"}</span>
+                                            <span className="text-base font-extrabold text-slate-900">{a.name}</span>
+                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">{a.ad_provider}</span>
+                                        </div>
+                                        <div className="text-[11px] text-slate-500" dir="ltr">{a.id}</div>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] mb-3">
+                                        <div className="bg-white/60 p-2 rounded">
+                                            <div className="text-slate-500">external_account_id الحالي</div>
+                                            <div className="font-mono font-bold text-slate-900 break-all" dir="ltr">{a.external_account_id || <span className="text-rose-600">— غير محدد</span>}</div>
+                                        </div>
+                                        <div className="bg-white/60 p-2 rounded">
+                                            <div className="text-slate-500">الرصيد</div>
+                                            <div className="num font-bold text-emerald-700">{fmt(a.balance)}</div>
+                                        </div>
+                                        <div className="bg-white/60 p-2 rounded">
+                                            <div className="text-slate-500">آخر مزامنة</div>
+                                            <div className="font-mono text-[10px] font-bold">{a.last_auto_sync_date || "—"}</div>
+                                        </div>
+                                        <div className="bg-white/60 p-2 rounded">
+                                            <div className="text-slate-500">نمط الدين</div>
+                                            <div className="font-bold">{a.debt_mode === "auto" ? "تلقائي" : "يدوي"}</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Per-source status */}
+                                    <div className="space-y-2">
+                                        {a.per_source_status.map((s, i) => (
+                                            <div key={i} className="bg-white/80 border border-slate-200 rounded p-2 text-[11px]">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="font-mono font-bold text-slate-700" dir="ltr">{s.collection}</span>
+                                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]">حقل التمييز: {s.scope_field || "بدون"}</span>
+                                                    {s.your_external_id_matches ? (
+                                                        <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">✓ مطابق</span>
+                                                    ) : (
+                                                        <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-bold text-[10px]">✗ غير مطابق</span>
+                                                    )}
+                                                    <span className="ml-auto text-slate-500">{s.total_rows_in_source} صفوف</span>
+                                                </div>
+                                                {s.scope_field && s.available_ids?.length > 0 && (
+                                                    <div className="mt-1">
+                                                        <span className="text-slate-500">IDs متاحة فعلياً: </span>
+                                                        {s.available_ids.map((id) => (
+                                                            <span key={id} dir="ltr" className={`inline-block font-mono px-1.5 py-0.5 m-0.5 rounded text-[10px] ${id === a.external_account_id ? "bg-emerald-200 text-emerald-900 font-bold" : "bg-amber-100 text-amber-900"}`}>{id}</span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {s.sample_recent?.length > 0 && (
+                                                    <div className="mt-1 text-slate-600">
+                                                        <span className="text-slate-500">عيّنة آخر بيانات: </span>
+                                                        {s.sample_recent.map((r, j) => (
+                                                            <span key={j} className="font-mono text-[10px]">{r.date}={fmt(r.spend)} </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Problems summary */}
+                                    {!a.healthy && (
+                                        <div className="mt-3 bg-rose-100 border border-rose-300 rounded p-3 text-xs text-rose-900 space-y-1">
+                                            <div className="font-extrabold">🔍 المشكلة:</div>
+                                            {a.diagnosis.map((d, i) => (
+                                                <div key={i}>• {d}</div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="p-5 border-t border-slate-100 flex justify-end">
+                            <button onClick={() => setDiagnose(null)} className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-bold" data-testid="adacc-diag-close">إغلاق</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

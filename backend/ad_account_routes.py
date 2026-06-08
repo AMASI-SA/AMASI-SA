@@ -354,6 +354,116 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             "totals": {k: _round(v) for k, v in totals.items()},
         }
 
+    # ── GET /diagnose (Iter-110) — read-only data-source diagnostic ──
+    # NOTE: this MUST be registered before `GET /{cp_id}` otherwise
+    # FastAPI matches "diagnose" as a counterparty id.
+    @router.get("/diagnose")
+    async def diagnose_data_sources(user: dict = Depends(current_user)):
+        """Health check that pinpoints WHY an ad-account isn't syncing.
+
+        For each ad-account counterparty: returns its
+        external_account_id, and for the matching provider collection
+        the set of ad_account_id values the source has rows for. The
+        merchant can compare visually — if the counterparty's value
+        isn't in the "available" list, the sync will return 0.
+        """
+        uid = user["id"]
+        out_accounts = []
+
+        # Pre-fetch the distinct external IDs per source collection for
+        # this user. This is what the sync code will actually filter on.
+        avail = {}  # {collection: {scope_field, distinct_ids, total_rows, sample_dates}}
+        for provider, sources in PROVIDER_SOURCES.items():
+            for src in sources:
+                col = src["collection"]
+                scope = src["scope_field"]
+                if col in avail:
+                    continue
+                ids = []
+                if scope:
+                    ids = await db[col].distinct(scope, {"user_id": uid})
+                rows = await db[col].count_documents({"user_id": uid})
+                sample = []
+                async for d in db[col].find(
+                    {"user_id": uid}, {"_id": 0, "date": 1, "spend": 1},
+                ).sort([("date", -1)]).limit(3):
+                    sample.append({"date": d.get("date"), "spend": d.get("spend")})
+                avail[col] = {
+                    "scope_field": scope, "distinct_ids": ids,
+                    "total_rows": rows, "sample_recent": sample,
+                }
+
+        async for cp in db.counterparties.find(
+            {"user_id": uid, "kind": "ad_account"}, {"_id": 0},
+        ).sort([("name", 1)]):
+            provider = cp.get("ad_provider")
+            ext_id = (cp.get("external_account_id") or "").strip() or None
+            sources = PROVIDER_SOURCES.get(provider, [])
+            per_source_status = []
+            for src in sources:
+                col = src["collection"]
+                src_data = avail.get(col, {})
+                distinct_ids = src_data.get("distinct_ids") or []
+                match_ok = (
+                    ext_id is not None
+                    and src["scope_field"]
+                    and ext_id in distinct_ids
+                )
+                # When the source has NO scope field, any data counts as
+                # "could be picked up" but with the multi-account risk.
+                if src["scope_field"] is None and src_data.get("total_rows", 0) > 0:
+                    match_ok = True
+                per_source_status.append({
+                    "collection": col,
+                    "scope_field": src["scope_field"],
+                    "available_ids": distinct_ids[:10],  # cap
+                    "total_rows_in_source": src_data.get("total_rows", 0),
+                    "your_external_id_matches": match_ok,
+                    "sample_recent": src_data.get("sample_recent", []),
+                })
+
+            # Heuristic diagnosis text
+            problems = []
+            if not provider or provider not in PROVIDER_SOURCES:
+                problems.append(f"المنصة `{provider}` غير مدعومة للمزامنة التلقائية.")
+            elif not ext_id and any(s["scope_field"] for s in sources):
+                problems.append(
+                    "هذا الحساب لا يحتوي `external_account_id`. اضغط ⚙️ الإعدادات على البطاقة وأضف Ad Account ID."
+                )
+            elif ext_id and not any(s["your_external_id_matches"] for s in per_source_status):
+                # Suggest likely IDs
+                guesses = []
+                for s in per_source_status:
+                    for x in s["available_ids"]:
+                        if x not in guesses:
+                            guesses.append(x)
+                problems.append(
+                    f"الـ external_account_id الذي أدخلته (`{ext_id}`) لا يطابق أي ID موجود في بيانات الصرف. " +
+                    (f"الـ IDs المتاحة فعلياً: {guesses[:5]}" if guesses else
+                     "لا توجد بيانات صرف مخزّنة لهذه المنصة — اربط الـ Snapchat OAuth أو فعّل Make.com webhook أولاً.")
+                )
+            elif ext_id and all(
+                s["total_rows_in_source"] == 0 for s in per_source_status
+            ):
+                problems.append("لا توجد بيانات صرف مخزّنة لهذه المنصة (التراكم اليومي = 0). اربط مصدر البيانات (OAuth أو Make.com).")
+
+            out_accounts.append({
+                "id": cp["id"], "name": cp.get("name"),
+                "ad_provider": provider, "external_account_id": ext_id,
+                "balance": _round(cp.get("balance") or 0),
+                "last_auto_sync_date": cp.get("last_auto_sync_date"),
+                "debt_mode": cp.get("debt_mode") or "auto",
+                "per_source_status": per_source_status,
+                "diagnosis": problems or ["لا توجد مشكلة واضحة — المزامنة يجب أن تعمل."],
+                "healthy": not problems,
+            })
+        return {
+            "user_id": uid,
+            "checked_at": _now(),
+            "accounts": out_accounts,
+            "sources_overview": avail,
+        }
+
     # ── GET /{id} ─────────────────────────────────────────────────────
     @router.get("/{cp_id}")
     async def get_ad_account(cp_id: str, user: dict = Depends(current_user)):

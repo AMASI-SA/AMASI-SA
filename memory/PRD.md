@@ -10,6 +10,44 @@
 
 ---
 
+## ✅ ITERATION 110-d — Cumulative-debt fix + Diagnose UI (Feb 2026)
+
+### Why
+بعد إصلاح المزامنة الأول وزر force-resync، اكتشف المستخدم:
+- **بق التراكم**: عند الضغط على إعادة المزامنة (force=true)، الدين كان يتضاعف بدل أن يُستبدل. مثال: 300 SAR → ضغطة → 600 SAR.
+- **سؤال Snapchat**: لا تظهر أي قيم رغم وجود البيانات على Production. سبب محتمل: عدم تطابق `external_account_id` بين الـ counterparty وبين البيانات الفعلية.
+
+### Backend Fixes
+1. **Cumulative-debt bug (`_run_sync_for_all` when `force=True`)**: قبل كتابة بيانات الصرف الجديدة، الكود الآن:
+   - يبحث عن سجلات `ad_account_ledger` السابقة بـ `auto_cron=True` في الفترة المحددة
+   - يستعيد جزء `from_balance` للرصيد
+   - يخفّض/يحذف liability المرتبط بـ `source=ad_account_cron` بمقدار `uncovered`
+   - يحذف الـ ledger rows القديمة
+   - ثم يطبّق البيانات الجديدة من البداية → re-sync يصبح idempotent حقيقي.
+2. **`GET /api/ad-accounts/diagnose`** (read-only): لكل حساب يعرض:
+   - الـ `external_account_id` المُدخل
+   - لكل source collection: حقل التمييز، الـ IDs المتاحة فعلياً (أول 10)، عدد الصفوف، عيّنة من آخر بيانات، هل ID المستخدم مطابق؟
+   - تشخيص نصي عربي يوضّح المشكلة وتوصية إصلاح.
+
+### Frontend
+- **`/ad-accounts`**: زر "🩺 تشخيص المزامنة" (blue) في الـ header → dialog يعرض كل حساب مع:
+  - شارة ✅/❌ صحي/غير صحي
+  - الـ external ID الحالي + الرصيد + آخر مزامنة + نمط الدين
+  - بطاقة لكل source collection مع badge "✓ مطابق" أو "✗ غير مطابق"
+  - الـ IDs المتاحة (الـ ID المطابق مظلّل بأخضر، الباقي amber)
+  - عيّنة من آخر بيانات الصرف
+  - صندوق "🔍 المشكلة" مع التوصيات للحسابات غير الصحية
+
+### Tests
+- `test_ad_account_sync_fix_iter110.py` (6/6 ✅): إضافة `test_force_resync_is_idempotent_no_double_counting` + `test_force_resync_picks_up_increased_spend`. مزامنة 300 SAR مرتين → الدين يبقى 300 (وليس 600). نموّ الصرف من 100 إلى 300 → الدين يحدّث إلى 300 (وليس 400).
+- `test_ad_account_diagnose_iter110.py` (3/3 ✅): mismatch + healthy + no-external-id paths.
+
+### Route Fix
+- إعادة ترتيب route definitions: `/diagnose` يجب أن يُسجَّل قبل `/{cp_id}` وإلا FastAPI يفسّر "diagnose" كـ counterparty ID.
+
+---
+
+
 ## ✅ ITERATION 110-c — Ad-account delete button + Settings toggle (Feb 2026)
 
 ### Why
