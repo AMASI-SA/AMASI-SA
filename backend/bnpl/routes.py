@@ -13,7 +13,7 @@
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -27,7 +27,7 @@ from .config_store import (
     get_raw_secrets, get_settings, record_test_result, save_settings,
 )
 from .sync_service import ensure_sync_indexes, sync_tabby_payments
-from .tamara_backfill import backfill_tamara
+from .tamara_backfill import backfill_tamara, backfill_tamara_full
 
 
 async def ensure_bnpl_indexes(db) -> None:
@@ -142,6 +142,129 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
         if not res.get("ok"):
             raise HTTPException(400, res.get("error") or "backfill failed")
         return res
+
+    @router.post("/tamara/backfill/full")
+    async def tamara_backfill_full_endpoint(
+        since: Optional[str] = Query(
+            None, pattern=r"^\d{4}-\d{2}-\d{2}$",
+            description="Only scan unified_orders with order_date >= since.",
+        ),
+        hard_cap: int = Query(
+            10000, ge=100, le=50000,
+            description="Absolute upper bound — safety net so a runaway "
+                        "merchant catalogue can't burn a million Tamara calls.",
+        ),
+        user: dict = Depends(current_user),
+    ):
+        """Process EVERY pending order in batches of 100 until the
+        candidate set is empty.  Returns aggregate + per-batch stats."""
+        res = await backfill_tamara_full(
+            db, user["id"], since=since, hard_cap=int(hard_cap),
+        )
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "backfill failed")
+        return res
+
+    # ── DEBUG (Tabby) ──────────────────────────────────────────
+    @router.post("/tabby/debug")
+    async def tabby_debug(user: dict = Depends(current_user)):
+        """Forensic check — fetch the LAST 10 payments from Tabby with
+        NO date/status filter so we can prove (or disprove) that any
+        payments exist for this merchant.
+
+        Surfaces: key type, merchant_code, endpoint URL, raw count,
+        and the first few payment summaries verbatim from Tabby.
+        Returns a clear directive when the API returns an empty page so
+        the merchant knows whether to contact Tabby support or fix the
+        key locally.
+        """
+        uid = user["id"]
+        secrets = await get_raw_secrets(db, uid, "tabby")
+        masked = await get_settings(db, uid, "tabby")
+
+        if not secrets.get("secret_key"):
+            raise HTTPException(400, "Tabby secret_key not set")
+
+        cli = TabbyClient(
+            secret_key=secrets["secret_key"],
+            merchant_code=secrets.get("merchant_code") or "",
+            base_url=secrets.get("api_base_url") or "https://api.tabby.sa",
+        )
+
+        endpoint = f"{cli.base_url}/api/v2/payments"
+        report: Dict[str, Any] = {
+            "ok": True,
+            "key_type": masked.get("secret_key_type") or "unknown",
+            "key_masked": masked.get("secret_key_masked") or "",
+            "merchant_code": secrets.get("merchant_code") or "(not set)",
+            "endpoint": endpoint,
+            "request_params": {"limit": 10, "no_date_filter": True,
+                               "no_status_filter": True},
+        }
+
+        try:
+            raw = await cli._get("/api/v2/payments", params={"limit": 10})  # noqa: SLF001
+        except TabbyError as exc:
+            report["ok"] = False
+            report["error"] = str(exc)
+            report["diagnosis"] = (
+                f"Tabby rejected the request with status {exc.status}. "
+                "This is an authentication / authorization issue at "
+                "Tabby's side — NOT a Mezan bug. Action: verify the "
+                "secret_key (must be Live, not Test, if your store is "
+                "live), and that API access is enabled on this account."
+            )
+            return report
+
+        payments = []
+        pagination = {}
+        if isinstance(raw, dict):
+            payments = raw.get("payments") or []
+            pagination = raw.get("pagination") or {}
+
+        report["raw_payments_count"] = len(payments)
+        report["pagination_total_count"] = pagination.get("total_count")
+        report["sample_payments"] = [
+            {
+                "id": p.get("id"),
+                "status": p.get("status"),
+                "amount": p.get("amount"),
+                "currency": p.get("currency"),
+                "is_test": p.get("is_test"),
+                "created_at": p.get("created_at"),
+                "order_reference_id": (p.get("order") or {}).get("reference_id"),
+            }
+            for p in payments[:10]
+        ]
+
+        if len(payments) == 0:
+            if report["key_type"] == "test":
+                report["diagnosis"] = (
+                    "❌ المفتاح المحفوظ هو مفتاح Test (sk_test_…)، لذا "
+                    "Tabby لن يُرجع أي معاملات حقيقية. الحل: استخدم "
+                    "مفتاح Live (sk_live_…) من merchant.tabby.sa → "
+                    "Developer → Live API Keys."
+                )
+            else:
+                report["diagnosis"] = (
+                    "✓ المفتاح يعمل (تمّت المصادقة بنجاح)، لكن Tabby "
+                    "أرجع 0 معاملات بدون أي فلاتر. الأسباب المحتملة:\n"
+                    "  1. Merchant API access غير مفعّل على حسابك. "
+                    "تواصل مع partner@tabby.sa واطلب التفعيل.\n"
+                    "  2. Merchant Code خاطئ أو ناقص (إن كان عندك "
+                    "متاجر متعدّدة).\n"
+                    "  3. حسابك جديد ولم تتمّ أي عملية بعد عبر Tabby.\n"
+                    "هذه مشكلة من جانب Tabby وليست من Mezan."
+                )
+        else:
+            report["diagnosis"] = (
+                f"✓ Tabby أرجع {len(payments)} معاملة فعلاً. النظام "
+                "يعمل بشكل صحيح. إذا كانت المزامنة الموجهة بتاريخ ترجع "
+                "0، تحقّق من نطاق التاريخ المُرسل والمعاملات الحقيقية "
+                "في sample_payments هنا."
+            )
+
+        return report
 
     # ── LIST LOCAL DATA ────────────────────────────────────────
     @router.get("/{provider}/transactions")

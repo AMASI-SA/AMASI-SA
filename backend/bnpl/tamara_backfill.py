@@ -45,10 +45,23 @@ from .webhook_routes import (
 THROTTLE_SECONDS = 0.2     # gap between Tamara calls (rate-limit guard)
 MAX_CONCURRENCY = 2        # don't hammer Tamara
 DEFAULT_LIMIT = 500        # safety cap per run
+BATCH_SIZE = 100           # full-backfill batch size — bounded memory
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+async def _candidate_query(user_id: str, since: Optional[str]) -> Dict[str, Any]:
+    """Mongo filter for orders worth backfilling against Tamara."""
+    q: Dict[str, Any] = {"user_id": user_id}
+    if since:
+        q["order_date"] = {"$gte": since}
+    q["$or"] = [
+        {"sources_seen": {"$ne": "tamara"}},
+        {"sources_seen": {"$exists": False}},
+    ]
+    return q
 
 
 async def _persist_tamara_order(
@@ -173,14 +186,17 @@ async def backfill_tamara(
                   or DEFAULTS["tamara"]["api_base_url"]),
     )
 
-    query: Dict[str, Any] = {"user_id": user_id}
+    query = await _candidate_query(user_id, since)
+
+    # Total candidates BEFORE this run (so the UI sees what's still left)
+    total_candidates_before = await db.unified_orders.count_documents(query)
+
+    # Also count already-verified rows in the same since-window for clarity.
+    skipped_query: Dict[str, Any] = {"user_id": user_id,
+                                     "sources_seen": "tamara"}
     if since:
-        query["order_date"] = {"$gte": since}
-    # Skip orders ALREADY verified by Tamara — efficient retries.
-    query.setdefault("$or", [
-        {"sources_seen": {"$ne": "tamara"}},
-        {"sources_seen": {"$exists": False}},
-    ])
+        skipped_query["order_date"] = {"$gte": since}
+    skipped_already_verified = await db.unified_orders.count_documents(skipped_query)
 
     refs: List[str] = []
     async for r in (
@@ -198,7 +214,9 @@ async def backfill_tamara(
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     stats = {
-        "scanned": len(refs),
+        "total_orders_candidates": total_candidates_before,
+        "skipped_already_verified": skipped_already_verified,
+        "scanned_count": len(refs),
         "found": 0,
         "not_found": 0,
         "errors": 0,
@@ -232,5 +250,138 @@ async def backfill_tamara(
     if errors_sample:
         stats["errors_sample"] = errors_sample[:5]
 
+    # How many candidates remain for a follow-up batch?
+    stats["remaining_after_run"] = await db.unified_orders.count_documents(query)
+
     await record_sync(db, user_id, "tamara")
     return {"ok": True, "stats": stats}
+
+
+async def backfill_tamara_full(
+    db, user_id: str, *,
+    since: Optional[str] = None,
+    hard_cap: int = 10000,
+) -> Dict[str, Any]:
+    """Process ALL pending Tamara candidates in BATCH_SIZE chunks until
+    the candidate set is exhausted (or `hard_cap` is reached for
+    safety).  Aggregates the per-batch stats and reports per-batch
+    progress so the merchant can prove every order got checked.
+    """
+    secrets = await get_raw_secrets(db, user_id, "tamara")
+    if not secrets.get("api_token"):
+        return {"ok": False, "error": "Tamara api_token not set"}
+
+    client = TamaraClient(
+        api_token=secrets["api_token"],
+        base_url=(secrets.get("api_base_url")
+                  or DEFAULTS["tamara"]["api_base_url"]),
+    )
+
+    query = await _candidate_query(user_id, since)
+    initial_candidates = await db.unified_orders.count_documents(query)
+
+    skipped_query: Dict[str, Any] = {"user_id": user_id,
+                                     "sources_seen": "tamara"}
+    if since:
+        skipped_query["order_date"] = {"$gte": since}
+    skipped_already_verified = await db.unified_orders.count_documents(skipped_query)
+
+    aggregate = {
+        "total_orders_candidates": initial_candidates,
+        "skipped_already_verified": skipped_already_verified,
+        "scanned_count": 0,
+        "found": 0,
+        "not_found": 0,
+        "errors": 0,
+        "refunds_found": 0,
+        "orders_updated": 0,
+        "transactions_stored": 0,
+        "batches_completed": 0,
+        "since": since,
+        "hard_cap": int(hard_cap),
+    }
+    batches: List[Dict[str, Any]] = []
+    errors_sample: List[str] = []
+
+    sem = asyncio.Semaphore(MAX_CONCURRENCY)
+    consumed_refs: set = set()  # dedupe across batches
+
+    while aggregate["scanned_count"] < hard_cap:
+        # Re-fetch a fresh batch (skip rows we already touched this run).
+        live_query = await _candidate_query(user_id, since)
+        if consumed_refs:
+            live_query["$and"] = [
+                {"order_reference_id": {"$nin": list(consumed_refs)}},
+                {"order_number": {"$nin": list(consumed_refs)}},
+            ]
+
+        refs: List[str] = []
+        async for r in (
+            db.unified_orders.find(
+                live_query,
+                {"_id": 0, "order_reference_id": 1, "order_number": 1},
+            ).sort([("order_date", -1)]).limit(BATCH_SIZE)
+        ):
+            ref = (r.get("order_reference_id") or r.get("order_number") or "").strip()
+            if ref and ref not in consumed_refs:
+                refs.append(ref)
+                consumed_refs.add(ref)
+
+        if not refs:
+            break
+
+        tasks = [_lookup_one(db, user_id, client, sem, r) for r in refs]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        batch_stat = {
+            "batch_number": aggregate["batches_completed"] + 1,
+            "size": len(refs),
+            "found": 0, "not_found": 0, "errors": 0,
+        }
+        for r in results:
+            if isinstance(r, Exception):
+                batch_stat["errors"] += 1
+                aggregate["errors"] += 1
+                errors_sample.append(str(r))
+                continue
+            outcome = r.get("outcome")
+            if outcome == "found":
+                batch_stat["found"] += 1
+                aggregate["found"] += 1
+                aggregate["refunds_found"] += r.get("refunds_found", 0)
+                if r.get("updated_existing_order"):
+                    aggregate["orders_updated"] += 1
+                if r.get("stored_transaction"):
+                    aggregate["transactions_stored"] += 1
+            elif outcome == "not_found":
+                batch_stat["not_found"] += 1
+                aggregate["not_found"] += 1
+            else:
+                batch_stat["errors"] += 1
+                aggregate["errors"] += 1
+                if r.get("detail"):
+                    errors_sample.append(r["detail"])
+
+        aggregate["scanned_count"] += len(refs)
+        aggregate["batches_completed"] += 1
+        batches.append(batch_stat)
+
+        # If this batch had every request fail with auth errors, abort
+        # early rather than burning through the entire candidate set.
+        if batch_stat["errors"] == len(refs) and len(refs) > 0:
+            aggregate["aborted"] = (
+                "All requests in last batch failed. Aborting full "
+                "backfill to avoid wasted calls. Check the errors_sample."
+            )
+            break
+
+    if errors_sample:
+        aggregate["errors_sample"] = errors_sample[:10]
+
+    aggregate["remaining_after_run"] = await db.unified_orders.count_documents(
+        await _candidate_query(user_id, since),
+    )
+    aggregate["per_batch"] = batches
+
+    await record_sync(db, user_id, "tamara")
+    return {"ok": True, "stats": aggregate}

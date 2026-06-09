@@ -336,18 +336,84 @@ export default function BnplDiagnostics() {
             );
             const s = data.stats || {};
             toast.success(
-                `فحص Tamara اكتمل ← ` +
-                `تم الفحص: ${s.scanned || 0} · ` +
-                `موجودة: ${s.found || 0} · ` +
-                `غير موجودة: ${s.not_found || 0} · ` +
+                `Tamara batch ← ` +
+                `مرشّحون: ${s.total_orders_candidates || 0} · ` +
+                `مفحوص: ${s.scanned_count || 0} · ` +
+                `موجود: ${s.found || 0} · ` +
+                `غير موجود: ${s.not_found || 0} · ` +
                 `مسترجعات: ${s.refunds_found || 0} · ` +
-                `طلبات حُدّثت: ${s.orders_updated || 0}` +
+                `متبقّي: ${s.remaining_after_run || 0}` +
                 (s.errors ? ` · أخطاء: ${s.errors}` : ""),
                 { duration: 12000 },
             );
             await load();
         } catch (e) {
             toast.error(errMsg(e, "فشل فحص Tamara"));
+        }
+    };
+
+    const runTamaraFullBackfill = async () => {
+        const def = "2025-01-01";
+        const since = window.prompt(
+            `🔁 الفحص الكامل — يفحص كل الطلبات في النطاق دون توقّف.\n\n` +
+            `أدخل التاريخ الأقدم (YYYY-MM-DD):`,
+            def,
+        );
+        if (!since) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+            toast.error("صيغة التاريخ خطأ. يجب أن تكون YYYY-MM-DD");
+            return;
+        }
+        if (!window.confirm(
+            `سيبدأ الفحص الكامل من ${since} حتى آخر طلب.\n` +
+            `قد يستغرق ${10}-${30} دقيقة حسب عدد الطلبات.\n` +
+            `لا تغلق الصفحة. هل تريد المتابعة؟`,
+        )) return;
+        try {
+            toast.info("بدأ الفحص الكامل — جاري المعالجة بدفعات…", { duration: 5000 });
+            const { data } = await api.post(`/bnpl/tamara/backfill/full?since=${since}`, null, { timeout: 600000 });
+            const s = data.stats || {};
+            toast.success(
+                `🎉 الفحص الكامل اكتمل! ` +
+                `${s.batches_completed || 0} دفعة · ` +
+                `مفحوص: ${s.scanned_count || 0}/${s.total_orders_candidates || 0} · ` +
+                `موجود: ${s.found || 0} · ` +
+                `غير موجود: ${s.not_found || 0} · ` +
+                `مسترجعات: ${s.refunds_found || 0} · ` +
+                `أخطاء: ${s.errors || 0}` +
+                (s.aborted ? `\n⚠ ${s.aborted}` : ""),
+                { duration: 20000 },
+            );
+            await load();
+        } catch (e) {
+            toast.error(errMsg(e, "فشل الفحص الكامل"));
+        }
+    };
+
+    const runTabbyDebug = async () => {
+        try {
+            toast.info("جاري تشخيص Tabby…", { duration: 2000 });
+            const { data } = await api.post(`/bnpl/tabby/debug`);
+            // Print full report to console for advanced inspection.
+            console.log("Tabby debug report →", data);
+            const lines = [
+                `🔍 Tabby Debug Report`,
+                ``,
+                `Key type: ${data.key_type?.toUpperCase() || "?"}  (${data.key_masked || ""})`,
+                `Merchant code: ${data.merchant_code || "(none)"}`,
+                `Endpoint: ${data.endpoint}`,
+                `Request: ${JSON.stringify(data.request_params)}`,
+                ``,
+                `Raw payments returned: ${data.raw_payments_count ?? "?"}`,
+                `Tabby pagination.total_count: ${data.pagination_total_count ?? "?"}`,
+                ``,
+                `Diagnosis:`,
+                data.diagnosis || "—",
+            ].join("\n");
+            window.alert(lines);
+            await load();
+        } catch (e) {
+            toast.error(errMsg(e, "فشل تشخيص Tabby"));
         }
     };
 
@@ -393,11 +459,27 @@ export default function BnplDiagnostics() {
                     </button>
                     <button
                         type="button"
+                        onClick={runTabbyDebug}
+                        className="px-3 py-1.5 bg-fuchsia-700 text-white text-xs font-bold rounded-lg hover:bg-fuchsia-800 flex items-center gap-1"
+                        data-testid="bnpl-diag-tabby-debug"
+                    >
+                        <Stethoscope size={14} /> Tabby Debug
+                    </button>
+                    <button
+                        type="button"
                         onClick={runTamaraBackfill}
                         className="px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 flex items-center gap-1"
                         data-testid="bnpl-diag-tamara-backfill"
                     >
-                        <ArrowsClockwise size={14} /> فحص تاريخي Tamara
+                        <ArrowsClockwise size={14} /> فحص دفعة Tamara
+                    </button>
+                    <button
+                        type="button"
+                        onClick={runTamaraFullBackfill}
+                        className="px-3 py-1.5 bg-rose-700 text-white text-xs font-bold rounded-lg hover:bg-rose-800 flex items-center gap-1"
+                        data-testid="bnpl-diag-tamara-backfill-full"
+                    >
+                        <ArrowsClockwise size={14} /> فحص كامل Tamara
                     </button>
                     <button
                         type="button"
