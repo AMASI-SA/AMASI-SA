@@ -367,6 +367,11 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                         <option value="production">Production</option>
                         <option value="sandbox">Sandbox / Test</option>
                     </select>
+                    {settings.api_base_url && (
+                        <span className="text-[10px] text-slate-500 mt-1 font-mono break-all">
+                            URL: {settings.api_base_url}
+                        </span>
+                    )}
                 </Field>
                 <Field label="حالة الربط">
                     <label className="flex items-center gap-2 mt-1.5">

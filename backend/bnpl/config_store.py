@@ -57,6 +57,25 @@ DEFAULTS = {
 }
 
 
+# Sandbox base URLs — picked automatically when environment == "sandbox"
+# so a sandbox API token doesn't get sent to the production endpoint
+# (which always returns 401 even for valid sandbox creds).
+SANDBOX_URLS = {
+    "tabby": "https://api.tabby.ai",       # Tabby uses single URL; sandbox = test keys
+    "tamara": "https://api-sandbox.tamara.co",
+}
+
+
+def _resolve_base_url(provider: str, environment: str,
+                      explicit: Optional[str] = None) -> str:
+    """Pick the correct base URL based on env, with explicit override."""
+    if explicit:
+        return explicit
+    if (environment or "production") == "sandbox":
+        return SANDBOX_URLS.get(provider, DEFAULTS[provider]["api_base_url"])
+    return DEFAULTS[provider]["api_base_url"]
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -158,7 +177,10 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
                                               defaults.get("settlement_period_days", 7))),
         "transfer_days": int(doc.get("transfer_days",
                                      defaults.get("transfer_days", 2))),
-        "api_base_url": doc.get("api_base_url") or defaults.get("api_base_url"),
+        "api_base_url": _resolve_base_url(
+            provider, doc.get("environment", "production"),
+            doc.get("api_base_url"),
+        ),
         "last_sync_at": doc.get("last_sync_at"),
         "last_test_ok": doc.get("last_test_ok"),
         "last_test_error": doc.get("last_test_error"),
@@ -182,13 +204,16 @@ async def get_raw_secrets(db, user_id: str, provider: str) -> dict:
     doc = await db.bnpl_settings.find_one(
         {"user_id": user_id, "provider": provider}, {"_id": 0},
     ) or {}
+    environment = doc.get("environment", "production")
     return {
         "api_token": _try_decrypt(doc.get("api_token_encrypted")),
         "notification_token": _try_decrypt(doc.get("notification_token_encrypted")),
         "secret_key": _try_decrypt(doc.get("secret_key_encrypted")),
         "merchant_code": doc.get("merchant_code") or "",
-        "api_base_url": doc.get("api_base_url") or DEFAULTS.get(provider, {}).get("api_base_url"),
-        "environment": doc.get("environment", "production"),
+        "api_base_url": _resolve_base_url(
+            provider, environment, doc.get("api_base_url"),
+        ),
+        "environment": environment,
         "enabled": bool(doc.get("enabled", False)),
         "activation_date": doc.get("activation_date"),
     }
