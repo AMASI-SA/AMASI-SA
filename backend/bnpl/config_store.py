@@ -81,12 +81,21 @@ def _now_iso() -> str:
 
 
 def _mask(s: str, keep: int = 4) -> str:
-    """Return e.g. 'sk_…abcd' so the UI confirms a value is saved
-    without exposing it."""
+    """Return e.g. 'sk_live_•••••••abcd' so the UI confirms a value is
+    saved AND surfaces its environment (live vs test) at a glance.
+
+    Preserves common credential prefixes when present:
+      • sk_live_, sk_test_, pk_live_, pk_test_
+    Falls back to first-2 chars for opaque tokens.
+    """
     if not s:
         return ""
     if len(s) <= keep:
         return "•" * len(s)
+    prefixes = ("sk_live_", "sk_test_", "pk_live_", "pk_test_")
+    for pref in prefixes:
+        if s.startswith(pref):
+            return f"{pref}{'•' * 7}{s[-keep:]}"
     return f"{s[:2]}{'•' * 6}{s[-keep:]}"
 
 
@@ -143,6 +152,17 @@ async def find_user_by_webhook_secret(
     )
 
 
+def _detect_key_type(decrypted: str) -> str:
+    """Return 'live', 'test', or 'unknown' based on the key prefix."""
+    if not decrypted:
+        return "unknown"
+    if decrypted.startswith(("sk_live_", "pk_live_")):
+        return "live"
+    if decrypted.startswith(("sk_test_", "pk_test_")):
+        return "test"
+    return "unknown"
+
+
 async def get_settings(db, user_id: str, provider: str) -> dict:
     """Return MASKED + flag info — never raw secrets."""
     if provider not in BNPL_PROVIDERS:
@@ -167,6 +187,8 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
         "api_token_masked": _mask(_try_decrypt(doc.get("api_token_encrypted"))),
         "notification_token_masked": _mask(_try_decrypt(doc.get("notification_token_encrypted"))),
         "secret_key_masked": _mask(_try_decrypt(doc.get("secret_key_encrypted"))),
+        "secret_key_type": _detect_key_type(_try_decrypt(doc.get("secret_key_encrypted"))),
+        "api_token_type": _detect_key_type(_try_decrypt(doc.get("api_token_encrypted"))),
         "webhook_secret": webhook_secret,
         "mdr_percent": float(doc.get("mdr_percent", defaults.get("mdr_percent", 0))),
         "fixed_fee_per_order": float(doc.get("fixed_fee_per_order",

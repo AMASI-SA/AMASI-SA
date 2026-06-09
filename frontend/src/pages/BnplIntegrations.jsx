@@ -41,17 +41,30 @@ function Field({ label, hint, children }) {
     );
 }
 
-function SecretField({ label, hint, value, onChange, masked, hasValue, testid }) {
+function SecretField({ label, hint, value, onChange, masked, hasValue, testid, keyType }) {
     const [reveal, setReveal] = useState(false);
+    const liveTest = (keyType === "live" || keyType === "test") ? keyType : null;
     return (
         <label className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-700">{label}</span>
-                {hasValue && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-                        محفوظ
-                    </span>
-                )}
+                <div className="flex items-center gap-1">
+                    {liveTest === "live" && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full" data-testid={`${testid}-type`}>
+                            LIVE ✓
+                        </span>
+                    )}
+                    {liveTest === "test" && (
+                        <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-300 px-1.5 py-0.5 rounded-full" data-testid={`${testid}-type`}>
+                            TEST ⚠
+                        </span>
+                    )}
+                    {hasValue && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                            محفوظ
+                        </span>
+                    )}
+                </div>
             </div>
             <div className="relative">
                 <input
@@ -310,6 +323,26 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                 lastWebhookAt={settings.last_webhook_at}
             />
 
+            {/* Live/Test mismatch warning (Iter-116 fix) */}
+            {((provider === "tabby" && settings.secret_key_type === "test"
+                && settings.environment === "production") ||
+              (provider === "tamara" && settings.api_token_type === "test"
+                && settings.environment === "production")) && (
+                <div className="rounded-xl bg-rose-50 border-2 border-rose-300 p-3 mb-4 text-xs text-rose-900" data-testid={`bnpl-${provider}-test-key-warning`}>
+                    <div className="font-extrabold mb-1 flex items-center gap-1.5">
+                        <XCircle size={16} weight="fill" /> تحذير: مفتاح Test على بيئة Production
+                    </div>
+                    <div className="leading-relaxed">
+                        مفتاحك يبدأ بـ <code>sk_test_</code> أو <code>pk_test_</code> لكن البيئة مضبوطة على <b>Production</b>.
+                        لن يُرجع لك Tabby أي معاملات حقيقية بهذا المفتاح. الحلول:
+                        <ul className="list-disc ps-5 mt-1 space-y-0.5">
+                            <li>اذهب لـ <code>merchant.tabby.sa</code> → API Keys واحصل على مفتاح <b>Live</b> (يبدأ بـ <code>sk_live_</code>)</li>
+                            <li>أو غيّر «البيئة» إلى <b>Sandbox / Test</b> أعلاه</li>
+                        </ul>
+                    </div>
+                </div>
+            )}
+
             {/* Credentials */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 {provider === "tabby" && (
@@ -321,6 +354,7 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             onChange={(v) => set("secret_key", v)}
                             masked={settings.secret_key_masked}
                             hasValue={settings.has_secret_key}
+                            keyType={settings.secret_key_type}
                             testid="bnpl-tabby-secret-key"
                         />
                         <Field label="Merchant Code (اختياري)" hint="مطلوب فقط للمتاجر المتعددة">
