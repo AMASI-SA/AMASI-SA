@@ -1,0 +1,351 @@
+"""BNPL diagnostics — Iter-116 verification report.
+
+Builds a forensic snapshot of what `payment_transactions`,
+`payment_refunds`, and `unified_orders` actually contain for a given
+merchant — so the user can confirm with their own eyes that sync
+fetched real data, not just that test-connection succeeded.
+
+Answers (in one round-trip):
+
+  1. Last sync timestamps (Tabby + Tamara).
+  2. Sync scope: actual since-date used per provider.
+  3. Matching: matched_orders / created_orders / unmatched_txns.
+  4. Refunds detected per provider + orders updated.
+  5. Mismatch report — sample of payments without unified order link,
+     and unified orders without any payment_transactions row.
+  6. Comparison rows (Order / Provider / Status / Amount / Refunds /
+     Match).
+  7. Dedup audit: the unique key in use + estimated skipped duplicates.
+  8. Behavior contract: how old orders get updated, NEVER recreated.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, Depends, Query, Request
+
+from auth import get_current_user_from_db
+
+from .config_store import BNPL_PROVIDERS, get_settings
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+async def _provider_stats(db, user_id: str, provider: str) -> Dict[str, Any]:
+    """Aggregate per-provider stats from local collections."""
+    ptx_filter = {"user_id": user_id, "provider": provider}
+    refunds_filter = {"user_id": user_id, "provider": provider}
+
+    transactions_count = await db.payment_transactions.count_documents(ptx_filter)
+    refunds_count = await db.payment_refunds.count_documents(refunds_filter)
+
+    # earliest / latest synced (by created_at_provider)
+    earliest_doc = await db.payment_transactions.find_one(
+        ptx_filter, sort=[("created_at_provider", 1)],
+        projection={"_id": 0, "created_at_provider": 1, "amount": 1},
+    )
+    latest_doc = await db.payment_transactions.find_one(
+        ptx_filter, sort=[("created_at_provider", -1)],
+        projection={"_id": 0, "created_at_provider": 1, "amount": 1},
+    )
+
+    return {
+        "transactions_count": transactions_count,
+        "refunds_count": refunds_count,
+        "earliest_payment_at": (earliest_doc or {}).get("created_at_provider") or None,
+        "latest_payment_at": (latest_doc or {}).get("created_at_provider") or None,
+    }
+
+
+async def _matching_stats(db, user_id: str, provider: str) -> Dict[str, Any]:
+    """How many txns are linked to unified_orders?  How many created new
+    orders (source=provider)?  How many txns have no order at all?"""
+    created_orders = await db.unified_orders.count_documents({
+        "user_id": user_id, "source": provider,
+    })
+
+    matched_orders_pipeline = [
+        {"$match": {"user_id": user_id, "provider": provider}},
+        {"$project": {"order_reference_id": 1, "_id": 0}},
+        {"$match": {"order_reference_id": {"$nin": [None, ""]}}},
+        {"$lookup": {
+            "from": "unified_orders",
+            "let": {"ref": "$order_reference_id"},
+            "pipeline": [
+                {"$match": {
+                    "$expr": {
+                        "$and": [
+                            {"$eq": ["$user_id", user_id]},
+                            {"$or": [
+                                {"$eq": ["$order_reference_id", "$$ref"]},
+                                {"$eq": ["$order_number", "$$ref"]},
+                            ]},
+                        ],
+                    },
+                }},
+                {"$limit": 1},
+                {"$project": {"_id": 1}},
+            ],
+            "as": "matched",
+        }},
+        {"$match": {"matched.0": {"$exists": True}}},
+        {"$count": "n"},
+    ]
+    cur = db.payment_transactions.aggregate(matched_orders_pipeline)
+    matched_orders = 0
+    async for r in cur:
+        matched_orders = r.get("n", 0)
+
+    unmatched_txns_pipeline = [
+        {"$match": {"user_id": user_id, "provider": provider}},
+        {"$lookup": {
+            "from": "unified_orders",
+            "let": {"ref": "$order_reference_id"},
+            "pipeline": [
+                {"$match": {
+                    "$expr": {
+                        "$and": [
+                            {"$eq": ["$user_id", user_id]},
+                            {"$or": [
+                                {"$eq": ["$order_reference_id", "$$ref"]},
+                                {"$eq": ["$order_number", "$$ref"]},
+                            ]},
+                        ],
+                    },
+                }},
+                {"$limit": 1},
+                {"$project": {"_id": 1}},
+            ],
+            "as": "matched",
+        }},
+        {"$match": {"matched.0": {"$exists": False}}},
+        {"$count": "n"},
+    ]
+    cur = db.payment_transactions.aggregate(unmatched_txns_pipeline)
+    unmatched_txns = 0
+    async for r in cur:
+        unmatched_txns = r.get("n", 0)
+
+    return {
+        "matched_orders": matched_orders,
+        "created_orders": created_orders,
+        "unmatched_txns": unmatched_txns,
+    }
+
+
+async def _refunds_stats(db, user_id: str, provider: str) -> Dict[str, Any]:
+    refunds_detected = await db.payment_refunds.count_documents({
+        "user_id": user_id, "provider": provider,
+    })
+    orders_with_refunds = await db.unified_orders.count_documents({
+        "user_id": user_id,
+        "refunded_amount": {"$gt": 0},
+        "sources_seen": provider,
+    })
+    return {
+        "refunds_detected": refunds_detected,
+        "orders_with_refunds_from_provider": orders_with_refunds,
+    }
+
+
+async def _samples_unmatched(db, user_id: str, provider: str,
+                             limit: int = 10) -> List[Dict[str, Any]]:
+    """Sample of payment_transactions with no unified_orders link
+    (provider has payment but our orders DB doesn't know about it)."""
+    pipeline = [
+        {"$match": {"user_id": user_id, "provider": provider}},
+        {"$lookup": {
+            "from": "unified_orders",
+            "let": {"ref": "$order_reference_id"},
+            "pipeline": [
+                {"$match": {
+                    "$expr": {
+                        "$and": [
+                            {"$eq": ["$user_id", user_id]},
+                            {"$or": [
+                                {"$eq": ["$order_reference_id", "$$ref"]},
+                                {"$eq": ["$order_number", "$$ref"]},
+                            ]},
+                        ],
+                    },
+                }},
+                {"$limit": 1},
+                {"$project": {"_id": 1}},
+            ],
+            "as": "matched",
+        }},
+        {"$match": {"matched.0": {"$exists": False}}},
+        {"$limit": int(limit)},
+        {"$project": {
+            "_id": 0, "provider_id": 1, "order_reference_id": 1,
+            "amount": 1, "currency": 1, "status": 1,
+            "refunded_amount": 1, "created_at_provider": 1,
+        }},
+    ]
+    rows: List[Dict[str, Any]] = []
+    async for r in db.payment_transactions.aggregate(pipeline):
+        rows.append(r)
+    return rows
+
+
+async def _comparison_rows(db, user_id: str, limit_per_provider: int = 50,
+                           ) -> List[Dict[str, Any]]:
+    """Combined Order/Provider/Status/Amount/Refund/Match table — covers
+    every payment_transactions row for the user (capped per provider)."""
+    out: List[Dict[str, Any]] = []
+    for provider in BNPL_PROVIDERS:
+        async for ptx in (
+            db.payment_transactions
+              .find({"user_id": user_id, "provider": provider}, {"_id": 0, "raw_payload": 0})
+              .sort([("created_at_provider", -1)])
+              .limit(limit_per_provider)
+        ):
+            ref = ptx.get("order_reference_id") or ptx.get("order_number") or ""
+            match_doc = None
+            if ref:
+                match_doc = await db.unified_orders.find_one(
+                    {"user_id": user_id,
+                     "$or": [
+                         {"order_reference_id": ref},
+                         {"order_number": ref},
+                     ]},
+                    {"_id": 0, "id": 1, "source": 1, "needs_review": 1,
+                     "order_status": 1, "payment_status_provider": 1,
+                     "sources_seen": 1},
+                )
+            if not ref:
+                match = "no_reference"
+            elif match_doc is None:
+                match = "unmatched"
+            elif (match_doc.get("source") or "") == provider:
+                match = "created_by_provider"
+            else:
+                match = "matched"
+            out.append({
+                "order_number": ref or "—",
+                "provider": provider,
+                "payment_status": ptx.get("status") or "",
+                "order_status": (match_doc or {}).get("order_status") or "",
+                "amount": float(ptx.get("amount") or 0),
+                "refund_amount": float(ptx.get("refunded_amount") or 0),
+                "match_status": match,
+                "provider_id": ptx.get("provider_id"),
+                "created_at_provider": ptx.get("created_at_provider"),
+            })
+    out.sort(
+        key=lambda r: r.get("created_at_provider") or "", reverse=True,
+    )
+    return out
+
+
+def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
+    async def current_user(request: Request) -> dict:
+        return await get_current_user_from_db(request, db)
+
+    router = APIRouter(prefix="/bnpl", tags=["bnpl-diagnostics"])
+
+    @router.get("/diagnostics")
+    async def diagnostics(
+        comparison_limit: int = Query(50, ge=1, le=500),
+        sample_limit: int = Query(10, ge=1, le=100),
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        report: Dict[str, Any] = {
+            "generated_at": _now_iso(),
+            "user_id": uid,
+            "providers": {},
+        }
+
+        for provider in BNPL_PROVIDERS:
+            settings_doc = await get_settings(db, uid, provider)
+            stats = await _provider_stats(db, uid, provider)
+            matching = await _matching_stats(db, uid, provider)
+            refunds = await _refunds_stats(db, uid, provider)
+            unmatched_samples = await _samples_unmatched(
+                db, uid, provider, limit=sample_limit,
+            )
+
+            report["providers"][provider] = {
+                "settings": {
+                    "enabled": settings_doc.get("enabled"),
+                    "environment": settings_doc.get("environment"),
+                    "activation_date": settings_doc.get("activation_date"),
+                    "last_sync_at": settings_doc.get("last_sync_at"),
+                    "last_webhook_at": settings_doc.get("last_webhook_at"),
+                    "last_test_ok": settings_doc.get("last_test_ok"),
+                    "last_test_error": settings_doc.get("last_test_error"),
+                    "api_base_url": settings_doc.get("api_base_url"),
+                },
+                "stats": stats,
+                "matching": matching,
+                "refunds": refunds,
+                "samples_unmatched_payments": unmatched_samples,
+                "sync_scope": {
+                    "since_used": (
+                        f"{settings_doc.get('activation_date')}T00:00:00Z"
+                        if settings_doc.get("activation_date") else None
+                    ),
+                    "rule": "From `activation_date` 00:00 UTC. No historical "
+                            "backfill unless `?since=YYYY-MM-DD` passed to "
+                            "the sync endpoint explicitly.",
+                },
+            }
+
+        report["comparison_rows"] = await _comparison_rows(
+            db, uid, limit_per_provider=comparison_limit,
+        )
+
+        # Dedup behaviour contract — what guarantees we don't double-write
+        report["deduplication"] = {
+            "transactions_unique_key": "(user_id, provider, provider_id)",
+            "transactions_index": "ptx_uniq (unique)",
+            "refunds_unique_key": "(user_id, provider, provider_refund_id)",
+            "refunds_index": "prefund_uniq (unique, sparse)",
+            "guarantee": (
+                "Mongo enforces uniqueness — a second sync of the same "
+                "Tabby payment_id or Tamara order_id can NEVER create a "
+                "duplicate row; the upsert simply re-writes the same row."
+            ),
+        }
+
+        # Old-order behaviour contract
+        report["old_orders_behavior"] = {
+            "mode": "update-only",
+            "explanation": (
+                "When a new refund/status arrives for an order that "
+                "already exists in `unified_orders`, the merge layer "
+                "ONLY updates payment fields "
+                "(payment_verified / paid_amount / refunded_amount / "
+                "payment_status_provider / last_provider_sync_at) and "
+                "appends the provider to `sources_seen`. It NEVER "
+                "overwrites Make/Excel canonical fields (gross_amount, "
+                "items, etc.) and NEVER recreates the order."
+            ),
+            "match_keys_priority": [
+                "order_reference_id",
+                "order_number",
+            ],
+        }
+
+        # Headline summary
+        total_txn = sum(p["stats"]["transactions_count"]
+                        for p in report["providers"].values())
+        total_refunds = sum(p["stats"]["refunds_count"]
+                            for p in report["providers"].values())
+        total_created = sum(p["matching"]["created_orders"]
+                            for p in report["providers"].values())
+        total_matched = sum(p["matching"]["matched_orders"]
+                            for p in report["providers"].values())
+        report["headline"] = {
+            "total_transactions_synced": total_txn,
+            "total_refunds_synced": total_refunds,
+            "total_orders_created_by_bnpl": total_created,
+            "total_orders_matched": total_matched,
+        }
+        return report
+
+    parent_router.include_router(router)

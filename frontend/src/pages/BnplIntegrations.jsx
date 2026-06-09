@@ -13,9 +13,11 @@
  *   POST   /api/bnpl/tabby/sync                ← manual sync trigger
  */
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
     Lightning, ShieldCheck, ArrowsClockwise, Eye, EyeSlash,
     CheckCircle, XCircle, Receipt, Storefront, Copy, Link as LinkIcon,
+    Stethoscope,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
@@ -555,6 +557,13 @@ export default function BnplIntegrations() {
                         مصدر بيانات مستقل للتسويات والمسترجعات. المفاتيح مشفّرة ولا تُعرض كاملة بعد الحفظ.
                     </p>
                 </div>
+                <Link
+                    to="/integrations/bnpl/diagnostics"
+                    className="px-3 py-2 rounded-lg bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 flex items-center gap-1.5"
+                    data-testid="open-bnpl-diagnostics"
+                >
+                    <Stethoscope size={16} weight="duotone" /> تقرير التشخيص الشامل
+                </Link>
             </div>
 
             <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900 flex items-start gap-2">

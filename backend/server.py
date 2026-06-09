@@ -86,7 +86,7 @@ from counterparties_routes import attach_counterparties_routes, ensure_counterpa
 from purchase_invoices_routes import attach_purchase_invoice_routes, ensure_purchase_invoices_indexes
 from custom_app_routes import attach_custom_app_routes, ensure_custom_app_indexes
 from ad_account_routes import attach_ad_account_routes, ensure_ad_account_indexes
-from bnpl import attach_bnpl_routes, ensure_bnpl_indexes, attach_bnpl_webhook_routes
+from bnpl import attach_bnpl_routes, ensure_bnpl_indexes, attach_bnpl_webhook_routes, attach_bnpl_diagnostics_routes
 from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
 from reconciliation_routes import attach_reconciliation_routes
 from diagnostics_routes import attach_diagnostics_routes
@@ -2916,6 +2916,7 @@ attach_custom_app_routes(api, db)
 attach_ad_account_routes(api, db)
 attach_bnpl_routes(api, db)
 attach_bnpl_webhook_routes(api, db)
+attach_bnpl_diagnostics_routes(api, db)
 # Iter-114 — Operational reports (daily/monthly/yearly aggregated)
 from operational_reports_routes import attach_operational_reports_routes
 attach_operational_reports_routes(api, db, current_user)
