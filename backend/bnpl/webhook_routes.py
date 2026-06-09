@@ -79,28 +79,108 @@ def _normalise_tamara_order(order: Dict[str, Any], user_id: str) -> Dict[str, An
 
 
 def _extract_tamara_refunds(order: Dict[str, Any], user_id: str) -> list[dict]:
+    """Extract per-refund rows from a Tamara order payload.
+
+    Tamara returns refund detail in several different shapes depending
+    on the endpoint and account configuration:
+      • order["refunds"]                      — top-level list
+      • order["refund_orders"]                — alt naming
+      • order["captures"][i]["refunds"]       — nested under captures
+
+    If NONE of these are populated but the order has
+    `total_refunded_amount > 0` (visible from status fully_refunded /
+    partially_refunded), we synthesise a single aggregate refund row
+    using the order_id as the refund key so the merchant's audit
+    reflects the cash impact even when Tamara hides per-refund detail.
+    """
     out = []
-    for r in (order.get("refunds") or []):
-        amt = r.get("total_amount") or r.get("amount") or {}
+    order_id = order.get("order_id") or ""
+    order_ref = order.get("order_reference_id") or ""
+    status = (order.get("status") or "").lower()
+
+    def _amt(node):
+        if isinstance(node, dict):
+            try:
+                return float(node.get("amount") or 0)
+            except (TypeError, ValueError):
+                return 0.0
         try:
-            value = float(amt.get("amount") or 0) if isinstance(amt, dict) else float(amt or 0)
+            return float(node or 0)
         except (TypeError, ValueError):
-            value = 0.0
+            return 0.0
+
+    def _curr(node, default="SAR"):
+        if isinstance(node, dict):
+            return node.get("currency") or default
+        return default
+
+    # ── A) top-level refunds[] or refund_orders[]
+    candidates: list = list(order.get("refunds") or [])
+    candidates.extend(order.get("refund_orders") or [])
+
+    # ── B) captures[i].refunds[]
+    for cap in (order.get("captures") or []):
+        if isinstance(cap, dict):
+            candidates.extend(cap.get("refunds") or [])
+
+    for r in candidates:
+        if not isinstance(r, dict):
+            continue
+        amt_node = (
+            r.get("total_amount") or r.get("amount")
+            or r.get("refund_amount") or {}
+        )
         out.append({
             "id": str(uuid.uuid4()),
             "user_id": user_id,
             "provider": "tamara",
-            "provider_payment_id": order.get("order_id"),
-            "provider_refund_id": r.get("refund_id") or r.get("id") or "",
-            "order_reference_id": order.get("order_reference_id") or "",
-            "amount": value,
-            "currency": amt.get("currency") if isinstance(amt, dict) else "SAR",
-            "status": (r.get("status") or "").lower(),
+            "provider_payment_id": order_id,
+            "provider_refund_id": (
+                r.get("refund_id") or r.get("id")
+                or r.get("refund_order_id") or ""
+            ),
+            "order_reference_id": order_ref,
+            "amount": _amt(amt_node),
+            "currency": _curr(amt_node),
+            "status": (r.get("status") or "").lower() or "succeeded",
             "reason": r.get("comment") or r.get("reason") or "",
-            "refunded_at": r.get("created_at") or "",
+            "refunded_at": r.get("created_at")
+                or r.get("refunded_at") or "",
             "raw": r,
             "synced_at": _now_iso(),
         })
+
+    # ── C) Synthesised aggregate row when Tamara reports total_refunded
+    # but didn't expose detailed refund records.
+    if not out and status in ("fully_refunded", "partially_refunded",
+                              "refunded"):
+        total_refunded = (
+            order.get("total_refunded_amount")
+            or order.get("refunded_amount")
+            or {}
+        )
+        value = _amt(total_refunded)
+        if value > 0:
+            out.append({
+                "id": str(uuid.uuid4()),
+                "user_id": user_id,
+                "provider": "tamara",
+                "provider_payment_id": order_id,
+                # Stable, deterministic ID so re-runs don't duplicate.
+                "provider_refund_id": f"synthetic:{order_id or order_ref}",
+                "order_reference_id": order_ref,
+                "amount": value,
+                "currency": _curr(total_refunded),
+                "status": status,
+                "reason": "synthesised from order-level total_refunded_amount",
+                "refunded_at": (
+                    order.get("updated_at") or order.get("created_at") or ""
+                ),
+                "raw": {"_synthesised_from": "order.total_refunded_amount"},
+                "synced_at": _now_iso(),
+                "synthesised": True,
+            })
+
     return out
 
 

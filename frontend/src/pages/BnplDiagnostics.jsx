@@ -395,6 +395,53 @@ export default function BnplDiagnostics() {
         }
     };
 
+    const runTamaraRefundInspect = async () => {
+        try {
+            toast.info("جاري فحص أول طلب refunded من Tamara…", { duration: 3000 });
+            const { data } = await api.post(`/bnpl/tamara/refund-inspect`);
+            console.log("Tamara refund inspect →", data);
+            if (data.note) {
+                window.alert(`ℹ️ ${data.note}`);
+                return;
+            }
+            const s = data.sample_order_used || {};
+            const byId = data.by_order_id || {};
+            const byRef = data.by_reference_id || {};
+            const fmt = (lbl, v) => {
+                if (v.error) return `  ❌ ${lbl}: ${v.error}`;
+                return [
+                    `  ${lbl}:`,
+                    `    status:                    ${v.status}`,
+                    `    total_amount:              ${JSON.stringify(v.total_amount)}`,
+                    `    total_refunded_amount:     ${JSON.stringify(v.total_refunded_amount)}`,
+                    `    refunded_amount:           ${JSON.stringify(v.refunded_amount)}`,
+                    `    refunds[] length:          ${v.refunds_array_len}`,
+                    `    refund_orders[] length:    ${v.refund_orders_array_len}`,
+                    `    captures[] count:          ${v.captures_count}`,
+                    `    captures[0].refunds len:   ${v.first_capture_refunds_len}`,
+                    `    all top-level keys:        ${(v.all_top_level_keys || []).join(", ")}`,
+                ].join("\n");
+            };
+            const lines = [
+                `🔍 TAMARA REFUND INSPECT`,
+                ``,
+                `Sample order:`,
+                `  reference_id:  ${s.order_reference_id}`,
+                `  tamara id:     ${s.tamara_order_id}`,
+                `  local status:  ${s.status_in_local_data}`,
+                `  local refund:  ${s.refunded_amount_in_local}`,
+                ``,
+                fmt("by_order_id", byId),
+                ``,
+                fmt("by_reference_id", byRef),
+            ].join("\n");
+            window.alert(lines);
+        } catch (e) {
+            toast.error(errMsg(e, "فشل refund inspect"));
+        }
+    };
+
+
     const runTabbySyncDebug = async () => {
         try {
             toast.info("جاري فحص 5 variations من Tabby…", { duration: 3000 });
@@ -451,6 +498,7 @@ export default function BnplDiagnostics() {
                 .map((r) => `  ${r.order_reference_id}: ${r.transactions} txns [${(r.statuses || []).join(", ")}]`)
                 .join("\n");
             const fmt = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const rc = data.refunds_comparison || {};
             const lines = [
                 `🔍 TAMARA AUDIT REPORT`,
                 ``,
@@ -468,7 +516,15 @@ export default function BnplDiagnostics() {
                 `Partially Refunded:   ${bs.partially_refunded}`,
                 `Canceled:             ${bs.canceled}`,
                 ``,
-                `Refunds count: ${s.refund_count} · total: ${fmt(s.refund_total_amount)} SAR`,
+                `═══ 4b) Refunds Comparison ═══`,
+                `Orders w/ refund status (Fully + Partial): ${rc.orders_with_refund_status}`,
+                `payment_refunds records:                    ${rc.payment_refunds_records}`,
+                `ptx with refunded_amount > 0:                ${rc.payment_transactions_with_refunded_gt_0}`,
+                `Refunded amount in transactions:             ${fmt(rc.refunded_amount_in_transactions)}`,
+                `Refunded amount in refund records:           ${fmt(rc.refunded_amount_in_refund_records)}`,
+                `Delta (status vs records):                   ${rc.delta_records_vs_status}`,
+                ``,
+                `${rc.diagnosis || ""}`,
                 ``,
                 `═══ 5) Sample of orders w/ multiple transactions ═══`,
                 dups || `  (none — every order has exactly 1 txn ✓)`,
@@ -619,6 +675,14 @@ export default function BnplDiagnostics() {
                         data-testid="bnpl-diag-tamara-audit"
                     >
                         <Stethoscope size={14} /> تدقيق Tamara
+                    </button>
+                    <button
+                        type="button"
+                        onClick={runTamaraRefundInspect}
+                        className="px-3 py-1.5 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-orange-700 flex items-center gap-1"
+                        data-testid="bnpl-diag-tamara-refund-inspect"
+                    >
+                        <Stethoscope size={14} /> فحص Refund Tamara
                     </button>
                     <button
                         type="button"

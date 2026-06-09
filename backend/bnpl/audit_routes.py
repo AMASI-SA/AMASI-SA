@@ -67,6 +67,45 @@ def attach_bnpl_audit_routes(parent_router: APIRouter, db) -> None:
         ]):
             refund_total = float(r.get("s") or 0)
 
+        # 4b) Refunded-status orders vs explicit refund records — proves
+        # whether per-refund detail is missing from Tamara payloads.
+        refunded_status_count = (
+            by_status.get("fully_refunded", 0)
+            + by_status.get("partially_refunded", 0)
+            + by_status.get("refunded", 0)
+        )
+        refunded_amount_in_ptx = 0.0
+        ptx_with_refund_count = 0
+        async for r in db.payment_transactions.aggregate([
+            {"$match": {**ptx_filter, "refunded_amount": {"$gt": 0}}},
+            {"$group": {
+                "_id": None,
+                "n": {"$sum": 1},
+                "s": {"$sum": "$refunded_amount"},
+            }},
+        ]):
+            ptx_with_refund_count = int(r.get("n") or 0)
+            refunded_amount_in_ptx = float(r.get("s") or 0)
+        refunds_comparison = {
+            "orders_with_refund_status": refunded_status_count,
+            "payment_refunds_records": refund_count,
+            "payment_transactions_with_refunded_gt_0": ptx_with_refund_count,
+            "refunded_amount_in_transactions": round(refunded_amount_in_ptx, 2),
+            "refunded_amount_in_refund_records": round(refund_total, 2),
+            "delta_records_vs_status": refunded_status_count - refund_count,
+            "diagnosis": (
+                "✓ matched — every refunded order has a detail record"
+                if refunded_status_count == refund_count else
+                f"⚠️ {refunded_status_count - refund_count} orders have a "
+                "refunded status but no per-refund detail record. "
+                "Tamara's /merchants/orders/reference-id/{ref} endpoint "
+                "may not include refunds[] for legacy orders. "
+                "Re-run Tamara backfill with the fixed extractor — it "
+                "now synthesises an aggregate refund row from "
+                "total_refunded_amount when detail is missing."
+            ),
+        }
+
         # 5) Orders with >1 transactions
         dup_pipeline = [
             {"$match": ptx_filter},
@@ -189,8 +228,85 @@ def attach_bnpl_audit_routes(parent_router: APIRouter, db) -> None:
             "amounts_from_api": api_sums,
             "amounts_in_unified_orders": uo_sums,
             "delta": delta,
+            "refunds_comparison": refunds_comparison,
             "sample_duplicate_orders": sample_dups,
             "verdict": verdict,
         }
+
+    @router.post("/tamara/refund-inspect")
+    async def tamara_refund_inspect(user: dict = Depends(current_user)):
+        """Pull the RAW JSON of one refunded order from Tamara so we can
+        see exactly which fields/paths carry refund information for
+        this merchant's account.
+        """
+        from .clients.tamara import TamaraClient, TamaraError
+        from .config_store import DEFAULTS, get_raw_secrets
+
+        uid = user["id"]
+        secrets = await get_raw_secrets(db, uid, "tamara")
+        if not secrets.get("api_token"):
+            return {"ok": False, "error": "Tamara api_token not set"}
+
+        # Find one refunded order in our payment_transactions
+        sample = await db.payment_transactions.find_one(
+            {"user_id": uid, "provider": "tamara",
+             "status": {"$in": ["fully_refunded", "partially_refunded",
+                                "refunded"]}},
+            {"_id": 0, "order_reference_id": 1, "provider_id": 1,
+             "status": 1, "refunded_amount": 1},
+        )
+        if not sample:
+            return {"ok": True, "note": "No refunded order in local data."}
+
+        client = TamaraClient(
+            api_token=secrets["api_token"],
+            base_url=(secrets.get("api_base_url")
+                      or DEFAULTS["tamara"]["api_base_url"]),
+        )
+
+        ref = sample.get("order_reference_id") or ""
+        order_id = sample.get("provider_id") or ""
+
+        report: Dict[str, Any] = {
+            "ok": True,
+            "sample_order_used": {
+                "order_reference_id": ref,
+                "tamara_order_id": order_id,
+                "status_in_local_data": sample.get("status"),
+                "refunded_amount_in_local": sample.get("refunded_amount"),
+            },
+        }
+
+        async def _probe(label: str, coro):
+            try:
+                raw = await coro
+                if not isinstance(raw, dict):
+                    raw = {"_non_dict_response": str(raw)[:300]}
+                # Surface the refund-related keys explicitly
+                report[label] = {
+                    "status": raw.get("status"),
+                    "total_amount":           raw.get("total_amount"),
+                    "total_refunded_amount":  raw.get("total_refunded_amount"),
+                    "refunded_amount":        raw.get("refunded_amount"),
+                    "refunds_array_len":      len(raw.get("refunds") or []),
+                    "refund_orders_array_len": len(raw.get("refund_orders") or []),
+                    "captures_count":         len(raw.get("captures") or []),
+                    "first_capture_refunds_len": len(
+                        ((raw.get("captures") or [{}])[0] or {}).get("refunds") or []
+                    ) if (raw.get("captures") or []) else 0,
+                    "all_top_level_keys": sorted(raw.keys()),
+                    "raw_truncated": str(raw)[:1500],
+                }
+            except TamaraError as exc:
+                report[label] = {"error": str(exc)}
+
+        if order_id:
+            await _probe("by_order_id", client.get_order_by_id(order_id))
+        if ref:
+            await _probe("by_reference_id", client.get_order_by_reference(ref))
+
+        return report
+
+
 
     parent_router.include_router(router)
