@@ -248,14 +248,65 @@ export default function BnplDiagnostics() {
         try {
             const { data } = await api.post(`/bnpl/${provider}/sync`);
             const s = data.stats || {};
-            toast.success(
-                `مزامنة ${provider} ← معاملات: ${s.transactions_upserted || 0} · ` +
-                `مسترجعات: ${s.refunds_upserted || 0} · ` +
-                `طلبات جديدة: ${s.orders_created || 0}`,
-            );
+            const fetched = Number(s.fetched || 0);
+            if (fetched === 0) {
+                toast.warning(
+                    `Tabby أرجع 0 معاملات في النطاق المطلوب — ` +
+                    `جرّب «جلب تاريخي» بتاريخ أقدم.`,
+                    { duration: 6000 },
+                );
+            } else {
+                toast.success(
+                    `استلَم Tabby ${fetched} معاملة · ` +
+                    `حُفظ: ${s.transactions_upserted || 0} · ` +
+                    `مسترجعات: ${s.refunds_upserted || 0} · ` +
+                    `طلبات جديدة: ${s.orders_created || 0}`,
+                );
+            }
             await load();
         } catch (e) {
             toast.error(errMsg(e, "فشلت المزامنة"));
+        }
+    };
+
+    const runBackfill = async () => {
+        const today = new Date().toISOString().slice(0, 10);
+        const def = "2026-01-01";
+        const since = window.prompt(
+            `أدخل تاريخ بداية الجلب التاريخي (YYYY-MM-DD)\n` +
+            `سيقوم النظام بجلب كل معاملات Tabby من هذا التاريخ حتى اليوم (${today}).\n` +
+            `الحد الأقصى المنصوح: 6-12 شهراً سابقة.`,
+            def,
+        );
+        if (!since) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+            toast.error("صيغة التاريخ خطأ. يجب أن تكون YYYY-MM-DD");
+            return;
+        }
+        try {
+            toast.info("جاري الجلب التاريخي… قد يستغرق دقيقة");
+            const { data } = await api.post(`/bnpl/tabby/sync?since=${since}`);
+            const s = data.stats || {};
+            const fetched = Number(s.fetched || 0);
+            if (fetched === 0) {
+                toast.warning(
+                    `لم يُرجع Tabby أي معاملات منذ ${since}. ` +
+                    `قد لا تكون البيانات في فترة activation_date للمتجر بعد، ` +
+                    `أو الحساب جديد.`,
+                    { duration: 8000 },
+                );
+            } else {
+                toast.success(
+                    `جلب تاريخي اكتمل ← ${fetched} معاملة · ` +
+                    `حُفظ: ${s.transactions_upserted || 0} · ` +
+                    `مسترجعات: ${s.refunds_upserted || 0} · ` +
+                    `طلبات جديدة: ${s.orders_created || 0}`,
+                    { duration: 8000 },
+                );
+            }
+            await load();
+        } catch (e) {
+            toast.error(errMsg(e, "فشل الجلب التاريخي"));
         }
     };
 
@@ -291,6 +342,14 @@ export default function BnplDiagnostics() {
                     >
                         <ArrowLeft size={14} /> العودة للإعدادات
                     </Link>
+                    <button
+                        type="button"
+                        onClick={runBackfill}
+                        className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 flex items-center gap-1"
+                        data-testid="bnpl-diag-backfill"
+                    >
+                        <ArrowsClockwise size={14} /> جلب تاريخي Tabby
+                    </button>
                     <button
                         type="button"
                         onClick={() => { setLoading(true); load(); }}

@@ -237,11 +237,21 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
         try {
             const { data } = await api.post(`/bnpl/${provider}/sync`);
             const s = data.stats || {};
-            toast.success(
-                `تمت المزامنة — معاملات: ${s.transactions_upserted || 0} · ` +
-                `مسترجعات: ${s.refunds_upserted || 0} · ` +
-                `طلبات جديدة: ${s.orders_created || 0}`,
-            );
+            const fetched = Number(s.fetched || 0);
+            if (fetched === 0) {
+                toast.warning(
+                    `${label} أرجع 0 معاملات في النطاق المطلوب. ` +
+                    `جرّب «جلب تاريخي» من صفحة التشخيص بتاريخ أقدم.`,
+                    { duration: 6000 },
+                );
+            } else {
+                toast.success(
+                    `استلَم ${label} ${fetched} معاملة · ` +
+                    `حُفظ: ${s.transactions_upserted || 0} · ` +
+                    `مسترجعات: ${s.refunds_upserted || 0} · ` +
+                    `طلبات جديدة: ${s.orders_created || 0}`,
+                );
+            }
             onReload();
         } catch (e) {
             toast.error(errMsg(e, "فشلت المزامنة"));
