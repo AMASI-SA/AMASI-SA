@@ -27,6 +27,7 @@ from .config_store import (
     get_raw_secrets, get_settings, record_test_result, save_settings,
 )
 from .sync_service import ensure_sync_indexes, sync_tabby_payments
+from .tamara_backfill import backfill_tamara
 
 
 async def ensure_bnpl_indexes(db) -> None:
@@ -115,6 +116,31 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
         )
         if not res.get("ok"):
             raise HTTPException(400, res.get("error") or "sync failed")
+        return res
+
+    # ── BACKFILL (Tamara — webhook-only provider) ──────────────
+    @router.post("/tamara/backfill")
+    async def tamara_backfill_endpoint(
+        since: Optional[str] = Query(
+            None, pattern=r"^\d{4}-\d{2}-\d{2}$",
+            description="Only scan unified_orders with order_date >= since.",
+        ),
+        limit: int = Query(
+            500, ge=1, le=5000,
+            description="Max number of unified_orders rows to scan in one run.",
+        ),
+        user: dict = Depends(current_user),
+    ):
+        """Walk through `unified_orders` and look each up in Tamara via
+        GET /merchants/orders/reference-id/{ref}.  Per-order outcome:
+        not_found (404) is normal and means the order wasn't paid via
+        Tamara.  Found orders get their payment_transactions and
+        unified_orders row updated."""
+        res = await backfill_tamara(
+            db, user["id"], since=since, limit=int(limit),
+        )
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "backfill failed")
         return res
 
     # ── LIST LOCAL DATA ────────────────────────────────────────

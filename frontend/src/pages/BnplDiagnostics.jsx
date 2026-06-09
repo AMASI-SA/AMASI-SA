@@ -310,6 +310,47 @@ export default function BnplDiagnostics() {
         }
     };
 
+    const runTamaraBackfill = async () => {
+        const def = "2026-01-01";
+        const since = window.prompt(
+            `أدخل تاريخ أقدم طلب تريد فحصه في Tamara (YYYY-MM-DD).\n` +
+            `النظام سيمرّ على طلبات unified_orders بدءاً من هذا التاريخ ` +
+            `ويستفسر عن كل order_reference_id من Tamara.\n` +
+            `قد يستغرق دقائق حسب عدد الطلبات.`,
+            def,
+        );
+        if (!since) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+            toast.error("صيغة التاريخ خطأ. يجب أن تكون YYYY-MM-DD");
+            return;
+        }
+        const limit = window.prompt(
+            `الحد الأقصى لعدد الطلبات في هذه الدفعة (1-5000)`,
+            "500",
+        );
+        if (!limit) return;
+        try {
+            toast.info("جاري الفحص التاريخي لـ Tamara… لا تُغلق الصفحة");
+            const { data } = await api.post(
+                `/bnpl/tamara/backfill?since=${since}&limit=${parseInt(limit, 10) || 500}`,
+            );
+            const s = data.stats || {};
+            toast.success(
+                `فحص Tamara اكتمل ← ` +
+                `تم الفحص: ${s.scanned || 0} · ` +
+                `موجودة: ${s.found || 0} · ` +
+                `غير موجودة: ${s.not_found || 0} · ` +
+                `مسترجعات: ${s.refunds_found || 0} · ` +
+                `طلبات حُدّثت: ${s.orders_updated || 0}` +
+                (s.errors ? ` · أخطاء: ${s.errors}` : ""),
+                { duration: 12000 },
+            );
+            await load();
+        } catch (e) {
+            toast.error(errMsg(e, "فشل فحص Tamara"));
+        }
+    };
+
     if (loading && !data) {
         return <div className="p-6 text-center text-slate-500">جاري تجميع التقرير…</div>;
     }
@@ -349,6 +390,14 @@ export default function BnplDiagnostics() {
                         data-testid="bnpl-diag-backfill"
                     >
                         <ArrowsClockwise size={14} /> جلب تاريخي Tabby
+                    </button>
+                    <button
+                        type="button"
+                        onClick={runTamaraBackfill}
+                        className="px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 flex items-center gap-1"
+                        data-testid="bnpl-diag-tamara-backfill"
+                    >
+                        <ArrowsClockwise size={14} /> فحص تاريخي Tamara
                     </button>
                     <button
                         type="button"
