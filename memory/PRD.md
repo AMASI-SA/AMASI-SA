@@ -9,6 +9,36 @@
 - Stack: React + FastAPI + MongoDB
 
 ---
+## ✅ ITERATION 115 — Dynamic Days-Worked Salary Accrual in Financial Position (Feb 2026)
+
+### Backend (`liabilities_routes.py`)
+- `_compute_employee_accrual(emp, today)` — iterates calendar month-by-month using **each month's own days_in_month** (June=30, July=31…) and sums `(monthly/days_in_month) × days_in_segment`.
+- Active employees accrue `start_date → today`; suspended employees freeze at `stopped_at` (newly tracked field on `operating_salaries`; falls back to `updated_at`).
+- `_aggregate_salary_accrual(db, user_id)` — produces `accrued_total / advances_total / paid_total / net_due` and `active_count / suspended_count`, plus per-employee rows.
+- **Advances are NOT subtracted from raw accrued** — they appear as a separate metric (employee debt to company).
+- **Paid = real bank-cash** (`paid_amount − advance_deducted`); consumed advances stay in the advances bucket.
+- New endpoint: `GET /api/liabilities/salary-accrual-summary`.
+- `GET /api/liabilities/summary` now returns a `salary_breakdown` object, and `liabilities.salaries_unpaid` equals `salary_breakdown.net_due` (real-time, no need to call `/generate-salaries`).
+
+### `expenses_routes.py`
+- PUT `/operating-expenses/salaries/{id}` now stamps `stopped_at = today` when status flips `active → stopped` (and clears it on reactivation). Only `category="employee"` participates in accrual.
+
+### Frontend (`FinancialPosition.jsx`)
+- New section "تفاصيل الرواتب — تراكم حسب أيام العمل" with 4 KPI tiles:
+  - `salary-accrued` (إجمالي المتراكم)
+  - `salary-advances` (إجمالي السلف — منفصلة)
+  - `salary-paid` (إجمالي المدفوع بدون السلف)
+  - `salary-net-due` (الصافي المستحق للدفع)
+- Active / Suspended counts (`salary-active-count`, `salary-suspended-count`).
+- Toggle button (`toggle-salary-rows-btn`) reveals per-employee detail table (`salary-employees-table`) with status badge, monthly, days worked, accrued, outstanding advance, paid, net due.
+- KPI card `kpi-liab-salaries` now shows `sb.net_due` (live).
+
+### Testing
+- iteration_47 — 6/6 backend pytest + frontend E2E: cross-month math, suspension freeze, advance separation, household exclusion, summary consistency. 100% pass.
+
+---
+
+
 
 ## ✅ ITERATION 114 — Operational Reports (Daily/Monthly/Yearly) (Feb 2026)
 
