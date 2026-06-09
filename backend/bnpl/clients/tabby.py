@@ -119,26 +119,59 @@ class TabbyClient:
         return await self._get("/api/v2/payments", params=params)
 
     async def list_payments_since(
-        self, since_iso: str, *, page_size: int = 20, max_pages: int = 200,
+        self, since_iso: str, *, page_size: int = 20, max_pages: int = 1000,
     ) -> List[Dict[str, Any]]:
         """Paginate from `since_iso` to now; cap at `max_pages` for safety.
 
-        Reads the `payments` array (per Tabby OpenAPI), not `data`.
-        Uses Tabby's max page size (20).
+        ⚠️ TABBY FILTER WORKAROUND (Iter-116 — Forensic Debug 2026-06-09):
+        Tabby's `created_at__gte` query filter has been observed to
+        return 0 payments for some merchant accounts even when the
+        underlying data clearly contains payments newer than the
+        provided date.  The OpenAPI advertises the filter, but in
+        practice it sometimes rejects valid filter values silently.
+
+        Instead of sending the broken server-side filter, we now:
+          1. Page through ALL payments (newest first — Tabby's default).
+          2. Apply the date filter **client-side** on `created_at`.
+          3. Short-circuit when we reach an item OLDER than `since_iso`
+             (Tabby sorts newest-first, so the remaining pages would
+             all be older too).
+
+        This costs more HTTP calls than the server filter would, but
+        it's the only way to guarantee correctness across every
+        merchant account configuration.
         """
         out: List[Dict[str, Any]] = []
         offset = 0
         page_size = max(1, min(int(page_size), 20))
+        cutoff = (since_iso or "")[:10] if since_iso else ""
+
         for _ in range(max_pages):
+            # NOTE: NO date filter passed to Tabby — only pagination.
+            # We filter on `created_at` ourselves below.
             page = await self.list_payments(
-                created_from=since_iso,
                 limit=page_size,
                 offset=offset,
             )
             items = []
             if isinstance(page, dict):
                 items = page.get("payments") or []
-            out.extend(items)
+            if not items:
+                break
+
+            crossed_cutoff = False
+            for it in items:
+                created = (it.get("created_at") or "")[:10]
+                if cutoff and created and created < cutoff:
+                    # Tabby returned an item OLDER than our cutoff;
+                    # everything beyond this point is older too.
+                    crossed_cutoff = True
+                    break
+                if not cutoff or not created or created >= cutoff:
+                    out.append(it)
+
+            if crossed_cutoff:
+                break
             if len(items) < page_size:
                 break
             offset += page_size

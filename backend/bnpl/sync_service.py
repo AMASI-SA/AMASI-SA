@@ -282,8 +282,14 @@ async def sync_tabby_payments(
         "last_payment_created_at": created_dates[-1] if created_dates else None,
         "filter_used": {
             "endpoint": f"{client.base_url}/api/v2/payments",
-            "created_at__gte": since_iso[:10] if since_iso else None,
-            "status": "default (AUTHORIZED + CLOSED only)",
+            "client_side_filter": True,
+            "client_side_cutoff": since_iso[:10] if since_iso else None,
+            "note": (
+                "Tabby's server-side `created_at__gte` filter is "
+                "unreliable on some merchant accounts (returns 0 "
+                "even when data exists). We now fetch all pages "
+                "and filter on `created_at` in Mezan."
+            ),
         },
     }
     # Per-payment outcome log (capped at 50 rows for response size).
@@ -347,17 +353,12 @@ async def sync_tabby_payments(
     # Friendly diagnosis when fetched==0
     if stats["fetched"] == 0:
         stats["diagnosis"] = (
-            f"Tabby returned 0 payments for filter "
-            f"created_at__gte={since_iso[:10]}. Without filter, Tabby has "
-            "payments (per the Debug endpoint), so this means either:\n"
-            "  • all your payments are OLDER than the activation_date "
-            "    you set, or\n"
-            "  • the most recent payments are in a non-default status "
-            "    (CREATED / REJECTED / EXPIRED) which Tabby's API hides "
-            "    unless you pass an explicit `status=` filter.\n"
-            "Action: open the Debug page and compare sample_payments[].created_at "
-            "with your activation_date. If all are older, lower the "
-            "activation_date (Settings page) and resync."
+            "Tabby returned data via pagination but NONE of the "
+            f"payments are newer than {since_iso[:10] if since_iso else 'the cutoff'}. "
+            "(Client-side filter applied — server-side filter "
+            "deliberately bypassed.)  Either lower the activation_date "
+            "in Settings, OR your account genuinely has no recent "
+            "payments via Tabby."
         )
 
     await record_sync(db, user_id, "tabby")
