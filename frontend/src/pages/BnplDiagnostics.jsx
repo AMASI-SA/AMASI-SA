@@ -395,6 +395,47 @@ export default function BnplDiagnostics() {
         }
     };
 
+    const runTabbySyncDebug = async () => {
+        try {
+            toast.info("جاري فحص 5 variations من Tabby…", { duration: 3000 });
+            const { data } = await api.post(`/bnpl/tabby/sync-debug`);
+            console.log("Tabby sync-debug full →", data);
+            const vars_ = data.variations || {};
+            const lines = [
+                `🔬 TABBY SYNC FORENSIC DEBUG`,
+                ``,
+                `Base URL:        ${data.base_url}`,
+                `Merchant code:   ${data.merchant_code}`,
+                `Activation date: ${data.activation_date_used}`,
+                ``,
+                `─── Counts ─────────────────────`,
+                ...Object.entries(data.counts_summary || {})
+                    .map(([k, v]) => `  ${k.padEnd(22)} → ${v}`),
+                ``,
+                `─── Detail per variation ───────`,
+                ...Object.entries(vars_).flatMap(([label, v]) => [
+                    ``,
+                    `▶ ${label}`,
+                    `  HTTP: ${v.http_status}  ·  count: ${v.raw_payments_count}`,
+                    `  URL: ${v.full_url || "(error)"}`,
+                    `  Params: ${JSON.stringify(v.params_sent)}`,
+                    v.pagination ? `  Pagination.total_count: ${v.pagination?.total_count}` : "",
+                    (v.payment_dates && v.payment_dates.length > 0)
+                        ? `  Sample dates: ${v.payment_dates.slice(0, 5).join(", ")}`
+                        : "",
+                    v.error ? `  ❌ ${v.error}` : "",
+                ]),
+                ``,
+                `═══════════════════════════════`,
+                `📋 ${data.verdict}`,
+            ].filter(Boolean).join("\n");
+            window.alert(lines);
+        } catch (e) {
+            toast.error(errMsg(e, "فشل forensic debug"));
+        }
+    };
+
+
     const runTamaraAudit = async () => {
         try {
             toast.info("جاري إعداد تقرير التدقيق…", { duration: 2000 });
@@ -546,6 +587,14 @@ export default function BnplDiagnostics() {
                         data-testid="bnpl-diag-tabby-debug"
                     >
                         <Stethoscope size={14} /> Tabby Debug
+                    </button>
+                    <button
+                        type="button"
+                        onClick={runTabbySyncDebug}
+                        className="px-3 py-1.5 bg-pink-700 text-white text-xs font-bold rounded-lg hover:bg-pink-800 flex items-center gap-1"
+                        data-testid="bnpl-diag-tabby-sync-debug"
+                    >
+                        <Stethoscope size={14} /> Tabby Forensic
                     </button>
                     <button
                         type="button"

@@ -166,6 +166,128 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
         return res
 
     # ── DEBUG (Tabby) ──────────────────────────────────────────
+    @router.post("/tabby/sync-debug")
+    async def tabby_sync_debug(user: dict = Depends(current_user)):
+        """Forensic debug — runs FIVE variations of the same Tabby call
+        and returns the exact URL, params, status code and first 20
+        payment IDs/dates from each, so we can pinpoint exactly which
+        filter combination is hiding the merchant's data.
+
+        Variations:
+          A) NO filter at all (control — matches Debug)
+          B) date filter only, YYYY-MM-DD format (matches current sync)
+          C) date filter only, full ISO8601 datetime
+          D) status=closed only, no date
+          E) status=closed + date filter
+        """
+        import json as _json
+        import httpx
+
+        uid = user["id"]
+        secrets = await get_raw_secrets(db, uid, "tabby")
+        if not secrets.get("secret_key"):
+            raise HTTPException(400, "Tabby secret_key not set")
+
+        masked = await get_settings(db, uid, "tabby")
+        act = masked.get("activation_date") or "2025-01-01"
+        base = secrets.get("api_base_url") or "https://api.tabby.sa"
+        url = f"{base}/api/v2/payments"
+        headers = {
+            "Authorization": f"Bearer {secrets['secret_key']}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if secrets.get("merchant_code"):
+            headers["X-Merchant-Code"] = secrets["merchant_code"]
+
+        variations = [
+            ("A_no_filter",          {"limit": 20}),
+            ("B_date_yyyymmdd",      {"limit": 20, "created_at__gte": act}),
+            ("C_date_iso8601",       {"limit": 20, "created_at__gte": f"{act}T00:00:00Z"}),
+            ("D_status_closed",      {"limit": 20, "status": "closed"}),
+            ("E_date_plus_closed",   {"limit": 20, "created_at__gte": act,
+                                       "status": "closed"}),
+        ]
+
+        results: Dict[str, Any] = {}
+        async with httpx.AsyncClient(timeout=30) as cli_http:
+            for label, params in variations:
+                try:
+                    resp = await cli_http.get(url, headers=headers, params=params)
+                    raw_body: Any = {}
+                    try:
+                        raw_body = resp.json()
+                    except ValueError:
+                        raw_body = {"_raw_text": resp.text[:500]}
+
+                    payments = (raw_body or {}).get("payments") or []
+                    pagination = (raw_body or {}).get("pagination") or {}
+                    results[label] = {
+                        "http_status": resp.status_code,
+                        "full_url": str(resp.url),
+                        "params_sent": params,
+                        "pagination": pagination,
+                        "raw_payments_count": len(payments),
+                        "payment_ids": [p.get("id") for p in payments[:20]],
+                        "payment_dates": [(p.get("created_at") or "")[:19]
+                                          for p in payments[:20]],
+                        "payment_statuses": [p.get("status") for p in payments[:20]],
+                        # Truncated raw body for inspection
+                        "raw_body_preview": _json.dumps(raw_body)[:1500],
+                    }
+                except httpx.HTTPError as exc:
+                    results[label] = {
+                        "error": f"HTTP transport error: {exc}",
+                        "params_sent": params,
+                    }
+
+        # Comparison verdict
+        counts = {k: v.get("raw_payments_count", 0) for k, v in results.items()
+                  if "raw_payments_count" in v}
+        a = counts.get("A_no_filter", 0)
+        b = counts.get("B_date_yyyymmdd", 0)
+        c = counts.get("C_date_iso8601", 0)
+        d = counts.get("D_status_closed", 0)
+        e = counts.get("E_date_plus_closed", 0)
+
+        if a > 0 and b == 0 and c == 0:
+            verdict = (
+                f"🔴 BUG IDENTIFIED: Date filter zeros out the result on "
+                f"BOTH date formats (YYYY-MM-DD AND ISO8601). Without "
+                f"filter we get {a}, with date filter we get 0. This is "
+                "a Tabby-side filter quirk for THIS account."
+            )
+        elif a > 0 and b > 0:
+            verdict = (
+                f"✓ Date filter works! A={a}, B={b}. If the sync still "
+                "shows 0, the bug is in our sync loop (offset/page_size)."
+            )
+        elif a > 0 and b == 0 and c > 0:
+            verdict = (
+                f"🟡 BUG FOUND: YYYY-MM-DD returns {b}, but ISO8601 "
+                f"returns {c}. Tabby requires the ISO8601 format for "
+                "your account. Will patch the client."
+            )
+        elif a > 0 and d == 0:
+            verdict = (
+                "🔴 status=closed returns 0 even though A has results "
+                "with status=CLOSED. Status param is the culprit."
+            )
+        else:
+            verdict = (
+                f"Inspect manually: A={a}, B={b}, C={c}, D={d}, E={e}"
+            )
+
+        return {
+            "ok": True,
+            "activation_date_used": act,
+            "base_url": base,
+            "merchant_code": secrets.get("merchant_code") or "(none)",
+            "variations": results,
+            "counts_summary": counts,
+            "verdict": verdict,
+        }
+
     @router.post("/tabby/debug")
     async def tabby_debug(user: dict = Depends(current_user)):
         """Forensic check — fetch the LAST 10 payments from Tabby with
