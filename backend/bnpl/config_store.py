@@ -214,6 +214,16 @@ async def save_settings(
     if "created_at" not in existing:
         update["created_at"] = _now_iso()
 
+    # ── Explicit clearing — `clear_secrets: true` wipes all keys ──
+    unset: dict = {}
+    if payload.get("clear_secrets"):
+        for field in ("api_token_encrypted", "notification_token_encrypted",
+                      "secret_key_encrypted"):
+            unset[field] = ""
+        # Also clear the cached error state so the UI resets cleanly.
+        unset["last_test_ok"] = ""
+        unset["last_test_error"] = ""
+
     # ── Secrets (only update when a non-empty value is provided) ──
     if (tok := (payload.get("api_token") or "").strip()):
         update["api_token_encrypted"] = encrypt_token(tok)
@@ -252,7 +262,7 @@ async def save_settings(
 
     await db.bnpl_settings.update_one(
         {"user_id": user_id, "provider": provider},
-        {"$set": update},
+        {"$set": update, **({"$unset": unset} if unset else {})},
         upsert=True,
     )
     return await get_settings(db, user_id, provider)

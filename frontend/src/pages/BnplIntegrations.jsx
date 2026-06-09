@@ -20,6 +20,11 @@ import {
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 
+// Pull a human message out of an axios error.  Backend sends
+// {"detail": "..."} on 4xx — that's what the user actually needs to see.
+const errMsg = (e, fallback) =>
+    formatApiErrorDetail(e?.response?.data?.detail) || fallback || "حدث خطأ";
+
 const inputCls =
     "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm " +
     "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500";
@@ -205,7 +210,7 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
             toast.success(`تم حفظ إعدادات ${label}`);
             onReload();
         } catch (e) {
-            toast.error(formatApiErrorDetail(e) || "تعذّر الحفظ");
+            toast.error(errMsg(e, "تعذّر الحفظ"));
         } finally {
             setBusy(false);
         }
@@ -218,7 +223,7 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
             toast.success(`اتصال ${label} ناجح ✓`);
             onReload();
         } catch (e) {
-            toast.error(formatApiErrorDetail(e) || "فشل الاتصال");
+            toast.error(errMsg(e, `فشل الاتصال بـ ${label}`));
             onReload();
         } finally {
             setBusy(false);
@@ -237,9 +242,23 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
             );
             onReload();
         } catch (e) {
-            toast.error(formatApiErrorDetail(e) || "فشلت المزامنة");
+            toast.error(errMsg(e, "فشلت المزامنة"));
         } finally {
             setSyncing(false);
+        }
+    };
+
+    const clearKeys = async () => {
+        if (!window.confirm(`هل أنت متأكّد من مسح كل مفاتيح ${label}؟ الإعدادات والرسوم تبقى كما هي.`)) return;
+        setBusy(true);
+        try {
+            await api.put(`/bnpl/settings/${provider}`, { clear_secrets: true });
+            toast.success(`تم مسح مفاتيح ${label}`);
+            onReload();
+        } catch (e) {
+            toast.error(errMsg(e, "تعذّر المسح"));
+        } finally {
+            setBusy(false);
         }
     };
 
@@ -457,6 +476,19 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                         آخر مزامنة: {new Date(settings.last_sync_at).toLocaleString("ar-SA")}
                     </span>
                 )}
+                <div className="flex-1" />
+                {(settings.has_api_token || settings.has_secret_key ||
+                  settings.has_notification_token) && (
+                    <button
+                        type="button"
+                        onClick={clearKeys}
+                        disabled={busy}
+                        className="px-3 py-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold hover:bg-rose-100 disabled:opacity-50"
+                        data-testid={`bnpl-${provider}-clear`}
+                    >
+                        مسح المفاتيح
+                    </button>
+                )}
             </div>
 
             {settings.last_test_error && (
@@ -478,7 +510,7 @@ export default function BnplIntegrations() {
             const { data } = await api.get("/bnpl/settings");
             setData(data);
         } catch (e) {
-            toast.error(formatApiErrorDetail(e) || "تعذّر التحميل");
+            toast.error(errMsg(e, "تعذّر التحميل"));
         } finally {
             setLoading(false);
         }
@@ -491,7 +523,7 @@ export default function BnplIntegrations() {
                 const { data } = await api.get("/bnpl/settings");
                 if (!cancelled) setData(data);
             } catch (e) {
-                if (!cancelled) toast.error(formatApiErrorDetail(e) || "تعذّر التحميل");
+                if (!cancelled) toast.error(errMsg(e, "تعذّر التحميل"));
             } finally {
                 if (!cancelled) setLoading(false);
             }
