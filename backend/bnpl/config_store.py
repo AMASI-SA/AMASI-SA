@@ -1,0 +1,227 @@
+"""BNPL config store — per-user, per-provider credentials + fees.
+
+Collection: `bnpl_settings`
+Document shape (one per user × provider):
+{
+    user_id, provider ('tamara'|'tabby'),
+    # — secrets (Fernet ciphertext) —
+    api_token_encrypted, notification_token_encrypted,
+    secret_key_encrypted, merchant_code,        # tabby
+    # — flags —
+    environment ('sandbox'|'production'),
+    enabled (bool),
+    activation_date (str YYYY-MM-DD),           # only sync from this day
+    # — fee settings (Iter-116) —
+    mdr_percent (float, e.g. 0.06 = 6%),
+    fixed_fee_per_order (float, e.g. 1.0 for Tabby),
+    vat_on_fees_percent (float, e.g. 0.15),
+    settlement_period_days (int, e.g. 7),
+    transfer_days (int, e.g. 2),
+    # — bookkeeping —
+    last_sync_at, last_test_ok, last_test_error,
+    created_at, updated_at,
+}
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Optional
+
+from .crypto import decrypt_token, encrypt_token
+
+
+BNPL_PROVIDERS = ("tabby", "tamara")
+
+# Default fee settings — user can override via Settings UI.
+DEFAULTS = {
+    "tabby": {
+        "mdr_percent": 0.06,
+        "fixed_fee_per_order": 1.0,    # user-confirmed: 1 SAR not 1.5
+        "vat_on_fees_percent": 0.15,
+        "settlement_period_days": 7,
+        "transfer_days": 2,
+        "api_base_url": "https://api.tabby.sa",
+    },
+    "tamara": {
+        "mdr_percent": 0.07,
+        "fixed_fee_per_order": 0.0,
+        "vat_on_fees_percent": 0.15,
+        "settlement_period_days": 7,
+        "transfer_days": 2,
+        "api_base_url": "https://api.tamara.co",
+    },
+}
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _mask(s: str, keep: int = 4) -> str:
+    """Return e.g. 'sk_…abcd' so the UI confirms a value is saved
+    without exposing it."""
+    if not s:
+        return ""
+    if len(s) <= keep:
+        return "•" * len(s)
+    return f"{s[:2]}{'•' * 6}{s[-keep:]}"
+
+
+async def ensure_indexes(db) -> None:
+    try:
+        await db.bnpl_settings.create_index(
+            [("user_id", 1), ("provider", 1)],
+            unique=True, name="bnpl_settings_uniq",
+        )
+    except Exception:
+        pass
+
+
+async def get_settings(db, user_id: str, provider: str) -> dict:
+    """Return MASKED + flag info — never raw secrets."""
+    if provider not in BNPL_PROVIDERS:
+        return {}
+    doc = await db.bnpl_settings.find_one(
+        {"user_id": user_id, "provider": provider}, {"_id": 0},
+    ) or {}
+    defaults = DEFAULTS.get(provider, {})
+
+    return {
+        "provider": provider,
+        "enabled": bool(doc.get("enabled", False)),
+        "environment": doc.get("environment", "production"),
+        "activation_date": doc.get("activation_date"),
+        "has_api_token": bool(doc.get("api_token_encrypted")),
+        "has_notification_token": bool(doc.get("notification_token_encrypted")),
+        "has_secret_key": bool(doc.get("secret_key_encrypted")),
+        "merchant_code": doc.get("merchant_code") or "",  # not secret
+        "api_token_masked": _mask(_try_decrypt(doc.get("api_token_encrypted"))),
+        "notification_token_masked": _mask(_try_decrypt(doc.get("notification_token_encrypted"))),
+        "secret_key_masked": _mask(_try_decrypt(doc.get("secret_key_encrypted"))),
+        "mdr_percent": float(doc.get("mdr_percent", defaults.get("mdr_percent", 0))),
+        "fixed_fee_per_order": float(doc.get("fixed_fee_per_order",
+                                             defaults.get("fixed_fee_per_order", 0))),
+        "vat_on_fees_percent": float(doc.get("vat_on_fees_percent",
+                                             defaults.get("vat_on_fees_percent", 0))),
+        "settlement_period_days": int(doc.get("settlement_period_days",
+                                              defaults.get("settlement_period_days", 7))),
+        "transfer_days": int(doc.get("transfer_days",
+                                     defaults.get("transfer_days", 2))),
+        "api_base_url": doc.get("api_base_url") or defaults.get("api_base_url"),
+        "last_sync_at": doc.get("last_sync_at"),
+        "last_test_ok": doc.get("last_test_ok"),
+        "last_test_error": doc.get("last_test_error"),
+    }
+
+
+def _try_decrypt(blob) -> str:
+    if not blob:
+        return ""
+    try:
+        return decrypt_token(blob)
+    except ValueError:
+        return ""
+
+
+async def get_raw_secrets(db, user_id: str, provider: str) -> dict:
+    """Internal — returns decrypted secrets for client use."""
+    if provider not in BNPL_PROVIDERS:
+        return {}
+    doc = await db.bnpl_settings.find_one(
+        {"user_id": user_id, "provider": provider}, {"_id": 0},
+    ) or {}
+    return {
+        "api_token": _try_decrypt(doc.get("api_token_encrypted")),
+        "notification_token": _try_decrypt(doc.get("notification_token_encrypted")),
+        "secret_key": _try_decrypt(doc.get("secret_key_encrypted")),
+        "merchant_code": doc.get("merchant_code") or "",
+        "api_base_url": doc.get("api_base_url") or DEFAULTS.get(provider, {}).get("api_base_url"),
+        "environment": doc.get("environment", "production"),
+        "enabled": bool(doc.get("enabled", False)),
+        "activation_date": doc.get("activation_date"),
+    }
+
+
+async def save_settings(
+    db, user_id: str, provider: str, payload: dict,
+) -> dict:
+    """Upsert. Empty-string secret values are IGNORED (keep existing)
+    so the masked UI value doesn't accidentally erase the stored key."""
+    if provider not in BNPL_PROVIDERS:
+        raise ValueError(f"Unknown provider: {provider}")
+
+    existing = await db.bnpl_settings.find_one(
+        {"user_id": user_id, "provider": provider}, {"_id": 0},
+    ) or {}
+
+    update: dict = {
+        "user_id": user_id,
+        "provider": provider,
+        "updated_at": _now_iso(),
+    }
+    if "created_at" not in existing:
+        update["created_at"] = _now_iso()
+
+    # ── Secrets (only update when a non-empty value is provided) ──
+    if (tok := (payload.get("api_token") or "").strip()):
+        update["api_token_encrypted"] = encrypt_token(tok)
+    if (tok := (payload.get("notification_token") or "").strip()):
+        update["notification_token_encrypted"] = encrypt_token(tok)
+    if (tok := (payload.get("secret_key") or "").strip()):
+        update["secret_key_encrypted"] = encrypt_token(tok)
+
+    # ── Plain fields ──
+    if "merchant_code" in payload:
+        update["merchant_code"] = (payload.get("merchant_code") or "").strip()
+    if "environment" in payload:
+        env = payload.get("environment")
+        if env in ("sandbox", "production"):
+            update["environment"] = env
+    if "enabled" in payload:
+        update["enabled"] = bool(payload.get("enabled"))
+    if "activation_date" in payload:
+        update["activation_date"] = payload.get("activation_date") or None
+    if "api_base_url" in payload and payload.get("api_base_url"):
+        update["api_base_url"] = payload["api_base_url"].strip()
+
+    # ── Fees ──
+    for k in ("mdr_percent", "fixed_fee_per_order", "vat_on_fees_percent"):
+        if k in payload and payload.get(k) is not None:
+            try:
+                update[k] = float(payload[k])
+            except (TypeError, ValueError):
+                pass
+    for k in ("settlement_period_days", "transfer_days"):
+        if k in payload and payload.get(k) is not None:
+            try:
+                update[k] = int(payload[k])
+            except (TypeError, ValueError):
+                pass
+
+    await db.bnpl_settings.update_one(
+        {"user_id": user_id, "provider": provider},
+        {"$set": update},
+        upsert=True,
+    )
+    return await get_settings(db, user_id, provider)
+
+
+async def record_test_result(db, user_id: str, provider: str,
+                             ok: bool, error: Optional[str] = None) -> None:
+    await db.bnpl_settings.update_one(
+        {"user_id": user_id, "provider": provider},
+        {"$set": {
+            "last_test_ok": bool(ok),
+            "last_test_error": (error or "") if not ok else "",
+            "last_test_at": _now_iso(),
+        }},
+        upsert=True,
+    )
+
+
+async def record_sync(db, user_id: str, provider: str) -> None:
+    await db.bnpl_settings.update_one(
+        {"user_id": user_id, "provider": provider},
+        {"$set": {"last_sync_at": _now_iso()}},
+        upsert=True,
+    )

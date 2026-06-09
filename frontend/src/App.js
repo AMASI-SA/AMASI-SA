@@ -43,6 +43,7 @@ import Receivables from "./pages/Receivables";
 import OperationsDashboard from "./pages/OperationsDashboard";
 import CustomAppIntegration from "./pages/CustomAppIntegration";
 import AdAccounts from "./pages/AdAccounts";
+import BnplIntegrations from "./pages/BnplIntegrations";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -92,6 +93,7 @@ function AppRoutes() {
             <Route path="/operations-dashboard" element={<ProtectedRoute><Layout><OperationsDashboard /></Layout></ProtectedRoute>} />
             <Route path="/integrations/custom-app" element={<ProtectedRoute><Layout><CustomAppIntegration /></Layout></ProtectedRoute>} />
             <Route path="/ad-accounts" element={<ProtectedRoute><Layout><AdAccounts /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/bnpl" element={<ProtectedRoute><Layout><BnplIntegrations /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />

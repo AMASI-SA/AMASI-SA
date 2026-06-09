@@ -9,6 +9,43 @@
 - Stack: React + FastAPI + MongoDB
 
 ---
+## ✅ ITERATION 116 — BNPL Integrations Phase 1 (Tabby + Tamara foundations) (Feb 2026)
+
+### Backend (`/app/backend/bnpl/`)
+- **Encrypted credentials store** (`config_store.py`) — re-uses existing `SALLA_TOKEN_ENC_KEY` Fernet. One row per user × provider in `bnpl_settings`. Secrets stored as ciphertext; values returned to UI as masked previews (`sk••••••7890`). Save-without-secret preserves the stored key (masked-erasure protection).
+- **Async HTTP clients**:
+  - `clients/tabby.py` — KSA base `https://api.tabby.sa`, Bearer `secret_key` + `X-Merchant-Code`. `list_payments_since(iso)` paginates `GET /api/v1/payments`. `test_connection()` hits payments with `limit=1`.
+  - `clients/tamara.py` — base `https://api.tamara.co`, Bearer `api_token`. Webhook-first design (no list endpoint). `test_connection()` probes a non-existent reference (404 = auth ok, 401/403 = bad token).
+- **Sync service** (`sync_service.py` — Tabby only this phase):
+  - Pulls from `activation_date` onwards (NO historical backfill unless `since=YYYY-MM-DD` passed explicitly).
+  - Normalises payment → upserts `payment_transactions`.
+  - Extracts embedded refunds → upserts `payment_refunds`.
+  - Merges into `unified_orders`: if order exists → update payment fields only (preserves Make/Excel canonicals); if missing AND money received → creates with `source="tabby"`, `needs_review=true`, `payment_verified=true`.
+  - Source priority constants: `salla_api(1) > make(2) > tamara(3) > tabby(4) > excel(5)`.
+- **Routes** (`routes.py`):
+  - `GET/PUT /api/bnpl/settings[/{provider}]`
+  - `POST /api/bnpl/{provider}/test-connection` — validates against real API
+  - `POST /api/bnpl/tabby/sync?since=YYYY-MM-DD` (optional backfill date)
+  - `GET /api/bnpl/{provider}/transactions|refunds`
+
+### Frontend (`/integrations/bnpl`)
+- New sidebar entry «ربط تمارا وتابي» under «الاستيراد والربط».
+- Card per provider with: secret fields (eye-toggle, masked when saved), activation date, environment, enable toggle, **fee settings** (MDR / fixed-fee / VAT / settlement period / transfer days), Save + Test-Connection + Sync-Now buttons, last error display, last sync timestamp.
+- Tabby default fixed_fee = **1 SAR** (per user contract, NOT 1.5).
+
+### Tested
+- 8/8 pytest passed: settings round-trip, mask format, save-without-overwrite, invalid-key returns 400, empty list endpoints, payment normalisation math, refund extraction.
+
+### Remaining for Iter-116 (next sessions)
+- **Phase 2B**: Tamara webhook handler `/api/webhooks/tamara/orders` + Notification Token verification.
+- **Phase 2C**: Tabby webhook handler `/api/webhooks/tabby/payments`.
+- **Phase 3**: Settlement computation engine (`payment_settlements`, `settlement_items`, status: computed/confirmed/mismatch).
+- **Phase 4**: Frontend pages «تسويات تمارا وتابي» + «الطلبات غير المتطابقة».
+- **Phase 5**: Reconciliation logic (`reconciliation_results`) — auto-match against bank transactions + optional uploaded settlement file.
+
+---
+
+
 ## ✅ ITERATION 115 — Dynamic Days-Worked Salary Accrual in Financial Position (Feb 2026)
 
 ### Backend (`liabilities_routes.py`)

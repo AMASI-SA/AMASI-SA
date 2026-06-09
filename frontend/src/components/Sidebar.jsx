@@ -4,7 +4,7 @@ import {
     ChartPieSlice, ChartLineUp, Truck, Plug, Wallet, Ghost, Package, Image, UserCircle,
     UsersThree, MagnifyingGlass, Queue, ArrowsLeftRight, Scales, Storefront,
     CurrencyDollar, LinkSimple, GearSix, CaretDown, X, PaperPlaneRight,
-    HandCoins, Coin, Briefcase,
+    HandCoins, Coin, Briefcase, Lightning,
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -70,6 +70,7 @@ const SECTIONS = [
             { to: "/import-jobs", label: "حالة الاستيراد", icon: Queue, testid: "nav-import-jobs" },
             { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
             { to: "/integrations/custom-app", label: "ربط تطبيقي الخاص", icon: Plug, testid: "nav-custom-app" },
+            { to: "/integrations/bnpl", label: "ربط تمارا وتابي", icon: Lightning, testid: "nav-bnpl-integrations" },
             { to: "/settings/salla", label: "ربط متجر سلة", icon: Storefront, testid: "nav-salla-integration" },
             { to: "/salla-sources", label: "مقارنة مصادر البيانات", icon: ChartPieSlice, testid: "nav-salla-sources" },
             { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },
