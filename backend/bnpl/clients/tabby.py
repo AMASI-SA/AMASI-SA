@@ -1,15 +1,18 @@
 """Tabby Merchant API async client.
 
-Endpoints used:
-  GET  /api/v1/payments               — list/search payments (date range)
-  GET  /v2/payments/{id}              — single payment with refund detail
+Endpoints used (per Tabby OpenAPI — docs.tabby.ai):
+  GET  /api/v2/payments               — list payments with date filter
+  GET  /api/v2/payments/{id}          — single payment
   POST /api/v1/webhooks               — register a webhook
 
-Auth: `Authorization: Bearer {secret_key}` + optional `X-Merchant-Code`.
+Auth: `Authorization: Bearer {secret_key}`.  `X-Merchant-Code` is
+optional and only used by merchants Tabby has explicitly told to
+include it (multi-store setups).  We pass it when the user fills it in.
 
-Base URL is KSA by default (https://api.tabby.sa).  Test vs live is
-chosen entirely by which secret_key the user pastes in Settings —
-exactly as Tabby documents.
+Base URLs (region-specific):
+  KSA          → https://api.tabby.sa
+  UAE / Kuwait → https://api.tabby.ai
+Tabby itself decides test-vs-live from the key prefix (sk_test_ vs sk_live_).
 """
 from __future__ import annotations
 
@@ -76,15 +79,14 @@ class TabbyClient:
     async def test_connection(self) -> Dict[str, Any]:
         """Issue the lightest read-only call we can to verify creds.
 
-        Tabby doesn't publish a dedicated /ping endpoint; we call the
-        payments list endpoint with a tiny page size — a 401/403 means
-        creds are wrong, a 2xx means we're good.
+        Tabby exposes the live payments listing at GET /api/v2/payments
+        (per official OpenAPI).  A 401/403 means the secret_key is
+        wrong; a 2xx with an empty array means we're good and there
+        just haven't been any payments yet.
         """
-        data = await self._get("/api/v1/payments", params={"limit": 1})
-        return {
-            "ok": True,
-            "sample_count": len(data.get("data") or []) if isinstance(data, dict) else 0,
-        }
+        data = await self._get("/api/v2/payments", params={"limit": 1})
+        payments = (data or {}).get("payments") if isinstance(data, dict) else []
+        return {"ok": True, "sample_count": len(payments or [])}
 
     # ── public — list payments ─────────────────────────────────
     async def list_payments(
@@ -92,35 +94,50 @@ class TabbyClient:
         *,
         created_from: Optional[str] = None,
         created_to: Optional[str] = None,
-        limit: int = 50,
+        limit: int = 20,
         offset: int = 0,
     ) -> Dict[str, Any]:
         """Return a single page of payments from Tabby.
 
-        `created_from` / `created_to` should be ISO-8601 UTC strings.
-        The exact filter parameter names follow Tabby's API reference.
+        Per OpenAPI:
+          • endpoint: GET /api/v2/payments
+          • filter params: `created_at__gte` (double underscore),
+                           `created_at__lte`
+          • format: ISO date `YYYY-MM-DD` (no time component required)
+          • max `limit` accepted by Tabby: 20.
         """
-        params: Dict[str, Any] = {"limit": limit, "offset": offset}
+        # Tabby caps limit at 20 — clamp to be safe.
+        params: Dict[str, Any] = {
+            "limit": max(1, min(int(limit), 20)),
+            "offset": max(0, int(offset)),
+        }
         if created_from:
-            params["created_at[gte]"] = created_from
+            # accept full ISO datetime but trim to YYYY-MM-DD for Tabby
+            params["created_at__gte"] = created_from[:10]
         if created_to:
-            params["created_at[lte]"] = created_to
-        return await self._get("/api/v1/payments", params=params)
+            params["created_at__lte"] = created_to[:10]
+        return await self._get("/api/v2/payments", params=params)
 
     async def list_payments_since(
-        self, since_iso: str, *, page_size: int = 50, max_pages: int = 200,
+        self, since_iso: str, *, page_size: int = 20, max_pages: int = 200,
     ) -> List[Dict[str, Any]]:
-        """Paginate from `since_iso` to now; cap at `max_pages` for safety."""
+        """Paginate from `since_iso` to now; cap at `max_pages` for safety.
+
+        Reads the `payments` array (per Tabby OpenAPI), not `data`.
+        Uses Tabby's max page size (20).
+        """
         out: List[Dict[str, Any]] = []
         offset = 0
+        page_size = max(1, min(int(page_size), 20))
         for _ in range(max_pages):
             page = await self.list_payments(
                 created_from=since_iso,
                 limit=page_size,
                 offset=offset,
             )
-            items = page.get("data") if isinstance(page, dict) else []
-            items = items or []
+            items = []
+            if isinstance(page, dict):
+                items = page.get("payments") or []
             out.extend(items)
             if len(items) < page_size:
                 break
@@ -129,4 +146,4 @@ class TabbyClient:
 
     # ── public — single payment ────────────────────────────────
     async def get_payment(self, payment_id: str) -> Dict[str, Any]:
-        return await self._get(f"/v2/payments/{payment_id}")
+        return await self._get(f"/api/v2/payments/{payment_id}")

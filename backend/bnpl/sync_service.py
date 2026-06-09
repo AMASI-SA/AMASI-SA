@@ -63,23 +63,28 @@ def _extract_order_ref(p: Dict[str, Any]) -> Tuple[str, str]:
 
 
 def _normalise_payment(p: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-    """Map a Tabby payment object to our `payment_transactions` row."""
+    """Map a Tabby payment object to our `payment_transactions` row.
+
+    Tabby (per OpenAPI spec) returns `amount` as a plain string and
+    `currency` as a separate sibling field — NOT a nested object.
+    Each capture and refund also has `amount` as a plain string.
+    """
     order_ref, order_number = _extract_order_ref(p)
+
     refunds = p.get("refunds") or []
-    refunded_amount = sum(_f((r or {}).get("amount", {}).get("amount", 0))
-                          for r in refunds)
+    refunded_amount = sum(_f((r or {}).get("amount", 0)) for r in refunds)
+
     captures = p.get("captures") or []
-    captured_amount = sum(_f((c or {}).get("amount", {}).get("amount", 0))
-                          for c in captures)
-    amount = p.get("amount") or {}
+    captured_amount = sum(_f((c or {}).get("amount", 0)) for c in captures)
+
     return {
         "id": str(uuid.uuid4()),  # internal id
         "user_id": user_id,
         "provider": "tabby",
         "provider_id": (p.get("id") or "").strip(),
         "status": (p.get("status") or "").lower(),
-        "amount": _f(amount.get("amount")),
-        "currency": amount.get("currency") or "SAR",
+        "amount": _f(p.get("amount")),
+        "currency": p.get("currency") or "SAR",
         "captured_amount": captured_amount,
         "refunded_amount": refunded_amount,
         "order_reference_id": order_ref,
@@ -87,7 +92,7 @@ def _normalise_payment(p: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         "buyer_email": (p.get("buyer") or {}).get("email") or "",
         "buyer_phone": (p.get("buyer") or {}).get("phone") or "",
         "created_at_provider": p.get("created_at") or "",
-        "updated_at_provider": p.get("updated_at") or "",
+        "updated_at_provider": (p.get("order") or {}).get("updated_at") or "",
         "raw_payload": p,
         "synced_at": _now_iso(),
     }
@@ -96,8 +101,8 @@ def _normalise_payment(p: Dict[str, Any], user_id: str) -> Dict[str, Any]:
 def _extract_refund_rows(p: Dict[str, Any], user_id: str) -> List[Dict[str, Any]]:
     order_ref, _ = _extract_order_ref(p)
     rows = []
+    currency = p.get("currency") or "SAR"
     for r in (p.get("refunds") or []):
-        amt = (r or {}).get("amount") or {}
         rows.append({
             "id": str(uuid.uuid4()),
             "user_id": user_id,
@@ -105,8 +110,8 @@ def _extract_refund_rows(p: Dict[str, Any], user_id: str) -> List[Dict[str, Any]
             "provider_payment_id": (p.get("id") or "").strip(),
             "provider_refund_id": (r.get("id") or "").strip(),
             "order_reference_id": order_ref,
-            "amount": _f(amt.get("amount")),
-            "currency": amt.get("currency") or "SAR",
+            "amount": _f(r.get("amount")),
+            "currency": currency,
             "status": (r.get("status") or "").lower(),
             "reason": r.get("reason") or "",
             "refunded_at": r.get("created_at") or "",

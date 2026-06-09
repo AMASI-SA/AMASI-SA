@@ -127,20 +127,25 @@ def test_refunds_endpoint_empty(headers):
 
 # ── In-process tests for sync_service helpers ─────────────────
 def test_normalise_payment_shape():
-    """Verify _normalise_payment returns the expected fields."""
+    """Verify _normalise_payment returns the expected fields.
+
+    Tabby (OpenAPI) returns flat string `amount` + separate `currency`,
+    NOT a nested object — our normaliser must handle this exact shape.
+    """
     import sys
     sys.path.insert(0, "/app/backend")
     from bnpl.sync_service import _normalise_payment
 
     fake = {
         "id": "tabby_pay_111",
-        "status": "CAPTURED",
-        "amount": {"amount": "120.50", "currency": "SAR"},
-        "order": {"reference_id": "SALLA-9001"},
+        "status": "CLOSED",
+        "amount": "120.50",
+        "currency": "SAR",
+        "order": {"reference_id": "SALLA-9001", "updated_at": "2026-06-09T08:30:00Z"},
         "buyer": {"email": "x@y.com", "phone": "+966500000000"},
-        "captures": [{"amount": {"amount": "120.50", "currency": "SAR"}}],
+        "captures": [{"amount": "120.50", "id": "cap-1"}],
         "refunds": [
-            {"id": "rfd-1", "amount": {"amount": "20", "currency": "SAR"},
+            {"id": "rfd-1", "amount": "20.00",
              "status": "succeeded", "created_at": "2026-06-09T10:00:00Z"},
         ],
         "created_at": "2026-06-09T08:00:00Z",
@@ -149,10 +154,11 @@ def test_normalise_payment_shape():
     assert txn["provider"] == "tabby"
     assert txn["provider_id"] == "tabby_pay_111"
     assert txn["amount"] == 120.5
+    assert txn["currency"] == "SAR"
     assert txn["captured_amount"] == 120.5
     assert txn["refunded_amount"] == 20.0
     assert txn["order_reference_id"] == "SALLA-9001"
-    assert txn["status"] == "captured"
+    assert txn["status"] == "closed"
 
 
 def test_extract_refund_rows():
@@ -162,11 +168,12 @@ def test_extract_refund_rows():
 
     fake = {
         "id": "tabby_pay_222",
+        "currency": "SAR",
         "order": {"reference_id": "ABC-1"},
         "refunds": [
-            {"id": "r1", "amount": {"amount": "5", "currency": "SAR"},
+            {"id": "r1", "amount": "5.00",
              "status": "succeeded"},
-            {"id": "r2", "amount": {"amount": "10.50", "currency": "SAR"},
+            {"id": "r2", "amount": "10.50",
              "status": "pending"},
         ],
     }
@@ -175,3 +182,4 @@ def test_extract_refund_rows():
     assert rows[0]["amount"] == 5.0
     assert rows[1]["amount"] == 10.5
     assert rows[0]["provider_refund_id"] == "r1"
+    assert rows[0]["currency"] == "SAR"
