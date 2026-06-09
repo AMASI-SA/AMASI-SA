@@ -1,0 +1,196 @@
+"""Tamara audit report (Iter-116) — forensic verification of synced data.
+
+Answers: are these 558 records genuinely unique orders, or just multiple
+transactions per order?  Compares sum-of-amounts between
+`payment_transactions` (raw from Tamara) and `unified_orders` (after
+merge) to prove no double-counting or loss.
+"""
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, Depends, Request
+
+from auth import get_current_user_from_db
+
+
+def attach_bnpl_audit_routes(parent_router: APIRouter, db) -> None:
+    async def current_user(request: Request) -> dict:
+        return await get_current_user_from_db(request, db)
+
+    router = APIRouter(prefix="/bnpl", tags=["bnpl-audit"])
+
+    @router.get("/tamara/audit")
+    async def tamara_audit(user: dict = Depends(current_user)):
+        uid = user["id"]
+        ptx_filter = {"user_id": uid, "provider": "tamara"}
+
+        total_transactions = await db.payment_transactions.count_documents(ptx_filter)
+
+        # 1) Unique orders by order_reference_id (drop empty refs)
+        unique_refs_pipeline = [
+            {"$match": ptx_filter},
+            {"$match": {"order_reference_id": {"$nin": [None, ""]}}},
+            {"$group": {"_id": "$order_reference_id"}},
+            {"$count": "n"},
+        ]
+        unique_orders = 0
+        async for r in db.payment_transactions.aggregate(unique_refs_pipeline):
+            unique_orders = r.get("n", 0)
+
+        # transactions without any reference (orphans)
+        orphan_ptx = await db.payment_transactions.count_documents({
+            **ptx_filter,
+            "$or": [
+                {"order_reference_id": {"$in": [None, ""]}},
+                {"order_reference_id": {"$exists": False}},
+            ],
+        })
+
+        # 2-3) Status breakdown
+        status_pipeline = [
+            {"$match": ptx_filter},
+            {"$group": {"_id": "$status", "n": {"$sum": 1}}},
+        ]
+        by_status: Dict[str, int] = {}
+        async for r in db.payment_transactions.aggregate(status_pipeline):
+            by_status[(r.get("_id") or "").lower()] = r.get("n", 0)
+
+        # 4) Refunds count + total refund amount
+        refund_count = await db.payment_refunds.count_documents({
+            "user_id": uid, "provider": "tamara",
+        })
+        refund_total = 0.0
+        async for r in db.payment_refunds.aggregate([
+            {"$match": {"user_id": uid, "provider": "tamara"}},
+            {"$group": {"_id": None, "s": {"$sum": "$amount"}}},
+        ]):
+            refund_total = float(r.get("s") or 0)
+
+        # 5) Orders with >1 transactions
+        dup_pipeline = [
+            {"$match": ptx_filter},
+            {"$match": {"order_reference_id": {"$nin": [None, ""]}}},
+            {"$group": {"_id": "$order_reference_id", "n": {"$sum": 1}}},
+            {"$match": {"n": {"$gt": 1}}},
+            {"$count": "n"},
+        ]
+        orders_with_multi_tx = 0
+        async for r in db.payment_transactions.aggregate(dup_pipeline):
+            orders_with_multi_tx = r.get("n", 0)
+
+        # 6) Sum from API (payment_transactions)
+        api_sum_pipeline = [
+            {"$match": ptx_filter},
+            {"$group": {
+                "_id": None,
+                "amount":   {"$sum": "$amount"},
+                "captured": {"$sum": "$captured_amount"},
+                "refunded": {"$sum": "$refunded_amount"},
+            }},
+        ]
+        api_sums = {"amount": 0.0, "captured": 0.0, "refunded": 0.0}
+        async for r in db.payment_transactions.aggregate(api_sum_pipeline):
+            api_sums["amount"] = float(r.get("amount") or 0)
+            api_sums["captured"] = float(r.get("captured") or 0)
+            api_sums["refunded"] = float(r.get("refunded") or 0)
+
+        # 7) Sum in unified_orders for those touched by tamara
+        uo_sum_pipeline = [
+            {"$match": {"user_id": uid, "sources_seen": "tamara"}},
+            {"$group": {
+                "_id": None,
+                "gross":    {"$sum": "$gross_amount"},
+                "paid":     {"$sum": "$paid_amount"},
+                "refunded": {"$sum": "$refunded_amount"},
+                "count":    {"$sum": 1},
+            }},
+        ]
+        uo_sums = {"gross": 0.0, "paid": 0.0, "refunded": 0.0, "count": 0}
+        async for r in db.payment_transactions.aggregate(uo_sum_pipeline):
+            pass  # placeholder
+        async for r in db.unified_orders.aggregate(uo_sum_pipeline):
+            uo_sums["gross"] = float(r.get("gross") or 0)
+            uo_sums["paid"] = float(r.get("paid") or 0)
+            uo_sums["refunded"] = float(r.get("refunded") or 0)
+            uo_sums["count"] = int(r.get("count") or 0)
+
+        # 8) Difference (API vs unified)
+        delta = {
+            "amount_vs_gross": round(
+                api_sums["amount"] - uo_sums["gross"], 2),
+            "captured_vs_paid": round(
+                api_sums["captured"] - uo_sums["paid"], 2),
+            "refunded_vs_refunded": round(
+                api_sums["refunded"] - uo_sums["refunded"], 2),
+        }
+
+        # Sample of duplicate orders so the user can inspect them
+        sample_dups: List[Dict[str, Any]] = []
+        async for r in db.payment_transactions.aggregate([
+            {"$match": ptx_filter},
+            {"$match": {"order_reference_id": {"$nin": [None, ""]}}},
+            {"$group": {
+                "_id": "$order_reference_id",
+                "n": {"$sum": 1},
+                "statuses": {"$push": "$status"},
+                "amounts":  {"$push": "$amount"},
+                "provider_ids": {"$push": "$provider_id"},
+                "created_at": {"$push": "$created_at_provider"},
+            }},
+            {"$match": {"n": {"$gt": 1}}},
+            {"$sort": {"n": -1}},
+            {"$limit": 10},
+        ]):
+            sample_dups.append({
+                "order_reference_id": r["_id"],
+                "transactions": r["n"],
+                "statuses": r["statuses"],
+                "amounts": r["amounts"],
+                "provider_ids": r["provider_ids"],
+                "created_at": r["created_at"],
+            })
+
+        # Verdict
+        verdict = "✓ بياناتك نظيفة" if (
+            delta["captured_vs_paid"] == 0 and
+            delta["refunded_vs_refunded"] == 0 and
+            orders_with_multi_tx == 0
+        ) else (
+            f"⚠️ يوجد {orders_with_multi_tx} طلب بأكثر من معاملة "
+            "(طبيعي إذا كانت العملية authorise ثم capture ثم refund "
+            "كصفوف منفصلة في API)" if orders_with_multi_tx > 0 else
+            "⚠️ هناك فرق في المبالغ — راجع delta"
+        )
+
+        return {
+            "ok": True,
+            "summary": {
+                "total_transactions_synced": total_transactions,
+                "unique_orders": unique_orders,
+                "orphan_transactions_no_ref": orphan_ptx,
+                "orders_with_multi_transactions": orders_with_multi_tx,
+                "refund_count": refund_count,
+                "refund_total_amount": round(refund_total, 2),
+            },
+            "by_status": by_status,
+            "by_status_key_hints": {
+                "authorised":          by_status.get("authorised", 0)
+                                       + by_status.get("authorized", 0),
+                "fully_captured":      by_status.get("fully_captured", 0)
+                                       + by_status.get("captured", 0),
+                "partially_captured":  by_status.get("partially_captured", 0),
+                "canceled":            by_status.get("canceled", 0)
+                                       + by_status.get("cancelled", 0),
+                "fully_refunded":      by_status.get("fully_refunded", 0)
+                                       + by_status.get("refunded", 0),
+                "partially_refunded":  by_status.get("partially_refunded", 0),
+            },
+            "amounts_from_api": api_sums,
+            "amounts_in_unified_orders": uo_sums,
+            "delta": delta,
+            "sample_duplicate_orders": sample_dups,
+            "verdict": verdict,
+        }
+
+    parent_router.include_router(router)

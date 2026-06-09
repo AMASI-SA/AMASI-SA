@@ -395,6 +395,67 @@ export default function BnplDiagnostics() {
         }
     };
 
+    const runTamaraAudit = async () => {
+        try {
+            toast.info("جاري إعداد تقرير التدقيق…", { duration: 2000 });
+            const { data } = await api.get(`/bnpl/tamara/audit`);
+            console.log("Tamara audit →", data);
+            const s = data.summary || {};
+            const bs = data.by_status_key_hints || {};
+            const api_amounts = data.amounts_from_api || {};
+            const uo = data.amounts_in_unified_orders || {};
+            const d = data.delta || {};
+            const dups = (data.sample_duplicate_orders || [])
+                .slice(0, 5)
+                .map((r) => `  ${r.order_reference_id}: ${r.transactions} txns [${(r.statuses || []).join(", ")}]`)
+                .join("\n");
+            const fmt = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const lines = [
+                `🔍 TAMARA AUDIT REPORT`,
+                ``,
+                `═══ 1) Counts ═══`,
+                `Total transactions synced:  ${s.total_transactions_synced}`,
+                `Unique orders:              ${s.unique_orders}`,
+                `Orders w/ multi tx:         ${s.orders_with_multi_transactions}`,
+                `Orphan tx (no ref):         ${s.orphan_transactions_no_ref}`,
+                ``,
+                `═══ 2-4) By Status ═══`,
+                `Authorised:           ${bs.authorised}`,
+                `Fully Captured:       ${bs.fully_captured}`,
+                `Partially Captured:   ${bs.partially_captured}`,
+                `Fully Refunded:       ${bs.fully_refunded}`,
+                `Partially Refunded:   ${bs.partially_refunded}`,
+                `Canceled:             ${bs.canceled}`,
+                ``,
+                `Refunds count: ${s.refund_count} · total: ${fmt(s.refund_total_amount)} SAR`,
+                ``,
+                `═══ 5) Sample of orders w/ multiple transactions ═══`,
+                dups || `  (none — every order has exactly 1 txn ✓)`,
+                ``,
+                `═══ 6-7) Amount totals ═══`,
+                `API total (Σ amount):      ${fmt(api_amounts.amount)}`,
+                `API captured (Σ captured): ${fmt(api_amounts.captured)}`,
+                `API refunded (Σ refunded): ${fmt(api_amounts.refunded)}`,
+                ``,
+                `Unified orders (matched):  ${uo.count} rows`,
+                `  gross_amount:            ${fmt(uo.gross)}`,
+                `  paid_amount:             ${fmt(uo.paid)}`,
+                `  refunded_amount:         ${fmt(uo.refunded)}`,
+                ``,
+                `═══ 8) Delta (API − Unified) ═══`,
+                `amount − gross:        ${fmt(d.amount_vs_gross)}   ${d.amount_vs_gross === 0 ? "✓" : "⚠"}`,
+                `captured − paid:       ${fmt(d.captured_vs_paid)}   ${d.captured_vs_paid === 0 ? "✓" : "⚠"}`,
+                `refunded − refunded:   ${fmt(d.refunded_vs_refunded)}   ${d.refunded_vs_refunded === 0 ? "✓" : "⚠"}`,
+                ``,
+                `📋 VERDICT: ${data.verdict}`,
+            ].join("\n");
+            window.alert(lines);
+        } catch (e) {
+            toast.error(errMsg(e, "فشل تقرير التدقيق"));
+        }
+    };
+
+
     const runTabbyDebug = async () => {
         try {
             toast.info("جاري تشخيص Tabby…", { duration: 2000 });
@@ -501,6 +562,14 @@ export default function BnplDiagnostics() {
                         data-testid="bnpl-diag-tamara-backfill-full"
                     >
                         <ArrowsClockwise size={14} /> فحص كامل Tamara
+                    </button>
+                    <button
+                        type="button"
+                        onClick={runTamaraAudit}
+                        className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-bold rounded-lg hover:bg-emerald-800 flex items-center gap-1"
+                        data-testid="bnpl-diag-tamara-audit"
+                    >
+                        <Stethoscope size={14} /> تدقيق Tamara
                     </button>
                     <button
                         type="button"
