@@ -2913,6 +2913,9 @@ attach_counterparties_routes(api, db)
 attach_purchase_invoice_routes(api, db)
 attach_custom_app_routes(api, db)
 attach_ad_account_routes(api, db)
+# Iter-114 — Operational reports (daily/monthly/yearly aggregated)
+from operational_reports_routes import attach_operational_reports_routes
+attach_operational_reports_routes(api, db, current_user)
 app.include_router(api)
 
 # CORS

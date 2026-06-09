@@ -14,6 +14,7 @@ import Reports from "./pages/Reports";
 import ShippingAccounts from "./pages/ShippingAccounts";
 import MakeWebhook from "./pages/MakeWebhook";
 import OperatingExpenses from "./pages/OperatingExpenses";
+import OperationalReports from "./pages/OperationalReports";
 import AdsReport from "./pages/AdsReport";
 import SnapchatAccounts from "./pages/SnapchatAccounts";
 import ProductCosts from "./pages/ProductCosts";
@@ -63,6 +64,7 @@ function AppRoutes() {
             <Route path="/history" element={<ProtectedRoute><Layout><History /></Layout></ProtectedRoute>} />
             <Route path="/daily-costs" element={<ProtectedRoute><Layout><DailyCosts /></Layout></ProtectedRoute>} />
             <Route path="/operating-expenses" element={<ProtectedRoute><Layout><OperatingExpenses /></Layout></ProtectedRoute>} />
+            <Route path="/operational-reports" element={<ProtectedRoute><Layout><OperationalReports /></Layout></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Layout><Reports /></Layout></ProtectedRoute>} />
             <Route path="/reports/ads" element={<ProtectedRoute><Layout><AdsReport /></Layout></ProtectedRoute>} />
             <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatAccounts /></Layout></ProtectedRoute>} />

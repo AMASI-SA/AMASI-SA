@@ -14,7 +14,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     Scales, Wallet, Receipt, CurrencyDollar, ChartLineUp,
-    ClipboardText, Clock, ArrowRight, Truck,
+    ClipboardText, Clock, ArrowRight, Truck, Users, UserMinus,
+    HandCoins, CaretDown, CaretUp,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
@@ -83,6 +84,7 @@ export default function FinancialPosition() {
     const [recon, setRecon] = useState(null);
     const [openCount, setOpenCount] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [showSalaryRows, setShowSalaryRows] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -124,6 +126,10 @@ export default function FinancialPosition() {
 
     const a = summary.assets || {};
     const l = summary.liabilities || {};
+    const sb = summary.salary_breakdown || {
+        accrued_total: 0, advances_total: 0, paid_total: 0, net_due: 0,
+        active_count: 0, suspended_count: 0, employees: [],
+    };
     const totals = recon.totals || {};
     const byProvider = l.by_ad_provider || {};
 
@@ -218,9 +224,9 @@ export default function FinancialPosition() {
             <SectionTitle Icon={Receipt}>الالتزامات</SectionTitle>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Card
-                    title="الرواتب المستحقة"
-                    value={fmtMoney(l.salaries_unpaid)}
-                    sub="مولَّدة من الموظفين النشطين"
+                    title="الرواتب المستحقة (صافي)"
+                    value={fmtMoney(sb.net_due ?? l.salaries_unpaid)}
+                    sub={`متراكم ${fmtMoney(sb.accrued_total)} − مدفوع ${fmtMoney(sb.paid_total)}`}
                     tone="amber"
                     Icon={ClipboardText}
                     testid="kpi-liab-salaries"
@@ -260,6 +266,137 @@ export default function FinancialPosition() {
                     Icon={CurrencyDollar}
                     testid="kpi-liab-total"
                 />
+            </div>
+
+            {/* Salary breakdown (Iter-115) ─────────────────────────── */}
+            <SectionTitle Icon={Users}>تفاصيل الرواتب — تراكم حسب أيام العمل</SectionTitle>
+            <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4" data-testid="salary-breakdown-card">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-white border border-amber-200 p-3" data-testid="salary-accrued">
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-bold text-amber-900/80">إجمالي الرواتب المتراكمة</span>
+                            <ClipboardText size={16} weight="duotone" className="text-amber-700" />
+                        </div>
+                        <div className="num text-xl sm:text-2xl font-extrabold text-amber-900">
+                            {fmtMoney(sb.accrued_total)}
+                        </div>
+                        <div className="text-[10px] text-amber-700/70 mt-1">
+                            مجموع راتب اليوم × أيام العمل الفعلية
+                        </div>
+                    </div>
+                    <div className="rounded-lg bg-white border border-sky-200 p-3" data-testid="salary-advances">
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-bold text-sky-900/80">إجمالي السلف على الموظفين</span>
+                            <HandCoins size={16} weight="duotone" className="text-sky-700" />
+                        </div>
+                        <div className="num text-xl sm:text-2xl font-extrabold text-sky-900">
+                            {fmtMoney(sb.advances_total)}
+                        </div>
+                        <div className="text-[10px] text-sky-700/70 mt-1">
+                            مدينة على الموظفين — تُعرض منفصلة
+                        </div>
+                    </div>
+                    <div className="rounded-lg bg-white border border-emerald-200 p-3" data-testid="salary-paid">
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-bold text-emerald-900/80">إجمالي المدفوع</span>
+                            <CurrencyDollar size={16} weight="duotone" className="text-emerald-700" />
+                        </div>
+                        <div className="num text-xl sm:text-2xl font-extrabold text-emerald-900">
+                            {fmtMoney(sb.paid_total)}
+                        </div>
+                        <div className="text-[10px] text-emerald-700/70 mt-1">
+                            مبالغ مدفوعة فعلياً من البنك (بدون السلف)
+                        </div>
+                    </div>
+                    <div className="rounded-lg bg-white border border-rose-200 p-3" data-testid="salary-net-due">
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-bold text-rose-900/80">صافي المستحق للدفع</span>
+                            <Scales size={16} weight="duotone" className="text-rose-700" />
+                        </div>
+                        <div className="num text-xl sm:text-2xl font-extrabold text-rose-900">
+                            {fmtMoney(sb.net_due)}
+                        </div>
+                        <div className="text-[10px] text-rose-700/70 mt-1">
+                            المتراكم − المدفوع
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 p-2.5" data-testid="salary-active-count">
+                        <Users size={18} weight="duotone" className="text-emerald-600" />
+                        <div>
+                            <div className="text-[10px] text-slate-500 font-bold">الموظفون النشطون</div>
+                            <div className="num text-lg font-extrabold text-slate-900">
+                                {Number(sb.active_count || 0).toLocaleString("en-US")}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 p-2.5" data-testid="salary-suspended-count">
+                        <UserMinus size={18} weight="duotone" className="text-rose-600" />
+                        <div>
+                            <div className="text-[10px] text-slate-500 font-bold">الموظفون الموقوفون</div>
+                            <div className="num text-lg font-extrabold text-slate-900">
+                                {Number(sb.suspended_count || 0).toLocaleString("en-US")}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => setShowSalaryRows((v) => !v)}
+                    className="mt-3 w-full flex items-center justify-center gap-1.5 text-sm font-bold text-amber-900 hover:text-amber-700 transition py-1.5 rounded-lg hover:bg-amber-100/60"
+                    data-testid="toggle-salary-rows-btn"
+                >
+                    {showSalaryRows ? <CaretUp size={16} /> : <CaretDown size={16} />}
+                    {showSalaryRows ? "إخفاء قائمة الموظفين" : `عرض تفاصيل ${(sb.employees || []).length} موظف`}
+                </button>
+
+                {showSalaryRows && (sb.employees || []).length > 0 && (
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-white overflow-x-auto" data-testid="salary-employees-table">
+                        <table className="w-full text-xs sm:text-sm" dir="rtl">
+                            <thead className="bg-slate-50 text-slate-600">
+                                <tr>
+                                    <th className="p-2 text-right">الموظف</th>
+                                    <th className="p-2 text-right">الحالة</th>
+                                    <th className="p-2 text-right">راتب شهري</th>
+                                    <th className="p-2 text-right">أيام العمل</th>
+                                    <th className="p-2 text-right">المتراكم</th>
+                                    <th className="p-2 text-right">سلف مفتوحة</th>
+                                    <th className="p-2 text-right">مدفوع</th>
+                                    <th className="p-2 text-right">صافي مستحق</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {(sb.employees || []).map((e) => (
+                                    <tr key={e.id} data-testid={`salary-emp-row-${e.id}`}>
+                                        <td className="p-2 font-bold text-slate-800">{e.name || "—"}</td>
+                                        <td className="p-2">
+                                            {e.status === "active" ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">
+                                                    نشط
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">
+                                                    موقوف
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="p-2 num text-slate-700">{fmtMoney(e.monthly_amount)}</td>
+                                        <td className="p-2 num text-slate-700">
+                                            {Number(e.days_worked || 0).toLocaleString("en-US")} يوم
+                                        </td>
+                                        <td className="p-2 num font-bold text-amber-800">{fmtMoney(e.accrued)}</td>
+                                        <td className="p-2 num text-sky-700">{fmtMoney(e.outstanding_advance)}</td>
+                                        <td className="p-2 num text-emerald-700">{fmtMoney(e.paid)}</td>
+                                        <td className="p-2 num font-extrabold text-rose-700">{fmtMoney(e.net_due)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
 
             {/* Quick indicators */}

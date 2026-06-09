@@ -340,6 +340,229 @@ def _last_day_of_month(year: int, month: int) -> str:
     return f"{year:04d}-{month:02d}-{calendar.monthrange(year, month)[1]:02d}"
 
 
+# ── Iter-115 — Cross-month daily salary accrual ────────────────────────────
+# Per user requirement: an employee's accrued salary equals the sum of
+# their daily-rate over every actually-worked calendar day.  Each month
+# uses ITS OWN days_in_month (June=30, July=31, ...). Suspended employees
+# stop accruing at their stop date (operating_salaries.stopped_at if set,
+# else updated_at as a fallback).
+def _parse_iso_safe(s: Optional[str]) -> Optional[date]:
+    if not s or len(s) < 10:
+        return None
+    try:
+        return date.fromisoformat(s[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _add_one_month(d: date) -> date:
+    if d.month == 12:
+        return date(d.year + 1, 1, 1)
+    return date(d.year, d.month + 1, 1)
+
+
+def _compute_employee_accrual(
+    emp: dict, today: Optional[date] = None,
+) -> dict:
+    """Compute days-worked and accrued amount for a single employee row.
+
+    Rules (Iter-115):
+      • Daily rate is recomputed per month using THAT month's day count.
+      • Active employees accrue from start_date → today (inclusive).
+      • Stopped employees accrue from start_date → stop_date (inclusive).
+        stop_date = operating_salaries.stopped_at  ─ if explicitly stored
+                  ↪ else operating_salaries.updated_at  (when status was
+                    flipped to 'stopped').
+        If neither exists, we DON'T accrue past today (defensive default).
+      • If the employee has not started yet (start_date > end), accrued=0.
+    """
+    today = today or date.today()
+    start = _parse_iso_safe(emp.get("start_date"))
+    if start is None:
+        return {
+            "days_worked": 0,
+            "accrued": 0.0,
+            "start_date": None,
+            "end_date": None,
+            "is_active": (emp.get("status") or "active") == "active",
+        }
+
+    is_active = (emp.get("status") or "active") == "active"
+    if is_active:
+        end = today
+    else:
+        stop_str = (
+            emp.get("stopped_at")
+            or emp.get("updated_at")
+            or ""
+        )
+        end = _parse_iso_safe(stop_str) or today
+        # Clamp: a stop date in the future is meaningless.
+        if end > today:
+            end = today
+
+    if start > end:
+        return {
+            "days_worked": 0,
+            "accrued": 0.0,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "is_active": is_active,
+        }
+
+    monthly = float(emp.get("monthly_amount") or 0)
+    total = 0.0
+    days = 0
+    cursor = start
+    while cursor <= end:
+        dim = calendar.monthrange(cursor.year, cursor.month)[1]
+        month_last = date(cursor.year, cursor.month, dim)
+        eff_end = min(end, month_last)
+        seg_days = (eff_end - cursor).days + 1
+        daily_rate = (monthly / dim) if dim > 0 else 0.0
+        total += daily_rate * seg_days
+        days += seg_days
+        cursor = _add_one_month(cursor)
+
+    return {
+        "days_worked": days,
+        "accrued": round(total, 2),
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "is_active": is_active,
+    }
+
+
+async def _aggregate_salary_accrual(db, user_id: str) -> dict:
+    """Aggregate salary-accrual metrics across all employees for the
+    `المركز المالي` view.  Only category=employee rows participate.
+
+    Advances are reported SEPARATELY — they DO NOT cancel the raw
+    accrued liability (user requirement, Iter-115).
+
+    Paid total = actual bank-cash payments made on salary obligations,
+    i.e. liabilities.kind=salary  (paid_amount − advance_deducted).
+    Advances that got consumed are NOT counted here; they live in the
+    advances bucket.
+    """
+    today = date.today()
+    employees: List[dict] = []
+    accrued_total = 0.0
+    active_count = 0
+    suspended_count = 0
+
+    cursor = db.operating_salaries.find(
+        {"user_id": user_id, "category": "employee"}, {"_id": 0},
+    )
+    async for emp in cursor:
+        calc = _compute_employee_accrual(emp, today=today)
+        accrued_total += calc["accrued"]
+        if calc["is_active"]:
+            active_count += 1
+        else:
+            suspended_count += 1
+        employees.append({
+            "id": emp.get("id"),
+            "name": emp.get("name"),
+            "status": emp.get("status") or "active",
+            "monthly_amount": round(float(emp.get("monthly_amount") or 0), 2),
+            "start_date": calc["start_date"],
+            "end_date": calc["end_date"],
+            "days_worked": calc["days_worked"],
+            "accrued": calc["accrued"],
+        })
+
+    # ── Outstanding advances (employee debt to company) ──
+    advances_total = 0.0
+    open_advances: List[dict] = []
+    async for adv in db.liabilities.find(
+        {
+            "user_id": user_id,
+            "kind": "salary_advance",
+            "advance_status": "open",
+        },
+        {"_id": 0, "id": 1, "employee_salary_id": 1,
+         "expected_amount": 1, "consumed_amount": 1,
+         "description": 1, "due_date": 1, "created_at": 1},
+    ):
+        remaining = _round(
+            _round(adv.get("expected_amount"))
+            - _round(adv.get("consumed_amount"))
+        )
+        if remaining <= 0:
+            continue
+        advances_total += remaining
+        open_advances.append({
+            "id": adv.get("id"),
+            "employee_salary_id": adv.get("employee_salary_id"),
+            "remaining": remaining,
+            "description": adv.get("description") or "",
+            "due_date": adv.get("due_date") or "",
+        })
+
+    # ── Paid total = real cash sent for salaries (excl. advance offsets) ──
+    paid_total = 0.0
+    async for r in db.liabilities.find(
+        {"user_id": user_id, "kind": "salary"},
+        {"_id": 0, "paid_amount": 1, "advance_deducted": 1,
+         "employee_salary_id": 1},
+    ):
+        cash_paid = _round(
+            _round(r.get("paid_amount"))
+            - _round(r.get("advance_deducted"))
+        )
+        if cash_paid > 0:
+            paid_total += cash_paid
+
+    accrued_total = _round(accrued_total)
+    advances_total = _round(advances_total)
+    paid_total = _round(paid_total)
+    net_due = _round(max(0.0, accrued_total - paid_total))
+
+    # Attach per-employee outstanding advance breakdown for the UI.
+    adv_by_emp: dict = {}
+    for adv in open_advances:
+        eid = adv.get("employee_salary_id")
+        adv_by_emp[eid] = _round(
+            (adv_by_emp.get(eid) or 0) + adv["remaining"]
+        )
+    paid_by_emp: dict = {}
+    async for r in db.liabilities.find(
+        {"user_id": user_id, "kind": "salary"},
+        {"_id": 0, "paid_amount": 1, "advance_deducted": 1,
+         "employee_salary_id": 1},
+    ):
+        cash_paid = _round(
+            _round(r.get("paid_amount"))
+            - _round(r.get("advance_deducted"))
+        )
+        if cash_paid > 0:
+            eid = r.get("employee_salary_id")
+            paid_by_emp[eid] = _round((paid_by_emp.get(eid) or 0) + cash_paid)
+
+    for e in employees:
+        e["outstanding_advance"] = adv_by_emp.get(e["id"]) or 0.0
+        e["paid"] = paid_by_emp.get(e["id"]) or 0.0
+        e["net_due"] = _round(max(0.0, e["accrued"] - e["paid"]))
+
+    # Sort: active first, then by net_due desc.
+    employees.sort(
+        key=lambda x: (0 if x["status"] == "active" else 1, -x["net_due"])
+    )
+
+    return {
+        "accrued_total": accrued_total,
+        "advances_total": advances_total,
+        "paid_total": paid_total,
+        "net_due": net_due,
+        "active_count": active_count,
+        "suspended_count": suspended_count,
+        "employees": employees,
+        "advances": open_advances,
+        "generated_at": _now(),
+    }
+
+
 # ── Router ────────────────────────────────────────────────────────────────
 def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
     async def current_user(request: Request) -> dict:
@@ -656,6 +879,19 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         }
 
     # ── GET /summary ─────────────────────────────────────────────────
+    @router.get("/salary-accrual-summary")
+    async def salary_accrual_summary(user: dict = Depends(current_user)):
+        """Iter-115 — Days-worked based salary accrual snapshot.
+
+        Returns the dynamic per-employee accrued amounts (computed live
+        from calendar days using each month's real days-in-month), the
+        outstanding employee advances, real cash paid against salaries
+        and the resulting net due-to-pay.  Used by the `المركز المالي`
+        screen to display real-time salary liabilities instead of the
+        legacy full-month block.
+        """
+        return await _aggregate_salary_accrual(db, user["id"])
+
     @router.get("/summary")
     async def summary(user: dict = Depends(current_user)):
         """Assets − Liabilities = Net financial position.
@@ -678,6 +914,13 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         """
         uid = user["id"]
 
+        # Iter-115 — salary liabilities are now computed from the
+        # days-worked accrual aggregator (real-time, calendar-based)
+        # instead of the legacy per-month block. Advances are EXCLUDED
+        # from the headline "salaries_unpaid" and reported separately,
+        # so they do NOT cancel the raw obligation.
+        salary_accrual = await _aggregate_salary_accrual(db, uid)
+
         # Assets ───────────────────────────────────────────────────
         banks_total = 0.0
         platforms_total = 0.0
@@ -699,7 +942,10 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         # Liabilities ──────────────────────────────────────────────
         today = _today_str()
         agg = {
-            "salaries_unpaid": 0.0,
+            # Iter-115 — `salaries_unpaid` is now the days-worked NET DUE
+            # from the accrual aggregator (real-time), NOT the legacy
+            # sum of liabilities.kind=salary rows.
+            "salaries_unpaid": salary_accrual["net_due"],
             "ad_accounts_unpaid": 0.0,
             "suppliers_unpaid": 0.0,
             "overdue_total": 0.0,
@@ -708,7 +954,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         async for r in db.liabilities.find(
             {
                 "user_id": uid,
-                "kind": {"$in": ["salary", "ad_account", "supplier"]},
+                "kind": {"$in": ["ad_account", "supplier"]},
                 "status": {"$ne": "paid"},
             },
             {"_id": 0, "kind": 1, "expected_amount": 1, "paid_amount": 1,
@@ -719,9 +965,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             )
             if remaining <= 0:
                 continue
-            if r["kind"] == "salary":
-                agg["salaries_unpaid"] += remaining
-            elif r["kind"] == "ad_account":
+            if r["kind"] == "ad_account":
                 agg["ad_accounts_unpaid"] += remaining
                 prov = r.get("ad_provider")
                 if prov in by_provider:
@@ -806,6 +1050,19 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 "overdue_total": _round(agg["overdue_total"]),
                 "total": liabilities_total,
                 "by_ad_provider": {k: _round(v) for k, v in by_provider.items()},
+            },
+            # Iter-115 — full salary breakdown so the UI can render
+            # the four headline numbers requested by the user
+            # (accrued / advances / paid / net_due) plus active &
+            # suspended counts and per-employee rows.
+            "salary_breakdown": {
+                "accrued_total": salary_accrual["accrued_total"],
+                "advances_total": salary_accrual["advances_total"],
+                "paid_total": salary_accrual["paid_total"],
+                "net_due": salary_accrual["net_due"],
+                "active_count": salary_accrual["active_count"],
+                "suspended_count": salary_accrual["suspended_count"],
+                "employees": salary_accrual["employees"],
             },
             "net_position": _round(assets_total - liabilities_total),
             "generated_at": _now(),

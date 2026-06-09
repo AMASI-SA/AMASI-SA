@@ -10,6 +10,33 @@
 
 ---
 
+## ✅ ITERATION 114 — Operational Reports (Daily/Monthly/Yearly) (Feb 2026)
+
+### Backend
+`GET /api/operational-reports?period=daily|monthly|yearly` يجمع من 8 مصادر:
+salaries (`liabilities` kind=salary), rentals (`operating_rentals`), daily_expenses,
+prepaid, shipping (`operating_shipping`), advances (`operating_advances`),
+purchase_invoices, liability_payments. للسنوي يضيف `monthly_breakdown` (12 شهر × 9 فئات).
+يحسب: per-employee summary (days_worked, salary_due, paid, remaining, advance, net) +
+final summary (gross_expense, gross_paid, unpaid, open_liabilities_total,
+employees_we_owe, employees_owed_to_us, net_we_owe, net_owed_to_us).
+
+### Frontend (`/operational-reports`)
+- 3 أزرار للتنقل: يومي/شهري/سنوي. زر "🖨️ طباعة / حفظ PDF" يستخدم `window.print()`.
+- `@media print` CSS يخفي الـ chrome (sidebar/header).
+- تفاصيل كل فئة في جدول منفصل (بحد 200 صف للأداء).
+- التقرير السنوي: جدول إجماليات شهرية أولاً، ثم تفاصيل كل فئة، ثم ملخص الموظفين.
+- "الملخص العام" في الأسفل بـ 6 بطاقات + صناديق بارزة لـ "صافي المطلوب مني" و "صافي المطلوب لي".
+
+### Sidebar
+- entry جديد "التقارير التشغيلية" تحت "إدارة التشغيل".
+
+### Verified (Production-shape data)
+لـ `amasi.jewelery@gmail.com`: السنوي يعرض 7 موظفين، 23,100 ر.س رواتب يونيو، إجمالي السنة 23,100.
+
+---
+
+
 ## ✅ ITERATION 113 — Daily-accrual mode for salary liabilities (Feb 2026)
 
 ### Why

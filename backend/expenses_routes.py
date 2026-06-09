@@ -514,6 +514,14 @@ def _build_router(db) -> APIRouter:
             if payload.status not in {"active", "stopped"}:
                 raise HTTPException(status_code=400, detail="حالة السجل غير صحيحة")
             update["status"] = payload.status
+            # Iter-115 — track stop_date explicitly when status flips to
+            # "stopped" so the salary-accrual aggregator can cap accrual
+            # at the actual suspension day instead of falling back to
+            # `updated_at`.
+            if payload.status == "stopped" and existing.get("status") != "stopped":
+                update["stopped_at"] = datetime.now(timezone.utc).date().isoformat()
+            elif payload.status == "active":
+                update["stopped_at"] = None
         if payload.notes is not None:
             update["notes"] = payload.notes.strip()
         await db.operating_salaries.update_one(

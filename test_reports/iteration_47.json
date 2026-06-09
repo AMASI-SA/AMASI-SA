@@ -1,0 +1,26 @@
+{
+  "summary": "Iter-115 — Dynamic days-worked salary accrual fully verified. Backend: 6/6 pytest tests passed covering empty tenant, cross-month math (full prior month days × prior-month days_in_month + current-month days × current days_in_month), suspension freezes accrual (stopped_at stamped to today, accrued does not grow afterwards), advances reported separately (NOT subtracted from raw accrued, net_due = accrued − paid), household category excluded from employees[], and /summary surfaces salary_breakdown matching /salary-accrual-summary with liabilities.salaries_unpaid == salary_breakdown.net_due. Frontend: /financial-position renders salary-breakdown-card with all 4 KPI tiles (salary-accrued/advances/paid/net-due), active+suspended counts, toggle reveals employees table with per-employee rows showing correct daily-accrued values (3000/30*9=900 active, 2000/30*9=600 stopped). Net Position banner math = assets − liabilities is accurate.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_salary_accrual_iter115.py",
+    "/app/test_reports/pytest/iter115_salary.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "liabilities_routes.py is 1489 lines — consider splitting salary-accrual aggregator into its own module for maintainability.",
+    "_aggregate_salary_accrual iterates db.liabilities.find({kind:'salary'}) twice (paid_total then paid_by_emp) — could be folded into one pass to halve DB roundtrips for tenants with many salary records.",
+    "Defensive default in _compute_employee_accrual when stop_date is missing returns today which means a freshly-flipped row WITHOUT stopped_at would keep accruing until updated_at fallback fires; backend correctly stamps stopped_at on PUT so OK in practice, but worth a code comment.",
+    "Frontend KPI tile 'salary-paid' shows 'بدون السلف' explanation — good UX. All testids present and accessible."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_salary_accrual_iter115.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Auto-registered sal115ui<rand>@example.com / T#aaa1xyz per test run (cleaned in teardown).",
+  "seed_data_creation": "Per-test: registered ephemeral user, created 1-2 operating_salaries rows (employee + household for exclusion test), inserted salary_advance liability directly via Mongo for separation test. Teardown deletes operating_salaries & liabilities for the test user.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-115 salary accrual is solid. Files: backend liabilities_routes.py (_compute_employee_accrual, _aggregate_salary_accrual, /salary-accrual-summary, /summary), expenses_routes.py (PUT /salaries/{id} stamps stopped_at), FinancialPosition.jsx salary section. Note: SALARY_COUNTRIES = {'saudi','yemen','other'} (NOT 'saudi_arabia') — use 'saudi' in any future test.",
+  "rca of the issue": "N/A — no defects found."
+}
