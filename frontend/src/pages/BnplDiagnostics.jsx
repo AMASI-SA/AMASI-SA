@@ -250,19 +250,24 @@ export default function BnplDiagnostics() {
             const s = data.stats || {};
             const fetched = Number(s.fetched || 0);
             if (fetched === 0) {
-                toast.warning(
-                    `Tabby أرجع 0 معاملات في النطاق المطلوب — ` +
-                    `جرّب «جلب تاريخي» بتاريخ أقدم.`,
-                    { duration: 6000 },
+                window.alert(
+                    `Tabby Sync — 0 معاملة\n\n` +
+                    `Endpoint: ${s.filter_used?.endpoint || "?"}\n` +
+                    `Filter: created_at__gte=${s.filter_used?.created_at__gte || "?"}\n` +
+                    `Status filter: ${s.filter_used?.status || "?"}\n\n` +
+                    `${s.diagnosis || "Tabby أرجع 0 معاملات في النطاق."}`,
                 );
             } else {
+                const r = s.reconciliation || {};
                 toast.success(
-                    `استلَم Tabby ${fetched} معاملة · ` +
-                    `حُفظ: ${s.transactions_upserted || 0} · ` +
-                    `مسترجعات: ${s.refunds_upserted || 0} · ` +
-                    `طلبات جديدة: ${s.orders_created || 0}`,
+                    `Tabby ← استلم: ${r.fetched} · حُفظ: ${r.saved}` +
+                    (r.missing > 0 ? ` · مفقود: ${r.missing}` : "") +
+                    ` · أول تاريخ: ${(s.first_payment_created_at || "").slice(0, 10)}` +
+                    ` · آخر تاريخ: ${(s.last_payment_created_at || "").slice(0, 10)}`,
+                    { duration: 14000 },
                 );
             }
+            console.log("Sync report →", data);
             await load();
         } catch (e) {
             toast.error(errMsg(e, "فشلت المزامنة"));
@@ -394,20 +399,36 @@ export default function BnplDiagnostics() {
         try {
             toast.info("جاري تشخيص Tabby…", { duration: 2000 });
             const { data } = await api.post(`/bnpl/tabby/debug`);
-            // Print full report to console for advanced inspection.
             console.log("Tabby debug report →", data);
+            const wd = data.with_date_filter || {};
+            const byStatus = Object.entries(data.by_status || {})
+                .map(([k, v]) => `  ${k}: ${v}`).join("\n");
+            const sampleDates = (data.sample_payments || [])
+                .map((p) => `  ${(p.created_at || "").slice(0, 19)} · ${p.status} · ${p.amount}`)
+                .join("\n");
             const lines = [
-                `🔍 Tabby Debug Report`,
+                `🔍 TABBY DEBUG REPORT`,
                 ``,
-                `Key type: ${data.key_type?.toUpperCase() || "?"}  (${data.key_masked || ""})`,
-                `Merchant code: ${data.merchant_code || "(none)"}`,
-                `Endpoint: ${data.endpoint}`,
-                `Request: ${JSON.stringify(data.request_params)}`,
+                `🔑 Key type:  ${data.key_type?.toUpperCase() || "?"}  (${data.key_masked || ""})`,
+                `🏪 Merchant code:  ${data.merchant_code || "(none)"}`,
+                `🌐 Endpoint:  ${data.endpoint}`,
                 ``,
-                `Raw payments returned: ${data.raw_payments_count ?? "?"}`,
-                `Tabby pagination.total_count: ${data.pagination_total_count ?? "?"}`,
+                `── A) Without any filter ──`,
+                `Raw returned: ${data.raw_payments_count ?? "?"}`,
+                `Total count (Tabby): ${data.pagination_total_count ?? "?"}`,
+                sampleDates ? `\nLast 10 payments:\n${sampleDates}` : "",
                 ``,
-                `Diagnosis:`,
+                `── B) With activation_date filter (${data.activation_date_in_settings || "?"}) ──`,
+                wd.error
+                    ? `❌ Error: ${wd.error}`
+                    : `Returned: ${wd.raw_count ?? "?"} · ` +
+                      `Total: ${wd.pagination_total_count ?? "?"}\n` +
+                      (wd.sample_dates ? `Sample dates:\n  ${wd.sample_dates.join("\n  ")}` : ""),
+                ``,
+                `── C) Total per Tabby status ──`,
+                byStatus,
+                ``,
+                `📋 DIAGNOSIS:`,
                 data.diagnosis || "—",
             ].join("\n");
             window.alert(lines);

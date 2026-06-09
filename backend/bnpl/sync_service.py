@@ -261,22 +261,44 @@ async def sync_tabby_payments(
     )
 
     try:
+        # Default fetch (no status filter → Tabby's default = AUTHORIZED + CLOSED).
         payments = await client.list_payments_since(since_iso)
     except TabbyError as exc:
         return {"ok": False, "error": str(exc)}
 
-    stats = {
+    # Forensic stats — proves to the user exactly what came back and why
+    # the saved count may differ from the fetched count.
+    created_dates = [p.get("created_at") or "" for p in payments if p.get("created_at")]
+    created_dates.sort()
+    stats: Dict[str, Any] = {
         "fetched": len(payments),
         "transactions_upserted": 0,
         "refunds_upserted": 0,
         "orders_created": 0,
         "orders_updated": 0,
         "orders_skipped": 0,
+        "skipped_no_id": 0,
+        "first_payment_created_at": created_dates[0] if created_dates else None,
+        "last_payment_created_at": created_dates[-1] if created_dates else None,
+        "filter_used": {
+            "endpoint": f"{client.base_url}/api/v2/payments",
+            "created_at__gte": since_iso[:10] if since_iso else None,
+            "status": "default (AUTHORIZED + CLOSED only)",
+        },
     }
+    # Per-payment outcome log (capped at 50 rows for response size).
+    outcomes: List[Dict[str, Any]] = []
 
     for p in payments:
         pid = (p.get("id") or "").strip()
         if not pid:
+            stats["skipped_no_id"] += 1
+            outcomes.append({
+                "provider_id": None,
+                "created_at": p.get("created_at"),
+                "status": p.get("status"),
+                "outcome": "skipped_no_id",
+            })
             continue
         txn = _normalise_payment(p, user_id)
         await db.payment_transactions.update_one(
@@ -302,6 +324,41 @@ async def sync_tabby_payments(
         res = await _merge_into_unified_orders(db, user_id, txn)
         action = res.get("action") or "skipped"
         stats[f"orders_{action}"] = stats.get(f"orders_{action}", 0) + 1
+
+        if len(outcomes) < 50:
+            outcomes.append({
+                "provider_id": pid,
+                "created_at": p.get("created_at"),
+                "status": p.get("status"),
+                "amount": p.get("amount"),
+                "order_reference_id": (p.get("order") or {}).get("reference_id"),
+                "merged_action": action,
+                "outcome": "saved",
+            })
+
+    stats["per_payment_log_sample"] = outcomes
+    # Reconciliation: fetched - skipped = upserted (sanity)
+    stats["reconciliation"] = {
+        "fetched": stats["fetched"],
+        "saved": stats["transactions_upserted"],
+        "skipped_no_id": stats["skipped_no_id"],
+        "missing": stats["fetched"] - stats["transactions_upserted"] - stats["skipped_no_id"],
+    }
+    # Friendly diagnosis when fetched==0
+    if stats["fetched"] == 0:
+        stats["diagnosis"] = (
+            f"Tabby returned 0 payments for filter "
+            f"created_at__gte={since_iso[:10]}. Without filter, Tabby has "
+            "payments (per the Debug endpoint), so this means either:\n"
+            "  • all your payments are OLDER than the activation_date "
+            "    you set, or\n"
+            "  • the most recent payments are in a non-default status "
+            "    (CREATED / REJECTED / EXPIRED) which Tabby's API hides "
+            "    unless you pass an explicit `status=` filter.\n"
+            "Action: open the Debug page and compare sample_payments[].created_at "
+            "with your activation_date. If all are older, lower the "
+            "activation_date (Settings page) and resync."
+        )
 
     await record_sync(db, user_id, "tabby")
     return {"ok": True, "since": since_iso, "stats": stats}

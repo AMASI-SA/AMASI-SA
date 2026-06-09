@@ -237,6 +237,42 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
             for p in payments[:10]
         ]
 
+        # ── Probe B: same call WITH the merchant's activation_date filter
+        # so we can prove (or rule out) the date-filter as the cause.
+        act = (await get_settings(db, uid, "tabby")).get("activation_date")
+        report["activation_date_in_settings"] = act
+        if act:
+            try:
+                raw2 = await cli._get(
+                    "/api/v2/payments",
+                    params={"limit": 10, "created_at__gte": act},
+                )
+                payments2 = (raw2 or {}).get("payments") or []
+                report["with_date_filter"] = {
+                    "filter": {"created_at__gte": act, "limit": 10},
+                    "raw_count": len(payments2),
+                    "pagination_total_count": (raw2 or {}).get(
+                        "pagination", {}).get("total_count"),
+                    "sample_dates": [p.get("created_at") for p in payments2[:10]],
+                }
+            except TabbyError as exc:
+                report["with_date_filter"] = {"error": str(exc)}
+
+        # ── Probe C: scan ALL Tabby statuses one-by-one to find hidden
+        # payments (CREATED / REJECTED / EXPIRED don't show in default).
+        report["by_status"] = {}
+        for st in ("authorized", "closed", "rejected", "new",
+                   "captured", "refunded", "cancelled"):
+            try:
+                rs = await cli._get(
+                    "/api/v2/payments",
+                    params={"limit": 1, "status": st},
+                )
+                report["by_status"][st] = (rs or {}).get(
+                    "pagination", {}).get("total_count", 0)
+            except TabbyError as exc:
+                report["by_status"][st] = f"error: {exc.status}"
+
         if len(payments) == 0:
             if report["key_type"] == "test":
                 report["diagnosis"] = (
@@ -257,12 +293,38 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
                     "هذه مشكلة من جانب Tabby وليست من Mezan."
                 )
         else:
-            report["diagnosis"] = (
-                f"✓ Tabby أرجع {len(payments)} معاملة فعلاً. النظام "
-                "يعمل بشكل صحيح. إذا كانت المزامنة الموجهة بتاريخ ترجع "
-                "0، تحقّق من نطاق التاريخ المُرسل والمعاملات الحقيقية "
-                "في sample_payments هنا."
+            # We have payments WITHOUT a filter. If WITH filter we
+            # have zero, the activation_date is the culprit.
+            with_filter = report.get("with_date_filter") or {}
+            wf_count = with_filter.get("raw_count")
+            sample_dates = [
+                (p.get("created_at") or "")[:10] for p in payments
+            ]
+            latest_existing = max(sample_dates) if sample_dates else None
+            base_msg = (
+                f"✓ Tabby أرجع {len(payments)} معاملة بدون فلتر "
+                f"(الأحدث بتاريخ {latest_existing}). "
             )
+            if act and wf_count == 0:
+                report["diagnosis"] = (
+                    base_msg
+                    + f"⚠️ مع فلتر activation_date={act} أرجع 0 معاملة. "
+                    + f"هذا يعني أن كل معاملاتك في Tabby أقدم من {act}. "
+                    + "الحل: غيّر activation_date إلى تاريخ أقدم "
+                    + "(مثل 2025-01-01) من صفحة الإعدادات، ثم زامن."
+                )
+            elif act and wf_count and wf_count > 0:
+                report["diagnosis"] = (
+                    base_msg
+                    + f"✓ مع فلتر activation_date={act} يُرجع {wf_count}+ معاملة. "
+                    + "النظام يعمل بالكامل — تأكّد أن المزامنة تُحفظ "
+                    + "في DB (راجع reconciliation في sync stats)."
+                )
+            else:
+                report["diagnosis"] = base_msg + (
+                    "النظام يعمل بشكل صحيح. تابع نتائج المزامنة "
+                    "العادية لمعرفة كم معاملة تُحفظ."
+                )
 
         return report
 
