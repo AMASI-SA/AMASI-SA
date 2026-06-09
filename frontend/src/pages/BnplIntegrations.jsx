@@ -15,7 +15,7 @@
 import { useEffect, useState } from "react";
 import {
     Lightning, ShieldCheck, ArrowsClockwise, Eye, EyeSlash,
-    CheckCircle, XCircle, Receipt, Storefront,
+    CheckCircle, XCircle, Receipt, Storefront, Copy, Link as LinkIcon,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
@@ -74,6 +74,109 @@ function SecretField({ label, hint, value, onChange, masked, hasValue, testid })
         </label>
     );
 }
+
+function WebhookUrlBlock({ provider, webhookSecret, lastWebhookAt }) {
+    const path = `/api/webhooks/${provider === "tabby" ? "tabby/payments" : "tamara/orders"}/${webhookSecret || ""}`;
+    const productionUrl = `https://mezansalla.com${path}`;
+    const currentUrl = `${typeof window !== "undefined" ? window.location.origin : ""}${path}`;
+    const [copied, setCopied] = useState(null);
+
+    const copy = async (text, key) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(key);
+            toast.success("تم النسخ ✓");
+            setTimeout(() => setCopied(null), 1500);
+        } catch {
+            toast.error("تعذّر النسخ");
+        }
+    };
+
+    if (!webhookSecret) {
+        return (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 mb-4 text-xs text-amber-900">
+                جاري توليد رابط الـ Webhook…
+            </div>
+        );
+    }
+
+    return (
+        <div className="rounded-xl bg-sky-50 border border-sky-200 p-3 mb-4" data-testid={`bnpl-${provider}-webhook-block`}>
+            <h4 className="text-xs font-extrabold text-sky-900 flex items-center gap-1.5 mb-2">
+                <LinkIcon size={14} weight="duotone" />
+                رابط الـ Webhook الخاص بك
+            </h4>
+
+            <div className="space-y-2">
+                <div>
+                    <div className="text-[10px] font-bold text-emerald-800 mb-1">
+                        🌐 رابط Production (لـ {provider === "tabby" ? "Tabby Merchant Dashboard" : "Tamara Partner Portal"})
+                    </div>
+                    <div className="flex items-stretch gap-1">
+                        <code
+                            className="flex-1 px-2 py-1.5 text-[11px] bg-white border border-sky-300 rounded-lg font-mono break-all select-all"
+                            data-testid={`bnpl-${provider}-webhook-url-production`}
+                        >
+                            {productionUrl}
+                        </code>
+                        <button
+                            type="button"
+                            onClick={() => copy(productionUrl, "prod")}
+                            className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1 flex-shrink-0"
+                            data-testid={`bnpl-${provider}-webhook-copy-production`}
+                        >
+                            <Copy size={14} />
+                            {copied === "prod" ? "نُسخ" : "نسخ"}
+                        </button>
+                    </div>
+                </div>
+
+                {currentUrl && currentUrl !== productionUrl && (
+                    <details className="text-[10px] text-slate-600">
+                        <summary className="cursor-pointer font-bold text-slate-700">
+                            رابط البيئة الحالية (للاختبار)
+                        </summary>
+                        <div className="flex items-stretch gap-1 mt-1">
+                            <code className="flex-1 px-2 py-1.5 bg-white border border-slate-300 rounded-lg font-mono break-all select-all">
+                                {currentUrl}
+                            </code>
+                            <button
+                                type="button"
+                                onClick={() => copy(currentUrl, "curr")}
+                                className="px-2.5 py-1.5 bg-slate-600 text-white rounded-lg text-xs font-bold hover:bg-slate-700 flex items-center gap-1 flex-shrink-0"
+                            >
+                                <Copy size={14} />
+                                {copied === "curr" ? "نُسخ" : "نسخ"}
+                            </button>
+                        </div>
+                    </details>
+                )}
+            </div>
+
+            <div className="mt-2 text-[10px] text-sky-800/80 leading-relaxed">
+                {provider === "tamara" ? (
+                    <>
+                        الصق هذا الرابط في خانة <b>URL</b> في صفحة إنشاء Webhook على Tamara Partner Portal.
+                        تأكّد أن <b>Tamara Notification Token</b> أعلاه يطابق ما سيُعطى لك من Tamara عند تفعيل الـ Webhook،
+                        وأن نوع الـ Webhook = <b>Order</b> مع تفعيل الأحداث (<b>Approved</b> مطلوب).
+                    </>
+                ) : (
+                    <>
+                        الصق هذا الرابط في خانة <b>URL</b> في إعدادات Webhooks بـ Tabby Merchant Dashboard.
+                        التفعيل الكامل لمعالجة Tabby webhooks سيتم في المرحلة التالية — الرابط جاهز للتسجيل من الآن.
+                    </>
+                )}
+            </div>
+
+            {lastWebhookAt && (
+                <div className="mt-2 text-[10px] text-emerald-700">
+                    ✓ آخر إشعار مستلَم: {new Date(lastWebhookAt).toLocaleString("ar-SA")}
+                </div>
+            )}
+        </div>
+    );
+}
+
 
 function ProviderCard({ provider, label, Icon, settings, onReload }) {
     const [form, setForm] = useState(() => ({
@@ -168,6 +271,13 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                     )}
                 </div>
             </div>
+
+            {/* Webhook URL (Iter-116 Phase 2B) */}
+            <WebhookUrlBlock
+                provider={provider}
+                webhookSecret={settings.webhook_secret}
+                lastWebhookAt={settings.last_webhook_at}
+            />
 
             {/* Credentials */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">

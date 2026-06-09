@@ -7,6 +7,8 @@ Document shape (one per user × provider):
     # — secrets (Fernet ciphertext) —
     api_token_encrypted, notification_token_encrypted,
     secret_key_encrypted, merchant_code,        # tabby
+    # — webhook routing (Iter-116 Phase 2B) —
+    webhook_secret,                              # per-user URL token
     # — flags —
     environment ('sandbox'|'production'),
     enabled (bool),
@@ -19,11 +21,13 @@ Document shape (one per user × provider):
     transfer_days (int, e.g. 2),
     # — bookkeeping —
     last_sync_at, last_test_ok, last_test_error,
+    last_webhook_at,
     created_at, updated_at,
 }
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -75,12 +79,58 @@ async def ensure_indexes(db) -> None:
         )
     except Exception:
         pass
+    try:
+        await db.bnpl_settings.create_index(
+            [("webhook_secret", 1)], unique=True, sparse=True,
+            name="bnpl_webhook_secret_uniq",
+        )
+    except Exception:
+        pass
+
+
+async def _ensure_webhook_secret(db, user_id: str, provider: str) -> str:
+    """Lazily generate a per-(user × provider) webhook_secret on first
+    read. Lookups by this secret resolve to a user_id without exposing
+    primary IDs in webhook URLs."""
+    doc = await db.bnpl_settings.find_one(
+        {"user_id": user_id, "provider": provider},
+        {"_id": 0, "webhook_secret": 1},
+    )
+    if doc and doc.get("webhook_secret"):
+        return doc["webhook_secret"]
+    secret = uuid.uuid4().hex
+    await db.bnpl_settings.update_one(
+        {"user_id": user_id, "provider": provider},
+        {"$set": {"webhook_secret": secret, "updated_at": _now_iso()},
+         "$setOnInsert": {
+             "user_id": user_id, "provider": provider,
+             "created_at": _now_iso(),
+         }},
+        upsert=True,
+    )
+    return secret
+
+
+async def find_user_by_webhook_secret(
+    db, secret: str, provider: str,
+) -> Optional[dict]:
+    """Reverse-lookup for incoming webhooks. Returns the bnpl_settings
+    doc or None.  Index `bnpl_webhook_secret_uniq` makes this O(1)."""
+    if not secret or not secret.strip():
+        return None
+    return await db.bnpl_settings.find_one(
+        {"webhook_secret": secret.strip(), "provider": provider},
+        {"_id": 0},
+    )
 
 
 async def get_settings(db, user_id: str, provider: str) -> dict:
     """Return MASKED + flag info — never raw secrets."""
     if provider not in BNPL_PROVIDERS:
         return {}
+    # Lazily provision a webhook_secret so the UI can display the
+    # webhook URL even before any credentials are saved.
+    webhook_secret = await _ensure_webhook_secret(db, user_id, provider)
     doc = await db.bnpl_settings.find_one(
         {"user_id": user_id, "provider": provider}, {"_id": 0},
     ) or {}
@@ -98,6 +148,7 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
         "api_token_masked": _mask(_try_decrypt(doc.get("api_token_encrypted"))),
         "notification_token_masked": _mask(_try_decrypt(doc.get("notification_token_encrypted"))),
         "secret_key_masked": _mask(_try_decrypt(doc.get("secret_key_encrypted"))),
+        "webhook_secret": webhook_secret,
         "mdr_percent": float(doc.get("mdr_percent", defaults.get("mdr_percent", 0))),
         "fixed_fee_per_order": float(doc.get("fixed_fee_per_order",
                                              defaults.get("fixed_fee_per_order", 0))),
@@ -111,6 +162,7 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
         "last_sync_at": doc.get("last_sync_at"),
         "last_test_ok": doc.get("last_test_ok"),
         "last_test_error": doc.get("last_test_error"),
+        "last_webhook_at": doc.get("last_webhook_at"),
     }
 
 
