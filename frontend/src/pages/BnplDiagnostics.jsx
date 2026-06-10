@@ -227,6 +227,9 @@ export default function BnplDiagnostics() {
     const [devMode, setDevMode] = useState(
         typeof window !== "undefined" && window.localStorage?.getItem("mezan_dev_mode") === "1",
     );
+    // Comparison table pagination — 15 orders per page
+    const [tablePage, setTablePage] = useState(0);
+    const PAGE_SIZE = 15;
     const toggleDevMode = () => {
         const next = !devMode;
         setDevMode(next);
@@ -821,6 +824,10 @@ export default function BnplDiagnostics() {
     const rows = (data.comparison_rows || []).filter((r) =>
         filter === "all" ? true : r.provider === filter,
     );
+    // Pagination math
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    const safePage = Math.min(tablePage, totalPages - 1);
+    const visibleRows = rows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
     return (
         <div className="space-y-4" dir="rtl" data-testid="bnpl-diagnostics-page">
@@ -1209,7 +1216,7 @@ export default function BnplDiagnostics() {
                             <button
                                 key={p}
                                 type="button"
-                                onClick={() => setFilter(p)}
+                                onClick={() => { setFilter(p); setTablePage(0); }}
                                 className={`px-2.5 py-1 text-xs font-bold rounded-lg ${
                                     filter === p
                                         ? "bg-slate-900 text-white"
@@ -1228,6 +1235,7 @@ export default function BnplDiagnostics() {
                         لا توجد معاملات مزامَنة بعد. اضغط «مزامنة الآن» في القسم العلوي.
                     </div>
                 ) : (
+                    <>
                     <div className="overflow-x-auto">
                         <table className="mezan-table compact w-full text-xs" data-testid="bnpl-diag-table">
                             <thead className="bg-slate-50 text-slate-700">
@@ -1242,8 +1250,8 @@ export default function BnplDiagnostics() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {rows.map((r, i) => (
-                                    <tr key={`${r.provider}-${r.provider_id}-${i}`} className="hover:bg-slate-50">
+                                {visibleRows.map((r, i) => (
+                                    <tr key={`${r.provider}-${r.provider_id}-${safePage}-${i}`} className="hover:bg-slate-50">
                                         <td className="p-2 font-bold text-slate-900">{r.order_number}</td>
                                         <td className="p-2">
                                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
@@ -1283,6 +1291,70 @@ export default function BnplDiagnostics() {
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Pagination footer — Iter-117 (15 per page + arrow navigation) */}
+                    <div className="mt-3 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 border-t border-slate-100 pt-3">
+                        <div data-testid="bnpl-diag-table-counter">
+                            عرض{" "}
+                            <span className="font-bold text-slate-900 num">
+                                {rows.length === 0 ? 0 : safePage * PAGE_SIZE + 1}
+                            </span>
+                            {" – "}
+                            <span className="font-bold text-slate-900 num">
+                                {Math.min((safePage + 1) * PAGE_SIZE, rows.length)}
+                            </span>
+                            {" من "}
+                            <span className="font-bold text-slate-900 num">{rows.length}</span>
+                            {" طلب"}
+                            {filter !== "all" && (
+                                <span className="text-slate-400"> · مصدر: {filter}</span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setTablePage(0)}
+                                disabled={safePage === 0}
+                                className="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700"
+                                title="الصفحة الأولى"
+                                data-testid="bnpl-diag-table-first"
+                            >
+                                ⏮
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTablePage((p) => Math.max(0, p - 1))}
+                                disabled={safePage === 0}
+                                className="px-3 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-slate-700"
+                                data-testid="bnpl-diag-table-prev"
+                            >
+                                ‹ السابق
+                            </button>
+                            <div className="px-3 py-1 rounded bg-slate-900 text-white font-bold num" data-testid="bnpl-diag-table-page">
+                                {safePage + 1} / {totalPages}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setTablePage((p) => Math.min(totalPages - 1, p + 1))}
+                                disabled={safePage >= totalPages - 1}
+                                className="px-3 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-slate-700"
+                                data-testid="bnpl-diag-table-next"
+                            >
+                                التالي ›
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTablePage(totalPages - 1)}
+                                disabled={safePage >= totalPages - 1}
+                                className="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700"
+                                title="الصفحة الأخيرة"
+                                data-testid="bnpl-diag-table-last"
+                            >
+                                ⏭
+                            </button>
+                        </div>
+                    </div>
+                    </>
                 )}
             </div>
 
