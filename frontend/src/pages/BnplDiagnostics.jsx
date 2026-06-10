@@ -375,6 +375,8 @@ export default function BnplDiagnostics() {
         total_fetched: d.total_fetched ?? d.fetched ?? prev?.total_fetched ?? 0,
         total_saved: d.total_saved ?? d.saved ?? prev?.total_saved ?? 0,
         skipped_old: d.skipped_old ?? prev?.skipped_old ?? 0,
+        item_errors: d.item_errors ?? prev?.item_errors ?? 0,
+        sample_errors: d.sample_errors ?? prev?.sample_errors ?? [],
         oldest_date_seen: d.oldest_date_seen || d.first_date || prev?.oldest_date_seen || "",
         newest_date_seen: d.newest_date_seen || d.last_date || prev?.newest_date_seen || "",
         stop_reason: d.stop_reason || prev?.stop_reason || "",
@@ -957,6 +959,18 @@ export default function BnplDiagnostics() {
                             testid="bnpl-diag-tabby-job-stop"
                         />
                     </div>
+                    {(tabbyJob.item_errors || 0) > 0 && (
+                        <div className="mt-3 text-xs bg-rose-50 border border-rose-200 rounded-lg p-3" data-testid="bnpl-diag-tabby-job-errors">
+                            <div className="font-bold text-rose-800 mb-1">
+                                ⚠ تم تخطّي {tabbyJob.item_errors} عنصر بسبب أخطاء (الـ Job مستمر)
+                            </div>
+                            {(tabbyJob.sample_errors || []).slice(0, 5).map((er, i) => (
+                                <div key={i} className="text-rose-700 font-mono text-[10px]">
+                                    • <span className="font-bold">{er.provider_id}</span> → {er.error}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     {tabbyJob.status !== "done" && (
                         <div className="mt-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3 flex items-center gap-2">
                             <Warning size={16} className="text-amber-600" />

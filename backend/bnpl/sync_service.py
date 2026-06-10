@@ -161,11 +161,14 @@ async def _merge_into_unified_orders(
             "last_provider_sync_at": _now_iso(),
             "sources_seen": list(sources_seen),
         }
-        await db.unified_orders.update_one(
-            {"user_id": user_id, "id": existing["id"]},
-            {"$set": update},
-        )
-        return {"action": "updated", "order_id": existing["id"]}
+        # Use the same lookup query for the update — guards against
+        # documents inserted by Salla/Excel/Make.com that may not have
+        # a custom `id` field (would otherwise crash with KeyError).
+        await db.unified_orders.update_one(q, {"$set": update})
+        return {"action": "updated",
+                "order_id": existing.get("id")
+                or existing.get("order_reference_id")
+                or existing.get("order_number") or ""}
 
     if not is_money_received:
         return {"action": "skipped", "reason": "no positive captured/auth amount"}

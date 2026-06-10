@@ -123,10 +123,12 @@ async def _run_one_batch(db, job_id: str) -> Dict[str, Any]:
         batch_fetched = 0           # items SEEN from Tabby in this batch
         batch_saved = 0             # items WRITTEN to payment_transactions
         batch_skipped_old = 0       # items dropped client-side by cutoff
+        batch_item_errors = 0       # rows that errored (kept job alive)
         first_date = job.get("first_date")   # OLDEST date envelope so far
         last_date = job.get("last_date")     # NEWEST date envelope so far
         finished = False
         stop_reason = ""
+        sample_errors: list = []
 
         for _ in range(PAGES_PER_BATCH):
             # ⚠️ NO date filter sent to Tabby — pagination only.
@@ -164,29 +166,39 @@ async def _run_one_batch(db, job_id: str) -> Dict[str, Any]:
                 if not pid:
                     continue
 
-                txn = _normalise_payment(it, uid)
-                await db.payment_transactions.update_one(
-                    {"user_id": uid, "provider": "tabby", "provider_id": pid},
-                    {"$set": {k: v for k, v in txn.items() if k != "id"},
-                     "$setOnInsert": {"id": txn["id"], "created_at": _now_iso()}},
-                    upsert=True,
-                )
-                batch_saved += 1
-
-                for rfd in _extract_refund_rows(it, uid):
-                    rid = rfd.get("provider_refund_id") or ""
-                    if not rid:
-                        continue
-                    await db.payment_refunds.update_one(
-                        {"user_id": uid, "provider": "tabby",
-                         "provider_refund_id": rid},
-                        {"$set": {k: v for k, v in rfd.items() if k != "id"},
-                         "$setOnInsert": {"id": rfd["id"],
-                                          "created_at": _now_iso()}},
+                try:
+                    txn = _normalise_payment(it, uid)
+                    await db.payment_transactions.update_one(
+                        {"user_id": uid, "provider": "tabby", "provider_id": pid},
+                        {"$set": {k: v for k, v in txn.items() if k != "id"},
+                         "$setOnInsert": {"id": txn["id"], "created_at": _now_iso()}},
                         upsert=True,
                     )
+                    batch_saved += 1
 
-                await _merge_into_unified_orders(db, uid, txn)
+                    for rfd in _extract_refund_rows(it, uid):
+                        rid = rfd.get("provider_refund_id") or ""
+                        if not rid:
+                            continue
+                        await db.payment_refunds.update_one(
+                            {"user_id": uid, "provider": "tabby",
+                             "provider_refund_id": rid},
+                            {"$set": {k: v for k, v in rfd.items() if k != "id"},
+                             "$setOnInsert": {"id": rfd["id"],
+                                              "created_at": _now_iso()}},
+                            upsert=True,
+                        )
+
+                    await _merge_into_unified_orders(db, uid, txn)
+                except Exception as item_exc:  # noqa: BLE001
+                    # Per-item guard: a single malformed/legacy row must
+                    # NOT kill the whole backfill job.  Log and continue.
+                    batch_item_errors += 1
+                    if len(sample_errors) < 5:
+                        sample_errors.append({
+                            "provider_id": pid,
+                            "error": f"{type(item_exc).__name__}: {item_exc}",
+                        })
 
             offset += len(items)
             if len(items) < PAGE_SIZE:
@@ -205,9 +217,11 @@ async def _run_one_batch(db, job_id: str) -> Dict[str, Any]:
             "fetched": int(job.get("fetched") or 0) + batch_fetched,
             "saved": int(job.get("saved") or 0) + batch_saved,
             "skipped_old": int(job.get("skipped_old") or 0) + batch_skipped_old,
+            "item_errors": int(job.get("item_errors") or 0) + batch_item_errors,
             "first_date": first_date,
             "last_date": last_date,
             "stop_reason": stop_reason,
+            "last_sample_errors": sample_errors,
             "updated_at": _now_iso(),
         }
         await db.bnpl_sync_jobs.update_one(
@@ -223,6 +237,8 @@ async def _run_one_batch(db, job_id: str) -> Dict[str, Any]:
             "total_fetched": update["fetched"],
             "total_saved": update["saved"],
             "skipped_old": update["skipped_old"],
+            "item_errors": update["item_errors"],
+            "sample_errors": sample_errors,
             "oldest_date_seen": update["first_date"] or "",
             "newest_date_seen": update["last_date"] or "",
             "stop_reason": stop_reason,
