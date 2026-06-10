@@ -64,7 +64,7 @@ function StatTile({ label, value, hint, tone = "slate", testid }) {
     );
 }
 
-function ProviderCard({ data }) {
+function ProviderCard({ data, onDiagnose, diagnosing }) {
     const meta = PROVIDER_LABEL[data.provider] || { name: data.provider, color: "from-slate-50 to-white", icon: "💳" };
     const verdict = VERDICT_TONE[data.verdict] || VERDICT_TONE.ok;
     const VerdictIcon = verdict.icon;
@@ -72,6 +72,9 @@ function ProviderCard({ data }) {
     const refunds = data.refund_records || {};
     const unified = data.unified_orders || {};
     const deltas = data.deltas || {};
+    const hasDelta = deltas.records_vs_status !== 0
+        || Math.abs(deltas.amount_ptx_vs_refunds) >= 0.01
+        || Math.abs(deltas.amount_unified_vs_ptx) >= 0.01;
 
     return (
         <div
@@ -129,7 +132,20 @@ function ProviderCard({ data }) {
 
             {/* Deltas */}
             <div className="mt-4 p-3 bg-white border-2 border-dashed border-slate-300 rounded-lg">
-                <div className="text-xs font-bold text-slate-700 mb-2">⚖ المقارنة (Delta = 0 يعني تطابق تام)</div>
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                    <div className="text-xs font-bold text-slate-700">⚖ المقارنة (Delta = 0 يعني تطابق تام)</div>
+                    {hasDelta && (
+                        <button
+                            type="button"
+                            onClick={() => onDiagnose(data.provider)}
+                            disabled={diagnosing === data.provider}
+                            className="px-3 py-1 bg-rose-600 text-white text-[11px] font-bold rounded-lg hover:bg-rose-700 disabled:opacity-50 flex items-center gap-1"
+                            data-testid={`refund-audit-diagnose-${data.provider}`}
+                        >
+                            {diagnosing === data.provider ? "جاري التشخيص…" : "🔍 تشخيص الفرق"}
+                        </button>
+                    )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                     <div className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded">
                         <span className="text-slate-600">سجلات vs حالة:</span>
@@ -155,11 +171,23 @@ function ProviderCard({ data }) {
     );
 }
 
+// Classification labels (Arabic) for the Diagnose Delta tool
+const CLASS_LABELS = {
+    expected_full: { label: "كامل ✓", cls: "bg-emerald-100 text-emerald-800" },
+    expected_partial: { label: "جزئي ✓", cls: "bg-sky-100 text-sky-800" },
+    multiple_partials: { label: "تجزئة متعددة", cls: "bg-amber-100 text-amber-800" },
+    orphan_no_ptx: { label: "بدون معاملة!", cls: "bg-rose-200 text-rose-900" },
+    orphan_zero_ptx: { label: "ptx=0 لكن السجل موجود", cls: "bg-rose-100 text-rose-800" },
+    duplicate: { label: "مكرر!", cls: "bg-fuchsia-200 text-fuchsia-900" },
+};
+
 export default function RefundAudit() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [fixing, setFixing] = useState(false);
+    const [diagnosing, setDiagnosing] = useState(null);   // provider being loaded
+    const [diagnosis, setDiagnosis] = useState(null);     // { provider, rows, counts }
 
     const load = async () => {
         try {
@@ -202,6 +230,23 @@ export default function RefundAudit() {
             toast.error(errMsg(e, "تعذّرت العملية"));
         } finally {
             setFixing(false);
+        }
+    };
+
+    const diagnoseProvider = async (provider) => {
+        setDiagnosing(provider);
+        setDiagnosis(null);
+        try {
+            const { data: r } = await api.get(`/bnpl/refund-audit/diagnose/${provider}`);
+            if (r?.success) {
+                setDiagnosis(r);
+            } else {
+                toast.error(`فشل التشخيص: ${r?.error || "غير معروف"}`);
+            }
+        } catch (e) {
+            toast.error(errMsg(e, "تعذّر التشخيص"));
+        } finally {
+            setDiagnosing(null);
         }
     };
 
@@ -323,8 +368,102 @@ export default function RefundAudit() {
             {data?.providers && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {data.providers.map((p) => (
-                        <ProviderCard key={p.provider} data={p} />
+                        <ProviderCard
+                            key={p.provider}
+                            data={p}
+                            onDiagnose={diagnoseProvider}
+                            diagnosing={diagnosing}
+                        />
                     ))}
+                </div>
+            )}
+
+            {/* Diagnose Delta — drill-down table */}
+            {diagnosis && (
+                <div
+                    className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-5"
+                    data-testid="refund-audit-diagnosis"
+                >
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                        <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                            🔍 تشخيص فروقات {PROVIDER_LABEL[diagnosis.provider]?.name || diagnosis.provider}
+                        </h3>
+                        <button
+                            type="button"
+                            onClick={() => setDiagnosis(null)}
+                            className="px-3 py-1 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-300"
+                            data-testid="refund-audit-diagnosis-close"
+                        >
+                            إغلاق ✕
+                        </button>
+                    </div>
+
+                    {/* Counts summary */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
+                        {Object.entries(diagnosis.counts || {}).map(([k, v]) => {
+                            const meta = CLASS_LABELS[k] || { label: k, cls: "bg-slate-100 text-slate-700" };
+                            return (
+                                <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center">
+                                    <div className="text-2xl font-extrabold text-slate-900 num">{v}</div>
+                                    <div className={`text-[10px] font-bold inline-block px-1.5 py-0.5 rounded mt-1 ${meta.cls}`}>{meta.label}</div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Drill-down table */}
+                    <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+                        <table className="mezan-table compact w-full text-xs">
+                            <thead>
+                                <tr>
+                                    <th className="p-2">الحالة</th>
+                                    <th className="p-2">Order Ref</th>
+                                    <th className="p-2">Payment ID</th>
+                                    <th className="p-2">Refund ID</th>
+                                    <th className="p-2">Refund Amount</th>
+                                    <th className="p-2">ptx.refunded</th>
+                                    <th className="p-2">ptx.amount</th>
+                                    <th className="p-2">ptx.status</th>
+                                    <th className="p-2">عدد على نفس الدفعة</th>
+                                    <th className="p-2">تاريخ الاسترجاع</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(diagnosis.rows || []).map((r, i) => {
+                                    const meta = CLASS_LABELS[r.classification] || { label: r.classification, cls: "bg-slate-100 text-slate-700" };
+                                    return (
+                                        <tr key={r.refund_id + i} data-testid={`refund-audit-diagnosis-row-${i}`}>
+                                            <td className="p-2">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${meta.cls}`}>
+                                                    {meta.label}
+                                                </span>
+                                            </td>
+                                            <td className="p-2 font-mono text-[10px]">{r.order_reference_id || "—"}</td>
+                                            <td className="p-2 font-mono text-[10px]">{(r.payment_id || "—").slice(0, 14)}…</td>
+                                            <td className="p-2 font-mono text-[10px]">{(r.refund_id || "—").slice(0, 14)}…</td>
+                                            <td className="p-2 num font-bold text-rose-700">{formatMoney(r.refund_amount)}</td>
+                                            <td className="p-2 num">{r.transaction_refunded_amount == null ? "—" : formatMoney(r.transaction_refunded_amount)}</td>
+                                            <td className="p-2 num">{r.transaction_amount == null ? "—" : formatMoney(r.transaction_amount)}</td>
+                                            <td className="p-2 text-slate-600">{r.transaction_status || "—"}</td>
+                                            <td className="p-2 num text-center">{r.refunds_on_same_payment}</td>
+                                            <td className="p-2 text-[10px] text-slate-500">{r.refunded_at?.slice(0, 16) || "—"}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="mt-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3">
+                        <strong className="text-slate-900">📖 شرح التصنيفات:</strong>
+                        <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                            <li><strong>كامل ✓ / جزئي ✓</strong> — سجل سليم يطابق payment_transactions.</li>
+                            <li><strong>تجزئة متعددة</strong> — أكثر من refund record على نفس الدفعة (سبب طبيعي لـ records &gt; status).</li>
+                            <li><strong>ptx=0 لكن السجل موجود</strong> — السجل في DB لكن المعاملة تشير إلى 0 → غالباً ناتج من webhook قديم لم يتم تحديث ptx بعده.</li>
+                            <li><strong>بدون معاملة!</strong> — refund موجود بدون أي payment_transaction أب → فاسد.</li>
+                            <li><strong>مكرر!</strong> — نفس <code>provider_refund_id</code> ظاهر مرتين → بحاجة لحذف يدوي.</li>
+                        </ul>
+                    </div>
                 </div>
             )}
         </div>
