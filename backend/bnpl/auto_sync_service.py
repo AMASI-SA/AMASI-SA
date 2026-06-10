@@ -88,12 +88,10 @@ async def _sync_one_user_provider(
         if provider == "tabby":
             res = await sync_tabby_payments(db, user_id, since_iso=since_iso)
         elif provider == "tamara":
-            # Tamara's backfill uses date_from / date_to params.
+            # Tamara's backfill scans unified_orders rows since `since`
+            # (YYYY-MM-DD) and re-validates them against Tamara.
             since_day = since_iso[:10]
-            today = datetime.now(timezone.utc).date().isoformat()
-            res = await backfill_tamara(
-                db, user_id, date_from=since_day, date_to=today,
-            )
+            res = await backfill_tamara(db, user_id, since=since_day)
         else:
             return {"ok": False, "provider": provider, "error": f"unknown provider {provider}"}
 
