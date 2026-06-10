@@ -396,7 +396,22 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
             </Field>
 
             {/* Iter-118 — balance card shows what's owed / paid for the picked counterparty */}
-            {selected && (
+            {selected && (() => {
+                // Aggregate ALL open liabilities for the SAME counterparty so
+                // the merchant sees the cumulative balance, not just one row.
+                const cpKey = (selected.counterparty_name || "").trim().toLowerCase();
+                const sameCounterparty = cpKey
+                    ? openLiabilities.filter((l) =>
+                        (l.counterparty_name || "").trim().toLowerCase() === cpKey
+                      )
+                    : [selected];
+                const sumExpected = sameCounterparty.reduce((s, l) => s + (Number(l.expected_amount) || 0), 0);
+                const sumPaid = sameCounterparty.reduce((s, l) => s + (Number(l.paid_amount) || 0), 0);
+                const sumRemaining = sameCounterparty.reduce((s, l) => s + (Number(l.remaining_amount) || 0), 0);
+                const overdueCount = sameCounterparty.filter((l) => l.is_overdue).length;
+                const hasMultiple = sameCounterparty.length > 1;
+
+                return (
                 <div
                     className="sm:col-span-2 p-3 rounded-lg bg-emerald-50 border-2 border-emerald-200"
                     data-testid="pay-liability-balance-card"
@@ -411,13 +426,18 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                                 </span>
                             </div>
                         </div>
-                        {selected.is_overdue && (
+                        {(selected.is_overdue || overdueCount > 0) && (
                             <span className="px-2 py-1 bg-rose-600 text-white text-[11px] font-bold rounded-full">
-                                ⚠ متأخر السداد
+                                ⚠ {overdueCount > 1 ? `${overdueCount} مستحقات متأخرة` : "متأخر السداد"}
                             </span>
                         )}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+
+                    {/* Per-liability breakdown (the one selected) */}
+                    <div className="text-[11px] text-slate-500 mb-1">
+                        الالتزام المحدد:
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs mb-3">
                         <div className="bg-white border border-slate-200 rounded p-2 text-center">
                             <div className="text-[10px] text-slate-500">المبلغ المتوقع</div>
                             <div className="num font-extrabold text-slate-900 text-sm">{fmt(selected.expected_amount)}</div>
@@ -427,7 +447,7 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                             <div className="num font-extrabold text-emerald-700 text-sm">{fmt(selected.paid_amount)}</div>
                         </div>
                         <div className="bg-white border-2 border-rose-300 rounded p-2 text-center">
-                            <div className="text-[10px] text-rose-700">المتبقي عليه/له</div>
+                            <div className="text-[10px] text-rose-700">المتبقي</div>
                             <div className="num font-extrabold text-rose-700 text-base">{fmt(selected.remaining_amount)}</div>
                         </div>
                         <div className="bg-white border border-slate-200 rounded p-2 text-center">
@@ -435,13 +455,55 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                             <div className="num font-bold text-slate-700 text-sm">{selected.due_date || "—"}</div>
                         </div>
                     </div>
+
+                    {/* Iter-118 — Cumulative totals across ALL open liabilities of this counterparty */}
+                    {hasMultiple && (
+                        <>
+                            <div className="text-[11px] font-bold text-slate-700 mb-1 mt-2 flex items-center gap-1">
+                                <span className="px-1.5 py-0.5 bg-violet-100 text-violet-800 rounded text-[10px] font-bold">
+                                    {sameCounterparty.length} التزامات مفتوحة
+                                </span>
+                                📊 الرصيد التراكمي لـ {selected.counterparty_name}:
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                                <div className="bg-slate-900 text-white rounded p-2 text-center">
+                                    <div className="text-[10px] text-slate-300">إجمالي مستحق</div>
+                                    <div className="num font-extrabold text-base">{fmt(sumExpected)}</div>
+                                </div>
+                                <div className="bg-emerald-700 text-white rounded p-2 text-center">
+                                    <div className="text-[10px] text-emerald-100">إجمالي مدفوع</div>
+                                    <div className="num font-extrabold text-base">{fmt(sumPaid)}</div>
+                                </div>
+                                <div className="bg-rose-700 text-white rounded p-2 text-center">
+                                    <div className="text-[10px] text-rose-100">إجمالي المتبقي</div>
+                                    <div className="num font-extrabold text-base">{fmt(sumRemaining)}</div>
+                                </div>
+                            </div>
+
+                            {/* List of all open liabilities for this counterparty */}
+                            <div className="mt-2 text-[11px] bg-white border border-slate-200 rounded p-2 max-h-32 overflow-y-auto">
+                                <div className="font-bold text-slate-700 mb-1">قائمة الالتزامات المفتوحة:</div>
+                                {sameCounterparty.map((l) => (
+                                    <div key={l.id} className={`flex items-center justify-between py-1 border-b border-slate-100 last:border-0 ${l.id === selected.id ? "bg-amber-50 -mx-2 px-2" : ""}`}>
+                                        <span className="text-slate-600">
+                                            {KIND_LABEL[l.kind] || l.kind} · {l.description || l.due_date || "—"}
+                                            {l.id === selected.id && <span className="ms-1 text-[9px] text-amber-700 font-bold">(محدد)</span>}
+                                        </span>
+                                        <span className="num font-bold text-rose-700">{fmt(l.remaining_amount)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
                     {selected.description && selected.counterparty_name && (
                         <div className="mt-2 text-[11px] text-slate-600 bg-white/60 p-2 rounded">
                             📝 {selected.description}
                         </div>
                     )}
                 </div>
-            )}
+                );
+            })()}
 
             {/* Iter-118 — Removed: salary calculation by actual work days
                 (per user request: ماله حاجة). Merchant pays the fixed
