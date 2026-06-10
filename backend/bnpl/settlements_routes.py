@@ -57,4 +57,24 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
         except Exception as e:  # noqa: BLE001
             return {"success": False, "error": f"{type(e).__name__}: {e}"}
 
+    @router.get("/balances/canonical")
+    async def canonical_balances(user: dict = Depends(get_current_user)):
+        """Single Source of Truth for Tabby + Tamara balances.  Every
+        page that shows a BNPL balance should call this endpoint so
+        all pages agree on the number."""
+        try:
+            from .balance_service import get_all_bnpl_balances
+            balances = await get_all_bnpl_balances(db, user["id"])
+            return {
+                "success": True,
+                "balances": balances,
+                "total": round(sum(float(b["balance"] or 0) for b in balances), 2),
+                "formula_doc": (
+                    "balance = gross_sales − refunds − commission − VAT "
+                    "− settlement_fee − transferred_to_bank"
+                ),
+            }
+        except Exception as e:  # noqa: BLE001
+            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+
     parent_router.include_router(router)

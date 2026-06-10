@@ -47,6 +47,7 @@ import BnplIntegrations from "./pages/BnplIntegrations";
 import BnplDiagnostics from "./pages/BnplDiagnostics";
 import RefundAudit from "./pages/RefundAudit";
 import BnplSettlements from "./pages/BnplSettlements";
+import BnplBalancesDiagnostic from "./pages/BnplBalancesDiagnostic";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -100,6 +101,7 @@ function AppRoutes() {
             <Route path="/integrations/bnpl/diagnostics" element={<ProtectedRoute><Layout><BnplDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/refund-audit" element={<ProtectedRoute><Layout><RefundAudit /></Layout></ProtectedRoute>} />
             <Route path="/bnpl-settlements" element={<ProtectedRoute><Layout><BnplSettlements /></Layout></ProtectedRoute>} />
+            <Route path="/bnpl-balances" element={<ProtectedRoute><Layout><BnplBalancesDiagnostic /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />

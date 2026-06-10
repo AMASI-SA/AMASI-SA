@@ -288,6 +288,29 @@ async def _account_with_meta(db, user_id: str, doc: dict) -> dict:
     out["transactions_count"] = await db.account_transactions.count_documents(
         {"user_id": user_id, "account_id": out["id"]}
     )
+
+    # Iter-118 — SSOT for BNPL provider balances.  When this account
+    # is a Tabby/Tamara wallet, override `current_balance` with the
+    # canonical BNPL formula so the Accounts/Transfers page shows the
+    # SAME number as the BNPL Settlements page.  Without this, the
+    # two pages disagreed (the local ledger only knows what's been
+    # explicitly recorded as in/out movements, while the BNPL formula
+    # uses `payment_transactions` as the source of truth).
+    try:
+        from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
+        bnpl_provider = is_bnpl_account(out)
+        if bnpl_provider:
+            canon = await get_bnpl_provider_balance(db, user_id, bnpl_provider)
+            out["current_balance_ledger"] = out.get("current_balance")
+            out["current_balance"] = float(canon["balance"])
+            out["bnpl_balance_components"] = canon["components"]
+            out["balance_source"] = "bnpl_ssot"
+        else:
+            out["balance_source"] = "ledger"
+    except Exception:  # noqa: BLE001
+        # Never let SSOT computation block account listing.
+        out["balance_source"] = "ledger"
+
     return out
 
 
