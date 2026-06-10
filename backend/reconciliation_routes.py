@@ -130,6 +130,33 @@ def attach_reconciliation_routes(parent_router: APIRouter, db) -> None:
         pending = round(expected - transferred, 2)
         rate = round((transferred / expected * 100), 2) if expected > 0 else 0.0
 
+        # Iter-118 — apply BNPL SSOT for Tabby / Tamara accounts so this
+        # page shows the SAME `current_balance` as /accounts (Transfers
+        # page) and /bnpl-settlements.  Without this, the reconciliation
+        # page diverged because it bypassed `_account_with_meta`.
+        try:
+            from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
+            bnpl_provider = is_bnpl_account(acc)
+            if bnpl_provider:
+                canon = await get_bnpl_provider_balance(db, uid, bnpl_provider)
+                current_balance = round(float(canon["balance"]), 2)
+                # Also override `expected` so this is now ONE consistent
+                # number: net_payable (gross − refunds − commission − VAT
+                # − settlement_fee).  This is the merchant's true claim.
+                comps = canon.get("components") or {}
+                expected = round(
+                    float(comps.get("net_sales", 0))
+                    - float(comps.get("commission", 0))
+                    - float(comps.get("commission_vat", 0))
+                    - float(comps.get("settlement_fee", 0)),
+                    2,
+                )
+                expected_source = "bnpl_ssot"
+                pending = round(expected - transferred, 2)
+                rate = round((transferred / expected * 100), 2) if expected > 0 else 0.0
+        except Exception:  # noqa: BLE001
+            pass
+
         return {
             "account_id": acc["id"],
             "name": acc["name"],
