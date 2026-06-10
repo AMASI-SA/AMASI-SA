@@ -46,6 +46,7 @@ const SECTIONS = [
             { to: "/counterparties", label: "قائمة الأطراف الموحَّدة", icon: UsersThree, testid: "nav-counterparties" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
             { to: "/settlements", label: "تسويات المدفوعات", icon: Receipt, testid: "nav-settlements" },
+            { to: "/bnpl-settlements", label: "تسويات Tabby و Tamara", icon: Receipt, testid: "nav-bnpl-settlements" },
             { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
             { to: "/refund-audit", label: "تدقيق المسترجعات (BNPL)", icon: MagnifyingGlass, testid: "nav-refund-audit" },
         ],
