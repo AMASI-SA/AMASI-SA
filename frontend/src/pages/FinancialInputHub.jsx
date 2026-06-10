@@ -242,8 +242,46 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
     const [busy, setBusy] = useState(false);
     const [daysBusy, setDaysBusy] = useState(false);
     const [daysInput, setDaysInput] = useState("");
+    // Iter-118 — searchable counterparty picker (replaces big dropdown)
+    const [query, setQuery] = useState("");
+    const [showResults, setShowResults] = useState(false);
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
     const selected = openLiabilities.find((l) => l.id === form.liability_id);
+
+    // Filter liabilities by counterparty name / description / kind.
+    // Limited to 8 results to keep the dropdown compact and fast.
+    const searchResults = (() => {
+        const q = (query || "").trim().toLowerCase();
+        if (!q) return [];
+        return openLiabilities.filter((l) => {
+            const haystack = [
+                l.counterparty_name, l.description, l.kind,
+                l.notes, l.counterparty_id,
+            ].filter(Boolean).join(" ").toLowerCase();
+            return haystack.includes(q);
+        }).slice(0, 8);
+    })();
+
+    const KIND_LABEL = {
+        salary: "راتب موظف",
+        salary_advance: "سلفة موظف",
+        supplier: "مورد",
+        ad_account: "حساب إعلاني",
+        receivable: "مستحقات لنا",
+        general: "عام",
+    };
+
+    const pickLiability = (l) => {
+        set("liability_id", l.id);
+        setQuery(l.counterparty_name || l.description || l.kind || "");
+        setShowResults(false);
+    };
+
+    const clearSelection = () => {
+        set("liability_id", "");
+        setQuery("");
+        setShowResults(false);
+    };
     // Iter-102 — show inline days-worked editor for salary kind only.
     const isSalary = selected?.kind === "salary";
 
@@ -304,17 +342,130 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
             busy={busy}
             submitLabel="تسجيل السداد"
         >
-            <Field label="الالتزام" required full>
-                <select value={form.liability_id} onChange={(e) => set("liability_id", e.target.value)} className={inputCls} data-testid="pay-liability-id">
-                    <option value="">— اختر التزاماً مفتوحاً —</option>
-                    {openLiabilities.map((l) => (
-                        <option key={l.id} value={l.id}>
-                            {l.description || l.kind} — متبقٍ {fmt(l.remaining_amount)} ر.س
-                            {l.is_overdue ? " ⚠️ متأخر" : ""}
-                        </option>
-                    ))}
-                </select>
+            <Field label="الالتزام (ابحث باسم الموظف / المورد)" required full>
+                <div className="relative">
+                    <input
+                        type="text"
+                        value={query}
+                        onChange={(e) => { setQuery(e.target.value); setShowResults(true); if (form.liability_id && e.target.value !== (selected?.counterparty_name || selected?.description || "")) set("liability_id", ""); }}
+                        onFocus={() => setShowResults(true)}
+                        onBlur={() => setTimeout(() => setShowResults(false), 200)}
+                        placeholder="اكتب اسم الموظف أو المورد أو العميل…"
+                        className={inputCls}
+                        data-testid="pay-liability-search"
+                        autoComplete="off"
+                    />
+                    {form.liability_id && (
+                        <button
+                            type="button"
+                            onClick={clearSelection}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 text-lg leading-none"
+                            data-testid="pay-liability-clear"
+                            title="إلغاء الاختيار"
+                        >
+                            ✕
+                        </button>
+                    )}
+
+                    {/* Results dropdown */}
+                    {showResults && query.trim() && (
+                        <div
+                            className="absolute z-20 mt-1 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg max-h-72 overflow-y-auto"
+                            data-testid="pay-liability-results"
+                        >
+                            {searchResults.length === 0 ? (
+                                <div className="p-3 text-xs text-slate-500 text-center">
+                                    لا توجد نتائج تطابق «{query}». تأكد من وجود التزام مفتوح لهذا الاسم.
+                                </div>
+                            ) : (
+                                searchResults.map((l) => (
+                                    <button
+                                        key={l.id}
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => pickLiability(l)}
+                                        className="w-full text-right p-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 flex items-center justify-between gap-3"
+                                        data-testid={`pay-liability-result-${l.id}`}
+                                    >
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-bold text-slate-900 text-sm truncate">
+                                                {l.counterparty_name || l.description || "—"}
+                                            </div>
+                                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                                                <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700">
+                                                    {KIND_LABEL[l.kind] || l.kind}
+                                                </span>
+                                                {l.description && l.counterparty_name && (
+                                                    <span className="truncate">{l.description}</span>
+                                                )}
+                                                {l.is_overdue && (
+                                                    <span className="text-rose-600 font-bold">⚠ متأخر</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="text-end flex-shrink-0">
+                                            <div className="text-[10px] text-slate-400">متبقٍ</div>
+                                            <div className={`font-extrabold num text-sm ${
+                                                Number(l.remaining_amount) > 0 ? "text-rose-700" : "text-emerald-700"
+                                            }`}>
+                                                {fmt(l.remaining_amount)} ر.س
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    )}
+                </div>
             </Field>
+
+            {/* Iter-118 — balance card shows what's owed / paid for the picked counterparty */}
+            {selected && (
+                <div
+                    className="sm:col-span-2 p-3 rounded-lg bg-emerald-50 border-2 border-emerald-200"
+                    data-testid="pay-liability-balance-card"
+                >
+                    <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                        <div>
+                            <div className="text-xs text-slate-500">تم اختيار:</div>
+                            <div className="text-base font-extrabold text-slate-900">
+                                {selected.counterparty_name || selected.description || "—"}
+                                <span className="ms-2 text-xs text-slate-600 font-normal">
+                                    ({KIND_LABEL[selected.kind] || selected.kind})
+                                </span>
+                            </div>
+                        </div>
+                        {selected.is_overdue && (
+                            <span className="px-2 py-1 bg-rose-600 text-white text-[11px] font-bold rounded-full">
+                                ⚠ متأخر السداد
+                            </span>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div className="bg-white border border-slate-200 rounded p-2 text-center">
+                            <div className="text-[10px] text-slate-500">المبلغ المتوقع</div>
+                            <div className="num font-extrabold text-slate-900 text-sm">{fmt(selected.expected_amount)}</div>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded p-2 text-center">
+                            <div className="text-[10px] text-slate-500">المدفوع حتى الآن</div>
+                            <div className="num font-extrabold text-emerald-700 text-sm">{fmt(selected.paid_amount)}</div>
+                        </div>
+                        <div className="bg-white border-2 border-rose-300 rounded p-2 text-center">
+                            <div className="text-[10px] text-rose-700">المتبقي عليه/له</div>
+                            <div className="num font-extrabold text-rose-700 text-base">{fmt(selected.remaining_amount)}</div>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded p-2 text-center">
+                            <div className="text-[10px] text-slate-500">تاريخ الاستحقاق</div>
+                            <div className="num font-bold text-slate-700 text-sm">{selected.due_date || "—"}</div>
+                        </div>
+                    </div>
+                    {selected.description && selected.counterparty_name && (
+                        <div className="mt-2 text-[11px] text-slate-600 bg-white/60 p-2 rounded">
+                            📝 {selected.description}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {isSalary && (
                 <div className="sm:col-span-2 p-3 rounded-lg bg-violet-50 border border-violet-200" data-testid="pay-days-worked-row">
