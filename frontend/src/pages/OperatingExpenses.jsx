@@ -539,7 +539,7 @@ function ReportPanel({ report }) {
                         <h3 className="text-lg font-bold" style={{ fontFamily: "Tajawal" }}>{b.title}</h3>
                         <div className="text-xs text-muted-foreground num" dir="ltr">{b.from} → {b.to}</div>
                     </div>
-                    <table className="w-full text-sm" data-testid={`oe-report-${b.title}`}>
+                    <table className="mezan-table w-full text-sm" data-testid={`oe-report-${b.title}`}>
                         <tbody>
                             {b.rows.map((r) => (
                                 <tr key={r.label} className="border-t border-border first:border-t-0">
@@ -917,7 +917,7 @@ function TableWrap({ children, testid }) {
         <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
             <table
                 data-testid={testid}
-                className="w-full text-right text-sm border-collapse min-w-[640px]
+                className="mezan-table w-full text-right text-sm border-collapse min-w-[640px]
                     [&_th]:px-3 [&_th]:py-3 [&_th]:border [&_th]:border-border [&_th]:whitespace-nowrap [&_th]:font-semibold [&_th]:text-muted-foreground [&_th]:bg-accent/60
                     [&_td]:px-3 [&_td]:py-3 [&_td]:border [&_td]:border-border [&_td]:whitespace-nowrap"
             >

@@ -327,7 +327,7 @@ export default function TeamManagement() {
                     </span>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="mezan-table w-full text-sm">
                         <thead className="bg-slate-50 text-xs text-muted-foreground uppercase">
                             <tr>
                                 <th className="text-right px-5 py-2.5 font-bold">الاسم</th>

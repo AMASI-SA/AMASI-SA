@@ -286,7 +286,7 @@ export default function AccountDetails() {
                         <h2 className="font-bold text-sky-900">تفاصيل طرق الدفع داخل هذا الحساب</h2>
                         <span className="text-xs text-sky-700">{account.sub_methods.length} طريقة دفع</span>
                     </div>
-                    <table className="w-full text-sm">
+                    <table className="mezan-table w-full text-sm">
                         <thead className="bg-slate-50/50 text-xs text-muted-foreground">
                             <tr>
                                 <th className="text-right px-4 py-2.5 font-bold">طريقة الدفع</th>
@@ -327,7 +327,7 @@ export default function AccountDetails() {
                     <span className="text-xs text-muted-foreground">{transactions.length} حركة</span>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="mezan-table w-full text-sm">
                         <thead className="bg-slate-50/50 text-xs text-muted-foreground">
                             <tr>
                                 <th className="text-right px-4 py-2.5 font-bold">التاريخ</th>

@@ -471,7 +471,7 @@ function LedgerDialog({ row, open, onClose, onSaved }) {
                     {loading ? <div className="text-center text-slate-500 text-sm py-8">جاري التحميل…</div> :
                      rows.length === 0 ? <div className="text-center text-slate-500 text-sm py-8">لا توجد حركات بعد</div> : (
                         <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                            <table className="w-full text-sm">
+                            <table className="mezan-table w-full text-sm">
                                 <thead className="bg-slate-50 text-slate-600 text-xs">
                                     <tr>
                                         <th className="text-right p-2 font-bold">التاريخ</th>
@@ -715,7 +715,7 @@ function MigrationDialog({ open, onClose, onSaved }) {
                         </div>
 
                         <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-[420px] overflow-y-auto">
-                            <table className="w-full text-sm">
+                            <table className="mezan-table w-full text-sm">
                                 <thead className="bg-slate-50 text-slate-600 text-[11px] sticky top-0">
                                     <tr>
                                         <th className="p-2 w-8"></th>
@@ -805,7 +805,7 @@ function MigrationDialog({ open, onClose, onSaved }) {
                             ✅ تمت العملية. أدناه تفاصيل ما تم.
                         </div>
                         <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                            <table className="w-full text-sm">
+                            <table className="mezan-table w-full text-sm">
                                 <thead className="bg-slate-50 text-slate-600 text-[11px]">
                                     <tr>
                                         <th className="text-right p-2 font-bold">الحساب</th>
@@ -850,7 +850,7 @@ function MigrationDialog({ open, onClose, onSaved }) {
                                 <h3 className="font-bold text-slate-900 text-sm">صرف يومي — {showDailyFor.name}</h3>
                                 <button onClick={() => setShowDailyFor(null)} className="text-slate-500 text-xl">×</button>
                             </div>
-                            <table className="w-full text-xs">
+                            <table className="mezan-table compact w-full text-xs">
                                 <thead className="bg-slate-50 text-slate-600">
                                     <tr><th className="text-right p-2">التاريخ</th><th className="text-right p-2">الصرف</th></tr>
                                 </thead>

@@ -266,7 +266,7 @@ export default function DailyProductCostModal({ open, onClose, onSaved }) {
                         </div>
                     ) : (
                         <div className="rounded-lg border border-slate-200 overflow-x-auto max-h-56 overflow-y-auto">
-                            <table className="w-full text-xs">
+                            <table className="mezan-table compact w-full text-xs">
                                 <thead className="bg-slate-50 sticky top-0">
                                     <tr>
                                         <th className="text-start px-3 py-1.5 font-bold text-slate-700">التاريخ</th>

@@ -146,7 +146,7 @@ export default function AnalysisResult() {
             <div className="rounded-xl border border-border bg-white p-6">
                 <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>تفاصيل طرق الدفع</h3>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right text-sm" data-testid="payment-breakdown-table">
+                    <table className="mezan-table w-full text-right text-sm" data-testid="payment-breakdown-table">
                         <thead className="text-xs text-muted-foreground border-b border-border">
                             <tr>
                                 <th className="py-3 font-semibold">طريقة الدفع</th>
@@ -191,7 +191,7 @@ export default function AnalysisResult() {
             <div className="rounded-xl border border-border bg-white p-6">
                 <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>تفاصيل شركات الشحن</h3>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right text-sm" data-testid="shipping-breakdown-table">
+                    <table className="mezan-table w-full text-right text-sm" data-testid="shipping-breakdown-table">
                         <thead className="text-xs text-muted-foreground border-b border-border">
                             <tr>
                                 <th className="py-3 font-semibold">شركة الشحن</th>

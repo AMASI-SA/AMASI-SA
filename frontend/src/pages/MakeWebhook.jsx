@@ -439,7 +439,7 @@ export default function MakeWebhook() {
                     </p>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="mezan-table w-full text-sm">
                             <thead>
                                 <tr className="text-xs font-bold text-muted-foreground uppercase border-b border-border">
                                     <th className="text-start py-2 px-2">رقم الطلب</th>

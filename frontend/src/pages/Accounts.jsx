@@ -586,7 +586,7 @@ export default function Accounts() {
             {/* Table */}
             <div className="bg-white rounded-xl border border-border overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="mezan-table w-full text-sm">
                         <thead className="bg-slate-50 text-xs text-muted-foreground">
                             <tr>
                                 <th className="text-right px-4 py-2.5 font-bold">اسم الحساب</th>

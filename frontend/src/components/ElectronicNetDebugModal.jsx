@@ -233,7 +233,7 @@ export default function ElectronicNetDebugModal({ open, onClose, filters }) {
                                     تفصيل الطلبات المستبعدة حسب الحالة
                                 </div>
                                 <div className="rounded-lg border border-slate-200 overflow-x-auto">
-                                    <table className="w-full text-xs">
+                                    <table className="mezan-table compact w-full text-xs">
                                         <thead className="bg-slate-50">
                                             <tr>
                                                 <th className="text-start px-3 py-2 font-bold text-slate-700">الحالة</th>
@@ -260,7 +260,7 @@ export default function ElectronicNetDebugModal({ open, onClose, filters }) {
                                     تقسيم حسب طريقة الدفع (بعد الفلترة)
                                 </div>
                                 <div className="rounded-lg border border-slate-200 overflow-x-auto">
-                                    <table className="w-full text-xs">
+                                    <table className="mezan-table compact w-full text-xs">
                                         <thead className="bg-slate-50">
                                             <tr>
                                                 <th className="text-start px-3 py-2 font-bold text-slate-700">طريقة الدفع</th>
@@ -294,7 +294,7 @@ export default function ElectronicNetDebugModal({ open, onClose, filters }) {
                                     <span className="text-[10px] text-amber-700">انقر للتوسيع</span>
                                 </summary>
                                 <div className="px-3 py-2 max-h-72 overflow-y-auto">
-                                    <table className="w-full text-[11px]">
+                                    <table className="mezan-table compact w-full text-[11px]">
                                         <thead className="text-amber-900">
                                             <tr>
                                                 <th className="text-start px-2 py-1">رقم الطلب</th>

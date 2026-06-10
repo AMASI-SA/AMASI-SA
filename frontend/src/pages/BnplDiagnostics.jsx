@@ -184,7 +184,7 @@ function ProviderSection({ provider, label, data, onSync }) {
                         5) عيّنة من معاملات موجودة في {label} وغير مرتبطة بطلب
                     </h3>
                     <div className="rounded-lg border border-rose-200 bg-white overflow-x-auto">
-                        <table className="w-full text-xs">
+                        <table className="mezan-table compact w-full text-xs">
                             <thead className="bg-rose-50 text-rose-900">
                                 <tr>
                                     <th className="p-2 text-right">Provider Payment ID</th>
@@ -1048,7 +1048,7 @@ export default function BnplDiagnostics() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-xs" data-testid="bnpl-diag-table">
+                        <table className="mezan-table compact w-full text-xs" data-testid="bnpl-diag-table">
                             <thead className="bg-slate-50 text-slate-700">
                                 <tr>
                                     <th className="p-2 text-right">Order #</th>

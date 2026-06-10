@@ -193,7 +193,7 @@ export default function OrderStatusPolicySection() {
                 <div className="text-sm text-muted-foreground py-6 text-center">لا توجد حالات طلبات في بياناتك بعد.</div>
             ) : (
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm" data-testid="osp-table">
+                    <table className="mezan-table w-full text-sm" data-testid="osp-table">
                         <thead className="text-xs text-muted-foreground bg-slate-50">
                             <tr>
                                 <th className="text-right px-3 py-2 font-semibold">الحالة</th>

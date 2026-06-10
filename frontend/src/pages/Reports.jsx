@@ -302,7 +302,7 @@ export default function Reports() {
                             {(reconciliation.transparency.unclassified_amount > 0 ||
                                 reconciliation.transparency.empty_payment_method_amount > 0) && (
                                 <div className="rounded-lg border border-border overflow-hidden">
-                                    <table className="w-full text-sm">
+                                    <table className="mezan-table w-full text-sm">
                                         <thead className="bg-slate-50/70 text-xs text-muted-foreground">
                                             <tr>
                                                 <th className="text-right px-4 py-2 font-bold">السبب</th>
@@ -435,7 +435,7 @@ export default function Reports() {
                         ) : (
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 <table
-                                    className="w-full text-right text-sm border-collapse
+                                    className="mezan-table w-full text-right text-sm border-collapse
                                         [&_th]:px-3 [&_th]:border-s [&_th]:border-border
                                         [&_td]:px-3 [&_td]:border-s [&_td]:border-border
                                         [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
@@ -571,7 +571,7 @@ export default function Reports() {
                         ) : (
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 <table
-                                    className="w-full text-right text-sm border-collapse
+                                    className="mezan-table w-full text-right text-sm border-collapse
                                         [&_th]:px-3 [&_th]:border-s [&_th]:border-border
                                         [&_td]:px-3 [&_td]:border-s [&_td]:border-border
                                         [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
@@ -619,7 +619,7 @@ export default function Reports() {
                             <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>إجمالي طرق الدفع</h3>
                             <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
                             <table
-                                className="w-full text-right text-sm border-collapse min-w-[480px]
+                                className="mezan-table w-full text-right text-sm border-collapse min-w-[480px]
                                     [&_th]:px-3 [&_th]:border-s [&_th]:border-border
                                     [&_td]:px-3 [&_td]:border-s [&_td]:border-border
                                     [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
@@ -651,7 +651,7 @@ export default function Reports() {
                             <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "Tajawal" }}>إجمالي شركات الشحن</h3>
                             <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
                             <table
-                                className="w-full text-right text-sm border-collapse min-w-[400px]
+                                className="mezan-table w-full text-right text-sm border-collapse min-w-[400px]
                                     [&_th]:px-3 [&_th]:border-s [&_th]:border-border
                                     [&_td]:px-3 [&_td]:border-s [&_td]:border-border
                                     [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"

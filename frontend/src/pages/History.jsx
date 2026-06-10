@@ -100,7 +100,7 @@ export default function History() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-right" data-testid="history-table">
+                        <table className="mezan-table w-full text-right" data-testid="history-table">
                             <thead className="text-sm text-muted-foreground border-b border-border">
                                 <tr>
                                     <th className="py-3 font-semibold">الاسم</th>

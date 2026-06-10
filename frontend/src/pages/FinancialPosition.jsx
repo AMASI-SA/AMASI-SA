@@ -355,7 +355,7 @@ export default function FinancialPosition() {
 
                 {showSalaryRows && (sb.employees || []).length > 0 && (
                     <div className="mt-3 rounded-lg border border-slate-200 bg-white overflow-x-auto" data-testid="salary-employees-table">
-                        <table className="w-full text-xs sm:text-sm" dir="rtl">
+                        <table className="mezan-table compact w-full text-xs sm:text-sm" dir="rtl">
                             <thead className="bg-slate-50 text-slate-600">
                                 <tr>
                                     <th className="p-2 text-right">الموظف</th>

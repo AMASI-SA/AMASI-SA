@@ -375,7 +375,7 @@ export default function PaymentSettlements() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto" data-testid="settlements-table-scroll">
-                        <table className="w-full min-w-[1100px] text-xs" data-testid="settlements-files-table">
+                        <table className="mezan-table compact w-full min-w-[1100px] text-xs" data-testid="settlements-files-table">
                             <thead className="bg-slate-50 text-slate-600 text-[11px] border-b border-slate-200">
                                 <tr>
                                     <th className="text-right px-4 py-2 whitespace-nowrap">البوابة</th>

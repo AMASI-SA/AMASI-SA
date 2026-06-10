@@ -83,7 +83,7 @@ export default function OperationalReports() {
                     {period === "yearly" && data.monthly_breakdown?.length > 0 && (
                         <div className="mb-8">
                             <h3 className="text-lg font-extrabold text-slate-800 mb-3 border-b border-slate-300 pb-2">📅 إجماليات شهرية</h3>
-                            <table className="w-full text-xs border border-slate-300">
+                            <table className="mezan-table compact w-full text-xs border border-slate-300">
                                 <thead className="bg-slate-100">
                                     <tr>
                                         <th className="border border-slate-300 p-2 text-right">الشهر</th>
@@ -134,7 +134,7 @@ export default function OperationalReports() {
                                 <h3 className="text-base font-extrabold text-slate-800 mb-2 bg-violet-50 p-2 rounded">
                                     {cat.label} <span className="text-xs font-normal text-slate-600">({cat.items.length} عملية)</span>
                                 </h3>
-                                <table className="w-full text-xs border border-slate-300">
+                                <table className="mezan-table compact w-full text-xs border border-slate-300">
                                     <thead className="bg-slate-50">
                                         <tr>
                                             <th className="border border-slate-300 p-2 text-right">التاريخ</th>
@@ -166,7 +166,7 @@ export default function OperationalReports() {
                     {data.employees && data.employees.length > 0 && (
                         <div className="mb-6">
                             <h3 className="text-base font-extrabold text-slate-800 mb-2 bg-amber-50 p-2 rounded">👥 ملخص الموظفين</h3>
-                            <table className="w-full text-xs border border-slate-300">
+                            <table className="mezan-table compact w-full text-xs border border-slate-300">
                                 <thead className="bg-slate-50">
                                     <tr>
                                         <th className="border border-slate-300 p-2 text-right">الموظف</th>

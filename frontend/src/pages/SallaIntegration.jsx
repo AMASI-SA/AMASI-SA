@@ -609,7 +609,7 @@ export default function SallaIntegration() {
                             </div>
                         ) : (
                             <div className="max-h-96 overflow-y-auto">
-                                <table className="w-full text-xs" data-testid="salla-sync-logs">
+                                <table className="mezan-table compact w-full text-xs" data-testid="salla-sync-logs">
                                     <thead className="bg-slate-100 text-slate-600 text-[11px] sticky top-0">
                                         <tr>
                                             <th className="text-right px-3 py-2">النوع</th>

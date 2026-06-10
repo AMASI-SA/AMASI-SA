@@ -245,7 +245,7 @@ export default function RefundsAlert() {
                             </button>
                         </div>
                         <div className="flex-1 overflow-y-auto">
-                            <table className="w-full text-xs">
+                            <table className="mezan-table compact w-full text-xs">
                                 <thead className="bg-slate-50 text-slate-600 text-[11px] sticky top-0">
                                     <tr>
                                         <th className="text-right px-3 py-2">رقم الطلب</th>

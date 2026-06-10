@@ -248,7 +248,7 @@ export default function Advances() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="mezan-table w-full text-sm">
                             <thead className="bg-slate-50 text-slate-600 text-xs">
                                 <tr>
                                     <th className="text-right p-3 font-bold">الموظف</th>

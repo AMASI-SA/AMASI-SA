@@ -137,7 +137,7 @@ export default function Reconciliation() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm" style={{ minWidth: 1100 }}>
+                        <table className="mezan-table w-full text-sm" style={{ minWidth: 1100 }}>
                             <thead className="bg-slate-50/50 text-xs text-muted-foreground">
                                 <tr>
                                     <th className="text-right px-3 py-2.5 font-bold whitespace-nowrap">المنصة</th>

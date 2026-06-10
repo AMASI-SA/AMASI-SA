@@ -261,7 +261,7 @@ function ComparisonTable({ platforms, combined }) {
                 <h3 className="text-lg font-bold" style={{ fontFamily: "Tajawal" }}>مقارنة المقاييس جنباً إلى جنب</h3>
             </div>
             <div className="overflow-x-auto">
-                <table className="w-full text-right text-sm border-collapse
+                <table className="mezan-table w-full text-right text-sm border-collapse
                     [&_th]:px-3 [&_th]:py-2.5 [&_th]:border [&_th]:border-border [&_th]:whitespace-nowrap [&_th]:bg-accent/60 [&_th]:font-semibold
                     [&_td]:px-3 [&_td]:py-2.5 [&_td]:border [&_td]:border-border [&_td]:whitespace-nowrap">
                     <thead>

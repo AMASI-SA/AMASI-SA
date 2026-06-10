@@ -105,7 +105,7 @@ export default function ProductSalesReport({ fromDate, toDate }) {
             )}
 
             <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                <table className="w-full text-sm text-right border-collapse min-w-[820px]"
+                <table className="mezan-table w-full text-sm text-right border-collapse min-w-[820px]"
                        data-testid="psr-table">
                     <thead className="text-muted-foreground bg-accent/40 border-b-2 border-border text-xs">
                         <tr>

@@ -405,7 +405,7 @@ export default function ImageCatalog() {
             ) : (
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm" data-testid="catalog-table">
+                        <table className="mezan-table w-full text-sm" data-testid="catalog-table">
                             <thead className="bg-slate-50 text-slate-600 text-xs">
                                 <tr>
                                     <th className="text-right px-4 py-3 font-bold">الصورة</th>

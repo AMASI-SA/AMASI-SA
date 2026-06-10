@@ -93,7 +93,7 @@ export default function PendingOrdersCard({ qs = "", testid = "pending-orders-ca
             </div>
 
             <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid={`${testid}-table`}>
+                <table className="mezan-table w-full text-sm" data-testid={`${testid}-table`}>
                     <thead className="text-xs text-amber-800/80 bg-amber-100/50">
                         <tr>
                             <th className="text-right px-3 py-1.5 font-semibold">البوابة</th>

@@ -201,7 +201,7 @@ export default function ShippingAccounts() {
                                         <p className="p-5 text-center text-sm text-muted-foreground">لا توجد دفعات مسجَّلة بعد</p>
                                     ) : (
                                         <div className="overflow-x-auto">
-                                            <table className="w-full text-sm">
+                                            <table className="mezan-table w-full text-sm">
                                                 <thead>
                                                     <tr className="text-xs font-bold text-muted-foreground uppercase">
                                                         <th className="text-start px-5 py-3">التاريخ</th>

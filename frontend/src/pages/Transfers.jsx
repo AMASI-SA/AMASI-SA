@@ -380,7 +380,7 @@ export default function Transfers() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="mezan-table w-full text-sm">
                             <thead className="bg-slate-50/50 text-xs text-muted-foreground">
                                 <tr>
                                     <th className="text-right px-4 py-2.5 font-bold">التاريخ</th>

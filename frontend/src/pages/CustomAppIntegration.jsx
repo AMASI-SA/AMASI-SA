@@ -272,7 +272,7 @@ function MonitoringTab() {
                     <div className="p-8 text-center text-slate-500 text-sm">لا توجد أحداث بعد</div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="mezan-table w-full text-sm">
                             <thead className="bg-slate-50 text-slate-600 text-xs">
                                 <tr>
                                     <th className="text-right p-3 font-bold">الوقت</th>
@@ -477,7 +477,7 @@ function DocsTab({ settings }) {
 
                 <div className="font-bold text-xs text-slate-700 mt-3">📋 الحقول المدعومة (جميعها اختيارية ما لم يُذكر عكس ذلك):</div>
                 <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                    <table className="w-full text-xs">
+                    <table className="mezan-table compact w-full text-xs">
                         <thead className="bg-slate-50 text-slate-600">
                             <tr><th className="text-right p-2 font-bold">الحقل</th><th className="text-right p-2 font-bold">النوع</th><th className="text-right p-2 font-bold">الوصف</th></tr>
                         </thead>
@@ -509,7 +509,7 @@ function DocsTab({ settings }) {
 
                 <div className="font-bold text-xs text-slate-700 mt-3">📦 حقول كل عنصر في items[]:</div>
                 <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                    <table className="w-full text-xs">
+                    <table className="mezan-table compact w-full text-xs">
                         <thead className="bg-slate-50 text-slate-600">
                             <tr><th className="text-right p-2 font-bold">الحقل</th><th className="text-right p-2 font-bold">النوع</th><th className="text-right p-2 font-bold">الوصف</th></tr>
                         </thead>
@@ -631,7 +631,7 @@ X-API-Key: ${apiKey}
 
             <Section id="errors" title="6. أكواد الأخطاء والاستجابات">
                 <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                    <table className="w-full text-xs">
+                    <table className="mezan-table compact w-full text-xs">
                         <thead className="bg-slate-50 text-slate-600">
                             <tr><th className="text-right p-2 font-bold">الكود</th><th className="text-right p-2 font-bold">المعنى</th><th className="text-right p-2 font-bold">الحل</th></tr>
                         </thead>

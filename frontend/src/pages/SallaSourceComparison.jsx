@@ -164,7 +164,7 @@ export default function SallaSourceComparison() {
                     <h3 className="font-extrabold text-slate-900">توزّع الطلبات حسب المصادر</h3>
                     <p className="text-[11px] text-slate-500 mt-1">إجمالي {grand.orders} طلب بقيمة {fmtMoney(grand.amount)} ر.س</p>
                 </div>
-                <table className="w-full text-sm">
+                <table className="mezan-table w-full text-sm">
                     <thead className="bg-slate-50 text-slate-600 text-xs">
                         <tr>
                             <th className="text-right px-4 py-2">الحالة</th>

@@ -121,7 +121,7 @@ export default function ImportJobs() {
                             لا توجد عمليات استيراد بعد. <Link to="/upload" className="text-brand font-bold hover:underline">ارفع ملف Excel الآن</Link>
                         </div>
                     ) : (
-                        <table className="w-full text-sm">
+                        <table className="mezan-table w-full text-sm">
                             <thead className="bg-slate-50 text-muted-foreground text-xs">
                                 <tr>
                                     <th className="text-right px-3 py-2 font-bold">الملف</th>

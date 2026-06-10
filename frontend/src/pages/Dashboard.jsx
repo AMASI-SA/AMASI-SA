@@ -1372,7 +1372,7 @@ export default function Dashboard() {
                             <div className="text-center py-10 text-muted-foreground">لم تقم بإجراء أي تحليل بعد.</div>
                         ) : (
                             <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                                <table className="w-full text-right min-w-[640px]" data-testid="recent-analyses-table">
+                                <table className="mezan-table w-full text-right min-w-[640px]" data-testid="recent-analyses-table">
                                     <thead>
                                         <tr className="text-sm text-muted-foreground border-b border-border">
                                             <th className="pb-3 font-semibold">الاسم</th>

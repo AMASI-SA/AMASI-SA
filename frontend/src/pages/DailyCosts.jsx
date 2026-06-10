@@ -253,7 +253,7 @@ export default function DailyCosts() {
                 ) : (
                     <div className="overflow-x-auto">
                         <table
-                            className="w-full text-right text-sm border-collapse
+                            className="mezan-table w-full text-right text-sm border-collapse
                                 [&_th]:px-3 [&_th]:py-3 [&_th]:border [&_th]:border-border [&_th]:whitespace-nowrap
                                 [&_td]:px-3 [&_td]:py-3 [&_td]:border [&_td]:border-border [&_td]:whitespace-nowrap"
                             data-testid="daily-costs-table"

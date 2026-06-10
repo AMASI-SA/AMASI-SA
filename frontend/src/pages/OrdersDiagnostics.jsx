@@ -277,7 +277,7 @@ export default function OrdersDiagnostics() {
                         </div>
                         {scan.legacy_overlap_orders.length > 0 && (
                             <div className="mt-4 overflow-x-auto">
-                                <table className="w-full text-xs">
+                                <table className="mezan-table compact w-full text-xs">
                                     <thead className="bg-slate-50 text-muted-foreground">
                                         <tr>
                                             <th className="text-right px-2 py-1.5 font-bold">رقم الطلب</th>
@@ -326,7 +326,7 @@ export default function OrdersDiagnostics() {
                                 {scan.legacy_file_duplicates.map((f) => (
                                     <div key={f.filename} className="border border-amber-200 rounded-lg p-3 bg-amber-50/40">
                                         <div className="font-bold text-sm mb-1">📄 {f.filename} — مرفوع {f.uploads.length} مرات</div>
-                                        <table className="w-full text-xs mt-1">
+                                        <table className="mezan-table compact w-full text-xs mt-1">
                                             <thead className="text-muted-foreground">
                                                 <tr>
                                                     <th className="text-right px-2 py-1">التاريخ</th>

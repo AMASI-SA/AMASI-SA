@@ -384,7 +384,7 @@ function CatalogueTab({ items, total, search, setSearch, onEdit, onDelete, loadi
                 </div>
             ) : (
                 <div className="overflow-x-auto rounded-xl border border-border bg-white">
-                    <table className="w-full text-sm" data-testid="catalogue-table">
+                    <table className="mezan-table w-full text-sm" data-testid="catalogue-table">
                         <thead className="bg-accent/40 text-xs">
                             <tr>
                                 <th className="px-3 py-2 text-center font-bold w-14">الصورة</th>
@@ -524,7 +524,7 @@ function MissingTab({ missing, onQuickAdd, loading }) {
                 </div>
             )}
             <div className="overflow-x-auto rounded-xl border border-border bg-white">
-                <table className="w-full text-sm" data-testid="missing-table">
+                <table className="mezan-table w-full text-sm" data-testid="missing-table">
                     <thead className="bg-accent/40 text-xs">
                         <tr>
                             <th className="px-3 py-2 text-center font-bold w-14">الصورة</th>

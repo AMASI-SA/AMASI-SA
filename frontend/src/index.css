@@ -140,3 +140,95 @@ code, pre {
 
 /* Sidebar scroll override */
 aside { scrollbar-width: thin; }
+
+
+/* ─────────────────────────────────────────────────────────────
+   MEZAN — Unified table design (matches Reports.jsx reference).
+   Apply class="mezan-table" on any <table> element to get the
+   same look across the entire site (Dashboard, Orders, Settle-
+   ments, Reconciliation, Counterparties, etc.).
+
+   !important is used on key bg/border properties so this design
+   wins over legacy Tailwind classes (e.g. `bg-slate-50`) that
+   may still live on thead/tbody/tr elements in older code.
+
+   Structure:
+     <table className="mezan-table">
+       <thead><tr><th>…</th></tr></thead>
+       <tbody>
+         <tr>…</tr>                 ← striped + hover
+         <tr className="mezan-total-row">…</tr>  ← optional totals
+       </tbody>
+     </table>
+   ───────────────────────────────────────────────────────────── */
+.mezan-table {
+    width: 100%;
+    text-align: right;
+    border-collapse: collapse !important;
+}
+
+/* Vertical column dividers (all but first column) */
+.mezan-table th,
+.mezan-table td {
+    padding-left: 0.75rem;          /* px-3 */
+    padding-right: 0.75rem;
+    border-inline-start: 1px solid hsl(var(--border)) !important;
+}
+.mezan-table th:first-child,
+.mezan-table td:first-child {
+    border-inline-start: 0 !important;
+}
+
+/* Header row */
+.mezan-table thead {
+    color: hsl(var(--muted-foreground)) !important;
+    background-color: hsl(var(--accent) / 0.40) !important;
+    border-bottom: 2px solid hsl(var(--border)) !important;
+}
+.mezan-table thead th {
+    padding-top: 0.75rem;           /* py-3 */
+    padding-bottom: 0.75rem;
+    font-weight: 600;               /* font-semibold */
+    background-color: transparent !important; /* inherit thead bg */
+}
+
+/* Body rows — separator + hover */
+.mezan-table tbody tr {
+    border-bottom: 1px solid hsl(var(--border)) !important;
+    transition: background-color 0.15s ease;
+}
+.mezan-table tbody tr:last-child {
+    border-bottom: 0 !important;
+}
+.mezan-table tbody tr:hover {
+    background-color: hsl(var(--accent) / 0.30) !important;
+}
+.mezan-table tbody td {
+    padding-top: 0.625rem;          /* py-2.5 */
+    padding-bottom: 0.625rem;
+    background-color: transparent;  /* let row hover show through */
+}
+
+/* First column in body — semi-bold (matches reference) */
+.mezan-table tbody td:first-child {
+    font-weight: 600;
+}
+
+/* Optional totals / footer row */
+.mezan-table tr.mezan-total-row,
+.mezan-table tfoot tr {
+    background-color: hsl(var(--accent) / 0.30) !important;
+    font-weight: 700 !important;
+    border-top: 2px solid hsl(var(--border)) !important;
+}
+.mezan-table tr.mezan-total-row:hover,
+.mezan-table tfoot tr:hover {
+    background-color: hsl(var(--accent) / 0.30) !important;
+}
+
+/* Variant: left-aligned numeric columns (use class="num-cell" on td/th) */
+.mezan-table .num-cell { direction: ltr; unicode-bidi: embed; }
+
+/* Variant: compact (smaller padding — apply on the <table>) */
+.mezan-table.compact thead th { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+.mezan-table.compact tbody td { padding-top: 0.4rem; padding-bottom: 0.4rem; }

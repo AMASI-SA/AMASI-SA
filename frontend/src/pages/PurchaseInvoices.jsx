@@ -210,7 +210,7 @@ function InvoiceDialog({ open, suppliers, editing, onClose, onSaved }) {
                                 </button>
                             </div>
                             <div className="border border-slate-200 rounded-lg overflow-x-auto">
-                                <table className="w-full text-sm">
+                                <table className="mezan-table w-full text-sm">
                                     <thead className="bg-slate-50 text-slate-600 text-[11px]">
                                         <tr>
                                             <th className="text-right p-2 font-bold">اسم المنتج</th>
@@ -335,7 +335,7 @@ function SupplierStatement({ cpId, open, onClose }) {
                                 </div>
                             </div>
                             <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                                <table className="w-full text-sm">
+                                <table className="mezan-table w-full text-sm">
                                     <thead className="bg-slate-50 text-slate-600 text-xs">
                                         <tr>
                                             <th className="text-right p-2 font-bold">رقم</th>
@@ -507,7 +507,7 @@ export default function PurchaseInvoices() {
                         لا توجد فواتير. ابدأ بإنشاء فاتورة شراء جديدة.
                     </div>
                 ) : (
-                    <table className="w-full text-sm">
+                    <table className="mezan-table w-full text-sm">
                         <thead className="bg-slate-50 text-slate-600 text-xs">
                             <tr>
                                 <th className="text-right p-3 font-bold">رقم الفاتورة</th>
