@@ -198,6 +198,53 @@ function WebhookUrlBlock({ provider, webhookSecret, lastWebhookAt }) {
 }
 
 
+// Iter-121 — weekday-based settlement cycle.  Canonical keys are
+// English lowercase; we render the Arabic label next to a checkbox.
+const WEEKDAY_OPTIONS = [
+    { key: "saturday",  ar: "السبت" },
+    { key: "sunday",    ar: "الأحد" },
+    { key: "monday",    ar: "الاثنين" },
+    { key: "tuesday",   ar: "الثلاثاء" },
+    { key: "wednesday", ar: "الأربعاء" },
+    { key: "thursday",  ar: "الخميس" },
+    { key: "friday",    ar: "الجمعة" },
+];
+
+function WeekdayCheckboxes({ value, onChange, testidPrefix }) {
+    const v = Array.isArray(value) ? value : [];
+    const toggle = (k) => {
+        onChange(v.includes(k) ? v.filter((x) => x !== k) : [...v, k]);
+    };
+    return (
+        <div className="flex flex-wrap gap-1.5" data-testid={`${testidPrefix}-group`}>
+            {WEEKDAY_OPTIONS.map((d) => {
+                const checked = v.includes(d.key);
+                return (
+                    <label
+                        key={d.key}
+                        className={`cursor-pointer select-none px-2.5 py-1 rounded-full text-[11px] font-bold border-2 transition ${
+                            checked
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                                : "bg-white text-slate-600 border-slate-300 hover:border-emerald-400"
+                        }`}
+                        data-testid={`${testidPrefix}-${d.key}`}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggle(d.key)}
+                            className="sr-only"
+                        />
+                        {d.ar}
+                    </label>
+                );
+            })}
+        </div>
+    );
+}
+
+
+
 function ProviderCard({ provider, label, Icon, settings, onReload }) {
     const [form, setForm] = useState(() => ({
         api_token: "",
@@ -212,6 +259,9 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
         vat_on_fees_percent: settings.vat_on_fees_percent ?? 0.15,
         settlement_period_days: settings.settlement_period_days ?? 7,
         transfer_days: settings.transfer_days ?? 2,
+        // Iter-121 — weekday-based settlement cycle
+        invoice_weekdays:  settings.invoice_weekdays  ?? [],
+        transfer_weekdays: settings.transfer_weekdays ?? [],
         settlement_fee_per_invoice: settings.settlement_fee_per_invoice ?? 0,
     }));
     const [busy, setBusy] = useState(false);
@@ -470,28 +520,7 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             data-testid={`bnpl-${provider}-vat`}
                         />
                     </Field>
-                    <Field label="فترة التسوية (أيام)">
-                        <input
-                            type="number"
-                            value={form.settlement_period_days}
-                            onChange={(e) => set("settlement_period_days", parseInt(e.target.value) || 7)}
-                            className={inputCls}
-                            data-testid={`bnpl-${provider}-period`}
-                        />
-                    </Field>
-                    <Field label="أيام التحويل المتوقعة">
-                        <input
-                            type="number"
-                            value={form.transfer_days}
-                            onChange={(e) => set("transfer_days", parseInt(e.target.value) || 2)}
-                            className={inputCls}
-                            data-testid={`bnpl-${provider}-transfer`}
-                        />
-                    </Field>
-                    <Field
-                        label="رسوم التسوية لكل فاتورة (ر.س)"
-                        hint="رسوم تُخصم مرة واحدة عند إنشاء كل تسوية أسبوعية — وليس على كل طلب."
-                    >
+                    <Field label="رسوم التسوية لكل فاتورة (ر.س)" hint="رسوم تُخصم مرة واحدة عند إنشاء كل تسوية — وليس على كل طلب.">
                         <input
                             type="number"
                             step="0.01"
@@ -503,6 +532,39 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             placeholder={provider === "tabby" ? "5.00" : "0.00"}
                         />
                     </Field>
+                </div>
+
+                {/* Iter-121 — Weekday-based settlement cycle */}
+                <div className="mt-4 pt-4 border-t-2 border-dashed border-slate-300">
+                    <h5 className="text-sm font-extrabold text-slate-800 mb-2 flex items-center gap-2">
+                        🗓️ دورة التسوية حسب أيام الأسبوع
+                    </h5>
+                    <p className="text-[11px] text-slate-500 mb-3">
+                        اختر يوم/أيام إصدار الفاتورة (متى يُغلق المزود الفترة) وأيام التحويل البنكي المتوقعة بعدها.
+                        تطبق هذه القاعدة على جميع التسويات بدل الاعتماد على عدد أيام ثابت.
+                    </p>
+                    <div className="space-y-3">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                                أيام إصدار الفاتورة <span className="text-slate-400 font-normal">(يمكن اختيار أكثر من يوم)</span>
+                            </label>
+                            <WeekdayCheckboxes
+                                value={form.invoice_weekdays}
+                                onChange={(v) => set("invoice_weekdays", v)}
+                                testidPrefix={`bnpl-${provider}-invoice-day`}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                                أيام التحويل البنكي المتوقعة <span className="text-slate-400 font-normal">(يمكن اختيار أكثر من يوم)</span>
+                            </label>
+                            <WeekdayCheckboxes
+                                value={form.transfer_weekdays}
+                                onChange={(v) => set("transfer_weekdays", v)}
+                                testidPrefix={`bnpl-${provider}-transfer-day`}
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
 

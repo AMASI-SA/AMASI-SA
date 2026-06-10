@@ -17,8 +17,11 @@ Document shape (one per user × provider):
     mdr_percent (float, e.g. 0.06 = 6%),
     fixed_fee_per_order (float, e.g. 1.0 for Tabby),
     vat_on_fees_percent (float, e.g. 0.15),
-    settlement_period_days (int, e.g. 7),
-    transfer_days (int, e.g. 2),
+    settlement_period_days (int, e.g. 7),         # LEGACY — fallback only
+    transfer_days (int, e.g. 2),                  # LEGACY — fallback only
+    # — Iter-121: weekday-based settlement cycle —
+    invoice_weekdays (list[str], lowercase English: "monday"…"sunday"),
+    transfer_weekdays (list[str], same vocabulary),
     # — bookkeeping —
     last_sync_at, last_test_ok, last_test_error,
     last_webhook_at,
@@ -36,6 +39,13 @@ from .crypto import decrypt_token, encrypt_token
 
 BNPL_PROVIDERS = ("tabby", "tamara")
 
+# Canonical weekday vocabulary — lowercase English so we don't have
+# any localisation ambiguity in the database.  UI maps these to Arabic.
+WEEKDAYS = (
+    "saturday", "sunday", "monday", "tuesday",
+    "wednesday", "thursday", "friday",
+)
+
 # Default fee settings — user can override via Settings UI.
 DEFAULTS = {
     "tabby": {
@@ -44,6 +54,10 @@ DEFAULTS = {
         "vat_on_fees_percent": 0.15,
         "settlement_period_days": 7,
         "transfer_days": 2,
+        # Iter-121 — weekday cycle.  Tabby officially closes invoices
+        # on Mondays and pays out 1-2 business days later.
+        "invoice_weekdays":  ["monday"],
+        "transfer_weekdays": ["tuesday", "wednesday"],
         "settlement_fee_per_invoice": 5.0,   # SAR charged ONCE per
                                              # weekly settlement invoice
                                              # (not per order)
@@ -55,6 +69,9 @@ DEFAULTS = {
         "vat_on_fees_percent": 0.15,
         "settlement_period_days": 7,
         "transfer_days": 2,
+        # Iter-121 — Tamara closes invoices Sunday, pays Tuesday.
+        "invoice_weekdays":  ["sunday"],
+        "transfer_weekdays": ["tuesday"],
         "settlement_fee_per_invoice": 0.0,   # Tamara doesn't charge it
         "api_base_url": "https://api.tamara.co",
     },
@@ -203,6 +220,12 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
                                               defaults.get("settlement_period_days", 7))),
         "transfer_days": int(doc.get("transfer_days",
                                      defaults.get("transfer_days", 2))),
+        # Iter-121 — weekday cycle (canonical).  Falls back to provider
+        # defaults if user hasn't customised yet.
+        "invoice_weekdays": list(doc.get("invoice_weekdays")
+                                 or defaults.get("invoice_weekdays") or []),
+        "transfer_weekdays": list(doc.get("transfer_weekdays")
+                                  or defaults.get("transfer_weekdays") or []),
         "settlement_fee_per_invoice": float(doc.get(
             "settlement_fee_per_invoice",
             defaults.get("settlement_fee_per_invoice", 0),
@@ -315,6 +338,19 @@ async def save_settings(
                 update[k] = int(payload[k])
             except (TypeError, ValueError):
                 pass
+
+    # Iter-121 — weekday lists.  Sanitize against the canonical
+    # vocabulary so we never store typos like "satrday".
+    for k in ("invoice_weekdays", "transfer_weekdays"):
+        if k in payload and isinstance(payload.get(k), list):
+            clean = [
+                str(d).strip().lower()
+                for d in payload[k]
+                if str(d).strip().lower() in WEEKDAYS
+            ]
+            # Deduplicate while preserving order
+            seen = set()
+            update[k] = [d for d in clean if not (d in seen or seen.add(d))]
 
     await db.bnpl_settings.update_one(
         {"user_id": user_id, "provider": provider},

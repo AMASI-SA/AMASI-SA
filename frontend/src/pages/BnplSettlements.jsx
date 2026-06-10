@@ -182,6 +182,35 @@ export default function BnplSettlements() {
     // Weekly settlements table (Phase 4) — one row per weekly invoice
     const [weekly, setWeekly] = useState({});      // { tabby: [...], tamara: [...] }
     const [weeklyOpen, setWeeklyOpen] = useState(null);  // provider currently expanded
+    // Iter-120 — per-period item drill-down (sales + refunds)
+    const [itemsByInv, setItemsByInv] = useState({});    // { "tabby:3": {sales,refunds,...} }
+    const [expandedInv, setExpandedInv] = useState(null); // "tabby:3" | null
+    const [itemsLoading, setItemsLoading] = useState(false);
+
+    const loadItems = async (provider, invoice_no, from, to) => {
+        const key = `${provider}:${invoice_no}`;
+        if (itemsByInv[key]) {
+            setExpandedInv((cur) => cur === key ? null : key);
+            return;
+        }
+        setItemsLoading(true);
+        try {
+            const { data: r } = await api.get(
+                `/bnpl/settlements/items/${provider}`,
+                { params: { from, to } },
+            );
+            if (r?.success) {
+                setItemsByInv((prev) => ({ ...prev, [key]: r }));
+                setExpandedInv(key);
+            } else {
+                toast.error(`خطأ: ${r?.error || "غير معروف"}`);
+            }
+        } catch (e) {
+            toast.error(errMsg(e, "تعذّر تحميل تفاصيل الفترة"));
+        } finally {
+            setItemsLoading(false);
+        }
+    };
 
     const loadWeekly = async (provider) => {
         try {
@@ -445,6 +474,7 @@ export default function BnplSettlements() {
                                             <th className="p-2">#</th>
                                             <th className="p-2">من</th>
                                             <th className="p-2">إلى</th>
+                                            <th className="p-2">تحويل متوقع</th>
                                             <th className="p-2">العمليات</th>
                                             <th className="p-2">المبيعات</th>
                                             <th className="p-2">المسترجعات</th>
@@ -456,6 +486,7 @@ export default function BnplSettlements() {
                                             <th className="p-2">المحوَّل</th>
                                             <th className="p-2">المتبقي</th>
                                             <th className="p-2" data-testid="bnpl-weekly-match-header">المطابقة البنكية</th>
+                                            <th className="p-2">تفاصيل</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -469,11 +500,16 @@ export default function BnplSettlements() {
                                                 under:     { txt: "⚠ نقص",      cls: "bg-rose-100 text-rose-800" },
                                                 unmatched: { txt: "—",          cls: "bg-slate-100 text-slate-500" },
                                             }[status] || { txt: status, cls: "bg-slate-100 text-slate-600" };
+                                            const expKey = `${weeklyOpen}:${r.invoice_no}`;
+                                            const isExpanded = expandedInv === expKey;
                                             return (
                                             <tr key={r.invoice_no} data-testid={`bnpl-weekly-row-${r.invoice_no}`}>
                                                 <td className="p-2 font-bold text-slate-900">{r.invoice_no}</td>
                                                 <td className="p-2 font-mono text-[10px]">{r.from}</td>
                                                 <td className="p-2 font-mono text-[10px]">{r.to}</td>
+                                                <td className="p-2 font-mono text-[10px] text-emerald-700">
+                                                    {r.expected_transfer_date || "—"}
+                                                </td>
                                                 <td className="p-2 num">{fmtInt(r.transactions_count)}</td>
                                                 <td className="p-2 num">{fmt(r.gross_sales)}</td>
                                                 <td className="p-2 num text-rose-700">{fmt(r.total_refunds)}</td>
@@ -513,11 +549,22 @@ export default function BnplSettlements() {
                                                         )}
                                                     </div>
                                                 </td>
+                                                <td className="p-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => loadItems(weeklyOpen, r.invoice_no, r.from, r.to)}
+                                                        className={`px-2 py-1 text-[10px] font-bold rounded-lg ${isExpanded ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                                                        data-testid={`bnpl-weekly-details-${r.invoice_no}`}
+                                                    >
+                                                        {isExpanded ? "إخفاء ▲" : "تفاصيل ▼"}
+                                                    </button>
+                                                </td>
                                             </tr>
                                             );
                                         })}
                                         <tr className="mezan-total-row">
                                             <td className="p-2" colSpan="3">الإجمالي</td>
+                                            <td className="p-2 text-[10px] text-slate-400">—</td>
                                             <td className="p-2 num">—</td>
                                             <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.gross_sales)}</td>
                                             <td className="p-2 num text-rose-700">{fmt(weekly[weeklyOpen].totals?.total_refunds)}</td>
@@ -538,6 +585,7 @@ export default function BnplSettlements() {
                                                     </span>
                                                 ) : "—"}
                                             </td>
+                                            <td className="p-2 text-[10px] text-slate-400">—</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -545,10 +593,136 @@ export default function BnplSettlements() {
 
                             <div className="mt-3 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
                                 📌 كل فاتورة تمثّل أسبوع التسوية القياسي للمزوّد. رسوم التسوية تُخصم مرة واحدة لكل فاتورة.
+                                <span className="block mt-1">
+                                    🧮 <strong>قاعدة محاسبية (Iter-120):</strong> المبيعات تُحسب بتاريخ الطلب، أما المسترجعات فتُحسب بتاريخ <strong>الاسترجاع الفعلي</strong> — لذا قد يظهر استرجاع لطلب من فترة قديمة داخل تسوية الفترة التي حدث فيها الاسترجاع.
+                                </span>
                                 {weekly[weeklyOpen].toleranceDoc && (
                                     <span className="block mt-1">🔍 {weekly[weeklyOpen].toleranceDoc}</span>
                                 )}
                             </div>
+
+                            {/* Iter-120 — Drill-down: sales + refunds tables for the expanded week */}
+                            {expandedInv && expandedInv.startsWith(`${weeklyOpen}:`) && itemsByInv[expandedInv] && (
+                                <div
+                                    className="mt-4 rounded-xl border-2 border-violet-300 bg-violet-50 p-4 space-y-4"
+                                    data-testid="bnpl-period-details"
+                                >
+                                    <h4 className="text-sm font-extrabold text-violet-900 flex items-center gap-2 flex-wrap">
+                                        🔎 تفاصيل فترة الفاتورة #{expandedInv.split(":")[1]}
+                                        <span className="text-xs font-mono text-violet-700">
+                                            {itemsByInv[expandedInv].period?.from} → {itemsByInv[expandedInv].period?.to}
+                                        </span>
+                                        {itemsByInv[expandedInv].cross_period_refunds_count > 0 && (
+                                            <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">
+                                                ⚠ {itemsByInv[expandedInv].cross_period_refunds_count} استرجاع من طلبات فترات سابقة
+                                            </span>
+                                        )}
+                                    </h4>
+
+                                    {/* Sales table */}
+                                    <div data-testid="bnpl-period-sales">
+                                        <h5 className="text-xs font-extrabold text-slate-800 mb-2 flex items-center gap-2">
+                                            🟢 مبيعات الفترة
+                                            <span className="text-slate-500 font-normal">
+                                                ({itemsByInv[expandedInv].sales?.length || 0} طلب · مجموع
+                                                <span className="num font-bold"> {fmt(itemsByInv[expandedInv].sales_total)}</span> ر.س)
+                                            </span>
+                                        </h5>
+                                        {(itemsByInv[expandedInv].sales || []).length === 0 ? (
+                                            <div className="text-xs text-slate-500 bg-white border border-slate-200 rounded p-3">
+                                                لا توجد مبيعات داخل هذه الفترة.
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto">
+                                                <table className="mezan-table compact w-full text-xs bg-white">
+                                                    <thead>
+                                                        <tr>
+                                                            <th className="p-2">رقم الطلب</th>
+                                                            <th className="p-2">تاريخ الطلب</th>
+                                                            <th className="p-2">المبلغ</th>
+                                                            <th className="p-2">الحالة</th>
+                                                            <th className="p-2">طريقة الدفع</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {itemsByInv[expandedInv].sales.map((s) => (
+                                                            <tr key={s.id} data-testid={`bnpl-sale-${s.id}`}>
+                                                                <td className="p-2 font-mono text-[10px]">{s.order_reference_id || s.order_number || s.id?.slice(0,8)}</td>
+                                                                <td className="p-2 font-mono text-[10px]">{(s.order_date || "").slice(0,10)}</td>
+                                                                <td className="p-2 num font-bold">{fmt(s.amount)}</td>
+                                                                <td className="p-2 text-[10px] text-slate-600">{s.status || "—"}</td>
+                                                                <td className="p-2 text-[10px]">{s.payment_method}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Refunds table */}
+                                    <div data-testid="bnpl-period-refunds">
+                                        <h5 className="text-xs font-extrabold text-slate-800 mb-2 flex items-center gap-2">
+                                            🔴 مسترجعات الفترة
+                                            <span className="text-slate-500 font-normal">
+                                                (حسب تاريخ الاسترجاع · {itemsByInv[expandedInv].refunds?.length || 0} استرجاع · مجموع
+                                                <span className="num font-bold text-rose-700"> {fmt(itemsByInv[expandedInv].refunds_total)}</span> ر.س)
+                                            </span>
+                                        </h5>
+                                        {(itemsByInv[expandedInv].refunds || []).length === 0 ? (
+                                            <div className="text-xs text-slate-500 bg-white border border-slate-200 rounded p-3">
+                                                لا توجد مسترجعات داخل هذه الفترة.
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto">
+                                                <table className="mezan-table compact w-full text-xs bg-white">
+                                                    <thead>
+                                                        <tr>
+                                                            <th className="p-2">رقم الطلب</th>
+                                                            <th className="p-2">تاريخ الطلب</th>
+                                                            <th className="p-2">تاريخ الاسترجاع</th>
+                                                            <th className="p-2">المبلغ الأصلي</th>
+                                                            <th className="p-2">مبلغ الاسترجاع</th>
+                                                            <th className="p-2">طريقة الدفع</th>
+                                                            <th className="p-2">سبب</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {itemsByInv[expandedInv].refunds.map((rf) => {
+                                                            const odate = (rf.order_date || "").slice(0,10);
+                                                            const rdate = (rf.refund_date || "").slice(0,10);
+                                                            const fromOlderPeriod = odate && odate < itemsByInv[expandedInv].period?.from;
+                                                            return (
+                                                            <tr key={rf.id} data-testid={`bnpl-refund-${rf.id}`}>
+                                                                <td className="p-2 font-mono text-[10px]">{rf.order_reference_id || rf.order_number || rf.provider_refund_id?.slice(0,8)}</td>
+                                                                <td className="p-2 font-mono text-[10px]">
+                                                                    {odate || "—"}
+                                                                    {fromOlderPeriod && (
+                                                                        <span className="block text-[9px] text-amber-700 font-bold">↩ من فترة سابقة</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="p-2 font-mono text-[10px] font-bold text-slate-900">{rdate || "—"}</td>
+                                                                <td className="p-2 num">{rf.original_order_amount != null ? fmt(rf.original_order_amount) : "—"}</td>
+                                                                <td className="p-2 num font-bold text-rose-700">{fmt(rf.refund_amount)}</td>
+                                                                <td className="p-2 text-[10px]">{rf.payment_method}</td>
+                                                                <td className="p-2 text-[10px] text-slate-500 max-w-[12rem] truncate" title={rf.reason || ""}>
+                                                                    {rf.reason || "—"}
+                                                                </td>
+                                                            </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            {itemsLoading && (
+                                <div className="mt-3 text-xs text-slate-500 text-center" data-testid="bnpl-items-loading">
+                                    جاري تحميل تفاصيل الفترة...
+                                </div>
+                            )}
 
                             {/* Iter-119 — Unmatched bank transfers section */}
                             {(weekly[weeklyOpen].unmatchedTransfers || []).length > 0 && (

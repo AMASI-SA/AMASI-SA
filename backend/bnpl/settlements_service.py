@@ -54,6 +54,47 @@ DEFAULT_FEE_RATES: Dict[str, Dict[str, float]] = {
 
 PROVIDERS = ("tabby", "tamara")
 
+# ── Iter-121 — Weekday-based settlement cycle ─────────────────────
+# Python's date.weekday() returns 0 = Monday … 6 = Sunday.  We map the
+# canonical lowercase names used in `bnpl_settings.invoice_weekdays`
+# / `transfer_weekdays` to those integers.
+WEEKDAY_TO_INT: Dict[str, int] = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+
+
+def _weekday_set(names: Optional[List[str]]) -> set[int]:
+    """Convert a list of canonical weekday names to a set of ints."""
+    if not names:
+        return set()
+    return {WEEKDAY_TO_INT[n] for n in names if n in WEEKDAY_TO_INT}
+
+
+def _next_or_same_weekday(d: date, allowed: set[int]) -> Optional[date]:
+    """Return the first date ≥ `d` whose weekday is in `allowed`.
+
+    If `allowed` is empty, returns None (caller should fall back to the
+    legacy day-count window).  We never look more than 14 days ahead —
+    if the user picked an empty allowed set we'd loop forever.
+    """
+    if not allowed:
+        return None
+    from datetime import timedelta
+    for offset in range(14):  # at most one full fortnight
+        cand = d + timedelta(days=offset)
+        if cand.weekday() in allowed:
+            return cand
+    return None
+
+
+def _next_strict_weekday(d: date, allowed: set[int]) -> Optional[date]:
+    """Like above but STRICTLY after `d`."""
+    if not allowed:
+        return None
+    from datetime import timedelta
+    return _next_or_same_weekday(d + timedelta(days=1), allowed)
+
 
 def _r(x: float) -> float:
     return round(float(x or 0), 2)
@@ -62,11 +103,12 @@ def _r(x: float) -> float:
 def _count_settlements_in_period(
     date_from: Optional[str], date_to: Optional[str],
     settlement_period_days: int = 7,
+    invoice_weekdays: Optional[List[str]] = None,
 ) -> int:
-    """How many provider weekly settlement invoices fall inside the
-    requested period.  When the period is open-ended (no `from`/`to`)
-    we treat it as the time SINCE provider activation, but the caller
-    decides — here we just compute from the dates given.  Floors at 1
+    """How many provider settlement invoices fall inside the requested
+    period.  Iter-121 — when `invoice_weekdays` is configured, count
+    occurrences of those weekdays inside [date_from, date_to];
+    otherwise fall back to the legacy day-count window.  Floors at 1
     so we always charge AT LEAST one settlement fee per period view."""
     if not date_from or not date_to:
         return 1
@@ -78,12 +120,27 @@ def _count_settlements_in_period(
     days = (d_to - d_from).days + 1
     if days <= 0:
         return 1
+    days = (d_to - d_from).days + 1
+    if days <= 0:
+        return 1
+    # Iter-121 — if invoice_weekdays is configured, count actual
+    # occurrences of those weekdays inside the window.
+    allowed = _weekday_set(invoice_weekdays)
+    if allowed:
+        from datetime import timedelta
+        count = 0
+        cur = d_from
+        while cur <= d_to:
+            if cur.weekday() in allowed:
+                count += 1
+            cur += timedelta(days=1)
+        return max(1, count)
     return max(1, math.ceil(days / max(1, settlement_period_days)))
 
 
 async def _merchant_fee_rates(
     db, user_id: str, provider: str,
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     """Load per-merchant overrides from bnpl_settings, falling back to
     provider defaults.  Returns the rates as PERCENT (e.g. 5.0) — not
     fractions — so the UI can display them directly."""
@@ -92,7 +149,19 @@ async def _merchant_fee_rates(
         "fixed_fee_per_order": 0,
         "settlement_fee_per_invoice": 0, "settlement_period_days": 7,
     })
-    rates = dict(defaults)
+    rates: Dict[str, Any] = dict(defaults)
+    # Iter-121 — weekday defaults (canonical).  Tabby = Monday close,
+    # Tue/Wed payouts; Tamara = Sunday close, Tuesday payout.
+    weekday_defaults = {
+        "tabby":  {"invoice_weekdays":  ["monday"],
+                   "transfer_weekdays": ["tuesday", "wednesday"]},
+        "tamara": {"invoice_weekdays":  ["sunday"],
+                   "transfer_weekdays": ["tuesday"]},
+    }
+    wd = weekday_defaults.get(provider, {})
+    rates["invoice_weekdays"]  = list(wd.get("invoice_weekdays")  or [])
+    rates["transfer_weekdays"] = list(wd.get("transfer_weekdays") or [])
+
     doc = await db.bnpl_settings.find_one(
         {"user_id": user_id, "provider": provider}, {"_id": 0},
     )
@@ -108,6 +177,11 @@ async def _merchant_fee_rates(
             rates["settlement_fee_per_invoice"] = float(doc["settlement_fee_per_invoice"])
         if doc.get("settlement_period_days") is not None:
             rates["settlement_period_days"] = int(doc["settlement_period_days"])
+        # Iter-121 — accept user-customised weekday lists.
+        if isinstance(doc.get("invoice_weekdays"), list) and doc["invoice_weekdays"]:
+            rates["invoice_weekdays"] = list(doc["invoice_weekdays"])
+        if isinstance(doc.get("transfer_weekdays"), list) and doc["transfer_weekdays"]:
+            rates["transfer_weekdays"] = list(doc["transfer_weekdays"])
     return rates
 
 
@@ -116,39 +190,160 @@ async def _compute_provider_totals(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Aggregate gross sales + refunds for one provider from the
-    existing `payment_transactions` collection."""
-    match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
+    """Aggregate gross sales + refunds for one provider.
+
+    ⚠️ ITER-120 — IMPORTANT ACCOUNTING RULE:
+        • Sales are aggregated by ORDER DATE (`created_at_provider`).
+        • Refunds are aggregated by REFUND DATE (`refunded_at`).
+    A refund for an OLD order appears in the settlement of the period
+    when the refund happened — NOT the period when the order was
+    placed.  This matches the provider's real settlement file behavior
+    (Tabby/Tamara report refunds in the week they occur).
+    """
+    # ── Gross sales — by order date (created_at_provider) ──────────
+    sales_match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
     if date_from or date_to:
         rng: Dict[str, str] = {}
         if date_from:
             rng["$gte"] = date_from
         if date_to:
             rng["$lte"] = date_to + "T23:59:59Z"
-        match["created_at_provider"] = rng
+        sales_match["created_at_provider"] = rng
 
     gross = 0.0
-    refunds = 0.0
     count = 0
     async for r in db.payment_transactions.aggregate([
-        {"$match": match},
+        {"$match": sales_match},
         {"$group": {
             "_id": None,
             "n": {"$sum": 1},
             "gross": {"$sum": {"$ifNull": ["$amount", 0]}},
-            "refunds": {"$sum": {"$ifNull": ["$refunded_amount", 0]}},
         }},
     ]):
         count = int(r.get("n") or 0)
         gross = float(r.get("gross") or 0)
+
+    # ── Refunds — by REFUND date, NOT order date ───────────────────
+    refund_match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
+    if date_from or date_to:
+        rng2: Dict[str, str] = {}
+        if date_from:
+            rng2["$gte"] = date_from
+        if date_to:
+            rng2["$lte"] = date_to + "T23:59:59Z"
+        refund_match["refunded_at"] = rng2
+
+    refunds = 0.0
+    refunds_count = 0
+    async for r in db.payment_refunds.aggregate([
+        {"$match": refund_match},
+        {"$group": {
+            "_id": None,
+            "n": {"$sum": 1},
+            "refunds": {"$sum": {"$ifNull": ["$amount", 0]}},
+        }},
+    ]):
+        refunds_count = int(r.get("n") or 0)
         refunds = float(r.get("refunds") or 0)
 
     return {
         "transactions_count": count,
+        "refunds_count": refunds_count,
         "gross_sales": _r(gross),
         "total_refunds": _r(refunds),
         "net_sales": _r(gross - refunds),
     }
+
+
+async def _compute_period_items(
+    db, user_id: str, provider: str,
+    date_from: str, date_to: str,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Iter-120 — return the raw sales + refunds list for a settlement
+    period, used by the UI to render the two detail tables under each
+    weekly settlement row.
+
+    Each refund row is enriched with the ORIGINAL order's date and
+    amount (looked up via `provider_payment_id` → `payment_transactions
+    .provider_id`) so the merchant can see at a glance that a refund
+    in the current period belongs to an order from an earlier period.
+    """
+    to_inclusive = (date_to or "") + "T23:59:59Z"
+
+    # Sales — orders whose order date falls inside the window.
+    sales: List[Dict[str, Any]] = []
+    async for t in db.payment_transactions.find(
+        {
+            "user_id":             user_id,
+            "provider":            provider,
+            "created_at_provider": {"$gte": date_from, "$lte": to_inclusive},
+        },
+        {"_id": 0, "id": 1, "order_reference_id": 1, "order_number": 1,
+         "amount": 1, "currency": 1, "created_at_provider": 1, "status": 1,
+         "buyer_email": 1},
+    ).sort([("created_at_provider", 1)]):
+        sales.append({
+            "id":                  t.get("id"),
+            "order_reference_id":  t.get("order_reference_id"),
+            "order_number":        t.get("order_number"),
+            "order_date":          t.get("created_at_provider"),
+            "amount":              _r(float(t.get("amount") or 0)),
+            "currency":            t.get("currency") or "SAR",
+            "status":              t.get("status"),
+            "payment_method":      provider,
+        })
+
+    # Refunds — by refund date.  Then enrich with the original order
+    # info so the table can show order_date + original_order_amount.
+    refund_docs: List[Dict[str, Any]] = []
+    async for r in db.payment_refunds.find(
+        {
+            "user_id":     user_id,
+            "provider":    provider,
+            "refunded_at": {"$gte": date_from, "$lte": to_inclusive},
+        },
+        {"_id": 0, "id": 1, "provider_refund_id": 1,
+         "provider_payment_id": 1, "order_reference_id": 1,
+         "amount": 1, "currency": 1, "refunded_at": 1,
+         "reason": 1, "status": 1},
+    ).sort([("refunded_at", 1)]):
+        refund_docs.append(r)
+
+    pmt_ids = list({r.get("provider_payment_id")
+                    for r in refund_docs
+                    if r.get("provider_payment_id")})
+    pmt_map: Dict[str, Dict[str, Any]] = {}
+    if pmt_ids:
+        async for t in db.payment_transactions.find(
+            {"user_id": user_id, "provider": provider,
+             "provider_id": {"$in": pmt_ids}},
+            {"_id": 0, "provider_id": 1, "amount": 1,
+             "created_at_provider": 1, "order_reference_id": 1,
+             "order_number": 1},
+        ):
+            pmt_map[t.get("provider_id")] = t
+
+    refunds: List[Dict[str, Any]] = []
+    for r in refund_docs:
+        orig = pmt_map.get(r.get("provider_payment_id")) or {}
+        refunds.append({
+            "id":                    r.get("id"),
+            "provider_refund_id":    r.get("provider_refund_id"),
+            "order_reference_id":    r.get("order_reference_id")
+                                     or orig.get("order_reference_id"),
+            "order_number":          orig.get("order_number"),
+            "order_date":            orig.get("created_at_provider"),
+            "refund_date":           r.get("refunded_at"),
+            "original_order_amount": (_r(float(orig.get("amount") or 0))
+                                      if orig else None),
+            "refund_amount":         _r(float(r.get("amount") or 0)),
+            "currency":              r.get("currency") or "SAR",
+            "payment_method":        provider,
+            "reason":                r.get("reason"),
+            "status":                r.get("status"),
+        })
+
+    return {"sales": sales, "refunds": refunds}
 
 
 async def _find_provider_account(
@@ -228,10 +423,11 @@ async def compute_settlement_for_provider(
     commission = commission_pct_part + commission_fixed_part
     commission_vat = commission * vat_rate
 
-    # Settlement fee — charged ONCE per provider invoice (weekly).
-    # Count how many invoices fall inside the requested period.
+    # Settlement fee — charged ONCE per provider invoice.  Iter-121:
+    # use weekday-based count if the merchant configured invoice_weekdays.
     settlement_invoices_count = _count_settlements_in_period(
         date_from, date_to, settlement_period_days,
+        invoice_weekdays=fee_rates.get("invoice_weekdays"),
     )
     settlement_fee = settlement_fee_per_invoice * settlement_invoices_count
 
@@ -268,6 +464,7 @@ async def compute_settlement_for_provider(
         "provider": provider,
         "totals": {
             "transactions_count": totals["transactions_count"],
+            "refunds_count": totals.get("refunds_count", 0),
             "gross_sales": totals["gross_sales"],
             "total_refunds": totals["total_refunds"],
             "net_sales": totals["net_sales"],
@@ -289,11 +486,19 @@ async def compute_weekly_settlements(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Return ONE settlement row per weekly period from `date_from` to
-    `date_to` (inclusive).  Useful for the settlements history table.
+    """Return ONE settlement row per invoice period from `date_from` to
+    `date_to` (inclusive).
 
-    If `date_from` is None, falls back to the provider's activation
-    date in bnpl_settings.  If `date_to` is None, falls back to today.
+    Iter-121 — period boundaries are driven by the merchant's
+    `invoice_weekdays` setting (e.g. Tabby = Monday).  Each row's `to`
+    is an invoice-issuance weekday; `from` is the day AFTER the
+    previous invoice (or activation_date for the very first row).
+    The `expected_transfer_date` is the soonest selected transfer
+    weekday on/after the invoice date.
+
+    If `invoice_weekdays` is empty (e.g. user cleared all checkboxes)
+    we gracefully fall back to fixed N-day windows from
+    `settlement_period_days`.
     """
     # Resolve floor + ceiling
     if not date_from:
@@ -317,11 +522,56 @@ async def compute_weekly_settlements(
 
     fees = await _merchant_fee_rates(db, user_id, provider)
     period_days = int(fees.get("settlement_period_days") or 7)
+    invoice_set = _weekday_set(fees.get("invoice_weekdays") or [])
+    transfer_set = _weekday_set(fees.get("transfer_weekdays") or [])
 
-    rows: List[Dict[str, Any]] = []
-    cursor = floor
-    invoice_no = 1
     from datetime import timedelta
+    rows: List[Dict[str, Any]] = []
+    invoice_no = 1
+
+    if invoice_set:
+        # Iter-121 — weekday-driven cycle.
+        # First invoice date = first allowed weekday ≥ floor.
+        period_start = floor
+        invoice_date = _next_or_same_weekday(floor, invoice_set)
+        while invoice_date is not None and invoice_date <= ceil_:
+            s = await compute_settlement_for_provider(
+                db, user_id, provider,
+                period_start.isoformat(), invoice_date.isoformat(),
+            )
+            t = s.get("totals", {})
+            b = s.get("bank", {})
+            expected_transfer = (
+                _next_or_same_weekday(
+                    invoice_date + timedelta(days=1), transfer_set,
+                ) if transfer_set else None
+            )
+            rows.append({
+                "invoice_no": invoice_no,
+                "from": period_start.isoformat(),
+                "to": invoice_date.isoformat(),
+                "expected_transfer_date": (
+                    expected_transfer.isoformat() if expected_transfer else None
+                ),
+                "transactions_count": t.get("transactions_count", 0),
+                "refunds_count": t.get("refunds_count", 0),
+                "gross_sales": t.get("gross_sales", 0),
+                "total_refunds": t.get("total_refunds", 0),
+                "net_sales": t.get("net_sales", 0),
+                "commission": t.get("commission", 0),
+                "commission_vat": t.get("commission_vat", 0),
+                "settlement_fee": t.get("settlement_fee", 0),
+                "net_payable": t.get("net_payable", 0),
+                "transferred_amount": b.get("transferred_amount", 0),
+                "remaining_with_provider": b.get("remaining_with_provider", 0),
+            })
+            period_start = invoice_date + timedelta(days=1)
+            invoice_date = _next_strict_weekday(invoice_date, invoice_set)
+            invoice_no += 1
+        return rows
+
+    # Legacy fixed-N-day window (kept for backwards compat).
+    cursor = floor
     while cursor <= ceil_:
         week_end = min(cursor + timedelta(days=period_days - 1), ceil_)
         s = await compute_settlement_for_provider(
@@ -334,7 +584,9 @@ async def compute_weekly_settlements(
             "invoice_no": invoice_no,
             "from": cursor.isoformat(),
             "to": week_end.isoformat(),
+            "expected_transfer_date": None,
             "transactions_count": t.get("transactions_count", 0),
+            "refunds_count": t.get("refunds_count", 0),
             "gross_sales": t.get("gross_sales", 0),
             "total_refunds": t.get("total_refunds", 0),
             "net_sales": t.get("net_sales", 0),

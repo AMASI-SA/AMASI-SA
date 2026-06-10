@@ -9,6 +9,7 @@ from .settlements_service import (
     compute_all_settlements,
     compute_settlement_for_provider,
     compute_weekly_settlements,
+    _compute_period_items,
     PROVIDERS,
 )
 
@@ -31,6 +32,52 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             return {
                 "success": True,
                 **(await compute_all_settlements(db, user["id"], from_date, to_date)),
+            }
+        except Exception as e:  # noqa: BLE001
+            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+
+    @router.get("/items/{provider}")
+    async def settlement_items(
+        provider: str,
+        user: dict = Depends(get_current_user),
+        from_date: str = Query(..., alias="from",
+                               pattern=r"^\d{4}-\d{2}-\d{2}$"),
+        to_date: str = Query(..., alias="to",
+                             pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    ):
+        """Iter-120 — return the raw sales + refund items inside a
+        single settlement period.  Powers the two detail tables shown
+        when the merchant expands a weekly settlement row.
+
+        IMPORTANT ACCOUNTING RULE:
+          • Sales:  orders whose ORDER DATE  ∈ [from, to].
+          • Refunds: refunds whose REFUND DATE ∈ [from, to] — regardless
+            of when the original order was placed.  Each refund row is
+            enriched with its original order's date and amount so the
+            merchant can see when the refund crosses period boundaries.
+        """
+        if provider not in PROVIDERS:
+            return {"success": False, "error": f"unknown provider {provider}"}
+        try:
+            items = await _compute_period_items(
+                db, user["id"], provider, from_date, to_date,
+            )
+            return {
+                "success":     True,
+                "provider":    provider,
+                "period":      {"from": from_date, "to": to_date},
+                "sales":       items["sales"],
+                "refunds":     items["refunds"],
+                "sales_total": round(
+                    sum(s["amount"] for s in items["sales"]), 2,
+                ),
+                "refunds_total": round(
+                    sum(r["refund_amount"] for r in items["refunds"]), 2,
+                ),
+                "cross_period_refunds_count": sum(
+                    1 for r in items["refunds"]
+                    if (r.get("order_date") or "")[:10] < from_date
+                ),
             }
         except Exception as e:  # noqa: BLE001
             return {"success": False, "error": f"{type(e).__name__}: {e}"}
