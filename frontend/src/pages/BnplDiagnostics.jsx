@@ -395,6 +395,31 @@ export default function BnplDiagnostics() {
         }
     };
 
+    const runRebuildRefunds = async () => {
+        if (!window.confirm(
+            "سيُعاد بناء سجلات payment_refunds من معاملات Tamara " +
+            "التي لديها refunded_amount > 0 ولا يوجد لها سجل refund.\n\n" +
+            "العملية idempotent — لن تُنشئ تكرارات. هل تكمل؟",
+        )) return;
+        try {
+            toast.info("جاري إعادة بناء سجلات الـ refund…", { duration: 2000 });
+            const { data } = await api.post(`/bnpl/tamara/rebuild-refunds`);
+            console.log("Rebuild refunds →", data);
+            window.alert(
+                `🔧 REBUILD COMPLETE\n\n` +
+                `Scanned transactions:      ${data.scanned_transactions}\n` +
+                `Refund records created:    ${data.refund_records_created}\n` +
+                `Already had records:       ${data.already_had_records}\n` +
+                `Total amount reconstructed: ${Number(data.total_amount_reconstructed || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} SAR\n` +
+                `unified_orders synced:     ${data.unified_orders_synced}\n\n` +
+                `📋 ${data.verdict}`,
+            );
+        } catch (e) {
+            toast.error(errMsg(e, "فشل rebuild refunds"));
+        }
+    };
+
+
     const runTamaraRefundInspect = async () => {
         try {
             toast.info("جاري فحص أول طلب refunded من Tamara…", { duration: 3000 });
@@ -683,6 +708,14 @@ export default function BnplDiagnostics() {
                         data-testid="bnpl-diag-tamara-refund-inspect"
                     >
                         <Stethoscope size={14} /> فحص Refund Tamara
+                    </button>
+                    <button
+                        type="button"
+                        onClick={runRebuildRefunds}
+                        className="px-3 py-1.5 bg-teal-700 text-white text-xs font-bold rounded-lg hover:bg-teal-800 flex items-center gap-1"
+                        data-testid="bnpl-diag-rebuild-refunds"
+                    >
+                        <ArrowsClockwise size={14} /> إعادة بناء Refunds
                     </button>
                     <button
                         type="button"

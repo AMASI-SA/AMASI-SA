@@ -309,4 +309,117 @@ def attach_bnpl_audit_routes(parent_router: APIRouter, db) -> None:
 
 
 
+    @router.post("/tamara/rebuild-refunds")
+    async def tamara_rebuild_refunds(user: dict = Depends(current_user)):
+        """One-shot reconstruction of `payment_refunds` from existing
+        `payment_transactions` data — for orders whose Tamara payload
+        carried `refunded_amount > 0` but no per-refund detail array
+        (so the original backfill never created the refund row).
+
+        Idempotent: uses the deterministic `synthetic:{provider_id}`
+        refund_id so re-runs of this endpoint don't create duplicates.
+        Skips transactions that already have an associated refund row.
+        """
+        import uuid
+        from datetime import datetime, timezone
+
+        uid = user["id"]
+        scanned = 0
+        created = 0
+        already_had = 0
+        amount_total = 0.0
+
+        async for ptx in db.payment_transactions.find(
+            {"user_id": uid, "provider": "tamara",
+             "refunded_amount": {"$gt": 0}},
+            {"_id": 0, "provider_id": 1, "order_reference_id": 1,
+             "status": 1, "refunded_amount": 1, "currency": 1,
+             "updated_at_provider": 1, "created_at_provider": 1},
+        ):
+            scanned += 1
+            pid = (ptx.get("provider_id") or "").strip()
+            ref = (ptx.get("order_reference_id") or "").strip()
+            amt = float(ptx.get("refunded_amount") or 0)
+            if not pid or amt <= 0:
+                continue
+
+            synthetic_id = f"synthetic:{pid}"
+
+            # Does ANY refund row already exist for this payment?
+            existing = await db.payment_refunds.find_one(
+                {"user_id": uid, "provider": "tamara",
+                 "provider_payment_id": pid},
+                {"_id": 0, "id": 1},
+            )
+            if existing:
+                already_had += 1
+                continue
+
+            now_iso = datetime.now(timezone.utc).isoformat()
+            doc = {
+                "id": str(uuid.uuid4()),
+                "user_id": uid,
+                "provider": "tamara",
+                "provider_payment_id": pid,
+                "provider_refund_id": synthetic_id,
+                "order_reference_id": ref,
+                "amount": round(amt, 2),
+                "currency": ptx.get("currency") or "SAR",
+                "status": (ptx.get("status") or "").lower(),
+                "reason": "rebuilt from payment_transactions.refunded_amount",
+                "refunded_at": (
+                    ptx.get("updated_at_provider")
+                    or ptx.get("created_at_provider") or ""
+                ),
+                "raw": {"_rebuilt_from": "payment_transactions"},
+                "synced_at": now_iso,
+                "created_at": now_iso,
+                "synthesised": True,
+            }
+            try:
+                await db.payment_refunds.insert_one(doc)
+                created += 1
+                amount_total += amt
+            except Exception as exc:  # noqa: BLE001
+                # Unique index collision → another concurrent run already
+                # inserted the same synthetic row. Treat as already-had.
+                already_had += 1
+                _ = exc
+
+        # Also refresh unified_orders.refunded_amount in case it was
+        # zero on rows whose payment_transactions DO show a refund.
+        uo_synced = 0
+        async for ptx in db.payment_transactions.find(
+            {"user_id": uid, "provider": "tamara",
+             "refunded_amount": {"$gt": 0}},
+            {"_id": 0, "order_reference_id": 1, "refunded_amount": 1},
+        ):
+            ref = (ptx.get("order_reference_id") or "").strip()
+            if not ref:
+                continue
+            res = await db.unified_orders.update_one(
+                {"user_id": uid,
+                 "$or": [{"order_reference_id": ref},
+                         {"order_number": ref}],
+                 "refunded_amount": {"$lt": float(ptx["refunded_amount"])}},
+                {"$set": {"refunded_amount": float(ptx["refunded_amount"])}},
+            )
+            if res.modified_count > 0:
+                uo_synced += 1
+
+        return {
+            "ok": True,
+            "scanned_transactions": scanned,
+            "refund_records_created": created,
+            "already_had_records": already_had,
+            "total_amount_reconstructed": round(amount_total, 2),
+            "unified_orders_synced": uo_synced,
+            "verdict": (
+                f"✓ Created {created} new payment_refunds records "
+                f"(SAR {round(amount_total, 2)}). "
+                + ("Re-run Tamara Audit — delta should now be 0."
+                   if created > 0 else "Nothing to rebuild.")
+            ),
+        }
+
     parent_router.include_router(router)
