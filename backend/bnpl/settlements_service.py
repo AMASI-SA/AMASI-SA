@@ -177,10 +177,12 @@ async def _merchant_fee_rates(
             rates["settlement_fee_per_invoice"] = float(doc["settlement_fee_per_invoice"])
         if doc.get("settlement_period_days") is not None:
             rates["settlement_period_days"] = int(doc["settlement_period_days"])
-        # Iter-121 — accept user-customised weekday lists.
-        if isinstance(doc.get("invoice_weekdays"), list) and doc["invoice_weekdays"]:
+        # Iter-122 — distinguish "field absent" (use defaults) from
+        # "field present but empty list" (user explicitly cleared all
+        # checkboxes — respect their choice and disable that aspect).
+        if "invoice_weekdays" in doc and isinstance(doc["invoice_weekdays"], list):
             rates["invoice_weekdays"] = list(doc["invoice_weekdays"])
-        if isinstance(doc.get("transfer_weekdays"), list) and doc["transfer_weekdays"]:
+        if "transfer_weekdays" in doc and isinstance(doc["transfer_weekdays"], list):
             rates["transfer_weekdays"] = list(doc["transfer_weekdays"])
     return rates
 
