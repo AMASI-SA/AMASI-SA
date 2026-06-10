@@ -8,41 +8,46 @@ backfills, no debug endpoints — just a pure aggregation over:
     payment_refunds       (per-refund breakdown)
     accounts              (the provider's "wallet" account in our books)
     account_transactions  (internal_transfer rows = bank-out money)
+    bnpl_settings         (per-merchant fee overrides)
 
 Output structure (per provider):
     {
       "provider": "tabby",
       "totals": {
-        "gross_sales":          ...,
-        "total_refunds":        ...,
-        "net_sales":            ...,
-        "commission":           ...,   # net_sales × commission_rate
-        "commission_vat":       ...,   # commission × VAT_rate
-        "net_payable":          ...,   # net_sales − commission − VAT
+        "gross_sales":           ...,
+        "total_refunds":         ...,
+        "net_sales":             ...,
+        "commission":            ...,   # net_sales × commission_rate
+        "commission_vat":        ...,   # commission × VAT_rate
+        "settlement_fee":        ...,   # SAR × N invoices in period
+        "settlement_fee_per_invoice": 5.0,
+        "settlement_invoices_count": 6,
+        "net_payable":           ...,   # net − commission − VAT − settle_fee
       },
-      "bank": {
-        "linked_account_id":    "...",
-        "linked_account_name":  "حساب تابي",
-        "transferred_amount":   ...,   # money already moved OUT of it
-        "remaining_with_provider": ..., # what provider still owes us
-        "delta_overpayment":    ...,    # positive = surplus, negative = shortfall
-      },
-      "fee_rates": { "commission_pct": 5.0, "vat_pct": 15.0 },
+      "bank": { … },
+      "fee_rates": { "commission_pct": 5.0, "vat_pct": 15.0,
+                     "settlement_fee_per_invoice": 5.0,
+                     "settlement_period_days": 7 },
       "period": { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }
     }
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import math
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 
 # Fee rates (mirror payment_methods.py — keeping a local copy so we
 # don't create a circular import.  These are merchant-default rates;
-# real settlement files override them when available).
+# bnpl_settings overrides them per merchant.).
 DEFAULT_FEE_RATES: Dict[str, Dict[str, float]] = {
-    "tabby":  {"commission_pct": 5.00, "vat_pct": 15.0},
-    "tamara": {"commission_pct": 6.99, "vat_pct": 15.0},
+    "tabby":  {"commission_pct": 5.00, "vat_pct": 15.0,
+               "settlement_fee_per_invoice": 5.0,
+               "settlement_period_days": 7},
+    "tamara": {"commission_pct": 6.99, "vat_pct": 15.0,
+               "settlement_fee_per_invoice": 0.0,
+               "settlement_period_days": 7},
 }
 
 PROVIDERS = ("tabby", "tamara")
@@ -50,6 +55,55 @@ PROVIDERS = ("tabby", "tamara")
 
 def _r(x: float) -> float:
     return round(float(x or 0), 2)
+
+
+def _count_settlements_in_period(
+    date_from: Optional[str], date_to: Optional[str],
+    settlement_period_days: int = 7,
+) -> int:
+    """How many provider weekly settlement invoices fall inside the
+    requested period.  When the period is open-ended (no `from`/`to`)
+    we treat it as the time SINCE provider activation, but the caller
+    decides — here we just compute from the dates given.  Floors at 1
+    so we always charge AT LEAST one settlement fee per period view."""
+    if not date_from or not date_to:
+        return 1
+    try:
+        d_from = date.fromisoformat(date_from)
+        d_to = date.fromisoformat(date_to)
+    except (TypeError, ValueError):
+        return 1
+    days = (d_to - d_from).days + 1
+    if days <= 0:
+        return 1
+    return max(1, math.ceil(days / max(1, settlement_period_days)))
+
+
+async def _merchant_fee_rates(
+    db, user_id: str, provider: str,
+) -> Dict[str, float]:
+    """Load per-merchant overrides from bnpl_settings, falling back to
+    provider defaults.  Returns the rates as PERCENT (e.g. 5.0) — not
+    fractions — so the UI can display them directly."""
+    defaults = DEFAULT_FEE_RATES.get(provider, {
+        "commission_pct": 0, "vat_pct": 0,
+        "settlement_fee_per_invoice": 0, "settlement_period_days": 7,
+    })
+    rates = dict(defaults)
+    doc = await db.bnpl_settings.find_one(
+        {"user_id": user_id, "provider": provider}, {"_id": 0},
+    )
+    if doc:
+        # `mdr_percent` in DB is stored as fraction (0.05) — convert.
+        if doc.get("mdr_percent") is not None:
+            rates["commission_pct"] = round(float(doc["mdr_percent"]) * 100, 4)
+        if doc.get("vat_on_fees_percent") is not None:
+            rates["vat_pct"] = round(float(doc["vat_on_fees_percent"]) * 100, 4)
+        if doc.get("settlement_fee_per_invoice") is not None:
+            rates["settlement_fee_per_invoice"] = float(doc["settlement_fee_per_invoice"])
+        if doc.get("settlement_period_days") is not None:
+            rates["settlement_period_days"] = int(doc["settlement_period_days"])
+    return rates
 
 
 async def _compute_provider_totals(
@@ -151,14 +205,26 @@ async def compute_settlement_for_provider(
     if provider not in PROVIDERS:
         return {"provider": provider, "error": f"unknown provider {provider}"}
 
-    fee_rates = DEFAULT_FEE_RATES.get(provider, {"commission_pct": 0, "vat_pct": 0})
+    fee_rates = await _merchant_fee_rates(db, user_id, provider)
     commission_rate = fee_rates["commission_pct"] / 100.0
     vat_rate = fee_rates["vat_pct"] / 100.0
+    settlement_fee_per_invoice = fee_rates["settlement_fee_per_invoice"]
+    settlement_period_days = int(fee_rates.get("settlement_period_days") or 7)
 
     totals = await _compute_provider_totals(db, user_id, provider, date_from, date_to)
     commission = totals["net_sales"] * commission_rate
     commission_vat = commission * vat_rate
-    net_payable = totals["net_sales"] - commission - commission_vat
+
+    # Settlement fee — charged ONCE per provider invoice (weekly).
+    # Count how many invoices fall inside the requested period.
+    settlement_invoices_count = _count_settlements_in_period(
+        date_from, date_to, settlement_period_days,
+    )
+    settlement_fee = settlement_fee_per_invoice * settlement_invoices_count
+
+    net_payable = (
+        totals["net_sales"] - commission - commission_vat - settlement_fee
+    )
 
     # Bank-side reconciliation
     account = await _find_provider_account(db, user_id, provider)
@@ -181,7 +247,7 @@ async def compute_settlement_for_provider(
             "linked_account_name": account.get("name") or f"حساب {provider}",
             "transferred_amount": transferred,
             "remaining_with_provider": _r(remaining),
-            "delta_overpayment": _r(-remaining),    # positive = bank received more than due
+            "delta_overpayment": _r(-remaining),
             "is_linked": True,
         }
 
@@ -194,6 +260,9 @@ async def compute_settlement_for_provider(
             "net_sales": totals["net_sales"],
             "commission": _r(commission),
             "commission_vat": _r(commission_vat),
+            "settlement_fee": _r(settlement_fee),
+            "settlement_fee_per_invoice": _r(settlement_fee_per_invoice),
+            "settlement_invoices_count": settlement_invoices_count,
             "net_payable": _r(net_payable),
         },
         "bank": bank_info,
@@ -220,6 +289,7 @@ async def compute_all_settlements(
         "net_sales": 0.0,
         "commission": 0.0,
         "commission_vat": 0.0,
+        "settlement_fee": 0.0,
         "net_payable": 0.0,
         "transferred_amount": 0.0,
         "remaining_with_provider": 0.0,
@@ -228,7 +298,8 @@ async def compute_all_settlements(
         t = p.get("totals", {})
         b = p.get("bank", {})
         for k in ("gross_sales", "total_refunds", "net_sales",
-                  "commission", "commission_vat", "net_payable"):
+                  "commission", "commission_vat", "settlement_fee",
+                  "net_payable"):
             totals[k] += t.get(k, 0)
         totals["transferred_amount"] += b.get("transferred_amount", 0)
         totals["remaining_with_provider"] += b.get("remaining_with_provider", 0)

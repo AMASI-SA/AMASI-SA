@@ -212,6 +212,7 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
         vat_on_fees_percent: settings.vat_on_fees_percent ?? 0.15,
         settlement_period_days: settings.settlement_period_days ?? 7,
         transfer_days: settings.transfer_days ?? 2,
+        settlement_fee_per_invoice: settings.settlement_fee_per_invoice ?? 0,
     }));
     const [busy, setBusy] = useState(false);
     const [syncing, setSyncing] = useState(false);
@@ -485,6 +486,21 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             onChange={(e) => set("transfer_days", parseInt(e.target.value) || 2)}
                             className={inputCls}
                             data-testid={`bnpl-${provider}-transfer`}
+                        />
+                    </Field>
+                    <Field
+                        label="رسوم التسوية لكل فاتورة (ر.س)"
+                        hint="رسوم تُخصم مرة واحدة عند إنشاء كل تسوية أسبوعية — وليس على كل طلب."
+                    >
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={form.settlement_fee_per_invoice}
+                            onChange={(e) => set("settlement_fee_per_invoice", parseFloat(e.target.value) || 0)}
+                            className={inputCls}
+                            data-testid={`bnpl-${provider}-settlement-fee`}
+                            placeholder={provider === "tabby" ? "5.00" : "0.00"}
                         />
                     </Field>
                 </div>

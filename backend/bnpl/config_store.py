@@ -44,6 +44,9 @@ DEFAULTS = {
         "vat_on_fees_percent": 0.15,
         "settlement_period_days": 7,
         "transfer_days": 2,
+        "settlement_fee_per_invoice": 5.0,   # SAR charged ONCE per
+                                             # weekly settlement invoice
+                                             # (not per order)
         "api_base_url": "https://api.tabby.sa",
     },
     "tamara": {
@@ -52,6 +55,7 @@ DEFAULTS = {
         "vat_on_fees_percent": 0.15,
         "settlement_period_days": 7,
         "transfer_days": 2,
+        "settlement_fee_per_invoice": 0.0,   # Tamara doesn't charge it
         "api_base_url": "https://api.tamara.co",
     },
 }
@@ -199,6 +203,10 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
                                               defaults.get("settlement_period_days", 7))),
         "transfer_days": int(doc.get("transfer_days",
                                      defaults.get("transfer_days", 2))),
+        "settlement_fee_per_invoice": float(doc.get(
+            "settlement_fee_per_invoice",
+            defaults.get("settlement_fee_per_invoice", 0),
+        )),
         "api_base_url": _resolve_base_url(
             provider, doc.get("environment", "production"),
             doc.get("api_base_url"),
@@ -294,7 +302,8 @@ async def save_settings(
         update["api_base_url"] = payload["api_base_url"].strip()
 
     # ── Fees ──
-    for k in ("mdr_percent", "fixed_fee_per_order", "vat_on_fees_percent"):
+    for k in ("mdr_percent", "fixed_fee_per_order", "vat_on_fees_percent",
+              "settlement_fee_per_invoice"):
         if k in payload and payload.get(k) is not None:
             try:
                 update[k] = float(payload[k])

@@ -97,6 +97,18 @@ function ProviderCard({ data }) {
                 <Row label="صافي المبيعات" value={`${fmt(t.net_sales)} ر.س`} bold tone="slate" />
                 <Row label={`عمولة المزوّد (${fmt(fees.commission_pct)}%)`} value={`(${fmt(t.commission)})`} tone="rose" />
                 <Row label={`ضريبة العمولة (${fmt(fees.vat_pct)}%)`} value={`(${fmt(t.commission_vat)})`} tone="rose" />
+                <Row
+                    label={
+                        <span>
+                            رسوم التسوية{" "}
+                            <span className="text-[10px] text-slate-400">
+                                ({fmt(t.settlement_fee_per_invoice)} ر.س × {fmtInt(t.settlement_invoices_count)} فاتورة)
+                            </span>
+                        </span>
+                    }
+                    value={`(${fmt(t.settlement_fee)})`}
+                    tone="rose"
+                />
                 <Row label="صافي المستحق" value={`${fmt(t.net_payable)} ر.س`} bold tone="emerald" />
             </div>
 
@@ -285,9 +297,13 @@ export default function BnplSettlements() {
                                 <div className="text-[10px] text-rose-400">ر.س</div>
                             </div>
                             <div className="rounded-xl border border-slate-300 bg-white p-3">
-                                <div className="text-[10px] font-bold text-slate-500 uppercase">عمولات + ضريبة</div>
+                                <div className="text-[10px] font-bold text-slate-500 uppercase">عمولات + ضريبة + رسوم تسوية</div>
                                 <div className="text-xl font-extrabold text-slate-900 num">
-                                    {fmt((data.totals?.commission || 0) + (data.totals?.commission_vat || 0))}
+                                    {fmt(
+                                        (data.totals?.commission || 0)
+                                        + (data.totals?.commission_vat || 0)
+                                        + (data.totals?.settlement_fee || 0),
+                                    )}
                                 </div>
                                 <div className="text-[10px] text-slate-400">ر.س</div>
                             </div>
