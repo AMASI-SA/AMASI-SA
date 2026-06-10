@@ -6,9 +6,13 @@ import {
     CurrencyDollar, LinkSimple, GearSix, CaretDown, X, PaperPlaneRight,
     HandCoins, Coin, Briefcase, Lightning,
 } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { LogoIcon } from "./MezanLogo";
+import SidebarVisibilityDialog from "./SidebarVisibilityDialog";
+import {
+    loadHiddenPages, SIDEBAR_VISIBILITY_EVENT,
+} from "../lib/sidebarVisibility";
 
 
 // Normalize Arabic text for search — strip tashkeel and unify variants
@@ -135,6 +139,15 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
         });
     }, [user?.is_owner]);
 
+    // ── Iter-124 — User-hidden pages (per-device localStorage) ──
+    const [hiddenSet, setHiddenSet] = useState(() => loadHiddenPages());
+    const [visibilityDialogOpen, setVisibilityDialogOpen] = useState(false);
+    useEffect(() => {
+        const handler = (e) => setHiddenSet(new Set(e.detail?.hidden || []));
+        window.addEventListener(SIDEBAR_VISIBILITY_EVENT, handler);
+        return () => window.removeEventListener(SIDEBAR_VISIBILITY_EVENT, handler);
+    }, []);
+
     // ── Open-section state ──────────────────────────────────────────
     // We derive the open section from (in order):
     //   1. User's explicit toggle for the current path (last clicked)
@@ -176,14 +189,22 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
     const normalizedQuery = normalizeAr(search);
 
     const filteredSections = useMemo(() => {
-        if (!searchActive) return sections;
-        return sections
+        // Apply hidden-pages filter FIRST (per-user visibility),
+        // then the search filter on top of the remaining visible items.
+        const base = sections
+            .map((s) => ({
+                ...s,
+                items: s.items.filter((it) => !hiddenSet.has(it.testid)),
+            }))
+            .filter((s) => s.items.length > 0);
+        if (!searchActive) return base;
+        return base
             .map((s) => ({
                 ...s,
                 items: s.items.filter((it) => normalizeAr(it.label).includes(normalizedQuery)),
             }))
             .filter((s) => s.items.length > 0);
-    }, [sections, searchActive, normalizedQuery]);
+    }, [sections, hiddenSet, searchActive, normalizedQuery]);
 
     const totalMatches = useMemo(
         () => filteredSections.reduce((n, s) => n + s.items.length, 0),
@@ -252,8 +273,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                             className="w-full ps-3 pe-9 py-2 text-[13px] rounded-lg border border-border bg-slate-50 focus:bg-white focus:border-brand outline-none transition-colors"
                             data-testid="sidebar-search-input"
                             aria-label="ابحث في القائمة"
-                        />
-                        {searchActive && (
+                        />                        {searchActive && (
                             <button
                                 type="button"
                                 onClick={() => setSearch("")}
@@ -270,6 +290,25 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                             {totalMatches > 0 ? `${totalMatches} نتيجة` : "لا توجد نتائج"}
                         </p>
                     )}
+                </div>
+
+                {/* Iter-124 — Sidebar visibility toggle */}
+                <div className="px-3 pb-2">
+                    <button
+                        type="button"
+                        onClick={() => setVisibilityDialogOpen(true)}
+                        className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                        data-testid="sidebar-visibility-btn"
+                        title="اختر الصفحات المرئية في القائمة"
+                    >
+                        <GearSix size={13} weight="bold" />
+                        إعدادات إظهار الصفحات
+                        {hiddenSet.size > 0 && (
+                            <span className="bg-rose-500 text-white px-1.5 py-0.5 rounded-full text-[9px] num" data-testid="sidebar-hidden-count">
+                                {hiddenSet.size}
+                            </span>
+                        )}
+                    </button>
                 </div>
 
                 {/* Accordion nav */}
@@ -368,6 +407,13 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                     </button>
                 </div>
             </aside>
+
+            {/* Iter-124 — Visibility dialog (mounted regardless of mobile/desktop) */}
+            <SidebarVisibilityDialog
+                open={visibilityDialogOpen}
+                onClose={() => setVisibilityDialogOpen(false)}
+                sections={sections}
+            />
         </>
     );
 }
