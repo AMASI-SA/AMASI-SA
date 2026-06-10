@@ -119,8 +119,12 @@ code, pre {
     color: #fff;
 }
 
-/* Numbers should remain LTR for readability */
+/* Numbers should remain LTR for readability — but NOT change display
+   when the .num class lands on a table cell (was breaking row heights
+   in mezan-table because <td class="num"> would become inline-block,
+   shrinking to content and visually misaligning columns). */
 .num { direction: ltr; unicode-bidi: embed; display: inline-block; }
+td.num, th.num { display: table-cell; }
 
 /* Reusable input style for forms (Operating Expenses modal etc.) */
 .oe-input {
@@ -207,6 +211,15 @@ aside { scrollbar-width: thin; }
     padding-top: 0.625rem;          /* py-2.5 */
     padding-bottom: 0.625rem;
     background-color: transparent;  /* let row hover show through */
+}
+
+/* Numbers must NEVER wrap — keep cells single-line so they don't
+   collide with neighbouring columns (which previously made tables
+   look misaligned).  Numeric cells should use class="num". */
+.mezan-table td.num,
+.mezan-table th.num,
+.mezan-table .num {
+    white-space: nowrap;
 }
 
 /* First column in body — semi-bold (matches reference) */

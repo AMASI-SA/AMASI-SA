@@ -98,7 +98,7 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
 
             <div className="overflow-x-auto">
                 <table
-                    className="mezan-table w-full text-right text-sm border-collapse
+                    className="mezan-table w-full text-right text-sm border-collapse min-w-[980px]
                         [&_th]:px-3 [&_th]:border-s [&_th]:border-border
                         [&_td]:px-3 [&_td]:border-s [&_td]:border-border
                         [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
