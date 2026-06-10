@@ -217,6 +217,9 @@ export default function BnplDiagnostics() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState("all");
+    // Live Tabby backfill job state (Iter-116 — manual Start/Continue UI)
+    const [tabbyJob, setTabbyJob] = useState(null);   // last batch response
+    const [tabbyBusy, setTabbyBusy] = useState(false);
 
     const load = async () => {
         try {
@@ -292,7 +295,7 @@ export default function BnplDiagnostics() {
 
         let jobId = null;
         let totals = { fetched: 0, saved: 0, pages_read: 0,
-                       first_date: null, last_date: null };
+                       first_date: null, last_date: null, stop_reason: "" };
         try {
             toast.info("بدأ الجلب التاريخي…", { duration: 3000 });
             const startRes = await api.post(
@@ -303,12 +306,14 @@ export default function BnplDiagnostics() {
             jobId = startData.job_id;
             if (!jobId) throw new Error("لم يبدأ الـ Job");
             totals = {
-                fetched: startData.fetched || 0,
-                saved: startData.saved || 0,
+                fetched: startData.total_fetched ?? startData.fetched ?? 0,
+                saved: startData.total_saved ?? startData.saved ?? 0,
                 pages_read: startData.pages_read || 0,
-                first_date: startData.first_date,
-                last_date: startData.last_date,
+                first_date: startData.oldest_date_seen || startData.first_date,
+                last_date: startData.newest_date_seen || startData.last_date,
+                stop_reason: startData.stop_reason || "",
             };
+            setTabbyJob({ job_id: jobId, status: startData.status, ...totals });
 
             // Auto-loop until status=done (or error).  Cap at 200 batches
             // = 20,000 payments which is more than any merchant.
@@ -329,13 +334,15 @@ export default function BnplDiagnostics() {
                     throw new Error(d.error || "Batch failed");
                 }
                 totals = {
-                    fetched: d.fetched || totals.fetched,
-                    saved: d.saved || totals.saved,
+                    fetched: d.total_fetched ?? d.fetched ?? totals.fetched,
+                    saved: d.total_saved ?? d.saved ?? totals.saved,
                     pages_read: d.pages_read || totals.pages_read,
-                    first_date: d.first_date || totals.first_date,
-                    last_date: d.last_date || totals.last_date,
+                    first_date: d.oldest_date_seen || d.first_date || totals.first_date,
+                    last_date: d.newest_date_seen || d.last_date || totals.last_date,
+                    stop_reason: d.stop_reason || totals.stop_reason,
                 };
                 status = d.status;
+                setTabbyJob({ job_id: jobId, status, ...totals });
             }
 
             window.alert(
@@ -344,8 +351,9 @@ export default function BnplDiagnostics() {
                 `Pages read:    ${totals.pages_read}\n` +
                 `Fetched:       ${totals.fetched}\n` +
                 `Saved:         ${totals.saved}\n` +
-                `First date:    ${totals.first_date}\n` +
-                `Last date:     ${totals.last_date}\n` +
+                `Oldest date:   ${totals.first_date}\n` +
+                `Newest date:   ${totals.last_date}\n` +
+                `Stop reason:   ${totals.stop_reason}\n` +
                 `Final status:  ${status}`,
             );
             await load();
@@ -356,6 +364,83 @@ export default function BnplDiagnostics() {
                 (jobId ? ` · Job=${jobId} (يمكن استئنافه يدوياً)` : ""),
                 { duration: 10000 },
             );
+        }
+    };
+
+    // ── Iter-116 manual Start/Continue (single-batch buttons) ──────
+    const _applyBatch = (d, prev) => ({
+        job_id: d.job_id || prev?.job_id,
+        status: d.status || prev?.status,
+        pages_read: d.pages_read ?? prev?.pages_read ?? 0,
+        total_fetched: d.total_fetched ?? d.fetched ?? prev?.total_fetched ?? 0,
+        total_saved: d.total_saved ?? d.saved ?? prev?.total_saved ?? 0,
+        skipped_old: d.skipped_old ?? prev?.skipped_old ?? 0,
+        oldest_date_seen: d.oldest_date_seen || d.first_date || prev?.oldest_date_seen || "",
+        newest_date_seen: d.newest_date_seen || d.last_date || prev?.newest_date_seen || "",
+        stop_reason: d.stop_reason || prev?.stop_reason || "",
+        last_offset: d.last_offset ?? prev?.last_offset ?? 0,
+        batch_duration_seconds: d.batch_duration_seconds ?? 0,
+    });
+
+    const startTabbyBackfill = async () => {
+        const since = window.prompt(
+            `▶️ Start Tabby Backfill\n\nأدخل تاريخ التفعيل (YYYY-MM-DD)\nسيتم تجاهل أي معاملة أقدم منه:`,
+            "2025-01-01",
+        );
+        if (!since) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+            toast.error("صيغة التاريخ خطأ. يجب YYYY-MM-DD");
+            return;
+        }
+        setTabbyBusy(true);
+        try {
+            const { data: d } = await api.post(
+                `/bnpl/tabby/backfill/start?cutoff=${since}`,
+                null, { timeout: 90000 },
+            );
+            if (!d.ok) throw new Error(d.error || "start failed");
+            setTabbyJob(_applyBatch(d, null));
+            toast.success(
+                `✅ Start: حُفظ ${d.total_saved ?? 0} / تم جلب ${d.total_fetched ?? 0} · ` +
+                `صفحات ${d.pages_read} · stop_reason=${d.stop_reason}`,
+                { duration: 6000 },
+            );
+        } catch (e) {
+            toast.error(errMsg(e, "فشل Start") + ` · ${e.message || ""}`, { duration: 8000 });
+        } finally {
+            setTabbyBusy(false);
+        }
+    };
+
+    const continueTabbyBackfill = async () => {
+        if (!tabbyJob?.job_id) {
+            toast.error("لا يوجد Job نشط — اضغط Start أولاً");
+            return;
+        }
+        if (tabbyJob.status === "done") {
+            toast.info("الـ Job مكتمل بالفعل (status=done)");
+            return;
+        }
+        setTabbyBusy(true);
+        try {
+            const { data: d } = await api.post(
+                `/bnpl/tabby/backfill/continue/${tabbyJob.job_id}`,
+                null, { timeout: 90000 },
+            );
+            if (!d.ok) throw new Error(d.error || "continue failed");
+            setTabbyJob((prev) => _applyBatch(d, prev));
+            toast.success(
+                `✅ Continue: حُفظ ${d.total_saved ?? 0} / جلب ${d.total_fetched ?? 0} · ` +
+                `stop_reason=${d.stop_reason} · status=${d.status}`,
+                { duration: 6000 },
+            );
+            if (d.status === "done") {
+                await load();
+            }
+        } catch (e) {
+            toast.error(errMsg(e, "فشل Continue") + ` · ${e.message || ""}`, { duration: 8000 });
+        } finally {
+            setTabbyBusy(false);
         }
     };
 
@@ -703,7 +788,25 @@ export default function BnplDiagnostics() {
                         className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 flex items-center gap-1"
                         data-testid="bnpl-diag-backfill"
                     >
-                        <ArrowsClockwise size={14} /> جلب تاريخي Tabby
+                        <ArrowsClockwise size={14} /> جلب تاريخي Tabby (تلقائي)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={startTabbyBackfill}
+                        disabled={tabbyBusy}
+                        className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
+                        data-testid="bnpl-diag-tabby-start"
+                    >
+                        ▶ Start Tabby Backfill
+                    </button>
+                    <button
+                        type="button"
+                        onClick={continueTabbyBackfill}
+                        disabled={tabbyBusy || !tabbyJob?.job_id || tabbyJob?.status === "done"}
+                        className="px-3 py-1.5 bg-sky-700 text-white text-xs font-bold rounded-lg hover:bg-sky-800 disabled:opacity-50 flex items-center gap-1"
+                        data-testid="bnpl-diag-tabby-continue"
+                    >
+                        ⏭ Continue Backfill
                     </button>
                     <button
                         type="button"
@@ -771,6 +874,100 @@ export default function BnplDiagnostics() {
                     </button>
                 </div>
             </div>
+
+            {/* Tabby Backfill — Live Job Status (Iter-116) */}
+            {tabbyJob && (
+                <div
+                    className="rounded-2xl border-2 border-sky-300 bg-sky-50 p-5"
+                    data-testid="bnpl-diag-tabby-job-panel"
+                >
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                        <h2 className="text-lg font-extrabold text-slate-900">
+                            🔁 Tabby Backfill — حالة الـ Job
+                        </h2>
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="text-slate-600">
+                                Job ID:{" "}
+                                <code className="bg-white px-2 py-0.5 rounded border border-slate-200 num">
+                                    {tabbyJob.job_id?.slice(0, 12)}…
+                                </code>
+                            </span>
+                            <span
+                                className={
+                                    "px-2 py-0.5 rounded-full font-bold " +
+                                    (tabbyJob.status === "done"
+                                        ? "bg-emerald-600 text-white"
+                                        : tabbyJob.status === "error"
+                                            ? "bg-rose-600 text-white"
+                                            : "bg-amber-500 text-white")
+                                }
+                                data-testid="bnpl-diag-tabby-job-status"
+                            >
+                                {tabbyJob.status}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                        <StatTile
+                            label="pages_read"
+                            value={Number(tabbyJob.pages_read || 0).toLocaleString("en-US")}
+                            tone="sky"
+                            testid="bnpl-diag-tabby-job-pages"
+                        />
+                        <StatTile
+                            label="total_fetched"
+                            value={Number(tabbyJob.total_fetched || 0).toLocaleString("en-US")}
+                            tone="sky"
+                            testid="bnpl-diag-tabby-job-fetched"
+                        />
+                        <StatTile
+                            label="total_saved"
+                            value={Number(tabbyJob.total_saved || 0).toLocaleString("en-US")}
+                            tone={tabbyJob.total_saved > 0 ? "emerald" : "amber"}
+                            testid="bnpl-diag-tabby-job-saved"
+                        />
+                        <StatTile
+                            label="skipped_old (قبل cutoff)"
+                            value={Number(tabbyJob.skipped_old || 0).toLocaleString("en-US")}
+                            tone="amber"
+                            testid="bnpl-diag-tabby-job-skipped"
+                        />
+                        <StatTile
+                            label="oldest_date_seen"
+                            value={tabbyJob.oldest_date_seen || "—"}
+                            tone="slate"
+                            testid="bnpl-diag-tabby-job-oldest"
+                        />
+                        <StatTile
+                            label="newest_date_seen"
+                            value={tabbyJob.newest_date_seen || "—"}
+                            tone="slate"
+                            testid="bnpl-diag-tabby-job-newest"
+                        />
+                        <StatTile
+                            label="stop_reason"
+                            value={tabbyJob.stop_reason || "—"}
+                            tone={
+                                tabbyJob.stop_reason === "empty_page" ||
+                                    tabbyJob.stop_reason === "short_page"
+                                    ? "emerald"
+                                    : "amber"
+                            }
+                            hint={`last_offset=${tabbyJob.last_offset || 0}`}
+                            testid="bnpl-diag-tabby-job-stop"
+                        />
+                    </div>
+                    {tabbyJob.status !== "done" && (
+                        <div className="mt-3 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3 flex items-center gap-2">
+                            <Warning size={16} className="text-amber-600" />
+                            الـ Job لم يكتمل بعد — اضغط زر{" "}
+                            <strong className="text-sky-800">Continue Backfill</strong> لمتابعة الدفعة التالية
+                            (كل دفعة = ~100 معاملة). كرّر حتى تصبح <code>status = done</code> و{" "}
+                            <code>stop_reason = empty_page</code> أو <code>short_page</code>.
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Headline KPIs */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
