@@ -86,7 +86,7 @@ from counterparties_routes import attach_counterparties_routes, ensure_counterpa
 from purchase_invoices_routes import attach_purchase_invoice_routes, ensure_purchase_invoices_indexes
 from custom_app_routes import attach_custom_app_routes, ensure_custom_app_indexes
 from ad_account_routes import attach_ad_account_routes, ensure_ad_account_indexes
-from bnpl import attach_bnpl_routes, ensure_bnpl_indexes, attach_bnpl_webhook_routes, attach_bnpl_diagnostics_routes, attach_bnpl_audit_routes
+from bnpl import attach_bnpl_routes, ensure_bnpl_indexes, attach_bnpl_webhook_routes, attach_bnpl_diagnostics_routes, attach_bnpl_audit_routes, attach_bnpl_auto_sync_routes, run_auto_sync_for_all_users
 from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
 from reconciliation_routes import attach_reconciliation_routes
 from diagnostics_routes import attach_diagnostics_routes
@@ -2918,6 +2918,7 @@ attach_bnpl_routes(api, db)
 attach_bnpl_webhook_routes(api, db)
 attach_bnpl_diagnostics_routes(api, db)
 attach_bnpl_audit_routes(api, db)
+attach_bnpl_auto_sync_routes(api, db=db, get_current_user=current_user)
 # Iter-114 — Operational reports (daily/monthly/yearly aggregated)
 from operational_reports_routes import attach_operational_reports_routes
 attach_operational_reports_routes(api, db, current_user)
@@ -2994,6 +2995,37 @@ async def on_startup():
                 await _asyncio.sleep(60)
 
     _asyncio.create_task(_ad_account_daily_cron())
+
+    # ── Iter-117 — Hourly BNPL auto-sync (Tabby + Tamara) ────────
+    # Runs every hour to fetch new/updated payments and refunds
+    # incrementally from each merchant's BNPL providers, keeping
+    # `unified_orders` (the single source of truth) up to date so
+    # all UI pages (Dashboard / Reports / Profits / Assets /
+    # Settlements) reflect the latest provider state automatically.
+    async def _bnpl_hourly_auto_sync():
+        from bnpl.auto_sync_service import SYNC_INTERVAL_SECONDS
+        # Stagger first run by 60s so server has time to settle.
+        await _asyncio.sleep(60)
+        while True:
+            try:
+                logger.info("iter-117: starting BNPL hourly auto-sync")
+                summary = await run_auto_sync_for_all_users(db)
+                logger.info(
+                    "iter-117: bnpl auto-sync done — %d pairs, "
+                    "users=%d, failures=%s, duration=%.1fs",
+                    summary.get("pairs_processed", 0),
+                    summary.get("users_processed", 0),
+                    summary.get("any_failures"),
+                    summary.get("duration_seconds", 0.0),
+                )
+            except Exception as e:
+                logger.exception("iter-117: bnpl auto-sync iteration failed: %s", e)
+                # Back off briefly so we don't hammer providers on a bad config.
+                await _asyncio.sleep(120)
+                continue
+            await _asyncio.sleep(SYNC_INTERVAL_SECONDS)
+
+    _asyncio.create_task(_bnpl_hourly_auto_sync())
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:

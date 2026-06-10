@@ -220,6 +220,59 @@ export default function BnplDiagnostics() {
     // Live Tabby backfill job state (Iter-116 — manual Start/Continue UI)
     const [tabbyJob, setTabbyJob] = useState(null);   // last batch response
     const [tabbyBusy, setTabbyBusy] = useState(false);
+    // Iter-117 — Auto-sync status & manual trigger
+    const [syncStatus, setSyncStatus] = useState(null);
+    const [syncBusy, setSyncBusy] = useState(false);
+    // Iter-117 — Developer Mode (persists in localStorage)
+    const [devMode, setDevMode] = useState(
+        typeof window !== "undefined" && window.localStorage?.getItem("mezan_dev_mode") === "1",
+    );
+    const toggleDevMode = () => {
+        const next = !devMode;
+        setDevMode(next);
+        try {
+            window.localStorage.setItem("mezan_dev_mode", next ? "1" : "0");
+        } catch { /* ignore quota errors */ }
+    };
+
+    const loadSyncStatus = async () => {
+        try {
+            const { data } = await api.get("/bnpl/auto-sync/status");
+            if (data?.success !== false) setSyncStatus(data);
+        } catch { /* silent — non-fatal */ }
+    };
+
+    const runSyncNow = async () => {
+        setSyncBusy(true);
+        try {
+            const { data } = await api.post("/bnpl/auto-sync/run-now", null, { timeout: 120000 });
+            if (data?.success) {
+                const run = data.run || {};
+                const failed = (run.results || []).filter((r) => !r.ok);
+                if (failed.length === 0) {
+                    toast.success(
+                        `✅ مزامنة ناجحة — ${run.results?.length || 0} مزوّد · المدة ${
+                            ((new Date(run.finished_at) - new Date(run.started_at)) / 1000).toFixed(1)
+                        } ثانية`,
+                        { duration: 5000 },
+                    );
+                } else {
+                    toast.error(
+                        `⚠️ اكتملت المزامنة مع أخطاء: ${failed.map((f) => f.provider + ": " + (f.error || "?")).join(" · ")}`,
+                        { duration: 10000 },
+                    );
+                }
+                await loadSyncStatus();
+                await load();
+            } else {
+                toast.error(`فشل المزامنة: ${data?.error || "غير معروف"}`, { duration: 8000 });
+            }
+        } catch (e) {
+            toast.error(errMsg(e, "تعذّرت المزامنة"), { duration: 8000 });
+        } finally {
+            setSyncBusy(false);
+        }
+    };
 
     const load = async () => {
         try {
@@ -236,8 +289,14 @@ export default function BnplDiagnostics() {
         let cancelled = false;
         (async () => {
             try {
-                const { data } = await api.get("/bnpl/diagnostics");
-                if (!cancelled) setData(data);
+                const [{ data }, syncRes] = await Promise.all([
+                    api.get("/bnpl/diagnostics"),
+                    api.get("/bnpl/auto-sync/status").catch(() => null),
+                ]);
+                if (!cancelled) {
+                    setData(data);
+                    if (syncRes?.data?.success !== false) setSyncStatus(syncRes?.data);
+                }
             } catch (e) {
                 if (!cancelled) toast.error(errMsg(e, "تعذّر التحميل"));
             } finally {
@@ -776,7 +835,7 @@ export default function BnplDiagnostics() {
                         إثبات فعلي من قاعدة البيانات أن المزامنة جلبت بيانات حقيقية.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <Link
                         to="/integrations/bnpl"
                         className="text-xs text-slate-600 hover:text-slate-900 flex items-center gap-1"
@@ -784,6 +843,43 @@ export default function BnplDiagnostics() {
                     >
                         <ArrowLeft size={14} /> العودة للإعدادات
                     </Link>
+                    {/* Primary action — always visible to merchant */}
+                    <button
+                        type="button"
+                        onClick={runSyncNow}
+                        disabled={syncBusy}
+                        className="px-4 py-2 bg-emerald-700 text-white text-sm font-bold rounded-lg hover:bg-emerald-800 disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                        data-testid="bnpl-diag-sync-now"
+                    >
+                        <ArrowsClockwise size={16} className={syncBusy ? "animate-spin" : ""} />
+                        {syncBusy ? "جاري المزامنة…" : "مزامنة الآن"}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setLoading(true); load(); loadSyncStatus(); }}
+                        className="px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 flex items-center gap-1"
+                        data-testid="bnpl-diag-refresh"
+                    >
+                        <ArrowsClockwise size={14} /> تحديث التقرير
+                    </button>
+                    {/* Developer Mode toggle */}
+                    <button
+                        type="button"
+                        onClick={toggleDevMode}
+                        className={
+                            "px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1 border " +
+                            (devMode
+                                ? "bg-amber-100 text-amber-800 border-amber-400"
+                                : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50")
+                        }
+                        title="إظهار أزرار التشخيص للمطوّر فقط"
+                        data-testid="bnpl-diag-devmode-toggle"
+                    >
+                        {devMode ? "🛠 وضع المطوّر مفعّل" : "🛠 وضع المطوّر"}
+                    </button>
+
+                    {/* ── Developer-only diagnostic buttons (Iter-117) ── */}
+                    {devMode && (<>
                     <button
                         type="button"
                         onClick={runBackfill}
@@ -866,16 +962,101 @@ export default function BnplDiagnostics() {
                     >
                         <ArrowsClockwise size={14} /> إعادة بناء Refunds
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => { setLoading(true); load(); }}
-                        className="px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 flex items-center gap-1"
-                        data-testid="bnpl-diag-refresh"
-                    >
-                        <ArrowsClockwise size={14} /> تحديث التقرير
-                    </button>
+                    </>)}
                 </div>
             </div>
+
+            {/* Iter-117 — Auto-Sync Status Card (always visible, clean UX) */}
+            {syncStatus && (
+                <div
+                    className="rounded-2xl border border-emerald-200 bg-gradient-to-l from-emerald-50 to-white p-5"
+                    data-testid="bnpl-diag-sync-status-card"
+                >
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <div>
+                            <h2 className="text-base sm:text-lg font-extrabold text-emerald-900 flex items-center gap-2">
+                                <ArrowsClockwise size={18} weight="duotone" className="text-emerald-700" />
+                                المزامنة التلقائية — Tamara &amp; Tabby
+                            </h2>
+                            <p className="text-xs text-slate-500 mt-1">
+                                تعمل تلقائياً كل {Math.round((syncStatus.interval_seconds || 3600) / 60)} دقيقة بدون تدخّل يدوي.
+                                البيانات الجديدة وحالات الطلبات والمسترجعات تنعكس في كل الصفحات تلقائياً.
+                            </p>
+                        </div>
+                        {syncStatus.last_run && (
+                            <div className="text-end text-xs text-slate-600">
+                                <div>آخر تشغيل تلقائي</div>
+                                <div className="font-bold text-slate-800 num">
+                                    {new Date(syncStatus.last_run.started_at).toLocaleString("ar-SA", {
+                                        dateStyle: "short",
+                                        timeStyle: "short",
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {(syncStatus.providers || []).map((p) => {
+                            const ok = p.last_auto_sync_status === "ok";
+                            const never = p.last_auto_sync_status === "never";
+                            const error = p.last_auto_sync_status === "error";
+                            return (
+                                <div
+                                    key={p.provider}
+                                    className={
+                                        "rounded-xl border bg-white p-4 " +
+                                        (ok ? "border-emerald-300"
+                                            : error ? "border-rose-300"
+                                            : "border-slate-200")
+                                    }
+                                    data-testid={`bnpl-diag-sync-provider-${p.provider}`}
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="font-extrabold text-slate-900 uppercase text-sm">
+                                            {p.provider}
+                                        </div>
+                                        <span
+                                            className={
+                                                "px-2 py-0.5 rounded-full text-[10px] font-bold " +
+                                                (ok ? "bg-emerald-100 text-emerald-800"
+                                                    : error ? "bg-rose-100 text-rose-800"
+                                                    : never ? "bg-slate-100 text-slate-600"
+                                                    : "bg-amber-100 text-amber-800")
+                                            }
+                                        >
+                                            {!p.enabled ? "معطّل"
+                                                : ok ? "✓ نشط"
+                                                : error ? "خطأ"
+                                                : "لم يبدأ"}
+                                        </span>
+                                    </div>
+                                    <div className="text-xs text-slate-600 space-y-1">
+                                        <div>
+                                            <span className="text-slate-400">آخر مزامنة:</span>{" "}
+                                            <span className="font-semibold text-slate-800 num">
+                                                {p.last_auto_sync_at
+                                                    ? new Date(p.last_auto_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })
+                                                    : "—"}
+                                            </span>
+                                        </div>
+                                        {p.last_auto_sync_since && (
+                                            <div>
+                                                <span className="text-slate-400">منذ:</span>{" "}
+                                                <span className="num">{(p.last_auto_sync_since || "").slice(0, 10)}</span>
+                                            </div>
+                                        )}
+                                        {error && p.last_auto_sync_error && (
+                                            <div className="mt-2 p-2 bg-rose-50 border border-rose-200 rounded text-rose-800 text-[11px] font-mono break-words">
+                                                {p.last_auto_sync_error}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Tabby Backfill — Live Job Status (Iter-116) */}
             {tabbyJob && (
