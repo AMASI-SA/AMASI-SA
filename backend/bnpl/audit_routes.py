@@ -311,6 +311,157 @@ def attach_bnpl_audit_routes(parent_router: APIRouter, db) -> None:
 
     @router.post("/tamara/rebuild-refunds")
     async def tamara_rebuild_refunds(user: dict = Depends(current_user)):
+        """One-shot reconstruction with FULL per-row logging — fixes
+        prior bug where all failures were silently counted as
+        'already_had'.  Returns up to 10 failed-row diagnostics so the
+        merchant can see exactly why a refund row couldn't be created.
+        """
+        import time
+        import traceback
+        import uuid as _uuid
+        from datetime import datetime, timezone
+
+        t_start = time.monotonic()
+        uid = user["id"]
+        scanned = 0
+        created = 0
+        already_had = 0
+        skipped_no_pid = 0
+        skipped_zero_amount = 0
+        failed = 0
+        amount_total = 0.0
+        failures: list = []
+
+        try:
+            cursor = db.payment_transactions.find(
+                {"user_id": uid, "provider": "tamara",
+                 "refunded_amount": {"$gt": 0}},
+                {"_id": 0, "provider_id": 1, "order_reference_id": 1,
+                 "status": 1, "refunded_amount": 1, "currency": 1,
+                 "updated_at_provider": 1, "created_at_provider": 1},
+            )
+            async for ptx in cursor:
+                scanned += 1
+                pid = (ptx.get("provider_id") or "").strip()
+                ref = (ptx.get("order_reference_id") or "").strip()
+                amt = float(ptx.get("refunded_amount") or 0)
+
+                if not pid:
+                    skipped_no_pid += 1
+                    if len(failures) < 10:
+                        failures.append({
+                            "reason": "no provider_payment_id",
+                            "order_reference_id": ref,
+                            "refunded_amount": amt,
+                        })
+                    continue
+                if amt <= 0:
+                    skipped_zero_amount += 1
+                    continue
+
+                synthetic_id = f"synthetic:{pid}"
+
+                # Existing check — by either provider_payment_id OR the
+                # synthetic_id (covers both prior shapes of saved rows).
+                existing = await db.payment_refunds.find_one(
+                    {"user_id": uid, "provider": "tamara",
+                     "$or": [
+                         {"provider_payment_id": pid},
+                         {"provider_refund_id": synthetic_id},
+                     ]},
+                    {"_id": 0, "id": 1},
+                )
+                if existing:
+                    already_had += 1
+                    continue
+
+                now_iso = datetime.now(timezone.utc).isoformat()
+                doc = {
+                    "id": str(_uuid.uuid4()),
+                    "user_id": uid,
+                    "provider": "tamara",
+                    "provider_payment_id": pid,
+                    "provider_refund_id": synthetic_id,
+                    "order_reference_id": ref,
+                    "amount": round(amt, 2),
+                    "currency": ptx.get("currency") or "SAR",
+                    "status": (ptx.get("status") or "").lower(),
+                    "reason": "rebuilt from payment_transactions.refunded_amount",
+                    "refunded_at": (
+                        ptx.get("updated_at_provider")
+                        or ptx.get("created_at_provider") or ""
+                    ),
+                    "raw": {"_rebuilt_from": "payment_transactions"},
+                    "synced_at": now_iso,
+                    "created_at": now_iso,
+                    "synthesised": True,
+                }
+                try:
+                    await db.payment_refunds.insert_one(doc)
+                    created += 1
+                    amount_total += amt
+                except Exception as exc:  # noqa: BLE001
+                    failed += 1
+                    if len(failures) < 10:
+                        failures.append({
+                            "reason": f"{type(exc).__name__}: {exc}",
+                            "provider_payment_id": pid,
+                            "order_reference_id": ref,
+                            "refunded_amount": amt,
+                            "synthetic_id": synthetic_id,
+                        })
+
+            # Sync unified_orders.refunded_amount
+            uo_synced = 0
+            uo_cursor = db.payment_transactions.find(
+                {"user_id": uid, "provider": "tamara",
+                 "refunded_amount": {"$gt": 0}},
+                {"_id": 0, "order_reference_id": 1, "refunded_amount": 1},
+            )
+            async for ptx in uo_cursor:
+                ref2 = (ptx.get("order_reference_id") or "").strip()
+                if not ref2:
+                    continue
+                res = await db.unified_orders.update_one(
+                    {"user_id": uid,
+                     "$or": [{"order_reference_id": ref2},
+                             {"order_number": ref2}],
+                     "refunded_amount": {"$lt": float(ptx["refunded_amount"])}},
+                    {"$set": {"refunded_amount": float(ptx["refunded_amount"])}},
+                )
+                if res.modified_count > 0:
+                    uo_synced += 1
+
+            return {
+                "success": True,
+                "scanned": scanned,
+                "created": created,
+                "already_had": already_had,
+                "skipped_no_pid": skipped_no_pid,
+                "skipped_zero_amount": skipped_zero_amount,
+                "failed": failed,
+                "total_amount": round(amount_total, 2),
+                "unified_orders_synced": uo_synced,
+                "first_failures": failures,
+                "execution_time_seconds": round(time.monotonic() - t_start, 2),
+                "verdict": (
+                    f"✓ Created {created} refund records "
+                    f"(SAR {round(amount_total, 2)}). "
+                    f"already_had={already_had} · failed={failed}"
+                ),
+            }
+        except Exception as exc:  # noqa: BLE001
+            # Global guard — Cloudflare ALWAYS gets a valid JSON.
+            return {
+                "success": False,
+                "error": f"{type(exc).__name__}: {exc}",
+                "traceback": traceback.format_exc(limit=20),
+                "scanned": scanned,
+                "created": created,
+                "execution_time_seconds": round(time.monotonic() - t_start, 2),
+            }
+
+    parent_router.include_router(router)
         """One-shot reconstruction of `payment_refunds` from existing
         `payment_transactions` data — for orders whose Tamara payload
         carried `refunded_amount > 0` but no per-refund detail array
