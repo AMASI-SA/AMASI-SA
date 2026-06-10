@@ -177,3 +177,9 @@ frontend/node_modules/.cache/default-development/134.pack
 frontend/node_modules/.cache/default-development/132.pack
 frontend/node_modules/.cache/default-development/138.pack
 frontend/node_modules/.cache/default-development/139.pack
+.env
+.env.*
+*.env
+credentials.json
+*.key
+.credentials
