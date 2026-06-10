@@ -141,9 +141,29 @@ def _count_settlements_in_period(
 async def _merchant_fee_rates(
     db, user_id: str, provider: str,
 ) -> Dict[str, Any]:
-    """Load per-merchant overrides from bnpl_settings, falling back to
-    provider defaults.  Returns the rates as PERCENT (e.g. 5.0) — not
-    fractions — so the UI can display them directly."""
+    """Load per-merchant fee rates with a UNIFIED SOURCE OF TRUTH.
+
+    Iter-126 — Resolution order:
+      1. `users.settings.payment_methods[name]` — the Settings page is the
+         SINGLE place merchants edit commission_percent / fixed_fee /
+         vat_percent for ALL payment methods (mada, visa, tabby, tamara,
+         إمكان…).  This is the canonical source.
+      2. `bnpl_settings.{mdr_percent, fixed_fee_per_order,
+         vat_on_fees_percent}` — legacy per-BNPL fields, kept as a
+         migration fallback for users whose payment_methods entry is
+         still missing.  When a user saves on either screen, both
+         locations get updated by the settings save hook.
+      3. Code defaults from `DEFAULT_FEE_RATES` — only used the very
+         first time the user opens the page (before any save).
+
+    Settlement-specific fields (`settlement_fee_per_invoice`,
+    `settlement_period_days`, `invoice_weekdays`, `transfer_weekdays`)
+    live exclusively in `bnpl_settings` since they have no analogue in
+    `payment_methods`.
+
+    Returns the rates as PERCENT (e.g. 5.0) — not fractions — so the
+    UI can display them directly.
+    """
     defaults = DEFAULT_FEE_RATES.get(provider, {
         "commission_pct": 0, "vat_pct": 0,
         "fixed_fee_per_order": 0,
@@ -161,25 +181,51 @@ async def _merchant_fee_rates(
     wd = weekday_defaults.get(provider, {})
     rates["invoice_weekdays"]  = list(wd.get("invoice_weekdays")  or [])
     rates["transfer_weekdays"] = list(wd.get("transfer_weekdays") or [])
+    rates["fee_source"] = "code_default"
 
+    # Iter-126 — STEP 1: read from the unified payment_methods settings.
+    # Provider name → Arabic display label that matches `payment_methods`.
+    PROVIDER_AR_NAME = {"tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان"}
+    ar_name = PROVIDER_AR_NAME.get(provider)
+    if ar_name:
+        user_doc = await db.users.find_one(
+            {"id": user_id},
+            {"_id": 0, "settings.payment_methods": 1},
+        )
+        pm_list = ((user_doc or {}).get("settings") or {}).get("payment_methods") or []
+        match = next((pm for pm in pm_list if pm.get("name") == ar_name), None)
+        if match:
+            if match.get("commission_percent") is not None:
+                rates["commission_pct"] = float(match["commission_percent"])
+            if match.get("vat_percent") is not None:
+                rates["vat_pct"] = float(match["vat_percent"])
+            if match.get("fixed_fee") is not None:
+                rates["fixed_fee_per_order"] = float(match["fixed_fee"])
+            rates["fee_source"] = "payment_methods_settings"
+
+    # Iter-126 — STEP 2: bnpl_settings legacy fallback / overrides for
+    # the BNPL-specific fields (settlement_fee_per_invoice, weekdays).
+    # We also let bnpl_settings.* override fee fields IF the unified
+    # payment_methods entry didn't supply them (graceful migration).
     doc = await db.bnpl_settings.find_one(
         {"user_id": user_id, "provider": provider}, {"_id": 0},
     )
     if doc:
-        # `mdr_percent` in DB is stored as fraction (0.05) — convert.
-        if doc.get("mdr_percent") is not None:
-            rates["commission_pct"] = round(float(doc["mdr_percent"]) * 100, 4)
-        if doc.get("vat_on_fees_percent") is not None:
-            rates["vat_pct"] = round(float(doc["vat_on_fees_percent"]) * 100, 4)
-        if doc.get("fixed_fee_per_order") is not None:
-            rates["fixed_fee_per_order"] = float(doc["fixed_fee_per_order"])
+        if rates["fee_source"] != "payment_methods_settings":
+            # No payment_methods entry yet — fall back to bnpl_settings.
+            if doc.get("mdr_percent") is not None:
+                rates["commission_pct"] = round(float(doc["mdr_percent"]) * 100, 4)
+                rates["fee_source"] = "bnpl_settings_legacy"
+            if doc.get("vat_on_fees_percent") is not None:
+                rates["vat_pct"] = round(float(doc["vat_on_fees_percent"]) * 100, 4)
+            if doc.get("fixed_fee_per_order") is not None:
+                rates["fixed_fee_per_order"] = float(doc["fixed_fee_per_order"])
+        # ALWAYS take these BNPL-specific fields from bnpl_settings
+        # since payment_methods has no equivalent.
         if doc.get("settlement_fee_per_invoice") is not None:
             rates["settlement_fee_per_invoice"] = float(doc["settlement_fee_per_invoice"])
         if doc.get("settlement_period_days") is not None:
             rates["settlement_period_days"] = int(doc["settlement_period_days"])
-        # Iter-122 — distinguish "field absent" (use defaults) from
-        # "field present but empty list" (user explicitly cleared all
-        # checkboxes — respect their choice and disable that aspect).
         if "invoice_weekdays" in doc and isinstance(doc["invoice_weekdays"], list):
             rates["invoice_weekdays"] = list(doc["invoice_weekdays"])
         if "transfer_weekdays" in doc and isinstance(doc["transfer_weekdays"], list):

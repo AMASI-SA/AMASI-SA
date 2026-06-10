@@ -357,6 +357,45 @@ async def save_settings(
         {"$set": update, **({"$unset": unset} if unset else {})},
         upsert=True,
     )
+
+    # Iter-126 — UNIFIED SOURCE OF TRUTH: also mirror fee fields into
+    # `users.settings.payment_methods` so the Settings → Payment Methods
+    # page reflects the same numbers.  This keeps both UIs in lockstep
+    # without forcing the merchant to update the rate in two places.
+    PROVIDER_AR_NAME = {"tabby": "تابي", "tamara": "تمارا"}
+    ar_name = PROVIDER_AR_NAME.get(provider)
+    if ar_name and any(
+        k in payload and payload.get(k) is not None
+        for k in ("mdr_percent", "fixed_fee_per_order", "vat_on_fees_percent")
+    ):
+        pm_update: dict = {}
+        if payload.get("mdr_percent") is not None:
+            try:
+                pm_update["settings.payment_methods.$.commission_percent"] = round(
+                    float(payload["mdr_percent"]) * 100, 4,
+                )
+            except (TypeError, ValueError):
+                pass
+        if payload.get("vat_on_fees_percent") is not None:
+            try:
+                pm_update["settings.payment_methods.$.vat_percent"] = round(
+                    float(payload["vat_on_fees_percent"]) * 100, 4,
+                )
+            except (TypeError, ValueError):
+                pass
+        if payload.get("fixed_fee_per_order") is not None:
+            try:
+                pm_update["settings.payment_methods.$.fixed_fee"] = float(
+                    payload["fixed_fee_per_order"],
+                )
+            except (TypeError, ValueError):
+                pass
+        if pm_update:
+            await db.users.update_one(
+                {"id": user_id, "settings.payment_methods.name": ar_name},
+                {"$set": pm_update},
+            )
+
     return await get_settings(db, user_id, provider)
 
 

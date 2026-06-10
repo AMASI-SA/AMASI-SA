@@ -489,6 +489,16 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                 <h4 className="text-xs font-extrabold text-slate-700 mb-2">
                     إعدادات الرسوم العقدية
                 </h4>
+                {/* Iter-126 — point users to the unified settings page */}
+                <div className="mb-3 rounded-lg bg-blue-50 border-2 border-blue-200 px-3 py-2 text-[11px] text-blue-900 flex items-start gap-2" data-testid={`bnpl-${provider}-fee-source-note`}>
+                    <span className="text-base">ℹ️</span>
+                    <span>
+                        <strong>المصدر الموحد:</strong> نسبة العمولة (MDR)، الرسوم الثابتة لكل طلب، وVAT
+                        على الرسوم تُدار من <strong>الإعدادات → طرق الدفع → {provider === "tabby" ? "تابي" : "تمارا"}</strong>،
+                        وتُستخدم في كل التقارير والتسويات والمركز المالي.
+                        التغيير هنا يحدّث نفس المكان تلقائياً.
+                    </span>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     <Field label="MDR %" hint="مثلاً 0.06 = 6%">
                         <input
