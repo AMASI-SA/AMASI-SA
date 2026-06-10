@@ -641,13 +641,45 @@ function ReceivableForm({ onSaved }) {
 
 
 // ── Tab 5: Salary advance ───────────────────────────────────────────
-function AdvanceForm({ employees, banks, onSaved }) {
+function AdvanceForm({ employees, banks, openLiabilities, onSaved }) {
     const [form, setForm] = useState({
         employee_salary_id: "", paid_from_account_id: "", expected_amount: "",
         due_date: today(), description: "", notes: "",
     });
+    // Iter-125 — search-based employee picker (mirrors Pay Liability UX).
+    const [empQuery, setEmpQuery] = useState("");
+    const [empOpen, setEmpOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+    const selectedEmployee = employees.find((e) => e.id === form.employee_salary_id) || null;
+
+    const empResults = (() => {
+        const q = empQuery.trim().toLowerCase();
+        if (!q) return [];
+        return employees
+            .filter((e) => (e.name || "").toLowerCase().includes(q))
+            .slice(0, 8);
+    })();
+
+    // Cumulative open salary_advance balance for the selected employee.
+    const openAdvances = selectedEmployee
+        ? (openLiabilities || []).filter(
+              (l) => l.kind === "salary_advance"
+                  && l.counterparty_name === selectedEmployee.name
+                  && (Number(l.remaining_amount) || 0) > 0,
+          )
+        : [];
+    const sumAdvanceRemaining = openAdvances.reduce(
+        (s, l) => s + (Number(l.remaining_amount) || 0), 0,
+    );
+    const sumAdvanceExpected = openAdvances.reduce(
+        (s, l) => s + (Number(l.expected_amount) || 0), 0,
+    );
+    const sumAdvancePaid = openAdvances.reduce(
+        (s, l) => s + (Number(l.paid_amount) || 0), 0,
+    );
+
     const submit = async () => {
         if (!form.employee_salary_id) { toast.error("اختر الموظف"); return; }
         if (!form.paid_from_account_id) { toast.error("اختر الحساب البنكي"); return; }
@@ -672,12 +704,106 @@ function AdvanceForm({ employees, banks, onSaved }) {
     };
     return (
         <SectionCard title="سلفة موظف" Icon={Coins} hint="تُخصم فوراً من البنك وتُستهلَك تلقائياً من راتب الشهر القادم" onSubmit={submit} busy={busy}>
-            <Field label="الموظف" required full>
-                <select value={form.employee_salary_id} onChange={(e) => set("employee_salary_id", e.target.value)} className={inputCls} data-testid="adv-employee">
-                    <option value="">— اختر موظفاً —</option>
-                    {employees.map((e) => <option key={e.id} value={e.id}>{e.name} ({fmt(e.monthly_amount)} ر.س/شهر)</option>)}
-                </select>
+            <Field label="الموظف (ابحث بالاسم)" required full>
+                <div className="relative">
+                    <input
+                        type="text"
+                        value={selectedEmployee ? selectedEmployee.name : empQuery}
+                        onChange={(e) => {
+                            setEmpQuery(e.target.value);
+                            setEmpOpen(true);
+                            if (form.employee_salary_id) set("employee_salary_id", "");
+                        }}
+                        onFocus={() => setEmpOpen(true)}
+                        placeholder="اكتب اسم الموظف…"
+                        className={inputCls}
+                        data-testid="adv-employee-search"
+                    />
+                    {selectedEmployee && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                set("employee_salary_id", "");
+                                setEmpQuery("");
+                                setEmpOpen(false);
+                            }}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 text-lg"
+                            data-testid="adv-employee-clear"
+                            title="إلغاء"
+                        >✕</button>
+                    )}
+                    {empOpen && empResults.length > 0 && !selectedEmployee && (
+                        <ul
+                            className="absolute z-30 mt-1 w-full max-h-64 overflow-auto rounded-lg border-2 border-slate-200 bg-white shadow-lg"
+                            data-testid="adv-employee-results"
+                        >
+                            {empResults.map((e) => (
+                                <li key={e.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            set("employee_salary_id", e.id);
+                                            setEmpQuery("");
+                                            setEmpOpen(false);
+                                        }}
+                                        className="w-full text-right px-3 py-2 hover:bg-emerald-50 text-sm flex items-center justify-between gap-2"
+                                        data-testid={`adv-employee-pick-${e.id}`}
+                                    >
+                                        <span className="font-bold">{e.name}</span>
+                                        <span className="text-xs text-slate-500 num">{fmt(e.monthly_amount)} ر.س/شهر</span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    {empOpen && empQuery.trim() && empResults.length === 0 && !selectedEmployee && (
+                        <div className="absolute z-30 mt-1 w-full rounded-lg border-2 border-slate-200 bg-white shadow-lg px-3 py-2 text-xs text-slate-500">
+                            لا توجد نتائج تطابق «{empQuery}».
+                        </div>
+                    )}
+                </div>
             </Field>
+
+            {/* Iter-125 — Cumulative advance balance card */}
+            {selectedEmployee && (
+                <div
+                    className="md:col-span-2 mt-2 rounded-xl border-2 border-amber-300 bg-amber-50 p-3"
+                    data-testid="adv-cumulative-card"
+                >
+                    <h5 className="text-xs font-extrabold text-amber-900 mb-2 flex items-center gap-2">
+                        💰 الرصيد التراكمي لسلف {selectedEmployee.name}
+                        <span className="text-[10px] font-normal text-amber-700">
+                            (راتب شهري: <span className="num">{fmt(selectedEmployee.monthly_amount)}</span> ر.س)
+                        </span>
+                    </h5>
+                    {openAdvances.length === 0 ? (
+                        <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
+                            ✅ لا توجد سلف مفتوحة على هذا الموظف حالياً.
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-3 gap-2 mb-2">
+                                <div className="bg-white rounded-lg p-2 text-center">
+                                    <div className="text-[10px] text-slate-500 mb-1">إجمالي مستحق</div>
+                                    <div className="num font-extrabold text-sm text-slate-800">{fmt(sumAdvanceExpected)}</div>
+                                </div>
+                                <div className="bg-white rounded-lg p-2 text-center">
+                                    <div className="text-[10px] text-slate-500 mb-1">المخصوم</div>
+                                    <div className="num font-extrabold text-sm text-emerald-700">{fmt(sumAdvancePaid)}</div>
+                                </div>
+                                <div className="bg-white rounded-lg p-2 text-center border-2 border-rose-300">
+                                    <div className="text-[10px] text-slate-500 mb-1">متبقّي عليه</div>
+                                    <div className="num font-extrabold text-sm text-rose-700">{fmt(sumAdvanceRemaining)}</div>
+                                </div>
+                            </div>
+                            <div className="text-[10px] text-amber-800">
+                                ⚠ لديه {openAdvances.length} سلفة مفتوحة — مجموع المتبقي سيُخصم تدريجياً من راتبه القادم.
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
+
             <Field label="الحساب البنكي" required>
                 <select value={form.paid_from_account_id} onChange={(e) => set("paid_from_account_id", e.target.value)} className={inputCls} data-testid="adv-bank">
                     <option value="">— اختر بنكاً —</option>
@@ -917,7 +1043,9 @@ export default function FinancialInputHub() {
                 (empRes.data?.items || []).map((e) => [e.id, e])
             );
             const isPayableKind = (l) => {
-                if (!["salary", "ad_account", "supplier"].includes(l.kind)) return false;
+                // Iter-125 — include salary_advance so the "سلفة موظف"
+                // tab can show each employee's cumulative open advances.
+                if (!["salary", "ad_account", "supplier", "salary_advance"].includes(l.kind)) return false;
                 if (l.kind === "salary" && l.employee_salary_id) {
                     const emp = empById[l.employee_salary_id];
                     return emp ? emp.category === "employee" : true;
@@ -979,7 +1107,7 @@ export default function FinancialInputHub() {
                     {tab === "pay-liab"   && <PayLiabilityForm openLiabilities={openLiabilities} banks={banks} onSaved={load} />}
                     {tab === "daily-exp"  && <DailyExpenseForm banks={banks} onSaved={load} />}
                     {tab === "receivable" && <ReceivableForm onSaved={load} />}
-                    {tab === "advance"    && <AdvanceForm employees={employees} banks={banks} onSaved={load} />}
+                    {tab === "advance"    && <AdvanceForm employees={employees} banks={banks} openLiabilities={openLiabilities} onSaved={load} />}
                     {tab === "shipping"   && <ShippingPaymentForm banks={banks} onSaved={load} />}
                     {tab === "cod"        && <CodTransferForm accounts={accounts} banks={banks} onSaved={load} />}
                 </>
