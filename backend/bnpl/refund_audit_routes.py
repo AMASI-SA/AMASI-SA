@@ -27,34 +27,46 @@ async def _audit_provider(db, user_id: str, provider: str) -> Dict[str, Any]:
     ptx_filter = {"user_id": user_id, "provider": provider}
 
     # --- payment_transactions side ---------------------------------
+    # Classify by REFUND AMOUNT (not status string) because Tabby
+    # tracks refunds via `refunded_amount` on a payment whose status
+    # is still "closed".  Tamara also exposes the same field.  Using
+    # amount keeps the audit provider-agnostic and accurate.
     full_count = 0
     partial_count = 0
     none_count = 0
     refunded_amount_in_ptx = 0.0
 
-    # Statuses Tabby/Tamara use for full refund. Both providers tend
-    # to send "fully_refunded" but some webhooks use "refunded".
-    full_statuses = ("fully_refunded", "refunded")
-    partial_statuses = ("partially_refunded",)
-
     async for r in db.payment_transactions.aggregate([
         {"$match": ptx_filter},
+        {"$project": {
+            "amount": {"$ifNull": ["$amount", 0]},
+            "refunded_amount": {"$ifNull": ["$refunded_amount", 0]},
+        }},
         {"$group": {
-            "_id": {"$toLower": "$status"},
+            "_id": {
+                "$switch": {
+                    "branches": [
+                        {"case": {"$lte": ["$refunded_amount", 0]}, "then": "none"},
+                        {"case": {"$gte": ["$refunded_amount", "$amount"]}, "then": "full"},
+                    ],
+                    "default": "partial",
+                },
+            },
             "n": {"$sum": 1},
-            "refund_sum": {"$sum": {"$ifNull": ["$refunded_amount", 0]}},
+            "refund_sum": {"$sum": "$refunded_amount"},
         }},
     ]):
-        st = r["_id"] or ""
-        n = r.get("n", 0)
+        classification = r["_id"]
+        n = int(r.get("n") or 0)
         s = float(r.get("refund_sum") or 0)
-        refunded_amount_in_ptx += s
-        if st in full_statuses:
-            full_count += n
-        elif st in partial_statuses:
-            partial_count += n
+        if classification == "full":
+            full_count = n
+            refunded_amount_in_ptx += s
+        elif classification == "partial":
+            partial_count = n
+            refunded_amount_in_ptx += s
         else:
-            none_count += n
+            none_count = n
     refunded_amount_in_ptx = round(refunded_amount_in_ptx, 2)
 
     # --- payment_refunds side --------------------------------------

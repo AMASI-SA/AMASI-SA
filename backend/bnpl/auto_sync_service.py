@@ -76,6 +76,57 @@ def _since_iso_for_user(setting: Dict[str, Any]) -> str:
     return chosen.isoformat()
 
 
+async def _propagate_refunds_to_unified(
+    db, user_id: str, provider: str,
+) -> int:
+    """Copy `refunded_amount` from payment_transactions onto the
+    matching unified_orders rows so Reports / Profits / Settlements
+    reflect the refunds.  This closes the `dashboard_drift` gap that
+    happens when refunds arrive via webhook/sync AFTER the order row
+    was already created from Salla/Make/Excel.
+
+    Match strategy:
+        unified_orders.order_reference_id == ptx.order_reference_id
+            OR unified_orders.order_number == ptx.order_reference_id
+
+    Idempotent — only writes when the new amount is GREATER than the
+    one already stored (so we never accidentally zero a real refund).
+    Returns the number of unified_orders rows updated.
+    """
+    updates = 0
+    cursor = db.payment_transactions.find(
+        {"user_id": user_id, "provider": provider,
+         "refunded_amount": {"$gt": 0}},
+        {"_id": 0, "order_reference_id": 1, "refunded_amount": 1,
+         "provider_id": 1},
+    )
+    async for ptx in cursor:
+        ref = (ptx.get("order_reference_id") or "").strip()
+        amt = float(ptx.get("refunded_amount") or 0)
+        if not ref or amt <= 0:
+            continue
+        res = await db.unified_orders.update_one(
+            {
+                "user_id": user_id,
+                "$or": [
+                    {"order_reference_id": ref},
+                    {"order_number": ref},
+                ],
+                "$expr": {"$lt": [
+                    {"$ifNull": ["$refunded_amount", 0]}, amt,
+                ]},
+            },
+            {"$set": {
+                "refunded_amount": round(amt, 2),
+                "last_refund_propagated_at": _now_iso(),
+            },
+             "$addToSet": {"sources_seen": provider}},
+        )
+        if res.modified_count > 0:
+            updates += 1
+    return updates
+
+
 async def _sync_one_user_provider(
     db, user_id: str, provider: str, setting: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -96,6 +147,22 @@ async def _sync_one_user_provider(
             return {"ok": False, "provider": provider, "error": f"unknown provider {provider}"}
 
         ok = bool(res.get("ok", True))
+
+        # ── Propagate refunded_amount to unified_orders ────────────
+        # Ensures Reports / Profits / Settlements always reflect the
+        # refunds we just fetched from the provider, regardless of
+        # which sync path created the unified_orders row.
+        unified_refund_updates = 0
+        if ok:
+            try:
+                unified_refund_updates = await _propagate_refunds_to_unified(
+                    db, user_id, provider,
+                )
+            except Exception as prop_exc:  # noqa: BLE001
+                logger.warning(
+                    "iter-117: refund propagation failed for %s/%s: %s",
+                    user_id, provider, prop_exc,
+                )
         if ok:
             # Persist last_auto_sync_at marker.
             await db.bnpl_settings.update_one(

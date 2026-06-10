@@ -159,6 +159,7 @@ export default function RefundAudit() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [fixing, setFixing] = useState(false);
 
     const load = async () => {
         try {
@@ -173,6 +174,34 @@ export default function RefundAudit() {
         } finally {
             setLoading(false);
             setRefreshing(false);
+        }
+    };
+
+    const fixUnifiedRefunds = async () => {
+        if (!window.confirm(
+            "سيتم نسخ مبالغ المسترجعات من payment_transactions إلى " +
+            "unified_orders لكلا المزودين. هذه العملية آمنة و idempotent. " +
+            "متابعة؟",
+        )) return;
+        setFixing(true);
+        try {
+            const { data: r } = await api.post(
+                "/bnpl/auto-sync/fix-unified-refunds",
+                null, { timeout: 90000 },
+            );
+            if (r?.success) {
+                toast.success(
+                    `✅ تم تحديث ${r.total} طلب · Tabby: ${r.tabby_orders_updated} · Tamara: ${r.tamara_orders_updated}`,
+                    { duration: 7000 },
+                );
+                await load();
+            } else {
+                toast.error(`فشل: ${r?.error || "غير معروف"}`);
+            }
+        } catch (e) {
+            toast.error(errMsg(e, "تعذّرت العملية"));
+        } finally {
+            setFixing(false);
         }
     };
 
@@ -211,7 +240,7 @@ export default function RefundAudit() {
                         ومبالغ المسترجعات المنعكسة في الأرباح والتقارير. Delta = 0 ⇒ تطابق تام.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <Link
                         to="/integrations/bnpl/diagnostics"
                         className="text-xs text-slate-600 hover:text-slate-900 flex items-center gap-1"
@@ -219,6 +248,19 @@ export default function RefundAudit() {
                     >
                         <ArrowLeft size={14} /> صفحة التشخيص
                     </Link>
+                    {data && !data.all_ok && (
+                        <button
+                            type="button"
+                            onClick={fixUnifiedRefunds}
+                            disabled={fixing}
+                            className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2"
+                            data-testid="refund-audit-fix-unified"
+                            title="نسخ مبالغ المسترجعات من ptx إلى unified_orders"
+                        >
+                            <ArrowsClockwise size={16} className={fixing ? "animate-spin" : ""} />
+                            {fixing ? "جاري الإصلاح…" : "إصلاح unified_orders"}
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={handleRefresh}
