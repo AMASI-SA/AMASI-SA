@@ -276,42 +276,86 @@ export default function BnplDiagnostics() {
 
     const runBackfill = async () => {
         const today = new Date().toISOString().slice(0, 10);
-        const def = "2026-01-01";
+        const def = "2025-01-01";
         const since = window.prompt(
-            `أدخل تاريخ بداية الجلب التاريخي (YYYY-MM-DD)\n` +
-            `سيقوم النظام بجلب كل معاملات Tabby من هذا التاريخ حتى اليوم (${today}).\n` +
-            `الحد الأقصى المنصوح: 6-12 شهراً سابقة.`,
+            `🔁 جلب تاريخي Tabby (دفعات صغيرة آمنة)\n\n` +
+            `كل دفعة = 100 معاملة (5 صفحات × 20).\n` +
+            `النظام يستأنف تلقائياً حتى الانتهاء.\n\n` +
+            `أدخل التاريخ الأقدم (YYYY-MM-DD):`,
             def,
         );
         if (!since) return;
         if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) {
-            toast.error("صيغة التاريخ خطأ. يجب أن تكون YYYY-MM-DD");
+            toast.error("صيغة التاريخ خطأ. يجب YYYY-MM-DD");
             return;
         }
+
+        let jobId = null;
+        let totals = { fetched: 0, saved: 0, pages_read: 0,
+                       first_date: null, last_date: null };
         try {
-            toast.info("جاري الجلب التاريخي… قد يستغرق دقيقة");
-            const { data } = await api.post(`/bnpl/tabby/sync?since=${since}`);
-            const s = data.stats || {};
-            const fetched = Number(s.fetched || 0);
-            if (fetched === 0) {
-                toast.warning(
-                    `لم يُرجع Tabby أي معاملات منذ ${since}. ` +
-                    `قد لا تكون البيانات في فترة activation_date للمتجر بعد، ` +
-                    `أو الحساب جديد.`,
-                    { duration: 8000 },
+            toast.info("بدأ الجلب التاريخي…", { duration: 3000 });
+            const startRes = await api.post(
+                `/bnpl/tabby/backfill/start?cutoff=${since}`,
+                null, { timeout: 90000 },
+            );
+            const startData = startRes.data || {};
+            jobId = startData.job_id;
+            if (!jobId) throw new Error("لم يبدأ الـ Job");
+            totals = {
+                fetched: startData.fetched || 0,
+                saved: startData.saved || 0,
+                pages_read: startData.pages_read || 0,
+                first_date: startData.first_date,
+                last_date: startData.last_date,
+            };
+
+            // Auto-loop until status=done (or error).  Cap at 200 batches
+            // = 20,000 payments which is more than any merchant.
+            let status = startData.status;
+            for (let i = 0; i < 200 && status === "running"; i += 1) {
+                toast.info(
+                    `جاري المعالجة… دفعة ${i + 2} · معاملات: ${totals.fetched} · ` +
+                    `صفحات: ${totals.pages_read}` +
+                    (totals.last_date ? ` · آخر تاريخ: ${(totals.last_date || "").slice(0, 10)}` : ""),
+                    { duration: 2500 },
                 );
-            } else {
-                toast.success(
-                    `جلب تاريخي اكتمل ← ${fetched} معاملة · ` +
-                    `حُفظ: ${s.transactions_upserted || 0} · ` +
-                    `مسترجعات: ${s.refunds_upserted || 0} · ` +
-                    `طلبات جديدة: ${s.orders_created || 0}`,
-                    { duration: 8000 },
+                const next = await api.post(
+                    `/bnpl/tabby/backfill/continue/${jobId}`,
+                    null, { timeout: 90000 },
                 );
+                const d = next.data || {};
+                if (!d.ok) {
+                    throw new Error(d.error || "Batch failed");
+                }
+                totals = {
+                    fetched: d.fetched || totals.fetched,
+                    saved: d.saved || totals.saved,
+                    pages_read: d.pages_read || totals.pages_read,
+                    first_date: d.first_date || totals.first_date,
+                    last_date: d.last_date || totals.last_date,
+                };
+                status = d.status;
             }
+
+            window.alert(
+                `✅ Tabby Backfill complete\n\n` +
+                `Job ID:        ${jobId}\n` +
+                `Pages read:    ${totals.pages_read}\n` +
+                `Fetched:       ${totals.fetched}\n` +
+                `Saved:         ${totals.saved}\n` +
+                `First date:    ${totals.first_date}\n` +
+                `Last date:     ${totals.last_date}\n` +
+                `Final status:  ${status}`,
+            );
             await load();
         } catch (e) {
-            toast.error(errMsg(e, "فشل الجلب التاريخي"));
+            const det = e?.response?.data || {};
+            toast.error(
+                `فشل الجلب: ${det.error || e.message || "غير معروف"}` +
+                (jobId ? ` · Job=${jobId} (يمكن استئنافه يدوياً)` : ""),
+                { duration: 10000 },
+            );
         }
     };
 

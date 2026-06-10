@@ -27,12 +27,17 @@ from .config_store import (
     get_raw_secrets, get_settings, record_test_result, save_settings,
 )
 from .sync_service import ensure_sync_indexes, sync_tabby_payments
+from .tabby_backfill_jobs import (
+    continue_tabby_backfill, ensure_jobs_indexes,
+    get_job_status, start_tabby_backfill,
+)
 from .tamara_backfill import backfill_tamara, backfill_tamara_full
 
 
 async def ensure_bnpl_indexes(db) -> None:
     await ensure_settings_indexes(db)
     await ensure_sync_indexes(db)
+    await ensure_jobs_indexes(db)
 
 
 def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
@@ -166,6 +171,42 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
         return res
 
     # ── DEBUG (Tabby) ──────────────────────────────────────────
+    @router.post("/tabby/backfill/start")
+    async def tabby_backfill_start(
+        cutoff: Optional[str] = Query(
+            None, pattern=r"^\d{4}-\d{2}-\d{2}$",
+            description="Stop when we reach payments older than this date.",
+        ),
+        user: dict = Depends(current_user),
+    ):
+        res = await start_tabby_backfill(db, user["id"], cutoff_date=cutoff)
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "start failed")
+        return res
+
+    @router.post("/tabby/backfill/continue/{job_id}")
+    async def tabby_backfill_continue(
+        job_id: str, user: dict = Depends(current_user),
+    ):
+        # Ownership check
+        job = await db.bnpl_sync_jobs.find_one(
+            {"job_id": job_id, "user_id": user["id"]}, {"_id": 0, "job_id": 1},
+        )
+        if not job:
+            raise HTTPException(404, "Unknown job_id")
+        return await continue_tabby_backfill(db, job_id)
+
+    @router.get("/tabby/backfill/status/{job_id}")
+    async def tabby_backfill_status(
+        job_id: str, user: dict = Depends(current_user),
+    ):
+        job = await get_job_status(db, job_id)
+        if not job or job.get("user_id") != user["id"]:
+            raise HTTPException(404, "Unknown job_id")
+        # Strip large fields just in case
+        job.pop("error_traceback", None)
+        return job
+
     @router.post("/tabby/sync-debug")
     async def tabby_sync_debug(user: dict = Depends(current_user)):
         """Forensic debug — runs FIVE variations of the same Tabby call
