@@ -105,7 +105,18 @@ function ProviderCard({ data, onShowWeekly }) {
                 <Row label="إجمالي المبيعات" value={`${fmt(t.gross_sales)} ر.س`} />
                 <Row label="إجمالي المسترجعات" value={`(${fmt(t.total_refunds)})`} tone="rose" />
                 <Row label="صافي المبيعات" value={`${fmt(t.net_sales)} ر.س`} bold tone="slate" />
-                <Row label={`عمولة المزوّد (${fmt(fees.commission_pct)}%)`} value={`(${fmt(t.commission)})`} tone="rose" />
+                <Row
+                    label={
+                        <span>
+                            عمولة المزوّد
+                            <span className="text-[10px] text-slate-400 ms-1">
+                                ({fmt(fees.commission_pct)}% + {fmt(fees.fixed_fee_per_order || 0)} ر.س لكل طلب × {fmtInt(t.transactions_count)})
+                            </span>
+                        </span>
+                    }
+                    value={`(${fmt(t.commission)})`}
+                    tone="rose"
+                />
                 <Row label={`ضريبة العمولة (${fmt(fees.vat_pct)}%)`} value={`(${fmt(t.commission_vat)})`} tone="rose" />
                 <Row
                     label={

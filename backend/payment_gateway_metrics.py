@@ -76,13 +76,17 @@ PAYMENT_METHOD_REGISTRY: dict[str, dict] = {
         "aliases": ["tamara", "تمارا"],
         "estimated_fee_rate": 6.99,
         "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 0.0,
     },
     "tabby": {
         "name_ar": "تابي",
         "type": "gateway",
         "aliases": ["tabby", "تابي"],
-        "estimated_fee_rate": 6.99,
+        "estimated_fee_rate": 5.00,
         "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 1.0,        # 1 SAR per order — Tabby's
+                                           # standard merchant fee in
+                                           # addition to the 5% MDR.
     },
     "emkan": {
         "name_ar": "إمكان",
@@ -90,6 +94,7 @@ PAYMENT_METHOD_REGISTRY: dict[str, dict] = {
         "aliases": ["emkan", "إمكان", "امكان"],
         "estimated_fee_rate": 6.99,
         "estimated_vat_rate": 15.0,
+        "estimated_fixed_fee": 0.0,
     },
     "bank_transfer": {
         "name_ar": "تحويل بنكي",
@@ -266,6 +271,9 @@ async def compute_metrics(
             meta = PAYMENT_METHOD_REGISTRY.get(canon)
             rate = (meta or {}).get("estimated_fee_rate", 0.0)
             vat_rate = (meta or {}).get("estimated_vat_rate", 0.0)
+            # Iter-118 — fixed per-order fee (e.g. Tabby charges 1 SAR
+            # per order in addition to the percentage MDR).
+            fixed_fee = (meta or {}).get("estimated_fixed_fee", 0.0)
             if category == "refunded":
                 # Refunded orders — gateway waives fees, book gross as
                 # a full refund so net comes out to 0 for that order.
@@ -276,7 +284,7 @@ async def compute_metrics(
                 net = 0.0
             else:
                 # confirmed
-                fee = round(gross * rate / 100, 4)
+                fee = round(gross * rate / 100 + fixed_fee, 4)
                 vat = round(fee * vat_rate / 100, 4)
                 rfull = 0.0
                 rpart = 0.0

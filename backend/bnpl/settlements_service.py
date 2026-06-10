@@ -43,9 +43,11 @@ from typing import Any, Dict, List, Optional
 # bnpl_settings overrides them per merchant.).
 DEFAULT_FEE_RATES: Dict[str, Dict[str, float]] = {
     "tabby":  {"commission_pct": 5.00, "vat_pct": 15.0,
+               "fixed_fee_per_order": 1.0,
                "settlement_fee_per_invoice": 5.0,
                "settlement_period_days": 7},
     "tamara": {"commission_pct": 6.99, "vat_pct": 15.0,
+               "fixed_fee_per_order": 0.0,
                "settlement_fee_per_invoice": 0.0,
                "settlement_period_days": 7},
 }
@@ -87,6 +89,7 @@ async def _merchant_fee_rates(
     fractions — so the UI can display them directly."""
     defaults = DEFAULT_FEE_RATES.get(provider, {
         "commission_pct": 0, "vat_pct": 0,
+        "fixed_fee_per_order": 0,
         "settlement_fee_per_invoice": 0, "settlement_period_days": 7,
     })
     rates = dict(defaults)
@@ -99,6 +102,8 @@ async def _merchant_fee_rates(
             rates["commission_pct"] = round(float(doc["mdr_percent"]) * 100, 4)
         if doc.get("vat_on_fees_percent") is not None:
             rates["vat_pct"] = round(float(doc["vat_on_fees_percent"]) * 100, 4)
+        if doc.get("fixed_fee_per_order") is not None:
+            rates["fixed_fee_per_order"] = float(doc["fixed_fee_per_order"])
         if doc.get("settlement_fee_per_invoice") is not None:
             rates["settlement_fee_per_invoice"] = float(doc["settlement_fee_per_invoice"])
         if doc.get("settlement_period_days") is not None:
@@ -208,11 +213,19 @@ async def compute_settlement_for_provider(
     fee_rates = await _merchant_fee_rates(db, user_id, provider)
     commission_rate = fee_rates["commission_pct"] / 100.0
     vat_rate = fee_rates["vat_pct"] / 100.0
+    fixed_fee_per_order = float(fee_rates.get("fixed_fee_per_order") or 0)
     settlement_fee_per_invoice = fee_rates["settlement_fee_per_invoice"]
     settlement_period_days = int(fee_rates.get("settlement_period_days") or 7)
 
     totals = await _compute_provider_totals(db, user_id, provider, date_from, date_to)
-    commission = totals["net_sales"] * commission_rate
+    txn_count = totals.get("transactions_count", 0)
+    # Commission = percentage × net_sales + fixed_fee × txn_count.
+    # The fixed per-order fee (e.g. Tabby 1 SAR) is charged on EVERY
+    # transaction regardless of refund status, so we multiply by the
+    # full transactions count, not net_sales.
+    commission_pct_part = totals["net_sales"] * commission_rate
+    commission_fixed_part = fixed_fee_per_order * txn_count
+    commission = commission_pct_part + commission_fixed_part
     commission_vat = commission * vat_rate
 
     # Settlement fee — charged ONCE per provider invoice (weekly).
