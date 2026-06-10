@@ -246,18 +246,63 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
     const selected = openLiabilities.find((l) => l.id === form.liability_id);
 
-    // Filter liabilities by counterparty name / description / kind.
-    // Limited to 8 results to keep the dropdown compact and fast.
+    // Iter-127 — Group search results by counterparty so the dropdown
+    // shows each employee/supplier ONCE with their CUMULATIVE remaining
+    // balance, not one row per liability (which used to display only
+    // the monthly salary amount and confused merchants).  Selecting a
+    // group picks its newest open liability as the default; the card
+    // below the dropdown still surfaces every individual liability so
+    // nothing is lost.
     const searchResults = (() => {
         const q = (query || "").trim().toLowerCase();
         if (!q) return [];
-        return openLiabilities.filter((l) => {
+        // 1. Filter matching liabilities
+        const matched = openLiabilities.filter((l) => {
             const haystack = [
                 l.counterparty_name, l.description, l.kind,
                 l.notes, l.counterparty_id,
             ].filter(Boolean).join(" ").toLowerCase();
             return haystack.includes(q);
-        }).slice(0, 8);
+        });
+        // 2. Group by counterparty_name (case-insensitive, trimmed).
+        //    Liabilities WITHOUT a counterparty_name fall into a
+        //    per-id group so they still show up.
+        const groups = new Map();
+        for (const l of matched) {
+            const key = (l.counterparty_name || "").trim().toLowerCase()
+                || `__lone_${l.id}`;
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    counterparty_name: l.counterparty_name || l.description || "—",
+                    kinds: new Set(),
+                    items: [],
+                    sumExpected: 0,
+                    sumPaid: 0,
+                    sumRemaining: 0,
+                    anyOverdue: false,
+                    representative: l,  // newest liability (sort below)
+                });
+            }
+            const g = groups.get(key);
+            g.kinds.add(l.kind);
+            g.items.push(l);
+            g.sumExpected += Number(l.expected_amount) || 0;
+            g.sumPaid += Number(l.paid_amount) || 0;
+            g.sumRemaining += Number(l.remaining_amount) || 0;
+            g.anyOverdue = g.anyOverdue || !!l.is_overdue;
+            // Prefer overdue items as representative, else the oldest
+            // due_date so the form opens on the most urgent one.
+            const cur = g.representative;
+            const lDue = (l.due_date || "9999-12-31");
+            const cDue = (cur.due_date || "9999-12-31");
+            if ((l.is_overdue && !cur.is_overdue) || lDue < cDue) {
+                g.representative = l;
+            }
+        }
+        // 3. Sort groups by remaining DESC, cap to 8.
+        return Array.from(groups.values())
+            .sort((a, b) => b.sumRemaining - a.sumRemaining)
+            .slice(0, 8);
     })();
 
     const KIND_LABEL = {
@@ -354,7 +399,14 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                                     لا توجد نتائج تطابق «{query}». تأكد من وجود التزام مفتوح لهذا الاسم.
                                 </div>
                             ) : (
-                                searchResults.map((l) => (
+                                searchResults.map((g) => {
+                                    // Iter-127 — group represents one counterparty
+                                    // with cumulative remaining balance.
+                                    const l = g.representative;
+                                    const kindsLabel = Array.from(g.kinds)
+                                        .map((k) => KIND_LABEL[k] || k)
+                                        .join(" · ");
+                                    return (
                                     <button
                                         key={l.id}
                                         type="button"
@@ -365,30 +417,35 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                                     >
                                         <div className="flex-1 min-w-0">
                                             <div className="font-bold text-slate-900 text-sm truncate">
-                                                {l.counterparty_name || l.description || "—"}
+                                                {g.counterparty_name}
                                             </div>
                                             <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
                                                 <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700">
-                                                    {KIND_LABEL[l.kind] || l.kind}
+                                                    {kindsLabel}
                                                 </span>
-                                                {l.description && l.counterparty_name && (
-                                                    <span className="truncate">{l.description}</span>
+                                                {g.items.length > 1 && (
+                                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-bold num">
+                                                        {g.items.length} التزام
+                                                    </span>
                                                 )}
-                                                {l.is_overdue && (
+                                                {g.anyOverdue && (
                                                     <span className="text-rose-600 font-bold">⚠ متأخر</span>
                                                 )}
                                             </div>
                                         </div>
                                         <div className="text-end flex-shrink-0">
-                                            <div className="text-[10px] text-slate-400">متبقٍ</div>
+                                            <div className="text-[10px] text-slate-400">
+                                                {g.items.length > 1 ? "إجمالي متبقّي عليه" : "متبقٍ"}
+                                            </div>
                                             <div className={`font-extrabold num text-sm ${
-                                                Number(l.remaining_amount) > 0 ? "text-rose-700" : "text-emerald-700"
+                                                g.sumRemaining > 0 ? "text-rose-700" : "text-emerald-700"
                                             }`}>
-                                                {fmt(l.remaining_amount)} ر.س
+                                                {fmt(g.sumRemaining)} ر.س
                                             </div>
                                         </div>
                                     </button>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     )}
