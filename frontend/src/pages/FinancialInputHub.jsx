@@ -240,8 +240,6 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
         liability_id: "", paid_from_account_id: "", amount: "", payment_date: today(), notes: "",
     });
     const [busy, setBusy] = useState(false);
-    const [daysBusy, setDaysBusy] = useState(false);
-    const [daysInput, setDaysInput] = useState("");
     // Iter-118 — searchable counterparty picker (replaces big dropdown)
     const [query, setQuery] = useState("");
     const [showResults, setShowResults] = useState(false);
@@ -283,30 +281,8 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
         setShowResults(false);
     };
     // Iter-102 — show inline days-worked editor for salary kind only.
-    const isSalary = selected?.kind === "salary";
-
-    // Initialise the days input when a salary liability is selected.
-    useEffect(() => {
-        if (isSalary) setDaysInput(String(selected?.days_worked ?? selected?.days_in_month ?? ""));
-        else setDaysInput("");
-    }, [selected?.id, isSalary, selected?.days_worked, selected?.days_in_month]);
-
-    const applyDays = async () => {
-        if (!selected) return;
-        const d = parseInt(daysInput, 10);
-        if (isNaN(d)) { toast.error("أدخل أيام صحيحة"); return; }
-        setDaysBusy(true);
-        try {
-            const { data } = await api.put(
-                `/liabilities/${selected.id}/days-worked`,
-                { days_worked: d },
-            );
-            toast.success(`تم احتساب الراتب: ${fmt(data.expected_amount)} ر.س`);
-            await onSaved();   // refresh parent list so dropdown shows updated remaining
-        } catch (e) {
-            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر الاحتساب");
-        } finally { setDaysBusy(false); }
-    };
+    // REMOVED in Iter-118 (user request): no longer compute salary
+    // based on actual work days; merchant pays the fixed monthly amount.
 
     const submit = async () => {
         if (!form.liability_id) { toast.error("اختر الالتزام"); return; }
@@ -467,74 +443,9 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                 </div>
             )}
 
-            {isSalary && (
-                <div className="sm:col-span-2 p-3 rounded-lg bg-violet-50 border border-violet-200" data-testid="pay-days-worked-row">
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="text-xs font-bold text-violet-900">
-                            🗓️ احتساب الراتب على أيام العمل الفعلية
-                        </div>
-                        {/* Iter-113 — toggle daily-accrual mode */}
-                        <button
-                            type="button"
-                            onClick={async () => {
-                                const isDaily = selected.accrual_mode === "daily";
-                                const newMode = isDaily ? "monthly" : "daily";
-                                try {
-                                    await api.put(
-                                        `/liabilities/${selected.id}/accrual-mode`,
-                                        { accrual_mode: newMode },
-                                    );
-                                    toast.success(
-                                        newMode === "daily"
-                                            ? "تم التبديل لاحتساب تراكمي يومي (راتب اليوم × عدد الأيام منذ بداية الشهر)"
-                                            : "تم التبديل للاحتساب الشهري"
-                                    );
-                                    await onSaved();
-                                } catch (e) {
-                                    toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التبديل");
-                                }
-                            }}
-                            className={`px-2 py-1 rounded text-[10px] font-bold ${selected.accrual_mode === "daily" ? "bg-emerald-200 text-emerald-900" : "bg-white text-violet-700 border border-violet-300"}`}
-                            data-testid="pay-accrual-mode-toggle"
-                        >
-                            {selected.accrual_mode === "daily" ? "✓ يومي تراكمي" : "🔄 تبديل ليومي تراكمي"}
-                        </button>
-                    </div>
-                    <div className="flex flex-wrap items-end gap-3">
-                        <div>
-                            <label className="block text-[11px] text-violet-900 mb-1">
-                                أيام العمل (من {selected.days_in_month || "—"} يوم)
-                            </label>
-                            <input
-                                type="number"
-                                min={0}
-                                max={selected.days_in_month || 31}
-                                step={1}
-                                value={daysInput}
-                                onChange={(e) => setDaysInput(e.target.value)}
-                                className={`${inputCls} num w-32`}
-                                data-testid="pay-days-input"
-                            />
-                        </div>
-                        <button
-                            type="button"
-                            onClick={applyDays}
-                            disabled={daysBusy}
-                            className="px-3 py-2 rounded-lg bg-violet-700 text-white text-xs font-bold hover:bg-violet-800 disabled:opacity-50"
-                            data-testid="pay-days-apply-btn"
-                        >
-                            {daysBusy ? "جاري…" : "احتساب وتحديث"}
-                        </button>
-                        <div className="text-[11px] text-violet-800">
-                            راتب أساسي: <b>{fmt(selected.monthly_amount_base ?? selected.expected_amount)} ر.س</b>
-                            {" "}· بعد الاحتساب الحالي: <b>{fmt(selected.expected_amount)} ر.س</b>
-                            {selected.accrual_mode === "daily" && selected.days_in_month && selected.monthly_amount_base && (
-                                <span> · راتب اليوم: <b>{fmt(selected.monthly_amount_base / selected.days_in_month)}</b></span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Iter-118 — Removed: salary calculation by actual work days
+                (per user request: ماله حاجة). Merchant pays the fixed
+                monthly amount directly. */}
 
             <Field label="الحساب البنكي" required>
                 <select value={form.paid_from_account_id} onChange={(e) => set("paid_from_account_id", e.target.value)} className={inputCls} data-testid="pay-account">
