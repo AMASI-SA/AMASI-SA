@@ -97,18 +97,24 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
             </div>
 
             <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid={`${testid}-table`}>
-                    <thead className="text-xs text-muted-foreground bg-slate-50">
+                <table
+                    className="w-full text-right text-sm border-collapse
+                        [&_th]:px-3 [&_th]:border-s [&_th]:border-border
+                        [&_td]:px-3 [&_td]:border-s [&_td]:border-border
+                        [&_th:first-child]:border-s-0 [&_td:first-child]:border-s-0"
+                    data-testid={`${testid}-table`}
+                >
+                    <thead className="text-muted-foreground bg-accent/40 border-b-2 border-border">
                         <tr>
-                            <th className="text-right px-3 py-2 font-semibold">البوابة</th>
-                            <th className="text-right px-3 py-2 font-semibold">الطلبات</th>
-                            <th className="text-right px-3 py-2 font-semibold">الإجمالي</th>
-                            <th className="text-right px-3 py-2 font-semibold">الرسوم</th>
-                            <th className="text-right px-3 py-2 font-semibold">ض. الرسوم</th>
-                            <th className="text-right px-3 py-2 font-semibold">المرتجع</th>
-                            <th className="text-right px-3 py-2 font-semibold">معلَّق</th>
-                            <th className="text-right px-3 py-2 font-semibold">الصافي</th>
-                            <th className="text-right px-3 py-2 font-semibold">المصدر</th>
+                            <th className="py-3 font-semibold">البوابة</th>
+                            <th className="py-3 font-semibold">الطلبات</th>
+                            <th className="py-3 font-semibold">الإجمالي</th>
+                            <th className="py-3 font-semibold">الرسوم</th>
+                            <th className="py-3 font-semibold">ض. الرسوم</th>
+                            <th className="py-3 font-semibold">المرتجع</th>
+                            <th className="py-3 font-semibold">معلَّق</th>
+                            <th className="py-3 font-semibold">الصافي</th>
+                            <th className="py-3 font-semibold">المصدر</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -118,26 +124,26 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                             const pending = Number(r.pending_gross || 0);
                             const pendingCount = Number(r.pending_orders_count || 0);
                             return (
-                                <tr key={r.key} className="border-t border-border hover:bg-accent/20" data-testid={`${testid}-row-${r.key}`}>
-                                    <td className="px-3 py-2 font-bold">{r.name_ar}</td>
-                                    <td className="px-3 py-2 num">{formatInt(r.orders_count)}</td>
-                                    <td className="px-3 py-2 num">{formatMoney(r.gross)}</td>
-                                    <td className="px-3 py-2 num text-rose-700">{formatMoney(r.fees)}</td>
-                                    <td className="px-3 py-2 num text-rose-700/70">{formatMoney(r.fees_vat)}</td>
-                                    <td className={`px-3 py-2 num ${r.refund_total > 0 ? "text-amber-700" : "text-muted-foreground"}`}>
+                                <tr key={r.key} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors" data-testid={`${testid}-row-${r.key}`}>
+                                    <td className="py-2.5 font-semibold">{r.name_ar}</td>
+                                    <td className="py-2.5 num">{formatInt(r.orders_count)}</td>
+                                    <td className="py-2.5 num font-bold">{formatMoney(r.gross)}</td>
+                                    <td className="py-2.5 num text-rose-700">{formatMoney(r.fees)}</td>
+                                    <td className="py-2.5 num text-rose-700/70">{formatMoney(r.fees_vat)}</td>
+                                    <td className={`py-2.5 num ${r.refund_total > 0 ? "text-amber-700" : "text-muted-foreground"}`}>
                                         {formatMoney(r.refund_total)}
                                     </td>
-                                    <td className={`px-3 py-2 num ${pending > 0 ? "text-amber-700" : "text-muted-foreground"}`} title={pending > 0 ? `${pendingCount} طلب بحالة معلَّقة` : ""}>
+                                    <td className={`py-2.5 num ${pending > 0 ? "text-amber-700" : "text-muted-foreground"}`} title={pending > 0 ? `${pendingCount} طلب بحالة معلَّقة` : ""}>
                                         {formatMoney(pending)}
                                     </td>
-                                    <td className="px-3 py-2 num font-extrabold text-emerald-700">{formatMoney(r.net)}</td>
-                                    <td className="px-3 py-2">
+                                    <td className="py-2.5 num font-extrabold text-emerald-700">{formatMoney(r.net)}</td>
+                                    <td className="py-2.5">
                                         {isActual ? (
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800" title={`${cov.toFixed(1)}% من الطلبات تم مطابقتها بملف تسوية`}>
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800" title={`${cov.toFixed(1)}% من الطلبات تم مطابقتها بملف تسوية`}>
                                                 فعلي {cov.toFixed(0)}%
                                             </span>
                                         ) : (
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
                                                 مُقدَّر
                                             </span>
                                         )}
@@ -145,16 +151,16 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                                 </tr>
                             );
                         })}
-                        <tr className="border-t-2 border-border bg-slate-50 font-bold">
-                            <td className="px-3 py-2">الإجمالي</td>
-                            <td className="px-3 py-2 num">{formatInt(t.orders_count)}</td>
-                            <td className="px-3 py-2 num">{formatMoney(t.gross)}</td>
-                            <td className="px-3 py-2 num text-rose-700">{formatMoney(t.fees)}</td>
-                            <td className="px-3 py-2 num text-rose-700/70">{formatMoney(t.fees_vat)}</td>
-                            <td className="px-3 py-2 num text-amber-700">{formatMoney(t.refund_total)}</td>
-                            <td className="px-3 py-2 num text-amber-700">{formatMoney(t.pending_gross)}</td>
-                            <td className="px-3 py-2 num text-emerald-700">{formatMoney(t.net)}</td>
-                            <td className="px-3 py-2" />
+                        <tr className="bg-accent/30 font-bold border-t-2 border-border">
+                            <td className="py-2.5">الإجمالي</td>
+                            <td className="py-2.5 num">{formatInt(t.orders_count)}</td>
+                            <td className="py-2.5 num">{formatMoney(t.gross)}</td>
+                            <td className="py-2.5 num text-rose-700">{formatMoney(t.fees)}</td>
+                            <td className="py-2.5 num text-rose-700/70">{formatMoney(t.fees_vat)}</td>
+                            <td className="py-2.5 num text-amber-700">{formatMoney(t.refund_total)}</td>
+                            <td className="py-2.5 num text-amber-700">{formatMoney(t.pending_gross)}</td>
+                            <td className="py-2.5 num text-emerald-700">{formatMoney(t.net)}</td>
+                            <td className="py-2.5" />
                         </tr>
                     </tbody>
                 </table>
