@@ -97,9 +97,13 @@ async def _run_one_batch(db, job_id: str) -> Dict[str, Any]:
         return {"ok": False, "error": "Unknown job_id"}
     if job.get("status") == "done":
         return {"ok": True, "job_id": job_id, "status": "done",
-                "fetched": job.get("fetched", 0),
-                "saved": job.get("saved", 0),
-                "pages_read": job.get("pages_read", 0)}
+                "pages_read": job.get("pages_read", 0),
+                "total_fetched": job.get("fetched", 0),
+                "total_saved": job.get("saved", 0),
+                "skipped_old": job.get("skipped_old", 0),
+                "oldest_date_seen": job.get("first_date") or "",
+                "newest_date_seen": job.get("last_date") or "",
+                "stop_reason": job.get("stop_reason") or "already_done"}
 
     uid = job["user_id"]
     cutoff = job.get("cutoff_date") or ""
@@ -116,34 +120,45 @@ async def _run_one_batch(db, job_id: str) -> Dict[str, Any]:
 
         offset = int(job.get("last_offset") or 0)
         pages_done = 0
-        batch_fetched = 0
-        batch_saved = 0
-        first_date = job.get("first_date")
-        last_date = job.get("last_date")
+        batch_fetched = 0           # items SEEN from Tabby in this batch
+        batch_saved = 0             # items WRITTEN to payment_transactions
+        batch_skipped_old = 0       # items dropped client-side by cutoff
+        first_date = job.get("first_date")   # OLDEST date envelope so far
+        last_date = job.get("last_date")     # NEWEST date envelope so far
         finished = False
+        stop_reason = ""
 
         for _ in range(PAGES_PER_BATCH):
+            # ⚠️ NO date filter sent to Tabby — pagination only.
+            # Cutoff is applied CLIENT-SIDE per item (skip, never break)
+            # because Tabby's payment ordering is NOT guaranteed.
             page = await client.list_payments(limit=PAGE_SIZE, offset=offset)
             items = (page or {}).get("payments") if isinstance(page, dict) else []
             items = items or []
             pages_done += 1
+
             if not items:
                 finished = True
+                stop_reason = "empty_page"
                 break
 
-            crossed_cutoff = False
             for it in items:
-                created = (it.get("created_at") or "")[:10]
-                # Track date envelope (only counted items)
-                if cutoff and created and created < cutoff:
-                    crossed_cutoff = True
-                    break
-
                 batch_fetched += 1
-                if first_date is None or (created and created < first_date):
-                    first_date = created
-                if last_date is None or (created and created > last_date):
-                    last_date = created
+                created = (it.get("created_at") or "")[:10]
+
+                # Always update date envelope (even for skipped items)
+                # so the merchant sees the FULL range Tabby is returning.
+                if created:
+                    if first_date is None or created < first_date:
+                        first_date = created
+                    if last_date is None or created > last_date:
+                        last_date = created
+
+                # Client-side cutoff: SKIP (do not break) — Tabby
+                # ordering is not chronological for this account.
+                if cutoff and created and created < cutoff:
+                    batch_skipped_old += 1
+                    continue
 
                 pid = (it.get("id") or "").strip()
                 if not pid:
@@ -174,12 +189,13 @@ async def _run_one_batch(db, job_id: str) -> Dict[str, Any]:
                 await _merge_into_unified_orders(db, uid, txn)
 
             offset += len(items)
-            if crossed_cutoff:
-                finished = True
-                break
             if len(items) < PAGE_SIZE:
                 finished = True
+                stop_reason = "short_page"
                 break
+
+        if not finished and not stop_reason:
+            stop_reason = "batch_limit_reached"
 
         new_status = "done" if finished else "running"
         update = {
@@ -188,8 +204,10 @@ async def _run_one_batch(db, job_id: str) -> Dict[str, Any]:
             "pages_read": int(job.get("pages_read") or 0) + pages_done,
             "fetched": int(job.get("fetched") or 0) + batch_fetched,
             "saved": int(job.get("saved") or 0) + batch_saved,
+            "skipped_old": int(job.get("skipped_old") or 0) + batch_skipped_old,
             "first_date": first_date,
             "last_date": last_date,
+            "stop_reason": stop_reason,
             "updated_at": _now_iso(),
         }
         await db.bnpl_sync_jobs.update_one(
@@ -202,10 +220,12 @@ async def _run_one_batch(db, job_id: str) -> Dict[str, Any]:
             "status": new_status,
             "last_offset": update["last_offset"],
             "pages_read": update["pages_read"],
-            "fetched": update["fetched"],
-            "saved": update["saved"],
-            "first_date": update["first_date"],
-            "last_date": update["last_date"],
+            "total_fetched": update["fetched"],
+            "total_saved": update["saved"],
+            "skipped_old": update["skipped_old"],
+            "oldest_date_seen": update["first_date"] or "",
+            "newest_date_seen": update["last_date"] or "",
+            "stop_reason": stop_reason,
             "batch_duration_seconds": round(time.monotonic() - started, 2),
         }
 
