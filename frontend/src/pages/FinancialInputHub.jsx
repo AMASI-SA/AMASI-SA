@@ -235,7 +235,7 @@ function NewLiabilityForm({ counterparties, onSaved }) {
 
 
 // ── Tab 2: Pay liability ────────────────────────────────────────────
-function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
+function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
     const [form, setForm] = useState({
         liability_id: "", paid_from_account_id: "", amount: "", payment_date: today(), notes: "",
     });
@@ -253,34 +253,71 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
     // group picks its newest open liability as the default; the card
     // below the dropdown still surfaces every individual liability so
     // nothing is lost.
+    //
+    // Iter-128 — Real-world fix: legacy salary liabilities have
+    // `counterparty_name` empty.  Use `employee_salary_id` as the
+    // canonical grouping key when present, falling back to
+    // `counterparty_id` / `counterparty_name` / `ad_account_label` for
+    // supplier / ad-account / other kinds.  Also derive remaining
+    // robustly from `expected_amount - paid_amount` when the
+    // `remaining_amount` field is missing.
+    const empById = (() => {
+        const m = {};
+        for (const e of (employees || [])) m[e.id] = e;
+        return m;
+    })();
+    const _liabRemaining = (l) =>
+        l.remaining_amount != null
+            ? Number(l.remaining_amount) || 0
+            : Math.max(0, (Number(l.expected_amount) || 0) - (Number(l.paid_amount) || 0));
+    const _displayName = (l) => {
+        if (l.counterparty_name) return l.counterparty_name;
+        if (l.employee_salary_id && empById[l.employee_salary_id])
+            return empById[l.employee_salary_id].name;
+        if (l.ad_account_label) return l.ad_account_label;
+        // Fallback: try to extract from description "راتب YYYY-MM — NAME"
+        if (l.description) {
+            const m = l.description.match(/—\s*(.+)$/);
+            if (m) return m[1].trim();
+        }
+        return l.description || "—";
+    };
+    const _groupKey = (l) => {
+        if (l.employee_salary_id) return `emp:${l.employee_salary_id}`;
+        if (l.counterparty_id)    return `cp:${l.counterparty_id}`;
+        const nm = (_displayName(l) || "").trim().toLowerCase();
+        if (nm) return `nm:${nm}`;
+        return `__lone_${l.id}`;
+    };
+
     const searchResults = (() => {
         const q = (query || "").trim().toLowerCase();
         if (!q) return [];
-        // 1. Filter matching liabilities
+        // 1. Filter matching liabilities — also search the resolved
+        //    display name so typing "عرفات" matches liabilities whose
+        //    counterparty_name is empty but whose description contains
+        //    the employee name.
         const matched = openLiabilities.filter((l) => {
             const haystack = [
                 l.counterparty_name, l.description, l.kind,
-                l.notes, l.counterparty_id,
+                l.notes, l.counterparty_id, _displayName(l),
             ].filter(Boolean).join(" ").toLowerCase();
             return haystack.includes(q);
         });
-        // 2. Group by counterparty_name (case-insensitive, trimmed).
-        //    Liabilities WITHOUT a counterparty_name fall into a
-        //    per-id group so they still show up.
+        // 2. Group by canonical key.
         const groups = new Map();
         for (const l of matched) {
-            const key = (l.counterparty_name || "").trim().toLowerCase()
-                || `__lone_${l.id}`;
+            const key = _groupKey(l);
             if (!groups.has(key)) {
                 groups.set(key, {
-                    counterparty_name: l.counterparty_name || l.description || "—",
+                    counterparty_name: _displayName(l),
                     kinds: new Set(),
                     items: [],
                     sumExpected: 0,
                     sumPaid: 0,
                     sumRemaining: 0,
                     anyOverdue: false,
-                    representative: l,  // newest liability (sort below)
+                    representative: l,
                 });
             }
             const g = groups.get(key);
@@ -288,10 +325,8 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
             g.items.push(l);
             g.sumExpected += Number(l.expected_amount) || 0;
             g.sumPaid += Number(l.paid_amount) || 0;
-            g.sumRemaining += Number(l.remaining_amount) || 0;
+            g.sumRemaining += _liabRemaining(l);
             g.anyOverdue = g.anyOverdue || !!l.is_overdue;
-            // Prefer overdue items as representative, else the oldest
-            // due_date so the form opens on the most urgent one.
             const cur = g.representative;
             const lDue = (l.due_date || "9999-12-31");
             const cDue = (cur.due_date || "9999-12-31");
@@ -299,7 +334,7 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                 g.representative = l;
             }
         }
-        // 3. Sort groups by remaining DESC, cap to 8.
+        // 3. Sort by remaining DESC, cap to 8.
         return Array.from(groups.values())
             .sort((a, b) => b.sumRemaining - a.sumRemaining)
             .slice(0, 8);
@@ -454,17 +489,16 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
 
             {/* Iter-118 — balance card shows what's owed / paid for the picked counterparty */}
             {selected && (() => {
-                // Aggregate ALL open liabilities for the SAME counterparty so
-                // the merchant sees the cumulative balance, not just one row.
-                const cpKey = (selected.counterparty_name || "").trim().toLowerCase();
-                const sameCounterparty = cpKey
-                    ? openLiabilities.filter((l) =>
-                        (l.counterparty_name || "").trim().toLowerCase() === cpKey
-                      )
-                    : [selected];
+                // Iter-128 — Aggregate ALL open liabilities for the SAME
+                // counterparty using the canonical group key (handles
+                // employee_salary_id, counterparty_id, name fallback).
+                const selKey = _groupKey(selected);
+                const sameCounterparty = openLiabilities.filter(
+                    (l) => _groupKey(l) === selKey,
+                );
                 const sumExpected = sameCounterparty.reduce((s, l) => s + (Number(l.expected_amount) || 0), 0);
                 const sumPaid = sameCounterparty.reduce((s, l) => s + (Number(l.paid_amount) || 0), 0);
-                const sumRemaining = sameCounterparty.reduce((s, l) => s + (Number(l.remaining_amount) || 0), 0);
+                const sumRemaining = sameCounterparty.reduce((s, l) => s + _liabRemaining(l), 0);
                 const overdueCount = sameCounterparty.filter((l) => l.is_overdue).length;
                 const hasMultiple = sameCounterparty.length > 1;
 
@@ -477,7 +511,7 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                         <div>
                             <div className="text-xs text-slate-500">تم اختيار:</div>
                             <div className="text-base font-extrabold text-slate-900">
-                                {selected.counterparty_name || selected.description || "—"}
+                                {_displayName(selected)}
                                 <span className="ms-2 text-xs text-slate-600 font-normal">
                                     ({KIND_LABEL[selected.kind] || selected.kind})
                                 </span>
@@ -520,7 +554,7 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                                 <span className="px-1.5 py-0.5 bg-violet-100 text-violet-800 rounded text-[10px] font-bold">
                                     {sameCounterparty.length} التزامات مفتوحة
                                 </span>
-                                📊 الرصيد التراكمي لـ {selected.counterparty_name}:
+                                📊 الرصيد التراكمي لـ {_displayName(selected)}:
                             </div>
                             <div className="grid grid-cols-3 gap-2 text-xs">
                                 <div className="bg-slate-900 text-white rounded p-2 text-center">
@@ -546,7 +580,7 @@ function PayLiabilityForm({ openLiabilities, banks, onSaved }) {
                                             {KIND_LABEL[l.kind] || l.kind} · {l.description || l.due_date || "—"}
                                             {l.id === selected.id && <span className="ms-1 text-[9px] text-amber-700 font-bold">(محدد)</span>}
                                         </span>
-                                        <span className="num font-bold text-rose-700">{fmt(l.remaining_amount)}</span>
+                                        <span className="num font-bold text-rose-700">{fmt(_liabRemaining(l))}</span>
                                     </div>
                                 ))}
                             </div>
@@ -1161,7 +1195,7 @@ export default function FinancialInputHub() {
             ) : (
                 <>
                     {tab === "new-liab"   && <NewLiabilityForm counterparties={counterparties} onSaved={load} />}
-                    {tab === "pay-liab"   && <PayLiabilityForm openLiabilities={openLiabilities} banks={banks} onSaved={load} />}
+                    {tab === "pay-liab"   && <PayLiabilityForm openLiabilities={openLiabilities} banks={banks} employees={employees} onSaved={load} />}
                     {tab === "daily-exp"  && <DailyExpenseForm banks={banks} onSaved={load} />}
                     {tab === "receivable" && <ReceivableForm onSaved={load} />}
                     {tab === "advance"    && <AdvanceForm employees={employees} banks={banks} openLiabilities={openLiabilities} onSaved={load} />}
