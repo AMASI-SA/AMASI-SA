@@ -32,15 +32,18 @@
 - SSOT Balance service (`bnpl/balance_service.py`) for canonical BNPL balances
 - mezan-table global UI standard for 60+ tables
 
-## Key Modules (Implemented)
-- **BNPL Suite**: Tabby & Tamara clients, auto-sync, refund audit, weekly settlements, SSOT balances.
-- **Financial Input Hub** (`/financial-input-hub`): Unified entry for new liabilities, pay liability, daily expense, transfers, COD, شركة شحن, etc.
-- **Cumulative Liability Balance**: Search-based counterparty picker + aggregated open-liabilities card (Feb 2026).
-- **Reconciliation + Accounts + Transfers**: All bound to BNPL SSOT.
+## Key Modules
+- **BNPL Suite**: Tabby & Tamara clients, auto-sync, refund audit, weekly settlements, SSOT balances, **auto-matching (Iter-119)**.
+- **Financial Input Hub** (`/financial-input-hub`): Unified entry for new liabilities, pay liability (search-based + cumulative card), daily expense, transfers, COD, شركة شحن.
+- **Reconciliation + Accounts + Transfers + المركز المالي**: All bound to BNPL SSOT (Iter-117 + Iter-119).
 - **Auth**: JWT + httpOnly cookie + Authorization header.
 
 ## Completed Work (timeline of significant items)
-- Iter-118 (Feb 2026): Removed working-days salary calc; added search-autocomplete for counterparty; cumulative balance card for selected counterparty (DONE & verified on Preview).
+- **Iter-119 (Feb 2026 — this session)**:
+  - Phase 4-A: Closed all SSOT bypass gaps. `/accounts/summary`, `/liabilities/summary` (المركز المالي), and `/transfers` overdraw guard now consult `get_bnpl_provider_balance()`. Every Tabby/Tamara number is identical across 5 pages.
+  - Phase 4-B: New `bnpl/matching_service.py` engine + `GET /api/bnpl/settlements/matching/{provider}`. Auto-matches each weekly invoice with an OUT bank transfer (window 14 days, tolerance max(2%, 3 SAR)). UI: new "المطابقة البنكية" column on Weekly Settlements + "تحويلات غير مُطابقة" section.
+  - Bug fix (caught by testing agent): `transfers_routes.py` find_one() projection was missing `account_type` and `provider_name`, causing SSOT override to never trigger. Fixed → BNPL overdraw guard now actually rejects over-balance transfers.
+- Iter-118 (Feb 2026): Removed working-days salary calc; added search-autocomplete for counterparty; cumulative balance card for selected counterparty.
 - Iter-117: BNPL SSOT — unified balances across Accounts / Transfers / Reconciliation.
 - Iter-116: Phase 4 weekly BNPL settlements UI + dynamic computation engine.
 - Iter-115: Configurable `settlement_fee_per_invoice`.
@@ -53,10 +56,10 @@
 ## Pending / Roadmap
 
 ### P0 — Verification Only
-- (NONE) Cumulative balance feature verified on Preview ✅. Production redeploy pending user action.
+- **Cumulative balance feature** (Iter-118) verified on Preview ✅, awaiting production redeploy verification by user.
 
 ### P1 — In Progress
-- Phase 4 BNPL Automation: auto-match settlements against actual bank transfers (`settlements_service.py`).
+- **Iter-119 Phase 4-C (persisted matches)**: optional follow-up — persist matches in a `bnpl_settlement_matches` collection so the user can manually override / unlink + audit trail. Currently the engine is read-only and recomputes per call.
 - Iter-99 Phase 3: per-counterparty balance display inside dropdowns.
 - Iter-99 Phase 4: migrate legacy string-based supplier / ad-account names in `liabilities` → `counterparty_id`.
 
@@ -64,6 +67,7 @@
 - Unify payment-methods commission settings UI + add `settlement_fee_per_invoice` field.
 - Smart Settlement Alerts UI (Iter-90 Phases C & D).
 - "الطلبات غير المتطابقة" page (orders in BNPL but missing in `unified_orders`).
+- Cache `get_bnpl_provider_balance` per request (called twice per /accounts/summary today; not a perf issue but cleaner).
 
 ### P3 — Future
 - Source priority matching rules (Salla > Make > Tamara > Tabby > Excel).
@@ -71,6 +75,8 @@
 
 ## Critical Notes for Next Agent
 - **Language**: respond in Arabic.
-- **BNPL balances**: always go through `get_bnpl_provider_balance` (SSOT), never recompute.
+- **BNPL balances**: always go through `get_bnpl_provider_balance` (SSOT), never recompute. After Iter-119 the five primary touchpoints (`/accounts/summary`, `/liabilities/summary`, `/accounts list`, `POST /transfers`, `/reconciliation/summary`) are all wired.
+- **Auto-matching**: `bnpl/matching_service.py` is read-only. Window 14 days, tolerance max(2%, 3 SAR). Greedy, deterministic.
 - **Cloudflare 524**: wrap long-running endpoints in `try/except` returning JSON `{ success:false, error:str(e) }`.
 - **Production access**: agent can ONLY edit Preview. User redeploys to push to mezansalla.com.
+- **Projection trap**: anywhere SSOT is consulted, ensure the doc projection includes `account_type`, `provider_name`, and `normalized_payment_method` — otherwise `is_bnpl_account()` returns None and the override silently fails.
