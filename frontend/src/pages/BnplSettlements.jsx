@@ -57,7 +57,7 @@ function Row({ label, value, hint, bold, tone }) {
     );
 }
 
-function ProviderCard({ data }) {
+function ProviderCard({ data, onShowWeekly }) {
     const meta = PROVIDER_META[data.provider] || { name: data.provider, icon: "💳", color: "from-slate-50 to-white" };
     const t = data.totals || {};
     const b = data.bank || {};
@@ -81,9 +81,19 @@ function ProviderCard({ data }) {
                         ({fmtInt(t.transactions_count)} عملية)
                     </span>
                 </h3>
-                <div className="text-xs text-slate-600 bg-white px-2 py-1 rounded-lg border border-slate-200">
-                    عمولة: <span className="font-bold num">{fmt(fees.commission_pct)}%</span>
-                    {" · "} VAT: <span className="font-bold num">{fmt(fees.vat_pct)}%</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                        type="button"
+                        onClick={() => onShowWeekly(data.provider)}
+                        className="px-3 py-1 bg-slate-900 text-white text-[11px] font-bold rounded-lg hover:bg-slate-800 flex items-center gap-1"
+                        data-testid={`bnpl-settle-show-weekly-${data.provider}`}
+                    >
+                        📅 عرض الفواتير الأسبوعية
+                    </button>
+                    <div className="text-xs text-slate-600 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                        عمولة: <span className="font-bold num">{fmt(fees.commission_pct)}%</span>
+                        {" · "} VAT: <span className="font-bold num">{fmt(fees.vat_pct)}%</span>
+                    </div>
                 </div>
             </div>
 
@@ -158,6 +168,26 @@ export default function BnplSettlements() {
     const [refreshing, setRefreshing] = useState(false);
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
+    // Weekly settlements table (Phase 4) — one row per weekly invoice
+    const [weekly, setWeekly] = useState({});      // { tabby: [...], tamara: [...] }
+    const [weeklyOpen, setWeeklyOpen] = useState(null);  // provider currently expanded
+
+    const loadWeekly = async (provider) => {
+        try {
+            const params = {};
+            if (fromDate) params.from = fromDate;
+            if (toDate) params.to = toDate;
+            const { data: r } = await api.get(`/bnpl/settlements/weekly/${provider}`, { params });
+            if (r?.success) {
+                setWeekly((prev) => ({ ...prev, [provider]: r }));
+                setWeeklyOpen(provider);
+            } else {
+                toast.error(`خطأ: ${r?.error || "غير معروف"}`);
+            }
+        } catch (e) {
+            toast.error(errMsg(e, "تعذّر تحميل الفواتير الأسبوعية"));
+        }
+    };
 
     const load = async (silent = false) => {
         if (!silent) setRefreshing(true);
@@ -337,9 +367,107 @@ export default function BnplSettlements() {
                     {/* Per-provider cards */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {(data.providers || []).map((p) => (
-                            <ProviderCard key={p.provider} data={p} />
+                            <ProviderCard
+                                key={p.provider}
+                                data={p}
+                                onShowWeekly={loadWeekly}
+                            />
                         ))}
                     </div>
+
+                    {/* Weekly settlements drill-down */}
+                    {weeklyOpen && weekly[weeklyOpen] && (
+                        <div
+                            className="rounded-2xl border-2 border-slate-300 bg-white p-5"
+                            data-testid="bnpl-settle-weekly-table"
+                        >
+                            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                                <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                                    📅 الفواتير الأسبوعية —{" "}
+                                    {PROVIDER_META[weeklyOpen]?.icon} {PROVIDER_META[weeklyOpen]?.name}
+                                    <span className="text-xs text-slate-400 font-normal num">
+                                        ({weekly[weeklyOpen].totals?.invoices_count} فاتورة · {weekly[weeklyOpen].range?.from} → {weekly[weeklyOpen].range?.to})
+                                    </span>
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setWeeklyOpen(weeklyOpen === "tabby" ? "tamara" : "tabby")}
+                                        className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200"
+                                    >
+                                        تبديل المزوّد
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setWeeklyOpen(null)}
+                                        className="px-3 py-1 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-300"
+                                    >
+                                        إغلاق ✕
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="mezan-table compact w-full text-xs">
+                                    <thead>
+                                        <tr>
+                                            <th className="p-2">#</th>
+                                            <th className="p-2">من</th>
+                                            <th className="p-2">إلى</th>
+                                            <th className="p-2">العمليات</th>
+                                            <th className="p-2">المبيعات</th>
+                                            <th className="p-2">المسترجعات</th>
+                                            <th className="p-2">صافي المبيعات</th>
+                                            <th className="p-2">العمولة</th>
+                                            <th className="p-2">ض. العمولة</th>
+                                            <th className="p-2">رسوم التسوية</th>
+                                            <th className="p-2">صافي المستحق</th>
+                                            <th className="p-2">المحوَّل</th>
+                                            <th className="p-2">المتبقي</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(weekly[weeklyOpen].rows || []).map((r) => (
+                                            <tr key={r.invoice_no} data-testid={`bnpl-weekly-row-${r.invoice_no}`}>
+                                                <td className="p-2 font-bold text-slate-900">{r.invoice_no}</td>
+                                                <td className="p-2 font-mono text-[10px]">{r.from}</td>
+                                                <td className="p-2 font-mono text-[10px]">{r.to}</td>
+                                                <td className="p-2 num">{fmtInt(r.transactions_count)}</td>
+                                                <td className="p-2 num">{fmt(r.gross_sales)}</td>
+                                                <td className="p-2 num text-rose-700">{fmt(r.total_refunds)}</td>
+                                                <td className="p-2 num font-bold">{fmt(r.net_sales)}</td>
+                                                <td className="p-2 num text-rose-700">{fmt(r.commission)}</td>
+                                                <td className="p-2 num text-rose-700/70">{fmt(r.commission_vat)}</td>
+                                                <td className="p-2 num text-rose-700/70">{fmt(r.settlement_fee)}</td>
+                                                <td className="p-2 num font-extrabold text-emerald-700">{fmt(r.net_payable)}</td>
+                                                <td className="p-2 num">{fmt(r.transferred_amount)}</td>
+                                                <td className={`p-2 num font-bold ${Math.abs(r.remaining_with_provider) < 0.5 ? "text-emerald-700" : "text-amber-700"}`}>
+                                                    {fmt(r.remaining_with_provider)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        <tr className="mezan-total-row">
+                                            <td className="p-2" colSpan="3">الإجمالي</td>
+                                            <td className="p-2 num">—</td>
+                                            <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.gross_sales)}</td>
+                                            <td className="p-2 num text-rose-700">{fmt(weekly[weeklyOpen].totals?.total_refunds)}</td>
+                                            <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.net_sales)}</td>
+                                            <td className="p-2 num text-rose-700">{fmt(weekly[weeklyOpen].totals?.commission)}</td>
+                                            <td className="p-2 num text-rose-700/70">{fmt(weekly[weeklyOpen].totals?.commission_vat)}</td>
+                                            <td className="p-2 num text-rose-700/70">{fmt(weekly[weeklyOpen].totals?.settlement_fee)}</td>
+                                            <td className="p-2 num font-extrabold text-emerald-700">{fmt(weekly[weeklyOpen].totals?.net_payable)}</td>
+                                            <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.transferred_amount)}</td>
+                                            <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.remaining_with_provider)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="mt-3 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
+                                📌 كل فاتورة تمثّل أسبوع التسوية القياسي للمزوّد. رسوم التسوية تُخصم مرة واحدة لكل فاتورة.
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>

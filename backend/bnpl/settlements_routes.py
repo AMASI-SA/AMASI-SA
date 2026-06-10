@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from .settlements_service import (
     compute_all_settlements,
     compute_settlement_for_provider,
+    compute_weekly_settlements,
     PROVIDERS,
 )
 
@@ -53,6 +54,44 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 **(await compute_settlement_for_provider(
                     db, user["id"], provider, from_date, to_date,
                 )),
+            }
+        except Exception as e:  # noqa: BLE001
+            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+
+    @router.get("/weekly/{provider}")
+    async def weekly_settlements(
+        provider: str,
+        user: dict = Depends(get_current_user),
+        from_date: Optional[str] = Query(None, alias="from",
+                                         pattern=r"^\d{4}-\d{2}-\d{2}$"),
+        to_date: Optional[str] = Query(None, alias="to",
+                                       pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    ):
+        """List of weekly settlements for ONE provider (one row per
+        weekly invoice).  Default range = activation_date → today."""
+        if provider not in PROVIDERS:
+            return {"success": False, "error": f"unknown provider {provider}"}
+        try:
+            rows = await compute_weekly_settlements(
+                db, user["id"], provider, from_date, to_date,
+            )
+            totals = {
+                k: round(sum(r[k] for r in rows), 2)
+                for k in ("gross_sales", "total_refunds", "net_sales",
+                         "commission", "commission_vat", "settlement_fee",
+                         "net_payable", "transferred_amount",
+                         "remaining_with_provider")
+            }
+            totals["invoices_count"] = len(rows)
+            return {
+                "success": True,
+                "provider": provider,
+                "rows": rows,
+                "totals": totals,
+                "range": {
+                    "from": (rows[0]["from"] if rows else from_date),
+                    "to":   (rows[-1]["to"] if rows else to_date),
+                },
             }
         except Exception as e:  # noqa: BLE001
             return {"success": False, "error": f"{type(e).__name__}: {e}"}

@@ -271,6 +271,72 @@ async def compute_settlement_for_provider(
     }
 
 
+async def compute_weekly_settlements(
+    db, user_id: str, provider: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Return ONE settlement row per weekly period from `date_from` to
+    `date_to` (inclusive).  Useful for the settlements history table.
+
+    If `date_from` is None, falls back to the provider's activation
+    date in bnpl_settings.  If `date_to` is None, falls back to today.
+    """
+    # Resolve floor + ceiling
+    if not date_from:
+        sett = await db.bnpl_settings.find_one(
+            {"user_id": user_id, "provider": provider}, {"activation_date": 1},
+        ) or {}
+        date_from = sett.get("activation_date") or (
+            (date.today().replace(day=1)).isoformat()
+        )
+    if not date_to:
+        date_to = date.today().isoformat()
+
+    try:
+        floor = date.fromisoformat(date_from)
+        ceil_ = date.fromisoformat(date_to)
+    except (TypeError, ValueError):
+        return []
+
+    if ceil_ < floor:
+        return []
+
+    fees = await _merchant_fee_rates(db, user_id, provider)
+    period_days = int(fees.get("settlement_period_days") or 7)
+
+    rows: List[Dict[str, Any]] = []
+    cursor = floor
+    invoice_no = 1
+    from datetime import timedelta
+    while cursor <= ceil_:
+        week_end = min(cursor + timedelta(days=period_days - 1), ceil_)
+        s = await compute_settlement_for_provider(
+            db, user_id, provider,
+            cursor.isoformat(), week_end.isoformat(),
+        )
+        t = s.get("totals", {})
+        b = s.get("bank", {})
+        rows.append({
+            "invoice_no": invoice_no,
+            "from": cursor.isoformat(),
+            "to": week_end.isoformat(),
+            "transactions_count": t.get("transactions_count", 0),
+            "gross_sales": t.get("gross_sales", 0),
+            "total_refunds": t.get("total_refunds", 0),
+            "net_sales": t.get("net_sales", 0),
+            "commission": t.get("commission", 0),
+            "commission_vat": t.get("commission_vat", 0),
+            "settlement_fee": t.get("settlement_fee", 0),
+            "net_payable": t.get("net_payable", 0),
+            "transferred_amount": b.get("transferred_amount", 0),
+            "remaining_with_provider": b.get("remaining_with_provider", 0),
+        })
+        cursor = week_end + timedelta(days=1)
+        invoice_no += 1
+    return rows
+
+
 async def compute_all_settlements(
     db, user_id: str,
     date_from: Optional[str] = None,
