@@ -190,7 +190,27 @@ export default function BnplSettlements() {
             if (toDate) params.to = toDate;
             const { data: r } = await api.get(`/bnpl/settlements/weekly/${provider}`, { params });
             if (r?.success) {
-                setWeekly((prev) => ({ ...prev, [provider]: r }));
+                // Iter-119 — also pull the auto-match map so each weekly row
+                // can show whether it has a matched bank transfer.
+                let matchByInv = {};
+                let unmatchedTransfers = [];
+                let matchTotals = null;
+                let toleranceDoc = "";
+                try {
+                    const { data: m } = await api.get(`/bnpl/settlements/matching/${provider}`, { params });
+                    if (m?.success && Array.isArray(m.invoices)) {
+                        matchByInv = Object.fromEntries(
+                            m.invoices.map((inv) => [inv.invoice_no, inv])
+                        );
+                        unmatchedTransfers = m.unmatched_transfers || [];
+                        matchTotals = m.totals || null;
+                        toleranceDoc = m.tolerance_doc || "";
+                    }
+                } catch (_) { /* matching is best-effort, never blocks weekly */ }
+                setWeekly((prev) => ({
+                    ...prev,
+                    [provider]: { ...r, matchByInv, unmatchedTransfers, matchTotals, toleranceDoc },
+                }));
                 setWeeklyOpen(provider);
             } else {
                 toast.error(`خطأ: ${r?.error || "غير معروف"}`);
@@ -435,10 +455,21 @@ export default function BnplSettlements() {
                                             <th className="p-2">صافي المستحق</th>
                                             <th className="p-2">المحوَّل</th>
                                             <th className="p-2">المتبقي</th>
+                                            <th className="p-2" data-testid="bnpl-weekly-match-header">المطابقة البنكية</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {(weekly[weeklyOpen].rows || []).map((r) => (
+                                        {(weekly[weeklyOpen].rows || []).map((r) => {
+                                            const match = weekly[weeklyOpen].matchByInv?.[r.invoice_no];
+                                            const status = match?.match_status || "unmatched";
+                                            const mt = match?.matched_transfer;
+                                            const badge = {
+                                                matched:   { txt: "✅ مطابق",   cls: "bg-emerald-100 text-emerald-800" },
+                                                over:      { txt: "⚠ زيادة",    cls: "bg-amber-100 text-amber-800" },
+                                                under:     { txt: "⚠ نقص",      cls: "bg-rose-100 text-rose-800" },
+                                                unmatched: { txt: "—",          cls: "bg-slate-100 text-slate-500" },
+                                            }[status] || { txt: status, cls: "bg-slate-100 text-slate-600" };
+                                            return (
                                             <tr key={r.invoice_no} data-testid={`bnpl-weekly-row-${r.invoice_no}`}>
                                                 <td className="p-2 font-bold text-slate-900">{r.invoice_no}</td>
                                                 <td className="p-2 font-mono text-[10px]">{r.from}</td>
@@ -455,8 +486,36 @@ export default function BnplSettlements() {
                                                 <td className={`p-2 num font-bold ${Math.abs(r.remaining_with_provider) < 0.5 ? "text-emerald-700" : "text-amber-700"}`}>
                                                     {fmt(r.remaining_with_provider)}
                                                 </td>
+                                                <td className="p-2">
+                                                    <div className="flex flex-col items-start gap-1">
+                                                        <span
+                                                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badge.cls}`}
+                                                            data-testid={`bnpl-weekly-match-${r.invoice_no}`}
+                                                        >
+                                                            {badge.txt}
+                                                        </span>
+                                                        {mt && (
+                                                            <div
+                                                                className="text-[10px] text-slate-600 leading-tight"
+                                                                title={mt.description || ""}
+                                                            >
+                                                                <span className="num font-bold">{fmt(mt.amount)}</span>{" "}
+                                                                <span className="font-mono">{mt.transaction_date}</span>
+                                                                {mt.peer_account_name && (
+                                                                    <span className="block text-slate-400">→ {mt.peer_account_name}</span>
+                                                                )}
+                                                                {typeof mt.delta === "number" && Math.abs(mt.delta) > 0.005 && (
+                                                                    <span className={`block font-bold ${mt.delta > 0 ? "text-amber-700" : "text-rose-700"}`}>
+                                                                        Δ {fmt(mt.delta)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
                                             </tr>
-                                        ))}
+                                            );
+                                        })}
                                         <tr className="mezan-total-row">
                                             <td className="p-2" colSpan="3">الإجمالي</td>
                                             <td className="p-2 num">—</td>
@@ -469,6 +528,16 @@ export default function BnplSettlements() {
                                             <td className="p-2 num font-extrabold text-emerald-700">{fmt(weekly[weeklyOpen].totals?.net_payable)}</td>
                                             <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.transferred_amount)}</td>
                                             <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.remaining_with_provider)}</td>
+                                            <td className="p-2 text-[10px] text-slate-600">
+                                                {weekly[weeklyOpen].matchTotals ? (
+                                                    <span className="num">
+                                                        <span className="text-emerald-700 font-bold">{weekly[weeklyOpen].matchTotals.matched_count}</span>
+                                                        {" / "}
+                                                        <span className="font-bold">{weekly[weeklyOpen].matchTotals.invoices_count}</span>
+                                                        <span className="block">مطابقة</span>
+                                                    </span>
+                                                ) : "—"}
+                                            </td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -476,7 +545,52 @@ export default function BnplSettlements() {
 
                             <div className="mt-3 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
                                 📌 كل فاتورة تمثّل أسبوع التسوية القياسي للمزوّد. رسوم التسوية تُخصم مرة واحدة لكل فاتورة.
+                                {weekly[weeklyOpen].toleranceDoc && (
+                                    <span className="block mt-1">🔍 {weekly[weeklyOpen].toleranceDoc}</span>
+                                )}
                             </div>
+
+                            {/* Iter-119 — Unmatched bank transfers section */}
+                            {(weekly[weeklyOpen].unmatchedTransfers || []).length > 0 && (
+                                <div
+                                    className="mt-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4"
+                                    data-testid="bnpl-unmatched-transfers"
+                                >
+                                    <h4 className="text-sm font-extrabold text-amber-900 mb-2 flex items-center gap-2">
+                                        ⚠ تحويلات بنكية لم تُطابق أي فاتورة
+                                        <span className="text-xs font-normal text-amber-700">
+                                            ({weekly[weeklyOpen].unmatchedTransfers.length} تحويل ·
+                                            <span className="num"> {fmt(weekly[weeklyOpen].matchTotals?.unmatched_transfer_total)}</span> ر.س)
+                                        </span>
+                                    </h4>
+                                    <div className="text-[11px] text-amber-800 mb-2">
+                                        هذه تحويلات خرجت من حساب {PROVIDER_META[weeklyOpen]?.name} ولم يتم ربطها بأي فاتورة أسبوعية.
+                                        قد تكون خارج النافذة الزمنية أو بمبلغ بعيد عن المتوقع.
+                                    </div>
+                                    <table className="mezan-table compact w-full text-xs bg-white">
+                                        <thead>
+                                            <tr>
+                                                <th className="p-2">التاريخ</th>
+                                                <th className="p-2">المبلغ</th>
+                                                <th className="p-2">إلى حساب</th>
+                                                <th className="p-2">الوصف</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {weekly[weeklyOpen].unmatchedTransfers.map((t) => (
+                                                <tr key={t.id} data-testid={`bnpl-unmatched-transfer-${t.id}`}>
+                                                    <td className="p-2 font-mono text-[10px]">{t.transaction_date}</td>
+                                                    <td className="p-2 num font-bold">{fmt(t.amount)}</td>
+                                                    <td className="p-2">{t.peer_account_name || "—"}</td>
+                                                    <td className="p-2 text-[10px] text-slate-600 max-w-md truncate">
+                                                        {t.description || "—"}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
                     )}
                 </>

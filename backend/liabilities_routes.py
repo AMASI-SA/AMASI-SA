@@ -922,12 +922,18 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         salary_accrual = await _aggregate_salary_accrual(db, uid)
 
         # Assets ───────────────────────────────────────────────────
+        # Iter-119 — apply BNPL SSOT when summing payment_platform totals
+        # so the Financial Position page (المركز المالي) matches the
+        # per-row balances in /accounts and /bnpl-settlements.
+        from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
         banks_total = 0.0
         platforms_total = 0.0
         async for a in db.accounts.find(
             {"user_id": uid},
-            {"_id": 0, "account_type": 1, "status": 1,
-             "current_balance": 1, "expected_orders_balance": 1},
+            {"_id": 0, "id": 1, "account_type": 1, "status": 1,
+             "current_balance": 1, "expected_orders_balance": 1,
+             "provider_name": 1, "name": 1,
+             "normalized_payment_method": 1},
         ):
             if (a.get("status") or "active") == "hidden":
                 continue
@@ -936,7 +942,17 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 banks_total += float(a.get("current_balance") or 0)
             elif t == "payment_platform":
                 # Iter-100 — REMAINING (un-transferred) balance only.
-                platforms_total += float(a.get("current_balance") or 0)
+                bal = float(a.get("current_balance") or 0)
+                try:
+                    bnpl_provider = is_bnpl_account(a)
+                    if bnpl_provider:
+                        canon = await get_bnpl_provider_balance(
+                            db, uid, bnpl_provider,
+                        )
+                        bal = float(canon["balance"])
+                except Exception:  # noqa: BLE001
+                    pass
+                platforms_total += bal
         assets_total = _round(banks_total + platforms_total)
 
         # Liabilities ──────────────────────────────────────────────

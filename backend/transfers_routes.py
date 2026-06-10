@@ -169,12 +169,14 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
         from_acc = await db.accounts.find_one(
             {"id": payload.from_account_id, "user_id": uid},
             {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1,
-             "current_balance": 1, "normalized_payment_method": 1},
+             "current_balance": 1, "normalized_payment_method": 1,
+             "account_type": 1, "provider_name": 1},
         )
         to_acc = await db.accounts.find_one(
             {"id": payload.to_account_id, "user_id": uid},
             {"_id": 0, "id": 1, "name": 1, "currency": 1, "status": 1,
-             "current_balance": 1, "normalized_payment_method": 1},
+             "current_balance": 1, "normalized_payment_method": 1,
+             "account_type": 1, "provider_name": 1},
         )
         if not from_acc:
             raise HTTPException(404, "حساب المصدر غير موجود.")
@@ -188,6 +190,23 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
         # current_balance (which already accounts for prior transfers).
         amount = round(float(payload.amount), 2)
         from_bal = round(float(from_acc.get("current_balance") or 0), 2)
+
+        # Iter-119 — BNPL SSOT: if the source is a Tabby/Tamara wallet, the
+        # ledger `current_balance` is stale (only reflects explicitly
+        # recorded transactions).  The canonical balance comes from the
+        # BNPL formula in `bnpl/balance_service.py` and is the same
+        # number every other page shows.  Without this override, the user
+        # could see "Balance = 6 500 SAR" in the UI yet have the backend
+        # reject a 5 000 SAR transfer (or accept an over-transfer).
+        try:
+            from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
+            bnpl_provider = is_bnpl_account(from_acc)
+            if bnpl_provider:
+                canon = await get_bnpl_provider_balance(db, uid, bnpl_provider)
+                from_bal = round(float(canon["balance"]), 2)
+        except Exception:  # noqa: BLE001 — never block transfer on diagnostic
+            pass
+
         if amount > from_bal + 0.001:  # tiny epsilon for float noise
             raise HTTPException(
                 400,

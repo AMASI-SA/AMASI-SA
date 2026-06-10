@@ -116,4 +116,32 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
         except Exception as e:  # noqa: BLE001
             return {"success": False, "error": f"{type(e).__name__}: {e}"}
 
+    @router.get("/matching/{provider}")
+    async def matching_for_provider(
+        provider: str,
+        user: dict = Depends(get_current_user),
+        from_date: Optional[str] = Query(None, alias="from",
+                                         pattern=r"^\d{4}-\d{2}-\d{2}$"),
+        to_date: Optional[str] = Query(None, alias="to",
+                                       pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    ):
+        """Phase 4-B — auto-match weekly invoices with bank transfers.
+
+        Returns each invoice's match status (`matched` / `unmatched`
+        / `over` / `under`) plus the list of leftover transfers that
+        the system could not assign to any invoice.  Read-only — no
+        DB writes."""
+        if provider not in PROVIDERS:
+            return {"success": False, "error": f"unknown provider {provider}"}
+        try:
+            from .matching_service import compute_matches_for_provider
+            return {
+                "success": True,
+                **(await compute_matches_for_provider(
+                    db, user["id"], provider, from_date, to_date,
+                )),
+            }
+        except Exception as e:  # noqa: BLE001
+            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+
     parent_router.include_router(router)

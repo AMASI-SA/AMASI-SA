@@ -1,0 +1,35 @@
+{
+  "summary": "Phase 4 (Iter-119) BNPL SSOT + auto-matching verified end-to-end. Backend: 12/12 pytest tests passed after fixing one real bug (transfers overdraw guard wasn't activating BNPL SSOT because account_type and provider_name were missing from the find_one projection). All five SSOT touchpoints (/accounts/summary, /liabilities/summary, /accounts list, /transfers POST guard, /reconciliation/summary platforms[]) now return the same Tabby/Tamara balances as /api/bnpl/settlements/balances/canonical (tabby=-5.00, tamara=-10000.00 on this preview tenant). The /api/bnpl/settlements/matching/{provider} endpoint returns the expected shape (invoices[], unmatched_transfers[], totals{}, linked_account_id, window_days=14, tolerance_doc). Frontend: /bnpl-settlements renders the new 'المطابقة البنكية' column (data-testid=bnpl-weekly-match-header) with per-row data-testid=bnpl-weekly-match-{invoice_no} cells for both Tabby and Tamara, plus the 'تحويلات بنكية لم تُطابق أي فاتورة' section (data-testid=bnpl-unmatched-transfers) showing the unmatched 10,000 SAR Tamara transfer dated 2025-01-15. Weekly+summary regression endpoints still pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bnpl_phase4_iter119.py",
+    "/app/test_reports/pytest/iter119_phase4.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BUG FIXED by testing agent: transfers_routes.py find_one() projection was missing account_type and provider_name, causing is_bnpl_account() to always return None — overdraw guard silently fell back to ledger current_balance for BNPL wallets. Reproduced by sending 100 SAR from Tabby (SSOT=-5) which was wrongly accepted with 200. Added the two fields to both from_acc and to_acc projections; after fix the same call is rejected with 400 'المبلغ أكبر من الرصيد المتاح'.",
+    "matching_service.py near-miss handling: when net_payable<=0 the matcher silently skips the consume branch and labels the invoice 'unmatched'. Probably correct (no obligation) but a comment/explicit branch would aid readability.",
+    "accounts_routes.py /summary recomputes get_bnpl_provider_balance for every BNPL account on every call — could be cached per request (currently 2 hits per /accounts/summary on a Tabby+Tamara tenant; not a perf issue today but worth memoising at the request scope).",
+    "BnplSettlements.jsx loadWeekly() swallows the matching error with `catch(_)` — fine for resilience, but a one-line debug log on failure would help future bisecting.",
+    "matching_service.py uses date.fromisoformat(tdate[:10]) without timezone awareness — OK for SAR/Asia-Riyadh dates but document the assumption."
+  ],
+  "updated_files": [
+    "/app/backend/transfers_routes.py",
+    "/app/backend/tests/test_bnpl_phase4_iter119.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (real merchant on Preview — Tabby SSOT=-5, Tamara SSOT=-10000).",
+  "seed_data_creation": "Each transfers/overdraw test does NOT persist data on overdraw (400 path). The matching endpoint is read-only. No cleanup required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-119 Phase 4 (SSOT + matching) is solid after one bug fix. Note that on Preview tamara has a legacy 10,000 SAR transfer dated 2025-01-15 which appears in unmatched_transfers — this is expected because there are no real BNPL invoices on Preview. Real validation of matched_count>0 requires production data. The matching algorithm uses WINDOW=14d, AMOUNT_PCT_TOL=2%, AMOUNT_FLAT_TOL=3 SAR and is greedy/deterministic. balance_source on /api/accounts is now 'bnpl_ssot' for Tabby/Tamara and 'ledger' for all others — frontend can use this flag to render a 'مصدر الرصيد' badge.",
+  "rca_of_the_issue": "Root cause of accepted overdraw on BNPL wallets: MongoDB find_one() projection on lines 169-178 of transfers_routes.py omitted account_type and provider_name. The Iter-119 SSOT override (lines 199-206) calls is_bnpl_account(from_acc) which returns None when account_type is missing (line 93 of bnpl/balance_service.py: `if not account or account.get('account_type') != 'payment_platform': return None`). Result: from_bal stayed at ledger current_balance (which is the high pre-SSOT seeded value 55,264.41 for Tabby) and the overdraw guard `amount > from_bal + 0.001` never tripped. Mitigation: added account_type and provider_name to both projections. Re-test confirms 400 is returned for over-SSOT amounts."
+}

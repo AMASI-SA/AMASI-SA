@@ -152,10 +152,9 @@ async def _sync_one_user_provider(
         # Ensures Reports / Profits / Settlements always reflect the
         # refunds we just fetched from the provider, regardless of
         # which sync path created the unified_orders row.
-        unified_refund_updates = 0
         if ok:
             try:
-                unified_refund_updates = await _propagate_refunds_to_unified(
+                await _propagate_refunds_to_unified(
                     db, user_id, provider,
                 )
             except Exception as prop_exc:  # noqa: BLE001

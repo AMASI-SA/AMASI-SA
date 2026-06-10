@@ -340,13 +340,28 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         """Powers the top 4 summary cards on /accounts."""
         cur = db.accounts.find(
             {"user_id": user["id"], "status": {"$ne": "hidden"}},
-            {"_id": 0, "account_type": 1, "current_balance": 1, "status": 1},
+            {"_id": 0, "id": 1, "account_type": 1, "current_balance": 1,
+             "status": 1, "provider_name": 1, "name": 1,
+             "normalized_payment_method": 1},
         )
+        # Iter-119 — apply BNPL SSOT when summing payment_platform totals
+        # so the 4 summary cards on /accounts MATCH the per-row balances
+        # (which already go through `_account_with_meta` → SSOT).
+        from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
         by_type: dict[str, float] = {t: 0.0 for t in ACCOUNT_TYPES}
         grand = 0.0
         async for d in cur:
             t = d.get("account_type")
             bal = float(d.get("current_balance") or 0)
+            try:
+                bnpl_provider = is_bnpl_account(d)
+                if bnpl_provider:
+                    canon = await get_bnpl_provider_balance(
+                        db, user["id"], bnpl_provider,
+                    )
+                    bal = float(canon["balance"])
+            except Exception:  # noqa: BLE001
+                pass
             grand += bal
             if t in by_type:
                 by_type[t] += bal
@@ -929,7 +944,6 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         # the `bank_transfer` rollup specifically, we must subtract the
         # routed amount so the rollup only reflects unrouted revenue.
         routed_total = round(sum(b["amount"] for b in bank_aggregates.values()), 2)
-        routed_count_total = sum(b["count"] for b in bank_aggregates.values())
 
         # 3. Upsert one account per top-level key.
         created = 0
