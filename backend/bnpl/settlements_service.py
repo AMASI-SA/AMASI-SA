@@ -532,26 +532,53 @@ async def compute_weekly_settlements(
     invoice_no = 1
 
     if invoice_set:
-        # Iter-121 — weekday-driven cycle.
-        # First invoice date = first allowed weekday ≥ floor.
+        # Iter-123 — Period convention change.  Each invoice covers a
+        # FULL cycle that STARTS on its invoice_weekday and ENDS the
+        # day BEFORE the next invoice_weekday.  Example:
+        #     invoice_weekdays = [Monday]
+        #     period 1 = Mon Apr 27 → Sun May 3   (full 7 days)
+        #     period 2 = Mon May 4 → Sun May 10
+        # The statement is "issued" on the FOLLOWING invoice_weekday
+        # (i.e. day after the period ends), which is the day Tabby /
+        # Tamara generate the actual settlement file.  The expected
+        # bank transfer date is the first transfer_weekday on/after
+        # the issue_date.
         period_start = floor
-        invoice_date = _next_or_same_weekday(floor, invoice_set)
-        while invoice_date is not None and invoice_date <= ceil_:
+        while period_start <= ceil_:
+            if period_start.weekday() in invoice_set:
+                # We're already on an invoice day → full cycle.
+                issue_date = _next_strict_weekday(period_start, invoice_set)
+            else:
+                # Mid-week start (e.g. activation date is a Wednesday).
+                # First period is partial — ends just before the next
+                # invoice day.
+                issue_date = _next_or_same_weekday(period_start, invoice_set)
+
+            if issue_date is None:
+                # No more invoice days ahead — close out remaining
+                # range as one final partial row.
+                period_end = ceil_
+            else:
+                period_end = min(issue_date - timedelta(days=1), ceil_)
+
+            if period_end < period_start:
+                break
+
             s = await compute_settlement_for_provider(
                 db, user_id, provider,
-                period_start.isoformat(), invoice_date.isoformat(),
+                period_start.isoformat(), period_end.isoformat(),
             )
             t = s.get("totals", {})
             b = s.get("bank", {})
             expected_transfer = (
-                _next_or_same_weekday(
-                    invoice_date + timedelta(days=1), transfer_set,
-                ) if transfer_set else None
+                _next_or_same_weekday(issue_date, transfer_set)
+                if (transfer_set and issue_date) else None
             )
             rows.append({
                 "invoice_no": invoice_no,
                 "from": period_start.isoformat(),
-                "to": invoice_date.isoformat(),
+                "to": period_end.isoformat(),
+                "issue_date": issue_date.isoformat() if issue_date else None,
                 "expected_transfer_date": (
                     expected_transfer.isoformat() if expected_transfer else None
                 ),
@@ -567,8 +594,9 @@ async def compute_weekly_settlements(
                 "transferred_amount": b.get("transferred_amount", 0),
                 "remaining_with_provider": b.get("remaining_with_provider", 0),
             })
-            period_start = invoice_date + timedelta(days=1)
-            invoice_date = _next_strict_weekday(invoice_date, invoice_set)
+            if issue_date is None or issue_date > ceil_:
+                break
+            period_start = issue_date
             invoice_no += 1
         return rows
 

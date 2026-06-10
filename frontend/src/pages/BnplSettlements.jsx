@@ -474,6 +474,7 @@ export default function BnplSettlements() {
                                             <th className="p-2">#</th>
                                             <th className="p-2">من</th>
                                             <th className="p-2">إلى</th>
+                                            <th className="p-2">تاريخ الإصدار</th>
                                             <th className="p-2">تحويل متوقع</th>
                                             <th className="p-2">العمليات</th>
                                             <th className="p-2">المبيعات</th>
@@ -507,6 +508,9 @@ export default function BnplSettlements() {
                                                 <td className="p-2 font-bold text-slate-900">{r.invoice_no}</td>
                                                 <td className="p-2 font-mono text-[10px]">{r.from}</td>
                                                 <td className="p-2 font-mono text-[10px]">{r.to}</td>
+                                                <td className="p-2 font-mono text-[10px] text-blue-700">
+                                                    {r.issue_date || "—"}
+                                                </td>
                                                 <td className="p-2 font-mono text-[10px] text-emerald-700">
                                                     {r.expected_transfer_date || "—"}
                                                 </td>
@@ -564,6 +568,7 @@ export default function BnplSettlements() {
                                         })}
                                         <tr className="mezan-total-row">
                                             <td className="p-2" colSpan="3">الإجمالي</td>
+                                            <td className="p-2 text-[10px] text-slate-400">—</td>
                                             <td className="p-2 text-[10px] text-slate-400">—</td>
                                             <td className="p-2 num">—</td>
                                             <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.gross_sales)}</td>

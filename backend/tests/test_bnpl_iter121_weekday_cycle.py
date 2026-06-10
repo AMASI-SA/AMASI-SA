@@ -58,19 +58,22 @@ class TestWeekdayCycle:
         assert r.status_code == 200, r.text[:300]
         rows = r.json().get("rows") or []
         assert len(rows) >= 3, f"expected several weekly rows in May, got {len(rows)}"
-        # Every invoice ends on Monday (weekday() == 0)
+        # Iter-123 — period STARTS on Monday and runs to Sunday.
+        # Each row that's not the partial first one should start on Monday.
+        # The issue_date is the NEXT Monday after the period ends.
+        # expected_transfer_date is Tuesday or Wednesday after issue_date.
         for row in rows:
-            inv = date.fromisoformat(row["to"])
-            assert inv.weekday() == 0, (
-                f"invoice #{row['invoice_no']} ends on weekday "
-                f"{inv.weekday()} ({row['to']}) — expected Monday (0)"
+            issue = row.get("issue_date")
+            assert issue is not None, row
+            issue_d = date.fromisoformat(issue)
+            assert issue_d.weekday() == 0, (
+                f"issue_date should be Monday, got {issue_d.weekday()} "
+                f"for row {row}"
             )
-            # expected_transfer_date is Tuesday or Wednesday
-            assert row.get("expected_transfer_date"), row
-            et = date.fromisoformat(row["expected_transfer_date"])
-            assert et.weekday() in {1, 2}, (
-                f"expected transfer should be Tue/Wed, got "
-                f"{et.weekday()} ({row['expected_transfer_date']})"
+            et = row.get("expected_transfer_date")
+            assert et, row
+            assert date.fromisoformat(et).weekday() in {1, 2}, (
+                f"expected_transfer must be Tue/Wed, got {et}"
             )
 
     def test_tamara_default_invoice_day_is_sunday(self, session):
@@ -81,12 +84,14 @@ class TestWeekdayCycle:
         assert r.status_code == 200, r.text[:300]
         rows = r.json().get("rows") or []
         assert rows, "no Tamara rows returned"
-        for row in rows[1:]:  # skip first partial period
-            inv = date.fromisoformat(row["to"])
-            assert inv.weekday() == 6, (  # Sunday = 6
-                f"Tamara invoice should end on Sunday, got "
-                f"{inv.weekday()} ({row['to']})"
-            )
+        # issue_date should be Sunday for every row (Tamara's default).
+        for row in rows:
+            issue = row.get("issue_date")
+            if issue:  # may be None for the last partial row
+                assert date.fromisoformat(issue).weekday() == 6, (  # Sun=6
+                    f"Tamara issue_date should be Sunday, got "
+                    f"{date.fromisoformat(issue).weekday()} ({issue})"
+                )
 
     def test_save_custom_weekdays_persists_and_drives_periods(self, session):
         """Set tabby to Monday+Thursday invoices, Wednesday+Friday transfers."""
@@ -112,9 +117,9 @@ class TestWeekdayCycle:
                 "?from=2025-05-01&to=2025-05-31", timeout=30,
             )
             rows = r.json().get("rows") or []
-            weekdays = [date.fromisoformat(row["to"]).weekday() for row in rows]
+            weekdays = [date.fromisoformat(row["issue_date"]).weekday() for row in rows if row.get("issue_date")]
             assert all(w in {0, 3} for w in weekdays), (
-                f"invoice weekdays should be Mon(0) or Thu(3); got {weekdays}"
+                f"issue weekdays should be Mon(0) or Thu(3); got {weekdays}"
             )
             # And both should appear at least once across the month
             assert 0 in weekdays
@@ -137,20 +142,18 @@ class TestWeekdayCycle:
             )
 
     def test_settlement_fee_counts_per_invoice_weekday(self, session):
-        """With Tabby default = Monday and a 1-Mar→31-Mar window in 2025
-        there are exactly 5 Mondays (3, 10, 17, 24, 31), so
-        settlement_fee = 5 × settlement_fee_per_invoice (default 5 SAR)
-        = 25 SAR — regardless of total days in the month."""
+        """With Tabby default = Monday in 1-Mar→31-Mar 2025, expect 5
+        Mondays within the range (3, 10, 17, 24, 31).  The aggregate
+        endpoint charges `settlement_fee_per_invoice` (5 SAR) × 5 = 25."""
         r = session.get(
             f"{BASE_URL}/api/bnpl/settlements/tabby"
-            "?from=2025-03-01&to=2025-03-31", timeout=30,
+            "?from=2025-03-03&to=2025-03-31", timeout=30,  # Mon → Mon
         )
         assert r.status_code == 200, r.text[:300]
         body = r.json()
         assert body["success"] is True, body
         totals = body["totals"]
         assert totals["settlement_invoices_count"] == 5, totals
-        # 5 SAR per invoice × 5 invoices = 25
         assert abs(totals["settlement_fee"] - 25.0) < 0.01, totals
 
     def test_invalid_weekday_names_are_silently_dropped(self, session):
