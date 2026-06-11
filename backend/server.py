@@ -364,6 +364,11 @@ class SettingsIn(BaseModel):
     report_included_statuses: Optional[List[str]] = None
     # NEW (Phase 5): per-user list of dashboard KPI card ids to hide.
     dashboard_hidden_cards: Optional[List[str]] = None
+    # Iter-141 — per-user list of sidebar nav-item testids to hide.
+    # Persisted in MongoDB so the choice is mirrored across every
+    # device the merchant logs in from (replaces the old
+    # localStorage-only `mezan.sidebar.hidden_pages`).
+    sidebar_hidden_pages: Optional[List[str]] = None
     # NEW (Phase 3): toggles for what gets deducted from "net sales" KPI.
     net_sales_config: Optional[NetSalesConfig] = None
     # NEW: hide Make.com orders with inferred (approximate) date from dashboard/reports.
@@ -726,6 +731,8 @@ async def get_settings(user: dict = Depends(current_user)):
         "cod_approved_statuses": s.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
         "report_included_statuses": s.get("report_included_statuses", []),
         "dashboard_hidden_cards": s.get("dashboard_hidden_cards", []),
+        # Iter-141 — sidebar visibility now syncs across devices.
+        "sidebar_hidden_pages": s.get("sidebar_hidden_pages", []),
         "net_sales_config": s.get("net_sales_config", DEFAULT_NET_SALES_CONFIG),
         "hide_inferred_date_orders": bool(s.get("hide_inferred_date_orders", False)),
         # iter-45 — electronic net status filter
@@ -756,6 +763,11 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["report_included_statuses"] = [s.strip() for s in payload.report_included_statuses if s.strip()]
     if payload.dashboard_hidden_cards is not None:
         update_doc["dashboard_hidden_cards"] = [s.strip() for s in payload.dashboard_hidden_cards if s.strip()]
+    # Iter-141 — cross-device sidebar visibility.
+    if payload.sidebar_hidden_pages is not None:
+        update_doc["sidebar_hidden_pages"] = [
+            s.strip() for s in payload.sidebar_hidden_pages if s.strip()
+        ]
     if payload.net_sales_config is not None:
         update_doc["net_sales_config"] = payload.net_sales_config.model_dump()
     if payload.hide_inferred_date_orders is not None:

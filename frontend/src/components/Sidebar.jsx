@@ -139,13 +139,25 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
         });
     }, [user?.is_owner]);
 
-    // ── Iter-124 — User-hidden pages (per-device localStorage) ──
+    // ── Iter-124 → Iter-141 — User-hidden pages (now cross-device) ──
     const [hiddenSet, setHiddenSet] = useState(() => loadHiddenPages());
     const [visibilityDialogOpen, setVisibilityDialogOpen] = useState(false);
     useEffect(() => {
         const handler = (e) => setHiddenSet(new Set(e.detail?.hidden || []));
         window.addEventListener(SIDEBAR_VISIBILITY_EVENT, handler);
         return () => window.removeEventListener(SIDEBAR_VISIBILITY_EVENT, handler);
+    }, []);
+    // Iter-141 — pull the canonical list from the server on first
+    // mount so a sidebar layout hidden on one device shows up
+    // immediately on every other device the merchant uses.
+    useEffect(() => {
+        let mounted = true;
+        import("../lib/sidebarVisibility").then(({ refreshHiddenPagesFromServer }) => {
+            refreshHiddenPagesFromServer().then((s) => {
+                if (mounted) setHiddenSet(s);
+            });
+        });
+        return () => { mounted = false; };
     }, []);
 
     // ── Open-section state ──────────────────────────────────────────
