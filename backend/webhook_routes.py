@@ -23,6 +23,8 @@ import os
 import uuid
 import logging
 from datetime import datetime, timezone
+
+from tz_utils import riyadh_today
 from typing import Optional, Union, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
@@ -284,8 +286,9 @@ def _build_router(db) -> APIRouter:
 
     @router.get("/tiktok/recent")
     async def tiktok_recent(days: int = Query(30, ge=1, le=365), user: dict = Depends(current_user)):
-        from datetime import timedelta, date as _date
-        cutoff = (_date.today() - timedelta(days=days - 1)).isoformat()
+        from datetime import timedelta
+        # Iter-140 — Asia/Riyadh calendar cutoff.
+        cutoff = (riyadh_today() - timedelta(days=days - 1)).isoformat()
         items = await db.tiktok_ads_daily.find(
             {"user_id": user["id"], "date": {"$gte": cutoff}}, {"_id": 0}
         ).sort("date", -1).to_list(days)
@@ -395,8 +398,9 @@ def _build_router(db) -> APIRouter:
 
     @router.get("/meta/recent")
     async def meta_recent(days: int = Query(30, ge=1, le=365), user: dict = Depends(current_user)):
-        from datetime import timedelta, date as _date
-        cutoff = (_date.today() - timedelta(days=days - 1)).isoformat()
+        from datetime import timedelta
+        # Iter-140 — Asia/Riyadh calendar cutoff.
+        cutoff = (riyadh_today() - timedelta(days=days - 1)).isoformat()
         items = await db.meta_ads_daily.find(
             {"user_id": user["id"], "date": {"$gte": cutoff}}, {"_id": 0}
         ).sort("date", -1).to_list(days * 50)

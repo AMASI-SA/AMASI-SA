@@ -44,6 +44,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_from_db
+from tz_utils import riyadh_today_iso
 
 
 def _now() -> str:
@@ -1845,8 +1846,8 @@ async def run_daily_cron(db) -> dict:
     Now it's called every 30 minutes by `_ad_account_halfhour_sync`
     in server.py so daily ad-balances reflect spend in near-realtime.
     """
-    from datetime import date
-    today = date.today().isoformat()
+    # Iter-140 — Asia/Riyadh calendar date (server runs in UTC).
+    today = riyadh_today_iso()
     users_done = []
     seen_users = set()
     async for cp in db.counterparties.find(

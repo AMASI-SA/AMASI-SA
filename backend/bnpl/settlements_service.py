@@ -37,6 +37,8 @@ import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from tz_utils import riyadh_today
+
 
 # ── Iter-130 — BNPL providers operate on Saudi Arabia local time
 # (Asia/Riyadh, UTC+3, no DST).  Tabby & Tamara cut off invoice
@@ -708,10 +710,10 @@ async def compute_weekly_settlements(
             {"user_id": user_id, "provider": provider}, {"activation_date": 1},
         ) or {}
         date_from = sett.get("activation_date") or (
-            (date.today().replace(day=1)).isoformat()
+            (riyadh_today().replace(day=1)).isoformat()
         )
     if not date_to:
-        date_to = date.today().isoformat()
+        date_to = riyadh_today().isoformat()
 
     try:
         floor = date.fromisoformat(date_from)

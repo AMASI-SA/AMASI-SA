@@ -37,6 +37,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, validator
 
 from auth import get_current_user_from_db
+from tz_utils import riyadh_today, riyadh_today_iso
 
 
 # ── Catalogue ──────────────────────────────────────────────────────────────
@@ -58,7 +59,8 @@ def _now() -> str:
 
 
 def _today_str() -> str:
-    return date.today().isoformat()
+    # Iter-140 — Asia/Riyadh calendar date (server runs in UTC).
+    return riyadh_today_iso()
 
 
 def _strip(doc: dict) -> dict:
@@ -376,7 +378,7 @@ def _compute_employee_accrual(
         If neither exists, we DON'T accrue past today (defensive default).
       • If the employee has not started yet (start_date > end), accrued=0.
     """
-    today = today or date.today()
+    today = today or riyadh_today()
     start = _parse_iso_safe(emp.get("start_date"))
     if start is None:
         return {
@@ -445,7 +447,7 @@ async def _aggregate_salary_accrual(db, user_id: str) -> dict:
     Advances that got consumed are NOT counted here; they live in the
     advances bucket.
     """
-    today = date.today()
+    today = riyadh_today()
     employees: List[dict] = []
     accrued_total = 0.0
     active_count = 0
@@ -589,7 +591,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         Any open advances for that employee are auto-deducted (advances
         already left the bank, so they count as pre-paid on the salary).
         """
-        today = date.today()
+        today = riyadh_today()
         if period:
             y, m = int(period[:4]), int(period[5:7])
         else:
@@ -1162,7 +1164,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
 
         start = liab.get("accrual_start_date") or f"{y:04d}-{m:02d}-01"
         start_d = date.fromisoformat(start)
-        today_d = date.today()
+        today_d = riyadh_today()
         period_first = date(y, m, 1)
         period_last  = date(y, m, dim)
         eff_start = max(start_d, period_first)
@@ -1233,7 +1235,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             start = upd.get("accrual_start_date") or liab.get("accrual_start_date") or f"{y:04d}-{m:02d}-01"
             start_d = date.fromisoformat(start)
             eff_start = max(start_d, date(y, m, 1))
-            eff_end   = min(date.today(), date(y, m, dim))
+            eff_end   = min(riyadh_today(), date(y, m, dim))
             days_accrued = max(0, (eff_end - eff_start).days + 1) if eff_end >= eff_start else 0
             days_accrued = min(days_accrued, dim)
             upd["days_worked"] = days_accrued
