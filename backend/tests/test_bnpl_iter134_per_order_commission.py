@@ -211,7 +211,7 @@ async def test_compute_provider_settlement_uses_per_order_math(monkeypatch):
     DB and prove that the totals dict includes the new
     `settlement_fee_vat` line AND that commission is computed per-order
     (i.e. it's NOT simply `net_sales × MDR`)."""
-    from backend.bnpl import settlements_service as svc
+    from bnpl import settlements_service as svc
 
     sales, refunds = _tabby_may_4_to_10_sample()
     db = _DB(sales, refunds)

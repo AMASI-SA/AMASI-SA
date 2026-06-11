@@ -42,14 +42,11 @@ def _settlement_rates(session, provider="tabby"):
 
 
 def _restore_defaults(session):
+    """Restore the merchant back to vendor-canonical defaults (Iter-137
+    'auto' mode) so subsequent test sessions start fresh."""
     session.put(
         f"{BASE_URL}/api/bnpl/settings/tabby",
-        json={
-            "mdr_percent":        0.05,
-            "fixed_fee_per_order": 1.0,
-            "vat_on_fees_percent": 0.15,
-            "settlement_fee_per_invoice": 5.0,
-        },
+        json={"commission_mode": "auto"},
         timeout=30,
     )
 
@@ -63,15 +60,22 @@ class TestUnifiedFeeSource:
             "payment_methods_settings",
             "bnpl_settings_legacy",
             "code_default",
+            # Iter-137 — when commission_mode='auto' the engine uses
+            # vendor-canonical defaults instead of stored values.
+            "auto_canonical_defaults",
         }
 
     def test_saving_via_bnpl_mirrors_into_payment_methods(self, session):
-        """When user saves MDR=8% via BNPL Integrations page, the same
-        rate must appear in `users.settings.payment_methods` so the
-        Settings page reflects it too."""
+        """When user saves MDR=8% via BNPL Integrations page in MANUAL
+        mode, the same rate must appear in `users.settings.payment_methods`
+        so the Settings page reflects it too."""
         save = session.put(
             f"{BASE_URL}/api/bnpl/settings/tabby",
-            json={"mdr_percent": 0.08, "fixed_fee_per_order": 2.5}, timeout=30,
+            json={"mdr_percent": 0.08, "fixed_fee_per_order": 2.5,
+                  # Iter-137 — manual mode is required to honour
+                  # custom values; auto mode always uses canonical.
+                  "commission_mode": "manual"},
+            timeout=30,
         )
         assert save.status_code == 200
         try:
@@ -97,7 +101,9 @@ class TestUnifiedFeeSource:
         no hardcoded values leaking into per-merchant calculations."""
         save = session.put(
             f"{BASE_URL}/api/bnpl/settings/tabby",
-            json={"mdr_percent": 0.0699}, timeout=30,
+            # Iter-137 — must be manual mode to honour the saved value.
+            json={"mdr_percent": 0.0699, "commission_mode": "manual"},
+            timeout=30,
         )
         assert save.status_code == 200
         try:

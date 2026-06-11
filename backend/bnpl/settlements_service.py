@@ -90,13 +90,20 @@ def _local_date_window_utc(
 # don't create a circular import.  These are merchant-default rates;
 # bnpl_settings overrides them per merchant.).
 DEFAULT_FEE_RATES: Dict[str, Dict[str, float]] = {
-    "tabby":  {"commission_pct": 5.00, "vat_pct": 15.0,
+    # Iter-134 — kept in sync with config_store.DEFAULTS so every code
+    # path (UI defaults, settlements engine fallback) sees the same
+    # vendor-canonical numbers.
+    "tabby":  {"commission_pct": 6.99, "vat_pct": 15.0,
                "fixed_fee_per_order": 1.0,
-               "settlement_fee_per_invoice": 5.0,
+               "refundable_commission_pct": 4.99,
+               "settlement_fee_per_invoice": 6.0,
+               "settlement_fee_vat_applicable": True,
                "settlement_period_days": 7},
-    "tamara": {"commission_pct": 6.99, "vat_pct": 15.0,
+    "tamara": {"commission_pct": 7.00, "vat_pct": 15.0,
                "fixed_fee_per_order": 0.0,
+               "refundable_commission_pct": 7.00,
                "settlement_fee_per_invoice": 0.0,
+               "settlement_fee_vat_applicable": True,
                "settlement_period_days": 7},
 }
 
@@ -231,11 +238,26 @@ async def _merchant_fee_rates(
     rates["transfer_weekdays"] = list(wd.get("transfer_weekdays") or [])
     rates["fee_source"] = "code_default"
 
+    # Iter-137 — Read commission_mode FIRST so STEP 1 (payment_methods)
+    # can also be bypassed when the merchant is on auto.  Otherwise an
+    # outdated commission_percent in payment_methods would leak through
+    # even after the user toggled to "auto".
+    doc = await db.bnpl_settings.find_one(
+        {"user_id": user_id, "provider": provider}, {"_id": 0},
+    )
+    commission_mode = (doc or {}).get("commission_mode", "auto")
+    auto_locked_fields = (
+        {"mdr_percent", "vat_on_fees_percent", "fixed_fee_per_order",
+         "refundable_commission_percent", "settlement_fee_per_invoice",
+         "settlement_fee_vat_applicable"}
+        if commission_mode == "auto" else set()
+    )
+
     # Iter-126 — STEP 1: read from the unified payment_methods settings.
     # Provider name → Arabic display label that matches `payment_methods`.
     PROVIDER_AR_NAME = {"tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان"}
     ar_name = PROVIDER_AR_NAME.get(provider)
-    if ar_name:
+    if ar_name and commission_mode != "auto":
         user_doc = await db.users.find_one(
             {"id": user_id},
             {"_id": 0, "settings.payment_methods": 1},
@@ -250,27 +272,31 @@ async def _merchant_fee_rates(
             if match.get("fixed_fee") is not None:
                 rates["fixed_fee_per_order"] = float(match["fixed_fee"])
             rates["fee_source"] = "payment_methods_settings"
+    elif commission_mode == "auto":
+        rates["fee_source"] = "auto_canonical_defaults"
 
     # Iter-126 — STEP 2: bnpl_settings legacy fallback / overrides for
     # the BNPL-specific fields (settlement_fee_per_invoice, weekdays).
     # We also let bnpl_settings.* override fee fields IF the unified
     # payment_methods entry didn't supply them (graceful migration).
-    doc = await db.bnpl_settings.find_one(
-        {"user_id": user_id, "provider": provider}, {"_id": 0},
-    )
+
     if doc:
         if rates["fee_source"] != "payment_methods_settings":
             # No payment_methods entry yet — fall back to bnpl_settings.
-            if doc.get("mdr_percent") is not None:
+            if (doc.get("mdr_percent") is not None
+                    and "mdr_percent" not in auto_locked_fields):
                 rates["commission_pct"] = round(float(doc["mdr_percent"]) * 100, 4)
                 rates["fee_source"] = "bnpl_settings_legacy"
-            if doc.get("vat_on_fees_percent") is not None:
+            if (doc.get("vat_on_fees_percent") is not None
+                    and "vat_on_fees_percent" not in auto_locked_fields):
                 rates["vat_pct"] = round(float(doc["vat_on_fees_percent"]) * 100, 4)
-            if doc.get("fixed_fee_per_order") is not None:
+            if (doc.get("fixed_fee_per_order") is not None
+                    and "fixed_fee_per_order" not in auto_locked_fields):
                 rates["fixed_fee_per_order"] = float(doc["fixed_fee_per_order"])
         # ALWAYS take these BNPL-specific fields from bnpl_settings
         # since payment_methods has no equivalent.
-        if doc.get("settlement_fee_per_invoice") is not None:
+        if (doc.get("settlement_fee_per_invoice") is not None
+                and "settlement_fee_per_invoice" not in auto_locked_fields):
             rates["settlement_fee_per_invoice"] = float(doc["settlement_fee_per_invoice"])
         if doc.get("settlement_period_days") is not None:
             rates["settlement_period_days"] = int(doc["settlement_period_days"])
@@ -279,19 +305,29 @@ async def _merchant_fee_rates(
         if "transfer_weekdays" in doc and isinstance(doc["transfer_weekdays"], list):
             rates["transfer_weekdays"] = list(doc["transfer_weekdays"])
         # Iter-134 — per-order commission split + VAT on settlement fee
-        if doc.get("refundable_commission_percent") is not None:
+        if (doc.get("refundable_commission_percent") is not None
+                and "refundable_commission_percent" not in auto_locked_fields):
             rates["refundable_commission_pct"] = round(
                 float(doc["refundable_commission_percent"]) * 100, 4,
             )
-        if "settlement_fee_vat_applicable" in doc:
+        if ("settlement_fee_vat_applicable" in doc
+                and "settlement_fee_vat_applicable" not in auto_locked_fields):
             rates["settlement_fee_vat_applicable"] = bool(
                 doc["settlement_fee_vat_applicable"],
             )
+    # Iter-137 — record which mode the engine ran under so the UI /
+    # settlement table can show a "🤖 Auto rates" badge.
+    rates["commission_mode"] = commission_mode
     # Iter-134 — when the merchant hasn't set a separate refundable
-    # commission percent, default to the FULL MDR.  That preserves
-    # pre-Iter-134 behaviour exactly (refund × full commission rate)
-    # and means existing reports never change without merchant action.
-    rates.setdefault("refundable_commission_pct", rates.get("commission_pct", 0))
+    # commission percent on their bnpl_settings doc, fall back to the
+    # vendor-canonical default for THIS provider (Tabby = 4.99%,
+    # Tamara = 7%) — NOT to the full MDR.  Defaulting to full MDR
+    # caused a +12 SAR over-pay in the merchant's Tabby invoice
+    # because every refund was rebated at 6.99% instead of 4.99%.
+    rates.setdefault(
+        "refundable_commission_pct",
+        defaults.get("refundable_commission_pct", rates.get("commission_pct", 0)),
+    )
     # KSA VAT applies to processor fees by default.
     rates.setdefault("settlement_fee_vat_applicable", True)
     return rates
