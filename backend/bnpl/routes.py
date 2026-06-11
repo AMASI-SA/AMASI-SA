@@ -73,6 +73,93 @@ def attach_bnpl_routes(parent_router: APIRouter, db) -> None:
         except ValueError as exc:
             raise HTTPException(400, str(exc))
 
+    # ── ADMIN PURGE (Iter-136) ─────────────────────────────────
+    # One-shot cleanup endpoint: deletes provider rows strictly before
+    # an Asia/Riyadh cutoff date across:
+    #   - payment_transactions  (raw API rows)
+    #   - payment_refunds       (raw API rows)
+    #   - bnpl_settlements      (weekly closes)
+    #   - unified_orders        (where source/payment_provider = provider)
+    # Always requires the merchant's own user_id and supports dry_run.
+    @router.post("/{provider}/admin/purge-before")
+    async def purge_before(
+        provider: str,
+        cutoff: str = Query(
+            ..., pattern=r"^\d{4}-\d{2}-\d{2}$",
+            description="Asia/Riyadh YYYY-MM-DD — rows strictly before this "
+                        "calendar day will be deleted.",
+        ),
+        dry_run: bool = Query(
+            True,
+            description="When true (default), only counts what WOULD be "
+                        "deleted without touching the database.",
+        ),
+        user: dict = Depends(current_user),
+    ):
+        if provider not in BNPL_PROVIDERS:
+            raise HTTPException(404, "Unknown provider")
+
+        uid = user["id"]
+        # Riyadh-local midnight → UTC ISO upper bound (same convention as
+        # Iter-130 / settlements_service).
+        from datetime import datetime, timedelta
+        try:
+            local_midnight = datetime.strptime(cutoff, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(400, "cutoff must be YYYY-MM-DD")
+        utc_cutoff = (local_midnight - timedelta(hours=3)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+        # Each entry: (collection, filter, label)
+        targets = [
+            ("payment_transactions",
+             {"user_id": uid, "provider": provider,
+              "created_at_provider": {"$lt": utc_cutoff}},
+             "payment_transactions"),
+            ("payment_refunds",
+             {"user_id": uid, "provider": provider,
+              "refunded_at": {"$lt": utc_cutoff}},
+             "payment_refunds"),
+            ("bnpl_settlements",
+             {"user_id": uid, "provider": provider,
+              "period_end": {"$lt": cutoff}},
+             "bnpl_settlements"),
+            ("unified_orders",
+             {"user_id": uid,
+              "$or": [{"source": provider}, {"payment_provider": provider}],
+              "order_date": {"$lt": cutoff}},
+             "unified_orders"),
+        ]
+
+        result: Dict[str, Any] = {
+            "provider": provider,
+            "cutoff_riyadh": cutoff,
+            "utc_cutoff": utc_cutoff,
+            "dry_run": dry_run,
+            "counts": {},
+            "deleted": {},
+        }
+
+        for col_name, flt, label in targets:
+            try:
+                cnt = await db[col_name].count_documents(flt)
+                result["counts"][label] = cnt
+                if not dry_run and cnt > 0:
+                    res = await db[col_name].delete_many(flt)
+                    result["deleted"][label] = res.deleted_count
+                else:
+                    result["deleted"][label] = 0
+            except Exception as exc:  # pragma: no cover — safety net
+                result["counts"][label] = f"ERROR: {exc}"
+                result["deleted"][label] = 0
+
+        result["total_matched"] = sum(
+            v for v in result["counts"].values() if isinstance(v, int)
+        )
+        result["total_deleted"] = sum(result["deleted"].values())
+        return result
+
     # ── TEST CONNECTION ────────────────────────────────────────
     @router.post("/{provider}/test-connection")
     async def test_connection(
