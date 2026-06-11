@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 import { todaySA } from "../lib/dates";
+import { SalaryAccrualSummaryCard } from "../components/EmployeeBalanceCard";
 import { useAuth } from "../context/AuthContext";
 import { ALL_KPI_CARDS } from "../lib/dashboardCards";
 import ProductCostCard from "../components/ProductCostCard";
@@ -521,6 +522,26 @@ export default function Dashboard() {
                 </div>
             ) : (
                 <>
+                    {/* Iter-138 — Unified salary accrual block (same
+                        data as المركز المالي / مركز الإدخال المالي /
+                        لوحة العمليات).  Hide-able from Settings ↦
+                        بطاقات خاصة via 'salary_accrual_card'. */}
+                    {!hiddenCards.includes("salary_accrual_card") && (
+                        <section
+                            className="rounded-xl border-2 border-emerald-200 bg-emerald-50/30 p-4"
+                            data-testid="dashboard-salary-accrual-section"
+                        >
+                            <h2 className="text-sm font-extrabold text-slate-800 mb-3 flex items-center gap-2">
+                                <span>👤</span>
+                                صافي مستحقات الموظفين الحالية
+                                <span className="text-[10px] font-normal text-slate-500">
+                                    (نفس أرقام «المركز المالي» — مصدر موحَّد)
+                                </span>
+                            </h2>
+                            <SalaryAccrualSummaryCard />
+                        </section>
+                    )}
+
                     {/* Missing product costs alert (iteration 19) — surface
                         any unmatched SKUs from the current dashboard window
                         so the merchant knows real profit may be off. */}
