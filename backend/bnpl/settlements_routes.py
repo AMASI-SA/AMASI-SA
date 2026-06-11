@@ -123,9 +123,10 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 db, user["id"], provider, from_date, to_date,
             )
             totals = {
-                k: round(sum(r[k] for r in rows), 2)
+                k: round(sum(r.get(k, 0) for r in rows), 2)
                 for k in ("gross_sales", "total_refunds", "net_sales",
                          "commission", "commission_vat", "settlement_fee",
+                         "settlement_fee_vat",   # Iter-134
                          "net_payable", "transferred_amount",
                          "remaining_with_provider")
             }

@@ -52,6 +52,11 @@ DEFAULTS = {
         "mdr_percent": 0.06,
         "fixed_fee_per_order": 1.0,    # user-confirmed: 1 SAR not 1.5
         "vat_on_fees_percent": 0.15,
+        # Iter-134 — Tabby refunds only the "refundable" slice of the
+        # commission on refunds.  Per the official invoice Excel the
+        # split is 4.99% refundable + 2.00% non-refundable (= 6.99%
+        # total).  User can override per merchant agreement.
+        "refundable_commission_percent": 0.0499,
         "settlement_period_days": 7,
         "transfer_days": 2,
         # Iter-121 — weekday cycle.  Tabby officially closes invoices
@@ -61,18 +66,27 @@ DEFAULTS = {
         "settlement_fee_per_invoice": 5.0,   # SAR charged ONCE per
                                              # weekly settlement invoice
                                              # (not per order)
+        # Iter-134 — KSA VAT applies to payment-processor service fees,
+        # so the per-invoice settlement fee carries 15% VAT.  Default
+        # ON for both providers, user can disable per agreement.
+        "settlement_fee_vat_applicable": True,
         "api_base_url": "https://api.tabby.sa",
     },
     "tamara": {
         "mdr_percent": 0.07,
         "fixed_fee_per_order": 0.0,
         "vat_on_fees_percent": 0.15,
+        # Tamara historically refunds the full commission on refunds;
+        # leaving the refundable slice equal to the full MDR keeps
+        # current behaviour intact.  User can override.
+        "refundable_commission_percent": 0.07,
         "settlement_period_days": 7,
         "transfer_days": 2,
         # Iter-121 — Tamara closes invoices Sunday, pays Tuesday.
         "invoice_weekdays":  ["sunday"],
         "transfer_weekdays": ["tuesday"],
         "settlement_fee_per_invoice": 0.0,   # Tamara doesn't charge it
+        "settlement_fee_vat_applicable": True,
         "api_base_url": "https://api.tamara.co",
     },
 }
@@ -230,6 +244,18 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
             "settlement_fee_per_invoice",
             defaults.get("settlement_fee_per_invoice", 0),
         )),
+        # Iter-134 — per-order commission split + VAT on settlement fee
+        "refundable_commission_percent": float(doc.get(
+            "refundable_commission_percent",
+            defaults.get(
+                "refundable_commission_percent",
+                doc.get("mdr_percent", defaults.get("mdr_percent", 0)),
+            ),
+        )),
+        "settlement_fee_vat_applicable": bool(doc.get(
+            "settlement_fee_vat_applicable",
+            defaults.get("settlement_fee_vat_applicable", True),
+        )),
         "api_base_url": _resolve_base_url(
             provider, doc.get("environment", "production"),
             doc.get("api_base_url"),
@@ -326,12 +352,19 @@ async def save_settings(
 
     # ── Fees ──
     for k in ("mdr_percent", "fixed_fee_per_order", "vat_on_fees_percent",
-              "settlement_fee_per_invoice"):
+              "settlement_fee_per_invoice",
+              # Iter-134 — per-order commission split
+              "refundable_commission_percent"):
         if k in payload and payload.get(k) is not None:
             try:
                 update[k] = float(payload[k])
             except (TypeError, ValueError):
                 pass
+    # Iter-134 — bool toggle for VAT on the settlement fee.
+    if "settlement_fee_vat_applicable" in payload:
+        update["settlement_fee_vat_applicable"] = bool(
+            payload.get("settlement_fee_vat_applicable"),
+        )
     for k in ("settlement_period_days", "transfer_days"):
         if k in payload and payload.get(k) is not None:
             try:

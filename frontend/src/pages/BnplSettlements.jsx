@@ -483,6 +483,9 @@ export default function BnplSettlements() {
                                             <th className="p-2">العمولة</th>
                                             <th className="p-2">ض. العمولة</th>
                                             <th className="p-2">رسوم التسوية</th>
+                                            <th className="p-2" title="ضريبة 15% على رسوم التسوية (KSA VAT)">
+                                                ض. رسوم التسوية
+                                            </th>
                                             <th className="p-2">صافي المستحق</th>
                                             <th className="p-2">المحوَّل</th>
                                             <th className="p-2">المتبقي</th>
@@ -533,6 +536,9 @@ export default function BnplSettlements() {
                                                 <td className="p-2 num text-rose-700">{fmt(r.commission)}</td>
                                                 <td className="p-2 num text-rose-700/70">{fmt(r.commission_vat)}</td>
                                                 <td className="p-2 num text-rose-700/70">{fmt(r.settlement_fee)}</td>
+                                                <td className="p-2 num text-rose-700/70" data-testid={`bnpl-weekly-settle-vat-${r.invoice_no}`}>
+                                                    {fmt(r.settlement_fee_vat)}
+                                                </td>
                                                 <td className="p-2 num font-extrabold text-emerald-700">{fmt(r.net_payable)}</td>
                                                 <td
                                                     className="p-2 num"
@@ -600,6 +606,9 @@ export default function BnplSettlements() {
                                             <td className="p-2 num text-rose-700">{fmt(weekly[weeklyOpen].totals?.commission)}</td>
                                             <td className="p-2 num text-rose-700/70">{fmt(weekly[weeklyOpen].totals?.commission_vat)}</td>
                                             <td className="p-2 num text-rose-700/70">{fmt(weekly[weeklyOpen].totals?.settlement_fee)}</td>
+                                            <td className="p-2 num text-rose-700/70" data-testid="bnpl-weekly-settle-vat-total">
+                                                {fmt(weekly[weeklyOpen].totals?.settlement_fee_vat)}
+                                            </td>
                                             <td className="p-2 num font-extrabold text-emerald-700">{fmt(weekly[weeklyOpen].totals?.net_payable)}</td>
                                             {/* Iter-131 — totals reflect the matched transfers only. */}
                                             <td className="p-2 num" data-testid="bnpl-weekly-transferred-total">

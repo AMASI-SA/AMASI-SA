@@ -263,6 +263,10 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
         invoice_weekdays:  settings.invoice_weekdays  ?? [],
         transfer_weekdays: settings.transfer_weekdays ?? [],
         settlement_fee_per_invoice: settings.settlement_fee_per_invoice ?? 0,
+        // Iter-134 — per-order commission split + VAT on settlement fee
+        refundable_commission_percent: settings.refundable_commission_percent
+            ?? settings.mdr_percent ?? 0,
+        settlement_fee_vat_applicable: settings.settlement_fee_vat_applicable ?? true,
     }));
     const [busy, setBusy] = useState(false);
     const [syncing, setSyncing] = useState(false);
@@ -542,6 +546,53 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             placeholder={provider === "tabby" ? "5.00" : "0.00"}
                         />
                     </Field>
+                </div>
+
+                {/* Iter-134 — Per-order commission split + VAT on settlement fee */}
+                <div className="mt-4 pt-4 border-t-2 border-dashed border-slate-300">
+                    <h5 className="text-sm font-extrabold text-slate-800 mb-1 flex items-center gap-2">
+                        🔬 الدقة المحاسبية المتقدمة (Iter-134)
+                    </h5>
+                    <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
+                        تُمكّنك من مطابقة فاتورة المزوّد إلى آخر ريال:
+                        نسبة العمولة القابلة للاسترجاع (بعض المزودين يُعيد جزءاً فقط من العمولة عند الاسترجاع)،
+                        وضريبة ١٥٪ على رسوم التسوية البنكية (مطبَّق افتراضياً وفق نظام الضريبة السعودي).
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <Field
+                            label="العمولة القابلة للاسترجاع %"
+                            hint={provider === "tabby"
+                                ? "مثلاً 0.0499 = 4.99% (الباقي 2% non-refundable)"
+                                : "مثلاً 0.07 = 7% (يُعاد الكل عند الاسترجاع)"}
+                        >
+                            <input
+                                type="number"
+                                step="0.0001"
+                                value={form.refundable_commission_percent}
+                                onChange={(e) => set("refundable_commission_percent", parseFloat(e.target.value) || 0)}
+                                className={inputCls}
+                                data-testid={`bnpl-${provider}-refundable-pct`}
+                                placeholder={provider === "tabby" ? "0.0499" : "0.07"}
+                            />
+                        </Field>
+                        <Field
+                            label="ضريبة ١٥٪ على رسوم التسوية"
+                            hint="مفعّل افتراضياً (KSA VAT لخدمات المعالجة B2B)."
+                        >
+                            <label className="flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 bg-white cursor-pointer hover:bg-slate-50">
+                                <input
+                                    type="checkbox"
+                                    checked={!!form.settlement_fee_vat_applicable}
+                                    onChange={(e) => set("settlement_fee_vat_applicable", e.target.checked)}
+                                    data-testid={`bnpl-${provider}-settlement-fee-vat`}
+                                    className="w-4 h-4"
+                                />
+                                <span className="text-xs text-slate-700">
+                                    {form.settlement_fee_vat_applicable ? "خاضعة للضريبة ١٥٪" : "بدون ضريبة"}
+                                </span>
+                            </label>
+                        </Field>
+                    </div>
                 </div>
 
                 {/* Iter-121 — Weekday-based settlement cycle */}

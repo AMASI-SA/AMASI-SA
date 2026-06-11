@@ -278,6 +278,22 @@ async def _merchant_fee_rates(
             rates["invoice_weekdays"] = list(doc["invoice_weekdays"])
         if "transfer_weekdays" in doc and isinstance(doc["transfer_weekdays"], list):
             rates["transfer_weekdays"] = list(doc["transfer_weekdays"])
+        # Iter-134 — per-order commission split + VAT on settlement fee
+        if doc.get("refundable_commission_percent") is not None:
+            rates["refundable_commission_pct"] = round(
+                float(doc["refundable_commission_percent"]) * 100, 4,
+            )
+        if "settlement_fee_vat_applicable" in doc:
+            rates["settlement_fee_vat_applicable"] = bool(
+                doc["settlement_fee_vat_applicable"],
+            )
+    # Iter-134 — when the merchant hasn't set a separate refundable
+    # commission percent, default to the FULL MDR.  That preserves
+    # pre-Iter-134 behaviour exactly (refund × full commission rate)
+    # and means existing reports never change without merchant action.
+    rates.setdefault("refundable_commission_pct", rates.get("commission_pct", 0))
+    # KSA VAT applies to processor fees by default.
+    rates.setdefault("settlement_fee_vat_applicable", True)
     return rates
 
 
@@ -518,17 +534,53 @@ async def compute_settlement_for_provider(
     fixed_fee_per_order = float(fee_rates.get("fixed_fee_per_order") or 0)
     settlement_fee_per_invoice = fee_rates["settlement_fee_per_invoice"]
     settlement_period_days = int(fee_rates.get("settlement_period_days") or 7)
+    # Iter-134 — per-order commission split + VAT on settlement fee.
+    refundable_rate = float(fee_rates.get("refundable_commission_pct") or 0) / 100.0
+    settlement_fee_vat_applicable = bool(
+        fee_rates.get("settlement_fee_vat_applicable", True),
+    )
 
     totals = await _compute_provider_totals(db, user_id, provider, date_from, date_to)
-    txn_count = totals.get("transactions_count", 0)
-    # Commission = percentage × net_sales + fixed_fee × txn_count.
-    # The fixed per-order fee (e.g. Tabby 1 SAR) is charged on EVERY
-    # transaction regardless of refund status, so we multiply by the
-    # full transactions count, not net_sales.
-    commission_pct_part = totals["net_sales"] * commission_rate
-    commission_fixed_part = fixed_fee_per_order * txn_count
-    commission = commission_pct_part + commission_fixed_part
-    commission_vat = commission * vat_rate
+
+    # ── Iter-134 — Per-order commission ───────────────────────────
+    # Tabby (and most BNPL providers) compute commission and VAT on
+    # each ORDER individually then sum, applying a 2-decimal rounding
+    # at every step.  Aggregating first and rounding once leaves a
+    # tiny but persistent gap that bewildered the merchant.  We now
+    # iterate the raw rows so the totals match the provider's invoice
+    # to the cent.
+    utc_gte, utc_lte = _local_date_window_utc(date_from, date_to)
+    sales_match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
+    if utc_gte or utc_lte:
+        sales_match["created_at_provider"] = {
+            **({"$gte": utc_gte} if utc_gte else {}),
+            **({"$lte": utc_lte} if utc_lte else {}),
+        }
+    refund_match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
+    if utc_gte or utc_lte:
+        refund_match["refunded_at"] = {
+            **({"$gte": utc_gte} if utc_gte else {}),
+            **({"$lte": utc_lte} if utc_lte else {}),
+        }
+
+    sales_commission = 0.0
+    sales_vat = 0.0
+    async for t in db.payment_transactions.find(sales_match, {"_id": 0, "amount": 1}):
+        amt = float(t.get("amount") or 0)
+        fee = round(amt * commission_rate, 2) + fixed_fee_per_order
+        sales_commission += fee
+        sales_vat += round(fee * vat_rate, 2)
+
+    refund_rebate = 0.0
+    refund_vat_rebate = 0.0
+    async for r in db.payment_refunds.find(refund_match, {"_id": 0, "amount": 1}):
+        amt = float(r.get("amount") or 0)
+        rebate = round(amt * refundable_rate, 2)
+        refund_rebate += rebate
+        refund_vat_rebate += round(rebate * vat_rate, 2)
+
+    commission     = _r(sales_commission - refund_rebate)
+    commission_vat = _r(sales_vat        - refund_vat_rebate)
 
     # Settlement fee — charged ONCE per provider invoice.  Iter-121:
     # use weekday-based count if the merchant configured invoice_weekdays.
@@ -536,10 +588,15 @@ async def compute_settlement_for_provider(
         date_from, date_to, settlement_period_days,
         invoice_weekdays=fee_rates.get("invoice_weekdays"),
     )
-    settlement_fee = settlement_fee_per_invoice * settlement_invoices_count
+    settlement_fee = _r(settlement_fee_per_invoice * settlement_invoices_count)
+    # Iter-134 — KSA VAT on the processor's settlement service fee.
+    settlement_fee_vat = (
+        _r(settlement_fee * vat_rate) if settlement_fee_vat_applicable else 0.0
+    )
 
-    net_payable = (
-        totals["net_sales"] - commission - commission_vat - settlement_fee
+    net_payable = _r(
+        totals["net_sales"] - commission - commission_vat
+        - settlement_fee - settlement_fee_vat
     )
 
     # Bank-side reconciliation
@@ -580,6 +637,8 @@ async def compute_settlement_for_provider(
             "settlement_fee": _r(settlement_fee),
             "settlement_fee_per_invoice": _r(settlement_fee_per_invoice),
             "settlement_invoices_count": settlement_invoices_count,
+            # Iter-134 — settlement-fee VAT surfaces as its own line.
+            "settlement_fee_vat": _r(settlement_fee_vat),
             "net_payable": _r(net_payable),
         },
         "bank": bank_info,
@@ -715,6 +774,7 @@ async def compute_weekly_settlements(
                 "commission": t.get("commission", 0),
                 "commission_vat": t.get("commission_vat", 0),
                 "settlement_fee": t.get("settlement_fee", 0),
+                "settlement_fee_vat": t.get("settlement_fee_vat", 0),
                 "net_payable": t.get("net_payable", 0),
                 "transferred_amount": _r(this_invoice_transfer),
                 "remaining_with_provider": row_remaining,
@@ -748,6 +808,7 @@ async def compute_weekly_settlements(
             "commission": t.get("commission", 0),
             "commission_vat": t.get("commission_vat", 0),
             "settlement_fee": t.get("settlement_fee", 0),
+            "settlement_fee_vat": t.get("settlement_fee_vat", 0),
             "net_payable": t.get("net_payable", 0),
             "transferred_amount": b.get("transferred_amount", 0),
             "remaining_with_provider": b.get("remaining_with_provider", 0),
@@ -776,6 +837,7 @@ async def compute_all_settlements(
         "commission": 0.0,
         "commission_vat": 0.0,
         "settlement_fee": 0.0,
+        "settlement_fee_vat": 0.0,
         "net_payable": 0.0,
         "transferred_amount": 0.0,
         "remaining_with_provider": 0.0,
@@ -785,7 +847,7 @@ async def compute_all_settlements(
         b = p.get("bank", {})
         for k in ("gross_sales", "total_refunds", "net_sales",
                   "commission", "commission_vat", "settlement_fee",
-                  "net_payable"):
+                  "settlement_fee_vat", "net_payable"):
             totals[k] += t.get(k, 0)
         totals["transferred_amount"] += b.get("transferred_amount", 0)
         totals["remaining_with_provider"] += b.get("remaining_with_provider", 0)
