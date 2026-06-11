@@ -620,6 +620,26 @@ async def compute_weekly_settlements(
                 _next_or_same_weekday(issue_date, transfer_set)
                 if (transfer_set and issue_date) else None
             )
+            # Iter-129 — Each invoice's bank transfer arrives AFTER the
+            # period ends (on/after `issue_date`).  Override the in-period
+            # `transferred_amount` with the transfer window
+            # [issue_date, issue_date + 14d] so the row reflects THIS
+            # invoice's actual payout — not the previous invoice's that
+            # happened to land mid-period.  Account-level transferred is
+            # only available when a provider account exists.
+            provider_acc = s.get("bank", {})
+            acc_id = provider_acc.get("linked_account_id")
+            if acc_id and issue_date:
+                from datetime import timedelta
+                payout_window_to = (issue_date + timedelta(days=14)).isoformat()
+                this_invoice_transfer = await _bank_transfer_total(
+                    db, user_id, acc_id,
+                    issue_date.isoformat(), payout_window_to,
+                )
+            else:
+                this_invoice_transfer = float(b.get("transferred_amount", 0) or 0)
+            net_payable_val = float(t.get("net_payable", 0) or 0)
+            row_remaining = round(net_payable_val - this_invoice_transfer, 2)
             rows.append({
                 "invoice_no": invoice_no,
                 "from": period_start.isoformat(),
@@ -637,8 +657,8 @@ async def compute_weekly_settlements(
                 "commission_vat": t.get("commission_vat", 0),
                 "settlement_fee": t.get("settlement_fee", 0),
                 "net_payable": t.get("net_payable", 0),
-                "transferred_amount": b.get("transferred_amount", 0),
-                "remaining_with_provider": b.get("remaining_with_provider", 0),
+                "transferred_amount": _r(this_invoice_transfer),
+                "remaining_with_provider": row_remaining,
             })
             if issue_date is None or issue_date > ceil_:
                 break
