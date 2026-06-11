@@ -23,6 +23,7 @@ import {
 } from "@phosphor-icons/react";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { todaySA } from "../lib/dates";
+import { EmployeeBalanceCard } from "../components/EmployeeBalanceCard";
 
 
 const today = () => todaySA();
@@ -488,6 +489,17 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                 </div>
             </Field>
 
+            {/* Iter-138 — Unified employee balance card (same numbers as
+                FinancialPosition / Dashboard / OperationalReports). */}
+            {selected && selected.employee_salary_id && (
+                <div className="sm:col-span-2">
+                    <EmployeeBalanceCard
+                        employeeId={selected.employee_salary_id}
+                        data-testid="pay-liab-employee-balance"
+                    />
+                </div>
+            )}
+
             {/* Iter-118 — balance card shows what's owed / paid for the picked counterparty */}
             {selected && (() => {
                 // Iter-128 — Aggregate ALL open liabilities for the SAME
@@ -855,6 +867,17 @@ function AdvanceForm({ employees, banks, openLiabilities, onSaved }) {
                     )}
                 </div>
             </Field>
+
+            {/* Iter-138 — Unified employee balance (same source as
+                FinancialPosition / Dashboard / OperationalReports). */}
+            {selectedEmployee && (
+                <div className="md:col-span-2 mt-2">
+                    <EmployeeBalanceCard
+                        employeeId={selectedEmployee.id}
+                        data-testid="adv-employee-balance"
+                    />
+                </div>
+            )}
 
             {/* Iter-125 — Cumulative advance balance card */}
             {selectedEmployee && (

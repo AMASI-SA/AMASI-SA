@@ -15,6 +15,7 @@ import {
     Briefcase, Receipt, HandCoins, Truck, Users, ArrowRight,
 } from "@phosphor-icons/react";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { SalaryAccrualSummaryCard } from "../components/EmployeeBalanceCard";
 
 
 const fmt = (v) =>
@@ -167,8 +168,7 @@ export default function OperationsDashboard() {
                 <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
                     <Truck size={18} weight="duotone" className="text-slate-500" />
                     الذمم المدينة والتحصيلات
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                </h2>                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <KPI title="إجمالي الذمم" value={k.recv_invoiced}
                         sub={`${data.receivables.length} ذمة`}
                         Icon={Truck}
@@ -183,6 +183,18 @@ export default function OperationsDashboard() {
                     <KPI title="نسبة التحصيل" value={k.recv_invoiced > 0 ? Number((k.recv_collected / k.recv_invoiced) * 100).toFixed(2) : 0}
                         tone="violet" sub="%" testid="ops-kpi-recv-rate" />
                 </div>
+            </section>
+
+            {/* Iter-138 — Salary accrual (unified source of truth) */}
+            <section data-testid="ops-salary-accrual-section">
+                <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <Users size={18} weight="duotone" className="text-slate-500" />
+                    تراكم رواتب الموظفين
+                    <span className="text-[10px] font-normal text-slate-500">
+                        — نفس البيانات الظاهرة في «المركز المالي» و«التقارير التشغيلية» (مصدر موحَّد).
+                    </span>
+                </h2>
+                <SalaryAccrualSummaryCard showEmployeeTable={true} />
             </section>
         </div>
     );

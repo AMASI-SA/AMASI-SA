@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { formatMoney, todayISO } from "../lib/format";
 import DateInput from "../components/DateInput";
+import { SalaryAccrualSummaryCard } from "../components/EmployeeBalanceCard";
 
 const SALARY_CATEGORIES = [
     { value: "employee",   label: "رواتب الموظفين",      icon: Users,     hint: "موظفين، إداريين، محاسبين، مسوقين، عاملين" },
@@ -283,6 +284,18 @@ function SalariesPanel({ items, onAdd, onEdit, onDelete }) {
             onAdd={onAdd}
             addTestId="oe-add-salary-btn"
         >
+            {/* Iter-138 — Unified salary accrual block (same data shown
+                in FinancialPosition, FinancialInputHub, OperationsDashboard,
+                OperationalReports).  Shows totals + per-employee net_due
+                for the employee category. */}
+            <div className="mb-4" data-testid="oe-salary-accrual-block">
+                <SalaryAccrualSummaryCard showEmployeeTable={false} />
+                <div className="mt-1 text-[11px] text-slate-500">
+                    👤 الرواتب التراكمية محدَّثة لحظياً من نفس مصدر «المركز المالي» —
+                    لا فروقات بين الصفحات.
+                </div>
+            </div>
+
             {items.length === 0 ? (
                 <EmptyState text="لا توجد رواتب مسجلة بعد." />
             ) : (

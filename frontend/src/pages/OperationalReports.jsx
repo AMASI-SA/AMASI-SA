@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import { toast } from "sonner";
+import { SalaryAccrualSummaryCard } from "../components/EmployeeBalanceCard";
 
 const fmt = (n) =>
     Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -78,6 +79,25 @@ export default function OperationalReports() {
                             من <b className="num">{data.from_date}</b> إلى <b className="num">{data.to_date}</b>
                         </div>
                     </div>
+
+                    {/* Iter-138 — Cumulative salary accrual section
+                        (same source as FinancialPosition / Dashboard).
+                        Shown only on monthly + yearly reports — the
+                        daily view is for cash-basis line items. */}
+                    {period !== "daily" && (
+                        <div className="mb-8" data-testid="opreport-salary-accrual">
+                            <h3 className="text-lg font-extrabold text-slate-800 mb-3 border-b border-slate-300 pb-2">
+                                👤 تراكم رواتب الموظفين (مصدر موحَّد)
+                            </h3>
+                            <SalaryAccrualSummaryCard showEmployeeTable={true} />
+                            <div className="mt-2 text-[11px] text-slate-500">
+                                <span className="font-bold">ملاحظة محاسبية:</span> الراتب اليومي محسوب
+                                بـ <span className="font-bold">monthly_amount ÷ عدد أيام الشهر الحالي</span>.
+                                الأرقام هنا مطابقة لما يظهر في صفحة «المركز المالي»
+                                ومركز الإدخال المالي ولوحة العمليات.
+                            </div>
+                        </div>
+                    )}
 
                     {/* Yearly: per-month breakdown FIRST */}
                     {period === "yearly" && data.monthly_breakdown?.length > 0 && (

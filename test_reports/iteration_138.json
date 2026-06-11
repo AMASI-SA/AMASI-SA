@@ -1,0 +1,31 @@
+{
+  "summary": "Iter-138 UI unification of cumulative salary numbers across 5 pages verified. New shared <EmployeeBalanceCard/> + <SalaryAccrualSummaryCard/> read from /api/liabilities/salary-accrual-summary and render identical values on FinancialInputHub (pay-liab + advance tabs), OperationsDashboard, OperationalReports (monthly/yearly), and OperatingExpenses (Salaries tab). Cross-page consistency for the 4 active employees (عرفات / خالد / عزوز / ابو جمال) is exact. No regressions detected on existing OperatingExpenses CRUD.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Pre-existing (NOT introduced by iter-138) React hydration warning: '<span> cannot be a child of <option>' originates from emergent x-* dynamic instrumentation injected into <option> elements inside the bank/account <select> in FinancialInputHub. Harmless console noise but worth tracking globally.",
+    "EmployeeBalanceCard re-fetches the full /salary-accrual-summary on every employeeId change. For pages that already render SalaryAccrualSummaryCard (e.g. OperationsDashboard) the same endpoint is called twice on first render. Minor — consider a lightweight context/cache if perf becomes an issue with many employees."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (merchant). Active employees on preview: عرفات (8200), خالد (8200), عزوز (5466.67), ابو جمال (4100). Totals: accrued=25966.67, net_due=25966.67, advances=0, paid=0.",
+  "seed_data_creation": "None — used live merchant data already present in preview.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Route names: OperationsDashboard lives at /operations-dashboard (NOT /operations). OperationalReports at /operational-reports. FinancialInputHub at /financial-input-hub. Default period on OperationalReports is 'daily' (opreport-salary-accrual section hidden by design). Use [data-testid='opreport-period-monthly'] / [data-testid='opreport-period-yearly'] buttons to switch. PayLiabilityForm: only liabilities with employee_salary_id render the new card — search 'عرفات' in pay-liability-search picks a salary liability that has it set. AdvanceForm: pick via [data-testid='adv-employee-pick-{id}']. The card briefly shows employee-balance-card-loading before settling to employee-balance-card.",
+  "verification_matrix": {
+    "FinancialInputHub.pay-liab (عرفات)":   {"accrued":"8,200.00","advance":"0.00","paid":"0.00","net_due":"8,200.00"},
+    "FinancialInputHub.advance (عرفات)":    {"accrued":"8,200.00","advance":"0.00","paid":"0.00","net_due":"8,200.00"},
+    "OperationsDashboard.row (عرفات)":      {"accrued":"8,200.00","advance":"0.00","paid":"0.00","net_due":"8,200.00"},
+    "OperationalReports.monthly (عرفات)":   {"accrued":"8,200.00","advance":"0.00","paid":"0.00","net_due":"8,200.00"},
+    "OperatingExpenses.totals (all emp)":   {"accrued":"25,966.67","advance":"0.00","paid":"0.00","net_due":"25,966.67"},
+    "API /salary-accrual-summary (totals)": {"accrued":"25,966.67","advance":"0.00","paid":"0.00","net_due":"25,966.67"}
+  },
+  "rca of the issue": "N/A — no defects found. All 5 wiring points render the unified component, fetch the same canonical endpoint, and display identical numbers down to two decimals. Hidden-on-daily behaviour on OperationalReports works (section absent on daily, present on monthly and yearly). Existing legacy cards (adv-cumulative-card, pay-liability-balance-card, oe-add-salary-btn) remain intact — no regressions."
+}
