@@ -1838,7 +1838,13 @@ async def _run_sync_for_all(
 
 async def run_daily_cron(db) -> dict:
     """Iterate ALL users with at least one ad-account counterparty and
-    sync today's spend. Designed to be called from a scheduler at 23:55."""
+    sync today's spend.  Idempotent — re-runs reverse the previous
+    cron rows of the same day and apply fresh totals (Iter-110 fix B).
+
+    Iter-139 — this used to be invoked from a 23:55 daily scheduler.
+    Now it's called every 30 minutes by `_ad_account_halfhour_sync`
+    in server.py so daily ad-balances reflect spend in near-realtime.
+    """
     from datetime import date
     today = date.today().isoformat()
     users_done = []
@@ -1849,7 +1855,13 @@ async def run_daily_cron(db) -> dict:
         if cp["user_id"] in seen_users:
             continue
         seen_users.add(cp["user_id"])
-        results = await _run_sync_for_all(db, cp["user_id"], today, today)
+        # Iter-139 — force=True so the half-hour cadence keeps the
+        # ad-account balance / liability in sync with the latest
+        # platform spend without double-counting earlier passes of
+        # the SAME day.
+        results = await _run_sync_for_all(
+            db, cp["user_id"], today, today, force=True,
+        )
         users_done.append({"user_id": cp["user_id"], "results": results})
     return {"ran_at": _now(), "today": today,
             "users_processed": len(users_done), "details": users_done}

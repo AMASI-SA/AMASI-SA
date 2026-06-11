@@ -2958,45 +2958,55 @@ async def on_startup():
     await ensure_custom_app_indexes(db)
     await ensure_ad_account_indexes(db)
     await ensure_bnpl_indexes(db)
-    # Iter-108 — daily cron at 23:55 to sync ad-spend → debt engine.
+    # Iter-139 — half-hourly ad-account sync (replaces the previous
+    # 23:55 daily cron).  Runs every 30 minutes, syncs TODAY only,
+    # uses force=True so each pass reverses prior cron rows for the
+    # same day and applies fresh totals — ad-balance + ad-liability
+    # stay near-realtime without double-counting.
     from ad_account_routes import run_daily_cron
     import asyncio as _asyncio
     from datetime import datetime as _dt, timedelta as _td
 
-    async def _ad_account_daily_cron():
-        # Loop forever. Each iteration sleeps until the next 23:55 then runs.
+    AD_ACCOUNT_SYNC_INTERVAL_SECONDS = 30 * 60   # 30 minutes
+
+    async def _ad_account_halfhour_sync():
+        # Stagger first run by 90s so the server is fully up.
+        await _asyncio.sleep(90)
         while True:
-            now = _dt.now()
-            target = now.replace(hour=23, minute=55, second=0, microsecond=0)
-            if now >= target:
-                target = target + _td(days=1)
-            wait_s = (target - now).total_seconds()
             try:
-                await _asyncio.sleep(wait_s)
-                logger.info("iter-108: starting daily ad-account cron")
+                logger.info("iter-139: starting ad-account half-hour sync")
                 result = await run_daily_cron(db)
                 logger.info(
-                    "iter-108: ad-account cron done — %d users processed",
+                    "iter-139: ad-account half-hour sync done — "
+                    "%d users processed (today=%s)",
                     result.get("users_processed", 0),
+                    result.get("today"),
                 )
-                # Persist run report (handy for /status UI)
+                # Persist run report so the UI / diagnostics can show
+                # the last successful pass.
                 try:
                     await db.cron_runs.insert_one({
                         "id": str(uuid.uuid4()),
-                        "type": "ad_account_daily_sync",
+                        "type": "ad_account_halfhour_sync",
                         "ran_at": result["ran_at"],
                         "today": result["today"],
                         "users_processed": result["users_processed"],
-                        "summary": result["details"][:50],   # cap
+                        "summary": result["details"][:50],
                     })
                 except Exception as _e:
-                    logger.warning("iter-108: cron run-log insert failed: %s", _e)
+                    logger.warning(
+                        "iter-139: cron run-log insert failed: %s", _e,
+                    )
             except Exception as e:
-                logger.exception("iter-108: cron iteration failed: %s", e)
-                # Back off 60 s after a hard failure before next attempt.
+                logger.exception(
+                    "iter-139: ad-account half-hour sync failed: %s", e,
+                )
+                # Back off 60s after a hard failure before next attempt.
                 await _asyncio.sleep(60)
+                continue
+            await _asyncio.sleep(AD_ACCOUNT_SYNC_INTERVAL_SECONDS)
 
-    _asyncio.create_task(_ad_account_daily_cron())
+    _asyncio.create_task(_ad_account_halfhour_sync())
 
     # ── Iter-117 — Hourly BNPL auto-sync (Tabby + Tamara) ────────
     # Runs every hour to fetch new/updated payments and refunds
