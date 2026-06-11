@@ -1333,6 +1333,185 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             })
         return {"ok": True, "results": results}
 
+    # ── POST /migration/cleanup-duplicates (Iter-133 follow-up) ───────
+    @router.post("/migration/cleanup-duplicates")
+    async def migration_cleanup_duplicates(
+        request: Request,
+        user: dict = Depends(current_user),
+    ):
+        """One-shot cleanup for the duplication that accumulated BEFORE
+        Iter-133 made the migration idempotent.  Two passes:
+
+        Pass A — duplicate ledger rows: for every (counterparty, date)
+        with multiple `breakdown.migration=True` ledger rows we KEEP
+        the most recent one (max `created_at`) and REVERSE every older
+        duplicate (restore `from_balance` to the counterparty, reduce
+        the migration liability by `uncovered`, delete the row).
+
+        Pass B — duplicate open migration liabilities: if a single
+        counterparty has more than one `status ∈ {unpaid, partial}`
+        liability with `source=ad_account_migration`, we MERGE them
+        into the newest by summing `expected_amount` + `paid_amount`,
+        then delete the older rows.
+
+        Query param `dry_run=true` (default) returns the plan WITHOUT
+        writing anything.  Pass `dry_run=false` to actually apply it.
+        """
+        params = dict(request.query_params)
+        dry_run = (params.get("dry_run", "true").lower() != "false")
+
+        scanned = 0
+        ledger_removed = 0
+        balance_restored = 0.0
+        liab_amount_reduced = 0.0
+        liabs_merged = 0
+        details: list[dict] = []
+
+        async for cp in db.counterparties.find(
+            {"user_id": user["id"], "kind": "ad_account"},
+            {"_id": 0},
+        ):
+            scanned += 1
+            cp_id = cp["id"]
+            per_cp = {
+                "id": cp_id, "name": cp.get("name"),
+                "removed_rows": 0,
+                "balance_restored": 0.0,
+                "liab_amount_reduced": 0.0,
+                "liabs_merged": 0,
+            }
+
+            # ── Pass A — group migration ledger rows by date ──────────
+            buckets: dict[str, list[dict]] = {}
+            async for row in db.ad_account_ledger.find(
+                {"user_id": user["id"], "counterparty_id": cp_id,
+                 "type": "spend", "breakdown.migration": True},
+                {"_id": 0},
+            ):
+                buckets.setdefault(row.get("date") or "", []).append(row)
+
+            cp_covered_restore = 0.0
+            cp_uncovered_remove = 0.0
+            ids_to_drop: list[str] = []
+            for _date, group in buckets.items():
+                if len(group) <= 1:
+                    continue
+                group.sort(key=lambda r: r.get("created_at") or "")
+                victims = group[:-1]   # keep the newest only
+                for v in victims:
+                    bd = v.get("breakdown") or {}
+                    cp_covered_restore += float(bd.get("from_balance") or 0)
+                    cp_uncovered_remove += float(bd.get("uncovered") or 0)
+                    if v.get("id"):
+                        ids_to_drop.append(v["id"])
+                per_cp["removed_rows"] += len(victims)
+
+            cp_covered_restore = round(cp_covered_restore, 2)
+            cp_uncovered_remove = round(cp_uncovered_remove, 2)
+            per_cp["balance_restored"]    = cp_covered_restore
+            per_cp["liab_amount_reduced"] = cp_uncovered_remove
+
+            if not dry_run and per_cp["removed_rows"] > 0:
+                if cp_covered_restore > 0:
+                    await db.counterparties.update_one(
+                        {"id": cp_id, "user_id": user["id"]},
+                        {"$inc": {"balance": cp_covered_restore},
+                         "$set": {"updated_at": _now()}},
+                    )
+                if cp_uncovered_remove > 0:
+                    open_liab = await db.liabilities.find_one(
+                        {"user_id": user["id"], "kind": "ad_account",
+                         "counterparty_id": cp_id,
+                         "source": "ad_account_migration",
+                         "status": {"$in": ["unpaid", "partial"]}},
+                        {"_id": 0},
+                    )
+                    if open_liab:
+                        new_exp = round(
+                            (open_liab.get("expected_amount") or 0)
+                            - cp_uncovered_remove, 2,
+                        )
+                        paid = float(open_liab.get("paid_amount") or 0)
+                        if new_exp <= max(paid, 0.01):
+                            if paid > 0:
+                                await db.liabilities.update_one(
+                                    {"id": open_liab["id"], "user_id": user["id"]},
+                                    {"$set": {"expected_amount": paid,
+                                              "status": "paid",
+                                              "updated_at": _now()}},
+                                )
+                            else:
+                                await db.liabilities.delete_one(
+                                    {"id": open_liab["id"], "user_id": user["id"]},
+                                )
+                        else:
+                            await db.liabilities.update_one(
+                                {"id": open_liab["id"], "user_id": user["id"]},
+                                {"$set": {"expected_amount": new_exp,
+                                          "updated_at": _now()}},
+                            )
+                if ids_to_drop:
+                    await db.ad_account_ledger.delete_many({
+                        "user_id": user["id"], "id": {"$in": ids_to_drop},
+                    })
+
+            # ── Pass B — merge duplicate OPEN migration liabilities ──
+            opens = await db.liabilities.find(
+                {"user_id": user["id"], "kind": "ad_account",
+                 "counterparty_id": cp_id,
+                 "source": "ad_account_migration",
+                 "status": {"$in": ["unpaid", "partial"]}},
+                {"_id": 0},
+            ).to_list(500)
+            if len(opens) > 1:
+                opens.sort(key=lambda lab: lab.get("created_at") or "")
+                survivor   = opens[-1]
+                duplicates = opens[:-1]
+                merged_exp  = float(survivor.get("expected_amount") or 0)
+                merged_paid = float(survivor.get("paid_amount") or 0)
+                for d in duplicates:
+                    merged_exp  += float(d.get("expected_amount") or 0)
+                    merged_paid += float(d.get("paid_amount") or 0)
+                merged_exp  = round(merged_exp, 2)
+                merged_paid = round(merged_paid, 2)
+                new_status = (
+                    "paid"    if merged_paid >= merged_exp
+                    else ("partial" if merged_paid > 0 else "unpaid")
+                )
+                per_cp["liabs_merged"] = len(duplicates)
+                if not dry_run:
+                    await db.liabilities.update_one(
+                        {"id": survivor["id"], "user_id": user["id"]},
+                        {"$set": {"expected_amount": merged_exp,
+                                  "paid_amount":     merged_paid,
+                                  "status":          new_status,
+                                  "updated_at":      _now()}},
+                    )
+                    await db.liabilities.delete_many({
+                        "user_id": user["id"],
+                        "id": {"$in": [d["id"] for d in duplicates]},
+                    })
+
+            ledger_removed      += per_cp["removed_rows"]
+            balance_restored    += per_cp["balance_restored"]
+            liab_amount_reduced += per_cp["liab_amount_reduced"]
+            liabs_merged        += per_cp["liabs_merged"]
+            if per_cp["removed_rows"] or per_cp["liabs_merged"]:
+                details.append(per_cp)
+
+        return {
+            "ok": True,
+            "dry_run": dry_run,
+            "summary": {
+                "counterparties_scanned":        scanned,
+                "duplicate_ledger_rows_removed": ledger_removed,
+                "balance_restored":              round(balance_restored, 2),
+                "liability_amount_reduced":      round(liab_amount_reduced, 2),
+                "duplicate_liabilities_merged":  liabs_merged,
+            },
+            "details": details,
+        }
+
     # ── PUT /{cp_id}/opening (Iter-110) ───────────────────────────────
     @router.put("/{cp_id}/opening")
     async def set_opening(

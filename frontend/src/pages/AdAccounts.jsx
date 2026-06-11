@@ -1097,6 +1097,48 @@ export default function AdAccounts() {
                     <button onClick={() => setMigrationOpen(true)} className="px-4 py-2.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-bold hover:bg-amber-200 flex items-center gap-2" data-testid="adacc-migration-btn">
                         <ArrowsClockwise size={16} /> ترحيل المديونيات التاريخية
                     </button>
+                    <button
+                        onClick={async () => {
+                            try {
+                                const { data: preview } = await api.post(
+                                    "/ad-accounts/migration/cleanup-duplicates?dry_run=true",
+                                );
+                                const s = preview.summary || {};
+                                if ((s.duplicate_ledger_rows_removed || 0) === 0
+                                    && (s.duplicate_liabilities_merged || 0) === 0) {
+                                    toast.success("لا توجد ترحيلات مكررة — حسابك نظيف ✨");
+                                    return;
+                                }
+                                const lines = [
+                                    `سيتم تنظيف الترحيلات المُكرّرة:`,
+                                    `• حسابات تم فحصها: ${s.counterparties_scanned}`,
+                                    `• سطور سيتم حذفها: ${s.duplicate_ledger_rows_removed}`,
+                                    `• مديونيات مكررة سيتم دمجها: ${s.duplicate_liabilities_merged}`,
+                                    `• رصيد سيُستعاد: ${(s.balance_restored || 0).toLocaleString()} ر.س`,
+                                    `• قيمة مديونية ستُخصم: ${(s.liability_amount_reduced || 0).toLocaleString()} ر.س`,
+                                    ``,
+                                    `هل تريد المتابعة؟ (لا يمكن التراجع)`,
+                                ].join("\n");
+                                if (!window.confirm(lines)) return;
+                                const { data: applied } = await api.post(
+                                    "/ad-accounts/migration/cleanup-duplicates?dry_run=false",
+                                );
+                                const a = applied.summary || {};
+                                toast.success(
+                                    `تم التنظيف · ${a.duplicate_ledger_rows_removed} سطر · `
+                                    + `${a.duplicate_liabilities_merged} مديونية مدموجة`
+                                );
+                                load();
+                            } catch (e) {
+                                toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التنظيف");
+                            }
+                        }}
+                        className="px-4 py-2.5 rounded-lg bg-rose-100 text-rose-800 text-sm font-bold hover:bg-rose-200 flex items-center gap-2"
+                        data-testid="adacc-cleanup-duplicates-btn"
+                        title="ينظّف الترحيلات المكررة من قبل إصلاح Iter-133"
+                    >
+                        🧹 تنظيف الترحيلات المُكرّرة
+                    </button>
                     <button onClick={async () => {
                         const today = todayIso();
                         const doSync = async (force = false) => {
