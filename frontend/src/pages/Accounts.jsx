@@ -6,6 +6,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 import UnifiedPaymentGatewaysCard from "../components/UnifiedPaymentGatewaysCard";
 import PendingOrdersCard from "../components/PendingOrdersCard";
 
@@ -266,7 +267,7 @@ function BankRoutingDialog({ open, onClose, onSaved }) {
 // ── Add/Edit modal ───────────────────────────────────────────────────────────
 function AccountFormModal({ initial, catalogue, banks, onClose, onSaved }) {
     const isEdit = !!initial;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todaySA();
     const [form, setForm] = useState(() => ({
         account_type: initial?.account_type || "bank",
         name: initial?.name || "",

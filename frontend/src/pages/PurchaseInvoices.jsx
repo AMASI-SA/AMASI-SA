@@ -19,6 +19,7 @@ import {
     CaretRight, ArrowRight,
 } from "@phosphor-icons/react";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 
 const inputCls =
@@ -29,7 +30,7 @@ const fmt = (v) =>
         minimumFractionDigits: 2, maximumFractionDigits: 2,
     });
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = () => todaySA();
 
 const STATUS_LABEL = {
     unpaid:  { label: "غير مسدَّدة",  tone: "bg-rose-50 text-rose-800 border-rose-200" },

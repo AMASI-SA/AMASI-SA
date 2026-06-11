@@ -18,8 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
-
-const todayIso = () => new Date().toISOString().slice(0, 10);
+import { todaySA as todayIso } from "../lib/dates";
 
 const fmtMoney = (v) =>
     Number.isFinite(Number(v))

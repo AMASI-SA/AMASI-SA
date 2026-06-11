@@ -4,6 +4,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 const inputCls =
     "w-full px-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition";
@@ -48,7 +49,7 @@ function downloadCSV(rows, filename) {
 }
 
 export default function OrdersDiagnostics() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todaySA();
     const firstDayMonth = new Date(); firstDayMonth.setDate(1);
     const [fromDate, setFromDate] = useState(firstDayMonth.toISOString().slice(0, 10));
     const [toDate, setToDate] = useState(today);

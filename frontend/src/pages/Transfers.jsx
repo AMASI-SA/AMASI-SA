@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 const fmtMoney = (v, ccy = "SAR") =>
     `${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ccy === "SAR" ? "ر.س" : ccy}`;
@@ -42,7 +43,7 @@ function AccountOption({ account }) {
 }
 
 function TransferFormModal({ accounts, onClose, onSaved }) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todaySA();
     const [form, setForm] = useState({
         from_account_id: "",
         to_account_id: "",

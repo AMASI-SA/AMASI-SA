@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 const TYPE_META = {
     bank:             { label: "حساب بنكي",  icon: Bank },
@@ -26,7 +27,7 @@ const fmt = (v, ccy = "SAR") =>
 
 // ── Add transaction modal ────────────────────────────────────────────────────
 function AddTxModal({ accountId, catalogue, onClose, onSaved }) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todaySA();
     const [form, setForm] = useState({
         transaction_type: "income",
         amount: "",

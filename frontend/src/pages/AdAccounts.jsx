@@ -16,12 +16,13 @@ import {
     CheckCircle, Warning,
 } from "@phosphor-icons/react";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA, monthStartSA } from "../lib/dates";
 
 
 const fmt = (v) =>
     Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = () => todaySA();
 
 const PROVIDER_LABEL = {
     snapchat: "Snapchat", tiktok: "TikTok", meta: "Meta / Facebook",
@@ -154,7 +155,7 @@ function CreateDialog({ open, onClose, onSaved }) {
 
 // ── Sync dialog (pull spend from platform daily ads) ────────────────
 function SyncDialog({ row, open, onClose, onSaved }) {
-    const monthStart = () => new Date().toISOString().slice(0, 8) + "01";
+    const monthStart = () => monthStartSA();
     const [form, setForm] = useState({ from_date: monthStart(), to_date: todayIso() });
     const [busy, setBusy] = useState(false);
 
@@ -557,7 +558,7 @@ function LedgerDialog({ row, open, onClose, onSaved }) {
 
 // ── Migration Preview + Apply dialog (Iter-110) ─────────────────────
 function MigrationDialog({ open, onClose, onSaved }) {
-    const monthStart = () => new Date().toISOString().slice(0, 8) + "01";
+    const monthStart = () => monthStartSA();
     const [step, setStep] = useState(1);            // 1 = pick dates · 2 = review · 3 = done
     const [form, setForm] = useState({ from_date: monthStart(), to_date: todayIso() });
     const [busy, setBusy] = useState(false);

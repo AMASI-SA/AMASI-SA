@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 const PROVIDER_TONES = {
     salla:         { label: "سلة",                cls: "bg-emerald-100 text-emerald-800 border-emerald-200" },
@@ -32,7 +33,7 @@ const fmt = (v) => Number(v || 0).toLocaleString("en-US", { minimumFractionDigit
 // ── Add/Edit modal ───────────────────────────────────────────────────────────
 function SettlementModal({ initial, onClose, onSaved }) {
     const isEdit = !!initial;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todaySA();
     const [form, setForm] = useState(() => ({
         order_number:     initial?.order_number || "",
         payment_method:   initial?.payment_method || "مدفوعات سلة",
@@ -218,7 +219,7 @@ function SettlementModal({ initial, onClose, onSaved }) {
 
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function Settlements() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todaySA();
     const firstDayOfMonth = new Date();
     firstDayOfMonth.setDate(1);
     const fromDefault = firstDayOfMonth.toISOString().slice(0, 10);

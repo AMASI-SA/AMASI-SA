@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
+import { todaySA } from "../lib/dates";
 import { useAuth } from "../context/AuthContext";
 import { ALL_KPI_CARDS } from "../lib/dashboardCards";
 import ProductCostCard from "../components/ProductCostCard";
@@ -226,7 +227,7 @@ export default function Dashboard() {
         const todayStr = snapSummary?.today?.date
             || metaSummary?.today?.date
             || tiktokSummary?.today?.date
-            || new Date().toISOString().slice(0, 10);
+            || todaySA();
 
         // Each task returns {platform, ok, msg} so the consolidated toast
         // can show exactly what worked.

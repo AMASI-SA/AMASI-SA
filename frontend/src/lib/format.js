@@ -18,7 +18,11 @@ export function formatPercent(value) {
 }
 
 export function todayISO() {
-    return new Date().toISOString().slice(0, 10);
+    // Iter-135 — kept only for backward compat.  New code should use
+    // `todaySA` from `../lib/dates` so 00:00-03:00 Saudi clock-time
+    // doesn't silently roll back to yesterday's UTC date.
+    const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
+    return new Date(Date.now() + RIYADH_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 export function formatDateAr(iso) {

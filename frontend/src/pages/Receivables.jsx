@@ -11,6 +11,7 @@ import {
     Coin, Plus, Trash, MagnifyingGlass, ArrowsDownUp,
 } from "@phosphor-icons/react";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 
 const inputCls =
@@ -19,7 +20,7 @@ const inputCls =
 const fmt = (v) =>
     Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = () => todaySA();
 
 const STATUS_LABEL = {
     unpaid:  { label: "مفتوحة",      tone: "bg-rose-50 text-rose-800 border-rose-200" },

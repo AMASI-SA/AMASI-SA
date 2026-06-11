@@ -21,6 +21,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 // Pull a human message out of an axios error.  Backend sends
 // {"detail": "..."} on 4xx — that's what the user actually needs to see.
@@ -245,6 +246,30 @@ function WeekdayCheckboxes({ value, onChange, testidPrefix }) {
 
 
 
+// Iter-134-Auto — vendor-canonical fee presets per provider.  When
+// commission_mode = "auto", the UI shows these numbers, disables the
+// inputs, and saves them verbatim so the settlement engine has a
+// consistent contract regardless of toggle history.
+const AUTO_PRESETS = {
+    tabby: {
+        mdr_percent: 0.0699,
+        fixed_fee_per_order: 1.0,
+        vat_on_fees_percent: 0.15,
+        refundable_commission_percent: 0.0499,
+        settlement_fee_per_invoice: 6.0,
+        settlement_fee_vat_applicable: true,
+    },
+    tamara: {
+        mdr_percent: 0.07,
+        fixed_fee_per_order: 0.0,
+        vat_on_fees_percent: 0.15,
+        refundable_commission_percent: 0.07,
+        settlement_fee_per_invoice: 0.0,
+        settlement_fee_vat_applicable: true,
+    },
+};
+
+
 function ProviderCard({ provider, label, Icon, settings, onReload }) {
     const [form, setForm] = useState(() => ({
         api_token: "",
@@ -253,7 +278,7 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
         merchant_code: settings.merchant_code || "",
         enabled: !!settings.enabled,
         environment: settings.environment || "production",
-        activation_date: settings.activation_date || new Date().toISOString().slice(0, 10),
+        activation_date: settings.activation_date || todaySA(),
         mdr_percent: settings.mdr_percent ?? 0,
         fixed_fee_per_order: settings.fixed_fee_per_order ?? 0,
         vat_on_fees_percent: settings.vat_on_fees_percent ?? 0.15,
@@ -267,11 +292,28 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
         refundable_commission_percent: settings.refundable_commission_percent
             ?? settings.mdr_percent ?? 0,
         settlement_fee_vat_applicable: settings.settlement_fee_vat_applicable ?? true,
+        // Iter-134-Auto — Auto (use vendor defaults) vs Manual (merchant tuned)
+        commission_mode: settings.commission_mode || "auto",
     }));
     const [busy, setBusy] = useState(false);
     const [syncing, setSyncing] = useState(false);
 
     const set = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+
+    // Iter-134-Auto — switching to "auto" forces vendor-canonical
+    // presets so the merchant can't accidentally save stale numbers
+    // while the toggle is on.  Switching to "manual" leaves the
+    // current values alone so they can be tweaked.
+    const setCommissionMode = (mode) => {
+        if (mode === "auto") {
+            const preset = AUTO_PRESETS[provider] || {};
+            setForm((s) => ({ ...s, ...preset, commission_mode: "auto" }));
+        } else {
+            setForm((s) => ({ ...s, commission_mode: "manual" }));
+        }
+    };
+
+    const isAuto = form.commission_mode === "auto";
 
     const save = async () => {
         setBusy(true);
@@ -490,9 +532,72 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
 
             {/* Fees */}
             <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 mb-4">
-                <h4 className="text-xs font-extrabold text-slate-700 mb-2">
-                    إعدادات الرسوم العقدية
-                </h4>
+                <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <h4 className="text-xs font-extrabold text-slate-700">
+                        إعدادات الرسوم العقدية
+                    </h4>
+                    {/* Iter-134-Auto — Auto / Manual mode toggle */}
+                    <div
+                        className="inline-flex items-center bg-white border-2 border-slate-300 rounded-full p-0.5 shadow-sm"
+                        role="radiogroup"
+                        aria-label="commission-mode"
+                        data-testid={`bnpl-${provider}-mode-toggle`}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setCommissionMode("auto")}
+                            className={`px-3 py-1 rounded-full text-[11px] font-extrabold transition ${
+                                isAuto
+                                    ? "bg-emerald-600 text-white shadow"
+                                    : "text-slate-600 hover:text-slate-900"
+                            }`}
+                            data-testid={`bnpl-${provider}-mode-auto`}
+                            aria-checked={isAuto}
+                            role="radio"
+                        >
+                            🤖 تلقائي
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setCommissionMode("manual")}
+                            className={`px-3 py-1 rounded-full text-[11px] font-extrabold transition ${
+                                !isAuto
+                                    ? "bg-amber-600 text-white shadow"
+                                    : "text-slate-600 hover:text-slate-900"
+                            }`}
+                            data-testid={`bnpl-${provider}-mode-manual`}
+                            aria-checked={!isAuto}
+                            role="radio"
+                        >
+                            ✏️ يدوي
+                        </button>
+                    </div>
+                </div>
+                <div
+                    className={`mb-3 rounded-lg px-3 py-2 text-[11px] flex items-start gap-2 ${
+                        isAuto
+                            ? "bg-emerald-50 border-2 border-emerald-200 text-emerald-900"
+                            : "bg-amber-50 border-2 border-amber-200 text-amber-900"
+                    }`}
+                    data-testid={`bnpl-${provider}-mode-hint`}
+                >
+                    <span className="text-base">{isAuto ? "🔒" : "⚙️"}</span>
+                    <span>
+                        {isAuto ? (
+                            <>
+                                <strong>الوضع التلقائي مفعّل:</strong> القيم أدناه مأخوذة من اتفاقية{" "}
+                                {provider === "tabby" ? "تابي" : "تمارا"} الرسمية وتُحدَّث تلقائياً
+                                عند أي تغيير من المزوّد. اضغط «يدوي» للتعديل.
+                            </>
+                        ) : (
+                            <>
+                                <strong>الوضع اليدوي:</strong> أنت تتحكَّم في كل النسب والرسوم —
+                                مفيد إن كان عقدك مع{" "}
+                                {provider === "tabby" ? "تابي" : "تمارا"} يختلف عن الأسعار العامة.
+                            </>
+                        )}
+                    </span>
+                </div>
                 {/* Iter-126 — point users to the unified settings page */}
                 <div className="mb-3 rounded-lg bg-blue-50 border-2 border-blue-200 px-3 py-2 text-[11px] text-blue-900 flex items-start gap-2" data-testid={`bnpl-${provider}-fee-source-note`}>
                     <span className="text-base">ℹ️</span>
@@ -510,7 +615,9 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             step="0.001"
                             value={form.mdr_percent}
                             onChange={(e) => set("mdr_percent", parseFloat(e.target.value) || 0)}
-                            className={inputCls}
+                            className={`${inputCls} ${isAuto ? "bg-slate-100 cursor-not-allowed" : ""}`}
+                            disabled={isAuto}
+                            readOnly={isAuto}
                             data-testid={`bnpl-${provider}-mdr`}
                         />
                     </Field>
@@ -520,7 +627,9 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             step="0.01"
                             value={form.fixed_fee_per_order}
                             onChange={(e) => set("fixed_fee_per_order", parseFloat(e.target.value) || 0)}
-                            className={inputCls}
+                            className={`${inputCls} ${isAuto ? "bg-slate-100 cursor-not-allowed" : ""}`}
+                            disabled={isAuto}
+                            readOnly={isAuto}
                             data-testid={`bnpl-${provider}-fixed-fee`}
                         />
                     </Field>
@@ -530,7 +639,9 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             step="0.01"
                             value={form.vat_on_fees_percent}
                             onChange={(e) => set("vat_on_fees_percent", parseFloat(e.target.value) || 0)}
-                            className={inputCls}
+                            className={`${inputCls} ${isAuto ? "bg-slate-100 cursor-not-allowed" : ""}`}
+                            disabled={isAuto}
+                            readOnly={isAuto}
                             data-testid={`bnpl-${provider}-vat`}
                         />
                     </Field>
@@ -541,9 +652,11 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             min="0"
                             value={form.settlement_fee_per_invoice}
                             onChange={(e) => set("settlement_fee_per_invoice", parseFloat(e.target.value) || 0)}
-                            className={inputCls}
+                            className={`${inputCls} ${isAuto ? "bg-slate-100 cursor-not-allowed" : ""}`}
+                            disabled={isAuto}
+                            readOnly={isAuto}
                             data-testid={`bnpl-${provider}-settlement-fee`}
-                            placeholder={provider === "tabby" ? "5.00" : "0.00"}
+                            placeholder={provider === "tabby" ? "6.00" : "0.00"}
                         />
                     </Field>
                 </div>
@@ -570,7 +683,9 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                                 step="0.0001"
                                 value={form.refundable_commission_percent}
                                 onChange={(e) => set("refundable_commission_percent", parseFloat(e.target.value) || 0)}
-                                className={inputCls}
+                                className={`${inputCls} ${isAuto ? "bg-slate-100 cursor-not-allowed" : ""}`}
+                                disabled={isAuto}
+                                readOnly={isAuto}
                                 data-testid={`bnpl-${provider}-refundable-pct`}
                                 placeholder={provider === "tabby" ? "0.0499" : "0.07"}
                             />
@@ -579,11 +694,12 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                             label="ضريبة ١٥٪ على رسوم التسوية"
                             hint="مفعّل افتراضياً (KSA VAT لخدمات المعالجة B2B)."
                         >
-                            <label className="flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 bg-white cursor-pointer hover:bg-slate-50">
+                            <label className={`flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 bg-white ${isAuto ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-slate-50"}`}>
                                 <input
                                     type="checkbox"
                                     checked={!!form.settlement_fee_vat_applicable}
                                     onChange={(e) => set("settlement_fee_vat_applicable", e.target.checked)}
+                                    disabled={isAuto}
                                     data-testid={`bnpl-${provider}-settlement-fee-vat`}
                                     className="w-4 h-4"
                                 />

@@ -22,9 +22,10 @@ import {
     HandCoins, Coins, PaperPlaneRight, ListChecks, Bank,
 } from "@phosphor-icons/react";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todaySA();
 
 
 function fmt(v) {

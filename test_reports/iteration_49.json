@@ -1,0 +1,34 @@
+{
+  "summary": "Iter-135 (Saudi-timezone default dates) and Iter-134-Auto (BNPL Auto/Manual commission_mode toggle) fully validated end-to-end against the preview URL. Backend: 5/5 unit tests + 8/8 new live API round-trip tests (tabby+tamara) pass — GET defaults to commission_mode='auto', PUT manual+mdr persists, invalid mode ignored, PUT auto resets. Frontend: 7/7 FinancialInputHub date inputs (liab-due-date, pay-date, dexp-date, rec-due, adv-date, ship-date, cod-date) prefill with today in Asia/Riyadh (2026-06-12). /transfers New Transfer modal `transfer-date` and /accounts add-account `account-opening-date-input` also prefill correctly. /integrations/bnpl: both tabby and tamara cards expose bnpl-{provider}-mode-toggle with -auto and -manual buttons; clicking Auto applies the exact preset numbers (Tabby: mdr=0.0699, fixed=1, vat=0.15, refundable=0.0499, settlement=6 ; Tamara: 0.07/0/0.15/0.07/0) and disables all 5 rate inputs; Manual re-enables them. Saving in Manual then reloading the page preserves the mode (amber active on manual button, MDR input remains enabled) — persistence confirmed both via DB GET and via UI reload.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bnpl_iter134_auto_manual_mode.py",
+    "/app/backend/tests/test_bnpl_iter134_api_roundtrip.py",
+    "/app/test_reports/pytest/iter134_api_roundtrip.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor doc nit: review_request says hub URL is /financial-input/hub but App.js mounts it at /financial-input-hub. The data-testid for accounts modal is `account-opening-date-input` (not `opening_balance_date`). Rate-input testids are bnpl-{p}-mdr, bnpl-{p}-fixed-fee, bnpl-{p}-vat, bnpl-{p}-refundable-pct, bnpl-{p}-settlement-fee (review_request listed slightly different names). All work as-is; just update the spec.",
+    "BnplIntegrations.jsx active-state colors differ between buttons (auto=emerald-600, manual=amber-600). This is intentional and visually clear, but the review_request implied both should be 'emerald-colored when active' — confirm the design intent is auto=emerald/manual=amber (currently the case).",
+    "dates.js helpers use `Date.now() + 3h` then `toISOString().slice(0,10)`. Correct for Asia/Riyadh (no DST). No issues.",
+    "config_store.save_settings correctly ignores invalid commission_mode values (verified) and persists 'manual'/'auto' atomically. Good guard rail."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bnpl_iter134_api_roundtrip.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (real merchant on preview).",
+  "seed_data_creation": "Test toggled tabby commission_mode to manual then restored to auto at end. No persistent test-only data left behind.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Correct URLs/testids for future iterations: /financial-input-hub (NOT /financial-input/hub); /integrations/bnpl (NOT /bnpl/integrations); accounts add-account date input is data-testid='account-opening-date-input'; BNPL rate inputs are bnpl-{tabby|tamara}-{mdr|fixed-fee|vat|refundable-pct|settlement-fee}; active toggle classes are bg-emerald-600 (auto) and bg-amber-600 (manual). Hub forms are lazy-mounted per tab — must click hub-tab-{id} before the date input becomes queryable in DOM. Expected Riyadh date matches `(datetime.utcnow() + 3h).strftime('%Y-%m-%d')`.",
+  "rca_of_the_issue": "N/A — no bugs found. Initial false-FAIL on persistence test was a test-script bug (looked for 'emerald' substring in manual button class, but manual uses 'amber'). Corrected and confirmed PERSISTENCE: OK."
+}

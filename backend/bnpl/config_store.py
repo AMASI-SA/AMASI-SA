@@ -49,7 +49,7 @@ WEEKDAYS = (
 # Default fee settings — user can override via Settings UI.
 DEFAULTS = {
     "tabby": {
-        "mdr_percent": 0.06,
+        "mdr_percent": 0.0699,
         "fixed_fee_per_order": 1.0,    # user-confirmed: 1 SAR not 1.5
         "vat_on_fees_percent": 0.15,
         # Iter-134 — Tabby refunds only the "refundable" slice of the
@@ -63,9 +63,10 @@ DEFAULTS = {
         # on Mondays and pays out 1-2 business days later.
         "invoice_weekdays":  ["monday"],
         "transfer_weekdays": ["tuesday", "wednesday"],
-        "settlement_fee_per_invoice": 5.0,   # SAR charged ONCE per
+        "settlement_fee_per_invoice": 6.0,   # SAR charged ONCE per
                                              # weekly settlement invoice
-                                             # (not per order)
+                                             # (not per order) — Tabby
+                                             # invoice shows 6.00 SAR
         # Iter-134 — KSA VAT applies to payment-processor service fees,
         # so the per-invoice settlement fee carries 15% VAT.  Default
         # ON for both providers, user can disable per agreement.
@@ -256,6 +257,9 @@ async def get_settings(db, user_id: str, provider: str) -> dict:
             "settlement_fee_vat_applicable",
             defaults.get("settlement_fee_vat_applicable", True),
         )),
+        # Iter-134-Auto — "auto" = use vendor-canonical defaults (read-only UI);
+        # "manual" = merchant has tuned the numbers themselves.
+        "commission_mode": doc.get("commission_mode", "auto"),
         "api_base_url": _resolve_base_url(
             provider, doc.get("environment", "production"),
             doc.get("api_base_url"),
@@ -365,6 +369,13 @@ async def save_settings(
         update["settlement_fee_vat_applicable"] = bool(
             payload.get("settlement_fee_vat_applicable"),
         )
+    # Iter-134-Auto — commission_mode tracks whether the merchant has
+    # overridden the vendor-canonical numbers (manual) or wants MEZAN
+    # to always apply the latest provider defaults (auto).
+    if "commission_mode" in payload:
+        mode = str(payload.get("commission_mode") or "").strip().lower()
+        if mode in ("auto", "manual"):
+            update["commission_mode"] = mode
     for k in ("settlement_period_days", "transfer_days"):
         if k in payload and payload.get(k) is not None:
             try:

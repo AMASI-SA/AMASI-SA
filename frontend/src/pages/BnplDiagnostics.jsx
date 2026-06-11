@@ -20,6 +20,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 const errMsg = (e, fb) =>
     formatApiErrorDetail(e?.response?.data?.detail) || fb || "حدث خطأ";
@@ -340,7 +341,7 @@ export default function BnplDiagnostics() {
     };
 
     const runBackfill = async () => {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todaySA();
         const def = "2025-01-01";
         const since = window.prompt(
             `🔁 جلب تاريخي Tabby (دفعات صغيرة آمنة)\n\n` +

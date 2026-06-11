@@ -6,6 +6,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 /**
  * /salla-sources — Compare unified_orders bucketed by data source
@@ -39,12 +40,12 @@ function fmtMoney(n) {
 }
 
 function todayISO() {
-    return new Date().toISOString().slice(0, 10);
+    return todaySA();
 }
 
 function daysAgoISO(days) {
-    const d = new Date();
-    d.setDate(d.getDate() - days);
+    const d = new Date(Date.now() + 3 * 60 * 60 * 1000); // Riyadh offset
+    d.setUTCDate(d.getUTCDate() - days);
     return d.toISOString().slice(0, 10);
 }
 
