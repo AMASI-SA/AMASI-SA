@@ -1153,6 +1153,82 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
                                 "error": f"provider {provider} not supported"})
                 continue
 
+            # ── Iter-133 — Idempotent re-migration ────────────────────
+            # If the merchant has already migrated all (or part of) this
+            # window before, we MUST reverse those prior postings before
+            # applying fresh figures.  Otherwise spend / liabilities
+            # double up exactly as the user observed in production.
+            # Pattern is identical to the `force=True` auto-sync reversal
+            # below — find prior `breakdown.migration=True` ledger rows in
+            # range, restore `from_balance`, shrink/delete the migration
+            # liability by `uncovered`, then drop those ledger rows.
+            prev_rows = await db.ad_account_ledger.find({
+                "user_id": user["id"], "counterparty_id": cp_id,
+                "type": "spend",
+                "breakdown.migration": True,
+                "date": {"$gte": payload.from_date, "$lte": payload.to_date},
+            }, {"_id": 0}).to_list(5000)
+            reversed_rows = 0
+            if prev_rows:
+                prev_covered = round(sum(
+                    (r.get("breakdown") or {}).get("from_balance", 0)
+                    for r in prev_rows), 2)
+                prev_uncovered = round(sum(
+                    (r.get("breakdown") or {}).get("uncovered", 0)
+                    for r in prev_rows), 2)
+                # 1) Restore balance the prior migration had consumed.
+                if prev_covered > 0:
+                    await db.counterparties.update_one(
+                        {"id": cp_id, "user_id": user["id"]},
+                        {"$inc": {"balance": prev_covered},
+                         "$set": {"updated_at": _now()}},
+                    )
+                    cp["balance"] = round(
+                        float(cp.get("balance") or 0) + prev_covered, 2,
+                    )
+                # 2) Shrink (or delete) the open migration liability.
+                if prev_uncovered > 0 and (cp.get("debt_mode") or "auto") == "auto":
+                    existing_liab = await db.liabilities.find_one(
+                        {"user_id": user["id"], "kind": "ad_account",
+                         "counterparty_id": cp_id,
+                         "source": "ad_account_migration",
+                         "status": {"$in": ["unpaid", "partial"]}},
+                        {"_id": 0},
+                    )
+                    if existing_liab:
+                        new_exp = round(
+                            (existing_liab.get("expected_amount") or 0)
+                            - prev_uncovered, 2,
+                        )
+                        paid = float(existing_liab.get("paid_amount") or 0)
+                        if new_exp <= max(paid, 0.01):
+                            if paid > 0:
+                                # Partially settled — keep history,
+                                # clamp expected to what was actually paid.
+                                await db.liabilities.update_one(
+                                    {"id": existing_liab["id"], "user_id": user["id"]},
+                                    {"$set": {"expected_amount": paid,
+                                              "status": "paid",
+                                              "updated_at": _now()}},
+                                )
+                            else:
+                                await db.liabilities.delete_one(
+                                    {"id": existing_liab["id"], "user_id": user["id"]},
+                                )
+                        else:
+                            await db.liabilities.update_one(
+                                {"id": existing_liab["id"], "user_id": user["id"]},
+                                {"$set": {"expected_amount": new_exp,
+                                          "updated_at": _now()}},
+                            )
+                # 3) Drop the prior ledger rows so they don't double-count.
+                ids_to_delete = [r["id"] for r in prev_rows if r.get("id")]
+                if ids_to_delete:
+                    res = await db.ad_account_ledger.delete_many({
+                        "user_id": user["id"], "id": {"$in": ids_to_delete},
+                    })
+                    reversed_rows = res.deleted_count
+
             ext_id = (cp.get("external_account_id") or "").strip() or None
             rows, source = await _fetch_daily_spend(
                 db, user["id"], provider, ext_id, payload.from_date, payload.to_date,
@@ -1251,6 +1327,9 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
                 "balance_after": round(balance_now, 2),
                 "mode_used": payload.mode,
                 "source_collection": source,
+                # Iter-133 — surface how many prior migration rows were
+                # rolled back so the user knows this run replaced them.
+                "reversed_prior_rows": reversed_rows,
             })
         return {"ok": True, "results": results}
 

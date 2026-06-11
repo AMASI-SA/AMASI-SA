@@ -654,7 +654,7 @@ function MigrationDialog({ open, onClose, onSaved }) {
                             <ul className="list-disc pr-5 space-y-1">
                                 <li>نقرأ صرف كل حساب إعلاني من بيانات المنصة المخزّنة عندك.</li>
                                 <li>الحسابات غير المربوطة بـ <b>Ad Account ID</b> ستُمنع افتراضياً حتى لا تندمج مع غيرها.</li>
-                                <li>كل ترحيل ينشئ سجلاً منفصلاً في الـ ledger يمكنك مراجعته أو إلغاؤه يدوياً.</li>
+                                <li>الترحيل <b>قابل لإعادة التشغيل بأمان</b> — لو رحّلت نفس الفترة مرتين، يستبدل النظام السجلات السابقة بالأرقام الجديدة (لا ازدواجية في الصرف أو المديونية).</li>
                             </ul>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
@@ -804,6 +804,18 @@ function MigrationDialog({ open, onClose, onSaved }) {
                         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-sm text-emerald-900">
                             ✅ تمت العملية. أدناه تفاصيل ما تم.
                         </div>
+                        {(() => {
+                            const totalReversed = (result.results || [])
+                                .reduce((s, r) => s + (r.reversed_prior_rows || 0), 0);
+                            return totalReversed > 0 ? (
+                                <div
+                                    className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-[12px] text-amber-900"
+                                    data-testid="adacc-mig-reversed-notice"
+                                >
+                                    🔁 تم استبدال <b className="num">{totalReversed}</b> سطر ترحيل سابق ضمن نفس النطاق ليصبح هذا الترحيل هو السجل الفعّال (لا ازدواجية).
+                                </div>
+                            ) : null;
+                        })()}
                         <div className="overflow-x-auto border border-slate-200 rounded-lg">
                             <table className="mezan-table w-full text-sm">
                                 <thead className="bg-slate-50 text-slate-600 text-[11px]">
@@ -811,6 +823,7 @@ function MigrationDialog({ open, onClose, onSaved }) {
                                         <th className="text-right p-2 font-bold">الحساب</th>
                                         <th className="text-right p-2 font-bold">الحالة</th>
                                         <th className="text-right p-2 font-bold">سطور مُرحّلة</th>
+                                        <th className="text-right p-2 font-bold">سُحب سابق</th>
                                         <th className="text-right p-2 font-bold">إجمالي الصرف</th>
                                         <th className="text-right p-2 font-bold">مديونية أُنشئت</th>
                                         <th className="text-right p-2 font-bold">الرصيد بعد</th>
@@ -828,6 +841,12 @@ function MigrationDialog({ open, onClose, onSaved }) {
                                                 )}
                                             </td>
                                             <td className="p-2 num text-xs">{r.rows_posted ?? "—"}</td>
+                                            <td
+                                                className="p-2 num text-xs text-amber-700"
+                                                data-testid={`adacc-mig-reversed-${r.id}`}
+                                            >
+                                                {r.reversed_prior_rows ? r.reversed_prior_rows : "—"}
+                                            </td>
                                             <td className="p-2 num text-xs text-violet-900">{r.total_spend != null ? fmt(r.total_spend) : "—"}</td>
                                             <td className="p-2 num text-xs text-rose-700">{r.debt_created != null ? fmt(r.debt_created) : "—"}</td>
                                             <td className="p-2 num text-xs text-emerald-700">{r.balance_after != null ? fmt(r.balance_after) : "—"}</td>
