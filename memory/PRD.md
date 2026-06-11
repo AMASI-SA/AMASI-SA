@@ -9,6 +9,7 @@
 - **Iter-121 — Weekday-Based Settlement Cycle**: `invoice_weekdays` + `transfer_weekdays`.
 - **Iter-122 — Strict Issue-vs-Transfer Separation**: Only `invoice_weekdays` creates settlements.
 - **Iter-123 — Period Start Convention**: `invoice_weekday` is the FIRST day of a period. Period spans `[invoice_weekday, next_invoice_weekday - 1]`. Issue date = next invoice_weekday (when provider generates statement).
+- **Iter-130 — Asia/Riyadh Local Time Window**: Saudi local YYYY-MM-DD is converted to a UTC ISO window (`-3h` on each side) before filtering Mongo. Matches how Tabby/Tamara cut off invoices at Saudi midnight.
 
 ## User Profile
 - Arabic merchant (عرفات — amasi.jewelery@gmail.com).
@@ -28,7 +29,15 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
-- **Iter-123 (Feb 2026 — this session)**: Period Start Convention.
+- **Iter-130 (Feb 11 2026 — this session)**: Asia/Riyadh timezone fix for settlements.
+  - Reproduced production discrepancy: Tabby invoice (4-10 May) gross = 16,646.29 / 69 orders, MEZAN showed 16,232.46 / 68 orders → exact gap = 413.83 SAR.
+  - Root cause: `settlements_service` filtered Mongo `created_at_provider` / `refunded_at` strings with the raw user date treated as UTC midnight, dropping orders captured in the last 3 UTC hours of the prior Saudi day.
+  - Added `_local_date_window_utc(date_from, date_to)` helper (`-3h` on each side, no DST).
+  - Applied to `_compute_provider_totals` (sales + refunds) and `_compute_period_items` (sales + refunds).
+  - Simulation against the official Tabby Excel: 69 sales / 16,646.29 SAR / 4 refunds / 534.72 SAR — matches official invoice **exactly**.
+  - 9/9 new pytest in `test_bnpl_iter130_riyadh_timezone.py` + 54/54 cumulative BNPL pytest still pass.
+  - Awaiting user redeploy on `mezansalla.com`.
+- **Iter-123 (Feb 2026)**: Period Start Convention.
   - Period now spans `[invoice_weekday, next_invoice_weekday - 1]` (Mon→Sun for default Tabby/Tamara).
   - New row field `issue_date` = next invoice_weekday (the day provider generates the statement file).
   - `expected_transfer_date` is computed from `issue_date`, not `period_end`.
@@ -75,6 +84,7 @@
 - **Refunds**: from `payment_refunds.refunded_at`, NEVER `payment_transactions.refunded_amount`.
 - **Settlement creation**: driven SOLELY by `invoice_weekdays`. `transfer_weekdays` is metadata.
 - **Period convention** (Iter-123): `invoice_weekday` is the START of the period. `to` is the day BEFORE the next invoice weekday. `issue_date` is the next invoice weekday after `to`.
+- **Timezone** (Iter-130): All BNPL date-window filters go through `_local_date_window_utc()`. Inputs are Saudi-local YYYY-MM-DD; outputs are UTC ISO. **Never** filter `created_at_provider` / `refunded_at` with raw YYYY-MM-DD again.
 - **Empty list vs absent in DB**: `[]` = user cleared. `key missing` = use defaults.
 - **Cloudflare 524**: wrap long-running endpoints in `try/except` returning JSON.
 - **Production access**: agent edits Preview only. User redeploys.

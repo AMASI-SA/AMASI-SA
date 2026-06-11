@@ -34,8 +34,56 @@ Output structure (per provider):
 from __future__ import annotations
 
 import math
-from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
+
+
+# ── Iter-130 — BNPL providers operate on Saudi Arabia local time
+# (Asia/Riyadh, UTC+3, no DST).  Tabby & Tamara cut off invoice
+# periods at midnight Saudi time.  Provider API timestamps however
+# come back in UTC ISO form (e.g. "2026-05-03T23:50:41Z" = 02:50
+# Saudi May 4).  Earlier versions of this engine filtered Mongo
+# string-fields with the raw user-supplied YYYY-MM-DD which
+# implicitly treated the boundary as UTC midnight → orders that
+# happened in the last 3 UTC hours of the previous day (= the first
+# 3 hours of the next Saudi day) were silently dropped from the
+# settlement, producing a +/−413 SAR discrepancy vs the official
+# Tabby invoice.  Centralising the conversion here also makes the
+# logic trivially testable.
+RIYADH_UTC_OFFSET = timedelta(hours=3)
+
+
+def _local_date_window_utc(
+    date_from: Optional[str], date_to: Optional[str],
+) -> Tuple[Optional[str], Optional[str]]:
+    """Convert a Saudi-local [date_from, date_to] window (inclusive,
+    YYYY-MM-DD strings) into UTC ISO bounds suitable for string-
+    comparison against provider timestamps stored as ISO-Z text.
+
+    Returns (utc_gte, utc_lte) where:
+        utc_gte = `date_from` 00:00 Asia/Riyadh expressed in UTC
+        utc_lte = `date_to`   23:59:59 Asia/Riyadh expressed in UTC
+    Either component may be ``None`` if the corresponding input is
+    falsy (caller decides whether to set that side of the range).
+    """
+    utc_gte: Optional[str] = None
+    utc_lte: Optional[str] = None
+    if date_from:
+        try:
+            d = datetime.strptime(date_from[:10], "%Y-%m-%d")
+            utc_gte = (d - RIYADH_UTC_OFFSET).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            utc_gte = date_from
+    if date_to:
+        try:
+            # 23:59:59 Saudi  =>  20:59:59 UTC of the same date.
+            d = datetime.strptime(date_to[:10], "%Y-%m-%d") + timedelta(
+                hours=23, minutes=59, seconds=59,
+            )
+            utc_lte = (d - RIYADH_UTC_OFFSET).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            utc_lte = date_to + "T23:59:59Z"
+    return utc_gte, utc_lte
 
 
 # Fee rates (mirror payment_methods.py — keeping a local copy so we
@@ -249,13 +297,16 @@ async def _compute_provider_totals(
     (Tabby/Tamara report refunds in the week they occur).
     """
     # ── Gross sales — by order date (created_at_provider) ──────────
+    # Iter-130 — convert the Saudi-local window to a UTC ISO range so
+    # we match exactly what Tabby/Tamara include in their invoices.
+    utc_gte, utc_lte = _local_date_window_utc(date_from, date_to)
     sales_match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
-    if date_from or date_to:
+    if utc_gte or utc_lte:
         rng: Dict[str, str] = {}
-        if date_from:
-            rng["$gte"] = date_from
-        if date_to:
-            rng["$lte"] = date_to + "T23:59:59Z"
+        if utc_gte:
+            rng["$gte"] = utc_gte
+        if utc_lte:
+            rng["$lte"] = utc_lte
         sales_match["created_at_provider"] = rng
 
     gross = 0.0
@@ -272,13 +323,14 @@ async def _compute_provider_totals(
         gross = float(r.get("gross") or 0)
 
     # ── Refunds — by REFUND date, NOT order date ───────────────────
+    # Iter-130 — same Saudi-local → UTC conversion as the sales side.
     refund_match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
-    if date_from or date_to:
+    if utc_gte or utc_lte:
         rng2: Dict[str, str] = {}
-        if date_from:
-            rng2["$gte"] = date_from
-        if date_to:
-            rng2["$lte"] = date_to + "T23:59:59Z"
+        if utc_gte:
+            rng2["$gte"] = utc_gte
+        if utc_lte:
+            rng2["$lte"] = utc_lte
         refund_match["refunded_at"] = rng2
 
     refunds = 0.0
@@ -316,7 +368,14 @@ async def _compute_period_items(
     .provider_id`) so the merchant can see at a glance that a refund
     in the current period belongs to an order from an earlier period.
     """
-    to_inclusive = (date_to or "") + "T23:59:59Z"
+    # Iter-130 — same Saudi-local → UTC conversion as
+    # `_compute_provider_totals` so detail tables match the totals.
+    utc_gte, utc_lte = _local_date_window_utc(date_from, date_to)
+    sales_filter_range: Dict[str, str] = {}
+    if utc_gte:
+        sales_filter_range["$gte"] = utc_gte
+    if utc_lte:
+        sales_filter_range["$lte"] = utc_lte
 
     # Sales — orders whose order date falls inside the window.
     sales: List[Dict[str, Any]] = []
@@ -324,7 +383,7 @@ async def _compute_period_items(
         {
             "user_id":             user_id,
             "provider":            provider,
-            "created_at_provider": {"$gte": date_from, "$lte": to_inclusive},
+            "created_at_provider": sales_filter_range,
         },
         {"_id": 0, "id": 1, "order_reference_id": 1, "order_number": 1,
          "amount": 1, "currency": 1, "created_at_provider": 1, "status": 1,
@@ -348,7 +407,7 @@ async def _compute_period_items(
         {
             "user_id":     user_id,
             "provider":    provider,
-            "refunded_at": {"$gte": date_from, "$lte": to_inclusive},
+            "refunded_at": sales_filter_range,
         },
         {"_id": 0, "id": 1, "provider_refund_id": 1,
          "provider_payment_id": 1, "order_reference_id": 1,
