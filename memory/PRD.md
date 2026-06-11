@@ -29,7 +29,12 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
-- **Iter-130 (Feb 11 2026 — this session)**: Asia/Riyadh timezone fix for settlements.
+- **Iter-131 (Feb 11 2026 — this session)**: Weekly table المُحوَّل/المتبقّي now reflect the SPECIFIC matched bank transfer (not the 14-day cumulative sum).
+  - Problem: row showed `transferred_amount = 27,141.91` (cumulative window) while the actual single matched transfer was 14,717.80 → confused users into thinking there's a 12k overpayment.
+  - Fix in `BnplSettlements.jsx`: when `matchByInv[invoice_no].match_status === 'matched'`, override `transferred_amount` with `matched_transfer.amount`, recompute remaining as `net_payable - matched_transfer.amount`. Totals row sums `matchTotals.matched_amount` instead of the backend's cumulative `totals.transferred_amount`.
+  - Added `data-testid` attributes: `bnpl-weekly-transferred-{n}`, `bnpl-weekly-remaining-{n}`, `bnpl-weekly-transferred-total`, `bnpl-weekly-remaining-total`.
+  - Verified: page renders, all test-ids present in DOM, no lint issues.
+- **Iter-130 (Feb 11 2026)**: Asia/Riyadh timezone fix for settlements.
   - Reproduced production discrepancy: Tabby invoice (4-10 May) gross = 16,646.29 / 69 orders, MEZAN showed 16,232.46 / 68 orders → exact gap = 413.83 SAR.
   - Root cause: `settlements_service` filtered Mongo `created_at_provider` / `refunded_at` strings with the raw user date treated as UTC midnight, dropping orders captured in the last 3 UTC hours of the prior Saudi day.
   - Added `_local_date_window_utc(date_from, date_to)` helper (`-3h` on each side, no DST).

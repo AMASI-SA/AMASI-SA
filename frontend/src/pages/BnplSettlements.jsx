@@ -501,6 +501,18 @@ export default function BnplSettlements() {
                                                 under:     { txt: "⚠ نقص",      cls: "bg-rose-100 text-rose-800" },
                                                 unmatched: { txt: "—",          cls: "bg-slate-100 text-slate-500" },
                                             }[status] || { txt: status, cls: "bg-slate-100 text-slate-600" };
+                                            // Iter-131 — show the SPECIFIC matched transfer (not the
+                                            // cumulative 14-day window) in the "المحوَّل" column so
+                                            // the merchant sees the exact Tabby/Tamara payout that
+                                            // settled THIS invoice.  Near-miss (over/under) rows
+                                            // keep zero here — their amount is surfaced in the
+                                            // "المطابقة البنكية" column with the warning badge.
+                                            const effTransferred = (status === "matched" && mt)
+                                                ? Number(mt.amount || 0)
+                                                : 0;
+                                            const effRemaining = Number(
+                                                ((r.net_payable || 0) - effTransferred).toFixed(2),
+                                            );
                                             const expKey = `${weeklyOpen}:${r.invoice_no}`;
                                             const isExpanded = expandedInv === expKey;
                                             return (
@@ -522,9 +534,20 @@ export default function BnplSettlements() {
                                                 <td className="p-2 num text-rose-700/70">{fmt(r.commission_vat)}</td>
                                                 <td className="p-2 num text-rose-700/70">{fmt(r.settlement_fee)}</td>
                                                 <td className="p-2 num font-extrabold text-emerald-700">{fmt(r.net_payable)}</td>
-                                                <td className="p-2 num">{fmt(r.transferred_amount)}</td>
-                                                <td className={`p-2 num font-bold ${Math.abs(r.remaining_with_provider) < 0.5 ? "text-emerald-700" : "text-amber-700"}`}>
-                                                    {fmt(r.remaining_with_provider)}
+                                                <td
+                                                    className="p-2 num"
+                                                    data-testid={`bnpl-weekly-transferred-${r.invoice_no}`}
+                                                    title={status === "matched"
+                                                        ? "قيمة التحويل البنكي المطابق لهذه الفاتورة"
+                                                        : "لم يُطابَق تحويل بنكي مع هذه الفاتورة"}
+                                                >
+                                                    {effTransferred ? fmt(effTransferred) : "—"}
+                                                </td>
+                                                <td
+                                                    className={`p-2 num font-bold ${Math.abs(effRemaining) < 0.5 ? "text-emerald-700" : "text-amber-700"}`}
+                                                    data-testid={`bnpl-weekly-remaining-${r.invoice_no}`}
+                                                >
+                                                    {fmt(effRemaining)}
                                                 </td>
                                                 <td className="p-2">
                                                     <div className="flex flex-col items-start gap-1">
@@ -578,8 +601,20 @@ export default function BnplSettlements() {
                                             <td className="p-2 num text-rose-700/70">{fmt(weekly[weeklyOpen].totals?.commission_vat)}</td>
                                             <td className="p-2 num text-rose-700/70">{fmt(weekly[weeklyOpen].totals?.settlement_fee)}</td>
                                             <td className="p-2 num font-extrabold text-emerald-700">{fmt(weekly[weeklyOpen].totals?.net_payable)}</td>
-                                            <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.transferred_amount)}</td>
-                                            <td className="p-2 num">{fmt(weekly[weeklyOpen].totals?.remaining_with_provider)}</td>
+                                            {/* Iter-131 — totals reflect the matched transfers only. */}
+                                            <td className="p-2 num" data-testid="bnpl-weekly-transferred-total">
+                                                {fmt(weekly[weeklyOpen].matchTotals?.matched_amount || 0)}
+                                            </td>
+                                            <td className="p-2 num" data-testid="bnpl-weekly-remaining-total">
+                                                {fmt(
+                                                    Number(
+                                                        (
+                                                            Number(weekly[weeklyOpen].totals?.net_payable || 0)
+                                                            - Number(weekly[weeklyOpen].matchTotals?.matched_amount || 0)
+                                                        ).toFixed(2)
+                                                    )
+                                                )}
+                                            </td>
                                             <td className="p-2 text-[10px] text-slate-600">
                                                 {weekly[weeklyOpen].matchTotals ? (
                                                     <span className="num">
