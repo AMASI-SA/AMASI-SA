@@ -3081,6 +3081,45 @@ async def on_startup():
             await _asyncio.sleep(DAILY_SECONDS)
 
     _asyncio.create_task(_tamara_attribution_daily_sweep())
+
+    # ── Iter-147 — One-shot startup migration ────────────────────────
+    # Backfills `effective_settlement_date` + `settlement_source` on
+    # every legacy Tamara payment_transactions row that pre-existed
+    # before Iter-147 shipped.  Without this, the new settlements
+    # engine would exclude legacy sales (no effective date set) while
+    # refunds still match by `refunded_at`, producing negative
+    # net-sales rows in the weekly invoice UI.  Runs in the background
+    # so it doesn't block startup.
+    async def _tamara_attribution_startup_migration():
+        # Tiny stagger so MongoDB / indexes finish initialising first.
+        await _asyncio.sleep(15)
+        try:
+            unattributed = await db.payment_transactions.count_documents({
+                "provider": "tamara",
+                "$or": [
+                    {"effective_settlement_date": {"$exists": False}},
+                    {"effective_settlement_date": None},
+                    {"effective_settlement_date": ""},
+                ],
+            })
+            if unattributed == 0:
+                logger.info("iter-147: startup migration — nothing to backfill")
+                return
+            logger.info(
+                "iter-147: startup migration — backfilling %d legacy Tamara rows",
+                unattributed,
+            )
+            summary = await run_tamara_attribution_sweep(db)
+            logger.info(
+                "iter-147: startup migration done — users=%d scanned=%d updated=%d",
+                summary.get("users_processed", 0),
+                summary.get("rows_scanned", 0),
+                summary.get("rows_updated", 0),
+            )
+        except Exception as e:
+            logger.exception("iter-147: startup migration failed: %s", e)
+
+    _asyncio.create_task(_tamara_attribution_startup_migration())
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:
