@@ -184,10 +184,23 @@ async def compute_owed_per_company(db, user_id: str) -> dict[str, dict]:
     cfg_map = await _shipping_config_map_db(db, user_id)
     deferred_set = set(await _deferred_company_names_db(db, user_id))
 
+    # Iter-149 v3 — apply COD cutoff so pre-accounting orders don't
+    # inflate the shipping liability shown on `/api/liabilities/summary`
+    # (و بالتالي على بطاقة المركز المالي).
+    try:
+        from accounting_cutoffs import get_cutoff
+        cod_cutoff = await get_cutoff(db, user_id, "cod")
+    except Exception:
+        cod_cutoff = None
+
+    orders_query: dict = {"user_id": user_id, "is_pre_accounting": {"$ne": True}}
+    if cod_cutoff:
+        orders_query["received_at"] = {"$gte": cod_cutoff + "T00:00:00"}
+
     out: dict[str, dict] = {}
 
     async for o in db.unified_orders.find(
-        {"user_id": user_id},
+        orders_query,
         {"_id": 0, "order_status": 1, "shipping_company": 1, "shipping_cost": 1},
     ):
         if not _matches_any_sync(o.get("order_status", ""), included_statuses):
@@ -218,9 +231,21 @@ async def compute_owed_per_company(db, user_id: str) -> dict[str, dict]:
 
 async def compute_paid_per_company(db, user_id: str) -> dict[str, float]:
     """Total amount already paid (or deducted via COD net method) to each
-    courier. Aggregated from `shipping_payments` keyed by `company_name`."""
+    courier. Aggregated from `shipping_payments` keyed by `company_name`.
+
+    Iter-149 v3 — apply bank_transfer cutoff so pre-accounting payments
+    are excluded.
+    """
+    try:
+        from accounting_cutoffs import get_cutoff
+        bank_cutoff = await get_cutoff(db, user_id, "bank_transfer")
+    except Exception:
+        bank_cutoff = None
+    match: dict = {"user_id": user_id, "is_pre_accounting": {"$ne": True}}
+    if bank_cutoff:
+        match["payment_date"] = {"$gte": bank_cutoff}
     pipeline = [
-        {"$match": {"user_id": user_id}},
+        {"$match": match},
         {"$group": {"_id": "$company_name", "paid": {"$sum": "$amount"}}},
     ]
     out: dict[str, float] = {}
