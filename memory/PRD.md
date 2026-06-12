@@ -29,6 +29,17 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-151b (Feb 13 2026)**: 🐛 Pay-Liability Search — "المديونيه 0 ريال رغم أن البحث يظهر 4200" Fix.
+  - **Bug**: User reported (Arabic): for employee "شهاب", search dropdown showed 4200 SAR but clicking + submitting returned the error "المبلغ أكبر من المتبقي (0.00)".
+  - **Root cause (two distinct issues)**:
+    1. When a counterparty group in the search contained MULTIPLE open liabilities and at least one had `remaining_amount = 0` (e.g. a `partial` row whose paid_amount equals expected after an advance was deducted), the GROUP's `representative` could resolve to the zero-remain row — group's `sumRemaining=4200` shown in dropdown, but the selected liability had `remaining=0`.
+    2. When the Iter-151 salary-topup endpoint created a fresh row for an employee with an open advance ≥ expected_amount, `_apply_open_advances_to_salary` immediately offset the topup → `paid=expected`, `status=paid`, `remaining_amount=0`. Frontend showed the topup as selected but submit failed with the same "0.00" error.
+  - **Fix** (`/app/frontend/src/pages/FinancialInputHub.jsx`):
+    - Group representative selection now prefers rows with `remaining > 0` (lines 361-377). When a group mixes paid and unpaid rows, the unpaid one is picked.
+    - The dropdown's `onClick` handler explicitly picks the first `g.items` row with `_liabRemaining > 0` (lines 600-610) — defensive against legacy data with stale `partial` zero-rem rows.
+  - **Fix** (`/app/backend/liabilities_routes.py`): `salary-topup` endpoint now flags `fully_offset_by_advance: true` with a clear Arabic `message` field when the open advance fully covers the topup. The frontend displays a friendly `toast.info` instead of attempting a zero-SAR payment.
+  - **Tests**: 8/8 backend pytest tests in `/app/backend/tests/test_pay_liability_search_iter151.py` (including new `test_salary_topup_fully_offset_by_advance_returns_clear_flag`).
+
 - **Iter-151 (Feb 13 2026)**: 🐛 Financial Input Hub — Pay-Liability Search: Employee re-appears after full payment.
   - **Bug**: After fully paying an employee's salary liability (e.g. "جمال"), the next search in the Pay-Liability dropdown showed only `ابو جمال` (different employee whose name CONTAINS "جمال"). The just-paid employee disappeared even though he's still an active employee with continued daily/monthly salary accrual.
   - **Root cause**: The search dropdown was built strictly from `openLiabilities` (status ∈ unpaid/partial). Once an employee's only open salary row was fully paid, the row left the list and the employee became invisible — even when `accrualMap[empId].net_due > 0`.

@@ -361,7 +361,20 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
             const cur = g.representative;
             const lDue = (l.due_date || "9999-12-31");
             const cDue = (cur.due_date || "9999-12-31");
-            if ((l.is_overdue && !cur.is_overdue) || lDue < cDue) {
+            // Iter-151b — Prefer a representative with remaining > 0.
+            // When a group contains a fully-paid `partial` row (e.g. one
+            // whose advance offset closed it) the rep used to be picked
+            // by overdue/due-date which could end up on the zero-remain
+            // row — making the submit handler reject the payment with
+            // "المبلغ أكبر من المتبقي (0.00)". We now skip zero-remain
+            // candidates whenever a positive-remain row exists.
+            const lRem = _liabRemaining(l);
+            const curRem = _liabRemaining(cur);
+            if (curRem <= 0 && lRem > 0) {
+                g.representative = l;
+            } else if (curRem > 0 && lRem <= 0) {
+                // keep cur
+            } else if ((l.is_overdue && !cur.is_overdue) || lDue < cDue) {
                 g.representative = l;
             }
         }
@@ -440,6 +453,19 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                 const { data: created } = await api.post(
                     `/liabilities/salary-topup?employee_salary_id=${encodeURIComponent(empId)}`
                 );
+                // Iter-151b — If an open advance fully offset the topup,
+                // the backend marks it `fully_offset_by_advance`. There's
+                // no cash to pay, but the merchant must be told clearly
+                // (the row is reconciled inside the books already).
+                if (created.fully_offset_by_advance) {
+                    toast.info(created.message ||
+                        "تم تسوية الراتب من السلفة — لا حاجة لسداد نقدي", {
+                            duration: 7000,
+                        });
+                    // Don't set liability_id — there's nothing to pay.
+                    setQuery("");
+                    return;
+                }
                 // Inject the new row into local openLiabilities-like
                 // lookup by stashing it on a ref attached to the form
                 // — selected getter below will fall back to it when the
@@ -563,7 +589,17 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                                         key={l.id}
                                         type="button"
                                         onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => pickLiability(l)}
+                                        onClick={() => {
+                                            // Iter-151b — Always pick the FIRST
+                                            // group item with remaining>0 instead
+                                            // of trusting the group's representative
+                                            // (which may be a zero-remain row when
+                                            // the group mixes paid and unpaid rows).
+                                            const withRem = (g.items || []).find(
+                                                (li) => _liabRemaining(li) > 0
+                                            );
+                                            pickLiability(withRem || l);
+                                        }}
                                         className="w-full text-right p-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 flex items-center justify-between gap-3"
                                         data-testid={`pay-liability-result-${l.id}`}
                                     >

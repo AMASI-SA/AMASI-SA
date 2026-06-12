@@ -311,3 +311,60 @@ def test_salary_topup_rejects_unknown_employee(ctx):
         headers=ctx["hdr"], timeout=10,
     )
     assert r_topup.status_code == 404
+
+
+def test_salary_topup_fully_offset_by_advance_returns_clear_flag(ctx):
+    """Iter-151b — When the employee has an open advance >= net_due,
+    the topup gets fully consumed by the advance.  The response must
+    flag this clearly so the UI tells the merchant "no cash needed"
+    instead of letting them attempt a 0-SAR payment.
+
+    Reported by the user (Feb 2026, Arabic): "أضفت تسديد شهاب مبلغ 4200
+    سداد المديونيه حقه. مارضى يسدد يقول المديوينيه 0 ريال رغم انه عند
+    البحث تظهر المديونيه 4200 ريال".
+    """
+    emp = _make_employee(ctx, "شهاب", 4200.0)
+    today = dt.date.today()
+
+    # 1) Give شهاب a 4200 SAR advance (already paid)
+    r_adv = requests.post(
+        f"{BASE_URL}/api/liabilities",
+        json={"kind": "salary_advance",
+              "employee_salary_id": emp["id"],
+              "expected_amount": 4200.0,
+              "paid_from_account_id": ctx["bank_id"],
+              "due_date": today.isoformat(),
+              "description": "سلفة شخصية"},
+        headers=ctx["hdr"], timeout=10,
+    )
+    assert r_adv.status_code == 200, r_adv.text
+
+    # 2) Pretend daily accrual has produced 4200 of net_due (we shortcut
+    #    via accrual aggregator query — actual accrual happens via
+    #    operating_salaries.start_date). Set start_date far enough back.
+    requests.put(
+        f"{BASE_URL}/api/operating-expenses/salaries/{emp['id']}",
+        json={"start_date": (today - dt.timedelta(days=400)).isoformat(),
+              "accrual_mode": "daily"},
+        headers=ctx["hdr"], timeout=10,
+    )
+
+    # 3) Trigger salary-topup. The endpoint will create a row, then
+    #    consume the open advance fully → status=paid, remaining=0.
+    r_topup = requests.post(
+        f"{BASE_URL}/api/liabilities/salary-topup",
+        params={"employee_salary_id": emp["id"], "amount": 4200.0},
+        headers=ctx["hdr"], timeout=10,
+    )
+    assert r_topup.status_code == 200, r_topup.text
+    created = r_topup.json()
+
+    assert created["expected_amount"] == 4200.0
+    assert created["paid_amount"] == 4200.0
+    assert created["status"] == "paid"
+    assert created["advance_deducted"] == 4200.0
+    assert created["remaining_amount"] == 0.0
+    # The new flag must be set so the frontend knows to display the
+    # friendly message instead of attempting a zero-SAR payment.
+    assert created.get("fully_offset_by_advance") is True
+    assert "السلفة" in (created.get("message") or "")

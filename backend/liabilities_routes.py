@@ -756,11 +756,22 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         }
         await db.liabilities.insert_one(row)
         # Consume any open advances against this top-up (same rules
-        # as monthly salary rows).
+        # as monthly salary rows). If the advance fully covers the
+        # topup we return a special response so the UI can display a
+        # friendly "تم التسوية من السلفة" toast instead of letting the
+        # merchant attempt a cash payment (which would over-pay the
+        # employee).
         await _apply_open_advances_to_salary(
             db, user["id"], employee_salary_id, row,
         )
-        return _enrich(row)
+        result = _enrich(row)
+        if result.get("status") == "paid" and (result.get("advance_deducted") or 0) > 0:
+            result["fully_offset_by_advance"] = True
+            result["message"] = (
+                f"تم تسوية الراتب بالكامل من السلفة المفتوحة "
+                f"({result['advance_deducted']:.2f} ر.س) — لا حاجة لسداد نقدي."
+            )
+        return result
 
     # ── POST / (manual create) ────────────────────────────────────────
     @router.post("")
