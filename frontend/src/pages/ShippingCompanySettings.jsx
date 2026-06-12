@@ -30,6 +30,32 @@ export default function ShippingCompanySettings() {
         setSettings({ ...settings, shipping_companies: next });
     };
 
+    // Iter-155 — add a brand-new shipping company row inline.
+    const addCompany = () => {
+        const name = (window.prompt("اسم شركة الشحن الجديدة:") || "").trim();
+        if (!name) return;
+        if (companies.some((c) => (c.name || "").trim() === name)) {
+            toast.error("شركة بهذا الاسم موجودة بالفعل");
+            return;
+        }
+        const next = [...companies, {
+            name,
+            cost_per_order: 0.0,
+            vat_percent: 15.0,
+            is_deferred: true,
+            cod_fee_percent: 0.0,
+            cod_fee_fixed_per_order: 0.0,
+        }];
+        setSettings({ ...settings, shipping_companies: next });
+    };
+
+    const removeCompany = (idx) => {
+        const name = companies[idx]?.name || "";
+        if (!window.confirm(`حذف «${name}» من قائمة شركات الشحن؟ هذا لن يحذف الطلبات المرتبطة، فقط يزيلها من الإعدادات.`)) return;
+        const next = companies.filter((_, i) => i !== idx);
+        setSettings({ ...settings, shipping_companies: next });
+    };
+
     const save = async () => {
         setBusy(true);
         try {
@@ -65,6 +91,7 @@ export default function ShippingCompanySettings() {
                             <th className="p-2 num text-right">VAT %</th>
                             <th className="p-2 num text-right">رسوم COD %</th>
                             <th className="p-2 num text-right">رسوم COD ثابتة/طلب</th>
+                            <th className="p-2 text-right w-12">إجراءات</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -81,13 +108,19 @@ export default function ShippingCompanySettings() {
                                 <td className="p-2"><input type="number" step="0.01" value={(c.vat_percent ?? (c.vat_rate || 0) * 100) || 0} onChange={(e) => updateCompany(idx, { vat_percent: Number(e.target.value), vat_rate: Number(e.target.value) / 100 })} className="w-16 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`vat-${c.name}`} /></td>
                                 <td className="p-2"><input type="number" step="0.001" min="0" max="1" value={c.cod_fee_percent ?? 0} onChange={(e) => updateCompany(idx, { cod_fee_percent: Number(e.target.value) })} className="w-20 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cod-pct-${c.name}`} placeholder="0.01" disabled={!c.is_deferred} /></td>
                                 <td className="p-2"><input type="number" step="0.01" min="0" value={c.cod_fee_fixed_per_order ?? 0} onChange={(e) => updateCompany(idx, { cod_fee_fixed_per_order: Number(e.target.value) })} className="w-20 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cod-fixed-${c.name}`} placeholder="5.00" disabled={!c.is_deferred} /></td>
+                                <td className="p-2">
+                                    <button type="button" onClick={() => removeCompany(idx)} className="text-rose-500 hover:text-rose-700 text-sm font-extrabold" title="حذف من الإعدادات" data-testid={`remove-${c.name}`}>×</button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
 
-            <div className="text-left">
+            <div className="flex items-center justify-between gap-3">
+                <button onClick={addCompany} type="button" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg" data-testid="add-shipping-company">
+                    ➕ إضافة شركة جديدة
+                </button>
                 <button onClick={save} disabled={busy} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg disabled:opacity-50" data-testid="settings-save">
                     {busy ? "جاري الحفظ…" : "💾 حفظ الإعدادات"}
                 </button>

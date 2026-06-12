@@ -291,6 +291,12 @@ class ShippingCompany(BaseModel):
     cost_per_order: float = Field(ge=0)
     vat_percent: float = Field(ge=0, le=100, default=0.0)
     is_deferred: bool = False  # if True: cost not deducted from Salla→bank transfer (accounts payable)
+    # Iter-155 — COD fee fields used by the new ShippingCompanySettings
+    # page. The frontend persists these into shipping_companies but
+    # they were previously stripped on the way out because they
+    # weren't declared here.
+    cod_fee_percent: Optional[float] = Field(default=0.0, ge=0, le=1)
+    cod_fee_fixed_per_order: Optional[float] = Field(default=0.0, ge=0)
 
 
 class NetSalesConfig(BaseModel):

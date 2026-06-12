@@ -29,6 +29,16 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-155 (Feb 13 2026)**: 🐛 Shipping Companies Settings — Save bug + Add/Remove capability.
+  - **User feedback**: "عند حفظ إعدادات شركات الشحن لا يتم حفظ المعلومات المضافه".
+  - **Root cause**: The backend `ShippingCompany` Pydantic model (`/app/backend/server.py` line 289) declared only 4 fields (`name`, `cost_per_order`, `vat_percent`, `is_deferred`). The new ShippingCompanySettings UI was sending `cod_fee_percent` and `cod_fee_fixed_per_order` too — but Pydantic v2's default `ignore` extras policy silently dropped them on round-trip. Additionally, the page had no UI to add/remove companies.
+  - **Backend fix**: Added `cod_fee_percent: Optional[float] = Field(default=0.0, ge=0, le=1)` and `cod_fee_fixed_per_order: Optional[float] = Field(default=0.0, ge=0)` to the model.
+  - **Frontend fix** (`/app/frontend/src/pages/ShippingCompanySettings.jsx`):
+    - **➕ "إضافة شركة جديدة"** button (`data-testid="add-shipping-company"`): prompts for the name and inserts a row with defaults (deferred=true, vat=15%).
+    - **"إجراءات" column** with × button per row to remove a company from settings (`data-testid="remove-{name}"`).
+    - Layout reflowed so save + add are side-by-side.
+  - **Tests**: 5/5 backend pytest (`test_shipping_settings_iter155.py`): GET works, COD fields persist round-trip, can add new company, can remove company, legacy fields still work.
+
 - **Iter-154 (Feb 13 2026)**: 🔗 Unified Employee Settlement — Merged "Pay Liability" + "Salary Advance" workflows.
   - **User feedback**: "تسديد راتب الموظف التراكمي او اضافه مديونيه تكون مدمجه بصفحه واحده ... اذا كان المبلغ المدخل أكبر من رصيد الموظف يقوم النظام بتسديد المبلغ المتراكم وباقي المبلغ يسجل ك سلفه ع الموظف".
   - **Backend** (`POST /api/liabilities/employee-settlement`): Inputs `employee_salary_id`, `amount`, `paid_from_account_id`, `payment_date`, `notes`. Computes live `net_due` from the accrual aggregator and intelligently splits: `salary_part = min(amount, net_due)` is paid against the largest open salary liability (or a fresh topup row with a unique period_key), and `advance_part = amount − salary_part` is recorded as an open `kind=salary_advance` liability. Both halves post a single bank debit each. Returns a structured response with `salary_part`, `advance_part`, `paid_liability_id`, `advance_liability_id`, and a friendly Arabic `message`.
