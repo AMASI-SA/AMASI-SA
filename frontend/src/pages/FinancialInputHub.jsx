@@ -343,6 +343,7 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                     sumRemaining: 0,
                     anyOverdue: false,
                     representative: l,
+                    virtual: false,
                 });
             }
             const g = groups.get(key);
@@ -359,6 +360,48 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                 g.representative = l;
             }
         }
+        // Iter-151 — Surface active employees with accrued net_due who
+        // currently have NO open salary liability (e.g. the merchant
+        // fully paid this month's row, but the daily-accrual engine
+        // says more salary has been earned since).  Without this they
+        // would silently disappear from the search the moment their
+        // last open salary liability is fully paid — the bug reported
+        // by the merchant ("جمال يظهر مرة واحدة، بعد السداد لا يظهر").
+        for (const emp of (employees || [])) {
+            if (!emp.name || !emp.name.toLowerCase().includes(q)) continue;
+            const empKey = `emp:${emp.id}`;
+            if (groups.has(empKey)) continue;  // already has open liability
+            const acc = accrualMap[emp.id];
+            const netDue = acc ? Number(acc.net_due || 0) : 0;
+            if (netDue <= 0) continue;
+            // Build a VIRTUAL group entry. Clicking it triggers an
+            // idempotent generate-salaries call then re-picks the new
+            // open liability.  `representative.id` carries the marker
+            // `__virtual_emp_${empId}` so pickLiability can route.
+            const virtRep = {
+                id: `__virtual_emp_${emp.id}`,
+                employee_salary_id: emp.id,
+                counterparty_name: emp.name,
+                kind: "salary",
+                expected_amount: netDue,
+                paid_amount: 0,
+                remaining_amount: netDue,
+                description: `راتب مستحق — ${emp.name}`,
+                is_overdue: false,
+                due_date: null,
+            };
+            groups.set(empKey, {
+                counterparty_name: emp.name,
+                kinds: new Set(["salary"]),
+                items: [virtRep],
+                sumExpected: netDue,
+                sumPaid: 0,
+                sumRemaining: netDue,
+                anyOverdue: false,
+                representative: virtRep,
+                virtual: true,
+            });
+        }
         // 3. Sort by remaining DESC, cap to 8.
         return Array.from(groups.values())
             .sort((a, b) => b.sumRemaining - a.sumRemaining)
@@ -374,7 +417,44 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
         general: "عام",
     };
 
-    const pickLiability = (l) => {
+    const pickLiability = async (l) => {
+        // Iter-151 — Virtual entry: employee has accrued net_due but no
+        // open salary liability. Ensure a salary row exists for the
+        // current Riyadh month (generate-salaries is idempotent), then
+        // fetch the new open salary liability for this employee and
+        // select it. Triggers onSaved() so the parent reloads.
+        if (typeof l.id === "string" && l.id.startsWith("__virtual_emp_")) {
+            const empId = l.employee_salary_id;
+            try {
+                setShowResults(false);
+                await api.post("/liabilities/generate-salaries");
+                const { data } = await api.get(
+                    `/liabilities?kind=salary&employee_salary_id=${empId}&status=unpaid&limit=20`
+                );
+                const items = data?.items || [];
+                let pick = items[0];
+                if (!pick) {
+                    // Try partial in case some prior partial payment exists.
+                    const { data: data2 } = await api.get(
+                        `/liabilities?kind=salary&employee_salary_id=${empId}&status=partial&limit=20`
+                    );
+                    pick = (data2?.items || [])[0];
+                }
+                if (!pick) {
+                    toast.error(
+                        "هذا الموظف لا يملك التزام راتب مفتوح حالياً. الرجاء استخدام تبويب «سلفة موظف»."
+                    );
+                    return;
+                }
+                set("liability_id", pick.id);
+                setQuery(pick.counterparty_name || (employees.find(e => e.id === empId)?.name) || "");
+                // Refresh parent state so the EmployeeBalanceCard sees the new row.
+                onSaved && onSaved();
+            } catch (e) {
+                toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر إنشاء التزام الراتب");
+            }
+            return;
+        }
         set("liability_id", l.id);
         setQuery(l.counterparty_name || l.description || l.kind || "");
         setShowResults(false);
@@ -494,6 +574,14 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                                                 <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700">
                                                     {kindsLabel}
                                                 </span>
+                                                {g.virtual && (
+                                                    <span
+                                                        className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded font-bold"
+                                                        data-testid="pay-liability-virtual-badge"
+                                                    >
+                                                        إنشاء التزام تلقائي
+                                                    </span>
+                                                )}
                                                 {g.items.length > 1 && (
                                                     <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-bold num">
                                                         {g.items.length} التزام

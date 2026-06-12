@@ -1,0 +1,49 @@
+{
+  "summary": "Frontend testing of Iter-151 Pay-Liability search fix in /financial-input-hub. Scenarios A and B PASS — جمال and ابو جمال both appear initially, and جمال still appears with the 'إنشاء التزام تلقائي' virtual badge after full payment. Scenario C FAILS — clicking the virtual entry shows error toast 'هذا الموظف لا يملك التزام راتب مفتوح حالياً. الرجاء استخدام تبويب «سلفة موظف»' because POST /api/liabilities/generate-salaries is idempotent for the current month and does NOT create a new salary liability for جمال (whose current-month row is already fully paid).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "PayLiabilityForm.pickLiability (virtual entry branch) — /app/frontend/src/pages/FinancialInputHub.jsx lines 420-457",
+        "issue": "When a merchant clicks the virtual 'إنشاء التزام تلقائي' entry for an employee whose current-month salary liability is already fully paid, the handler calls POST /api/liabilities/generate-salaries (idempotent — skips because a row already exists for the period) then queries /liabilities?kind=salary&employee_salary_id=...&status=unpaid|partial. Both return [] (current-month row is in status=paid). The handler then shows the 'لا يملك التزام راتب مفتوح' toast and aborts — leaving the merchant unable to record the additional accrued salary. This means the Iter-151 fix surfaces the employee in search (good) but the click does NOT actually let the merchant pay further accrued salary (the very scenario the bug report describes).",
+        "selector": "[data-testid=\"pay-liability-virtual-badge\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Click virtual entry → create new salary liability",
+        "issue": "generate-salaries idempotency blocks creation of a follow-up liability for the SAME month when the previous one is paid. The virtual-entry click needs a different strategy: e.g. create an ad-hoc salary liability via POST /api/liabilities with kind='salary', employee_salary_id=<empId>, expected_amount=<net_due_remaining>; OR modify generate-salaries to accept a 'force_create_topup' flag for this employee; OR query status=paid as a last-resort fallback and auto-select the paid row read-only with a 'create new' button.",
+        "affected_selectors": ["[data-testid=\"pay-liability-virtual-badge\"]", "[data-testid=\"pay-liability-clear\"]"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Pay Liability — bank account <select>",
+        "issues": ["React hydration warning: <span> inside <option> from the dynamic-source instrumentation wrapper (lines 770 of FinancialInputHub.jsx). Non-blocking but logs an error on render: 'In HTML, <span> cannot be a child of <option>'."]
+      }
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iter151_final.png"],
+  "action_items": [
+    "Rework PayLiabilityForm.pickLiability virtual-entry branch (FinancialInputHub.jsx ~lines 426-457): when generate-salaries does NOT yield an unpaid/partial liability, fall back to creating an ad-hoc salary liability directly (e.g. POST /api/liabilities with kind='salary', employee_salary_id, expected_amount=accrualMap[empId].net_due − sum(this month's paid_amount)), then auto-select the freshly created row.",
+    "Alternatively: add a backend endpoint POST /api/liabilities/create-salary-topup that bypasses the monthly idempotency guard when net_due > paid_for_period, and call it from the virtual-entry handler.",
+    "Investigate <span> inside <option> dynamic-source wrapper warning (lines 770, 1118, 1313, 1380 in FinancialInputHub.jsx) — harmless but pollutes console."
+  ],
+  "critical_code_review_comments": [
+    "FinancialInputHub.jsx is 1557 lines — well over the 700-line threshold; should be split into one file per tab (NewLiability, PayLiability, DailyExpense, Receivable, Advance, Shipping, COD).",
+    "_displayName fallback chain (lines 294-305) is robust, but the legacy salary liabilities created by generate-salaries STILL have counterparty_name=null — backend should populate counterparty_name during generation to avoid relying on UI fallbacks (lines 575+ of liabilities_routes.py).",
+    "PayLiabilityForm directly relies on accrualMap fetched once on mount (line 257) — if the user pays a liability and an accrual recompute happens server-side, the virtual-badge net_due will be stale until a remount. Consider refetching salary-accrual-summary inside onSaved()."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not retested, backend pytest already passing per agent context)", "frontend": "67% (Scenarios A & B pass, C fails)"},
+  "test_credentials": "Fresh users registered each run: iter151c_<random>@test.com / TestPass123!",
+  "seed_data_creation": "Per-run: registers a fresh user, creates employees 'جمال' (3000) and 'ابو جمال' (4000), creates bank account 'Test Bank' (opening 100000), POSTs /api/liabilities/generate-salaries.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "When retesting after E1 fixes Scenario C: use the same script structure. The critical assertion is: after clicking the virtual entry for جمال (whose current-month liability is fully paid), the form's pay-liability-clear button MUST appear, no error toast must appear, and a NEW (unpaid or partial) جمال salary liability must exist via GET /api/liabilities. The data-testid for the bank dropdown is pay-account, amount input is pay-amount, submit is hub-submit-btn. country field for /api/operating-expenses/salaries must be one of {saudi,yemen,other} (NOT 'SA').",
+  "rca of the issue": "The Iter-151 frontend fix surfaces VIRTUAL employees in the search dropdown by checking accrualMap[emp.id].net_due > 0 when no open salary liability exists. However, the pickLiability() handler for virtual entries calls POST /api/liabilities/generate-salaries which the backend treats idempotently per (user, employee_salary_id, period=YYYY-MM). When the current-month row is already created AND fully paid, generate-salaries returns 'skipped' for that employee, so the follow-up GET /api/liabilities?kind=salary&employee_salary_id=<id>&status=unpaid|partial returns empty and the UI shows 'هذا الموظف لا يملك التزام راتب مفتوح حالياً' — exactly the dead-end the merchant complained about. Reproduction: register fresh user → create active employee → generate-salaries → pay full amount → search the employee name → click virtual badge entry → error toast appears, no new liability is created. Mitigation: either (a) frontend POSTs /api/liabilities directly to create an ad-hoc top-up salary liability with expected_amount = net_due_remaining, or (b) backend exposes a 'force/top-up' variant of generate-salaries that bypasses the per-month idempotency when net_due > paid for the period."
+}
