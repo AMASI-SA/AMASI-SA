@@ -522,7 +522,19 @@ export default function BnplSettlements() {
                                             const isExpanded = expandedInv === expKey;
                                             return (
                                             <tr key={r.invoice_no} data-testid={`bnpl-weekly-row-${r.invoice_no}`}>
-                                                <td className="p-2 font-bold text-slate-900">{r.invoice_no}</td>
+                                                <td className="p-2 font-bold text-slate-900">
+                                                    {r.invoice_no}
+                                                    {/* Iter-147 v3 — badge when row comes from official Tamara file */}
+                                                    {r.data_source === "provider_official_file" && (
+                                                        <span
+                                                            className="ml-1 inline-block px-1 py-0.5 rounded text-[9px] font-semibold bg-blue-100 text-blue-800"
+                                                            title="أرقام رسمية مستوردة من ملف تسوية تمارا — مطابقة 100%"
+                                                            data-testid={`bnpl-row-official-badge-${r.invoice_no}`}
+                                                        >
+                                                            رسمي
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="p-2 font-mono text-[10px]">{r.from}</td>
                                                 <td className="p-2 font-mono text-[10px]">{r.to}</td>
                                                 <td className="p-2 font-mono text-[10px] text-blue-700">

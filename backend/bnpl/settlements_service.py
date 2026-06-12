@@ -576,6 +576,79 @@ async def _bank_transfer_total(
     return _r(total)
 
 
+
+async def _aggregate_official_totals(
+    db, user_id: str, date_from: str, date_to: str,
+) -> Optional[Dict[str, Any]]:
+    """Iter-147 v3 — Aggregate per-order entries from imported Tamara
+    settlement files for a given period.
+
+    Tamara's official settlement file is the ground truth for what the
+    merchant was actually charged.  When such a file exists for the
+    period, its totals override our computed totals (which can differ
+    by a few hundred SAR because of missing webhooks / refunds in the
+    wrong week / fee rate drift).
+
+    Each entry in `settlement_entries` has:
+      • event_type     — "sale" or "refund"
+      • actual_amount  — gross order amount
+      • actual_fees    — Tamara commission (variable + fixed, mixed)
+      • actual_vat     — VAT on commission
+      • actual_net_amount   — order net (gross − fees − vat)
+      • actual_refund_amount / actual_partial_refund_amount
+      • settlement_date     — date Tamara booked this row
+
+    Returns `None` when no entries exist (caller falls back to the
+    computed totals).
+    """
+    if not date_from or not date_to:
+        return None
+
+    gross_sales = 0.0
+    total_refunds = 0.0
+    sales_count = 0
+    refunds_count = 0
+    commission = 0.0
+    commission_vat = 0.0
+    net_payable = 0.0
+
+    cur = db.settlement_entries.find({
+        "user_id": user_id,
+        "provider": "tamara",
+        "settlement_date": {"$gte": date_from, "$lte": date_to},
+    })
+    found = False
+    async for e in cur:
+        found = True
+        ev = (e.get("event_type") or "").lower()
+        if ev == "refund":
+            refunds_count += 1
+            total_refunds += abs(float(
+                e.get("actual_refund_amount")
+                or e.get("actual_partial_refund_amount")
+                or 0.0,
+            ))
+        else:
+            sales_count += 1
+            gross_sales += float(e.get("actual_amount") or 0.0)
+        commission += float(e.get("actual_fees") or 0.0)
+        commission_vat += float(e.get("actual_vat") or 0.0)
+        net_payable += float(e.get("actual_net_amount") or 0.0)
+
+    if not found:
+        return None
+
+    return {
+        "transactions_count": sales_count,
+        "refunds_count":      refunds_count,
+        "gross_sales":        _r(gross_sales),
+        "total_refunds":      _r(total_refunds),
+        "commission":         _r(commission),
+        "commission_vat":     _r(commission_vat),
+        "net_payable":        _r(net_payable),
+    }
+
+
 async def compute_settlement_for_provider(
     db, user_id: str, provider: str,
     date_from: Optional[str] = None,
@@ -664,6 +737,45 @@ async def compute_settlement_for_provider(
         - settlement_fee - settlement_fee_vat
     )
 
+    # Iter-147 v3 — When the merchant has uploaded an OFFICIAL Tamara
+    # settlement file covering this period, use the file's totals as
+    # the source of truth.  This guarantees the displayed weekly
+    # invoice matches Tamara's invoice to the cent — eliminating any
+    # discrepancy caused by missing/extra orders in our DB.
+    data_source = "computed"
+    system_totals: Optional[Dict[str, Any]] = None
+    if provider == "tamara" and date_from and date_to:
+        official = await _aggregate_official_totals(
+            db, user_id, date_from, date_to,
+        )
+        if official and official.get("transactions_count", 0) > 0:
+            # Snapshot what our DB computed so the UI can show the diff.
+            system_totals = {
+                "transactions_count": totals["transactions_count"],
+                "refunds_count": totals.get("refunds_count", 0),
+                "gross_sales": totals["gross_sales"],
+                "total_refunds": totals["total_refunds"],
+                "net_sales": totals["net_sales"],
+                "commission": _r(commission),
+                "commission_vat": _r(commission_vat),
+                "net_payable": _r(net_payable),
+            }
+            # Override with Tamara's official numbers.
+            totals["transactions_count"] = official["transactions_count"]
+            totals["refunds_count"] = official.get("refunds_count", 0)
+            totals["gross_sales"] = official["gross_sales"]
+            totals["total_refunds"] = official["total_refunds"]
+            totals["net_sales"] = _r(
+                official["gross_sales"] - official["total_refunds"],
+            )
+            commission = official["commission"]
+            commission_vat = official["commission_vat"]
+            # Tamara's official files don't separate fixed_fee_per_order
+            # from variable_rate fees — they roll up into "fees".  Keep
+            # settlement_fee as 0 (Tamara has no per-invoice fee).
+            net_payable = _r(official["net_payable"])
+            data_source = "provider_official_file"
+
     # Bank-side reconciliation
     account = await _find_provider_account(db, user_id, provider)
     bank_info: Dict[str, Any] = {
@@ -709,6 +821,10 @@ async def compute_settlement_for_provider(
         "bank": bank_info,
         "fee_rates": fee_rates,
         "period": {"from": date_from, "to": date_to},
+        # Iter-147 v3 — surface the data source so the UI can show a
+        # badge: "أرقام رسمية من تمارا" when an official file is used.
+        "data_source": data_source,
+        "system_totals": system_totals,
     }
 
 
@@ -843,6 +959,10 @@ async def compute_weekly_settlements(
                 "net_payable": t.get("net_payable", 0),
                 "transferred_amount": _r(this_invoice_transfer),
                 "remaining_with_provider": row_remaining,
+                # Iter-147 v3 — per-row data source so UI can show
+                # "أرقام رسمية من تمارا" badge.
+                "data_source": s.get("data_source", "computed"),
+                "system_totals": s.get("system_totals"),
             })
             if issue_date is None or issue_date > ceil_:
                 break
