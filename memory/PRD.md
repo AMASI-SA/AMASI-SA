@@ -29,6 +29,19 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-152 (Feb 13 2026)**: 🛡️ Shipping Courier Transfers — Validation guardrails.
+  - **What changed (backend `/api/shipping-accounts/transfers`)**:
+    1. **courier_to_bank**: rejects if `amount > net_balance` (the courier's open balance with us). Clear Arabic error: "المبلغ أكبر من المستحق على «X» (Y ر.س)". Also rejects when there is NO outstanding balance to receive against.
+    2. **bank_to_courier**: rejects when the selected bank's `current_balance < amount`. Clear error: "رصيد الحساب البنكي «X» غير كافٍ".
+    3. **bank_to_courier over-payment**: when `amount > what we owe the courier`, the transfer SUCCEEDS but the response includes `overpayment` (delta) and `overpayment_note` (Arabic, ready for toast).
+    4. Unknown/non-deferred companies skip validation (preserves existing behavior).
+  - **What changed (frontend `/app/frontend/src/pages/ShippingTransfers.jsx`)**:
+    - Live hint pills under the form: "المستحق علينا/لنا" for the selected company + "رصيد البنك المختار".
+    - Inline warning ⛔ (red, blocks submit button) for hard-rejects; ⚠️ (amber, allows submit) for over-payment notice.
+    - Submit button is `disabled` when a blocking condition exists.
+    - On successful over-payment, the success toast shows the `overpayment_note` for ~7s.
+  - **Tests**: 8/8 pytest (`test_shipping_transfer_validation_iter152.py`) — covers all four rules plus an "unknown company" preservation test.
+
 - **Iter-151d (Feb 13 2026)**: 🧹 Data Hygiene — One-click "Clean up stale partial liabilities".
   - **Why**: The Iter-151c shortfall-virtual-entry logic LAYERS AROUND stale `partial`-but-fully-paid rows. To eliminate the root cause once and for all, the merchant now has a self-service button.
   - **Endpoint** (`POST /api/liabilities/admin/cleanup-stale-partial`): User-scoped. Finds rows with `status='partial'` AND `paid_amount + 0.01 >= expected_amount`, flips them to `status='paid'`, and returns a sample of fixed rows for audit. Supports `?dry_run=true` to show the count first without mutating.

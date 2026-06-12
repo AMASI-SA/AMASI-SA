@@ -39,19 +39,60 @@ export default function ShippingTransfers() {
 
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+    // Iter-152 — Live "owed" + "available" hints under the form.
+    const selectedCompany = companies.find((c) => c.name === form.company_name);
+    const companyNet = Number(selectedCompany?.net_balance || 0);
+    const owedToUs = companyNet > 0 ? companyNet : 0;          // courier owes us
+    const owedToCourier = companyNet < 0 ? -companyNet : 0;    // we owe courier
+    const selectedBank = banks.find((b) => b.id === form.bank_account_id);
+    const bankBalance = Number(selectedBank?.current_balance || 0);
+    const amtNum = Number(form.amount || 0);
+
+    let inlineWarning = null;
+    if (form.direction === "courier_to_bank" && selectedCompany) {
+        if (owedToUs <= 0) {
+            inlineWarning = `لا توجد مديونية حالية على «${form.company_name}» — لا يمكن استلام تحويل.`;
+        } else if (amtNum > owedToUs + 0.01) {
+            inlineWarning = `المبلغ (${fmt(amtNum)} ر.س) أكبر من المستحق على الشركة (${fmt(owedToUs)} ر.س).`;
+        }
+    }
+    if (form.direction === "bank_to_courier") {
+        if (selectedBank && bankBalance + 0.01 < amtNum) {
+            inlineWarning = `رصيد «${selectedBank.name}» غير كافٍ — المتاح ${fmt(bankBalance)} ر.س فقط.`;
+        } else if (selectedCompany && amtNum > owedToCourier + 0.01) {
+            const over = amtNum - owedToCourier;
+            inlineWarning = (owedToCourier > 0
+                ? `تنبيه: المبلغ يتجاوز المستحق للشركة بـ ${fmt(over)} ر.س — سيتم اعتبار الفرق مديونية للشركة لصالحك.`
+                : `تنبيه: لا توجد مديونية حالياً على «${form.company_name}» — سيتم تسجيل التحويل كمبلغ مدفوع زيادة (${fmt(amtNum)} ر.س) ستصبح مديونية للشركة لصالحك.`);
+        }
+    }
+    const blocksSubmit =
+        (form.direction === "courier_to_bank"
+            && selectedCompany
+            && (owedToUs <= 0 || amtNum > owedToUs + 0.01))
+        || (form.direction === "bank_to_courier"
+            && selectedBank
+            && bankBalance + 0.01 < amtNum);
+
     const submit = async () => {
         if (!form.company_name.trim()) return toast.error("اختر شركة الشحن");
         if (!Number(form.amount)) return toast.error("أدخل المبلغ");
         setBusy(true);
         try {
-            await api.post("/shipping-accounts/transfers", {
+            const { data } = await api.post("/shipping-accounts/transfers", {
                 ...form,
                 amount: Number(form.amount),
                 bank_account_id: form.bank_account_id || null,
             });
-            toast.success("تم تسجيل التحويل");
+            if (data?.overpayment_note) {
+                toast.success(data.overpayment_note, { duration: 7000 });
+            } else {
+                toast.success("تم تسجيل التحويل");
+            }
             setForm({ ...form, amount: "", reference: "", note: "" });
             reload();
+            // Refresh the companies ledger so the inline hint updates.
+            api.get("/shipping-accounts/ledger").then(({ data }) => setCompanies(data.companies || [])).catch(() => { });
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail));
         } finally { setBusy(false); }
@@ -116,8 +157,31 @@ export default function ShippingTransfers() {
                     <label className="text-xs text-slate-600 mb-1 block">ملاحظات</label>
                     <input value={form.note} onChange={(e) => set("note", e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm" data-testid="tx-note" />
                 </div>
-                <div className="md:col-span-3 text-left">
-                    <button onClick={submit} disabled={busy} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg disabled:opacity-50" data-testid="tx-submit">
+                <div className="md:col-span-3 text-left flex items-center justify-between gap-3 flex-wrap">
+                    {/* Iter-152 — live hints */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {selectedCompany && form.direction === "courier_to_bank" && (
+                            <span className="text-[11px] px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg font-bold" data-testid="hint-owed-to-us">
+                                المستحق علينا من «{form.company_name}»: <span className="num">{fmt(owedToUs)}</span> ر.س
+                            </span>
+                        )}
+                        {selectedCompany && form.direction === "bank_to_courier" && (
+                            <span className="text-[11px] px-2 py-1 bg-rose-50 text-rose-700 rounded-lg font-bold" data-testid="hint-owed-to-courier">
+                                المستحق علينا لـ «{form.company_name}»: <span className="num">{fmt(owedToCourier)}</span> ر.س
+                            </span>
+                        )}
+                        {selectedBank && (
+                            <span className="text-[11px] px-2 py-1 bg-sky-50 text-sky-700 rounded-lg font-bold" data-testid="hint-bank-balance">
+                                رصيد «{selectedBank.name}»: <span className="num">{fmt(bankBalance)}</span> ر.س
+                            </span>
+                        )}
+                        {inlineWarning && (
+                            <span className={`text-[11px] px-2 py-1 rounded-lg font-bold ${blocksSubmit ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`} data-testid="tx-inline-warning">
+                                {blocksSubmit ? "⛔ " : "⚠️ "}{inlineWarning}
+                            </span>
+                        )}
+                    </div>
+                    <button onClick={submit} disabled={busy || blocksSubmit} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" data-testid="tx-submit">
                         {busy ? "جاري الحفظ…" : "تسجيل التحويل"}
                     </button>
                 </div>

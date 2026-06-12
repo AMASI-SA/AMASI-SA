@@ -686,10 +686,70 @@ def _build_router(db) -> APIRouter:
         bank_id = payload.get("bank_account_id") or None
         if bank_id:
             acc = await db.accounts.find_one(
-                {"id": bank_id, "user_id": uid}, {"_id": 0, "id": 1},
+                {"id": bank_id, "user_id": uid},
+                {"_id": 0, "id": 1, "current_balance": 1, "name": 1},
             )
             if not acc:
                 raise HTTPException(404, "الحساب البنكي المختار غير موجود")
+            # Iter-152 — Block outgoing transfers if bank balance is
+            # insufficient.  Applies ONLY to bank_to_courier (cash
+            # leaving the bank).  courier_to_bank is INCOMING money so
+            # no balance check needed.
+            if direction == "bank_to_courier":
+                bal = float(acc.get("current_balance") or 0)
+                if bal + 0.01 < amount:
+                    raise HTTPException(
+                        400,
+                        f"رصيد الحساب البنكي «{acc.get('name','')}» غير كافٍ — "
+                        f"المتاح {bal:.2f} ر.س والمحاولة لتحويل {amount:.2f} ر.س",
+                    )
+
+        # Iter-152 — Validate against the courier's outstanding balance
+        # from the live ledger.  We piggy-back the existing /ledger
+        # endpoint by reading the in-memory rows for this company.
+        # Convention (from line 614):
+        #   net_balance = cod_approved − shipping_cost − cod_fee
+        #                 − courier_to_bank + bank_to_courier
+        # net_balance > 0 → courier owes us (لنا عند الشركة).
+        # net_balance < 0 → we owe courier (علينا للشركة).
+        try:
+            ledger = await shipping_ledger(user=user)  # reuse same router fn
+            company_row = next(
+                (r for r in (ledger.get("companies") or [])
+                 if (r.get("name") or "").lower() == company.lower()),
+                None,
+            )
+        except Exception:
+            company_row = None
+
+        # Don't enforce balance rules for non-deferred / unknown
+        # companies (the ledger only tracks deferred ones).
+        if company_row is not None:
+            net = float(company_row.get("net_balance") or 0)
+            if direction == "courier_to_bank":
+                # The courier is sending us money — they cannot send
+                # more than what they actually owe us.
+                if net <= 0:
+                    raise HTTPException(
+                        400,
+                        f"لا توجد مديونية حالية على شركة «{company}» — "
+                        f"رصيدها الحالي {net:.2f} ر.س ولا يمكن استلام تحويل منها",
+                    )
+                if amount > net + 0.01:
+                    raise HTTPException(
+                        400,
+                        f"المبلغ ({amount:.2f} ر.س) أكبر من المستحق على «{company}» "
+                        f"({net:.2f} ر.س). يمكن استلام مبلغ يساوي أو أقل من المستحق فقط.",
+                    )
+            else:  # bank_to_courier
+                # We're paying the courier — over-payment is allowed
+                # (it shifts the net balance into "courier owes us")
+                # but we flag it so the UI can warn the merchant.
+                owed_to_courier = max(0.0, -net)
+                # Save the over-payment delta in the response.
+                overpayment = max(0.0, round(amount - owed_to_courier, 2))
+                # No exception — caller is informed via the response.
+
         # Post the bank movement (in=courier_to_bank, out=bank_to_courier)
         tx_id = None
         if bank_id:
@@ -727,6 +787,17 @@ def _build_router(db) -> APIRouter:
         }
         await db.courier_transfers.insert_one(doc)
         doc.pop("_id", None)
+        # Surface the over-payment notice to the UI (non-blocking).
+        if direction == "bank_to_courier" and company_row is not None:
+            net = float(company_row.get("net_balance") or 0)
+            owed = max(0.0, -net)
+            over = max(0.0, round(amount - owed, 2))
+            if over > 0.01:
+                doc["overpayment"] = over
+                doc["overpayment_note"] = (
+                    f"تم دفع مبلغ يزيد عن المستحق بـ {over:.2f} ر.س — "
+                    f"أصبحت «{company}» مدينة لك بهذا المبلغ."
+                )
         return doc
 
     @router.delete("/transfers/{transfer_id}")
