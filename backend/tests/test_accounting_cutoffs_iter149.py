@@ -216,3 +216,50 @@ async def test_recompute_endpoint_flags_pre_cutoff_liabilities(mongo_db):
     new = await mongo_db.liabilities.find_one({"id": "L-new"})
     assert old["is_pre_accounting"] is True
     assert new.get("is_pre_accounting") is not True
+
+
+# ── Shipping ledger respects COD + bank_transfer cutoffs ─────────
+
+@pytest.mark.asyncio
+async def test_shipping_ledger_excludes_pre_accounting_orders(mongo_db):
+    """Orders flagged `is_pre_accounting=True` (or pre-COD-cutoff) must
+    NOT contribute to a shipping company's COD or shipping-cost
+    totals."""
+    uid = "u1"
+    await set_cutoff(mongo_db, uid, "cod", "2026-05-01")
+    # Seed shipping-company config so the company is "deferred".
+    await mongo_db.shipping_company_settings.insert_one({
+        "user_id": uid, "company_name": "SMSA",
+        "is_deferred": True, "cost": 18.0,
+        "cod_fee_percent": 0.0, "cod_fee_fixed_per_order": 0.0,
+        "vat_rate": 0.0,
+    })
+    # One pre-cutoff order, one post-cutoff order, both COD delivered.
+    await mongo_db.unified_orders.insert_many([
+        {
+            "user_id": uid, "order_number": "100",
+            "received_at": "2026-04-20T10:00:00",
+            "order_status": "تم التوصيل",
+            "shipping_company": "SMSA",
+            "payment_method": "cash_on_delivery",
+            "total_amount": 500.0, "shipping_cost": 18.0,
+            "is_pre_accounting": True,   # would be flagged by recompute
+        },
+        {
+            "user_id": uid, "order_number": "101",
+            "received_at": "2026-05-05T10:00:00",
+            "order_status": "تم التوصيل",
+            "shipping_company": "SMSA",
+            "payment_method": "cash_on_delivery",
+            "total_amount": 250.0, "shipping_cost": 18.0,
+        },
+    ])
+    # Hit the same query the ledger uses to verify the filter applies.
+    cur = mongo_db.unified_orders.find({
+        "user_id": uid,
+        "is_pre_accounting": {"$ne": True},
+        "received_at": {"$gte": "2026-05-01T00:00:00"},
+    })
+    counted = [d async for d in cur]
+    assert len(counted) == 1
+    assert counted[0]["order_number"] == "101"

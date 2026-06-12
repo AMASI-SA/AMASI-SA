@@ -508,8 +508,22 @@ def _build_router(db) -> APIRouter:
             }
 
         from balances import _is_cod_method
+        # Iter-149 v3 — pull both relevant cutoffs.  Shipping (COD)
+        # orders are scoped to the `cod` cutoff; courier_transfers to
+        # the `bank_transfer` cutoff (they're bank-side cash movements).
+        try:
+            from accounting_cutoffs import get_cutoff
+            cod_cutoff = await get_cutoff(db, uid, "cod")
+            bank_cutoff = await get_cutoff(db, uid, "bank_transfer")
+        except Exception:
+            cod_cutoff = None
+            bank_cutoff = None
+
+        orders_query: dict = {"user_id": uid, "is_pre_accounting": {"$ne": True}}
+        if cod_cutoff:
+            orders_query["received_at"] = {"$gte": cod_cutoff + "T00:00:00"}
         async for o in db.unified_orders.find(
-            {"user_id": uid},
+            orders_query,
             {"_id": 0, "order_status": 1, "shipping_company": 1,
              "shipping_cost": 1, "total_amount": 1, "payment_method": 1},
         ):
@@ -540,8 +554,13 @@ def _build_router(db) -> APIRouter:
                     row["pending_cod_orders_count"] += 1
 
         # 2) Fold in courier_transfers (both directions).
+        # Iter-149 v3 — filter by bank_transfer cutoff so pre-accounting
+        # courier transfers don't affect the ledger.
+        transfer_query: dict = {"user_id": uid}
+        if bank_cutoff:
+            transfer_query["transfer_date"] = {"$gte": bank_cutoff}
         async for t in db.courier_transfers.find(
-            {"user_id": uid}, {"_id": 0},
+            transfer_query, {"_id": 0},
         ):
             name = (t.get("company_name") or "").strip()
             if name not in per_company:

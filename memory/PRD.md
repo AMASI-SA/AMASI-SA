@@ -178,7 +178,8 @@
 - **Iter-121 (Feb 2026)**: Weekday-based settlement cycle.
 - **Iter-120 (Feb 2026)**: Refund-Date-Based Aggregation + period drill-down.
 - **Iter-119 (Feb 2026)**: BNPL SSOT + auto-matching engine.
-- **Iter-149 v2 (Feb 2026)**: Extended accounting cutoff to financial position + liabilities + bank balances. Saving a cutoff via PUT now auto-recomputes pre-accounting flags (no manual button needed). Financial position bank balances are dynamically adjusted to subtract pre-cutoff `account_transactions` net effect — so the displayed bank balance reflects only post-cutoff activity. Liabilities with `created_at` or `due_date` before the Tabby/Tamara cutoff are flagged `is_pre_accounting` and excluded from the unpaid totals.
+- **Iter-149 v3 (Feb 2026)**: Extended cutoff to shipping ledger. `shipping_accounts.shipping_ledger` now filters `unified_orders` by `cod` cutoff (`received_at >= cutoff`) + skips `is_pre_accounting=true` rows. `courier_transfers` filtered by `bank_transfer` cutoff on `transfer_date`. So pre-accounting orders no longer inflate courier COD totals or shipping-cost liabilities.
+- **Iter-149 v2 (Feb 2026)**: Extended accounting cutoff to financial position + liabilities + bank balances.
 - **Iter-149 (Feb 2026)**: Per-provider accounting cutoff dates.
 - **Iter-148 (Feb 2026)**: Diagnostic + cleanup for duplicate ad-account topup rows.
 - **Iter-147 v3 (Feb 2026)**: Settlement file totals override computed totals.
