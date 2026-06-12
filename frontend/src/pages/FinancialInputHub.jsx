@@ -1106,17 +1106,24 @@ function AdvanceForm({ employees, banks, openLiabilities, onSaved }) {
                                     >
                                         <div className="flex items-center justify-between gap-2">
                                             <span className="font-bold text-slate-900">{e.name}</span>
-                                            {acc ? (
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold num ${
-                                                    netDue > 0
-                                                        ? "bg-rose-100 text-rose-700"
-                                                        : "bg-emerald-100 text-emerald-700"
-                                                }`}>
-                                                    صافي مستحق: {fmt(netDue)} ر.س
-                                                </span>
-                                            ) : (
-                                                <span className="text-[10px] text-slate-400">جاري التحميل…</span>
-                                            )}
+                                            <div className="flex items-center gap-1">
+                                                {e.status !== "active" && (
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-200 text-slate-700" data-testid={`adv-emp-suspended-${e.id}`}>
+                                                        ⚠ موقوف
+                                                    </span>
+                                                )}
+                                                {acc ? (
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold num ${
+                                                        netDue > 0
+                                                            ? "bg-rose-100 text-rose-700"
+                                                            : "bg-emerald-100 text-emerald-700"
+                                                    }`}>
+                                                        صافي مستحق: {fmt(netDue)} ر.س
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] text-slate-400">جاري التحميل…</span>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
                                             <span>راتب شهري: <span className="num">{fmt(e.monthly_amount)}</span></span>
@@ -1144,6 +1151,11 @@ function AdvanceForm({ employees, banks, openLiabilities, onSaved }) {
                 FinancialPosition / Dashboard / OperationalReports). */}
             {selectedEmployee && (
                 <div className="md:col-span-2 mt-2">
+                    {selectedEmployee.status !== "active" && (
+                        <div className="mb-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold" data-testid="adv-suspended-warning">
+                            ⚠️ هذا الموظف موقوف — لكنه يمكن أن يكون لديه التزامات معلّقة أو تسويات نهائية. تأكد من السياق قبل صرف السلفة.
+                        </div>
+                    )}
                     <EmployeeBalanceCard
                         employeeId={selectedEmployee.id}
                         data-testid="adv-employee-balance"
@@ -1544,9 +1556,15 @@ export default function FinancialInputHub() {
             ]);
             const raw = accRes.data?.accounts || accRes.data?.items || (Array.isArray(accRes.data) ? accRes.data : []);
             setAccounts(raw);
-            // Iter-99 — filter to ONLY real employees (exclude household/charity).
+            // Iter-99/Iter-153 — include real employees ONLY (exclude
+            // household/charity), BUT include BOTH active and suspended
+            // statuses. Suspended employees may still have pending
+            // open liabilities, advances to repay, or final settlements
+            // — the UI surfaces a "موقوف" badge as a warning instead of
+            // hiding them entirely. (User feedback: "عندما يكون
+            // الموظف موقوف لا أستطيع البحث عنه — ابغى مسموح مع التنبيه").
             setEmployees((empRes.data?.items || []).filter(
-                (e) => e.status === "active" && e.category === "employee"
+                (e) => e.category === "employee"
             ));
             // Iter-99 — exclude any liability whose underlying employee is
             // household/charity from the "pay" picker.

@@ -29,6 +29,16 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-153 (Feb 13 2026)**: 👁️ Suspended Employees — Selectable in Pay-Liability + Advance + Search with visual warning.
+  - **User feedback**: "عندما يكون الموظف موقوف لا أستطيع البحث عنه وإضافة مديونيه أو سداد التزام له — أبغى يكون مسموح مع التنبيه".
+  - **Frontend change** (`/app/frontend/src/pages/FinancialInputHub.jsx`, line 1549): Removed the `e.status === "active"` filter — `employees` now includes both active and suspended (kept the `category === "employee"` filter to still exclude household/charity rows).
+  - **Visual warnings**:
+    - PayLiabilityForm dropdown already shows the `موظف موقوف` badge (existing logic).
+    - AdvanceForm dropdown now shows a `⚠ موقوف` slate badge next to each suspended employee (`data-testid="adv-emp-suspended-{id}"`).
+    - AdvanceForm displays a prominent amber warning above the EmployeeBalanceCard when a suspended employee is selected: "هذا الموظف موقوف — لكنه يمكن أن يكون لديه التزامات معلّقة أو تسويات نهائية".
+  - **Backend untouched**: `/operating-expenses/salaries`, `/liabilities/salary-accrual-summary`, `/liabilities/{id}/pay`, and `/liabilities` (kind=salary_advance) already accept suspended employees — only the frontend filter was the gate.
+  - **Tests**: 4/4 backend pytest (`test_suspended_employee_visibility_iter153.py`) confirm: salaries list returns both, accrual summary includes suspended, can pay existing liability for suspended employee, can record salary advance for suspended employee.
+
 - **Iter-152 (Feb 13 2026)**: 🛡️ Shipping Courier Transfers — Validation guardrails.
   - **What changed (backend `/api/shipping-accounts/transfers`)**:
     1. **courier_to_bank**: rejects if `amount > net_balance` (the courier's open balance with us). Clear Arabic error: "المبلغ أكبر من المستحق على «X» (Y ر.س)". Also rejects when there is NO outstanding balance to receive against.
