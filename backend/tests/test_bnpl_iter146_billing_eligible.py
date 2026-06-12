@@ -127,6 +127,9 @@ async def test_settlement_uses_billing_eligible_for_tamara(mongo_db):
         "amount": 500.0,
         "created_at_provider": _iso(2026, 4, 30),
         "billing_eligible_at":  _iso(2026, 5,  4),
+        # Iter-147 — settlement engine now filters by effective_settlement_date.
+        "effective_settlement_date": _iso(2026, 5, 4),
+        "settlement_source": "billing_eligible",
     })
 
     # Settlement window 2026-04-25 → 2026-05-01 must EXCLUDE this order.
@@ -201,6 +204,9 @@ async def test_refunds_keep_refunded_at_filter(mongo_db):
         "amount": 800.0,
         "created_at_provider": _iso(2026, 4, 10),
         "billing_eligible_at":  _iso(2026, 4, 14),
+        # Iter-147 — engine filters by effective_settlement_date.
+        "effective_settlement_date": _iso(2026, 4, 14),
+        "settlement_source": "billing_eligible",
     })
     # Refund happens in May.
     await mongo_db.payment_refunds.insert_one({

@@ -202,6 +202,44 @@ async def _apply_entries(
             },
         )
 
+        # Iter-147 — Tamara only: propagate the OFFICIAL attribution
+        # (settlement_id + settlement_date) to every Tamara
+        # payment_transactions row that belongs to this order.  This
+        # lets `settlements_service` group THIS order under the exact
+        # weekly invoice Tamara itself put it in.
+        if provider == "tamara":
+            try:
+                from bnpl.settlement_attribution import (
+                    set_provider_official_attribution,
+                )
+                # `rows` is a list of parsed entries for this order.
+                # Pick the first non-empty settlement_reference + the
+                # latest settlement_date as the canonical attribution.
+                ref = ""
+                latest_date: str | None = None
+                for r in rows:
+                    if r.get("settlement_reference") and not ref:
+                        ref = str(r["settlement_reference"])
+                    d = r.get("settlement_date")
+                    if d and (latest_date is None or str(d) > str(latest_date)):
+                        latest_date = str(d)
+                if ref or latest_date:
+                    tamara_order_id = next(
+                        (r.get("tamara_order_id") for r in rows
+                         if r.get("tamara_order_id")), None,
+                    )
+                    await set_provider_official_attribution(
+                        db, user_id,
+                        order_number=order_no,
+                        provider_id=tamara_order_id,
+                        provider_settlement_id=ref or None,
+                        provider_invoice_id=ref or None,
+                        provider_settlement_date=latest_date,
+                    )
+            except Exception:
+                # Never let attribution bookkeeping break file import.
+                pass
+
     return {
         "matched": matched,
         "unmatched": len(unmatched),

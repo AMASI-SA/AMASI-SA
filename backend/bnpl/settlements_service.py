@@ -355,9 +355,12 @@ async def _compute_provider_totals(
         • Refunds are aggregated by REFUND DATE (`refunded_at`) for ALL
           providers — this matches every BNPL statement we've observed.
     """
-    # Iter-146 — Tamara filters sales by billing_eligible_at.
+    # Iter-146 / Iter-147 — Tamara uses `effective_settlement_date`
+    # for sales (priority: provider_official > billing_eligible >
+    # estimated).  Other providers keep `created_at_provider`.
     sales_date_field = (
-        "billing_eligible_at" if provider == "tamara" else "created_at_provider"
+        "effective_settlement_date" if provider == "tamara"
+        else "created_at_provider"
     )
     # ── Gross sales — by order date (or billing_eligible_at for Tamara)
     # Iter-130 — convert the Saudi-local window to a UTC ISO range so
@@ -440,9 +443,11 @@ async def _compute_period_items(
     if utc_lte:
         sales_filter_range["$lte"] = utc_lte
 
-    # Iter-146 — Tamara uses billing_eligible_at for sales (drill-down).
+    # Iter-146 / Iter-147 — Tamara uses effective_settlement_date for
+    # the sales drill-down (drill-down must match the totals filter).
     sales_date_field = (
-        "billing_eligible_at" if provider == "tamara" else "created_at_provider"
+        "effective_settlement_date" if provider == "tamara"
+        else "created_at_provider"
     )
 
     # Sales — orders whose order date falls inside the window.
@@ -602,11 +607,13 @@ async def compute_settlement_for_provider(
     # tiny but persistent gap that bewildered the merchant.  We now
     # iterate the raw rows so the totals match the provider's invoice
     # to the cent.
-    # Iter-146 — for Tamara we filter sales by `billing_eligible_at`
-    # so the per-order commission loop matches the totals loop.
+    # Iter-146 / Iter-147 — for Tamara we filter sales by
+    # `effective_settlement_date` so the per-order commission loop
+    # matches the totals loop.
     utc_gte, utc_lte = _local_date_window_utc(date_from, date_to)
     sales_date_field = (
-        "billing_eligible_at" if provider == "tamara" else "created_at_provider"
+        "effective_settlement_date" if provider == "tamara"
+        else "created_at_provider"
     )
     sales_match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
     if utc_gte or utc_lte:

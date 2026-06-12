@@ -100,6 +100,13 @@ async def _persist_tamara_order(
             order_number=txn.get("order_number"),
             event_at=be_at,
         )
+    # Iter-147 — recompute attribution so estimated rows get an
+    # effective_settlement_date even if billing_eligible_at hasn't
+    # been set yet (falls back to created_at_provider).
+    from .settlement_attribution import recompute_attribution_for_doc
+    await recompute_attribution_for_doc(
+        db, user_id=user_id, provider_id=txn.get("provider_id"),
+    )
 
     for rfd in refunds:
         rid = rfd.get("provider_refund_id") or ""

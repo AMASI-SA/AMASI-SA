@@ -117,10 +117,29 @@ async def mark_billing_eligible_for_order(
     res = await db.payment_transactions.update_many(
         query, {"$set": {"billing_eligible_at": stamp}},
     )
+
+    # Iter-147 — refresh attribution (effective_settlement_date /
+    # settlement_source) on every row we just stamped, but ONLY for
+    # tamara (the only provider that uses the priority system today).
+    recomputed = 0
+    if provider == "tamara" and int(getattr(res, "modified_count", 0) or 0) > 0:
+        from .settlement_attribution import recompute_attribution_for_doc
+        # Walk the touched rows and recompute one-by-one.
+        async for d in db.payment_transactions.find(
+            {"user_id": user_id, "provider": provider, "$or": or_clause},
+            {"_id": 0, "id": 1},
+        ):
+            r = await recompute_attribution_for_doc(
+                db, user_id=user_id, txn_id=d.get("id"),
+            )
+            if r.get("updated"):
+                recomputed += 1
+
     return {
         "matched": matched,
         "updated": int(getattr(res, "modified_count", 0) or 0),
         "stamp":   stamp,
+        "attribution_recomputed": recomputed,
     }
 
 

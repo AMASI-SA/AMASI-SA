@@ -389,9 +389,14 @@ def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
             Tamara settlement until a future status update flips it.
           • Idempotent: never overwrites an already-stamped row.
 
+        Iter-147 — also recomputes `effective_settlement_date` +
+        `settlement_source` on every Tamara row so estimated/billing/
+        official attribution is correct after the run.
+
         Set ?dry_run=true for a count-only preview.
         """
         from .billing_eligible import is_billable_status
+        from .settlement_attribution import recompute_attribution_for_doc
 
         uid = user["id"]
         scanned = 0
@@ -400,6 +405,7 @@ def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
         skipped_no_order = 0
         skipped_not_billable = 0
         already_stamped = 0
+        attribution_recomputed = 0
 
         # Walk every Tamara txn that lacks billing_eligible_at.
         cur = db.payment_transactions.find(
@@ -486,6 +492,20 @@ def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
                 else:
                     already_stamped += 1
 
+        # Iter-147 — Recompute attribution on EVERY Tamara row (not
+        # just newly-stamped ones) so estimated rows get an
+        # effective_settlement_date too.
+        if not dry_run:
+            async for d in db.payment_transactions.find(
+                {"user_id": uid, "provider": "tamara"},
+                {"_id": 0, "id": 1},
+            ):
+                rr = await recompute_attribution_for_doc(
+                    db, user_id=uid, txn_id=d.get("id"),
+                )
+                if rr.get("updated"):
+                    attribution_recomputed += 1
+
         return {
             "ok": True,
             "dry_run": dry_run,
@@ -495,6 +515,57 @@ def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
             "already_stamped": already_stamped,
             "skipped_no_order": skipped_no_order,
             "skipped_not_billable": skipped_not_billable,
+            "attribution_recomputed": attribution_recomputed,
         }
+
+    # Iter-147 — Settlement-attribution status & forced recompute.
+    @router.get("/tamara/attribution/status")
+    async def attribution_status(user: dict = Depends(current_user)):
+        uid = user["id"]
+        total = await db.payment_transactions.count_documents(
+            {"user_id": uid, "provider": "tamara"},
+        )
+        official = await db.payment_transactions.count_documents({
+            "user_id": uid, "provider": "tamara",
+            "settlement_source": "provider_official",
+        })
+        billing = await db.payment_transactions.count_documents({
+            "user_id": uid, "provider": "tamara",
+            "settlement_source": "billing_eligible",
+        })
+        estimated = await db.payment_transactions.count_documents({
+            "user_id": uid, "provider": "tamara",
+            "settlement_source": "estimated",
+        })
+        unattributed = total - official - billing - estimated
+        return {
+            "total":             total,
+            "provider_official": official,
+            "billing_eligible":  billing,
+            "estimated":         estimated,
+            "unattributed":      max(0, unattributed),
+        }
+
+    @router.post("/tamara/attribution/recompute")
+    async def attribution_recompute(user: dict = Depends(current_user)):
+        """Walk EVERY Tamara payment_transactions row and refresh
+        `effective_settlement_date` + `settlement_source` based on the
+        current state of (provider_settlement_date, billing_eligible_at,
+        created_at_provider).  Idempotent — safe to run repeatedly."""
+        from .settlement_attribution import recompute_attribution_for_doc
+        uid = user["id"]
+        scanned = 0
+        updated = 0
+        async for d in db.payment_transactions.find(
+            {"user_id": uid, "provider": "tamara"},
+            {"_id": 0, "id": 1},
+        ):
+            scanned += 1
+            r = await recompute_attribution_for_doc(
+                db, user_id=uid, txn_id=d.get("id"),
+            )
+            if r.get("updated"):
+                updated += 1
+        return {"ok": True, "scanned": scanned, "updated": updated}
 
     parent_router.include_router(router)

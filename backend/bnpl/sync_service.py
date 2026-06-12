@@ -226,6 +226,25 @@ async def ensure_sync_indexes(db) -> None:
         )
     except Exception:
         pass
+    # Iter-147 — index effective_settlement_date (the field
+    # `settlements_service` actually filters by for Tamara) +
+    # provider_settlement_id for the side-by-side audit page.
+    try:
+        await db.payment_transactions.create_index(
+            [("user_id", 1), ("provider", 1), ("effective_settlement_date", 1)],
+            name="ptx_effective_settle",
+            sparse=True,
+        )
+    except Exception:
+        pass
+    try:
+        await db.payment_transactions.create_index(
+            [("user_id", 1), ("provider_settlement_id", 1)],
+            name="ptx_provider_settle_id",
+            sparse=True,
+        )
+    except Exception:
+        pass
     try:
         await db.payment_refunds.create_index(
             [("user_id", 1), ("provider", 1), ("provider_refund_id", 1)],

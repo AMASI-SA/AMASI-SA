@@ -292,6 +292,13 @@ def attach_bnpl_webhook_routes(parent_router: APIRouter, db) -> None:
                     order_number=txn.get("order_number"),
                     event_at=be_at,
                 )
+            # Iter-147 — always recompute attribution after a write so
+            # `effective_settlement_date` + `settlement_source` stay in
+            # sync (will fall back to estimated if no other signal).
+            from .settlement_attribution import recompute_attribution_for_doc
+            await recompute_attribution_for_doc(
+                db, user_id=user_id, provider_id=txn["provider_id"],
+            )
 
         for rfd in _extract_tamara_refunds(order, user_id):
             rid = rfd.get("provider_refund_id") or ""
