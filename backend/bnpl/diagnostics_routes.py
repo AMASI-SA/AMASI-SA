@@ -613,4 +613,81 @@ def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
         rows = [d async for d in cur]
         return {"rows": rows, "count": len(rows)}
 
+    @router.post("/tamara/attribution/reapply-from-files")
+    async def attribution_reapply_from_files(
+        user: dict = Depends(current_user),
+    ):
+        """Re-process every previously-imported Tamara settlement file
+        and propagate `provider_settlement_id` / `provider_settlement_date`
+        to `payment_transactions`.
+
+        Use case: a Tamara settlement file was uploaded BEFORE
+        Iter-147 v2 (when attribution only flowed through unified_orders
+        matches).  After upgrading, run this to retroactively apply the
+        official attribution to all `payment_transactions` from those
+        files — no re-upload needed.
+        """
+        from .settlement_attribution import (
+            set_provider_official_attribution,
+        )
+        uid = user["id"]
+
+        scanned_files = 0
+        scanned_entries = 0
+        attributed = 0
+        skipped_no_ref = 0
+
+        # Walk every Tamara settlement-file the merchant has ever uploaded.
+        async for f in db.settlement_files.find(
+            {"user_id": uid, "provider": "tamara"},
+            {"_id": 0, "id": 1},
+        ):
+            scanned_files += 1
+            # Walk per-entry trace rows of this file.
+            entries_by_order: Dict[str, list] = {}
+            async for e in db.settlement_entries.find(
+                {"file_id": f["id"], "user_id": uid, "provider": "tamara"},
+                {"_id": 0, "order_number": 1, "tamara_order_id": 1,
+                 "settlement_reference": 1, "settlement_date": 1},
+            ):
+                scanned_entries += 1
+                on = (e.get("order_number") or "").strip()
+                if not on:
+                    continue
+                entries_by_order.setdefault(on, []).append(e)
+
+            for order_no, rows in entries_by_order.items():
+                ref = ""
+                latest_date: str | None = None
+                tamara_order_id = None
+                for r in rows:
+                    if r.get("settlement_reference") and not ref:
+                        ref = str(r["settlement_reference"])
+                    d = r.get("settlement_date")
+                    if d and (latest_date is None or str(d) > str(latest_date)):
+                        latest_date = str(d)
+                    if r.get("tamara_order_id") and not tamara_order_id:
+                        tamara_order_id = r["tamara_order_id"]
+                if not (ref or latest_date):
+                    skipped_no_ref += 1
+                    continue
+                res = await set_provider_official_attribution(
+                    db, uid,
+                    order_number=order_no,
+                    provider_id=tamara_order_id,
+                    provider_settlement_id=ref or None,
+                    provider_invoice_id=ref or None,
+                    provider_settlement_date=latest_date,
+                )
+                if res.get("matched", 0) > 0:
+                    attributed += 1
+
+        return {
+            "ok": True,
+            "scanned_files": scanned_files,
+            "scanned_entries": scanned_entries,
+            "orders_attributed": attributed,
+            "skipped_no_ref": skipped_no_ref,
+        }
+
     parent_router.include_router(router)

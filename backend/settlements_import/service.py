@@ -110,6 +110,9 @@ async def import_file(
         "matched": match_result["matched"],
         "unmatched": match_result["unmatched"],
         "unmatched_orders": match_result["unmatched_orders"][:200],  # cap for storage
+        # Iter-147 v2 — surface the count of payment_transactions that
+        # got the official Tamara attribution (independent of unified_orders).
+        "attribution_applied": match_result.get("attribution_applied", 0),
     }
     await db.settlement_files.insert_one(audit_doc)
 
@@ -139,6 +142,8 @@ async def import_file(
         "unmatched_orders": match_result["unmatched_orders"][:50],
         "totals": totals,
         "header": header,
+        # Iter-147 v2.
+        "attribution_applied": match_result.get("attribution_applied", 0),
     }
 
 
@@ -171,6 +176,11 @@ async def _apply_entries(
     matched = 0
     unmatched: list[str] = []
     matched_set: set[str] = set()
+    # Iter-147 v2 — counts orders whose payment_transactions got the
+    # official Tamara attribution applied (may exceed unified_orders
+    # matches when the merchant has Tamara orders missing from
+    # unified_orders).  Boxed in a list so the inner scope can mutate it.
+    attribution_count = [0]
 
     # Fetch all existing orders that match in one shot for efficiency
     existing_cursor = db.unified_orders.find(
@@ -180,41 +190,42 @@ async def _apply_entries(
     existing_orders = {doc["order_number"] async for doc in existing_cursor}
 
     for order_no, rows in by_order.items():
-        if order_no not in existing_orders:
-            unmatched.append(order_no)
-            continue
-        matched += 1
-        matched_set.add(order_no)
         consolidated = _consolidate_rows(rows)
-        await db.unified_orders.update_one(
-            {"user_id": user_id, "order_number": order_no},
-            {
-                "$set": {
-                    **{f"actual_{k}" if not k.startswith("actual_") else k: v
-                       for k, v in consolidated["actual_fields"].items()},
-                    "settlement_source": provider,
-                    "settlement_date": consolidated["settlement_date"],
-                    "settlement_reference": consolidated["settlement_reference"],
-                    "payment_fee_status": "actual",
-                    "last_settlement_file_id": file_id,
-                    "last_settlement_applied_at": _now(),
-                },
-            },
-        )
+        is_in_unified = order_no in existing_orders
 
-        # Iter-147 — Tamara only: propagate the OFFICIAL attribution
-        # (settlement_id + settlement_date) to every Tamara
-        # payment_transactions row that belongs to this order.  This
-        # lets `settlements_service` group THIS order under the exact
-        # weekly invoice Tamara itself put it in.
+        if is_in_unified:
+            matched += 1
+            matched_set.add(order_no)
+            await db.unified_orders.update_one(
+                {"user_id": user_id, "order_number": order_no},
+                {
+                    "$set": {
+                        **{f"actual_{k}" if not k.startswith("actual_") else k: v
+                           for k, v in consolidated["actual_fields"].items()},
+                        "settlement_source": provider,
+                        "settlement_date": consolidated["settlement_date"],
+                        "settlement_reference": consolidated["settlement_reference"],
+                        "payment_fee_status": "actual",
+                        "last_settlement_file_id": file_id,
+                        "last_settlement_applied_at": _now(),
+                    },
+                },
+            )
+        else:
+            unmatched.append(order_no)
+
+        # Iter-147 v2 — Tamara only: propagate the OFFICIAL attribution
+        # to every Tamara `payment_transactions` row that matches this
+        # order, INDEPENDENT of whether `unified_orders` has it.  The
+        # settlement file is the source of truth for which weekly
+        # invoice this order belongs to — even orders missing from
+        # unified_orders can still have their settlement attribution
+        # corrected on the payment side.
         if provider == "tamara":
             try:
                 from bnpl.settlement_attribution import (
                     set_provider_official_attribution,
                 )
-                # `rows` is a list of parsed entries for this order.
-                # Pick the first non-empty settlement_reference + the
-                # latest settlement_date as the canonical attribution.
                 ref = ""
                 latest_date: str | None = None
                 for r in rows:
@@ -228,7 +239,7 @@ async def _apply_entries(
                         (r.get("tamara_order_id") for r in rows
                          if r.get("tamara_order_id")), None,
                     )
-                    await set_provider_official_attribution(
+                    res_attr = await set_provider_official_attribution(
                         db, user_id,
                         order_number=order_no,
                         provider_id=tamara_order_id,
@@ -236,6 +247,10 @@ async def _apply_entries(
                         provider_invoice_id=ref or None,
                         provider_settlement_date=latest_date,
                     )
+                    # Count attribution successes separately so the UI
+                    # can show "X orders attributed to provider_official".
+                    if res_attr.get("matched", 0) > 0:
+                        attribution_count[0] += 1
             except Exception:
                 # Never let attribution bookkeeping break file import.
                 pass
@@ -245,6 +260,10 @@ async def _apply_entries(
         "unmatched": len(unmatched),
         "unmatched_orders": unmatched,
         "matched_set": matched_set,
+        # Iter-147 v2 — Tamara settlement-file imports also report the
+        # number of orders whose payment_transactions got the official
+        # attribution (independent of unified_orders matching).
+        "attribution_applied": attribution_count[0] if provider == "tamara" else 0,
     }
 
 
