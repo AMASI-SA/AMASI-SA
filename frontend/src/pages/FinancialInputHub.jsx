@@ -1832,16 +1832,17 @@ function RecentEntriesTable({ reloadKey }) {
                     <thead className="bg-slate-50 text-slate-700">
                         <tr>
                             <th className="p-2 text-right">العملية</th>
-                            <th className="p-2 text-right">المورد / الموظف</th>
+                            <th className="p-2 text-right">المورد / الموظف / الحساب</th>
                             <th className="p-2 num text-right">المبلغ</th>
-                            <th className="p-2 num text-right">الرصيد المفتوح</th>
+                            <th className="p-2 num text-right text-rose-700" title="ما عليك للجهة (مديونيتك تجاهها)">كم له</th>
+                            <th className="p-2 num text-right text-emerald-700" title="ما لك على الجهة (مديونيتها تجاهك)">كم عليه</th>
                             <th className="p-2 text-right">التاريخ</th>
                             <th className="p-2 w-12"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {data.items.length === 0 ? (
-                            <tr><td colSpan={6} className="p-4 text-center text-slate-500">
+                            <tr><td colSpan={7} className="p-4 text-center text-slate-500">
                                 {busy ? "جاري التحميل..." : "لا توجد عمليات بعد"}
                             </td></tr>
                         ) : data.items.map((it) => (
@@ -1849,10 +1850,15 @@ function RecentEntriesTable({ reloadKey }) {
                                 <td className="p-2 font-bold text-slate-800">{it.operation}</td>
                                 <td className="p-2 truncate max-w-xs" title={it.party_name}>{it.party_name}</td>
                                 <td className="p-2 num text-right font-extrabold text-slate-900">{Number(it.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                <td className="p-2 num text-right text-rose-700">
-                                    {it.party_open_balance != null
-                                        ? Number(it.party_open_balance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                        : "—"}
+                                <td className="p-2 num text-right text-rose-700 font-semibold" data-testid={`hub-recent-owed-to-${it.id}`}>
+                                    {it.party_id && Number(it.owed_to_party) > 0
+                                        ? Number(it.owed_to_party).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                        : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="p-2 num text-right text-emerald-700 font-semibold" data-testid={`hub-recent-owed-from-${it.id}`}>
+                                    {it.party_id && Number(it.owed_from_party) > 0
+                                        ? Number(it.owed_from_party).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                        : <span className="text-slate-300">—</span>}
                                 </td>
                                 <td className="p-2 text-[10px] text-slate-500" dir="ltr">{(it.created_at || "").slice(0, 16).replace("T", " ")}</td>
                                 <td className="p-2">

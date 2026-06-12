@@ -29,6 +29,13 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159 (Feb 13 2026)**: 📊 Recent Entries — Directional Balance Columns ("كم له" / "كم عليه").
+  - **User request**: "إضافة عمود في جدول آخر عمليات الإدخال: اسم الموظف/الحساب/المورد + كم له + كم عليه".
+  - **Backend** (`GET /api/financial-input-hub/recent`): for every fed item, enriched with three new fields — `party_id`, `owed_to_party` (ما علينا لها), `owed_from_party` (ما لنا عليها) — computed via a single grouped aggregation over `liabilities` (status ∈ unpaid/partial). Kinds bucketed as `supplier|salary|ad_account` → "كم له" and `salary_advance|receivable` → "كم عليه". Net `party_open_balance` kept for backward-compat.
+  - **Frontend** (`FinancialInputHub.jsx` → `RecentEntriesTable`): replaced single "الرصيد المفتوح" column with two color-coded columns — red **كم له** + green **كم عليه**. Header expanded to "المورد / الموظف / الحساب". Empty values show muted "—".
+  - **Bug-fix during build**: outer `total = len(feed)` was being shadowed by an inner aggregation loop variable, returning bogus `total_pages`. Renamed inner to `sub`. Verified via direct curl: supplier with 1500+500 correctly aggregates to `owed_to_party=2000` while pagination `total=2`.
+
+
 - **Iter-157b (Feb 13 2026)**: 🔍 Recent Entries — Expanded coverage + search + operation filter.
   - **User request follow-up**: "الجدول يحوي على آخر تعليمات الإدخال وتسديد الرواتب وديون الرواتب جميع العمليات المضافة في مركز الإدخال تظهر بالجدول حسب الأحدث. مع إضافة اقتراح خيار البحث كامل".
   - **Expanded transaction coverage**: The recent endpoint now surfaces ALL hub-originated operations — added `expense`, `expense_payment`, `deposit`, `withdrawal`, `courier_transfer`, `cod_transfer`, `receivable_collect`, `shipping_payment`, `topup` to the `account_transactions` filter alongside the original four. Each gets a clear Arabic operation label (مصروف يومي، إيداع، تحويل شركة شحن، تحصيل من عميل، …).

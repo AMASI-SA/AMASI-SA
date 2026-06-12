@@ -929,42 +929,83 @@ async def financial_input_hub_recent(
     start = (page - 1) * page_size
     items = feed[start: start + page_size]
 
-    # Enrich with "prior balance" — current open balance for the party
-    # AFTER this operation. Simpler than computing the actual prior:
-    # for each unique party (counterparty_id or employee_salary_id),
-    # show the SUM of remaining_amount across their open liabilities.
-    party_ids = set()
+    # Enrich with directional balances for the party:
+    #  • owed_to_party   (كم له)  → what WE owe them right now
+    #                                (supplier / salary / ad_account)
+    #  • owed_from_party (كم عليه) → what THEY owe US right now
+    #                                (salary_advance / receivable)
+    #
+    # Step 1 — collect referenced liability ids (for both liability rows and
+    # transaction rows linked via peer_liability_id).
+    liab_id_refs = set()
     for it in items:
-        # Look up the linked liability to get the party id
         if it["type"] == "liability":
-            party_ids.add(("liab", it["ref_id"]))
-    party_balances = {}
-    if party_ids:
-        liab_ids = [pid for (k, pid) in party_ids if k == "liab"]
-        rows = await db.liabilities.find(
-            {"user_id": uid, "id": {"$in": liab_ids}},
-            {"_id": 0, "id": 1, "counterparty_id": 1, "employee_salary_id": 1},
-        ).to_list(500)
-        for r in rows:
-            cp = r.get("counterparty_id") or r.get("employee_salary_id")
-            if not cp:
-                continue
-            agg = await db.liabilities.aggregate([
-                {"$match": {"user_id": uid,
-                            "$or": [{"counterparty_id": cp},
-                                     {"employee_salary_id": cp}],
-                            "status": {"$in": ["unpaid", "partial"]}}},
-                {"$group": {"_id": None,
-                            "total": {"$sum": {"$subtract": [
-                                "$expected_amount", "$paid_amount"]}}}},
-            ]).to_list(1)
-            party_balances[r["id"]] = round((agg[0]["total"] if agg else 0), 2)
+            liab_id_refs.add(it["ref_id"])
+        elif it.get("ref_id"):
+            liab_id_refs.add(it["ref_id"])
 
+    # Step 2 — fetch those liabilities to map (liability_id) → party_id.
+    item_to_party = {}    # liability_id → party_id
+    party_ids_all = set()
+    if liab_id_refs:
+        rows = await db.liabilities.find(
+            {"user_id": uid, "id": {"$in": list(liab_id_refs)}},
+            {"_id": 0, "id": 1, "counterparty_id": 1, "employee_salary_id": 1},
+        ).to_list(2000)
+        for r in rows:
+            pid = r.get("counterparty_id") or r.get("employee_salary_id")
+            if pid:
+                item_to_party[r["id"]] = pid
+                party_ids_all.add(pid)
+
+    # Step 3 — for each unique party, compute both directional balances in
+    # a single aggregation grouped by kind.
+    OWE_THEM_KINDS = ("supplier", "salary", "ad_account")
+    THEY_OWE_KINDS = ("salary_advance", "receivable")
+    party_balances = {}  # party_id → {"owed_to_party": x, "owed_from_party": y}
+    if party_ids_all:
+        agg = await db.liabilities.aggregate([
+            {"$match": {
+                "user_id": uid,
+                "status": {"$in": ["unpaid", "partial"]},
+                "$or": [
+                    {"counterparty_id": {"$in": list(party_ids_all)}},
+                    {"employee_salary_id": {"$in": list(party_ids_all)}},
+                ],
+            }},
+            {"$group": {
+                "_id": {
+                    "party": {"$ifNull": ["$counterparty_id",
+                                          "$employee_salary_id"]},
+                    "kind": "$kind",
+                },
+                "total": {"$sum": {"$subtract": [
+                    "$expected_amount", "$paid_amount"]}},
+            }},
+        ]).to_list(5000)
+        for row in agg:
+            pid = row["_id"]["party"]
+            kind = row["_id"]["kind"]
+            sub = float(row.get("total") or 0)
+            bucket = party_balances.setdefault(
+                pid, {"owed_to_party": 0.0, "owed_from_party": 0.0})
+            if kind in OWE_THEM_KINDS:
+                bucket["owed_to_party"] += sub
+            elif kind in THEY_OWE_KINDS:
+                bucket["owed_from_party"] += sub
+
+    # Step 4 — attach to each feed item.
     for it in items:
-        if it["type"] == "liability":
-            it["party_open_balance"] = party_balances.get(it["ref_id"], 0)
-        else:
-            it["party_open_balance"] = None
+        party_id = item_to_party.get(it.get("ref_id"))
+        bal = party_balances.get(party_id, {}) if party_id else {}
+        owed_to = round(bal.get("owed_to_party", 0), 2)
+        owed_from = round(bal.get("owed_from_party", 0), 2)
+        it["party_id"] = party_id
+        it["owed_to_party"] = owed_to        # كم له
+        it["owed_from_party"] = owed_from    # كم عليه
+        # Keep legacy field for backward compatibility (net open balance).
+        it["party_open_balance"] = round(owed_to - owed_from, 2) \
+            if party_id else None
 
     return {
         "items": items,
