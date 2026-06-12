@@ -72,6 +72,21 @@ def seeded_payment(auth_session):
     refund_provider_id = f"RFD-{TRACER}"
 
     async def _seed():
+        # Iter-149 — disable accounting cutoff for this user so the
+        # 2025-05/2025-06 seeded data is not filtered out.
+        await db.accounting_cutoffs.update_one(
+            {"user_id": user_id, "provider": PROVIDER},
+            {"$set": {
+                "accounting_start_date": "2020-01-01",
+                "updated_at":            datetime.now(timezone.utc).isoformat(),
+            },
+             "$setOnInsert": {
+                "user_id":  user_id,
+                "provider": PROVIDER,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+             }},
+            upsert=True,
+        )
         await db.payment_transactions.insert_one({
             "id": str(uuid.uuid4()),
             "provider": PROVIDER,

@@ -113,6 +113,7 @@ const SECTIONS = [
             { to: "/image-catalog", label: "إدارة صور المنتجات", icon: Image, testid: "nav-image-catalog" },
             { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
             { to: "/profile", label: "حسابي", icon: UserCircle, testid: "nav-profile" },
+            { to: "/settings/accounting-cutoffs", label: "تواريخ بدء المحاسبة", icon: Gear, testid: "nav-accounting-cutoffs" },
             // Owner-only: pushed in at render time.
             { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" },
         ],

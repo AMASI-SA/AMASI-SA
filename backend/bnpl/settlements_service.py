@@ -375,6 +375,25 @@ async def _compute_provider_totals(
             rng["$lte"] = utc_lte
         sales_match[sales_date_field] = rng
 
+    # Iter-149 — Skip orders & refunds whose entity date is BEFORE the
+    # merchant's `accounting_start_date` for this provider.  These are
+    # historical / pre-accounting rows the merchant has archived.
+    try:
+        from accounting_cutoffs import get_cutoff
+        _cutoff = await get_cutoff(db, user_id, provider)
+    except Exception:
+        _cutoff = None
+    if _cutoff:
+        # Apply to BOTH date fields so the filter survives no matter
+        # which one we're aggregating by.
+        rng = sales_match.setdefault(sales_date_field, {})
+        if isinstance(rng, dict):
+            prev = rng.get("$gte")
+            if not prev or str(prev) < _cutoff:
+                rng["$gte"] = _cutoff
+        # Also explicitly exclude any row already flagged.
+        sales_match["is_pre_accounting"] = {"$ne": True}
+
     gross = 0.0
     count = 0
     async for r in db.payment_transactions.aggregate([
@@ -398,6 +417,15 @@ async def _compute_provider_totals(
         if utc_lte:
             rng2["$lte"] = utc_lte
         refund_match["refunded_at"] = rng2
+
+    # Iter-149 — exclude pre-accounting refunds too.
+    if _cutoff:
+        rng2 = refund_match.setdefault("refunded_at", {})
+        if isinstance(rng2, dict):
+            prev = rng2.get("$gte")
+            if not prev or str(prev) < _cutoff:
+                rng2["$gte"] = _cutoff
+        refund_match["is_pre_accounting"] = {"$ne": True}
 
     refunds = 0.0
     refunds_count = 0
@@ -605,6 +633,16 @@ async def _aggregate_official_totals(
     if not date_from or not date_to:
         return None
 
+    # Iter-149 — pre-accounting cutoff.
+    try:
+        from accounting_cutoffs import get_cutoff
+        cutoff = await get_cutoff(db, user_id, "tamara")
+    except Exception:
+        cutoff = None
+    effective_from = (
+        max(date_from, cutoff) if cutoff and cutoff > date_from else date_from
+    )
+
     # Iter-147 v3.2 — Deduplicate by (order_number, event_type,
     # settlement_date).  When the merchant uploads the same Tamara
     # settlement file twice (different bytes / re-export → new file_hash),
@@ -624,7 +662,8 @@ async def _aggregate_official_totals(
         {"$match": {
             "user_id": user_id,
             "provider": "tamara",
-            "settlement_date": {"$gte": date_from, "$lte": date_to},
+            "settlement_date": {"$gte": effective_from, "$lte": date_to},
+            "is_pre_accounting": {"$ne": True},
         }},
         {"$sort": {"created_at": -1}},
         {"$group": {

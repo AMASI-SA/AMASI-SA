@@ -2937,6 +2937,9 @@ attach_bnpl_settlements_routes(api, db=db, get_current_user=current_user)
 # Iter-114 — Operational reports (daily/monthly/yearly aggregated)
 from operational_reports_routes import attach_operational_reports_routes
 attach_operational_reports_routes(api, db, current_user)
+# Iter-149 — Per-provider accounting cutoff dates
+from accounting_cutoffs_routes import attach_accounting_cutoffs_routes
+attach_accounting_cutoffs_routes(api, db, current_user)
 app.include_router(api)
 
 # CORS

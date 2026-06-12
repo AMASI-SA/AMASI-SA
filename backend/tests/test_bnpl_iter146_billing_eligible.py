@@ -196,6 +196,11 @@ async def test_refunds_keep_refunded_at_filter(mongo_db):
     """Iter-120 unchanged — Tamara refunds still aggregate by
     `refunded_at`, not by the original order's billing_eligible_at."""
     uid = "user-1"
+    # Iter-149 — disable cutoff for this test so April data is included.
+    await mongo_db.accounting_cutoffs.insert_one({
+        "user_id": uid, "provider": "tamara",
+        "accounting_start_date": "2020-01-01",
+    })
     # Original order placed AND made billable in April.
     await mongo_db.payment_transactions.insert_one({
         "id": "t5", "user_id": uid, "provider": "tamara",
