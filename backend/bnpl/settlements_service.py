@@ -605,6 +605,12 @@ async def _aggregate_official_totals(
     if not date_from or not date_to:
         return None
 
+    # Iter-147 v3.2 — Deduplicate by (order_number, event_type,
+    # settlement_date).  When the merchant uploads the same Tamara
+    # settlement file twice (different bytes / re-export → new file_hash),
+    # each row appears N times in `settlement_entries`.  We pick the
+    # MOST RECENT entry per unique key so totals match Tamara's
+    # statement instead of being multiplied by the upload count.
     gross_sales = 0.0
     total_refunds = 0.0
     sales_count = 0
@@ -612,14 +618,26 @@ async def _aggregate_official_totals(
     commission = 0.0
     commission_vat = 0.0
     net_payable = 0.0
-
-    cur = db.settlement_entries.find({
-        "user_id": user_id,
-        "provider": "tamara",
-        "settlement_date": {"$gte": date_from, "$lte": date_to},
-    })
     found = False
-    async for e in cur:
+
+    pipeline = [
+        {"$match": {
+            "user_id": user_id,
+            "provider": "tamara",
+            "settlement_date": {"$gte": date_from, "$lte": date_to},
+        }},
+        {"$sort": {"created_at": -1}},
+        {"$group": {
+            "_id": {
+                "order_number":   "$order_number",
+                "event_type":     "$event_type",
+                "settlement_date": "$settlement_date",
+            },
+            "doc": {"$first": "$$ROOT"},
+        }},
+        {"$replaceRoot": {"newRoot": "$doc"}},
+    ]
+    async for e in db.settlement_entries.aggregate(pipeline):
         found = True
         ev = (e.get("event_type") or "").lower()
         if ev == "refund":
@@ -634,7 +652,6 @@ async def _aggregate_official_totals(
             gross_sales += float(e.get("actual_gross_amount") or 0.0)
             commission += float(e.get("actual_payment_fee") or 0.0)
             commission_vat += float(e.get("actual_payment_vat") or 0.0)
-        # net_payable across both — refunds contribute negatively.
         net_payable += float(e.get("actual_net_amount") or 0.0)
 
     if not found:

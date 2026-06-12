@@ -690,4 +690,93 @@ def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
             "skipped_no_ref": skipped_no_ref,
         }
 
+    # ── Iter-147 v3.2 — Cleanup duplicate settlement_entries ──────────
+    @router.get("/tamara/settlement-files/duplicates")
+    async def settlement_files_duplicates(
+        user: dict = Depends(current_user),
+    ):
+        """List Tamara settlement_entries that are duplicates of each
+        other — same (order_number, event_type, settlement_date) but
+        from multiple file uploads.  Read-only."""
+        uid = user["id"]
+        groups: list[dict] = []
+        pipeline = [
+            {"$match": {"user_id": uid, "provider": "tamara"}},
+            {"$group": {
+                "_id": {
+                    "order_number":    "$order_number",
+                    "event_type":      "$event_type",
+                    "settlement_date": "$settlement_date",
+                },
+                "count":   {"$sum": 1},
+                "file_ids": {"$addToSet": "$file_id"},
+            }},
+            {"$match": {"count": {"$gt": 1}}},
+            {"$sort": {"count": -1}},
+            {"$limit": 200},
+        ]
+        async for g in db.settlement_entries.aggregate(pipeline):
+            groups.append({
+                "order_number":    g["_id"]["order_number"],
+                "event_type":      g["_id"]["event_type"],
+                "settlement_date": g["_id"]["settlement_date"],
+                "count":           g["count"],
+                "file_ids":        g.get("file_ids", []),
+                "extra_entries":   g["count"] - 1,
+            })
+        return {
+            "duplicate_groups":     len(groups),
+            "total_extra_entries":  sum(g["extra_entries"] for g in groups),
+            "groups":               groups,
+        }
+
+    @router.post("/tamara/settlement-files/cleanup-duplicates")
+    async def settlement_files_cleanup_duplicates(
+        dry_run: bool = Query(True),
+        user: dict = Depends(current_user),
+    ):
+        """Remove duplicate Tamara `settlement_entries` rows that piled
+        up when the same settlement file was re-uploaded (different
+        file_hash but same data).  Keeps the most-recently-created
+        entry per (order_number, event_type, settlement_date) group
+        and deletes the rest.
+
+        Use `?dry_run=false` to actually apply.
+        """
+        uid = user["id"]
+        pipeline = [
+            {"$match": {"user_id": uid, "provider": "tamara"}},
+            {"$sort": {"created_at": -1}},
+            {"$group": {
+                "_id": {
+                    "order_number":    "$order_number",
+                    "event_type":      "$event_type",
+                    "settlement_date": "$settlement_date",
+                },
+                "keep_id":  {"$first": "$id"},
+                "all_ids":  {"$push":  "$id"},
+                "count":    {"$sum":   1},
+            }},
+            {"$match": {"count": {"$gt": 1}}},
+        ]
+        groups_scanned = 0
+        entries_removed = 0
+        async for g in db.settlement_entries.aggregate(pipeline):
+            groups_scanned += 1
+            victim_ids = [eid for eid in g["all_ids"] if eid != g["keep_id"]]
+            if dry_run:
+                entries_removed += len(victim_ids)
+                continue
+            res = await db.settlement_entries.delete_many(
+                {"user_id": uid, "id": {"$in": victim_ids}},
+            )
+            entries_removed += int(getattr(res, "deleted_count", 0) or 0)
+
+        return {
+            "ok":               True,
+            "dry_run":          dry_run,
+            "duplicate_groups": groups_scanned,
+            "entries_removed":  entries_removed,
+        }
+
     parent_router.include_router(router)

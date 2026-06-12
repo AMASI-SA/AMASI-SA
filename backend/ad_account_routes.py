@@ -1611,6 +1611,207 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         cp_fresh = await _get_account(db, user["id"], cp_id)
         return await _summarise(db, user["id"], cp_fresh)
 
+    # ── Iter-148 — Diagnostic + cleanup for duplicate TOPUP rows ──────
+    @router.get("/diagnostics/duplicate-topups")
+    async def diagnose_duplicate_topups(
+        user: dict = Depends(current_user),
+    ):
+        """List ad-account topup ledger rows that look like duplicates.
+
+        A "duplicate" is two-or-more `type=topup` rows for the SAME
+        counterparty on the SAME date with the SAME amount.  These piled
+        up before the topup endpoint had any client-side debounce.
+
+        Returns the list grouped by (counterparty, date, amount) so the
+        merchant can decide which ones to wipe.  No writes happen here.
+        """
+        uid = user["id"]
+        report: list[dict] = []
+
+        async for cp in db.counterparties.find(
+            {"user_id": uid, "kind": "ad_account"},
+            {"_id": 0, "id": 1, "name": 1, "balance": 1, "ad_provider": 1},
+        ):
+            cp_id = cp["id"]
+            buckets: dict[tuple, list[dict]] = {}
+            async for row in db.ad_account_ledger.find(
+                {"user_id": uid, "counterparty_id": cp_id, "type": "topup"},
+                {"_id": 0},
+            ):
+                key = (row.get("date") or "", round(float(row.get("amount") or 0), 2))
+                buckets.setdefault(key, []).append(row)
+
+            cp_dups: list[dict] = []
+            for (d, amt), rows in buckets.items():
+                if len(rows) <= 1:
+                    continue
+                rows.sort(key=lambda r: r.get("created_at") or "")
+                cp_dups.append({
+                    "date":  d,
+                    "amount": amt,
+                    "count": len(rows),
+                    "keep_id":   rows[0].get("id"),
+                    "kept_created_at": rows[0].get("created_at"),
+                    "victims": [
+                        {
+                            "id":          r.get("id"),
+                            "created_at":  r.get("created_at"),
+                            "related_tx_id": r.get("related_tx_id"),
+                            "related_liability_id": r.get("related_liability_id"),
+                            "breakdown":   r.get("breakdown") or {},
+                        }
+                        for r in rows[1:]
+                    ],
+                })
+            if cp_dups:
+                cp_dups.sort(key=lambda x: (x["date"], -x["count"]))
+                report.append({
+                    "counterparty_id":   cp_id,
+                    "name":              cp.get("name"),
+                    "ad_provider":       cp.get("ad_provider"),
+                    "current_balance":   _round(cp.get("balance") or 0),
+                    "duplicate_groups":  cp_dups,
+                    "total_extra_rows":  sum(len(g["victims"]) for g in cp_dups),
+                    "total_extra_amount": _round(
+                        sum(g["amount"] * len(g["victims"]) for g in cp_dups),
+                    ),
+                })
+        return {
+            "checked_at":   _now(),
+            "accounts_with_duplicates": len(report),
+            "total_extra_rows": sum(a["total_extra_rows"] for a in report),
+            "total_extra_amount": _round(
+                sum(a["total_extra_amount"] for a in report),
+            ),
+            "accounts": report,
+        }
+
+    @router.post("/diagnostics/duplicate-topups/cleanup")
+    async def cleanup_duplicate_topups(
+        request: Request,
+        user: dict = Depends(current_user),
+    ):
+        """Remove duplicate topup ledger rows + reverse their financial
+        impact.  Keeps the OLDEST row per (counterparty, date, amount)
+        group and reverses every younger duplicate:
+
+          • reverses the bank-side cash movement (deletes the linked
+            `account_transactions` row)
+          • decreases `counterparty.balance` by the row's `to_balance`
+            portion
+          • decreases the linked liability's `paid_amount` by the
+            `to_debt` portion (and re-opens it if needed)
+          • deletes the ledger row itself
+
+        Pass `?dry_run=true` (default) for a no-write preview.
+        """
+        uid = user["id"]
+        params = dict(request.query_params)
+        dry_run = (params.get("dry_run", "true").lower() != "false")
+
+        removed_rows = 0
+        balance_decreased = 0.0
+        liab_decreased    = 0.0
+        bank_tx_removed   = 0
+        per_account: list[dict] = []
+
+        async for cp in db.counterparties.find(
+            {"user_id": uid, "kind": "ad_account"},
+            {"_id": 0, "id": 1, "name": 1, "balance": 1},
+        ):
+            cp_id = cp["id"]
+            buckets: dict[tuple, list[dict]] = {}
+            async for row in db.ad_account_ledger.find(
+                {"user_id": uid, "counterparty_id": cp_id, "type": "topup"},
+                {"_id": 0},
+            ):
+                key = (row.get("date") or "", round(float(row.get("amount") or 0), 2))
+                buckets.setdefault(key, []).append(row)
+
+            cp_removed = 0
+            cp_bal_dec = 0.0
+            cp_liab_dec = 0.0
+            cp_tx_dropped = 0
+            for (_d, _amt), rows in buckets.items():
+                if len(rows) <= 1:
+                    continue
+                rows.sort(key=lambda r: r.get("created_at") or "")
+                victims = rows[1:]
+                for v in victims:
+                    bd = v.get("breakdown") or {}
+                    to_balance = _round(float(bd.get("to_balance") or 0))
+                    to_debt    = _round(float(bd.get("to_debt") or 0))
+                    cp_bal_dec  += to_balance
+                    cp_liab_dec += to_debt
+                    cp_removed  += 1
+
+                    if dry_run:
+                        continue
+
+                    # Reverse the bank-side tx
+                    if v.get("related_tx_id"):
+                        del_res = await db.account_transactions.delete_one(
+                            {"id": v["related_tx_id"], "user_id": uid},
+                        )
+                        cp_tx_dropped += int(getattr(del_res, "deleted_count", 0) or 0)
+                    # Decrease counterparty balance
+                    if to_balance:
+                        await db.counterparties.update_one(
+                            {"id": cp_id, "user_id": uid},
+                            {"$inc": {"balance": -to_balance},
+                             "$set": {"updated_at": _now()}},
+                        )
+                    # Reverse liability deduction
+                    if to_debt and v.get("related_liability_id"):
+                        liab = await db.liabilities.find_one(
+                            {"id": v["related_liability_id"], "user_id": uid},
+                        )
+                        if liab:
+                            new_paid = _round(
+                                max(0, (liab.get("paid_amount") or 0) - to_debt),
+                            )
+                            new_status = (
+                                "paid"
+                                if new_paid + 0.01 >= float(liab.get("expected_amount") or 0)
+                                else ("partial" if new_paid > 0 else "unpaid")
+                            )
+                            await db.liabilities.update_one(
+                                {"id": liab["id"], "user_id": uid},
+                                {"$set": {
+                                    "paid_amount": new_paid,
+                                    "status":      new_status,
+                                    "updated_at":  _now(),
+                                }},
+                            )
+                    # Finally drop the ledger row
+                    await db.ad_account_ledger.delete_one(
+                        {"id": v["id"], "user_id": uid},
+                    )
+
+            if cp_removed:
+                per_account.append({
+                    "counterparty_id":   cp_id,
+                    "name":              cp.get("name"),
+                    "removed_rows":      cp_removed,
+                    "balance_decreased": _round(cp_bal_dec),
+                    "liab_decreased":    _round(cp_liab_dec),
+                    "bank_tx_removed":   cp_tx_dropped,
+                })
+                removed_rows     += cp_removed
+                balance_decreased += cp_bal_dec
+                liab_decreased    += cp_liab_dec
+                bank_tx_removed   += cp_tx_dropped
+
+        return {
+            "ok":               True,
+            "dry_run":          dry_run,
+            "removed_rows":     removed_rows,
+            "balance_decreased": _round(balance_decreased),
+            "liab_decreased":    _round(liab_decreased),
+            "bank_tx_removed":   bank_tx_removed,
+            "per_account":       per_account,
+        }
+
     parent_router.include_router(router)
 
 

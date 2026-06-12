@@ -169,3 +169,44 @@ async def test_no_override_when_no_file_exists(mongo_db):
     assert result["data_source"] == "computed"
     assert result["system_totals"] is None
     assert result["totals"]["gross_sales"] == 500.0
+
+
+# ── Iter-147 v3.2 — Dedup when same file is uploaded twice ────────
+
+@pytest.mark.asyncio
+async def test_aggregator_dedups_double_uploaded_file(mongo_db):
+    """When the same Tamara file is uploaded twice (different
+    file_hash → not blocked), each row appears twice in
+    settlement_entries.  The aggregator MUST deduplicate by
+    (order_number, event_type, settlement_date), picking the
+    most-recently-created entry only."""
+    uid = "u1"
+    # Two upload "rounds" — each writes the same 2-order file.
+    rows = []
+    for round_idx, file_id in enumerate(["f-A", "f-B"]):
+        for order_no, gross, fee, vat, net in [
+            ("100", 17294.15, 1336.42, 200.44, 15617.29),
+        ]:
+            rows.append({
+                "id": f"{file_id}-{order_no}",
+                "file_id": file_id, "user_id": uid, "provider": "tamara",
+                "order_number": order_no,
+                "tamara_order_id": f"tx{order_no}",
+                "event_type": "sale",
+                "actual_gross_amount": gross,
+                "actual_payment_fee": fee,
+                "actual_payment_vat": vat,
+                "actual_net_amount": net,
+                "settlement_date": "2026-04-28",
+                "created_at": _iso(2026, 6, 12, 10 + round_idx),
+            })
+    await mongo_db.settlement_entries.insert_many(rows)
+
+    out = await _aggregate_official_totals(
+        mongo_db, uid, "2026-04-25", "2026-05-01",
+    )
+    assert out is not None
+    # Without dedup: gross would be 34,588.30 (× 2).  With dedup: 17,294.15.
+    assert out["transactions_count"] == 1
+    assert out["gross_sales"] == 17294.15
+    assert out["net_payable"] == 15617.29
