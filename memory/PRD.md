@@ -29,6 +29,14 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-150 (Feb 13 2026)**: 🐛 Ad Account Sync — Paid Liability No-Recreation Fix.
+  - **Bug**: When user paid off a cron-created ad-account liability, the next force=True sync (half-hour cadence) recreated a fresh liability for the full day's spend — undoing the payment.
+  - **Root cause**: Pre-Iter-150 `_run_sync_for_all` used a "drop + recreate" pattern. The reverse step looked for liabilities with `status in [unpaid, partial]`. After payoff, status became `paid`, so the reverse found nothing — then the apply step created a new liability for the full daily total.
+  - **Fix**: Switched to a **delta-based** approach in `/app/backend/ad_account_routes.py::_run_sync_for_all`. Each force-sync computes `delta = platform_total − sum(prev auto_cron amounts today)` and only applies the delta. Re-runs with no new platform spend are a genuine no-op (no DB writes, no liability touched).
+  - **Response shape additions** (backward compatible — only ADD): `delta_applied`, `prev_total_applied`, `no_op`. The frontend's existing `debt_created` reading semantics now reflect "debt added in THIS sync" (so a no-op re-sync shows 0).
+  - **Negative delta (rare correction)**: if platform reports LESS than what was already applied today, the abs(delta) is refunded to the prepaid balance and a correction ledger row is written. Liabilities are NEVER auto-reduced — user must adjust manually.
+  - **Tests**: 3 regression tests in `/app/backend/tests/test_ad_account_sync_paid_no_recreate_iter150.py` covering (a) paid-off liability not recreated, (b) new spend after payoff creates a NEW liability for the delta only, (c) 5x repeated force-sync with no spend change is a pure no-op (no ledger rows, no liability writes). All 3 pass. Existing Iter-110 tests adjusted to new delta semantics — all 9 in that file still pass. Wider Ad Account regression: 49/49 affected tests pass.
+
 - **Iter-144 (Feb 12 2026 — this session)**: 🚚 شركات الشحن — قسم مستقلّ مع unified courier ledger.
   - **Sidebar restructure**: new top-level section `🚚 شركات الشحن` housing 4 pages: حسابات الشحن الآجلة (existing), أرصدة شركات الشحن (new), تحويلات شركات الشحن (new), إعدادات شركات الشحن (new).  Old `/shipping-accounts` link removed from `إدارة التشغيل`.  COD-settlements page intentionally deferred until SMSA / iMile integration lands.
   - **New backend endpoints** (in `shipping_accounts.py`):

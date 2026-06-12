@@ -1905,88 +1905,41 @@ async def _run_sync_for_all(
                         "skipped": True, "reason": "already_synced"})
             continue
 
-        # ── Iter-110 fix B — when force=True we must REVERSE any prior
-        # auto-cron sync for the same date-range BEFORE applying the
-        # fresh figures, otherwise spend gets double-counted (the user
-        # reported "تراكميه" — cumulative debt). We:
-        #   1. find prior ledger rows tagged auto_cron=True in range,
-        #   2. restore the `from_balance` portion back to the balance,
-        #   3. reduce the open auto-generated liability by the
-        #      `uncovered` portion (deleting it if it drops to 0),
-        #   4. delete those ledger rows so they don't double-count.
+        # ── Iter-150 fix — DELTA-BASED sync. The old "drop + recreate"
+        # pattern (Iter-110 fix B) was unsafe: if the user PAID OFF the
+        # auto-cron liability between sync passes, the reverse step
+        # couldn't find an open liability to reduce, then the apply
+        # step recreated a brand-new liability for the full daily spend
+        # — undoing the user's payment. Reported bug (Feb 2026):
+        # "عند تسديد مديونيه ... المزامنه الثانيه يضيف المديونيه من جديد".
+        #
+        # NEW LOGIC: sum the amounts ALREADY applied today via auto_cron
+        # ledger rows (`prev_total_applied`), fetch the platform's fresh
+        # daily total, and only apply the DELTA (total − prev_total) as
+        # new spend. Re-runs with no new platform spend become genuine
+        # no-ops — they never touch the (possibly paid) liability.
+        ext_id = (cp.get("external_account_id") or "").strip() or None
+        rows, source = await _fetch_daily_spend(
+            db, user_id, cp["ad_provider"], ext_id, from_date, to_date,
+        )
+        total = round(sum(r["spend"] for r in rows), 2)
+
         if force:
             prev_rows = await db.ad_account_ledger.find({
                 "user_id": user_id, "counterparty_id": cp["id"],
                 "type": "spend",
                 "breakdown.auto_cron": True,
                 "date": {"$gte": from_date, "$lte": to_date},
-            }, {"_id": 0}).to_list(2000)
-            if prev_rows:
-                prev_covered = round(sum(
-                    (r.get("breakdown") or {}).get("from_balance", 0)
-                    for r in prev_rows), 2)
-                prev_uncovered = round(sum(
-                    (r.get("breakdown") or {}).get("uncovered", 0)
-                    for r in prev_rows), 2)
-                # 1) Restore balance
-                if prev_covered > 0:
-                    await db.counterparties.update_one(
-                        {"id": cp["id"], "user_id": user_id},
-                        {"$inc": {"balance": prev_covered},
-                         "$set": {"updated_at": _now()}},
-                    )
-                    cp["balance"] = round(
-                        float(cp.get("balance") or 0) + prev_covered, 2,
-                    )
-                # 2) Reduce open auto-generated liability (source=ad_account_cron)
-                if prev_uncovered > 0 and (cp.get("debt_mode") or "auto") == "auto":
-                    existing_liab = await db.liabilities.find_one(
-                        {"user_id": user_id, "kind": "ad_account",
-                         "counterparty_id": cp["id"],
-                         "source": "ad_account_cron",
-                         "status": {"$in": ["unpaid", "partial"]}},
-                        {"_id": 0},
-                    )
-                    if existing_liab:
-                        new_exp = round(
-                            (existing_liab.get("expected_amount") or 0) - prev_uncovered, 2,
-                        )
-                        paid = float(existing_liab.get("paid_amount") or 0)
-                        if new_exp <= max(paid, 0.01):
-                            # Nothing left of the cron portion. If it
-                            # was partially paid we keep the paid_amount
-                            # by clamping the expected to paid; otherwise
-                            # delete the row entirely.
-                            if paid > 0:
-                                await db.liabilities.update_one(
-                                    {"id": existing_liab["id"], "user_id": user_id},
-                                    {"$set": {"expected_amount": paid,
-                                              "status": "paid",
-                                              "updated_at": _now()}},
-                                )
-                            else:
-                                await db.liabilities.delete_one(
-                                    {"id": existing_liab["id"], "user_id": user_id},
-                                )
-                        else:
-                            await db.liabilities.update_one(
-                                {"id": existing_liab["id"], "user_id": user_id},
-                                {"$set": {"expected_amount": new_exp,
-                                          "updated_at": _now()}},
-                            )
-                # 3) Drop the prior ledger rows
-                ids_to_delete = [r["id"] for r in prev_rows if r.get("id")]
-                if ids_to_delete:
-                    await db.ad_account_ledger.delete_many({
-                        "user_id": user_id, "id": {"$in": ids_to_delete},
-                    })
+            }, {"_id": 0, "amount": 1}).to_list(5000)
+            prev_total_applied = round(sum(
+                float(r.get("amount") or 0) for r in prev_rows
+            ), 2)
+        else:
+            prev_total_applied = 0.0
 
-        ext_id = (cp.get("external_account_id") or "").strip() or None
-        rows, source = await _fetch_daily_spend(
-            db, user_id, cp["ad_provider"], ext_id, from_date, to_date,
-        )
-        total = round(sum(r["spend"] for r in rows), 2)
-        if total <= 0:
+        delta = round(total - prev_total_applied, 2)
+
+        if total <= 0 and prev_total_applied <= 0:
             await db.counterparties.update_one(
                 {"id": cp["id"]},
                 {"$set": {"last_auto_sync_date": to_date,
@@ -1996,45 +1949,111 @@ async def _run_sync_for_all(
                         "source_collection": source})
             continue
 
-        # Apply via the same internal logic as /spend.
-        balance_before = float(cp.get("balance") or 0)
-        covered = min(total, balance_before)
-        uncovered = round(total - covered, 2)
-        new_balance = round(balance_before - covered, 2)
-        await db.counterparties.update_one(
-            {"id": cp["id"]},
-            {"$set": {"balance": new_balance,
-                      "last_auto_sync_date": to_date,
-                      "last_auto_sync_at": _now(),
-                      "updated_at": _now()}},
-        )
-        mode = cp.get("debt_mode") or "auto"
-        liab_id, debt_after = await _apply_uncovered(
-            db, user_id, cp, uncovered, mode, to_date,
-            description=f"مديونية تلقائية (cron) — {cp['name']}",
-            source_tag="ad_account_cron",
-        )
+        # No new spend since last cron pass → genuine no-op. We do NOT
+        # touch the liability (it may have been paid by the user) and
+        # we do NOT add a ledger row. Just bump the sync timestamps.
+        if delta == 0:
+            await db.counterparties.update_one(
+                {"id": cp["id"]},
+                {"$set": {"last_auto_sync_date": to_date,
+                          "last_auto_sync_at": _now()}},
+            )
+            out.append({
+                "id": cp["id"], "name": cp["name"], "spend": total,
+                "covered": 0.0, "uncovered": 0.0,
+                "debt_created": 0.0,
+                "source_collection": source,
+                "delta_applied": 0.0, "prev_total_applied": prev_total_applied,
+                "no_op": True,
+            })
+            continue
 
-        # Ledger
-        await db.ad_account_ledger.insert_one({
-            "id": str(uuid.uuid4()), "user_id": user_id,
-            "counterparty_id": cp["id"], "type": "spend",
-            "amount": total, "balance_after": new_balance,
-            "debt_after": debt_after,
-            "related_liability_id": liab_id,
-            "description": f"مزامنة مجدولة من {cp['ad_provider']} ({from_date} → {to_date})",
-            "breakdown": {"from_balance": covered, "uncovered": uncovered,
-                          "mode": mode, "auto_cron": True,
-                          "source_collection": source,
-                          "created_debt": uncovered if mode == "auto" else 0.0},
-            "date": to_date, "created_at": _now(),
-        })
-        out.append({
-            "id": cp["id"], "name": cp["name"], "spend": total,
-            "covered": covered, "uncovered": uncovered,
-            "debt_created": uncovered if mode == "auto" else 0.0,
-            "source_collection": source,
-        })
+        mode = cp.get("debt_mode") or "auto"
+        balance_before = float(cp.get("balance") or 0)
+
+        if delta > 0:
+            # Apply DELTA as additional spend.
+            covered = min(delta, balance_before)
+            uncovered = round(delta - covered, 2)
+            new_balance = round(balance_before - covered, 2)
+            await db.counterparties.update_one(
+                {"id": cp["id"]},
+                {"$set": {"balance": new_balance,
+                          "last_auto_sync_date": to_date,
+                          "last_auto_sync_at": _now(),
+                          "updated_at": _now()}},
+            )
+            liab_id, debt_after = await _apply_uncovered(
+                db, user_id, cp, uncovered, mode, to_date,
+                description=f"مديونية تلقائية (cron) — {cp['name']}",
+                source_tag="ad_account_cron",
+            )
+            await db.ad_account_ledger.insert_one({
+                "id": str(uuid.uuid4()), "user_id": user_id,
+                "counterparty_id": cp["id"], "type": "spend",
+                "amount": delta, "balance_after": new_balance,
+                "debt_after": debt_after,
+                "related_liability_id": liab_id,
+                "description": f"مزامنة مجدولة من {cp['ad_provider']} ({from_date} → {to_date})",
+                "breakdown": {"from_balance": covered, "uncovered": uncovered,
+                              "mode": mode, "auto_cron": True,
+                              "source_collection": source,
+                              "created_debt": uncovered if mode == "auto" else 0.0,
+                              "delta_applied": delta,
+                              "platform_total": total,
+                              "prev_total_applied": prev_total_applied},
+                "date": to_date, "created_at": _now(),
+            })
+            out.append({
+                "id": cp["id"], "name": cp["name"], "spend": total,
+                "covered": covered, "uncovered": uncovered,
+                "debt_created": uncovered if mode == "auto" else 0.0,
+                "source_collection": source,
+                "delta_applied": delta,
+                "prev_total_applied": prev_total_applied,
+            })
+        else:
+            # delta < 0 — platform reported LESS than what we already
+            # logged today (rare correction). Refund the absolute delta
+            # to the balance and record a correction ledger row. We do
+            # NOT touch existing liabilities — if the user wants to
+            # reduce a paid liability, that's a separate manual action.
+            refund = round(-delta, 2)
+            new_balance = round(balance_before + refund, 2)
+            await db.counterparties.update_one(
+                {"id": cp["id"]},
+                {"$set": {"balance": new_balance,
+                          "last_auto_sync_date": to_date,
+                          "last_auto_sync_at": _now(),
+                          "updated_at": _now()}},
+            )
+            await db.ad_account_ledger.insert_one({
+                "id": str(uuid.uuid4()), "user_id": user_id,
+                "counterparty_id": cp["id"], "type": "spend",
+                "amount": delta,  # negative — keeps sum() consistent
+                "balance_after": new_balance,
+                "debt_after": 0.0,
+                "related_liability_id": None,
+                "description": f"تصحيح مزامنة (إنخفاض إنفاق) — {cp['ad_provider']}",
+                "breakdown": {"from_balance": 0.0, "uncovered": 0.0,
+                              "mode": mode, "auto_cron": True,
+                              "source_collection": source,
+                              "created_debt": 0.0,
+                              "correction": True,
+                              "delta_applied": delta,
+                              "platform_total": total,
+                              "prev_total_applied": prev_total_applied},
+                "date": to_date, "created_at": _now(),
+            })
+            out.append({
+                "id": cp["id"], "name": cp["name"], "spend": total,
+                "covered": 0.0, "uncovered": 0.0,
+                "debt_created": 0.0,
+                "source_collection": source,
+                "delta_applied": delta,
+                "prev_total_applied": prev_total_applied,
+                "correction": True,
+            })
     return out
 
 
