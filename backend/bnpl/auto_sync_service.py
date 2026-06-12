@@ -364,16 +364,38 @@ async def run_tamara_attribution_sweep(db) -> Dict[str, Any]:
 
     total_scanned = 0
     total_updated = 0
+    total_captured_extracted = 0
     per_user: Dict[str, Dict[str, int]] = {}
     for uid in user_ids:
         u_scanned = 0
         u_updated = 0
+        u_captured = 0
         try:
             async for d in db.payment_transactions.find(
                 {"user_id": uid, "provider": "tamara"},
-                {"_id": 0, "id": 1},
+                {"_id": 0, "id": 1, "captured_at_provider": 1, "raw_payload": 1},
             ):
                 u_scanned += 1
+                # Iter-147 v2 — opportunistically extract
+                # captured_at_provider from raw_payload.captures[]
+                # for rows that pre-date the field being native.
+                if not d.get("captured_at_provider"):
+                    raw = d.get("raw_payload") or {}
+                    captures = raw.get("captures") or []
+                    earliest = None
+                    for cap in captures:
+                        if not isinstance(cap, dict):
+                            continue
+                        ts = (cap.get("created_at") or cap.get("captured_at")
+                              or cap.get("date"))
+                        if ts and (earliest is None or str(ts) < str(earliest)):
+                            earliest = str(ts)
+                    if earliest:
+                        await db.payment_transactions.update_one(
+                            {"user_id": uid, "id": d["id"]},
+                            {"$set": {"captured_at_provider": earliest}},
+                        )
+                        u_captured += 1
                 r = await recompute_attribution_for_doc(
                     db, user_id=uid, txn_id=d.get("id"),
                 )
@@ -383,9 +405,13 @@ async def run_tamara_attribution_sweep(db) -> Dict[str, Any]:
             logger.warning(
                 "iter-147 attribution sweep: user=%s failed: %s", uid, e,
             )
-        per_user[uid] = {"scanned": u_scanned, "updated": u_updated}
+        per_user[uid] = {
+            "scanned": u_scanned, "updated": u_updated,
+            "captured_extracted": u_captured,
+        }
         total_scanned += u_scanned
         total_updated += u_updated
+        total_captured_extracted += u_captured
 
     summary = {
         "id": str(uuid.uuid4()),
@@ -395,11 +421,12 @@ async def run_tamara_attribution_sweep(db) -> Dict[str, Any]:
         "duration_seconds": round(
             (datetime.now(timezone.utc) - started_dt).total_seconds(), 1,
         ),
-        "users_processed": len(user_ids),
-        "rows_scanned":    total_scanned,
-        "rows_updated":    total_updated,
+        "users_processed":   len(user_ids),
+        "rows_scanned":      total_scanned,
+        "rows_updated":      total_updated,
+        "captured_extracted": total_captured_extracted,
         # cap to keep the log doc small
-        "per_user_sample": dict(list(per_user.items())[:25]),
+        "per_user_sample":   dict(list(per_user.items())[:25]),
     }
     try:
         await db.bnpl_auto_sync_runs.insert_one(summary)

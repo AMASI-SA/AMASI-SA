@@ -38,6 +38,7 @@ from typing import Any, Dict, Optional, Tuple
 
 
 SETTLEMENT_SOURCE_OFFICIAL  = "provider_official"
+SETTLEMENT_SOURCE_CAPTURED  = "provider_captured"
 SETTLEMENT_SOURCE_BILLING   = "billing_eligible"
 SETTLEMENT_SOURCE_ESTIMATED = "estimated"
 
@@ -54,28 +55,44 @@ def compute_attribution(doc: Dict[str, Any]) -> Tuple[Optional[str], str]:
     """Apply the priority rule and return the pair
     `(effective_settlement_date, settlement_source)`.
 
+    Priority (highest → lowest):
+      1. provider_official   — imported Tamara settlement file says
+         this order is in a specific weekly invoice.
+      2. provider_captured   — Tamara API recorded a capture event for
+         the order.  Tamara settles by CAPTURE DATE, so this matches
+         their statement perfectly.
+      3. billing_eligible    — order reached a billable status in our
+         system (shipped / prepared / delivered…).  Used when Tamara
+         hasn't reported a capture yet (e.g., the merchant captures
+         outside Tamara API).
+      4. estimated           — last-resort fallback to created_at_provider.
+
     Returns `(None, 'estimated')` when even `created_at_provider` is
-    missing — caller should NOT write the row in that case.
+    missing.
     """
     # 1. provider_official — any of these wins.
     psd = _norm_date(doc.get("provider_settlement_date"))
     if psd or doc.get("provider_settlement_id") or doc.get("provider_invoice_id"):
-        # Prefer the actual settlement DATE if present, else payout_date,
-        # else fall back to billing_eligible_at as a date proxy.
         effective = (
             psd
             or _norm_date(doc.get("provider_payout_date"))
+            or _norm_date(doc.get("captured_at_provider"))
             or _norm_date(doc.get("billing_eligible_at"))
             or _norm_date(doc.get("created_at_provider"))
         )
         return effective, SETTLEMENT_SOURCE_OFFICIAL
 
-    # 2. billing_eligible — from Iter-146 status transition.
+    # 2. provider_captured — Tamara's own capture-event timestamp.
+    cap = _norm_date(doc.get("captured_at_provider"))
+    if cap:
+        return cap, SETTLEMENT_SOURCE_CAPTURED
+
+    # 3. billing_eligible — Iter-146 status-driven stamp.
     be = _norm_date(doc.get("billing_eligible_at"))
     if be:
         return be, SETTLEMENT_SOURCE_BILLING
 
-    # 3. estimated — last resort.
+    # 4. estimated — last resort.
     return _norm_date(doc.get("created_at_provider")), SETTLEMENT_SOURCE_ESTIMATED
 
 

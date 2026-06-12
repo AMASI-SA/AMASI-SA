@@ -46,6 +46,12 @@ def _normalise_tamara_order(order: Dict[str, Any], user_id: str) -> Dict[str, An
     paths call `mark_billing_eligible_for_order` after upsert, which
     guarantees first-stamp-wins idempotency.  See
     `_tamara_billing_eligible_event` for the timestamp helper.
+
+    Iter-147 v2 — `captured_at_provider` is extracted from the FIRST
+    capture event Tamara recorded for this order.  Tamara uses the
+    capture date (not the order creation date or status-change date)
+    to assign an order to its weekly settlement file, so we treat the
+    capture timestamp as a stronger signal than `billing_eligible_at`.
     """
     total = order.get("total_amount") or {}
     captured = order.get("captured_amount") or order.get("total_captured_amount") or {}
@@ -63,7 +69,22 @@ def _normalise_tamara_order(order: Dict[str, Any], user_id: str) -> Dict[str, An
             return 0.0
 
     consumer = order.get("consumer") or {}
-    return {
+
+    # Earliest capture timestamp — Tamara settles by capture date.
+    captured_at_provider: Optional[str] = None
+    for cap in (order.get("captures") or []):
+        if not isinstance(cap, dict):
+            continue
+        ts = (
+            cap.get("created_at")
+            or cap.get("captured_at")
+            or cap.get("created_at_provider")
+            or cap.get("date")
+        )
+        if ts and (captured_at_provider is None or str(ts) < str(captured_at_provider)):
+            captured_at_provider = str(ts)
+
+    out: Dict[str, Any] = {
         "id": str(uuid.uuid4()),
         "user_id": user_id,
         "provider": "tamara",
@@ -82,6 +103,9 @@ def _normalise_tamara_order(order: Dict[str, Any], user_id: str) -> Dict[str, An
         "raw_payload": order,
         "synced_at": _now_iso(),
     }
+    if captured_at_provider:
+        out["captured_at_provider"] = captured_at_provider
+    return out
 
 
 def _tamara_billing_eligible_event(order: Dict[str, Any]) -> Optional[str]:

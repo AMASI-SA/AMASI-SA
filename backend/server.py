@@ -3090,6 +3090,10 @@ async def on_startup():
     # refunds still match by `refunded_at`, producing negative
     # net-sales rows in the weekly invoice UI.  Runs in the background
     # so it doesn't block startup.
+    #
+    # Iter-147 v2 — also runs when there are rows with raw_payload
+    # captures[] but no `captured_at_provider` extracted yet (the new
+    # capture-date priority needs that field populated).
     async def _tamara_attribution_startup_migration():
         # Tiny stagger so MongoDB / indexes finish initialising first.
         await _asyncio.sleep(15)
@@ -3102,19 +3106,34 @@ async def on_startup():
                     {"effective_settlement_date": ""},
                 ],
             })
-            if unattributed == 0:
+            # Iter-147 v2 — also count rows where captured_at_provider
+            # was never populated.  Even if effective_settlement_date
+            # exists, we may want to re-attribute with a stronger
+            # capture-date signal.
+            uncaptured = await db.payment_transactions.count_documents({
+                "provider": "tamara",
+                "$or": [
+                    {"captured_at_provider": {"$exists": False}},
+                    {"captured_at_provider": None},
+                    {"captured_at_provider": ""},
+                ],
+                "raw_payload.captures.0": {"$exists": True},
+            })
+            if unattributed == 0 and uncaptured == 0:
                 logger.info("iter-147: startup migration — nothing to backfill")
                 return
             logger.info(
-                "iter-147: startup migration — backfilling %d legacy Tamara rows",
-                unattributed,
+                "iter-147: startup migration — unattributed=%d uncaptured=%d",
+                unattributed, uncaptured,
             )
             summary = await run_tamara_attribution_sweep(db)
             logger.info(
-                "iter-147: startup migration done — users=%d scanned=%d updated=%d",
+                "iter-147: startup migration done — users=%d scanned=%d "
+                "updated=%d captured_extracted=%d",
                 summary.get("users_processed", 0),
                 summary.get("rows_scanned", 0),
                 summary.get("rows_updated", 0),
+                summary.get("captured_extracted", 0),
             )
         except Exception as e:
             logger.exception("iter-147: startup migration failed: %s", e)

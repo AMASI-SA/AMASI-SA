@@ -550,23 +550,53 @@ def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
     async def attribution_recompute(user: dict = Depends(current_user)):
         """Walk EVERY Tamara payment_transactions row and refresh
         `effective_settlement_date` + `settlement_source` based on the
-        current state of (provider_settlement_date, billing_eligible_at,
-        created_at_provider).  Idempotent — safe to run repeatedly."""
+        current state of (provider_settlement_date, captured_at_provider,
+        billing_eligible_at, created_at_provider).  Idempotent — safe
+        to run repeatedly.
+
+        Iter-147 v2 — also opportunistically extracts
+        `captured_at_provider` from existing `raw_payload.captures[]`
+        for rows that pre-date the field being persisted natively.
+        """
         from .settlement_attribution import recompute_attribution_for_doc
         uid = user["id"]
         scanned = 0
         updated = 0
+        captured_extracted = 0
         async for d in db.payment_transactions.find(
             {"user_id": uid, "provider": "tamara"},
-            {"_id": 0, "id": 1},
+            {"_id": 0, "id": 1, "captured_at_provider": 1, "raw_payload": 1},
         ):
             scanned += 1
+            # Extract captured_at_provider from raw_payload.captures[] if missing.
+            if not d.get("captured_at_provider"):
+                raw = d.get("raw_payload") or {}
+                captures = raw.get("captures") or []
+                earliest: str | None = None
+                for cap in captures:
+                    if not isinstance(cap, dict):
+                        continue
+                    ts = (cap.get("created_at") or cap.get("captured_at")
+                          or cap.get("date"))
+                    if ts and (earliest is None or str(ts) < str(earliest)):
+                        earliest = str(ts)
+                if earliest:
+                    await db.payment_transactions.update_one(
+                        {"user_id": uid, "id": d["id"]},
+                        {"$set": {"captured_at_provider": earliest}},
+                    )
+                    captured_extracted += 1
             r = await recompute_attribution_for_doc(
                 db, user_id=uid, txn_id=d.get("id"),
             )
             if r.get("updated"):
                 updated += 1
-        return {"ok": True, "scanned": scanned, "updated": updated}
+        return {
+            "ok": True,
+            "scanned": scanned,
+            "updated": updated,
+            "captured_at_provider_extracted": captured_extracted,
+        }
 
     @router.get("/tamara/attribution/log")
     async def attribution_log(
