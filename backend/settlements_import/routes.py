@@ -79,4 +79,66 @@ def attach_payment_settlements_routes(api_router: APIRouter, db) -> None:
     async def analytics(user: dict = Depends(current_user)):
         return await coverage_analytics(db, user["id"])
 
+    # ── Iter-156 — Salla-specific analytics for the new
+    # SallaSettlements page (file list + per-payment-method breakdown).
+    @router.get("/_analytics/salla")
+    async def salla_analytics(
+        user: dict = Depends(current_user),
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ):
+        files = await db.settlement_files.find(
+            {"user_id": user["id"], "provider": "salla"},
+            {"_id": 0},
+        ).sort("uploaded_at", -1).to_list(500)
+
+        # Aggregate per-payment-method across all entries belonging to
+        # Salla files of this user.
+        entries_pipeline = [
+            {"$match": {"user_id": user["id"], "provider": "salla",
+                        "event_type": {"$in": ["sale", "refund"]}}},
+            {"$group": {
+                "_id": "$actual_payment_method",
+                "count": {"$sum": 1},
+                "gross": {"$sum": "$actual_gross_amount"},
+                "fees": {"$sum": "$actual_payment_fee"},
+                "vat": {"$sum": "$actual_payment_vat"},
+                "net": {"$sum": "$actual_net_amount"},
+                "refund_full": {"$sum": "$actual_refund_amount"},
+                "refund_partial": {"$sum": "$actual_partial_refund_amount"},
+            }},
+            {"$sort": {"net": -1}},
+        ]
+        per_method = []
+        async for r in db.settlement_entries.aggregate(entries_pipeline):
+            per_method.append({
+                "payment_method": r["_id"] or "unknown",
+                "count": r["count"],
+                "gross": round(r.get("gross") or 0, 2),
+                "fees": round(r.get("fees") or 0, 2),
+                "vat": round(r.get("vat") or 0, 2),
+                "net": round(r.get("net") or 0, 2),
+                "refund_full": round(r.get("refund_full") or 0, 2),
+                "refund_partial": round(r.get("refund_partial") or 0, 2),
+                "effective_fee_rate": round(
+                    (r["fees"] / r["gross"]) * 100 if (r.get("gross") or 0) > 0 else 0,
+                    2,
+                ),
+            })
+
+        totals = {
+            "files": len(files),
+            "gross": round(sum(m["gross"] for m in per_method), 2),
+            "fees": round(sum(m["fees"] for m in per_method), 2),
+            "vat": round(sum(m["vat"] for m in per_method), 2),
+            "net": round(sum(m["net"] for m in per_method), 2),
+            "refund_full": round(sum(m["refund_full"] for m in per_method), 2),
+            "refund_partial": round(sum(m["refund_partial"] for m in per_method), 2),
+        }
+        return {
+            "files": files,
+            "per_method": per_method,
+            "totals": totals,
+        }
+
     api_router.include_router(router)

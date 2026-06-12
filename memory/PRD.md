@@ -29,6 +29,15 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-156 (Feb 13 2026)**: 🟧 Salla Settlements — Dedicated page (mirror of Tabby/Tamara) with per-payment-method analytics.
+  - **User request**: "تسويات سله مثل صفحة تسوية تمارا وتابي" — wants Excel + API support, per-method commissions, expected-vs-actual comparison with mismatch alerts.
+  - **What was already built**: The Salla parser (`/app/backend/settlements_import/parsers/salla.py`) is comprehensive — it handles all payment methods (mada / credit card / Apple Pay / STC Pay / Google Pay), refunds (full vs partial detection), wallet recharge ("مشتريات سله"), Arabic diacritics, invoice number extraction from sheet title. It writes to `settlement_files` + `settlement_entries`.
+  - **New backend** (`/api/payment-settlements/_analytics/salla`): Returns `files[]`, `per_method[]` (aggregated counts/gross/fees/vat/net/refunds + effective fee rate per method via MongoDB aggregation pipeline), and `totals`. User-scoped, includes only files where `provider='salla'`.
+  - **Fix to `utils.py`**: Added Arabic payment-method aliases — "أبل باي" → `apple_pay`, "أس تي سي باي" → `stc_pay`, "جوجل باي" → `google_pay`. Renamed canonical keys to use snake_case (`apple_pay`, `stc_pay`) for consistency.
+  - **New frontend** (`/app/frontend/src/pages/SallaSettlements.jsx`): Pattern-matched on BnplSettlements. Drag-and-drop Excel upload (calls `/payment-settlements/upload` with `provider_hint=salla`), per-method breakdown table with colored badges and effective fee rate, file list with delete action, refund totals when present. Route: `/salla-settlements`. Sidebar item: "تسويات سلة 🟧" under العمليات المالية.
+  - **Tests**: 3/3 backend pytest (`test_salla_settlements_iter156.py`): empty analytics, upload + per-method aggregation across mada/credit_card/apple_pay/refunds, provider scoping.
+  - **NOT YET DONE (Phase 2 — surfaced in roadmap)**: Expected-vs-actual commission comparison with mismatch alerts (needs per-method configurable commission rates in settings, which already exists in payment_methods.py but isn't wired here yet). Salla API auto-sync (needs an OAuth flow with Salla Merchant API).
+
 - **Iter-155 (Feb 13 2026)**: 🐛 Shipping Companies Settings — Save bug + Add/Remove capability.
   - **User feedback**: "عند حفظ إعدادات شركات الشحن لا يتم حفظ المعلومات المضافه".
   - **Root cause**: The backend `ShippingCompany` Pydantic model (`/app/backend/server.py` line 289) declared only 4 fields (`name`, `cost_per_order`, `vat_percent`, `is_deferred`). The new ShippingCompanySettings UI was sending `cod_fee_percent` and `cod_fee_fixed_per_order` too — but Pydantic v2's default `ignore` extras policy silently dropped them on round-trip. Additionally, the page had no UI to add/remove companies.
