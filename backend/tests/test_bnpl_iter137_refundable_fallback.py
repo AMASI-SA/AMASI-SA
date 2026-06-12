@@ -116,23 +116,24 @@ async def test_auto_mode_ignores_stale_doc_values():
 
 @pytest.mark.asyncio
 async def test_tamara_canonical_default_is_full_seven_percent():
+    """Iter-145 — Tamara's official invoice contract is 6.99% MDR +
+    1.50 SAR fixed/order, NOT 7% with no fixed fee.  Refundable rate
+    equals full MDR (Tamara doesn't split refundable like Tabby)."""
     db = _StubDB(
         user_doc={
             "id": "u1",
             "settings": {"payment_methods": [
-                {"name": "تمارا", "commission_percent": 7.0,
-                 "vat_percent": 15.0, "fixed_fee": 0.0},
+                {"name": "تمارا", "commission_percent": 6.99,
+                 "vat_percent": 15.0, "fixed_fee": 1.50},
             ]},
         },
         bnpl_doc={
             "user_id": "u1", "provider": "tamara",
-            "mdr_percent": 0.07,
-            # No refundable_commission_percent
+            "mdr_percent": 0.0699,
         },
     )
     rates = await svc._merchant_fee_rates(db, "u1", "tamara")
-    # Tamara refunds the full commission, so canonical refundable = 7%
-    assert rates["refundable_commission_pct"] == pytest.approx(7.00)
+    assert rates["refundable_commission_pct"] == pytest.approx(6.99)
 
 
 def test_default_fee_rates_dict_is_in_sync_with_config_store():

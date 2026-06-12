@@ -260,10 +260,10 @@ const AUTO_PRESETS = {
         settlement_fee_vat_applicable: true,
     },
     tamara: {
-        mdr_percent: 0.07,
-        fixed_fee_per_order: 0.0,
+        mdr_percent: 0.0699,
+        fixed_fee_per_order: 1.50,
         vat_on_fees_percent: 0.15,
-        refundable_commission_percent: 0.07,
+        refundable_commission_percent: 0.0699,
         settlement_fee_per_invoice: 0.0,
         settlement_fee_vat_applicable: true,
     },
