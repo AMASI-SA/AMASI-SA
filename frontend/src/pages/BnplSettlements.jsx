@@ -507,10 +507,12 @@ export default function BnplSettlements() {
                                             // Iter-131 — show the SPECIFIC matched transfer (not the
                                             // cumulative 14-day window) in the "المحوَّل" column so
                                             // the merchant sees the exact Tabby/Tamara payout that
-                                            // settled THIS invoice.  Near-miss (over/under) rows
-                                            // keep zero here — their amount is surfaced in the
-                                            // "المطابقة البنكية" column with the warning badge.
-                                            const effTransferred = (status === "matched" && mt)
+                                            // settled THIS invoice.
+                                            // Iter-145 — also surface near-miss (over/under)
+                                            // transfer amounts so the merchant doesn't see "—"
+                                            // when a real transfer landed but fell just outside
+                                            // the auto-match tolerance.
+                                            const effTransferred = mt
                                                 ? Number(mt.amount || 0)
                                                 : 0;
                                             const effRemaining = Number(
@@ -545,7 +547,9 @@ export default function BnplSettlements() {
                                                     data-testid={`bnpl-weekly-transferred-${r.invoice_no}`}
                                                     title={status === "matched"
                                                         ? "قيمة التحويل البنكي المطابق لهذه الفاتورة"
-                                                        : "لم يُطابَق تحويل بنكي مع هذه الفاتورة"}
+                                                        : (mt
+                                                            ? "أقرب تحويل بنكي ضمن النافذة — لم يُطابَق تلقائياً بسبب فرق خارج التسامح"
+                                                            : "لم يُطابَق تحويل بنكي مع هذه الفاتورة")}
                                                 >
                                                     {effTransferred ? fmt(effTransferred) : "—"}
                                                 </td>
@@ -610,16 +614,26 @@ export default function BnplSettlements() {
                                                 {fmt(weekly[weeklyOpen].totals?.settlement_fee_vat)}
                                             </td>
                                             <td className="p-2 num font-extrabold text-emerald-700">{fmt(weekly[weeklyOpen].totals?.net_payable)}</td>
-                                            {/* Iter-131 — totals reflect the matched transfers only. */}
+                                            {/* Iter-145 — totals reflect ALL surfaced transfers
+                                              (matched + near-miss over/under) so the merchant
+                                              sees the actual bank movement, not only auto-matched. */}
                                             <td className="p-2 num" data-testid="bnpl-weekly-transferred-total">
-                                                {fmt(weekly[weeklyOpen].matchTotals?.matched_amount || 0)}
+                                                {fmt(
+                                                    (weekly[weeklyOpen].rows || []).reduce((s, r) => {
+                                                        const m = weekly[weeklyOpen].matchByInv?.[r.invoice_no];
+                                                        return s + Number(m?.matched_transfer?.amount || 0);
+                                                    }, 0)
+                                                )}
                                             </td>
                                             <td className="p-2 num" data-testid="bnpl-weekly-remaining-total">
                                                 {fmt(
                                                     Number(
                                                         (
                                                             Number(weekly[weeklyOpen].totals?.net_payable || 0)
-                                                            - Number(weekly[weeklyOpen].matchTotals?.matched_amount || 0)
+                                                            - (weekly[weeklyOpen].rows || []).reduce((s, r) => {
+                                                                const m = weekly[weeklyOpen].matchByInv?.[r.invoice_no];
+                                                                return s + Number(m?.matched_transfer?.amount || 0);
+                                                            }, 0)
                                                         ).toFixed(2)
                                                     )
                                                 )}

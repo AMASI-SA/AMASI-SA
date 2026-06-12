@@ -178,6 +178,7 @@
 - **Iter-121 (Feb 2026)**: Weekday-based settlement cycle.
 - **Iter-120 (Feb 2026)**: Refund-Date-Based Aggregation + period drill-down.
 - **Iter-119 (Feb 2026)**: BNPL SSOT + auto-matching engine.
+- **Iter-145 (Feb 2026)**: BNPL Settlements UI — show transferred amount for near-miss (over/under) invoices, not only auto-matched. Totals row reflects all surfaced transfers.
 - Iter-118: Search-based counterparty + cumulative balance.
 - Iter-117: BNPL SSOT unification.
 - Iter-116: Phase 4 weekly settlements UI.
