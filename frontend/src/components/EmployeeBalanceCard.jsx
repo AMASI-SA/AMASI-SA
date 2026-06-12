@@ -18,6 +18,7 @@
  * changes.  This card is read-only.
  */
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import api from "../lib/api";
 
 
@@ -234,6 +235,43 @@ export function SalaryAccrualSummaryCard({
     }
     if (!data) return null;
 
+    // Iter-151d — Data hygiene action. Surface a small "تنظيف بيانات
+    // قديمة" link when the merchant might benefit from clearing stale
+    // partial rows that block the pay-liability dropdown. Defensive
+    // dry-run first so we never delete/mutate unknowingly.
+    const runCleanup = async () => {
+        try {
+            // 1) Dry run to count
+            const { data: dry } = await api.post(
+                "/liabilities/admin/cleanup-stale-partial?dry_run=true"
+            );
+            const n = dry.candidates_found || 0;
+            if (n === 0) {
+                toast.info("لا توجد سطور تالفة تحتاج تنظيف");
+                return;
+            }
+            const ok = window.confirm(
+                `تم العثور على ${n} سطر التزام بحالة "جزئي" لكنه مدفوع بالكامل ` +
+                `وقد يمنع تسجيل أي راتب جديد.\n\nهل تريد إصلاحها (status=paid) الآن؟`
+            );
+            if (!ok) return;
+            const { data: res } = await api.post(
+                "/liabilities/admin/cleanup-stale-partial"
+            );
+            toast.success(
+                `تم إصلاح ${res.updated || 0} من ${res.candidates_found || 0} سطر`
+            );
+            // Trigger refresh via onLoaded callback if parent listens
+            const { data: reloaded } = await api.get(
+                "/liabilities/salary-accrual-summary"
+            );
+            setData(reloaded);
+            onLoaded?.(reloaded);
+        } catch (e) {
+            toast.error("تعذّر تشغيل أداة التنظيف");
+        }
+    };
+
     return (
         <div className={className} data-testid="salary-accrual-summary">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
@@ -241,6 +279,19 @@ export function SalaryAccrualSummaryCard({
                 <Box label="إجمالي السلف المفتوحة" value={data.advances_total} tone="amber" testid="sa-total-advances" />
                 <Box label="إجمالي المدفوع" value={data.paid_total} tone="emerald" testid="sa-total-paid" />
                 <Box label="صافي المستحق للموظفين" value={data.net_due} tone="rose" bold testid="sa-total-net-due" />
+            </div>
+
+            {/* Iter-151d — Data hygiene action */}
+            <div className="mb-3 flex items-center justify-end">
+                <button
+                    type="button"
+                    onClick={runCleanup}
+                    className="text-[11px] text-slate-500 hover:text-rose-700 underline decoration-dotted underline-offset-2"
+                    data-testid="cleanup-stale-partial-btn"
+                    title="إصلاح سطور الالتزام المدفوعة بالكامل لكنها تحتفظ بحالة جزئية — يمنع تكرار خطأ &quot;المتبقي 0.00&quot; عند سداد الرواتب"
+                >
+                    🔧 تنظيف بيانات الالتزامات القديمة
+                </button>
             </div>
 
             {showEmployeeTable && (

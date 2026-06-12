@@ -29,6 +29,13 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-151d (Feb 13 2026)**: 🧹 Data Hygiene — One-click "Clean up stale partial liabilities".
+  - **Why**: The Iter-151c shortfall-virtual-entry logic LAYERS AROUND stale `partial`-but-fully-paid rows. To eliminate the root cause once and for all, the merchant now has a self-service button.
+  - **Endpoint** (`POST /api/liabilities/admin/cleanup-stale-partial`): User-scoped. Finds rows with `status='partial'` AND `paid_amount + 0.01 >= expected_amount`, flips them to `status='paid'`, and returns a sample of fixed rows for audit. Supports `?dry_run=true` to show the count first without mutating.
+  - **UI** (`/app/frontend/src/components/EmployeeBalanceCard.jsx` → `SalaryAccrualSummaryCard`): Discreet underlined link **"🔧 تنظيف بيانات الالتزامات القديمة"** under the four-box totals. Click → dry-run shows count → confirm dialog → real cleanup → toast + auto-refresh.
+  - **Tests**: 4/4 backend pytest (`test_cleanup_stale_partial_iter151d.py`): dry-run preserves state, real run fixes stale + leaves healthy partial rows alone, returns 0/0 when no candidates, and is strictly user-scoped (never touches another tenant's data).
+  - **Visible on**: Operating Expenses page (`/operating-expenses`) → الرواتب الشهرية tab. (The card is shared across Dashboard + Reports, so the button appears anywhere `SalaryAccrualSummaryCard` is rendered.)
+
 - **Iter-151c (Feb 13 2026)**: 🐛 Pay-Liability Search — "shortfall virtual entry" for stale partial rows.
   - **Bug**: User reported on production: شهاب التراكمي 4200 ر.س لكن الزر يرفض السداد بـ "المبلغ أكبر من المتبقي (0.00)". تشخيص iter-151b كان جزئياً.
   - **Real root cause**: Even after the iter-151b fixes, if the employee had an EXISTING open salary liability with `remaining=0` (e.g. stale `partial` row with paid==expected from a prior advance-offset round), the virtual-entry branch was SKIPPED because `groups.has(empKey)` was already true. The merchant got stuck on the zero-remain row.

@@ -571,6 +571,51 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         return await get_current_user_from_db(request, db)
     router = APIRouter(prefix="/liabilities", tags=["liabilities"])
 
+    # ── POST /admin/cleanup-stale-partial ──────────────────────────────
+    # Iter-151d — Data hygiene endpoint. Finds liabilities flagged
+    # `status='partial'` but whose `paid_amount` actually equals (or
+    # exceeds, within rounding tolerance) `expected_amount`. These
+    # rows trip up the pay-liability dropdown because they leak into
+    # `openLiabilities` with `remaining_amount = 0`, blocking the
+    # merchant from creating fresh topup rows for the same employee.
+    # Cause: legacy advance-offset rounds before Iter-151 that
+    # incremented paid_amount without bumping status. The fix is to
+    # flip them to `status='paid'`. Caller can pass `dry_run=true` to
+    # see the count first.
+    @router.post("/admin/cleanup-stale-partial")
+    async def cleanup_stale_partial(
+        dry_run: bool = Query(False),
+        user: dict = Depends(current_user),
+    ):
+        candidates = await db.liabilities.find({
+            "user_id": user["id"],
+            "status": "partial",
+        }, {"_id": 0}).to_list(10000)
+        stale = [
+            l for l in candidates
+            if (float(l.get("paid_amount") or 0) + 0.01
+                >= float(l.get("expected_amount") or 0))
+            and float(l.get("expected_amount") or 0) > 0
+        ]
+        sample = [{
+            "id": l["id"], "kind": l.get("kind"),
+            "counterparty_name": l.get("counterparty_name"),
+            "description": l.get("description"),
+            "expected_amount": float(l.get("expected_amount") or 0),
+            "paid_amount": float(l.get("paid_amount") or 0),
+            "period_key": l.get("period_key"),
+        } for l in stale[:50]]
+        if dry_run or not stale:
+            return {"ok": True, "dry_run": dry_run, "candidates_found": len(stale),
+                    "sample": sample, "updated": 0}
+        ids = [l["id"] for l in stale]
+        res = await db.liabilities.update_many(
+            {"user_id": user["id"], "id": {"$in": ids}, "status": "partial"},
+            {"$set": {"status": "paid", "updated_at": _now()}},
+        )
+        return {"ok": True, "dry_run": False, "candidates_found": len(stale),
+                "sample": sample, "updated": res.modified_count}
+
     # ── POST /generate-salaries ────────────────────────────────────────
     @router.post("/generate-salaries")
     async def generate_salaries(
