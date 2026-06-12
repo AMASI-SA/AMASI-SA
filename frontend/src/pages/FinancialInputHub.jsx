@@ -1048,7 +1048,32 @@ function ShippingPaymentForm({ banks, onSaved }) {
         invoice_number: "", paid_from_account_id: "", note: "",
     });
     const [busy, setBusy] = useState(false);
+    // Iter-143 — searchable shipping-company picker that exposes
+    // each company's CURRENT remaining balance (مستحق عليك /
+    // زائد سداد) so the merchant decides who to pay informed.
+    const [companies, setCompanies] = useState([]);
+    const [query, setQuery] = useState("");
+    const [shipOpen, setShipOpen] = useState(false);
+    useEffect(() => {
+        let alive = true;
+        api.get("/shipping-accounts")
+            .then(({ data }) => {
+                if (!alive) return;
+                setCompanies(data.accounts || []);
+            })
+            .catch(() => { });
+        return () => { alive = false; };
+    }, []);
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+    const filteredCompanies = (() => {
+        const q = (query || form.company_name || "").trim().toLowerCase();
+        const base = companies.slice().sort((a, b) => (b.remaining || 0) - (a.remaining || 0));
+        if (!q) return base.slice(0, 12);
+        return base.filter((c) => (c.name || "").toLowerCase().includes(q)).slice(0, 12);
+    })();
+    const selectedCompany = companies.find((c) => c.name === form.company_name) || null;
+
     const submit = async () => {
         if (!form.company_name.trim()) { toast.error("اسم شركة الشحن مطلوب"); return; }
         if (!Number(form.amount)) { toast.error("أدخل المبلغ"); return; }
@@ -1067,6 +1092,8 @@ function ShippingPaymentForm({ banks, onSaved }) {
                 toast.warning("تم تسجيل الدفعة بدون ربطها بحساب بنكي، لذلك لن تؤثر على رصيد البنك.");
             }
             setForm({ ...form, amount: "", invoice_number: "", note: "" });
+            // Refresh balances so the dropdown reflects the new payment.
+            api.get("/shipping-accounts").then(({ data }) => setCompanies(data.accounts || [])).catch(() => { });
             onSaved();
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail));
@@ -1074,16 +1101,113 @@ function ShippingPaymentForm({ banks, onSaved }) {
     };
     return (
         <SectionCard title="دفعة شركة شحن" Icon={Truck} hint="تُسدَّد للمستحقات الآجلة للشركة وتُخصم من البنك المختار" onSubmit={submit} busy={busy}>
-            <Field label="شركة الشحن" required>
-                <input list="ship-co" value={form.company_name} onChange={(e) => set("company_name", e.target.value)} className={inputCls} placeholder="سمسا، أيميل، مندوب الرياض…" data-testid="ship-company" />
-                <datalist id="ship-co">
-                    <option value="سمسا" />
-                    <option value="أيميل" />
-                    <option value="مندوب الرياض" />
-                    <option value="Aramex" />
-                    <option value="SPL" />
-                </datalist>
+            <Field label="شركة الشحن" required full>
+                <div className="relative">
+                    <input
+                        value={form.company_name || query}
+                        onChange={(e) => {
+                            setQuery(e.target.value);
+                            set("company_name", e.target.value);
+                            setShipOpen(true);
+                        }}
+                        onFocus={() => setShipOpen(true)}
+                        onBlur={() => setTimeout(() => setShipOpen(false), 200)}
+                        className={inputCls}
+                        placeholder="ابحث عن شركة الشحن… (سمسا، أيميل، Aramex…)"
+                        data-testid="ship-company"
+                        autoComplete="off"
+                    />
+                    {form.company_name && (
+                        <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => { set("company_name", ""); setQuery(""); }}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 text-lg"
+                            data-testid="ship-company-clear"
+                            title="إلغاء"
+                        >✕</button>
+                    )}
+                    {shipOpen && filteredCompanies.length > 0 && (
+                        <ul
+                            className="absolute z-30 mt-1 w-full max-h-72 overflow-auto rounded-lg border-2 border-slate-200 bg-white shadow-lg"
+                            data-testid="ship-company-results"
+                        >
+                            {filteredCompanies.map((c) => {
+                                const rem = Number(c.remaining || 0);
+                                let badgeText, badgeClass;
+                                if (rem > 0.005) {
+                                    badgeText = `مستحق عليك: ${fmt(rem)} ر.س`;
+                                    badgeClass = "bg-rose-100 text-rose-700";
+                                } else if (rem < -0.005) {
+                                    badgeText = `لك عليه: ${fmt(Math.abs(rem))} ر.س`;
+                                    badgeClass = "bg-emerald-100 text-emerald-700";
+                                } else {
+                                    badgeText = "مسدَّد بالكامل";
+                                    badgeClass = "bg-slate-100 text-slate-600";
+                                }
+                                return (
+                                <li key={c.name}>
+                                    <button
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => { set("company_name", c.name); setQuery(""); setShipOpen(false); }}
+                                        className="w-full text-right px-3 py-2 hover:bg-emerald-50 text-sm border-b border-slate-100 last:border-0"
+                                        data-testid={`ship-company-pick-${c.name}`}
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="font-bold text-slate-900">{c.name}</span>
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold num ${badgeClass}`}>
+                                                {badgeText}
+                                            </span>
+                                        </div>
+                                        <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+                                            <span>الطلبات: <span className="num font-bold">{c.orders_count || 0}</span></span>
+                                            <span>مجموع المستحق: <span className="num">{fmt(c.total_owed)}</span></span>
+                                            <span>مدفوع: <span className="num">{fmt(c.total_paid)}</span></span>
+                                        </div>
+                                    </button>
+                                </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                    {shipOpen && filteredCompanies.length === 0 && (
+                        <div className="absolute z-30 mt-1 w-full rounded-lg border-2 border-slate-200 bg-white shadow-lg px-3 py-2 text-xs text-slate-500" data-testid="ship-company-empty">
+                            لا توجد شركة بهذا الاسم. اكتب الاسم يدوياً للتسجيل تحت شركة جديدة.
+                        </div>
+                    )}
+                </div>
             </Field>
+            {/* Iter-143 — Selected-company balance summary card */}
+            {selectedCompany && (
+                <div
+                    className={`sm:col-span-2 -mt-1 mb-2 rounded-xl border-2 px-3 py-2 text-[12px] ${
+                        (selectedCompany.remaining || 0) > 0.005
+                            ? "bg-rose-50 border-rose-200 text-rose-900"
+                            : (selectedCompany.remaining || 0) < -0.005
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                            : "bg-slate-50 border-slate-200 text-slate-700"
+                    }`}
+                    data-testid="ship-company-balance-card"
+                >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div>
+                            <span className="font-extrabold">{selectedCompany.name}</span>
+                            <span className="ms-2 text-[10px] text-slate-500">
+                                ({selectedCompany.orders_count || 0} طلب · {fmt(selectedCompany.cost_per_order || 0)} ر.س/طلب)
+                            </span>
+                        </div>
+                        <div className="text-end">
+                            <div className="text-[10px] text-slate-500">رصيد بعد كل المدفوعات</div>
+                            <div className="font-extrabold num text-base">
+                                {(selectedCompany.remaining || 0) > 0.005 && `مستحق عليك ${fmt(selectedCompany.remaining)} ر.س`}
+                                {(selectedCompany.remaining || 0) < -0.005 && `لك عنده ${fmt(Math.abs(selectedCompany.remaining))} ر.س`}
+                                {Math.abs(selectedCompany.remaining || 0) <= 0.005 && "مسدَّد بالكامل ✅"}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             <Field label="رقم الفاتورة">
                 <input value={form.invoice_number} onChange={(e) => set("invoice_number", e.target.value)} className={inputCls} data-testid="ship-invoice" />
             </Field>

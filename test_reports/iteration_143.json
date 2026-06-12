@@ -1,0 +1,49 @@
+{
+  "summary": "Iter-143 frontend verification of the searchable shipping-company picker in FinancialInputHub → 'دفعة شركة شحن' tab. Both paths exercised: (1) EMPTY-state on the live merchant (0 shipping companies) — focus the input shows ship-company-empty with the correct Arabic hint, free-text typing keeps the value, clear-button resets it, and the form remains submittable with required fields. (2) POPULATED path simulated by seeding 2 companies (سمسا, أرامكس) via direct POST /api/shipping-accounts/{name}/payments — the dropdown then rendered exactly 2 rows with bold names + emerald 'لك عليه: {abs(remaining)} ر.س' badges + sub-line (الطلبات / مجموع المستحق / مدفوع) all matching GET /api/shipping-accounts. Picking سمسا filled the input and rendered ship-company-balance-card with 'لك عنده 100.00 ر.س'. Form POST returned 200 and the list refreshed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional cleanup: my seed left two test shipping accounts on the merchant — سمسا (total_paid=100, remaining=-100) and أرامكس (total_paid=200, remaining=-200) — both notes='seed for iter-143 test'. No DELETE endpoint exists for individual shipping payments (returned 404). Main agent or a follow-up cleanup script should null these out if they pollute production reports.",
+    "Pre-existing (NOT introduced by iter-143) React hydration warning persists: '<span> cannot be a child of <option>' from emergent x-* dynamic instrumentation injected into the bank <select>'s <option> children (FinancialInputHub:1223). Same as iter-138/142."
+  ],
+  "critical_code_review_comments": [
+    "ShippingPaymentForm useEffect fetches /api/shipping-accounts on mount AND again after every successful submit (line ~1096). Good. But the displayed input value uses `form.company_name || query`, which can create UX confusion: after a pick, query is cleared but `form.company_name` is set; then if user clicks back into the input and types, the onChange overwrites `form.company_name` directly with the new chars (line 1110) — so the old picked name is lost as soon as the first keystroke fires. Acceptable since they're switching companies, just note that the balance-card disappears the moment they start typing.",
+    "filteredCompanies sorts descending by remaining then slices to first 12. For merchants with many companies, the cap of 12 is fine, but if a merchant has >12 companies AND the one they want is past 12 alphabetically, they MUST type to find it (no scroll). The placeholder hints this with 'ابحث'. OK.",
+    "Free-text fallback works (verified by submission with non-existent name 'شركة_غير_موجودة_123') but the backend appears to normalize/strip suffixes (POSTing سمسا_تجربة stored as سمسا). This is backend behavior, not a frontend concern, but worth flagging if a merchant deliberately wants suffix-distinguished names."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (preview merchant). At test time merchant had 0 shipping accounts initially; testing agent seeded 2 (سمسا, أرامكس) via direct API.",
+  "seed_data_creation": "Seeded 2 shipping payments via POST /api/shipping-accounts/{name}/payments — سمسا (100 ر.س) and أرامكس (200 ر.س), both with note='seed for iter-143 test'. Backend does not expose a DELETE for individual payments (returned 404), so these persist until manually cleaned up.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Route is /financial-input-hub. Shipping tab testid=hub-tab-shipping. The merchant now has 2 seeded shipping accounts (سمسا, أرامكس) with negative remaining (over-paid against zero orders). The picker testids work as documented in the review request. The shipping-payments backend appears to NOT have a DELETE-by-id endpoint for individual payments, so cleanup must be done at DB-level if needed. Backend POST /api/shipping-accounts/{name}/payments accepts paid_from_account_id=null gracefully (just shows the warning toast). The hydration warning about <span> in <option> is from emergent's x-* instrumentation, not from product code.",
+  "verification_matrix": {
+    "empty_state": {
+      "ship-company-empty_visible": true,
+      "hint_text_correct": true,
+      "free_text_persists": true,
+      "clear_button_works": true,
+      "submit_enabled_with_free_text": true
+    },
+    "populated_state_after_seeding_2_companies": {
+      "ship-company-results_visible": true,
+      "row_count": 2,
+      "row_testids_present": ["ship-company-pick-سمسا", "ship-company-pick-أرامكس"],
+      "badge_for_negative_remaining": "لك عليه: 100.00 ر.س / 200.00 ر.س (emerald)",
+      "sub_line_orders_total_paid_correct": true,
+      "pick_fills_input": "سمسا",
+      "ship-company-balance-card_visible": true,
+      "balance_card_text": "لك عنده 100.00 ر.س",
+      "filter_by_typed_text": "ok (typing 'سمسا' showed 1 match)",
+      "post_payments_endpoint_status": 200,
+      "list_refresh_after_submit": true
+    }
+  },
+  "rca of the issue": "No defects. The picker correctly: (a) fetches /api/shipping-accounts on mount, (b) renders ship-company-results when companies exist + matching query, (c) renders ship-company-empty when query yields zero matches, (d) preserves free-text input (form.company_name || query), (e) fills the input + balance-card on pick, (f) re-fetches accounts after a successful POST. Badge colors and balance-card text match the sign of remaining exactly as coded (rose if >0.005, emerald if <-0.005, slate if ~0)."
+}
