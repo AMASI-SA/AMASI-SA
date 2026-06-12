@@ -180,3 +180,39 @@ async def test_is_pre_accounting_flag_skipped(mongo_db):
         date_from="2026-05-01", date_to="2026-05-31",
     )
     assert totals["transactions_count"] == 0
+
+
+# ── Bank-balance cutoff adjustment ────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_recompute_endpoint_flags_pre_cutoff_liabilities(mongo_db):
+    """A liability whose `created_at` falls BEFORE the Tabby cutoff
+    must be marked `is_pre_accounting=true` so the financial-position
+    screen excludes it from the unpaid totals."""
+    from backend.accounting_cutoffs_routes import _recompute_one
+    uid = "u1"
+    await set_cutoff(mongo_db, uid, "tabby", "2026-05-01")
+    # Pre-cutoff liability.
+    await mongo_db.liabilities.insert_one({
+        "id": "L-old", "user_id": uid, "kind": "ad_account",
+        "ad_provider": "snapchat",
+        "expected_amount": 500.0, "paid_amount": 0.0,
+        "status": "unpaid",
+        "created_at": _iso(2026, 4, 15),
+        "due_date":   "2026-04-20",
+    })
+    # Post-cutoff liability.
+    await mongo_db.liabilities.insert_one({
+        "id": "L-new", "user_id": uid, "kind": "ad_account",
+        "ad_provider": "snapchat",
+        "expected_amount": 200.0, "paid_amount": 0.0,
+        "status": "unpaid",
+        "created_at": _iso(2026, 5, 5),
+        "due_date":   "2026-05-10",
+    })
+    res = await _recompute_one(mongo_db, uid, "tabby")
+    assert res["liabilities"] == 1
+    old = await mongo_db.liabilities.find_one({"id": "L-old"})
+    new = await mongo_db.liabilities.find_one({"id": "L-new"})
+    assert old["is_pre_accounting"] is True
+    assert new.get("is_pre_accounting") is not True

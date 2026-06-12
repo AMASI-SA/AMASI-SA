@@ -928,6 +928,16 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         # so the Financial Position page (المركز المالي) matches the
         # per-row balances in /accounts and /bnpl-settlements.
         from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
+        # Iter-149 v2 — pull the bank-transfer cutoff once.  Bank balances
+        # in the financial position will be ADJUSTED so any account_
+        # transactions dated BEFORE the cutoff are subtracted out — i.e.,
+        # the displayed bank balance reflects only post-cutoff activity.
+        try:
+            from accounting_cutoffs import get_cutoff
+            bank_cutoff = await get_cutoff(db, uid, "bank_transfer")
+        except Exception:
+            bank_cutoff = None
+
         banks_total = 0.0
         platforms_total = 0.0
         async for a in db.accounts.find(
@@ -941,7 +951,20 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 continue
             t = a.get("account_type")
             if t == "bank":
-                banks_total += float(a.get("current_balance") or 0)
+                bal = float(a.get("current_balance") or 0)
+                # Iter-149 v2 — subtract net effect of pre-cutoff txns.
+                if bank_cutoff:
+                    pre_net = 0.0
+                    async for tx in db.account_transactions.find(
+                        {"user_id": uid, "account_id": a.get("id"),
+                         "transaction_date": {"$lt": bank_cutoff}},
+                        {"_id": 0, "amount": 1, "direction": 1},
+                    ):
+                        amt = float(tx.get("amount") or 0)
+                        d = (tx.get("direction") or "").lower()
+                        pre_net += amt if d == "in" else -amt
+                    bal -= pre_net
+                banks_total += bal
             elif t == "payment_platform":
                 # Iter-100 — REMAINING (un-transferred) balance only.
                 bal = float(a.get("current_balance") or 0)
@@ -974,6 +997,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 "user_id": uid,
                 "kind": {"$in": ["ad_account", "supplier"]},
                 "status": {"$ne": "paid"},
+                # Iter-149 — skip pre-accounting liabilities.
+                "is_pre_accounting": {"$ne": True},
             },
             {"_id": 0, "kind": 1, "expected_amount": 1, "paid_amount": 1,
              "due_date": 1, "ad_provider": 1, "status": 1},
