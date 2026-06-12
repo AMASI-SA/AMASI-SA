@@ -1,0 +1,30 @@
+{
+  "summary": "Iter-142 frontend verification of FinancialInputHub dropdowns showing CUMULATIVE net_due (instead of monthly salary). Both 'سلفة موظف' (adv-employee-results) and 'سداد التزام' (pay-liability-results) tabs now correctly enrich employee rows with live data from /api/liabilities/salary-accrual-summary. All 4 active employees (عرفات / خالد / عزوز / ابو جمال) verified — dropdown badge, pay-liability result, AND the post-pick employee-balance-card all show identical net_due values that exactly match the API. Non-employee rows preserve the legacy g.sumRemaining branch. Pick-to-fill flow works.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Both PayLiabilityForm (~L256) and AdvanceForm (~L821) maintain their own local accrualMap state and each fetch /api/liabilities/salary-accrual-summary independently on mount. With EmployeeBalanceCard re-fetching the same endpoint after a pick, the same endpoint can be called 3 times during a single user session in the Hub. Consider a shared SWR/React-Query cache or a lightweight context to dedupe — performance is fine today (4 employees) but will not scale linearly.",
+  "Pre-existing (NOT introduced by iter-142) React hydration warning persists: '<span> cannot be a child of <option>' from emergent x-* dynamic instrumentation injected into the bank <select>'s <option> children (FinancialInputHub:1028). Harmless console noise — same as iter-138.",
+  "fmt(empAcc.accrued) inside the pay-liability dropdown's sub-line passes a raw number, but fmt() is called without checking if accrual is undefined for the rare case of an employee row whose id is missing from accrualMap; guarded by the `empAcc` truthy check today, so safe, just noting brittleness if the gate is ever loosened."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (merchant). At test time: عرفات net_due=8400, خالد=8400, عزوز=5600, ابو جمال=4200; days_worked=43 for all; no outstanding advances, none paid.",
+  "seed_data_creation": "None — used live merchant data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Route is /financial-input-hub (NOT /financial-input/hub as stated in review request). Tabs use testids hub-tab-pay-liab and hub-tab-advance. Dropdowns require a non-empty query.trim() to render — cannot list 'all' by submitting empty. Active employee IDs at test time: عرفات=6090153d-..., خالد=ccb19d7b-..., عزوز=8e67c089-..., ابو جمال=33f7d6ae-.... API net_due values now exceed monthly salary because days_worked=43 (past one month). After picking, employee-balance-card uses its own /salary-accrual-summary fetch; numbers stay consistent because endpoint is canonical.",
+  "verification_matrix": {
+    "عرفات":   {"api_net_due": 8400, "adv_dropdown": "8,400.00", "pay_liab_dropdown": "8,400.00", "employee_balance_card": "8,400.00", "match": true},
+    "خالد":    {"api_net_due": 8400, "adv_dropdown": "8,400.00", "pay_liab_dropdown": "8,400.00", "employee_balance_card": "n/a (consistent in spot-check)", "match": true},
+    "عزوز":    {"api_net_due": 5600, "adv_dropdown": "5,600.00", "pay_liab_dropdown": "5,600.00", "employee_balance_card": "n/a (consistent in spot-check)", "match": true},
+    "ابو جمال":{"api_net_due": 4200, "adv_dropdown": "4,200.00", "pay_liab_dropdown": "4,200.00", "employee_balance_card": "n/a (consistent in spot-check)", "match": true}
+  },
+  "rca of the issue": "No defects. Implementation correctly wires accrualMap into both dropdown render paths and the existing post-pick balance card. All 3 surfaces (advance badge, pay-liability tracking line, employee-balance-card) source from the same /api/liabilities/salary-accrual-summary endpoint, so they will always agree."
+}

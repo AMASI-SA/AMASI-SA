@@ -248,6 +248,25 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
     const selected = openLiabilities.find((l) => l.id === form.liability_id);
 
+    // Iter-142 — Live employee accrual map for the dropdown so each
+    // employee row shows their CURRENT cumulative net_due (which can
+    // be larger than the sum of open salary liabilities — e.g. when
+    // the merchant pays mid-month without first generating a monthly
+    // liability row).  Same source as FinancialPosition / Dashboard.
+    const [accrualMap, setAccrualMap] = useState({});
+    useEffect(() => {
+        let alive = true;
+        api.get("/liabilities/salary-accrual-summary")
+            .then(({ data }) => {
+                if (!alive) return;
+                const m = {};
+                for (const e of (data.employees || [])) m[e.id] = e;
+                setAccrualMap(m);
+            })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, []);
+
     // Iter-127 — Group search results by counterparty so the dropdown
     // shows each employee/supplier ONCE with their CUMULATIVE remaining
     // balance, not one row per liability (which used to display only
@@ -443,6 +462,17 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                                     const kindsLabel = Array.from(g.kinds)
                                         .map((k) => KIND_LABEL[k] || k)
                                         .join(" · ");
+                                    // Iter-142 — For employee groups, surface the
+                                    // LIVE net_due from /salary-accrual-summary so
+                                    // the dropdown shows the merchant's actual
+                                    // cumulative obligation (accrued − paid),
+                                    // which can exceed the sum of currently-open
+                                    // liability rows when no monthly liability
+                                    // has been generated yet.
+                                    const empId = l.employee_salary_id;
+                                    const empAcc = empId ? accrualMap[empId] : null;
+                                    const empNetDue = empAcc ? Number(empAcc.net_due || 0) : null;
+                                    const empAdvances = empAcc ? Number(empAcc.outstanding_advance || 0) : 0;
                                     return (
                                     <button
                                         key={l.id}
@@ -468,17 +498,45 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                                                 {g.anyOverdue && (
                                                     <span className="text-rose-600 font-bold">⚠ متأخر</span>
                                                 )}
+                                                {empAcc && (
+                                                    <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-bold">
+                                                        {empAcc.status === "active" ? "موظف نشط" : "موظف موقوف"}
+                                                    </span>
+                                                )}
+                                                {empAdvances > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold num">
+                                                        سلف: {fmt(empAdvances)} ر.س
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="text-end flex-shrink-0">
-                                            <div className="text-[10px] text-slate-400">
-                                                {g.items.length > 1 ? "إجمالي متبقّي عليه" : "متبقٍ"}
-                                            </div>
-                                            <div className={`font-extrabold num text-sm ${
-                                                g.sumRemaining > 0 ? "text-rose-700" : "text-emerald-700"
-                                            }`}>
-                                                {fmt(g.sumRemaining)} ر.س
-                                            </div>
+                                            {empAcc ? (
+                                                <>
+                                                    <div className="text-[10px] text-slate-400">
+                                                        صافي مستحق تراكمي
+                                                    </div>
+                                                    <div className={`font-extrabold num text-sm ${
+                                                        empNetDue > 0 ? "text-rose-700" : "text-emerald-700"
+                                                    }`}>
+                                                        {fmt(empNetDue)} ر.س
+                                                    </div>
+                                                    <div className="text-[9px] text-slate-400 mt-0.5">
+                                                        ({empAcc.days_worked || 0} يوم · متراكم {fmt(empAcc.accrued)})
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="text-[10px] text-slate-400">
+                                                        {g.items.length > 1 ? "إجمالي متبقّي عليه" : "متبقٍ"}
+                                                    </div>
+                                                    <div className={`font-extrabold num text-sm ${
+                                                        g.sumRemaining > 0 ? "text-rose-700" : "text-emerald-700"
+                                                    }`}>
+                                                        {fmt(g.sumRemaining)} ر.س
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     </button>
                                     );
@@ -756,6 +814,26 @@ function AdvanceForm({ employees, banks, openLiabilities, onSaved }) {
     const [busy, setBusy] = useState(false);
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+    // Iter-142 — Live accrual map so the search dropdown shows each
+    // employee's CURRENT cumulative net_due (not just monthly salary).
+    // Uses the canonical /api/liabilities/salary-accrual-summary endpoint
+    // so the number is identical to FinancialPosition / Dashboard.
+    const [accrualMap, setAccrualMap] = useState({});
+    useEffect(() => {
+        let alive = true;
+        api.get("/liabilities/salary-accrual-summary")
+            .then(({ data }) => {
+                if (!alive) return;
+                const map = {};
+                for (const e of (data.employees || [])) {
+                    map[e.id] = e;
+                }
+                setAccrualMap(map);
+            })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, []);
+
     const selectedEmployee = employees.find((e) => e.id === form.employee_salary_id) || null;
 
     const empResults = (() => {
@@ -841,7 +919,11 @@ function AdvanceForm({ employees, banks, openLiabilities, onSaved }) {
                             className="absolute z-30 mt-1 w-full max-h-64 overflow-auto rounded-lg border-2 border-slate-200 bg-white shadow-lg"
                             data-testid="adv-employee-results"
                         >
-                            {empResults.map((e) => (
+                            {empResults.map((e) => {
+                                const acc = accrualMap[e.id];
+                                const netDue = Number(acc?.net_due || 0);
+                                const advances = Number(acc?.outstanding_advance || 0);
+                                return (
                                 <li key={e.id}>
                                     <button
                                         type="button"
@@ -850,14 +932,35 @@ function AdvanceForm({ employees, banks, openLiabilities, onSaved }) {
                                             setEmpQuery("");
                                             setEmpOpen(false);
                                         }}
-                                        className="w-full text-right px-3 py-2 hover:bg-emerald-50 text-sm flex items-center justify-between gap-2"
+                                        className="w-full text-right px-3 py-2 hover:bg-emerald-50 text-sm border-b border-slate-100 last:border-0"
                                         data-testid={`adv-employee-pick-${e.id}`}
                                     >
-                                        <span className="font-bold">{e.name}</span>
-                                        <span className="text-xs text-slate-500 num">{fmt(e.monthly_amount)} ر.س/شهر</span>
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="font-bold text-slate-900">{e.name}</span>
+                                            {acc ? (
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold num ${
+                                                    netDue > 0
+                                                        ? "bg-rose-100 text-rose-700"
+                                                        : "bg-emerald-100 text-emerald-700"
+                                                }`}>
+                                                    صافي مستحق: {fmt(netDue)} ر.س
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] text-slate-400">جاري التحميل…</span>
+                                            )}
+                                        </div>
+                                        <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+                                            <span>راتب شهري: <span className="num">{fmt(e.monthly_amount)}</span></span>
+                                            {advances > 0 && (
+                                                <span className="text-amber-700">
+                                                    سلف مفتوحة: <span className="num font-bold">{fmt(advances)}</span> ر.س
+                                                </span>
+                                            )}
+                                        </div>
                                     </button>
                                 </li>
-                            ))}
+                                );
+                            })}
                         </ul>
                     )}
                     {empOpen && empQuery.trim() && empResults.length === 0 && !selectedEmployee && (
