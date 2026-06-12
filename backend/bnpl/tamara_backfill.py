@@ -88,6 +88,19 @@ async def _persist_tamara_order(
     )
     res["stored_transaction"] = True
 
+    # Iter-146 — stamp billing_eligible_at idempotently when Tamara's
+    # own status indicates the order has entered the settlement cycle.
+    from .webhook_routes import _tamara_billing_eligible_event
+    be_at = _tamara_billing_eligible_event(order)
+    if be_at:
+        from .billing_eligible import mark_billing_eligible_for_order
+        await mark_billing_eligible_for_order(
+            db, user_id,
+            order_reference_id=txn.get("order_reference_id"),
+            order_number=txn.get("order_number"),
+            event_at=be_at,
+        )
+
     for rfd in refunds:
         rid = rfd.get("provider_refund_id") or ""
         if not rid:

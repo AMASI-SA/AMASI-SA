@@ -40,7 +40,13 @@ def _now_iso() -> str:
 
 
 def _normalise_tamara_order(order: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-    """Map Tamara order JSON → row for `payment_transactions`."""
+    """Map Tamara order JSON → row for `payment_transactions`.
+
+    Note: `billing_eligible_at` (Iter-146) is NOT set here.  Persistence
+    paths call `mark_billing_eligible_for_order` after upsert, which
+    guarantees first-stamp-wins idempotency.  See
+    `_tamara_billing_eligible_event` for the timestamp helper.
+    """
     total = order.get("total_amount") or {}
     captured = order.get("captured_amount") or order.get("total_captured_amount") or {}
     refunded = order.get("refunded_amount") or order.get("total_refunded_amount") or {}
@@ -76,6 +82,27 @@ def _normalise_tamara_order(order: Dict[str, Any], user_id: str) -> Dict[str, An
         "raw_payload": order,
         "synced_at": _now_iso(),
     }
+
+
+def _tamara_billing_eligible_event(order: Dict[str, Any]) -> Optional[str]:
+    """Iter-146 — return the ISO timestamp at which a Tamara order
+    became eligible for the weekly settlement, or `None` if the order
+    is not yet in a billable status.
+
+    Tamara's own statuses that mean "merchant has handed off the goods
+    and Tamara is now ready to remit funds":
+      • fully_captured / partially_captured
+      • fully_shipped / shipped
+      • partially_refunded / fully_refunded  (capture happened first)
+    """
+    status = (order.get("status") or "").lower()
+    if status in (
+        "fully_captured", "partially_captured",
+        "fully_shipped", "shipped",
+        "partially_refunded", "fully_refunded",
+    ):
+        return order.get("updated_at") or order.get("created_at") or None
+    return None
 
 
 def _extract_tamara_refunds(order: Dict[str, Any], user_id: str) -> list[dict]:
@@ -252,6 +279,19 @@ def attach_bnpl_webhook_routes(parent_router: APIRouter, db) -> None:
                  "$setOnInsert": {"id": txn["id"], "created_at": _now_iso()}},
                 upsert=True,
             )
+            # Iter-146 — stamp billing_eligible_at idempotently (first
+            # billable transition wins).  Tamara's own captured/shipped
+            # status is enough; if the order is not yet captured we rely
+            # on a later Salla/Make status update to flip the bit.
+            be_at = _tamara_billing_eligible_event(order)
+            if be_at:
+                from .billing_eligible import mark_billing_eligible_for_order
+                await mark_billing_eligible_for_order(
+                    db, user_id,
+                    order_reference_id=txn.get("order_reference_id"),
+                    order_number=txn.get("order_number"),
+                    event_at=be_at,
+                )
 
         for rfd in _extract_tamara_refunds(order, user_id):
             rid = rfd.get("provider_refund_id") or ""

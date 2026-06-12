@@ -245,6 +245,28 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
         {"$set": merged},
         upsert=True,
     )
+
+    # Iter-146 — Tamara billing-eligible propagation.
+    # When the merged order's status is one of the "billable" statuses
+    # (shipped / prepared / out-for-delivery / delivered / executed), we
+    # stamp `billing_eligible_at` on every Tamara `payment_transactions`
+    # row tied to this order.  Idempotent — first stamp wins.  Refunds
+    # are NOT touched (they keep their `refunded_at` aggregation rule).
+    try:
+        from bnpl.billing_eligible import propagate_status_to_billing_eligible
+        new_status = merged.get("order_status")
+        if new_status and new_status != (existing or {}).get("order_status"):
+            await propagate_status_to_billing_eligible(
+                db, user_id,
+                order_reference_id=merged.get("order_reference_id"),
+                order_number=order_number,
+                new_status=new_status,
+                event_at=merged.get("updated_at") or _now(),
+            )
+    except Exception:
+        # Never let billing-eligible bookkeeping break order ingestion.
+        pass
+
     return {"created": not bool(existing), "doc": merged}
 
 

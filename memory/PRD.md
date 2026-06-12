@@ -178,6 +178,7 @@
 - **Iter-121 (Feb 2026)**: Weekday-based settlement cycle.
 - **Iter-120 (Feb 2026)**: Refund-Date-Based Aggregation + period drill-down.
 - **Iter-119 (Feb 2026)**: BNPL SSOT + auto-matching engine.
+- **Iter-146 (Feb 2026)**: Tamara `billing_eligible_at` settlement-cycle rule. Sales enter the weekly Tamara invoice on the week the order first reaches a billable status (تم التنفيذ / جاري التوصيل / تم التوصيل / تم التجهيز / تم الشحن — plus Tamara API equivalents fully_captured/shipped/partially_refunded). Stamp is idempotent (first-stamp wins). Backfill endpoint + status endpoint added. Refunds keep Iter-120 `refunded_at` rule.
 - **Iter-145 (Feb 2026)**: BNPL Settlements UI — show transferred amount for near-miss (over/under) invoices, not only auto-matched. Totals row reflects all surfaced transfers.
 - Iter-118: Search-based counterparty + cumulative balance.
 - Iter-117: BNPL SSOT unification.

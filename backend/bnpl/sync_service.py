@@ -216,6 +216,16 @@ async def ensure_sync_indexes(db) -> None:
         )
     except Exception:
         pass
+    # Iter-146 — index Tamara's billing_eligible_at so the settlements
+    # engine's per-week aggregations stay fast.
+    try:
+        await db.payment_transactions.create_index(
+            [("user_id", 1), ("provider", 1), ("billing_eligible_at", 1)],
+            name="ptx_billing_eligible",
+            sparse=True,
+        )
+    except Exception:
+        pass
     try:
         await db.payment_refunds.create_index(
             [("user_id", 1), ("provider", 1), ("provider_refund_id", 1)],

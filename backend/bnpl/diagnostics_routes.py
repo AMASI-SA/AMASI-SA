@@ -348,4 +348,153 @@ def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
         }
         return report
 
+    # ── Iter-146 — Tamara billing-eligible backfill & status ──────
+    @router.get("/tamara/billing-eligible/status")
+    async def billing_eligible_status(user: dict = Depends(current_user)):
+        """Return how many Tamara payment_transactions already have a
+        billing_eligible_at stamp and how many remain.  Used by the UI to
+        decide whether to surface the backfill CTA."""
+        uid = user["id"]
+        total = await db.payment_transactions.count_documents(
+            {"user_id": uid, "provider": "tamara"},
+        )
+        stamped = await db.payment_transactions.count_documents({
+            "user_id": uid, "provider": "tamara",
+            "billing_eligible_at": {"$nin": [None, ""]},
+        })
+        return {
+            "total":     total,
+            "stamped":   stamped,
+            "unstamped": total - stamped,
+            "coverage_pct": (
+                round(stamped / total * 100, 2) if total > 0 else 0.0
+            ),
+        }
+
+    @router.post("/tamara/billing-eligible/backfill")
+    async def billing_eligible_backfill(
+        dry_run: bool = Query(False),
+        user: dict = Depends(current_user),
+    ):
+        """Backfill `billing_eligible_at` for existing Tamara payment_
+        transactions by inspecting the linked `unified_orders.order_status`.
+
+        Rules (Iter-146):
+          • If the unified order's status is currently billable, stamp
+            the txn's billing_eligible_at with the unified order's
+            `updated_at` (best-known transition time) — else the txn's
+            `updated_at_provider` → `created_at_provider`.
+          • If the unified order's status is NOT billable, leave
+            billing_eligible_at unset → the txn is excluded from the
+            Tamara settlement until a future status update flips it.
+          • Idempotent: never overwrites an already-stamped row.
+
+        Set ?dry_run=true for a count-only preview.
+        """
+        from .billing_eligible import is_billable_status
+
+        uid = user["id"]
+        scanned = 0
+        eligible = 0
+        stamped = 0
+        skipped_no_order = 0
+        skipped_not_billable = 0
+        already_stamped = 0
+
+        # Walk every Tamara txn that lacks billing_eligible_at.
+        cur = db.payment_transactions.find(
+            {
+                "user_id": uid,
+                "provider": "tamara",
+                "$or": [
+                    {"billing_eligible_at": {"$exists": False}},
+                    {"billing_eligible_at": None},
+                    {"billing_eligible_at": ""},
+                ],
+            },
+            {"_id": 0, "id": 1, "order_reference_id": 1, "order_number": 1,
+             "created_at_provider": 1, "updated_at_provider": 1,
+             "status": 1},
+        )
+        async for t in cur:
+            scanned += 1
+            # Try Tamara's own status first.
+            tamara_status = (t.get("status") or "").lower()
+            if tamara_status in (
+                "fully_captured", "partially_captured",
+                "fully_shipped", "shipped",
+                "partially_refunded", "fully_refunded",
+            ):
+                stamp = (
+                    t.get("updated_at_provider")
+                    or t.get("created_at_provider")
+                    or _now_iso()
+                )
+                eligible += 1
+                if not dry_run:
+                    r = await db.payment_transactions.update_one(
+                        {"user_id": uid, "id": t["id"],
+                         "$or": [
+                            {"billing_eligible_at": {"$exists": False}},
+                            {"billing_eligible_at": None},
+                            {"billing_eligible_at": ""},
+                         ]},
+                        {"$set": {"billing_eligible_at": stamp}},
+                    )
+                    stamped += int(getattr(r, "modified_count", 0) or 0)
+                continue
+
+            # Fall back to unified_orders.order_status lookup.
+            ref = (t.get("order_reference_id") or "").strip()
+            num = (t.get("order_number") or "").strip()
+            if not (ref or num):
+                skipped_no_order += 1
+                continue
+            keys = [k for k in (ref, num) if k]
+            uo = await db.unified_orders.find_one(
+                {"user_id": uid, "$or": [
+                    {"order_reference_id": {"$in": keys}},
+                    {"order_number":       {"$in": keys}},
+                ]},
+                {"_id": 0, "order_status": 1, "updated_at": 1},
+            )
+            if not uo:
+                skipped_no_order += 1
+                continue
+            if not is_billable_status(uo.get("order_status")):
+                skipped_not_billable += 1
+                continue
+            eligible += 1
+            stamp = (
+                uo.get("updated_at")
+                or t.get("updated_at_provider")
+                or t.get("created_at_provider")
+                or _now_iso()
+            )
+            if not dry_run:
+                r = await db.payment_transactions.update_one(
+                    {"user_id": uid, "id": t["id"],
+                     "$or": [
+                        {"billing_eligible_at": {"$exists": False}},
+                        {"billing_eligible_at": None},
+                        {"billing_eligible_at": ""},
+                     ]},
+                    {"$set": {"billing_eligible_at": stamp}},
+                )
+                if int(getattr(r, "modified_count", 0) or 0) > 0:
+                    stamped += 1
+                else:
+                    already_stamped += 1
+
+        return {
+            "ok": True,
+            "dry_run": dry_run,
+            "scanned": scanned,
+            "eligible_found": eligible,
+            "stamped": stamped,
+            "already_stamped": already_stamped,
+            "skipped_no_order": skipped_no_order,
+            "skipped_not_billable": skipped_not_billable,
+        }
+
     parent_router.include_router(router)

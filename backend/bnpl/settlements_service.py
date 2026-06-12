@@ -342,15 +342,24 @@ async def _compute_provider_totals(
 ) -> Dict[str, Any]:
     """Aggregate gross sales + refunds for one provider.
 
-    ⚠️ ITER-120 — IMPORTANT ACCOUNTING RULE:
-        • Sales are aggregated by ORDER DATE (`created_at_provider`).
-        • Refunds are aggregated by REFUND DATE (`refunded_at`).
-    A refund for an OLD order appears in the settlement of the period
-    when the refund happened — NOT the period when the order was
-    placed.  This matches the provider's real settlement file behavior
-    (Tabby/Tamara report refunds in the week they occur).
+    ⚠️ ITER-120 / ITER-146 — IMPORTANT ACCOUNTING RULES:
+        • Sales are aggregated by ORDER DATE (`created_at_provider`) for
+          Tabby and other providers — Tabby's settlement statement counts
+          orders from the day the payment was captured.
+        • Sales are aggregated by `billing_eligible_at` for **Tamara**
+          (Iter-146): Tamara enters an order into its weekly settlement
+          on the week it first reaches a billable status
+          (shipped / prepared / out_for_delivery / delivered / executed),
+          NOT the week the order was created.  Orders that haven't
+          reached a billable status are excluded from the period.
+        • Refunds are aggregated by REFUND DATE (`refunded_at`) for ALL
+          providers — this matches every BNPL statement we've observed.
     """
-    # ── Gross sales — by order date (created_at_provider) ──────────
+    # Iter-146 — Tamara filters sales by billing_eligible_at.
+    sales_date_field = (
+        "billing_eligible_at" if provider == "tamara" else "created_at_provider"
+    )
+    # ── Gross sales — by order date (or billing_eligible_at for Tamara)
     # Iter-130 — convert the Saudi-local window to a UTC ISO range so
     # we match exactly what Tabby/Tamara include in their invoices.
     utc_gte, utc_lte = _local_date_window_utc(date_from, date_to)
@@ -361,7 +370,7 @@ async def _compute_provider_totals(
             rng["$gte"] = utc_gte
         if utc_lte:
             rng["$lte"] = utc_lte
-        sales_match["created_at_provider"] = rng
+        sales_match[sales_date_field] = rng
 
     gross = 0.0
     count = 0
@@ -431,23 +440,29 @@ async def _compute_period_items(
     if utc_lte:
         sales_filter_range["$lte"] = utc_lte
 
+    # Iter-146 — Tamara uses billing_eligible_at for sales (drill-down).
+    sales_date_field = (
+        "billing_eligible_at" if provider == "tamara" else "created_at_provider"
+    )
+
     # Sales — orders whose order date falls inside the window.
     sales: List[Dict[str, Any]] = []
     async for t in db.payment_transactions.find(
         {
-            "user_id":             user_id,
-            "provider":            provider,
-            "created_at_provider": sales_filter_range,
+            "user_id":         user_id,
+            "provider":        provider,
+            sales_date_field:  sales_filter_range,
         },
         {"_id": 0, "id": 1, "order_reference_id": 1, "order_number": 1,
-         "amount": 1, "currency": 1, "created_at_provider": 1, "status": 1,
-         "buyer_email": 1},
-    ).sort([("created_at_provider", 1)]):
+         "amount": 1, "currency": 1, "created_at_provider": 1,
+         "billing_eligible_at": 1, "status": 1, "buyer_email": 1},
+    ).sort([(sales_date_field, 1)]):
         sales.append({
             "id":                  t.get("id"),
             "order_reference_id":  t.get("order_reference_id"),
             "order_number":        t.get("order_number"),
             "order_date":          t.get("created_at_provider"),
+            "billing_eligible_at": t.get("billing_eligible_at"),
             "amount":              _r(float(t.get("amount") or 0)),
             "currency":            t.get("currency") or "SAR",
             "status":              t.get("status"),
@@ -587,10 +602,15 @@ async def compute_settlement_for_provider(
     # tiny but persistent gap that bewildered the merchant.  We now
     # iterate the raw rows so the totals match the provider's invoice
     # to the cent.
+    # Iter-146 — for Tamara we filter sales by `billing_eligible_at`
+    # so the per-order commission loop matches the totals loop.
     utc_gte, utc_lte = _local_date_window_utc(date_from, date_to)
+    sales_date_field = (
+        "billing_eligible_at" if provider == "tamara" else "created_at_provider"
+    )
     sales_match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
     if utc_gte or utc_lte:
-        sales_match["created_at_provider"] = {
+        sales_match[sales_date_field] = {
             **({"$gte": utc_gte} if utc_gte else {}),
             **({"$lte": utc_lte} if utc_lte else {}),
         }
