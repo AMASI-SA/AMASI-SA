@@ -140,3 +140,43 @@ def test_amount_edit_via_existing_endpoint(ctx):
     target = next((i for i in rec["items"] if i["ref_id"] == liab["id"]), None)
     assert target is not None
     assert target["amount"] == 250.0
+
+
+def test_recent_search_filters_by_party_name(ctx):
+    """Iter-157b — search query filters by counterparty name."""
+    cp1 = requests.post(f"{BASE_URL}/api/counterparties",
+                        json={"name": "Ahmed Trader", "kind": "supplier"},
+                        headers=ctx["hdr"], timeout=10).json()
+    cp2 = requests.post(f"{BASE_URL}/api/counterparties",
+                        json={"name": "Mohammed Supplier", "kind": "supplier"},
+                        headers=ctx["hdr"], timeout=10).json()
+    for cp in (cp1, cp2):
+        requests.post(f"{BASE_URL}/api/liabilities",
+                      json={"kind": "supplier", "counterparty_id": cp["id"],
+                            "expected_amount": 100.0,
+                            "due_date": dt.date.today().isoformat(),
+                            "description": cp["name"]},
+                      headers=ctx["hdr"], timeout=10)
+    r = requests.get(f"{BASE_URL}/api/financial-input-hub/recent",
+                     params={"q": "Ahmed"},
+                     headers=ctx["hdr"], timeout=10).json()
+    names = [it["party_name"] for it in r["items"]]
+    assert any("Ahmed" in n for n in names), f"items={names}"
+    assert not any("Mohammed" in n for n in names)
+
+
+def test_recent_op_filter_create_only(ctx):
+    """Filtering by op_filter=create returns only liability creations."""
+    cp = requests.post(f"{BASE_URL}/api/counterparties",
+                       json={"name": "ف", "kind": "supplier"},
+                       headers=ctx["hdr"], timeout=10).json()
+    requests.post(f"{BASE_URL}/api/liabilities",
+                  json={"kind": "supplier", "counterparty_id": cp["id"],
+                        "expected_amount": 100.0,
+                        "due_date": dt.date.today().isoformat(),
+                        "description": "x"},
+                  headers=ctx["hdr"], timeout=10)
+    r = requests.get(f"{BASE_URL}/api/financial-input-hub/recent?op_filter=create",
+                     headers=ctx["hdr"], timeout=10).json()
+    for it in r["items"]:
+        assert it["type"] == "liability"

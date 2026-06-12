@@ -1741,12 +1741,17 @@ function RecentEntriesTable({ reloadKey }) {
     const [data, setData] = useState({ items: [], page: 1, total_pages: 1, total: 0 });
     const [page, setPage] = useState(1);
     const [busy, setBusy] = useState(false);
+    const [q, setQ] = useState("");
+    const [opFilter, setOpFilter] = useState("all");
 
-    const load = async (p = page) => {
+    const load = async (p = page, search = q, filter = opFilter) => {
         setBusy(true);
         try {
+            const params = new URLSearchParams({ page: String(p), page_size: "10" });
+            if (search.trim()) params.set("q", search.trim());
+            if (filter && filter !== "all") params.set("op_filter", filter);
             const { data } = await api.get(
-                `/financial-input-hub/recent?page=${p}&page_size=10`
+                `/financial-input-hub/recent?${params.toString()}`
             );
             setData(data);
             setPage(p);
@@ -1755,7 +1760,14 @@ function RecentEntriesTable({ reloadKey }) {
         } finally { setBusy(false); }
     };
 
-    useEffect(() => { load(1); /* eslint-disable-next-line */ }, [reloadKey]);
+    useEffect(() => { load(1, q, opFilter); /* eslint-disable-next-line */ }, [reloadKey]);
+
+    // Debounced auto-reload on search/filter change
+    useEffect(() => {
+        const t = setTimeout(() => load(1, q, opFilter), 250);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line
+    }, [q, opFilter]);
 
     const editAmount = async (it) => {
         if (!it.editable) {
@@ -1784,12 +1796,37 @@ function RecentEntriesTable({ reloadKey }) {
 
     return (
         <div className="mt-6 bg-white border border-slate-200 rounded-xl p-4" data-testid="hub-recent-entries">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <h2 className="text-base font-bold text-slate-900">📋 آخر عمليات الإدخال</h2>
-                <button onClick={() => load(page)} className="text-[11px] text-slate-500 hover:text-slate-700 underline" data-testid="hub-recent-refresh">
+                <button onClick={() => load(page, q, opFilter)} className="text-[11px] text-slate-500 hover:text-slate-700 underline" data-testid="hub-recent-refresh">
                     {busy ? "..." : "🔄 تحديث"}
                 </button>
             </div>
+
+            {/* Iter-157b — Search + operation filter */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                <input
+                    type="text"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="🔍 بحث باسم المورد/الموظف أو العملية..."
+                    className="sm:col-span-2 w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400"
+                    data-testid="hub-recent-search"
+                />
+                <select
+                    value={opFilter}
+                    onChange={(e) => setOpFilter(e.target.value)}
+                    className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400"
+                    data-testid="hub-recent-op-filter"
+                >
+                    <option value="all">كل العمليات</option>
+                    <option value="create">إنشاء التزام</option>
+                    <option value="pay">سداد / تسوية</option>
+                    <option value="advance">سلفة</option>
+                    <option value="expense">مصاريف</option>
+                </select>
+            </div>
+
             <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                     <thead className="bg-slate-50 text-slate-700">
@@ -1833,12 +1870,12 @@ function RecentEntriesTable({ reloadKey }) {
             </div>
             {data.total_pages > 1 && (
                 <div className="mt-3 flex items-center justify-center gap-2" data-testid="hub-recent-pagination">
-                    <button onClick={() => load(page - 1)} disabled={page <= 1 || busy} className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-xs rounded disabled:opacity-40">‹ السابق</button>
+                    <button onClick={() => load(page - 1, q, opFilter)} disabled={page <= 1 || busy} className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-xs rounded disabled:opacity-40">‹ السابق</button>
                     <span className="text-xs text-slate-600">
                         صفحة <span className="num font-extrabold">{page}</span> من <span className="num font-extrabold">{data.total_pages}</span>
                         <span className="text-slate-400 mr-2">({data.total} عملية)</span>
                     </span>
-                    <button onClick={() => load(page + 1)} disabled={page >= data.total_pages || busy} className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-xs rounded disabled:opacity-40">التالي ›</button>
+                    <button onClick={() => load(page + 1, q, opFilter)} disabled={page >= data.total_pages || busy} className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-xs rounded disabled:opacity-40">التالي ›</button>
                 </div>
             )}
         </div>

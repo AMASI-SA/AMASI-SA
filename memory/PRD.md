@@ -29,6 +29,14 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-157b (Feb 13 2026)**: 🔍 Recent Entries — Expanded coverage + search + operation filter.
+  - **User request follow-up**: "الجدول يحوي على آخر تعليمات الإدخال وتسديد الرواتب وديون الرواتب جميع العمليات المضافة في مركز الإدخال تظهر بالجدول حسب الأحدث. مع إضافة اقتراح خيار البحث كامل".
+  - **Expanded transaction coverage**: The recent endpoint now surfaces ALL hub-originated operations — added `expense`, `expense_payment`, `deposit`, `withdrawal`, `courier_transfer`, `cod_transfer`, `receivable_collect`, `shipping_payment`, `topup` to the `account_transactions` filter alongside the original four. Each gets a clear Arabic operation label (مصروف يومي، إيداع، تحويل شركة شحن، تحصيل من عميل، …).
+  - **Search** (`?q=...`): case-insensitive substring match against `party_name` OR `operation` label.
+  - **Operation filter** (`?op_filter=...`): values `create` (liability creations), `pay` (سداد/تسوية), `advance` (سلفة), `expense` (مصاريف), or `all`.
+  - **Frontend**: New search bar above the table with a text input + dropdown (`كل العمليات` / إنشاء / سداد / سلفة / مصاريف). Both controls debounce 250ms and auto-reload via `useEffect`. Pagination buttons now propagate the active filters.
+  - **Tests**: 6/6 pytest (`test_financial_input_hub_recent_iter157.py`): empty feed, single liability, 15-item pagination split, amount edit round-trip, **search filter by party name**, **op_filter=create scoping**. All green.
+
 - **Iter-157 (Feb 13 2026)**: 📋 Financial Input Hub — Recent Entries table with pagination + amount edit.
   - **User request**: "مركز الإدخال المالي — عرض جدول عمليات يعرض آخر 10 عمليات إدخال مع خيار تنقل بين باقي صفحات الجدول أسفل الجدول. العملية، اسم المورد/الموظف، المبلغ، كم له كم عليه سابق. مع إمكانية التعديل على المبلغ المدخل."
   - **Backend** (`GET /api/financial-input-hub/recent?page=N&page_size=10`): Unifies merchant-initiated entries from `liabilities` (excluding auto_generated salary rows) AND `account_transactions` (debt_payment, salary_advance, ad_account_topup, salary_settlement). Returns sorted feed with operation label, party name, amount, current open balance for the party (computed via aggregation), created_at, and `editable` flag. Default page_size=10, max=50.

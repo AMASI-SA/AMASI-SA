@@ -808,29 +808,37 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
 async def financial_input_hub_recent(
     page: int = 1,
     page_size: int = 10,
+    q: Optional[str] = None,
+    op_filter: Optional[str] = None,
     user: dict = Depends(current_user),
 ):
     uid = user["id"]
     page = max(1, page)
     page_size = max(1, min(50, page_size))
 
-    # Source 1: liabilities (creations + auto-generated salary rows are
-    # excluded — only merchant-initiated entries).
+    # Source 1: all liabilities (creations + auto-generated salary rows
+    # are excluded — only merchant-initiated entries).
     liabs = await db.liabilities.find(
         {"user_id": uid, "auto_generated": {"$ne": True}},
         {"_id": 0},
-    ).sort("created_at", -1).to_list(500)
+    ).sort("created_at", -1).to_list(1000)
 
-    # Source 2: payment events (account_transactions tagged as
-    # debt_payment / salary_advance / cod_settlement etc).
+    # Source 2: ALL merchant-facing bank transactions from the input
+    # hub (debt_payment, salary_advance, ad_account_topup,
+    # salary_settlement, deposit, expense, courier_transfer, cod_transfer,
+    # receivable_collect, shipping_payment, etc.).  We exclude only
+    # bank↔bank internal transfers since those have a dedicated page.
+    tx_types_in_hub = [
+        "debt_payment", "salary_advance", "ad_account_topup",
+        "salary_settlement", "expense", "deposit", "withdrawal",
+        "courier_transfer", "cod_transfer", "receivable_collect",
+        "shipping_payment", "expense_payment", "topup",
+    ]
     txs = await db.account_transactions.find(
         {"user_id": uid,
-         "transaction_type": {"$in": [
-             "debt_payment", "salary_advance",
-             "ad_account_topup", "salary_settlement",
-         ]}},
+         "transaction_type": {"$in": tx_types_in_hub}},
         {"_id": 0},
-    ).sort("created_at", -1).to_list(500)
+    ).sort("created_at", -1).to_list(1000)
 
     # Normalize into a single feed.
     feed = []
@@ -863,6 +871,15 @@ async def financial_input_hub_recent(
             "salary_advance": "صرف سلفة",
             "ad_account_topup": "شحن حساب إعلاني",
             "salary_settlement": "تسوية موظف",
+            "expense": "مصروف يومي",
+            "expense_payment": "دفع مصروف",
+            "deposit": "إيداع",
+            "withdrawal": "سحب",
+            "courier_transfer": "تحويل شركة شحن",
+            "cod_transfer": "تحويل COD",
+            "receivable_collect": "تحصيل من عميل",
+            "shipping_payment": "دفع شركة شحن",
+            "topup": "شحن",
         }.get(t.get("transaction_type") or "", t.get("transaction_type"))
         feed.append({
             "id": t["id"],
@@ -883,6 +900,31 @@ async def financial_input_hub_recent(
         })
 
     feed.sort(key=lambda x: (x.get("created_at") or ""), reverse=True)
+
+    # ── Iter-157b — Search + operation filter ──
+    if q:
+        q_low = q.strip().lower()
+        if q_low:
+            feed = [
+                it for it in feed
+                if q_low in (it.get("party_name") or "").lower()
+                or q_low in (it.get("operation") or "").lower()
+            ]
+    if op_filter:
+        f = op_filter.lower()
+        if f in ("create", "إنشاء"):
+            feed = [it for it in feed if it["type"] == "liability"]
+        elif f in ("pay", "سداد"):
+            feed = [it for it in feed
+                    if "سداد" in (it.get("operation") or "")
+                    or "تسوية" in (it.get("operation") or "")]
+        elif f in ("advance", "سلفة"):
+            feed = [it for it in feed
+                    if "سلفة" in (it.get("operation") or "")]
+        elif f in ("expense", "مصروف"):
+            feed = [it for it in feed
+                    if "مصروف" in (it.get("operation") or "")]
+
     total = len(feed)
     start = (page - 1) * page_size
     items = feed[start: start + page_size]
