@@ -1,0 +1,30 @@
+{
+  "summary": "Iter-53 — Verified Iter-151c fix on Preview for شهاب stale-partial-liability scenario. SETUP via API: fresh user → bank (100k) → شهاب employee (monthly=3000, accrual_mode=daily, start_date=today-42d producing 4200 accrued) → generate-salaries → then CORRUPTED the resulting salary row via pymongo direct write (paid_amount=3000, status='partial' → remaining=0, simulating the production stale state). RESULT: virtual-entry logic correctly surfaces شهاب in the dropdown with the 'إنشاء التزام تلقائي' badge AND shows the SHORTFALL (net_due − existingRemain = 1200) — not the misleading متراكم 4200. Clicking the entry POSTs /api/liabilities/salary-topup (200) creating a new open salary liability for 1200, success toast 'تم إنشاء التزام راتب جديد — جاهز للسداد' appears, the search input is populated with 'راتب مستحق إضافي — شهاب', and the selected card renders expected=1200/paid=0/remaining=1200. Filling amount=1200, picking the bank account, and clicking تسجيل السداد fires POST /api/liabilities/{topup_id}/pay (200), success toast 'تم تسجيل السداد وخصمه من البنك', and the form fully resets (search='' amount=''). The stale-data bug ('المبلغ أكبر من المتبقي 0.00') is NOT reproducible on Preview.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "FinancialInputHub — Pay Liability bank-account select", "issues": ["Pre-existing React hydration warning '<span> cannot be a child of <option>' persists (longstanding, non-blocking; flagged in iter-52)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iter53_shahab_setup.py",
+    "/tmp/iter53_v2_after_submit.png",
+    "/app/backend/tests/test_pay_liability_search_iter151.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Iter-151c shortfall logic (FinancialInputHub.jsx L396-452) is correct: it adds the virtual rep alongside existing items, sets sumRemaining += shortfall, and replaces representative so clicks route through the salary-topup flow. The visible 'صافي مستحق تراكمي' in the dropdown row shows the shortfall (net_due_from_accrual_summary − existingRemain), which is the actual remaining payable, not the raw accrual badge — this is correct.",
+    "Note for user-reported scenario interpretation: when the stale partial row has paid_amount=3000, the salary-accrual-summary endpoint subtracts that 3000 from accrued (4200) → net_due=1200, so the virtual shortfall surfaces as 1200, not 4200. The merchant can only pay the actual net_due (1200) — paying 4200 would over-pay the employee. If the merchant expected to pay 4200 they should reset/delete the stale paid_amount first; this is correct backend behavior, not a frontend bug.",
+    "FinancialInputHub.jsx remains 1634 lines — still a candidate for splitting into per-tab files (called out in iter-52 too)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (no changes; salary-topup + /pay both return 200)", "frontend": "100% (virtual badge → topup creation → form populated → payment submission → form reset all work)"},
+  "test_credentials": "Fresh per run: iter53-<random>@test.com / TestPass123!",
+  "seed_data_creation": "Per-run via API + direct MongoDB write. /app/test_reports/iter53_shahab_setup.py: (1) register+login, (2) POST /api/accounts bank=100000, (3) POST /api/operating-expenses/salaries name=شهاب accrual_mode=daily start_date=today-42d monthly_amount=3000, (4) POST /api/liabilities/generate-salaries, (5) PUT /api/liabilities/{id}/accrual-mode {mode:daily,start_date:today-42d}, (6) pymongo direct update_one on db.liabilities {id, user_id} → $set paid_amount=expected status='partial' — corruption verified via re-GET (remaining_amount=0, status=partial). salary-accrual-summary returns net_due=4200 (with paid=3000 subtracted via _aggregate_salary_accrual logic, observed UI shortfall=1200).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-151c is FULLY WORKING on Preview for both Scenario C (no existing open liability) AND the stale-partial scenario (existing open row with remaining < net_due). Key insight: the virtual shortfall = net_due_from_accrual_summary − existingRemain, NOT the raw accrued amount. When the stale row has nonzero paid_amount the accrual aggregator already subtracts it from net_due, so the virtual entry surfaces only the truly outstanding amount. Test asserted: pay-liability-virtual-badge present, dropdown row contains positive number, click → POST salary-topup 200 → search input populated with description, selected card renders, fill remaining + select bank + click hub-submit-btn → POST /api/liabilities/{topup_id}/pay 200 → form resets. The production bug 'المبلغ أكبر من المتبقي 0.00' is NOT reproducible on Preview — it will resolve for the merchant once they redeploy with Iter-151c.",
+  "rca of the issue": "User reported: 'عند محاولة تسديد راتب شهاب التراكمي 4200 يقول: المبلغ أكبر من المتبقي (0.00)'. Production has a pre-Iter-151c FinancialInputHub.jsx where the merchant could SELECT the stale partial-row (remaining=0) — the submit handler then rejected any amount > 0. Iter-151c (lines 389-452) fixes this by computing shortfall = net_due − existingRemain whenever it's > 0 and INSERTING a virtual rep into the same group with that shortfall as remaining; the rep is also promoted to representative so clicks bypass the stale row and route to /salary-topup which creates a fresh openable row. Verified on Preview: virtual badge appears, dropdown shows the correct shortfall (not 0), click creates topup, payment succeeds. Mitigation for production merchants: redeploy with Iter-151c. The merchant should also be aware that if their stale row has nonzero paid_amount, the system correctly subtracts that from accrued before exposing the shortfall — they cannot 'double-pay' from the merged amount."
+}

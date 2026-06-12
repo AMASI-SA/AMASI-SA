@@ -385,40 +385,70 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
         // would silently disappear from the search the moment their
         // last open salary liability is fully paid — the bug reported
         // by the merchant ("جمال يظهر مرة واحدة، بعد السداد لا يظهر").
+        //
+        // Iter-151c — ALSO surface a virtual entry when the employee
+        // DOES have open liabilities but their total remaining is LESS
+        // than the live accrued net_due (e.g. stale paid-but-still-
+        // partial rows, or topups that got fully offset by advances).
+        // Without this the merchant cannot pay the full net_due —
+        // they'd be stuck choosing a stale 0-remain row, getting the
+        // "المبلغ أكبر من المتبقي (0.00)" error (شهاب bug).
         for (const emp of (employees || [])) {
             if (!emp.name || !emp.name.toLowerCase().includes(q)) continue;
             const empKey = `emp:${emp.id}`;
-            if (groups.has(empKey)) continue;  // already has open liability
             const acc = accrualMap[emp.id];
             const netDue = acc ? Number(acc.net_due || 0) : 0;
             if (netDue <= 0) continue;
-            // Build a VIRTUAL group entry. Clicking it triggers an
-            // idempotent generate-salaries call then re-picks the new
-            // open liability.  `representative.id` carries the marker
-            // `__virtual_emp_${empId}` so pickLiability can route.
+            const existingGroup = groups.get(empKey);
+            const existingRemain = existingGroup
+                ? (Number(existingGroup.sumRemaining) || 0) : 0;
+            // If existing open liabilities already cover net_due fully,
+            // no virtual entry is needed.
+            if (existingGroup && existingRemain >= netDue - 0.01) continue;
+            // The virtual entry covers the SHORTFALL between net_due
+            // and what the existing open liabilities already capture.
+            const shortfall = Math.max(0, netDue - existingRemain);
+            if (shortfall <= 0) continue;
+            // Build a VIRTUAL group entry. Clicking it POSTs to the
+            // /liabilities/salary-topup endpoint which creates a new
+            // open salary liability for the SHORTFALL.
             const virtRep = {
                 id: `__virtual_emp_${emp.id}`,
                 employee_salary_id: emp.id,
                 counterparty_name: emp.name,
                 kind: "salary",
-                expected_amount: netDue,
+                expected_amount: shortfall,
                 paid_amount: 0,
-                remaining_amount: netDue,
-                description: `راتب مستحق — ${emp.name}`,
+                remaining_amount: shortfall,
+                description: existingGroup
+                    ? `راتب مستحق إضافي — ${emp.name}`
+                    : `راتب مستحق — ${emp.name}`,
                 is_overdue: false,
                 due_date: null,
             };
-            groups.set(empKey, {
-                counterparty_name: emp.name,
-                kinds: new Set(["salary"]),
-                items: [virtRep],
-                sumExpected: netDue,
-                sumPaid: 0,
-                sumRemaining: netDue,
-                anyOverdue: false,
-                representative: virtRep,
-                virtual: true,
-            });
+            if (existingGroup) {
+                // Add the virtual rep as an extra item alongside the
+                // existing open liabilities so they're not hidden.
+                existingGroup.items.push(virtRep);
+                existingGroup.sumExpected += shortfall;
+                existingGroup.sumRemaining += shortfall;
+                existingGroup.virtual = true;
+                // Make the virtual rep the representative so click
+                // routes through the salary-topup flow.
+                existingGroup.representative = virtRep;
+            } else {
+                groups.set(empKey, {
+                    counterparty_name: emp.name,
+                    kinds: new Set(["salary"]),
+                    items: [virtRep],
+                    sumExpected: shortfall,
+                    sumPaid: 0,
+                    sumRemaining: shortfall,
+                    anyOverdue: false,
+                    representative: virtRep,
+                    virtual: true,
+                });
+            }
         }
         // 3. Sort by remaining DESC, cap to 8.
         return Array.from(groups.values())
@@ -595,6 +625,16 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                                             // of trusting the group's representative
                                             // (which may be a zero-remain row when
                                             // the group mixes paid and unpaid rows).
+                                            // Iter-151c — If g.virtual is true the
+                                            // representative IS the virtual entry
+                                            // (covers shortfall vs net_due) — pick
+                                            // it directly so the salary-topup flow
+                                            // runs and the merchant can pay the
+                                            // full accrued net_due.
+                                            if (g.virtual) {
+                                                pickLiability(g.representative);
+                                                return;
+                                            }
                                             const withRem = (g.items || []).find(
                                                 (li) => _liabRemaining(li) > 0
                                             );
