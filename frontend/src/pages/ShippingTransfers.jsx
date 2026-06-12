@@ -1,0 +1,165 @@
+/**
+ * Iter-144 — Two-way courier transfers ledger.
+ *
+ * • courier_to_bank — money received FROM the courier (e.g. weekly COD settlement)
+ * • bank_to_courier — money we paid TO the courier (e.g. monthly shipping fees)
+ */
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
+import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
+
+
+const fmt = (v) => Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+
+export default function ShippingTransfers() {
+    const [items, setItems] = useState([]);
+    const [banks, setBanks] = useState([]);
+    const [companies, setCompanies] = useState([]);
+    const [form, setForm] = useState({
+        company_name: "", direction: "courier_to_bank",
+        amount: "", transfer_date: todaySA(),
+        bank_account_id: "", reference: "", note: "",
+    });
+    const [busy, setBusy] = useState(false);
+
+    const reload = () => {
+        api.get("/shipping-accounts/transfers")
+            .then(({ data }) => setItems(data.items || []))
+            .catch(() => { });
+    };
+
+    useEffect(() => {
+        reload();
+        api.get("/accounts").then(({ data }) => setBanks(data || [])).catch(() => { });
+        api.get("/shipping-accounts/ledger").then(({ data }) => setCompanies(data.companies || [])).catch(() => { });
+    }, []);
+
+    const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+    const submit = async () => {
+        if (!form.company_name.trim()) return toast.error("اختر شركة الشحن");
+        if (!Number(form.amount)) return toast.error("أدخل المبلغ");
+        setBusy(true);
+        try {
+            await api.post("/shipping-accounts/transfers", {
+                ...form,
+                amount: Number(form.amount),
+                bank_account_id: form.bank_account_id || null,
+            });
+            toast.success("تم تسجيل التحويل");
+            setForm({ ...form, amount: "", reference: "", note: "" });
+            reload();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail));
+        } finally { setBusy(false); }
+    };
+
+    const del = async (id) => {
+        if (!window.confirm("حذف هذا التحويل؟ (سيُعكس أثره على البنك)")) return;
+        try {
+            await api.delete(`/shipping-accounts/transfers/${id}`);
+            toast.success("تم الحذف");
+            reload();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail));
+        }
+    };
+
+    return (
+        <div className="p-6 max-w-6xl mx-auto space-y-5" dir="rtl" data-testid="shipping-transfers-page">
+            <header className="flex items-center justify-between gap-2 flex-wrap">
+                <h1 className="text-2xl font-extrabold text-slate-900">📒 تحويلات شركات الشحن</h1>
+                <Link to="/shipping/ledger" className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-bold rounded-lg" data-testid="transfers-back">
+                    ← الأرصدة
+                </Link>
+            </header>
+
+            {/* Form */}
+            <div className="bg-white border-2 border-slate-200 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-3" data-testid="transfer-form">
+                <div>
+                    <label className="text-xs text-slate-600 mb-1 block">شركة الشحن</label>
+                    <select value={form.company_name} onChange={(e) => set("company_name", e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm" data-testid="tx-company">
+                        <option value="">— اختر —</option>
+                        {companies.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs text-slate-600 mb-1 block">الاتجاه</label>
+                    <div className="grid grid-cols-2 gap-1" role="radiogroup">
+                        <button type="button" onClick={() => set("direction", "courier_to_bank")} className={`px-3 py-2 rounded-lg text-xs font-bold ${form.direction === "courier_to_bank" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700"}`} data-testid="tx-dir-in">↓ من الشركة للبنك</button>
+                        <button type="button" onClick={() => set("direction", "bank_to_courier")} className={`px-3 py-2 rounded-lg text-xs font-bold ${form.direction === "bank_to_courier" ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-700"}`} data-testid="tx-dir-out">↑ من البنك للشركة</button>
+                    </div>
+                </div>
+                <div>
+                    <label className="text-xs text-slate-600 mb-1 block">المبلغ (ر.س)</label>
+                    <input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => set("amount", e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm num" data-testid="tx-amount" />
+                </div>
+                <div>
+                    <label className="text-xs text-slate-600 mb-1 block">التاريخ</label>
+                    <input type="date" value={form.transfer_date} onChange={(e) => set("transfer_date", e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm" data-testid="tx-date" />
+                </div>
+                <div>
+                    <label className="text-xs text-slate-600 mb-1 block">الحساب البنكي</label>
+                    <select value={form.bank_account_id} onChange={(e) => set("bank_account_id", e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm" data-testid="tx-bank">
+                        <option value="">— بدون ربط —</option>
+                        {banks.map((b) => <option key={b.id} value={b.id}>{b.name} ({fmt(b.current_balance)} ر.س)</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs text-slate-600 mb-1 block">المرجع/الفاتورة</label>
+                    <input value={form.reference} onChange={(e) => set("reference", e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm" data-testid="tx-reference" />
+                </div>
+                <div className="md:col-span-3">
+                    <label className="text-xs text-slate-600 mb-1 block">ملاحظات</label>
+                    <input value={form.note} onChange={(e) => set("note", e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm" data-testid="tx-note" />
+                </div>
+                <div className="md:col-span-3 text-left">
+                    <button onClick={submit} disabled={busy} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg disabled:opacity-50" data-testid="tx-submit">
+                        {busy ? "جاري الحفظ…" : "تسجيل التحويل"}
+                    </button>
+                </div>
+            </div>
+
+            {/* List */}
+            <div className="bg-white border-2 border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-xs" data-testid="transfers-table">
+                    <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                            <th className="p-2 text-right">التاريخ</th>
+                            <th className="p-2 text-right">الشركة</th>
+                            <th className="p-2 text-right">الاتجاه</th>
+                            <th className="p-2 num text-right">المبلغ</th>
+                            <th className="p-2 text-right">البنك</th>
+                            <th className="p-2 text-right">المرجع</th>
+                            <th className="p-2 text-right">ملاحظات</th>
+                            <th className="p-2 text-right"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.length === 0 && (
+                            <tr><td colSpan={8} className="p-4 text-center text-slate-500">لا توجد تحويلات بعد.</td></tr>
+                        )}
+                        {items.map((it) => {
+                            const isIn = it.direction === "courier_to_bank";
+                            return (
+                                <tr key={it.id} className="border-t border-slate-100" data-testid={`tx-row-${it.id}`}>
+                                    <td className="p-2 num text-slate-700">{it.transfer_date}</td>
+                                    <td className="p-2 font-bold">{it.company_name}</td>
+                                    <td className="p-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isIn ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{isIn ? "↓ وارد" : "↑ صادر"}</span></td>
+                                    <td className={`p-2 num font-bold ${isIn ? "text-emerald-700" : "text-rose-700"}`}>{isIn ? "+" : "−"}{fmt(it.amount)}</td>
+                                    <td className="p-2 text-slate-600">{banks.find((b) => b.id === it.bank_account_id)?.name || "—"}</td>
+                                    <td className="p-2 text-slate-600 text-[11px]">{it.reference || "—"}</td>
+                                    <td className="p-2 text-slate-600 text-[11px]">{it.note || "—"}</td>
+                                    <td className="p-2"><button onClick={() => del(it.id)} className="text-rose-600 hover:text-rose-800 text-xs font-bold" data-testid={`tx-del-${it.id}`}>حذف</button></td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}

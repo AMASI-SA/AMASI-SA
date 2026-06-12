@@ -468,6 +468,239 @@ def _build_router(db) -> APIRouter:
 
         return {"items": rows}
 
+    # ─── Iter-144 — Per-company UNIFIED ledger ─────────────────
+    # Combines:
+    #   • COD approved (delivered orders)        — what couriers owe us
+    #   • COD pending  (non-delivered)           — info only, NOT in net
+    #   • Shipping cost (delivered)              — what we owe couriers
+    #   • COD fees (% + fixed/order, delivered)  — what couriers charge us
+    #   • courier_to_bank transfers              — money received from courier
+    #   • bank_to_courier payments               — money we paid courier
+    # net = cod_approved − shipping − cod_fee − courier_to_bank + bank_to_courier
+    # Only DEFERRED companies enter the ledger.  Immediate companies
+    # have shipping_cost booked as direct operating expense elsewhere.
+    @router.get("/ledger")
+    async def shipping_ledger(user: dict = Depends(current_user)):
+        uid = user["id"]
+        settings = await ensure_user_settings(db, uid)
+        cod_approved_statuses = settings.get(
+            "cod_approved_statuses",
+        ) or ["تم التوصيل", "delivered", "completed"]
+        cfg_map = await _shipping_config_map(uid)
+        deferred_names = await _deferred_company_names(uid)
+
+        def status_is_delivered(s: str) -> bool:
+            return _matches_any(s or "", cod_approved_statuses)
+
+        # 1) Walk unified_orders once — for each deferred company, accumulate
+        #    delivered COD, pending COD, delivered shipping cost, delivered order count.
+        per_company: dict[str, dict] = {}
+        for n in deferred_names:
+            per_company[n] = {
+                "name": n, "is_deferred": True,
+                "cod_approved": 0.0, "cod_pending": 0.0,
+                "shipping_cost": 0.0,
+                "delivered_orders_count": 0,
+                "pending_cod_orders_count": 0,
+                "cod_fee_percent": float(cfg_map.get(n.lower(), {}).get("cod_fee_percent") or 0),
+                "cod_fee_fixed_per_order": float(cfg_map.get(n.lower(), {}).get("cod_fee_fixed_per_order") or 0),
+                "vat_rate": float(cfg_map.get(n.lower(), {}).get("vat_rate") or 0),
+            }
+
+        from balances import _is_cod_method
+        async for o in db.unified_orders.find(
+            {"user_id": uid},
+            {"_id": 0, "order_status": 1, "shipping_company": 1,
+             "shipping_cost": 1, "total_amount": 1, "payment_method": 1},
+        ):
+            canonical, cfg = _resolve_company(o.get("shipping_company", ""), cfg_map)
+            if not cfg or not cfg.get("is_deferred"):
+                continue   # Immediate companies excluded — booked as direct expense.
+            row = per_company.setdefault(canonical, {
+                "name": canonical, "is_deferred": True,
+                "cod_approved": 0.0, "cod_pending": 0.0,
+                "shipping_cost": 0.0,
+                "delivered_orders_count": 0, "pending_cod_orders_count": 0,
+                "cod_fee_percent": float(cfg.get("cod_fee_percent") or 0),
+                "cod_fee_fixed_per_order": float(cfg.get("cod_fee_fixed_per_order") or 0),
+                "vat_rate": float(cfg.get("vat_rate") or 0),
+            })
+            delivered = status_is_delivered(o.get("order_status", ""))
+            is_cod = _is_cod_method(o.get("payment_method") or "")
+            total = float(o.get("total_amount") or 0)
+            cost_each = float(o.get("shipping_cost") or 0) or float(cfg.get("cost") or 0)
+            if delivered:
+                row["delivered_orders_count"] += 1
+                row["shipping_cost"] += cost_each * (1 + row["vat_rate"])
+                if is_cod:
+                    row["cod_approved"] += total
+            else:
+                if is_cod:
+                    row["cod_pending"] += total
+                    row["pending_cod_orders_count"] += 1
+
+        # 2) Fold in courier_transfers (both directions).
+        async for t in db.courier_transfers.find(
+            {"user_id": uid}, {"_id": 0},
+        ):
+            name = (t.get("company_name") or "").strip()
+            if name not in per_company:
+                continue
+            amt = float(t.get("amount") or 0)
+            direction = t.get("direction") or "courier_to_bank"
+            if direction == "courier_to_bank":
+                per_company[name].setdefault("courier_to_bank", 0.0)
+                per_company[name]["courier_to_bank"] += amt
+            elif direction == "bank_to_courier":
+                per_company[name].setdefault("bank_to_courier", 0.0)
+                per_company[name]["bank_to_courier"] += amt
+
+        # 3) Compute COD fees and net per company.
+        rows = []
+        for name, r in per_company.items():
+            cod_approved = round(r["cod_approved"], 2)
+            shipping_cost = round(r["shipping_cost"], 2)
+            cod_fee = round(
+                r["cod_fee_percent"] * cod_approved
+                + r["cod_fee_fixed_per_order"] * r["delivered_orders_count"],
+                2,
+            )
+            c2b = round(r.get("courier_to_bank", 0.0), 2)
+            b2c = round(r.get("bank_to_courier", 0.0), 2)
+            net = round(cod_approved - shipping_cost - cod_fee - c2b + b2c, 2)
+            interpretation = (
+                "لنا عند الشركة" if net > 0.005
+                else "علينا للشركة" if net < -0.005
+                else "متوازن"
+            )
+            rows.append({
+                "name": name,
+                "is_deferred": True,
+                "cod_approved": cod_approved,
+                "cod_pending": round(r["cod_pending"], 2),
+                "shipping_cost": shipping_cost,
+                "cod_fee": cod_fee,
+                "courier_to_bank": c2b,
+                "bank_to_courier": b2c,
+                "net_balance": net,
+                "interpretation": interpretation,
+                "delivered_orders_count": r["delivered_orders_count"],
+                "pending_cod_orders_count": r["pending_cod_orders_count"],
+                "cod_fee_percent": r["cod_fee_percent"],
+                "cod_fee_fixed_per_order": r["cod_fee_fixed_per_order"],
+            })
+        rows.sort(key=lambda x: (-abs(x["net_balance"]), x["name"]))
+
+        # 4) Top-line totals (deferred companies only).
+        totals = {
+            "cod_approved": round(sum(r["cod_approved"] for r in rows), 2),
+            "cod_pending":  round(sum(r["cod_pending"]  for r in rows), 2),
+            "shipping_cost": round(sum(r["shipping_cost"] for r in rows), 2),
+            "cod_fee":     round(sum(r["cod_fee"]     for r in rows), 2),
+            "courier_to_bank": round(sum(r["courier_to_bank"] for r in rows), 2),
+            "bank_to_courier": round(sum(r["bank_to_courier"] for r in rows), 2),
+            "net_owed_to_us": round(sum(r["net_balance"] for r in rows if r["net_balance"] > 0), 2),
+            "net_owed_by_us": round(abs(sum(r["net_balance"] for r in rows if r["net_balance"] < 0)), 2),
+            "net_balance":   round(sum(r["net_balance"] for r in rows), 2),
+        }
+        return {"companies": rows, "totals": totals}
+
+    # ─── Iter-144 — Courier transfers (two-way ledger movements) ──
+    @router.get("/transfers")
+    async def list_courier_transfers(
+        company: Optional[str] = None,
+        direction: Optional[str] = None,
+        user: dict = Depends(current_user),
+    ):
+        q = {"user_id": user["id"]}
+        if company:
+            q["company_name"] = company.strip()
+        if direction in ("courier_to_bank", "bank_to_courier"):
+            q["direction"] = direction
+        items = await db.courier_transfers.find(q, {"_id": 0}).sort(
+            "transfer_date", -1,
+        ).to_list(1000)
+        return {"items": items}
+
+    @router.post("/transfers")
+    async def add_courier_transfer(payload: dict, user: dict = Depends(current_user)):
+        uid = user["id"]
+        company = (payload.get("company_name") or "").strip()
+        direction = payload.get("direction") or "courier_to_bank"
+        amount = round(float(payload.get("amount") or 0), 2)
+        date_str = (payload.get("transfer_date") or "").strip()
+        if not company:
+            raise HTTPException(400, "اسم شركة الشحن مطلوب")
+        if direction not in ("courier_to_bank", "bank_to_courier"):
+            raise HTTPException(400, "اتجاه التحويل غير صحيح")
+        if amount <= 0:
+            raise HTTPException(400, "المبلغ يجب أن يكون موجباً")
+        try:
+            datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(400, "صيغة التاريخ يجب أن تكون YYYY-MM-DD")
+        bank_id = payload.get("bank_account_id") or None
+        if bank_id:
+            acc = await db.accounts.find_one(
+                {"id": bank_id, "user_id": uid}, {"_id": 0, "id": 1},
+            )
+            if not acc:
+                raise HTTPException(404, "الحساب البنكي المختار غير موجود")
+        # Post the bank movement (in=courier_to_bank, out=bank_to_courier)
+        tx_id = None
+        if bank_id:
+            tx_id = str(uuid.uuid4())
+            await db.account_transactions.insert_one({
+                "id": tx_id, "user_id": uid, "account_id": bank_id,
+                "transaction_type": "courier_transfer",
+                "amount": amount,
+                "direction": "in" if direction == "courier_to_bank" else "out",
+                "description": (
+                    f"تحويل من شركة الشحن — {company}"
+                    if direction == "courier_to_bank"
+                    else f"دفع لشركة الشحن — {company}"
+                ),
+                "transaction_date": date_str,
+                "balance_after": 0.0,
+                "status": "posted",
+                "reference": (payload.get("reference") or "")[:64],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            await _recompute_shipping_account_balance(db, uid, bank_id)
+        doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": uid,
+            "company_name": company,
+            "direction": direction,
+            "amount": amount,
+            "transfer_date": date_str,
+            "bank_account_id": bank_id,
+            "linked_transaction_id": tx_id,
+            "reference": (payload.get("reference") or "").strip(),
+            "note": (payload.get("note") or "").strip(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.courier_transfers.insert_one(doc)
+        doc.pop("_id", None)
+        return doc
+
+    @router.delete("/transfers/{transfer_id}")
+    async def delete_courier_transfer(transfer_id: str, user: dict = Depends(current_user)):
+        uid = user["id"]
+        t = await db.courier_transfers.find_one(
+            {"id": transfer_id, "user_id": uid}, {"_id": 0},
+        )
+        if not t:
+            raise HTTPException(404, "التحويل غير موجود")
+        if t.get("linked_transaction_id") and t.get("bank_account_id"):
+            await db.account_transactions.delete_one(
+                {"id": t["linked_transaction_id"], "user_id": uid},
+            )
+            await _recompute_shipping_account_balance(db, uid, t["bank_account_id"])
+        await db.courier_transfers.delete_one({"id": transfer_id, "user_id": uid})
+        return {"ok": True}
+
     return router
 
 

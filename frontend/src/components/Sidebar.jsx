@@ -79,7 +79,6 @@ const SECTIONS = [
             // sidebar links don't 404.
             { to: "/shipping/ledger", label: "أرصدة شركات الشحن (موحَّد)", icon: Receipt, testid: "nav-shipping-ledger" },
             { to: "/shipping/transfers", label: "تحويلات شركات الشحن", icon: Coin, testid: "nav-shipping-transfers" },
-            { to: "/shipping/cod-settlements", label: "تسويات COD", icon: HandCoins, testid: "nav-shipping-cod-settlements" },
             { to: "/shipping/settings", label: "إعدادات شركات الشحن", icon: GearSix, testid: "nav-shipping-settings" },
             // Future SMSA / iMile integrations land here.
         ],

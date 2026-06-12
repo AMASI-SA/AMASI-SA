@@ -251,13 +251,15 @@ export default function FinancialPosition() {
                         const rows = Object.entries(by)
                             .filter(([, v]) => Number(v?.remaining || 0) > 0)
                             .map(([name, v]) => `${name}: ${fmtMoney(v.remaining)}`);
-                        if (rows.length === 0) return "لا مستحقات قيد السداد — تُحسب من الطلبات المسلّمة فقط";
+                        if (rows.length === 0) return "لا مستحقات قيد السداد — راجع «أرصدة شركات الشحن» للتفاصيل";
                         return rows.slice(0, 3).join(" · ") + (rows.length > 3 ? " …" : "");
                     })()}
                     tone="amber"
                     Icon={Truck}
                     testid="kpi-liab-shipping"
                 />
+                {/* Iter-144 — Unified courier ledger summary */}
+                <ShippingLedgerSummary />
                 <Card
                     title="إجمالي الالتزامات"
                     value={fmtMoney(l.total)}
@@ -472,5 +474,28 @@ export default function FinancialPosition() {
                 )}
             </div>
         </div>
+    );
+}
+
+
+// Iter-144 — Unified courier ledger summary inside FinancialPosition.
+function ShippingLedgerSummary() {
+    const [data, setData] = useState(null);
+    useEffect(() => {
+        api.get("/shipping-accounts/ledger")
+            .then(({ data: d }) => setData(d))
+            .catch(() => setData({ totals: {} }));
+    }, []);
+    if (!data) return null;
+    const t = data.totals || {};
+    return (
+        <Card
+            title="🚚 صافي حسابات شركات الشحن"
+            value={fmtMoney(t.net_balance || 0)}
+            sub={`لنا: ${fmtMoney(t.net_owed_to_us || 0)} · علينا: ${fmtMoney(t.net_owed_by_us || 0)} · COD معلَّق: ${fmtMoney(t.cod_pending || 0)} (متابعة فقط)`}
+            tone={Number(t.net_balance || 0) >= 0 ? "emerald" : "rose"}
+            Icon={Truck}
+            testid="kpi-shipping-ledger-net"
+        />
     );
 }
