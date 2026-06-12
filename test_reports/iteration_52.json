@@ -1,0 +1,32 @@
+{
+  "summary": "Iter-151 Scenario C end-to-end RETEST after E1's fix (pendingTopup state + removal of onSaved() from virtual branch in pickLiability). ALL 4 verification points PASS: (a) clicking the virtual badge entry for خالد shows the success toast 'تم إنشاء التزام راتب جديد — جاهز للسداد' (captured in DOM); (b) search input is populated with 'راتب مستحق إضافي — خالد' (non-empty as required); (c) the form 'selected' card renders the new topup details below the dropdown — 'خالد (راتب موظف)', expected 36,522.58, paid 0, due 2026-06-12 — proving form.liability_id is set and pendingTopup correctly resolves selected before parent refresh; (d) entering 200 in pay-amount and clicking hub-submit-btn fires POST /api/liabilities/{topup_id}/pay (status 200, observed in network log), then the form resets (amount empty, search empty). The fix is FULLY WORKING.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "FinancialInputHub — Pay Liability bank-account select", "issues": ["React hydration warning persists: '<span> cannot be a child of <option>' from the dynamic-source instrumentation wrapper around the bank-account <select><option>. Pre-existing from iter50/51, non-blocking."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pay_liability_search_iter151.py",
+    "/app/test_reports/iter151c_test.py",
+    "/tmp/iter151c_badge.png",
+    "/tmp/iter151c_final.png"
+  ],
+  "action_items": [
+    "Optional: fix the longstanding '<span> option' hydration warning by removing the dynamic-source wrapper inside <select><option> in FinancialInputHub.jsx (e.g. around line 770)."
+  ],
+  "critical_code_review_comments": [
+    "FinancialInputHub.jsx is now 1558 lines — needs splitting per tab (each tab form could be its own file under /pages/FinancialInputHub/). The pickLiability handler is now ~40 lines with virtual-branch logic, but it's well-commented and the pendingTopup pattern is sound.",
+    "Good defensive design: `selected = openLiabilities.find(...) || pendingTopup`. This guarantees the form always has access to the just-created topup row regardless of when the parent's openLiabilities refetch lands. On submit success, pendingTopup is cleared so subsequent searches use the fresh openLiabilities."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (no backend changes; salary-topup endpoint was already verified in iter51)", "frontend": "100% — Scenario C end-to-end works: virtual badge click creates topup, search and selected card populate, submit fires /pay and form resets"},
+  "test_credentials": "Fresh user per run: iter151c-<random>@test.com / TestPass123!",
+  "seed_data_creation": "Per-run via API: register user → POST /api/accounts (Test Bank, 100000) → POST /api/operating-expenses/salaries (خالد daily start_date=today-400d 3000, ابو خالد monthly 4000 start=2024-01-01) → POST /api/liabilities/generate-salaries → PUT /api/liabilities/{khalid_liab_id}/accrual-mode {mode:daily,start_date:today-400d} → POST /api/liabilities/{khalid_liab_id}/pay (full remaining 3000)",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Scenario C is fully fixed. The salary-topup virtual-entry flow is end-to-end functional: (1) employee with fully-paid current month liability + positive net_due appears as a virtual entry with the pay-liability-virtual-badge testid; (2) clicking it POSTs /liabilities/salary-topup and stores the response in pendingTopup local state — form.liability_id is set and the search input shows created.description ('راتب مستحق إضافي — <name>'); (3) the selected balance card renders because `selected` getter falls back to pendingTopup; (4) submit fires POST /api/liabilities/{topup_id}/pay successfully and resets pendingTopup + form. Use [data-testid='hub-tab-pay-liab'] to switch tab (label text is 'سداد التزام', not 'سداد الالتزام'). Setup steps via API are reliable.",
+  "rca of the issue": "Iter-51 root cause: After clicking the virtual entry, pickLiability called set('liability_id', created.id), setQuery(...), and then onSaved() — the onSaved triggered the parent's load() which refetched openLiabilities and re-rendered PayLiabilityForm, wiping the just-set local state. FIX (iter-52): (1) introduced `pendingTopup` local state (line 251) that holds the just-created topup row independent of openLiabilities; (2) `selected` getter (line 253-254) falls back to pendingTopup when form.liability_id matches; (3) REMOVED the onSaved() call from the virtual branch (lines 425-456) — comment explicitly states 'We deliberately DO NOT call onSaved() here'; (4) submit() (line 489-491) clears pendingTopup + form + query AFTER a successful payment, then calls onSaved() so the parent refresh now happens at the correct time. Verified end-to-end: POST /api/liabilities/salary-topup → POST /api/liabilities/{topup_id}/pay both fire successfully in the same UI session."
+}

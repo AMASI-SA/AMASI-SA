@@ -245,8 +245,13 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
     // Iter-118 — searchable counterparty picker (replaces big dropdown)
     const [query, setQuery] = useState("");
     const [showResults, setShowResults] = useState(false);
+    // Iter-151 — Holds the salary-topup row created on-the-fly from a
+    // virtual search entry so the form can surface it BEFORE the parent
+    // refresh propagates the new row into openLiabilities.
+    const [pendingTopup, setPendingTopup] = useState(null);
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-    const selected = openLiabilities.find((l) => l.id === form.liability_id);
+    const selected = openLiabilities.find((l) => l.id === form.liability_id)
+        || (pendingTopup && pendingTopup.id === form.liability_id ? pendingTopup : null);
 
     // Iter-142 — Live employee accrual map for the dropdown so each
     // employee row shows their CURRENT cumulative net_due (which can
@@ -421,10 +426,13 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
         // Iter-151 — Virtual entry: employee has accrued net_due but no
         // open salary liability. We POST /liabilities/salary-topup to
         // create an ad-hoc unique-period salary row, then auto-select
-        // it. We do NOT call generate-salaries here because that is
-        // idempotent per (user × employee × YYYY-MM) and silently
-        // skips when the merchant fully paid the current month's row
-        // already — exactly the scenario this fix targets.
+        // it.  We deliberately DO NOT call onSaved() here: doing so
+        // triggers the parent's load() which refetches openLiabilities
+        // and re-renders this form — the resulting re-render races with
+        // the local state we just set, wiping liability_id back to ""
+        // and breaking the submit-payment flow.  The parent refresh
+        // happens naturally after the user submits the actual payment
+        // (line ~478).
         if (typeof l.id === "string" && l.id.startsWith("__virtual_emp_")) {
             const empId = l.employee_salary_id;
             try {
@@ -432,11 +440,15 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                 const { data: created } = await api.post(
                     `/liabilities/salary-topup?employee_salary_id=${encodeURIComponent(empId)}`
                 );
+                // Inject the new row into local openLiabilities-like
+                // lookup by stashing it on a ref attached to the form
+                // — selected getter below will fall back to it when the
+                // parent hasn't refreshed yet.
+                setPendingTopup(created);
                 set("liability_id", created.id);
                 setQuery(created.counterparty_name || created.description ||
                     (employees.find(e => e.id === empId)?.name) || "");
                 toast.success("تم إنشاء التزام راتب جديد — جاهز للسداد");
-                onSaved && onSaved();
             } catch (e) {
                 toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر إنشاء التزام الراتب");
             }
@@ -475,6 +487,8 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
             });
             toast.success("تم تسجيل السداد وخصمه من البنك");
             setForm({ ...form, amount: "", notes: "", liability_id: "" });
+            setQuery("");
+            setPendingTopup(null);
             onSaved();
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail));
