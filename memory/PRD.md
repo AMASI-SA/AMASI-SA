@@ -29,6 +29,18 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-154 (Feb 13 2026)**: 🔗 Unified Employee Settlement — Merged "Pay Liability" + "Salary Advance" workflows.
+  - **User feedback**: "تسديد راتب الموظف التراكمي او اضافه مديونيه تكون مدمجه بصفحه واحده ... اذا كان المبلغ المدخل أكبر من رصيد الموظف يقوم النظام بتسديد المبلغ المتراكم وباقي المبلغ يسجل ك سلفه ع الموظف".
+  - **Backend** (`POST /api/liabilities/employee-settlement`): Inputs `employee_salary_id`, `amount`, `paid_from_account_id`, `payment_date`, `notes`. Computes live `net_due` from the accrual aggregator and intelligently splits: `salary_part = min(amount, net_due)` is paid against the largest open salary liability (or a fresh topup row with a unique period_key), and `advance_part = amount − salary_part` is recorded as an open `kind=salary_advance` liability. Both halves post a single bank debit each. Returns a structured response with `salary_part`, `advance_part`, `paid_liability_id`, `advance_liability_id`, and a friendly Arabic `message`.
+  - **Frontend** (`/app/frontend/src/pages/FinancialInputHub.jsx`):
+    - Pay-Liability tab renamed to **"سداد التزام / تسوية موظف"** with a hint explaining the auto-split behaviour.
+    - Submit handler now branches: when `selected.kind === 'salary'` AND `selected.employee_salary_id`, calls the new endpoint; otherwise the legacy `/pay` endpoint with the over-amount cap (preserved for supplier/ad_account).
+    - **Live split-preview banner** (indigo, `data-testid='pay-liab-split-preview'`) appears once the entered amount > net_due, displaying both halves in side-by-side cards before submission.
+    - Standalone **"سلفة موظف"** tab now shows an informational banner (`data-testid='adv-merged-banner'`) pointing merchants to the unified flow. It still works for pure-advance recording.
+  - **Tests**:
+    - 7/7 backend pytest (`test_employee_settlement_iter154.py`): exact-match payment, partial, overpay-with-split, pure advance (future start date), insufficient bank, suspended-employee compatibility, household rejection.
+    - End-to-end testing_agent run (iteration_54.json) — **100% (3/3 scenarios)**: virtual-badge surfaces accrued, split-preview renders, overpay submits with combined toast, advance tab banner links back.
+
 - **Iter-153 (Feb 13 2026)**: 👁️ Suspended Employees — Selectable in Pay-Liability + Advance + Search with visual warning.
   - **User feedback**: "عندما يكون الموظف موقوف لا أستطيع البحث عنه وإضافة مديونيه أو سداد التزام له — أبغى يكون مسموح مع التنبيه".
   - **Frontend change** (`/app/frontend/src/pages/FinancialInputHub.jsx`, line 1549): Removed the `e.status === "active"` filter — `employees` now includes both active and suspended (kept the `category === "employee"` filter to still exclude household/charity rows).
