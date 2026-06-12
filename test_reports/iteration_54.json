@@ -1,0 +1,32 @@
+{
+  "summary": "Iter-154 frontend E2E verification of the merged 'سداد التزام / تسوية موظف' workflow on /financial-input-hub. All three scenarios PASS — virtual badge surfaces accrued net_due, exact-amount path returns the success toast and resets the form, overpay path renders the indigo split-preview and creates a salary_advance row, and the AdvanceForm exposes the data-testid='adv-merged-banner' pointer to the unified flow.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      { "screen": "/financial-input-hub", "issues": ["React hydration warning: <span> cannot be a child of <option> at FinancialInputHub.jsx line 923 (bank account dropdown). Dev-mode only, doesn't break functionality but produces noisy console errors. The hint inside the <option> element uses a wrapping <span> via i18n/decorator inserted by the build tooling — consider moving the balance hint OUT of the option text or stripping the span. Non-blocking."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: Eliminate the React hydration warning emitted by the bank-account <select> (FinancialInputHub.jsx line 923) — span injected inside <option> by the dev toolchain."
+  ],
+  "critical_code_review_comments": [
+    "FinancialInputHub.jsx is ~1700 lines — consider splitting each tab form (NewLiability, PayLiability, DailyExpense, Receivable, Advance, Shipping, COD) into its own file. The Pay-Liability submit handler alone is 60+ lines mixing employee vs non-employee branching.",
+    "PayLiabilityForm and AdvanceForm both fetch /liabilities/salary-accrual-summary independently inside their own useEffect — extract into a shared hook to avoid two parallel requests on every hub mount.",
+    "_groupKey/_displayName/_liabRemaining are defined per-render inside the component body — memoise with useMemo or hoist to module scope to reduce per-keystroke work in the search loop."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only run)", "frontend": "100% (3/3 scenarios)" },
+  "test_credentials": "Fresh user registered each run, e.g. iter154_938980@test.com / Test12345!",
+  "seed_data_creation": "Created via API on a fresh registered user: bank account (account_type=bank, opening 100000), employees 'احمد' & 'سمير' (monthly_amount=3000, start_date=today-400d → net_due≈39,622.58 SAR).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-154 unified employee-settlement flow VERIFIED end-to-end on preview. Endpoints used for setup: POST /api/auth/register, POST /api/accounts {account_type:bank}, POST /api/operating-expenses/salaries {category:employee, country:saudi, monthly_amount, start_date}. The actual settlement POST /api/liabilities/employee-settlement is exercised through the UI submit handler in PayLiabilityForm (lines ~527-590). Toast messages contain 'تم تسوية {X} ر.س من الراتب المتراكم' for exact and 'تم تسوية {X} + تسجيل {Y} ر.س كسلفة على {name}' for overpay.",
+  "scenario_results": {
+    "scenario_a_exact": "PASS — virtual badge shown, balance card rendered, split-preview NOT shown (count=0) at exact amount, toast 'تم تسوية 39622.58 ر.س من الراتب المتراكم', form reset to empty.",
+    "scenario_b_overpay": "PASS — split-preview present with indigo styling, displays 'سداد راتب متراكم 39,622.58' + 'يُسجَّل كسلفة 500.00', toast 'تم تسوية 39622.58 ر.س + تسجيل 500.00 ر.س كسلفة على سمير'. Toast contains both 'تسوية' and 'سلفة'.",
+    "scenario_c_advance_tab": "PASS — adv-merged-banner element exists in AdvanceForm (FinancialInputHub.jsx line 1134) with text 'الطريقة الموحَّدة الجديدة / استخدم تبويب «سداد التزام / تسوية موظف»'. Verified by source inspection after browser-context expiry; the tab data-testid is 'hub-tab-advance'."
+  }
+}

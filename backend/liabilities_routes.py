@@ -819,6 +819,215 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         return result
 
     # ── POST / (manual create) ────────────────────────────────────────
+    # ── POST /employee-settlement ──────────────────────────────────────
+    # Iter-154 — Unified employee cash-flow endpoint.
+    # User feedback: "تسديد راتب الموظف التراكمي او اضافه مديونيه تكون
+    # مدمجه بصفحه واحده ... اذا كان المبلغ المدخل أكبر من رصيد الموظف
+    # يقوم النظام بتسديد المبلغ المتراكم وباقي المبلغ يسجل ك سلفه ع
+    # الموظف".
+    #
+    # Inputs:
+    #   employee_salary_id  — the operating_salaries row
+    #   amount              — total cash leaving the bank to/for the
+    #                         employee
+    #   paid_from_account_id— the bank account being debited
+    #   payment_date        — YYYY-MM-DD
+    #   notes               — optional
+    #
+    # Behaviour:
+    #   1. Compute net_due from `_aggregate_salary_accrual`.
+    #   2. salary_part   = min(amount, net_due)
+    #   3. advance_part  = amount − salary_part   (>= 0)
+    #   4. If salary_part > 0:
+    #        ensure an open salary liability covering salary_part exists
+    #        (creates a topup row with unique period_key if needed),
+    #        then pay it via the existing /pay flow.
+    #   5. If advance_part > 0:
+    #        insert a new kind=salary_advance liability with
+    #        expected=advance_part, paid_amount=advance_part,
+    #        advance_status=open, and post the corresponding bank
+    #        debit transaction (handled by the existing /api/liabilities
+    #        POST endpoint).
+    #
+    # Response:
+    #   { salary_part, advance_part, net_due_before, paid_liability_id,
+    #     advance_liability_id, message }
+    @router.post("/employee-settlement")
+    async def employee_settlement(
+        payload: dict, user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        emp_id = (payload.get("employee_salary_id") or "").strip()
+        amount = _round(payload.get("amount"))
+        bank_id = (payload.get("paid_from_account_id") or "").strip()
+        payment_date = (payload.get("payment_date") or "").strip()
+        notes = (payload.get("notes") or "").strip()
+        if not emp_id:
+            raise HTTPException(400, "اختر الموظف")
+        if amount <= 0:
+            raise HTTPException(400, "أدخل مبلغاً صحيحاً")
+        if not bank_id:
+            raise HTTPException(400, "اختر الحساب البنكي")
+        if not payment_date:
+            raise HTTPException(400, "اختر التاريخ")
+        emp = await db.operating_salaries.find_one(
+            {"id": emp_id, "user_id": uid, "category": "employee"},
+            {"_id": 0},
+        )
+        if not emp:
+            raise HTTPException(404, "الموظف غير موجود")
+        bank = await db.accounts.find_one(
+            {"id": bank_id, "user_id": uid},
+            {"_id": 0, "current_balance": 1, "name": 1, "account_type": 1},
+        )
+        if not bank:
+            raise HTTPException(404, "الحساب البنكي غير موجود")
+        # Sufficient bank balance (defensive — pay/topup will also check).
+        if float(bank.get("current_balance") or 0) + 0.01 < amount:
+            raise HTTPException(
+                400,
+                f"رصيد «{bank.get('name','')}» غير كافٍ — "
+                f"المتاح {float(bank.get('current_balance') or 0):.2f} ر.س",
+            )
+
+        # Compute live net_due.
+        summary = await _aggregate_salary_accrual(db, uid)
+        emp_row = next(
+            (e for e in summary.get("employees", []) if e["id"] == emp_id),
+            None,
+        )
+        net_due = float(emp_row.get("net_due") or 0) if emp_row else 0.0
+
+        salary_part = min(amount, net_due)
+        advance_part = round(amount - salary_part, 2)
+        salary_part = round(salary_part, 2)
+
+        paid_liability_id: Optional[str] = None
+        advance_liability_id: Optional[str] = None
+        today_rd_str = riyadh_today().isoformat() if hasattr(riyadh_today(), "isoformat") else str(riyadh_today())
+
+        # ── Step 1 — settle accrued salary portion ──
+        if salary_part > 0:
+            # Try to use an existing OPEN salary liability with enough
+            # remaining capacity. Otherwise spin up a unique-period
+            # topup row covering exactly salary_part.
+            target_id: Optional[str] = None
+            existing = await db.liabilities.find_one(
+                {"user_id": uid, "kind": "salary",
+                 "employee_salary_id": emp_id,
+                 "status": {"$in": ["unpaid", "partial"]}},
+                {"_id": 0, "id": 1, "expected_amount": 1, "paid_amount": 1},
+                sort=[("expected_amount", -1)],
+            )
+            if existing:
+                rem = _round(
+                    _round(existing.get("expected_amount")) -
+                    _round(existing.get("paid_amount"))
+                )
+                if rem >= salary_part - 0.01:
+                    target_id = existing["id"]
+            if target_id is None:
+                # Create a topup row for salary_part
+                period_key = (
+                    f"{today_rd_str[:7]}-topup-{uuid.uuid4().hex[:8]}"
+                )
+                topup_id = str(uuid.uuid4())
+                await db.liabilities.insert_one({
+                    "id": topup_id,
+                    "user_id": uid,
+                    "kind": "salary",
+                    "employee_salary_id": emp_id,
+                    "period_key": period_key,
+                    "monthly_amount_base": _round(emp.get("monthly_amount")),
+                    "accrual_mode": emp.get("accrual_mode") or "monthly",
+                    "accrual_start_date": emp.get("accrual_start_date") or today_rd_str,
+                    "expected_amount": salary_part,
+                    "paid_amount": 0.0,
+                    "advance_deducted": 0.0,
+                    "due_date": today_rd_str,
+                    "status": "unpaid",
+                    "description": f"تسوية راتب — {emp.get('name','')}",
+                    "notes": notes or "",
+                    "auto_generated": False,
+                    "is_topup": True,
+                    "created_at": _now(),
+                    "updated_at": _now(),
+                })
+                target_id = topup_id
+
+            # Pay salary_part against target_id
+            tgt = await db.liabilities.find_one(
+                {"id": target_id, "user_id": uid}, {"_id": 0},
+            )
+            already_paid = _round(tgt.get("paid_amount"))
+            expected = _round(tgt.get("expected_amount"))
+            await _post_bank_tx(
+                db, uid,
+                account_id=bank_id,
+                amount=salary_part, direction="out",
+                transaction_date=payment_date,
+                description=f"سداد راتب — {emp.get('name','')}",
+                peer_liability_id=target_id,
+                transaction_type="debt_payment",
+            )
+            new_paid = _round(already_paid + salary_part)
+            new_status = _compute_status(expected, new_paid)
+            await db.liabilities.update_one(
+                {"id": target_id, "user_id": uid},
+                {"$set": {"paid_amount": new_paid, "status": new_status,
+                          "updated_at": _now()}},
+            )
+            paid_liability_id = target_id
+
+        # ── Step 2 — record excess as a salary advance ──
+        if advance_part > 0:
+            adv_id = str(uuid.uuid4())
+            await db.liabilities.insert_one({
+                "id": adv_id,
+                "user_id": uid,
+                "kind": "salary_advance",
+                "employee_salary_id": emp_id,
+                "expected_amount": advance_part,
+                "paid_amount": advance_part,
+                "consumed_amount": 0.0,
+                "advance_status": "open",
+                "due_date": today_rd_str,
+                "status": "paid",
+                "description": (
+                    notes
+                    or f"الفرق من تسوية الراتب — {emp.get('name','')}"
+                ),
+                "notes": notes or "",
+                "created_at": _now(),
+                "updated_at": _now(),
+            })
+            await _post_bank_tx(
+                db, uid,
+                account_id=bank_id,
+                amount=advance_part, direction="out",
+                transaction_date=payment_date,
+                description=f"سلفة — {emp.get('name','')}",
+                peer_liability_id=adv_id,
+                transaction_type="salary_advance",
+            )
+            advance_liability_id = adv_id
+
+        return {
+            "ok": True,
+            "employee_name": emp.get("name"),
+            "net_due_before": _round(net_due),
+            "amount": _round(amount),
+            "salary_part": salary_part,
+            "advance_part": advance_part,
+            "paid_liability_id": paid_liability_id,
+            "advance_liability_id": advance_liability_id,
+            "message": (
+                f"تم تسوية {salary_part:.2f} ر.س من الراتب المتراكم"
+                + (f" + تسجيل {advance_part:.2f} ر.س كسلفة على {emp.get('name','')}"
+                   if advance_part > 0 else "")
+            ),
+        }
+
     @router.post("")
     async def create_liability(
         payload: LiabilityCreate, user: dict = Depends(current_user)

@@ -529,6 +529,38 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
         if (!form.paid_from_account_id) { toast.error("اختر الحساب البنكي"); return; }
         const amt = Number(form.amount);
         if (!amt || amt <= 0) { toast.error("أدخل مبلغاً صحيحاً"); return; }
+        // Iter-154 — When the selected liability is for an EMPLOYEE
+        // (kind=salary, has employee_salary_id), route through the
+        // unified employee-settlement endpoint which auto-splits the
+        // amount between paying the accrued portion and recording the
+        // excess as a salary advance.  This merges the legacy
+        // "سداد التزام" and "سلفة موظف" flows into one smart submit.
+        const isEmployee = (selected?.kind === "salary"
+                            && selected?.employee_salary_id);
+        if (isEmployee) {
+            setBusy(true);
+            try {
+                const { data } = await api.post(
+                    "/liabilities/employee-settlement",
+                    {
+                        employee_salary_id: selected.employee_salary_id,
+                        amount: amt,
+                        paid_from_account_id: form.paid_from_account_id,
+                        payment_date: form.payment_date,
+                        notes: form.notes,
+                    },
+                );
+                toast.success(data.message || "تم تسجيل التسوية", { duration: 7000 });
+                setForm({ ...form, amount: "", notes: "", liability_id: "" });
+                setQuery("");
+                setPendingTopup(null);
+                onSaved();
+            } catch (e) {
+                toast.error(formatApiErrorDetail(e.response?.data?.detail));
+            } finally { setBusy(false); }
+            return;
+        }
+        // Non-employee path: enforce the legacy remaining-amount cap.
         if (selected && amt > Number(selected.remaining_amount) + 0.01) {
             toast.error(`المبلغ أكبر من المتبقي (${fmt(selected.remaining_amount)})`);
             return;
@@ -553,9 +585,9 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
 
     return (
         <SectionCard
-            title="سداد التزام قائم"
+            title="سداد التزام / تسوية موظف"
             Icon={CreditCard}
-            hint="يخصم تلقائياً من رصيد البنك المختار ويُحدِّث المركز المالي"
+            hint="للموظفين: المبلغ الزائد عن المتراكم يُسجَّل تلقائياً كسلفة. للموردين/الإعلانات: السداد العادي حتى حد المتبقي."
             onSubmit={submit}
             busy={busy}
             submitLabel="تسجيل السداد"
@@ -726,6 +758,50 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
                     />
                 </div>
             )}
+
+            {/* Iter-154 — Smart auto-split preview for employee
+                settlements.  When the entered amount > current net_due
+                the backend will pay the accrued portion and record
+                the excess as a salary advance.  We surface this so the
+                merchant knows what's about to happen. */}
+            {selected && selected.employee_salary_id && Number(form.amount) > 0 && (() => {
+                const acc = accrualMap[selected.employee_salary_id];
+                const nd = acc ? Number(acc.net_due || 0) : 0;
+                const amt = Number(form.amount);
+                if (nd <= 0 && amt > 0) {
+                    return (
+                        <div className="sm:col-span-2 p-3 rounded-lg bg-amber-50 border-2 border-amber-300 text-xs" data-testid="pay-liab-split-preview">
+                            <div className="font-extrabold text-amber-900 mb-1">📌 تنبيه: لا يوجد راتب مستحق حالياً</div>
+                            <div className="text-amber-800">
+                                المبلغ كاملاً (<span className="num font-bold">{fmt(amt)}</span> ر.س) سيُسجَّل
+                                كـ <span className="font-extrabold">سلفة على الموظف</span> ستُخصم من راتبه القادم.
+                            </div>
+                        </div>
+                    );
+                }
+                if (amt > nd + 0.01) {
+                    const advancePart = amt - nd;
+                    return (
+                        <div className="sm:col-span-2 p-3 rounded-lg bg-indigo-50 border-2 border-indigo-300 text-xs" data-testid="pay-liab-split-preview">
+                            <div className="font-extrabold text-indigo-900 mb-1">⚖️ تقسيم تلقائي للمبلغ</div>
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                <div className="bg-white rounded p-2 border border-indigo-200">
+                                    <div className="text-[10px] text-slate-500">سداد راتب متراكم</div>
+                                    <div className="num font-extrabold text-emerald-700 text-sm">{fmt(nd)} ر.س</div>
+                                </div>
+                                <div className="bg-white rounded p-2 border border-amber-200">
+                                    <div className="text-[10px] text-slate-500">يُسجَّل كسلفة</div>
+                                    <div className="num font-extrabold text-amber-700 text-sm">{fmt(advancePart)} ر.س</div>
+                                </div>
+                            </div>
+                            <div className="mt-2 text-indigo-800 text-[11px]">
+                                الفرق سيُسجَّل كسلفة على {selected.counterparty_name || "الموظف"} وستُخصم من رواتبه القادمة تلقائياً.
+                            </div>
+                        </div>
+                    );
+                }
+                return null;
+            })()}
 
             {/* Iter-118 — balance card shows what's owed / paid for the picked counterparty */}
             {selected && (() => {
@@ -1054,7 +1130,14 @@ function AdvanceForm({ employees, banks, openLiabilities, onSaved }) {
         } finally { setBusy(false); }
     };
     return (
-        <SectionCard title="سلفة موظف" Icon={Coins} hint="تُخصم فوراً من البنك وتُستهلَك تلقائياً من راتب الشهر القادم" onSubmit={submit} busy={busy}>
+        <SectionCard title="سلفة موظف (طريقة قديمة — منفصلة)" Icon={Coins} hint="🆕 الآن يمكنك تسوية الراتب وإضافة السلفة من خلال «سداد التزام / تسوية موظف» بنفس الوقت تلقائياً." onSubmit={submit} busy={busy}>
+            <div className="sm:col-span-2 p-3 rounded-lg bg-indigo-50 border-2 border-indigo-300 text-xs" data-testid="adv-merged-banner">
+                <div className="font-extrabold text-indigo-900 mb-1">💡 الطريقة الموحَّدة الجديدة</div>
+                <div className="text-indigo-800">
+                    استخدم تبويب <span className="font-extrabold">«سداد التزام / تسوية موظف»</span> لتسوية الراتب وإضافة السلفة في عملية واحدة:
+                    أدخل أي مبلغ، وسيقوم النظام بسداد المتراكم تلقائياً وتسجيل الفرق كسلفة. هذا التبويب لا يزال متاحاً لتسجيل سلفة مستقلة (دون تسوية راتب).
+                </div>
+            </div>
             <Field label="الموظف (ابحث بالاسم)" required full>
                 <div className="relative">
                     <input
