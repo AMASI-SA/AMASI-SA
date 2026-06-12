@@ -29,6 +29,13 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-151c (Feb 13 2026)**: 🐛 Pay-Liability Search — "shortfall virtual entry" for stale partial rows.
+  - **Bug**: User reported on production: شهاب التراكمي 4200 ر.س لكن الزر يرفض السداد بـ "المبلغ أكبر من المتبقي (0.00)". تشخيص iter-151b كان جزئياً.
+  - **Real root cause**: Even after the iter-151b fixes, if the employee had an EXISTING open salary liability with `remaining=0` (e.g. stale `partial` row with paid==expected from a prior advance-offset round), the virtual-entry branch was SKIPPED because `groups.has(empKey)` was already true. The merchant got stuck on the zero-remain row.
+  - **Fix** (`/app/frontend/src/pages/FinancialInputHub.jsx`): Reworked the virtual-entry loop to ALWAYS surface a virtual rep whenever `existingGroup.sumRemaining < employee.net_due`. The virtual covers the **shortfall** (= net_due − existingRemain) and is promoted to `representative`, so clicks route through the salary-topup flow regardless of stale data. The dropdown's `onClick` now short-circuits to `pickLiability(g.representative)` when `g.virtual` is true.
+  - **Backend behavior** (`liabilities_routes.py::create_salary_topup`): When the merchant has a stale partial row counted in `paid_amount`, the `_aggregate_salary_accrual` aggregator already subtracts it from `accrued` → returns the correct outstanding `net_due`. The topup endpoint then caps at this net_due, so over-payment is impossible (correct accounting invariant).
+  - **Tests**: 8/8 backend pytest (`test_pay_liability_search_iter151.py`) + end-to-end Playwright in iteration_53.json — all green. The bug is NOT reproducible on Preview after the fix; redeploy required to mirror on production.
+
 - **Iter-151b (Feb 13 2026)**: 🐛 Pay-Liability Search — "المديونيه 0 ريال رغم أن البحث يظهر 4200" Fix.
   - **Bug**: User reported (Arabic): for employee "شهاب", search dropdown showed 4200 SAR but clicking + submitting returned the error "المبلغ أكبر من المتبقي (0.00)".
   - **Root cause (two distinct issues)**:
