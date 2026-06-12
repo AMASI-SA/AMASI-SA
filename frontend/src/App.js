@@ -12,6 +12,7 @@ import DailyCosts from "./pages/DailyCosts";
 import History from "./pages/History";
 import Reports from "./pages/Reports";
 import ShippingAccounts from "./pages/ShippingAccounts";
+import ShippingLedgerStub from "./pages/ShippingLedgerStub";
 import MakeWebhook from "./pages/MakeWebhook";
 import OperatingExpenses from "./pages/OperatingExpenses";
 import OperationalReports from "./pages/OperationalReports";
@@ -80,6 +81,11 @@ function AppRoutes() {
             <Route path="/salla-sources" element={<ProtectedRoute><Layout><SallaSourceComparison /></Layout></ProtectedRoute>} />
             <Route path="/payment-settlements" element={<ProtectedRoute><Layout><PaymentSettlements /></Layout></ProtectedRoute>} />
             <Route path="/shipping-accounts" element={<ProtectedRoute><Layout><ShippingAccounts /></Layout></ProtectedRoute>} />
+            {/* Iter-144 stubs — sidebar shows these in the new 'شركات الشحن' section. */}
+            <Route path="/shipping/ledger" element={<ProtectedRoute><Layout><ShippingLedgerStub /></Layout></ProtectedRoute>} />
+            <Route path="/shipping/transfers" element={<ProtectedRoute><Layout><ShippingLedgerStub /></Layout></ProtectedRoute>} />
+            <Route path="/shipping/cod-settlements" element={<ProtectedRoute><Layout><ShippingLedgerStub /></Layout></ProtectedRoute>} />
+            <Route path="/shipping/settings" element={<ProtectedRoute><Layout><ShippingLedgerStub /></Layout></ProtectedRoute>} />
             <Route path="/make-webhook" element={<ProtectedRoute><Layout><MakeWebhook /></Layout></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><Layout><TeamManagement /></Layout></ProtectedRoute>} />
