@@ -331,3 +331,79 @@ async def get_auto_sync_status(db, user_id: str) -> Dict[str, Any]:
         "interval_seconds": SYNC_INTERVAL_SECONDS,
         "next_run_eta_seconds": None,  # filled by /status route from scheduler state
     }
+
+
+# ── Iter-147 — Daily Tamara attribution sweep ────────────────────
+async def run_tamara_attribution_sweep(db) -> Dict[str, Any]:
+    """Walk every user with Tamara enabled and recompute settlement
+    attribution on every `payment_transactions` row.
+
+    This is a safety-net background job: most attribution updates flow
+    through the inline hooks (status webhook, billing-eligible stamp,
+    settlement-file import).  This sweep catches edge cases — Salla
+    direct status updates that didn't pass through `orders_db.upsert_order`,
+    or rows that were inserted before Iter-147 shipped.
+
+    Idempotent: rows whose source hasn't changed are left untouched
+    and no audit-log entry is written.
+    """
+    from .settlement_attribution import recompute_attribution_for_doc
+
+    started = _now_iso()
+    started_dt = datetime.now(timezone.utc)
+
+    # Pick up only users with Tamara enabled.
+    user_ids: set[str] = set()
+    async for s in db.bnpl_settings.find(
+        {"provider": "tamara", "enabled": True},
+        {"_id": 0, "user_id": 1},
+    ):
+        uid = s.get("user_id")
+        if uid:
+            user_ids.add(uid)
+
+    total_scanned = 0
+    total_updated = 0
+    per_user: Dict[str, Dict[str, int]] = {}
+    for uid in user_ids:
+        u_scanned = 0
+        u_updated = 0
+        try:
+            async for d in db.payment_transactions.find(
+                {"user_id": uid, "provider": "tamara"},
+                {"_id": 0, "id": 1},
+            ):
+                u_scanned += 1
+                r = await recompute_attribution_for_doc(
+                    db, user_id=uid, txn_id=d.get("id"),
+                )
+                if r.get("updated"):
+                    u_updated += 1
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "iter-147 attribution sweep: user=%s failed: %s", uid, e,
+            )
+        per_user[uid] = {"scanned": u_scanned, "updated": u_updated}
+        total_scanned += u_scanned
+        total_updated += u_updated
+
+    summary = {
+        "id": str(uuid.uuid4()),
+        "kind": "tamara_attribution_sweep",
+        "started_at": started,
+        "finished_at": _now_iso(),
+        "duration_seconds": round(
+            (datetime.now(timezone.utc) - started_dt).total_seconds(), 1,
+        ),
+        "users_processed": len(user_ids),
+        "rows_scanned":    total_scanned,
+        "rows_updated":    total_updated,
+        # cap to keep the log doc small
+        "per_user_sample": dict(list(per_user.items())[:25]),
+    }
+    try:
+        await db.bnpl_auto_sync_runs.insert_one(summary)
+        summary.pop("_id", None)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("iter-147 attribution sweep: run-log insert failed: %s", e)
+    return summary

@@ -87,6 +87,7 @@ from purchase_invoices_routes import attach_purchase_invoice_routes, ensure_purc
 from custom_app_routes import attach_custom_app_routes, ensure_custom_app_indexes
 from ad_account_routes import attach_ad_account_routes, ensure_ad_account_indexes
 from bnpl import attach_bnpl_routes, ensure_bnpl_indexes, attach_bnpl_webhook_routes, attach_bnpl_diagnostics_routes, attach_bnpl_audit_routes, attach_bnpl_auto_sync_routes, attach_bnpl_refund_audit_routes, attach_bnpl_settlements_routes, run_auto_sync_for_all_users
+from bnpl.auto_sync_service import run_tamara_attribution_sweep
 from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
 from reconciliation_routes import attach_reconciliation_routes
 from diagnostics_routes import attach_diagnostics_routes
@@ -3050,6 +3051,36 @@ async def on_startup():
             await _asyncio.sleep(SYNC_INTERVAL_SECONDS)
 
     _asyncio.create_task(_bnpl_hourly_auto_sync())
+
+    # ── Iter-147 — Daily Tamara attribution sweep ───────────────────
+    # Re-derives `effective_settlement_date` + `settlement_source` for
+    # every Tamara payment_transactions row so estimated → billing →
+    # provider_official transitions are picked up automatically (without
+    # the merchant manually hitting the recompute endpoint each week).
+    # Runs every 24h, staggered 5 minutes after server boot so the
+    # hourly sync finishes its first round first.
+    async def _tamara_attribution_daily_sweep():
+        await _asyncio.sleep(300)  # 5-min stagger
+        DAILY_SECONDS = 24 * 60 * 60
+        while True:
+            try:
+                logger.info("iter-147: starting daily Tamara attribution sweep")
+                summary = await run_tamara_attribution_sweep(db)
+                logger.info(
+                    "iter-147: tamara attribution sweep done — "
+                    "users=%d rows_scanned=%d rows_updated=%d duration=%.1fs",
+                    summary.get("users_processed", 0),
+                    summary.get("rows_scanned", 0),
+                    summary.get("rows_updated", 0),
+                    summary.get("duration_seconds", 0.0),
+                )
+            except Exception as e:
+                logger.exception("iter-147: tamara attribution sweep failed: %s", e)
+                await _asyncio.sleep(300)
+                continue
+            await _asyncio.sleep(DAILY_SECONDS)
+
+    _asyncio.create_task(_tamara_attribution_daily_sweep())
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:

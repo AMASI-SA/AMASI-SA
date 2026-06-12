@@ -568,4 +568,19 @@ def attach_bnpl_diagnostics_routes(parent_router: APIRouter, db) -> None:
                 updated += 1
         return {"ok": True, "scanned": scanned, "updated": updated}
 
+    @router.get("/tamara/attribution/log")
+    async def attribution_log(
+        limit: int = Query(50, ge=1, le=500),
+        user: dict = Depends(current_user),
+    ):
+        """Return the recent attribution transitions (estimated →
+        billing → provider_official) so the merchant can audit how
+        settlement attribution evolved over time."""
+        uid = user["id"]
+        cur = db.tamara_attribution_log.find(
+            {"user_id": uid}, {"_id": 0},
+        ).sort([("at", -1)]).limit(limit)
+        rows = [d async for d in cur]
+        return {"rows": rows, "count": len(rows)}
+
     parent_router.include_router(router)
