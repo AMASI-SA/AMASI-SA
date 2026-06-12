@@ -589,14 +589,15 @@ async def _aggregate_official_totals(
     by a few hundred SAR because of missing webhooks / refunds in the
     wrong week / fee rate drift).
 
-    Each entry in `settlement_entries` has:
-      • event_type     — "sale" or "refund"
-      • actual_amount  — gross order amount
-      • actual_fees    — Tamara commission (variable + fixed, mixed)
-      • actual_vat     — VAT on commission
-      • actual_net_amount   — order net (gross − fees − vat)
-      • actual_refund_amount / actual_partial_refund_amount
-      • settlement_date     — date Tamara booked this row
+    Field mapping (matches `settlements_import/parsers/tamara.py`):
+      • event_type             — "sale" or "refund"
+      • actual_gross_amount    — gross order amount  (only on sales)
+      • actual_payment_fee     — Tamara commission   (only on sales)
+      • actual_payment_vat     — VAT on commission   (only on sales)
+      • actual_net_amount      — order net (can be negative for refunds)
+      • actual_refund_amount        — full refund amount
+      • actual_partial_refund_amount — partial refund amount
+      • settlement_date        — date Tamara booked this row
 
     Returns `None` when no entries exist (caller falls back to the
     computed totals).
@@ -630,9 +631,10 @@ async def _aggregate_official_totals(
             ))
         else:
             sales_count += 1
-            gross_sales += float(e.get("actual_amount") or 0.0)
-        commission += float(e.get("actual_fees") or 0.0)
-        commission_vat += float(e.get("actual_vat") or 0.0)
+            gross_sales += float(e.get("actual_gross_amount") or 0.0)
+            commission += float(e.get("actual_payment_fee") or 0.0)
+            commission_vat += float(e.get("actual_payment_vat") or 0.0)
+        # net_payable across both — refunds contribute negatively.
         net_payable += float(e.get("actual_net_amount") or 0.0)
 
     if not found:

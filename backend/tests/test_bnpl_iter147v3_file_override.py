@@ -60,8 +60,8 @@ async def test_aggregate_sums_sales_and_refunds(mongo_db):
             "provider": "tamara",
             "order_number": "100", "tamara_order_id": "tx1",
             "event_type": "sale",
-            "actual_amount": 1000.0, "actual_fees": 70.0,
-            "actual_vat": 10.5, "actual_net_amount": 919.5,
+            "actual_gross_amount": 1000.0, "actual_payment_fee": 70.0,
+            "actual_payment_vat": 10.5, "actual_net_amount": 919.5,
             "settlement_date": "2026-04-28",
         },
         {
@@ -69,8 +69,8 @@ async def test_aggregate_sums_sales_and_refunds(mongo_db):
             "provider": "tamara",
             "order_number": "101", "tamara_order_id": "tx2",
             "event_type": "sale",
-            "actual_amount": 500.0, "actual_fees": 35.0,
-            "actual_vat": 5.25, "actual_net_amount": 459.75,
+            "actual_gross_amount": 500.0, "actual_payment_fee": 35.0,
+            "actual_payment_vat": 5.25, "actual_net_amount": 459.75,
             "settlement_date": "2026-04-30",
         },
         {
@@ -80,8 +80,7 @@ async def test_aggregate_sums_sales_and_refunds(mongo_db):
             "event_type": "refund",
             "actual_refund_amount": 200.0,
             "actual_partial_refund_amount": 0.0,
-            "actual_fees": -14.0, "actual_vat": -2.1,
-            "actual_net_amount": -183.9,
+            "actual_net_amount": -200.0,
             "settlement_date": "2026-04-29",
         },
     ])
@@ -93,9 +92,10 @@ async def test_aggregate_sums_sales_and_refunds(mongo_db):
     assert out["refunds_count"] == 1
     assert out["gross_sales"] == 1500.0
     assert out["total_refunds"] == 200.0
-    assert out["commission"] == 91.0      # 70 + 35 + (-14)
-    assert out["commission_vat"] == 13.65
-    assert out["net_payable"] == 1195.35  # 919.5 + 459.75 + (-183.9)
+    # Only SALES contribute to commission (refunds are 0 fees per parser).
+    assert out["commission"] == 105.0       # 70 + 35
+    assert out["commission_vat"] == 15.75   # 10.5 + 5.25
+    assert out["net_payable"] == 1179.25    # 919.5 + 459.75 + (-200)
 
 
 # ── Integration: full compute_settlement_for_provider override ────
@@ -122,9 +122,9 @@ async def test_official_file_overrides_computed_totals(mongo_db):
         "file_id": "f-1", "order_number": "REAL-1",
         "tamara_order_id": "tam-real-1",
         "event_type": "sale",
-        "actual_amount": 17294.15,           # ← TRUE gross
-        "actual_fees": 1336.42,              # ← TRUE commission
-        "actual_vat": 200.44,                # ← TRUE VAT
+        "actual_gross_amount": 17294.15,     # ← TRUE gross
+        "actual_payment_fee": 1336.42,       # ← TRUE commission
+        "actual_payment_vat": 200.44,        # ← TRUE VAT
         "actual_net_amount": 15617.29,       # ← TRUE net
         "settlement_date": "2026-04-28",
     })
