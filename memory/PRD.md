@@ -29,6 +29,12 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-157 (Feb 13 2026)**: 📋 Financial Input Hub — Recent Entries table with pagination + amount edit.
+  - **User request**: "مركز الإدخال المالي — عرض جدول عمليات يعرض آخر 10 عمليات إدخال مع خيار تنقل بين باقي صفحات الجدول أسفل الجدول. العملية، اسم المورد/الموظف، المبلغ، كم له كم عليه سابق. مع إمكانية التعديل على المبلغ المدخل."
+  - **Backend** (`GET /api/financial-input-hub/recent?page=N&page_size=10`): Unifies merchant-initiated entries from `liabilities` (excluding auto_generated salary rows) AND `account_transactions` (debt_payment, salary_advance, ad_account_topup, salary_settlement). Returns sorted feed with operation label, party name, amount, current open balance for the party (computed via aggregation), created_at, and `editable` flag. Default page_size=10, max=50.
+  - **Frontend** (`/app/frontend/src/pages/FinancialInputHub.jsx`): New `RecentEntriesTable` component rendered below all tabs. Columns: العملية, المورد/الموظف, المبلغ, الرصيد المفتوح, التاريخ, + ✎ edit button. Pagination footer shows "صفحة X من Y · Z عملية" with «السابق» / «التالي» nav. Click ✎ → window.prompt for new amount → PUT `/liabilities/{id}` → toast + auto-reload. Posted bank transactions are surfaced read-only (editable=false) to avoid balance-corruption risk.
+  - **Tests**: 4/4 backend pytest (`test_financial_input_hub_recent_iter157.py`): empty feed, single liability listing, 15-item pagination split (10+5, no dupes), amount edit round-trip via existing PUT endpoint.
+
 - **Iter-156 (Feb 13 2026)**: 🟧 Salla Settlements — Dedicated page (mirror of Tabby/Tamara) with per-payment-method analytics.
   - **User request**: "تسويات سله مثل صفحة تسوية تمارا وتابي" — wants Excel + API support, per-method commissions, expected-vs-actual comparison with mismatch alerts.
   - **What was already built**: The Salla parser (`/app/backend/settlements_import/parsers/salla.py`) is comprehensive — it handles all payment methods (mada / credit card / Apple Pay / STC Pay / Google Pay), refunds (full vs partial detection), wallet recharge ("مشتريات سله"), Arabic diacritics, invoice number extraction from sheet title. It writes to `settlement_files` + `settlement_entries`.

@@ -800,6 +800,139 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
     return {"ok": True}
 
 
+# ── Iter-157 — Financial Input Hub: recent entries feed ─────────────────────
+# Returns a paginated, unified list of the merchant's recent inputs across
+# the four hub tabs: new liabilities, payments, salary advances, employee
+# settlements. Used by the table at the bottom of the Hub page.
+@api.get("/financial-input-hub/recent")
+async def financial_input_hub_recent(
+    page: int = 1,
+    page_size: int = 10,
+    user: dict = Depends(current_user),
+):
+    uid = user["id"]
+    page = max(1, page)
+    page_size = max(1, min(50, page_size))
+
+    # Source 1: liabilities (creations + auto-generated salary rows are
+    # excluded — only merchant-initiated entries).
+    liabs = await db.liabilities.find(
+        {"user_id": uid, "auto_generated": {"$ne": True}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(500)
+
+    # Source 2: payment events (account_transactions tagged as
+    # debt_payment / salary_advance / cod_settlement etc).
+    txs = await db.account_transactions.find(
+        {"user_id": uid,
+         "transaction_type": {"$in": [
+             "debt_payment", "salary_advance",
+             "ad_account_topup", "salary_settlement",
+         ]}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(500)
+
+    # Normalize into a single feed.
+    feed = []
+    for l in liabs:
+        kind = l.get("kind", "")
+        op = (
+            "إنشاء التزام" if kind == "supplier"
+            else "إنشاء التزام إعلانات" if kind == "ad_account"
+            else "سلفة موظف" if kind == "salary_advance"
+            else "التزام راتب" if kind == "salary"
+            else "إنشاء عميل دائن" if kind == "receivable"
+            else f"التزام ({kind})"
+        )
+        feed.append({
+            "id": l["id"],
+            "type": "liability",
+            "ref_id": l["id"],
+            "operation": op,
+            "kind": kind,
+            "party_name": (l.get("counterparty_name") or l.get("description") or "—"),
+            "amount": float(l.get("expected_amount") or 0),
+            "paid_amount": float(l.get("paid_amount") or 0),
+            "status": l.get("status"),
+            "created_at": l.get("created_at"),
+            "editable": kind != "salary_advance",
+        })
+    for t in txs:
+        op_label = {
+            "debt_payment": "سداد التزام",
+            "salary_advance": "صرف سلفة",
+            "ad_account_topup": "شحن حساب إعلاني",
+            "salary_settlement": "تسوية موظف",
+        }.get(t.get("transaction_type") or "", t.get("transaction_type"))
+        feed.append({
+            "id": t["id"],
+            "type": "transaction",
+            "ref_id": t.get("peer_liability_id") or t["id"],
+            "operation": op_label,
+            "kind": t.get("transaction_type"),
+            "party_name": (
+                t.get("description", "")
+                .replace("سداد لـ ", "")
+                .replace("شحن لـ ", "") or "—"
+            )[:80],
+            "amount": float(t.get("amount") or 0),
+            "paid_amount": float(t.get("amount") or 0),
+            "status": "posted",
+            "created_at": t.get("created_at") or t.get("transaction_date"),
+            "editable": False,  # editing a posted bank tx requires care
+        })
+
+    feed.sort(key=lambda x: (x.get("created_at") or ""), reverse=True)
+    total = len(feed)
+    start = (page - 1) * page_size
+    items = feed[start: start + page_size]
+
+    # Enrich with "prior balance" — current open balance for the party
+    # AFTER this operation. Simpler than computing the actual prior:
+    # for each unique party (counterparty_id or employee_salary_id),
+    # show the SUM of remaining_amount across their open liabilities.
+    party_ids = set()
+    for it in items:
+        # Look up the linked liability to get the party id
+        if it["type"] == "liability":
+            party_ids.add(("liab", it["ref_id"]))
+    party_balances = {}
+    if party_ids:
+        liab_ids = [pid for (k, pid) in party_ids if k == "liab"]
+        rows = await db.liabilities.find(
+            {"user_id": uid, "id": {"$in": liab_ids}},
+            {"_id": 0, "id": 1, "counterparty_id": 1, "employee_salary_id": 1},
+        ).to_list(500)
+        for r in rows:
+            cp = r.get("counterparty_id") or r.get("employee_salary_id")
+            if not cp:
+                continue
+            agg = await db.liabilities.aggregate([
+                {"$match": {"user_id": uid,
+                            "$or": [{"counterparty_id": cp},
+                                     {"employee_salary_id": cp}],
+                            "status": {"$in": ["unpaid", "partial"]}}},
+                {"$group": {"_id": None,
+                            "total": {"$sum": {"$subtract": [
+                                "$expected_amount", "$paid_amount"]}}}},
+            ]).to_list(1)
+            party_balances[r["id"]] = round((agg[0]["total"] if agg else 0), 2)
+
+    for it in items:
+        if it["type"] == "liability":
+            it["party_open_balance"] = party_balances.get(it["ref_id"], 0)
+        else:
+            it["party_open_balance"] = None
+
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+    }
+
+
 # ── Global App Config (singleton — affects all users) ────────────────────────
 # `app_config` is a single-document collection (id='global'). It holds settings
 # that affect the public-facing UI (e.g. whether the "create new account" link
