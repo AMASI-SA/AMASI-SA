@@ -306,8 +306,12 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
     const _groupKey = (l) => {
         if (l.employee_salary_id) return `emp:${l.employee_salary_id}`;
         if (l.counterparty_id)    return `cp:${l.counterparty_id}`;
-        const nm = (_displayName(l) || "").trim().toLowerCase();
-        if (nm) return `nm:${nm}`;
+        // Iter-149 v3 — Don't collapse legacy liabilities by display
+        // name.  Names like "جمال" / "ابو جمال" share the substring
+        // "جمال" so a name-keyed group would hide one behind the other
+        // when neither liability carries an employee_salary_id or
+        // counterparty_id (legacy data).  Falling back to a per-row
+        // key keeps each liability visible.
         return `__lone_${l.id}`;
     };
 
