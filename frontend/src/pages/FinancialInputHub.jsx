@@ -419,36 +419,23 @@ function PayLiabilityForm({ openLiabilities, banks, employees, onSaved }) {
 
     const pickLiability = async (l) => {
         // Iter-151 — Virtual entry: employee has accrued net_due but no
-        // open salary liability. Ensure a salary row exists for the
-        // current Riyadh month (generate-salaries is idempotent), then
-        // fetch the new open salary liability for this employee and
-        // select it. Triggers onSaved() so the parent reloads.
+        // open salary liability. We POST /liabilities/salary-topup to
+        // create an ad-hoc unique-period salary row, then auto-select
+        // it. We do NOT call generate-salaries here because that is
+        // idempotent per (user × employee × YYYY-MM) and silently
+        // skips when the merchant fully paid the current month's row
+        // already — exactly the scenario this fix targets.
         if (typeof l.id === "string" && l.id.startsWith("__virtual_emp_")) {
             const empId = l.employee_salary_id;
             try {
                 setShowResults(false);
-                await api.post("/liabilities/generate-salaries");
-                const { data } = await api.get(
-                    `/liabilities?kind=salary&employee_salary_id=${empId}&status=unpaid&limit=20`
+                const { data: created } = await api.post(
+                    `/liabilities/salary-topup?employee_salary_id=${encodeURIComponent(empId)}`
                 );
-                const items = data?.items || [];
-                let pick = items[0];
-                if (!pick) {
-                    // Try partial in case some prior partial payment exists.
-                    const { data: data2 } = await api.get(
-                        `/liabilities?kind=salary&employee_salary_id=${empId}&status=partial&limit=20`
-                    );
-                    pick = (data2?.items || [])[0];
-                }
-                if (!pick) {
-                    toast.error(
-                        "هذا الموظف لا يملك التزام راتب مفتوح حالياً. الرجاء استخدام تبويب «سلفة موظف»."
-                    );
-                    return;
-                }
-                set("liability_id", pick.id);
-                setQuery(pick.counterparty_name || (employees.find(e => e.id === empId)?.name) || "");
-                // Refresh parent state so the EmployeeBalanceCard sees the new row.
+                set("liability_id", created.id);
+                setQuery(created.counterparty_name || created.description ||
+                    (employees.find(e => e.id === empId)?.name) || "");
+                toast.success("تم إنشاء التزام راتب جديد — جاهز للسداد");
                 onSaved && onSaved();
             } catch (e) {
                 toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر إنشاء التزام الراتب");

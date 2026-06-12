@@ -670,6 +670,98 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             "total_active_salaries": len(salaries),
         }
 
+    # ── POST /salary-topup ─────────────────────────────────────────────
+    # Iter-151 — Ad-hoc salary liability for an employee whose monthly
+    # salary row is already FULLY PAID but who has accrued additional
+    # net_due (e.g. mid-month or accrual_mode=daily and the merchant
+    # paid before all days were counted).  The standard generate-
+    # salaries endpoint is idempotent per (user × employee × period),
+    # so it skips this case.  This endpoint creates a NEW open salary
+    # liability with a unique `period_key` (`YYYY-MM-topup-<uuid>`) so
+    # the unique index isn't violated.  The amount defaults to the
+    # employee's current `net_due` from the accrual aggregator, but the
+    # caller can override (e.g. UI form).
+    @router.post("/salary-topup")
+    async def create_salary_topup(
+        employee_salary_id: str = Query(...,
+            description="The operating_salaries row id"),
+        amount: Optional[float] = Query(
+            None, gt=0.0,
+            description="Override expected_amount (defaults to net_due)",
+        ),
+        notes: Optional[str] = Query(None),
+        user: dict = Depends(current_user),
+    ):
+        emp = await db.operating_salaries.find_one(
+            {"id": employee_salary_id, "user_id": user["id"]},
+            {"_id": 0},
+        )
+        if not emp:
+            raise HTTPException(404, "الموظف غير موجود")
+        if emp.get("category") != "employee":
+            raise HTTPException(400, "هذا السجل ليس موظفاً عاملاً")
+
+        # Compute remaining net_due via the existing aggregator. This
+        # honours daily accrual, start/end dates, and any open
+        # advances/paid offsets.
+        summary = await _aggregate_salary_accrual(db, user["id"])
+        emp_row = next(
+            (e for e in summary.get("employees", [])
+             if e["id"] == employee_salary_id),
+            None,
+        )
+        net_due = float(emp_row.get("net_due") or 0) if emp_row else 0.0
+
+        ask = _round(amount) if amount is not None else _round(net_due)
+        if ask <= 0:
+            raise HTTPException(
+                400,
+                "لا يوجد رصيد راتب مستحق لهذا الموظف حالياً",
+            )
+        if amount is not None and ask > net_due + 0.01:
+            # Hard cap at net_due to prevent accidental over-creation.
+            raise HTTPException(
+                400,
+                f"المبلغ المطلوب ({ask:.2f}) أكبر من الرصيد المستحق ({net_due:.2f} ر.س)",
+            )
+
+        today_rd = riyadh_today()
+        today_str = today_rd.isoformat() if hasattr(today_rd, "isoformat") else str(today_rd)
+        period_key = f"{today_str[:7]}-topup-{uuid.uuid4().hex[:8]}"
+        liab_id = str(uuid.uuid4())
+        row = {
+            "id": liab_id,
+            "user_id": user["id"],
+            "kind": "salary",
+            "employee_salary_id": employee_salary_id,
+            "ad_provider": None,
+            "ad_account_label": None,
+            "period_key": period_key,
+            "monthly_amount_base": _round(emp.get("monthly_amount")),
+            "days_in_month": None,
+            "days_worked": None,
+            "accrual_mode": emp.get("accrual_mode") or "monthly",
+            "accrual_start_date": emp.get("accrual_start_date") or today_str,
+            "expected_amount": ask,
+            "paid_amount": 0.0,
+            "advance_deducted": 0.0,
+            "due_date": today_str,
+            "status": "unpaid",
+            "description": f"راتب مستحق إضافي — {emp.get('name', '')}",
+            "notes": notes or "",
+            "auto_generated": False,
+            "is_topup": True,
+            "created_at": _now(),
+            "updated_at": _now(),
+        }
+        await db.liabilities.insert_one(row)
+        # Consume any open advances against this top-up (same rules
+        # as monthly salary rows).
+        await _apply_open_advances_to_salary(
+            db, user["id"], employee_salary_id, row,
+        )
+        return _enrich(row)
+
     # ── POST / (manual create) ────────────────────────────────────────
     @router.post("")
     async def create_liability(

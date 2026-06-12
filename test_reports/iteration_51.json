@@ -1,0 +1,54 @@
+{
+  "summary": "Iter-151 Scenario C retest on /financial-input-hub. The new POST /api/liabilities/salary-topup endpoint WORKS — clicking the virtual 'إنشاء التزام تلقائي' entry for خالد (current-month salary fully paid) successfully creates a new salary liability with unique period_key 'YYYY-MM-topup-<8hex>', status=unpaid, expected_amount=net_due (e.g. 38322.58). A green success toast 'تم إنشاء التزام راتب جديد — جاهز للسداد' is shown, no error toast appears. HOWEVER the END-TO-END UI flow is still broken: after the topup is created, the search input is CLEARED to empty (the new liability is NOT auto-selected in the form), and clicking 'تسجيل السداد' produces ZERO network calls (the submit handler aborts because form.liability_id is empty after the parent re-render triggered by onSaved()). Final topup row stays paid_amount=0, status=unpaid. So step 7 of the test plan FAILS.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "PayLiabilityForm.pickLiability — /app/frontend/src/pages/FinancialInputHub.jsx lines 420-448",
+        "issue": "After POST /liabilities/salary-topup succeeds, the handler calls `set('liability_id', created.id)`, `setQuery(created.description || ...)`, then `onSaved && onSaved()`. The onSaved() triggers parent load() which refetches openLiabilities and re-renders the form; the local state set just before (query + liability_id) is wiped — verified by reading the search input value AFTER the click: it is '' (empty). Consequently, clicking the submit button fires zero network requests (form.liability_id is falsy → submit() returns early at the `if (!form.liability_id) { toast.error('اختر الالتزام'); return; }` guard). The merchant must manually re-search the new topup row and select it again — the fix is therefore incomplete from the user's perspective.",
+        "selector": "[data-testid=\"pay-liability-search\"], [data-testid=\"hub-submit-btn\"]",
+        "priority": "HIGH"
+      },
+      {
+        "component": "PayLiabilityForm onChange query handler — FinancialInputHub.jsx line 498",
+        "issue": "Hydration warning: '<span> cannot be a child of <option>' from the dynamic-source instrumentation wrapper around bank-account <select><option>. Persists from iter50 (line 770). Non-blocking.",
+        "selector": "[data-testid=\"pay-account\"] option",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Click virtual entry → auto-select created topup → submit payment",
+        "issue": "Auto-selection breaks because onSaved() refresh resets PayLiabilityForm.query and form.liability_id. The order should be: (1) call set('liability_id', created.id), (2) setQuery(...), (3) DO NOT call onSaved() here — only call it after the user actually completes a payment via submit(). OR: invoke onSaved BEFORE set(...) so the refetch settles first, OR pass the created row up so the parent merges it into openLiabilities without remount.",
+        "affected_selectors": ["[data-testid=\"pay-liability-search\"]", "[data-testid=\"hub-submit-btn\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iter151c_v3_submit.png",
+    "/app/test_reports/iter151c_v2_clicked.png",
+    "/app/backend/tests/test_pay_liability_search_iter151.py"
+  ],
+  "action_items": [
+    "FIX: In FinancialInputHub.jsx pickLiability() virtual branch, REMOVE the onSaved() call (lines 439) OR move it to AFTER the user submits the actual payment. Currently the parent reload wipes the just-set liability_id and query, leaving the form unable to submit the new topup.",
+    "Alternative fix: Make PayLiabilityForm consume the newly-created row directly by maintaining a local `pendingExtraLiability` state, rather than relying on the parent's openLiabilities prop refresh.",
+    "After fix, re-verify Scenario C step 7: amount=200 → click submit → topup row.paid_amount becomes 200, status=partial. Currently zero network is sent on submit so payment never applies."
+  ],
+  "critical_code_review_comments": [
+    "FinancialInputHub.jsx still 1544 lines — needs to be split per tab (the pickLiability handler is now even more complex with virtual entry + API call inside the form component).",
+    "Backend salary-topup endpoint (liabilities_routes.py L673-763) is solid: capped at net_due, unique period_key prevents the (user,kind,emp,period) index collision, applies open advances via _apply_open_advances_to_salary, returns _enrich(row). 7/7 backend tests pass.",
+    "Frontend pickLiability mixes UI state (set/setQuery/setShowResults), an API call (api.post), AND a parent refresh trigger (onSaved). The onSaved is the regression cause — the same callback was added in iter151 to refresh balances after generate-salaries, but it now races with the local form state."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (salary-topup endpoint verified — 2 liab rows for خالد with topup row created with unique period_key)", "frontend": "60% — Virtual badge appears, click creates topup row + success toast (no error toast). FAILS: auto-select breaks (search input cleared), submit fires zero requests, payment NOT applied"},
+  "test_credentials": "Fresh user registered per run: iter151c_<random>@test.com / TestPass123!",
+  "seed_data_creation": "Per-run via API: register user → POST /api/accounts (Test Bank, 100000) → POST /api/operating-expenses/salaries (خالد 3000 start_date=today-400d, ابو خالد 4000) → POST /api/liabilities/generate-salaries → PUT /api/liabilities/{khalid_liab_id}/accrual-mode {mode:daily, start_date:today-400d} → POST /api/liabilities/{khalid_liab_id}/pay (full remaining e.g. 1200).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The salary-topup BACKEND endpoint is correct and works (period_key=YYYY-MM-topup-<8hex>, status=unpaid, expected=net_due). The FRONTEND auto-select is broken — after pickLiability runs the success path, the search input is empty and form.liability_id is reset, so the subsequent submit click is a no-op. Verify after E1's fix that: (a) after clicking the virtual badge, [data-testid='pay-liability-search'].value is NON-empty (e.g. 'خالد' or 'راتب مستحق إضافي — خالد'); (b) clicking hub-submit-btn produces a POST /api/liabilities/{topup_id}/pay request; (c) GET /api/liabilities returns final topup row with paid_amount>=200 and status in {partial,paid}. Use the same playwright flow — direct API for setup, then UI for the click+submit assertion. Don't rely on text 'تم تسجيل السداد' — check the network request instead.",
+  "rca of the issue": "Backend POST /liabilities/salary-topup correctly creates an ad-hoc salary liability with a unique period_key (YYYY-MM-topup-<uuid8>) bypassing the per-month idempotency guard. Frontend pickLiability (FinancialInputHub.jsx L420-448) flow: 1) POSTs salary-topup → gets created row, 2) sets liability_id=created.id, 3) setQuery(created.description), 4) toast.success(...), 5) calls onSaved() which fires parent load() refetching openLiabilities. The parent re-render (somewhere in the pipeline — possibly the inline anonymous onChange handler at L498 triggered by a controlled-input echo, or a useEffect dep on openLiabilities inside PayLiabilityForm) RESETS query to '' and liability_id to ''. Verified empirically: (a) immediately after the click, search input value is '', (b) submit button click produces 0 network requests (submit() aborts at the `if (!form.liability_id)` early-return). REPRODUCE: register fresh user → create خالد with start_date=today-400d → generate-salaries → set accrual-mode=daily → pay current-month liability in full → open /financial-input-hub → Pay Liability tab → type 'خالد' → click the virtual badge button → observe: success toast appears + topup row exists in DB BUT the search input clears and submit doesn't fire. MITIGATION: remove or defer the onSaved() call inside the virtual branch of pickLiability; only refresh parent data AFTER the actual payment succeeds. Alternatively, after creating the topup, navigate the form by re-doing the search + re-selecting (workaround for user)."
+}
