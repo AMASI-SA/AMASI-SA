@@ -935,13 +935,11 @@ async def financial_input_hub_recent(
     #  • owed_from_party (كم عليه) → what THEY owe US right now
     #                                (salary_advance / receivable)
     #
-    # Step 1 — collect referenced liability ids (for both liability rows and
-    # transaction rows linked via peer_liability_id).
+    # Step 1 — collect referenced liability ids from the FULL filtered feed
+    # (so totals reflect the active search/filter, not just the visible page).
     liab_id_refs = set()
-    for it in items:
-        if it["type"] == "liability":
-            liab_id_refs.add(it["ref_id"])
-        elif it.get("ref_id"):
+    for it in feed:
+        if it.get("ref_id"):
             liab_id_refs.add(it["ref_id"])
 
     # Step 2 — fetch those liabilities to map (liability_id) → party_id.
@@ -1007,12 +1005,27 @@ async def financial_input_hub_recent(
         it["party_open_balance"] = round(owed_to - owed_from, 2) \
             if party_id else None
 
+    # Step 5 — totals across the FULL filtered feed.  Each party counted
+    # once (not per operation row) to avoid double-counting when the same
+    # party appears in multiple rows.
+    total_owed_to = round(
+        sum(b.get("owed_to_party", 0) for b in party_balances.values()), 2)
+    total_owed_from = round(
+        sum(b.get("owed_from_party", 0) for b in party_balances.values()), 2)
+    net_balance = round(total_owed_to - total_owed_from, 2)
+
     return {
         "items": items,
         "page": page,
         "page_size": page_size,
         "total": total,
         "total_pages": max(1, (total + page_size - 1) // page_size),
+        "totals": {
+            "owed_to_party": total_owed_to,
+            "owed_from_party": total_owed_from,
+            "net_balance": net_balance,
+            "unique_parties": len(party_balances),
+        },
     }
 
 

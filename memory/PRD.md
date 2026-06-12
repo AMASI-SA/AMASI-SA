@@ -29,7 +29,12 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
-- **Iter-159 (Feb 13 2026)**: 📊 Recent Entries — Directional Balance Columns ("كم له" / "كم عليه").
+- **Iter-159b (Feb 13 2026)**: 📊 إجماليات المركز الصافي أسفل الجدول.
+  - **User follow-up**: "نعم" (وافق على اقتراح إضافة الإجماليات).
+  - **Backend**: استجابة `/financial-input-hub/recent` الآن تتضمن `totals: { owed_to_party, owed_from_party, net_balance, unique_parties }` محسوبة عبر الـ feed المفلتر بأكمله (وليس فقط الصفحة المعروضة)، مع احتساب كل جهة مرة واحدة لتجنّب التكرار.
+  - **Frontend**: ثلاث بطاقات ملوّنة تحت الجدول — 🔴 إجمالي «كم له» / 🟢 إجمالي «كم عليه» / ⚪ صافي المركز (مع عدد الجهات الفريدة). تتفاعل مع البحث والفلتر تلقائياً.
+
+- **Iter-159 (Feb 13 2026)**: 📊 Recent Entries — Directional Balance Columns.
   - **User request**: "إضافة عمود في جدول آخر عمليات الإدخال: اسم الموظف/الحساب/المورد + كم له + كم عليه".
   - **Backend** (`GET /api/financial-input-hub/recent`): for every fed item, enriched with three new fields — `party_id`, `owed_to_party` (ما علينا لها), `owed_from_party` (ما لنا عليها) — computed via a single grouped aggregation over `liabilities` (status ∈ unpaid/partial). Kinds bucketed as `supplier|salary|ad_account` → "كم له" and `salary_advance|receivable` → "كم عليه". Net `party_open_balance` kept for backward-compat.
   - **Frontend** (`FinancialInputHub.jsx` → `RecentEntriesTable`): replaced single "الرصيد المفتوح" column with two color-coded columns — red **كم له** + green **كم عليه**. Header expanded to "المورد / الموظف / الحساب". Empty values show muted "—".

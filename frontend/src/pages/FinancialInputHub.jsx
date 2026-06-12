@@ -1738,7 +1738,7 @@ export default function FinancialInputHub() {
 
 // ── Iter-157 — Recent entries with pagination + amount edit ───────────────
 function RecentEntriesTable({ reloadKey }) {
-    const [data, setData] = useState({ items: [], page: 1, total_pages: 1, total: 0 });
+    const [data, setData] = useState({ items: [], page: 1, total_pages: 1, total: 0, totals: { owed_to_party: 0, owed_from_party: 0, net_balance: 0, unique_parties: 0 } });
     const [page, setPage] = useState(1);
     const [busy, setBusy] = useState(false);
     const [q, setQ] = useState("");
@@ -1874,6 +1874,30 @@ function RecentEntriesTable({ reloadKey }) {
                     </tbody>
                 </table>
             </div>
+
+            {/* Iter-159b — Net position summary across all filtered parties */}
+            {data.totals && data.totals.unique_parties > 0 && (
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs" data-testid="hub-recent-totals">
+                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 flex items-center justify-between">
+                        <span className="text-rose-700 font-bold">إجمالي «كم له» (علينا للجهات)</span>
+                        <span className="num font-extrabold text-rose-700" data-testid="hub-recent-total-owed-to">
+                            {Number(data.totals.owed_to_party).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 flex items-center justify-between">
+                        <span className="text-emerald-700 font-bold">إجمالي «كم عليه» (لنا على الجهات)</span>
+                        <span className="num font-extrabold text-emerald-700" data-testid="hub-recent-total-owed-from">
+                            {Number(data.totals.owed_from_party).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                    </div>
+                    <div className={`border rounded-lg p-2 flex items-center justify-between ${Number(data.totals.net_balance) >= 0 ? "bg-slate-100 border-slate-300" : "bg-amber-50 border-amber-200"}`}>
+                        <span className="text-slate-700 font-bold">صافي المركز ({data.totals.unique_parties} جهة)</span>
+                        <span className={`num font-extrabold ${Number(data.totals.net_balance) >= 0 ? "text-slate-900" : "text-amber-800"}`} data-testid="hub-recent-total-net">
+                            {Number(data.totals.net_balance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                    </div>
+                </div>
+            )}
             {data.total_pages > 1 && (
                 <div className="mt-3 flex items-center justify-center gap-2" data-testid="hub-recent-pagination">
                     <button onClick={() => load(page - 1, q, opFilter)} disabled={page <= 1 || busy} className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-xs rounded disabled:opacity-40">‹ السابق</button>
