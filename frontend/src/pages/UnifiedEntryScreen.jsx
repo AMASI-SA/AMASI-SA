@@ -58,7 +58,7 @@ export default function UnifiedEntryScreen() {
                 api.get("/operating-expenses/salaries"),
                 api.get("/counterparties?kind=supplier&limit=500"),
                 api.get("/counterparties?limit=500"),
-                api.get("/accounts?type=bank&limit=200"),
+                api.get("/accounts?account_type=bank&limit=200"),
                 api.get("/accounting/expense-categories"),
             ]);
             setEmployees((emp.data?.items || emp.data || []).filter(
@@ -66,15 +66,24 @@ export default function UnifiedEntryScreen() {
             setSuppliers(sup.data?.items || sup.data || []);
             setExternals((ext.data?.items || ext.data || []).filter(
                 x => !["ad_account", "supplier", "courier"].includes(x.kind)));
-            // Phase 4 — also load payment_platform accounts so they can be
-            // selected in the unified entry. Stored as a single flat list
-            // but rendered grouped in the UI.
+            // Iter-170 — Fix duplicate accounts in dropdown:
+            // Backend originally ignored ?type= (it expects ?account_type=).
+            // Result: both queries below returned ALL accounts → merge
+            // produced 2× every account in the "خصم من حساب" picker.
+            // We now use account_type AND deduplicate by id as a defense
+            // in depth. The accounts are also tagged for grouping.
             const bankItems = bnk.data?.items || bnk.data || [];
-            let allAccounts = bankItems;
+            const seen = new Set();
+            const dedupe = (list) => list.filter((a) => {
+                if (!a?.id || seen.has(a.id)) return false;
+                seen.add(a.id);
+                return true;
+            });
+            let allAccounts = dedupe(bankItems);
             try {
-                const pp = await api.get("/accounts?type=payment_platform&limit=200");
+                const pp = await api.get("/accounts?account_type=payment_platform&limit=200");
                 const ppItems = pp.data?.items || pp.data || [];
-                allAccounts = [...bankItems, ...ppItems];
+                allAccounts = [...allAccounts, ...dedupe(ppItems)];
             } catch (e) { /* optional */ }
             setBanks(allAccounts);
             setCategories(cat.data || []);
@@ -371,16 +380,28 @@ export default function UnifiedEntryScreen() {
                                     <option value="">— اختر —</option>
                                     <optgroup label="🏦 الحسابات البنكية">
                                         {banks.filter(b => b.account_type === "bank").map(b =>
-                                            <option key={b.id} value={b.id}>{b.name}</option>)}
+                                            <option key={b.id} value={b.id}>{b.name} · بنك</option>)}
                                     </optgroup>
                                     <optgroup label="💳 بوابات الدفع">
-                                        {banks.filter(b => b.account_type === "payment_platform").map(b =>
-                                            <option key={b.id} value={b.id}>{b.name}</option>)}
+                                        {banks.filter(b => b.account_type === "payment_platform" && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                            <option key={b.id} value={b.id}>{b.name} · بوابة دفع</option>)}
                                     </optgroup>
-                                    {banks.some(b => b.account_type && !["bank","payment_platform"].includes(b.account_type)) && (
-                                        <optgroup label="📦 أخرى">
-                                            {banks.filter(b => b.account_type && !["bank","payment_platform"].includes(b.account_type)).map(b =>
-                                                <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    {banks.some(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")) && (
+                                        <optgroup label="💵 الدفع عند الاستلام">
+                                            {banks.filter(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                                <option key={b.id} value={b.id}>{b.name} · COD</option>)}
+                                        </optgroup>
+                                    )}
+                                    {banks.some(b => b.account_type === "courier") && (
+                                        <optgroup label="📦 شركات الشحن">
+                                            {banks.filter(b => b.account_type === "courier").map(b =>
+                                                <option key={b.id} value={b.id}>{b.name} · شركة شحن</option>)}
+                                        </optgroup>
+                                    )}
+                                    {banks.some(b => b.account_type && !["bank","payment_platform","courier"].includes(b.account_type)) && (
+                                        <optgroup label="📁 أخرى">
+                                            {banks.filter(b => b.account_type && !["bank","payment_platform","courier"].includes(b.account_type)).map(b =>
+                                                <option key={b.id} value={b.id}>{b.name} · {b.account_type}</option>)}
                                         </optgroup>
                                     )}
                                 </select>
@@ -395,12 +416,18 @@ export default function UnifiedEntryScreen() {
                                     <option value="">— اختر —</option>
                                     <optgroup label="🏦 الحسابات البنكية">
                                         {banks.filter(b => b.account_type === "bank" && b.id !== bankId).map(b =>
-                                            <option key={b.id} value={b.id}>{b.name}</option>)}
+                                            <option key={b.id} value={b.id}>{b.name} · بنك</option>)}
                                     </optgroup>
                                     <optgroup label="💳 بوابات الدفع">
-                                        {banks.filter(b => b.account_type === "payment_platform" && b.id !== bankId).map(b =>
-                                            <option key={b.id} value={b.id}>{b.name}</option>)}
+                                        {banks.filter(b => b.account_type === "payment_platform" && b.id !== bankId && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                            <option key={b.id} value={b.id}>{b.name} · بوابة دفع</option>)}
                                     </optgroup>
+                                    {banks.some(b => b.account_type === "payment_platform" && b.id !== bankId && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")) && (
+                                        <optgroup label="💵 الدفع عند الاستلام">
+                                            {banks.filter(b => b.account_type === "payment_platform" && b.id !== bankId && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                                <option key={b.id} value={b.id}>{b.name} · COD</option>)}
+                                        </optgroup>
+                                    )}
                                 </select>
                             </div>
                         )}

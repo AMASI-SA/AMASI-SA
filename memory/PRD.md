@@ -1081,3 +1081,46 @@ click «🔄 إعادة احتساب من السجل» → confirm → card debt
 the audit log. Going forward, future sync corrections also reduce the
 liability automatically, so this won't recur.
 
+
+## Iter-170 — Duplicate accounts in «خصم من حساب» dropdown (Feb 2026)
+**Reported by merchant**: Banks (الإنماء/الأهلي/الراجحي) appeared TWICE
+in the «خصم من حساب» dropdown of the Unified Entry screen. He asked us
+to (a) explain the source, (b) group by type, (c) prevent any duplicates,
+(d) show the type label next to each name.
+
+**Root cause**: `GET /api/accounts` endpoint declared the filter as
+`account_type` but the Unified Entry screen called
+`/api/accounts?type=bank`. FastAPI silently dropped the unknown `type`
+param, the filter was never applied, and BOTH calls (`?type=bank` and
+`?type=payment_platform`) returned ALL 8 accounts. The frontend then
+spread both lists → every account appeared twice.
+
+**Fix**:
+- Backend (`accounts_routes.py`): `list_accounts` now accepts both
+  `?account_type=` (long) and `?type=` (short alias). Long form wins
+  when both are supplied. Backwards-compatible.
+- Frontend (`UnifiedEntryScreen.jsx`):
+  - Updated all `?type=` calls to `?account_type=`.
+  - Added defensive `dedupe(list)` by `id` (never trust two list
+    sources to be disjoint).
+  - Dropdown now has 4 ordered optgroups:
+    `🏦 الحسابات البنكية` · `💳 بوابات الدفع` · `💵 الدفع عند الاستلام` ·
+    `📦 شركات الشحن` · `📁 أخرى`. COD is detected by name pattern.
+  - Each option shows `· بنك / بوابة دفع / COD / شركة شحن` next to
+    the name so the user can never confuse a bank with a payment
+    platform.
+  - Same treatment for the «إلى حساب» dropdown in `bank_transfer`.
+
+**Verified live on merchant's Preview**:
+- `/api/accounts?account_type=bank` → 3 (was 8) ✓
+- `/api/accounts?type=bank` → 3 (was 8) — short alias works ✓
+- `/api/accounts?type=payment_platform` → 5 ✓ (5 platforms)
+- Dedupe by id ensures no double-entries even if the API somehow
+  returns a row twice.
+
+**Tests**: `test_accounts_filter_alias_iter170.py` (1 test, passes).
+
+**Action for user**: Save to GitHub → Redeploy. Open Unified Entry
+→ pick any operation requiring a source account → confirm each bank
+appears once, with `· بنك` label, in its own group.
+

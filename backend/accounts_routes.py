@@ -374,12 +374,19 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
     async def list_accounts(
         user: dict = Depends(current_user),
         account_type: Optional[str] = None,
+        type: Optional[str] = None,
         status: Optional[str] = None,
         include_hidden: bool = False,
     ):
+        # Iter-170 — accept both `type` and `account_type` so callers
+        # that send the shorter alias (e.g. `?type=bank`) get filtered
+        # results. Previously `type=bank` was silently ignored and the
+        # endpoint returned ALL accounts → caused duplicate entries in
+        # the «خصم من حساب» dropdown of the Unified Entry screen.
         q: dict = {"user_id": user["id"]}
-        if account_type:
-            q["account_type"] = account_type
+        effective_type = account_type or type
+        if effective_type:
+            q["account_type"] = effective_type
         if status:
             q["status"] = status
         elif not include_hidden:
