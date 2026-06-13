@@ -1335,6 +1335,30 @@ export default function AdAccounts() {
                                     <button onClick={() => setOpeningFor(row)} className="px-3 py-2 rounded-lg bg-amber-100 text-amber-800 text-xs font-bold hover:bg-amber-200 transition-colors" data-testid={`adacc-opening-btn-${row.id}`} title="رصيد افتتاحي يدوي">
                                         ⚙️ افتتاحي
                                     </button>
+                                    <button
+                                        onClick={async () => {
+                                            if (!window.confirm(
+                                                "سيعيد احتساب المديونية الحالية لهذا الحساب من السجل الفعلي (ad_account_ledger). " +
+                                                "هذا يُصلح حالات بقي فيها رقم المديونية على البطاقة قديماً بعد تصحيح المزامنة.\n\nمتابعة؟"
+                                            )) return;
+                                            try {
+                                                const { data } = await api.post(
+                                                    `/ad-accounts/${row.id}/recover/recompute-debt-from-ledger`);
+                                                toast.success(
+                                                    `تم: ${fmt(data.previous_open_debt)} → ${fmt(data.new_open_debt)} ر.س ` +
+                                                    `(فرق ${fmt(data.delta)})`,
+                                                    { duration: 7000 });
+                                                load();
+                                            } catch (e) {
+                                                toast.error(e?.response?.data?.detail || "فشل");
+                                            }
+                                        }}
+                                        className="px-3 py-2 rounded-lg bg-indigo-100 text-indigo-800 text-xs font-bold hover:bg-indigo-200 transition-colors"
+                                        data-testid={`adacc-recompute-btn-${row.id}`}
+                                        title="يصلح المديونية على البطاقة إذا كانت لا تطابق السجل (Iter-169)"
+                                    >
+                                        🔄 إعادة احتساب من السجل
+                                    </button>
                                     {allowDelete && (
                                         <button
                                             onClick={() => deleteAccount(row)}

@@ -1163,6 +1163,113 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         await db.counterparties.delete_one({"id": cp_id, "user_id": user["id"]})
         return {"ok": True}
 
+    # ── POST /recover/recompute-debt-from-ledger (Iter-169) ─────────────
+    @router.post("/{cp_id}/recover/recompute-debt-from-ledger")
+    async def recompute_debt_from_ledger(
+        cp_id: str,
+        user: dict = Depends(current_user),
+    ):
+        """Repair endpoint for the «card shows stale debt after sync
+        correction» bug (Iter-169).
+
+        Walks `ad_account_ledger` chronologically to derive the TRUE
+        cumulative spend for this account (treating positive amounts as
+        spend, negative amounts as corrections). Then resets the open
+        auto-generated liability to: `max(0, true_cumulative_spend −
+        from_balance_total − topup_total)`. Result: the card's «المديونية»
+        figure mirrors the audit log immediately.
+
+        Idempotent — calling it twice in a row is a no-op.
+        """
+        uid = user["id"]
+        cp = await db.counterparties.find_one(
+            {"id": cp_id, "user_id": uid, "kind": "ad_account"},
+            {"_id": 0},
+        )
+        if not cp:
+            raise HTTPException(404, "الحساب غير موجود")
+
+        # 1) Compute true totals from the audit-log ledger.
+        spend_total = 0.0       # net spend (incl. corrections)
+        covered_total = 0.0     # how much was covered out of balance
+        topup_total = 0.0       # opening_balance + manual topups
+        async for r in db.ad_account_ledger.find(
+            {"user_id": uid, "counterparty_id": cp_id},
+            {"_id": 0},
+        ):
+            ev = r.get("type")
+            amt = float(r.get("amount") or 0)
+            bd = r.get("breakdown") or {}
+            if ev == "spend":
+                spend_total += amt
+                covered_total += float(bd.get("from_balance") or 0)
+            elif ev in ("topup", "opening"):
+                topup_total += amt
+        spend_total = round(spend_total, 2)
+
+        # 2) True remaining debt = spend that wasn't covered by topups.
+        # (Negative result means the user has surplus balance — that's
+        # fine, we floor at 0.)
+        true_debt = max(0.0, round(spend_total - topup_total, 2))
+
+        # 3) Find the auto-generated open liability for this account.
+        existing = await db.liabilities.find_one(
+            {"user_id": uid, "counterparty_id": cp_id,
+             "kind": "ad_account", "auto_generated": True,
+             "source": "ad_account_cron",
+             "status": {"$in": ["unpaid", "partial"]}},
+            sort=[("created_at", 1)],
+        )
+        prev_open = 0.0
+        if existing:
+            prev_open = round(
+                float(existing.get("expected_amount") or 0)
+                - float(existing.get("paid_amount") or 0), 2)
+            paid = float(existing.get("paid_amount") or 0)
+            new_expected = round(true_debt + paid, 2)
+            new_status = "paid" if true_debt < 0.01 else (
+                "partial" if paid > 0 else "unpaid")
+            await db.liabilities.update_one(
+                {"id": existing["id"], "user_id": uid},
+                {"$set": {
+                    "expected_amount": new_expected,
+                    "status": new_status,
+                    "updated_at": _now(),
+                    "recomputed_at": _now(),
+                    "recompute_note": (
+                        "إعادة احتساب من السجل (Iter-169) — "
+                        f"كان {prev_open}، أصبح {true_debt}"),
+                }},
+            )
+        elif true_debt > 0.01:
+            # No existing liability but the ledger shows uncovered spend.
+            # Create a new auto-generated liability so the card matches.
+            new_id = str(uuid.uuid4())
+            await db.liabilities.insert_one({
+                "id": new_id, "user_id": uid,
+                "counterparty_id": cp_id, "kind": "ad_account",
+                "expected_amount": true_debt, "paid_amount": 0.0,
+                "status": "unpaid",
+                "auto_generated": True, "source": "ad_account_cron",
+                "description": ("مديونية معاد احتسابها من السجل (Iter-169)"),
+                "due_date": (cp.get("last_auto_sync_date")
+                              or _now()[:10]),
+                "created_at": _now(), "updated_at": _now(),
+            })
+
+        return {
+            "ok": True,
+            "counterparty_id": cp_id,
+            "previous_open_debt": prev_open,
+            "new_open_debt": true_debt,
+            "delta": round(true_debt - prev_open, 2),
+            "diagnostic": {
+                "net_spend_from_ledger": spend_total,
+                "topup_total": round(topup_total, 2),
+                "covered_from_balance": round(covered_total, 2),
+            },
+        }
+
     # ── POST /sync-all (Iter-108) — manual trigger of the daily cron ──
     @router.post("/sync-all")
     async def sync_all_for_user(
@@ -2429,9 +2536,17 @@ async def _run_sync_for_all(
         else:
             # delta < 0 — platform reported LESS than what we already
             # logged today (rare correction). Refund the absolute delta
-            # to the balance and record a correction ledger row. We do
-            # NOT touch existing liabilities — if the user wants to
-            # reduce a paid liability, that's a separate manual action.
+            # to the balance.
+            #
+            # Iter-169 — BUG FIX. Previously this branch deliberately did
+            # NOT touch the open liability (comment: "if the user wants
+            # to reduce a paid liability, that's a separate manual
+            # action"). In practice that left a STALE high debt on the
+            # account card (e.g. 201,753.81 displayed while the audit
+            # log clearly showed the correction was applied). The fix:
+            # if this account has an auto-generated open liability from
+            # the cron sync, reduce its expected_amount by the same
+            # refund amount (capped so we never go below paid_amount).
             refund = round(-delta, 2)
             new_balance = round(balance_before + refund, 2)
             await db.counterparties.update_one(
@@ -2441,13 +2556,48 @@ async def _run_sync_for_all(
                           "last_auto_sync_at": _now(),
                           "updated_at": _now()}},
             )
+
+            # Iter-169 — also unwind any auto_cron liability so the card
+            # debt figure mirrors the audit log immediately.
+            new_debt_after = 0.0
+            existing_debt = await db.liabilities.find_one(
+                {"user_id": user_id, "counterparty_id": cp["id"],
+                 "kind": "ad_account", "auto_generated": True,
+                 "source": "ad_account_cron",
+                 "status": {"$in": ["unpaid", "partial"]}},
+                sort=[("created_at", 1)],
+            )
+            if existing_debt:
+                paid = float(existing_debt.get("paid_amount") or 0)
+                expected = float(existing_debt.get("expected_amount") or 0)
+                # Subtract refund from expected, but never go below paid
+                # (which would make the row negative-balance).
+                new_expected = max(paid, expected - refund)
+                remaining = max(0.0, new_expected - paid)
+                new_status = "paid" if remaining < 0.01 else (
+                    "partial" if paid > 0 else "unpaid")
+                await db.liabilities.update_one(
+                    {"id": existing_debt["id"], "user_id": user_id},
+                    {"$set": {
+                        "expected_amount": round(new_expected, 2),
+                        "status": new_status,
+                        "updated_at": _now(),
+                        "auto_correction_applied": (
+                            float(existing_debt.get(
+                                "auto_correction_applied") or 0)
+                            + round(min(refund, expected - paid), 2)),
+                    }},
+                )
+                new_debt_after = round(remaining, 2)
+
             await db.ad_account_ledger.insert_one({
                 "id": str(uuid.uuid4()), "user_id": user_id,
                 "counterparty_id": cp["id"], "type": "spend",
                 "amount": delta,  # negative — keeps sum() consistent
                 "balance_after": new_balance,
-                "debt_after": 0.0,
-                "related_liability_id": None,
+                "debt_after": new_debt_after,
+                "related_liability_id": (
+                    existing_debt["id"] if existing_debt else None),
                 "description": f"تصحيح مزامنة (إنخفاض إنفاق) — {cp['ad_provider']}",
                 "breakdown": {"from_balance": 0.0, "uncovered": 0.0,
                               "mode": mode, "auto_cron": True,
@@ -2455,6 +2605,12 @@ async def _run_sync_for_all(
                               "created_debt": 0.0,
                               "correction": True,
                               "delta_applied": delta,
+                              "liability_reduced_by": round(
+                                  min(refund, (existing_debt or {}).get(
+                                      "expected_amount", 0)
+                                      - (existing_debt or {}).get(
+                                          "paid_amount", 0)), 2)
+                              if existing_debt else 0,
                               "platform_total": total,
                               "prev_total_applied": prev_total_applied},
                 "date": to_date, "created_at": _now(),
@@ -2463,6 +2619,7 @@ async def _run_sync_for_all(
                 "id": cp["id"], "name": cp["name"], "spend": total,
                 "covered": 0.0, "uncovered": 0.0,
                 "debt_created": 0.0,
+                "debt_after": new_debt_after,
                 "source_collection": source,
                 "delta_applied": delta,
                 "prev_total_applied": prev_total_applied,

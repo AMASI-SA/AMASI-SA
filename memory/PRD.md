@@ -1048,3 +1048,36 @@ platforms with the production figures matching the Assets page.
 After verifying, execute the final migration. All assets and
 liabilities will be carried over.
 
+
+## Iter-169 — Card debt didn't follow sync corrections (Feb 2026)
+**Reported by merchant**: Snap card shows مديونية=201,753.81 even though
+the audit log clearly shows a «تصحيح مزامنة (إنخفاض إنفاق)» row dropping
+the debt to 116,351.99. The card stayed stale at the old (wrong) debt.
+
+**Root cause** (line 2429-2470 of ad_account_routes.py before fix):
+The "negative delta" branch in `_run_sync_for_all` deliberately did NOT
+reduce the open liability when the platform reported lower spend. The
+comment said «if the user wants to reduce a paid liability, that's a
+separate manual action». In practice this orphaned the inflated debt
+row: ledger showed correct net spend, but `_current_open_debt` kept
+reading the stale liability.
+
+**Fix**:
+- Negative-delta branch now also reduces the existing auto_cron
+  liability by the refund amount (capped at paid_amount so we never go
+  negative). The new ledger row's `debt_after` reflects the true post-
+  correction debt instead of hardcoded 0.
+- New repair endpoint
+  `POST /api/ad-accounts/{cp_id}/recover/recompute-debt-from-ledger`
+  walks `ad_account_ledger` to derive the TRUE net spend, then resets
+  the liability accordingly. Idempotent — safe to run multiple times.
+- New card button «🔄 إعادة احتساب من السجل» that triggers the repair
+  endpoint with confirmation.
+- Tests: `test_recompute_ad_debt_iter169.py` (2 tests, pass individually;
+  combined run hits the known pytest async event-loop isolation issue).
+
+**Action for user**: Save to GitHub → Redeploy. Open the Snap card →
+click «🔄 إعادة احتساب من السجل» → confirm → card debt drops to match
+the audit log. Going forward, future sync corrections also reduce the
+liability automatically, so this won't recur.
+
