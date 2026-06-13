@@ -1255,41 +1255,41 @@ export default function AdAccounts() {
                     لا توجد حسابات إعلانية. أضف الحسابات من <b>قائمة الأطراف الموحَّدة</b> (kind = ad_account).
                 </div>
             ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
                     {items.map((row) => (
-                        <div key={row.id} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4" data-testid={`adacc-card-${row.id}`}>
+                        <div key={row.id} className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col gap-4 h-full hover:border-slate-300 hover:shadow-sm transition-all duration-200" data-testid={`adacc-card-${row.id}`}>
                             <div className="flex items-start justify-between gap-2">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <h3 className="font-extrabold text-base text-slate-900">{row.name}</h3>
-                                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700">
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="font-extrabold text-base text-slate-900 truncate">{row.name}</h3>
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap shrink-0">
                                             {PROVIDER_LABEL[row.ad_provider] || row.ad_provider}
                                         </span>
                                     </div>
-                                    {row.notes && <div className="text-xs text-slate-500 mt-1">{row.notes}</div>}
+                                    {row.notes && <div className="text-xs text-slate-500 mt-1 line-clamp-2">{row.notes}</div>}
                                     {row.external_account_id && (
-                                        <div className="text-[11px] text-slate-500 mt-1 font-mono" dir="ltr">
+                                        <div className="text-[11px] text-slate-500 mt-1 font-mono truncate" dir="ltr" title={row.external_account_id}>
                                             🔗 {row.external_account_id}
                                         </div>
                                     )}
                                 </div>
-                                <button onClick={() => toggleMode(row)} className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${row.debt_mode === "auto" ? "bg-violet-50 text-violet-800 border-violet-200" : "bg-amber-50 text-amber-800 border-amber-200"}`} title="غيِّر وضع احتساب المديونية" data-testid={`adacc-mode-toggle-${row.id}`}>
+                                <button onClick={() => toggleMode(row)} className={`px-2 py-1 rounded-lg text-[11px] font-bold border whitespace-nowrap shrink-0 ${row.debt_mode === "auto" ? "bg-violet-50 text-violet-800 border-violet-200" : "bg-amber-50 text-amber-800 border-amber-200"}`} title="غيِّر وضع احتساب المديونية" data-testid={`adacc-mode-toggle-${row.id}`}>
                                     {row.debt_mode === "auto" ? "تلقائي" : "يدوي"}
                                 </button>
                             </div>
 
                             <div className="grid grid-cols-3 gap-2">
-                                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
-                                    <div className="text-[10px] font-bold text-emerald-800">الرصيد</div>
-                                    <div className="num text-base font-extrabold text-emerald-900 mt-1">{fmt(row.balance)}</div>
+                                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center flex flex-col justify-center min-h-[68px]">
+                                    <div className="text-[10px] font-bold text-emerald-800 leading-tight">الرصيد</div>
+                                    <div className="num text-base font-extrabold text-emerald-900 mt-1 leading-none">{fmt(row.balance)}</div>
                                 </div>
-                                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-center">
-                                    <div className="text-[10px] font-bold text-rose-800">المديونية</div>
-                                    <div className="num text-base font-extrabold text-rose-900 mt-1">{fmt(row.open_debt)}</div>
+                                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-center flex flex-col justify-center min-h-[68px]">
+                                    <div className="text-[10px] font-bold text-rose-800 leading-tight">المديونية</div>
+                                    <div className="num text-base font-extrabold text-rose-900 mt-1 leading-none">{fmt(row.open_debt)}</div>
                                 </div>
-                                <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 text-center">
-                                    <div className="text-[10px] font-bold text-violet-800">الصرف</div>
-                                    <div className="num text-base font-extrabold text-violet-900 mt-1">{fmt(row.total_spend)}</div>
+                                <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 text-center flex flex-col justify-center min-h-[68px]">
+                                    <div className="text-[10px] font-bold text-violet-800 leading-tight">الصرف</div>
+                                    <div className="num text-base font-extrabold text-violet-900 mt-1 leading-none">{fmt(row.total_spend)}</div>
                                 </div>
                             </div>
 
@@ -1299,55 +1299,58 @@ export default function AdAccounts() {
                             {/* Iter-160 — Accounting actions (settlement/writeoff/adjustment/audit log) */}
                             <AccountingActionsPanel row={row} onDone={load} fmt={fmt} />
 
-                            <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-3">
-                                <div className="flex items-center gap-1.5">
-                                    <Clock size={11} className="text-slate-400" /> آخر تعبئة:
-                                    <b className={row.last_topup ? "text-slate-900" : "text-slate-400"}>
-                                        {row.last_topup ? `${row.last_topup.date} (${fmt(row.last_topup.amount)})` : "—"}
-                                    </b>
+                            {/* Iter-168 — push the "last activity" + action buttons to the bottom so all cards in the grid have aligned footers regardless of mid-section content height. */}
+                            <div className="mt-auto space-y-3">
+                                <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-3">
+                                    <div className="flex items-center gap-1.5">
+                                        <Clock size={11} className="text-slate-400 shrink-0" /> آخر تعبئة:
+                                        <b className={`truncate ${row.last_topup ? "text-slate-900" : "text-slate-400"}`}>
+                                            {row.last_topup ? `${row.last_topup.date} (${fmt(row.last_topup.amount)})` : "—"}
+                                        </b>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <Clock size={11} className="text-slate-400 shrink-0" /> آخر صرف:
+                                        <b className={`truncate ${row.last_spend ? "text-slate-900" : "text-slate-400"}`}>
+                                            {row.last_spend ? `${row.last_spend.date} (${fmt(row.last_spend.amount)})` : "—"}
+                                        </b>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <Clock size={11} className="text-slate-400 shrink-0" /> آخر مديونية:
+                                        <b className={`truncate ${row.last_debt ? "text-rose-900" : "text-slate-400"}`}>
+                                            {row.last_debt ? `${row.last_debt.date} (${fmt(row.last_debt.amount)})` : "—"}
+                                        </b>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <Clock size={11} className="text-slate-400" /> آخر صرف:
-                                    <b className={row.last_spend ? "text-slate-900" : "text-slate-400"}>
-                                        {row.last_spend ? `${row.last_spend.date} (${fmt(row.last_spend.amount)})` : "—"}
-                                    </b>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    <Clock size={11} className="text-slate-400" /> آخر مديونية:
-                                    <b className={row.last_debt ? "text-rose-900" : "text-slate-400"}>
-                                        {row.last_debt ? `${row.last_debt.date} (${fmt(row.last_debt.amount)})` : "—"}
-                                    </b>
-                                </div>
-                            </div>
 
-                            <div className="flex flex-wrap gap-2 pt-2">
-                                <button onClick={() => setTopupFor(row)} className="flex-1 min-w-[100px] px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800" data-testid={`adacc-topup-btn-${row.id}`}>
-                                    <Plus size={12} className="inline ml-1" /> تعبئة
-                                </button>
-                                <button onClick={() => setSpendFor(row)} className="flex-1 min-w-[100px] px-3 py-2 rounded-lg bg-rose-700 text-white text-xs font-bold hover:bg-rose-800" data-testid={`adacc-spend-btn-${row.id}`}>
-                                    <Minus size={12} className="inline ml-1" /> تسجيل صرف
-                                </button>
-                                <button onClick={() => setLedgerFor(row)} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200" data-testid={`adacc-ledger-btn-${row.id}`}>
-                                    <ListBullets size={12} className="inline ml-1" /> السجل
-                                </button>
-                                <button onClick={() => setOpeningFor(row)} className="px-3 py-2 rounded-lg bg-amber-100 text-amber-800 text-xs font-bold hover:bg-amber-200" data-testid={`adacc-opening-btn-${row.id}`} title="رصيد افتتاحي يدوي">
-                                    ⚙️ افتتاحي
-                                </button>
-                                {allowDelete && (
-                                    <button
-                                        onClick={() => deleteAccount(row)}
-                                        disabled={Number(row.balance || 0) > 0 || Number(row.open_debt || 0) > 0}
-                                        className="px-3 py-2 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed border border-rose-200"
-                                        data-testid={`adacc-delete-btn-${row.id}`}
-                                        title={
-                                            Number(row.balance || 0) > 0 || Number(row.open_debt || 0) > 0
-                                                ? "غير متاح — الرصيد أو المديونية أكبر من 0"
-                                                : "حذف هذا الحساب الإعلاني"
-                                        }
-                                    >
-                                        🗑️ حذف
+                                <div className="flex flex-wrap gap-2">
+                                    <button onClick={() => setTopupFor(row)} className="flex-1 min-w-[100px] px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 transition-colors" data-testid={`adacc-topup-btn-${row.id}`}>
+                                        <Plus size={12} className="inline ml-1" /> تعبئة
                                     </button>
-                                )}
+                                    <button onClick={() => setSpendFor(row)} className="flex-1 min-w-[100px] px-3 py-2 rounded-lg bg-rose-700 text-white text-xs font-bold hover:bg-rose-800 transition-colors" data-testid={`adacc-spend-btn-${row.id}`}>
+                                        <Minus size={12} className="inline ml-1" /> تسجيل صرف
+                                    </button>
+                                    <button onClick={() => setLedgerFor(row)} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-colors" data-testid={`adacc-ledger-btn-${row.id}`}>
+                                        <ListBullets size={12} className="inline ml-1" /> السجل
+                                    </button>
+                                    <button onClick={() => setOpeningFor(row)} className="px-3 py-2 rounded-lg bg-amber-100 text-amber-800 text-xs font-bold hover:bg-amber-200 transition-colors" data-testid={`adacc-opening-btn-${row.id}`} title="رصيد افتتاحي يدوي">
+                                        ⚙️ افتتاحي
+                                    </button>
+                                    {allowDelete && (
+                                        <button
+                                            onClick={() => deleteAccount(row)}
+                                            disabled={Number(row.balance || 0) > 0 || Number(row.open_debt || 0) > 0}
+                                            className="px-3 py-2 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed border border-rose-200 transition-colors"
+                                            data-testid={`adacc-delete-btn-${row.id}`}
+                                            title={
+                                                Number(row.balance || 0) > 0 || Number(row.open_debt || 0) > 0
+                                                    ? "غير متاح — الرصيد أو المديونية أكبر من 0"
+                                                    : "حذف هذا الحساب الإعلاني"
+                                            }
+                                        >
+                                            🗑️ حذف
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ))}
