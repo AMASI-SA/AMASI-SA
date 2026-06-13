@@ -794,6 +794,13 @@ def make_migration_router(db) -> APIRouter:
             sp_new = await _ledger_bal("employee", e["employee_id"], "salary_payable")
             adv_new = await _ledger_bal("employee", e["employee_id"], "advance")
             cust_new = await _ledger_bal("employee", e["employee_id"], "custody")
+            # Iter-171 — economic net (display-only): payable − advance − custody.
+            # The underlying ledger keeps these three sub_accounts separate,
+            # this is just an aggregate view that answers "does the
+            # employee owe us or do we owe him?".
+            legacy_net = round(
+                e["salary_payable"] - e["advance"] - e["custody"], 2)
+            ledger_net = round(sp_new - adv_new - cust_new, 2)
             row = {
                 "id": e["employee_id"], "name": e["name"],
                 "salary_payable": _mk(e["salary_payable"], sp_new),
@@ -808,6 +815,18 @@ def make_migration_router(db) -> APIRouter:
                     "days_worked":   e.get("_days_worked", 0),
                     "accrued":       e.get("_accrued", 0),
                     "cash_paid":     e.get("_cash_paid", 0),
+                },
+                # Iter-171 — economic net display field
+                "economic_net": {
+                    "legacy": legacy_net,
+                    "ledger": ledger_net,
+                    "projected": legacy_net,
+                    "owed_to_employee": max(0.0, legacy_net),
+                    "owed_by_employee": max(0.0, -legacy_net),
+                    "verdict": (
+                        "owed_to_employee" if legacy_net > 0.01
+                        else "owed_by_employee" if legacy_net < -0.01
+                        else "balanced"),
                 },
             }
             row["all_match"] = all(

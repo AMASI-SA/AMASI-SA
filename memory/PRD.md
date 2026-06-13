@@ -1124,3 +1124,47 @@ spread both lists → every account appeared twice.
 → pick any operation requiring a source account → confirm each bank
 appears once, with `· بنك` label, in its own group.
 
+
+## Iter-171 — Employee Economic Net (display-only) (Feb 2026)
+**User request**: After Iter-170, the merchant asked us to surface an
+"Economic Net" view for each employee — combining payable, advance, and
+custody into one number — WITHOUT changing the underlying ledger
+structure (the 3 sub_accounts must remain separate).
+
+**Formula**:
+  economic_net = salary_payable − advance − custody
+  • positive → 🟢 الموظف له علينا (owed_to_employee)
+  • negative → 🔴 الموظف عليه للنظام (owed_by_employee)
+  • zero     → ⚪ متوازن
+
+**Implementation**:
+- Backend already returned `net_position` from `/employees/list` (per-row
+  and as a total). No backend change needed for that endpoint.
+- `/accounting/migration/reconciliation` now includes an `economic_net`
+  object per employee row with `legacy`, `ledger`, `projected`,
+  `owed_to_employee`, `owed_by_employee`, `verdict`.
+- Frontend `EmployeesLedger.jsx`:
+  - Totals card now labels: «صافي اقتصادي (لهم علينا)» or «(علينا منهم)»
+    with absolute value shown + color cue.
+  - Explainer banner shows the formula in plain Arabic.
+  - Per-row: net cell now has a small label «← له علينا / عليه للنظام /
+    متوازن».
+- Employee drawer (statement view): rewrote the net card with a full
+  3-row breakdown showing the formula transparently.
+- Reconciliation Report (`ReconciliationReport.jsx`): employee
+  breakdown sub-row now also includes an economic-net mini panel
+  with verdict + colors.
+- Tests: `test_economic_net_iter171.py` (2 tests, both pass individually;
+  combined run hits the known pytest async loop quirk).
+
+**Confirmed**: شهاب-style scenario (payable=100, advance=2895) yields
+net=−2795 with verdict='owed_by_employee'. Ledger entries are NOT
+merged — the 3 sub_accounts (`employee/salary_payable`,
+`employee/advance`, `employee/custody`) remain independently posted
+double-entry pairs.
+
+**Action for user**: Save to GitHub → Redeploy. Open `/employees-ledger`
+and click شهاب → drawer shows: «🔴 عليه للنظام: 2,795 ر.س» with the
+breakdown 100 − 2,895 − 0 = −2,795. Reconciliation report also surfaces
+this under each employee's accrual breakdown.
+

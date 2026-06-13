@@ -385,18 +385,39 @@ function Section({ title, rows, columns, showBreakdown, showBankBreakdown, migra
                                         data-testid={`emp-breakdown-${r.id}`}>
                                         <td colSpan={columns.length * (migrationCompleted ? 3 : 4) + 2}
                                             className="py-1.5 px-2 text-[11px] text-slate-600">
-                                            <span className="font-bold text-slate-700">تفصيل الراتب المستحق:</span>
-                                            <span className="mx-2">راتب شهري: <span className="num font-bold">{fmt(r.breakdown.monthly_amount)}</span></span>
-                                            ·
-                                            <span className="mx-2">من <span className="num">{r.breakdown.accrual_start || "—"}</span> إلى <span className="num">{r.breakdown.accrual_end || "—"}</span></span>
-                                            ·
-                                            <span className="mx-2">أيام عمل: <span className="num font-bold">{r.breakdown.days_worked}</span></span>
-                                            ·
-                                            <span className="mx-2">مستحق: <span className="num font-bold">{fmt(r.breakdown.accrued)}</span></span>
-                                            ·
-                                            <span className="mx-2">نقد مدفوع: <span className="num font-bold">{fmt(r.breakdown.cash_paid)}</span></span>
-                                            ·
-                                            <span className="mx-2 text-slate-800">صافي = <span className="num font-extrabold">{fmt(Math.max(0, (r.breakdown.accrued || 0) - (r.breakdown.cash_paid || 0)))}</span></span>
+                                            <div className="mb-1">
+                                                <span className="font-bold text-slate-700">تفصيل الراتب المستحق:</span>
+                                                <span className="mx-2">راتب شهري: <span className="num font-bold">{fmt(r.breakdown.monthly_amount)}</span></span>
+                                                ·
+                                                <span className="mx-2">من <span className="num">{r.breakdown.accrual_start || "—"}</span> إلى <span className="num">{r.breakdown.accrual_end || "—"}</span></span>
+                                                ·
+                                                <span className="mx-2">أيام عمل: <span className="num font-bold">{r.breakdown.days_worked}</span></span>
+                                                ·
+                                                <span className="mx-2">مستحق: <span className="num font-bold">{fmt(r.breakdown.accrued)}</span></span>
+                                                ·
+                                                <span className="mx-2">نقد مدفوع: <span className="num font-bold">{fmt(r.breakdown.cash_paid)}</span></span>
+                                                ·
+                                                <span className="mx-2 text-slate-800">صافي = <span className="num font-extrabold">{fmt(Math.max(0, (r.breakdown.accrued || 0) - (r.breakdown.cash_paid || 0)))}</span></span>
+                                            </div>
+                                            {/* Iter-171 — economic net (display-only) */}
+                                            {r.economic_net && (
+                                                <div className={`p-1.5 rounded border ${
+                                                    r.economic_net.verdict === "owed_to_employee" ? "bg-emerald-50 border-emerald-200"
+                                                        : r.economic_net.verdict === "owed_by_employee" ? "bg-rose-50 border-rose-200"
+                                                            : "bg-slate-50 border-slate-200"}`}>
+                                                    <span className="font-bold">
+                                                        {r.economic_net.verdict === "owed_to_employee" ? "🟢 له علينا"
+                                                            : r.economic_net.verdict === "owed_by_employee" ? "🔴 عليه للنظام"
+                                                                : "⚪ متوازن"}:
+                                                    </span>
+                                                    <span className={`num font-extrabold mx-2 ${r.economic_net.legacy >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                                                        {fmt(Math.abs(r.economic_net.legacy))} ر.س
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-600">
+                                                        (الصافي الاقتصادي = راتب مستحق − سلفة − عهدة = <span className="num">{fmt(r.economic_net.legacy)}</span>)
+                                                    </span>
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 )}

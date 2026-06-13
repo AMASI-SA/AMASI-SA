@@ -64,9 +64,21 @@ export default function EmployeesLedger() {
                         value={fmt(totals.advance)} color="amber" />
                     <SummaryCard label="عهد مفتوحة"
                         value={fmt(totals.custody)} color="sky" />
-                    <SummaryCard label="صافي المركز"
-                        value={fmt(totals.net_position)}
+                    <SummaryCard
+                        label={totals.net_position >= 0
+                            ? "صافي اقتصادي (لهم علينا)"
+                            : "صافي اقتصادي (علينا منهم)"}
+                        value={fmt(Math.abs(totals.net_position))}
                         color={totals.net_position >= 0 ? "emerald" : "rose"} />
+                </div>
+
+                {/* Iter-171 — economic net explainer */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4 text-[11px] text-slate-600 leading-relaxed">
+                    <span className="font-bold text-slate-800">💡 المعادلة:</span>{" "}
+                    <span className="num">الصافي الاقتصادي = الراتب المستحق − السلفة المفتوحة − العهدة المفتوحة</span>{" "}
+                    · <span className="text-emerald-700 font-bold">موجب = الموظف له علينا</span>{" "}
+                    · <span className="text-rose-700 font-bold">سالب = الموظف عليه للنظام</span>{" "}
+                    · القيود المحاسبية في دفتر الأستاذ تبقى مفصولة (التزام + أصلين منفصلين).
                 </div>
 
                 {loading ? (
@@ -100,6 +112,11 @@ export default function EmployeesLedger() {
                                         <td className="text-left py-2 px-2 num font-bold text-sky-700">{fmt(r.custody)}</td>
                                         <td className={`text-left py-2 px-2 num font-extrabold ${r.net_position >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                                             {fmt(r.net_position)}
+                                            <div className={`text-[10px] font-bold mt-0.5 ${r.net_position >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                                {r.net_position > 0.01 ? "← له علينا"
+                                                    : r.net_position < -0.01 ? "← عليه للنظام"
+                                                        : "متوازن"}
+                                            </div>
                                         </td>
                                         <td className="text-left py-2 px-2 text-slate-400 text-xs">عرض ←</td>
                                     </tr>
@@ -197,15 +214,31 @@ function EmployeeDrawer({ employee, onClose }) {
                             </div>
                         )}
 
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-4">
-                            <div className="text-xs text-emerald-900">
-                                <strong>صافي المركز:</strong>{" "}
-                                <span className={summary?.net_position >= 0 ? "text-emerald-700 font-bold" : "text-rose-700 font-bold"}>
-                                    {fmt(summary?.net_position)} ر.س
+                        <div className={`rounded-lg p-3 mb-4 border-2 ${
+                            (summary?.net_position || 0) > 0.01 ? "bg-emerald-50 border-emerald-300"
+                                : (summary?.net_position || 0) < -0.01 ? "bg-rose-50 border-rose-300"
+                                    : "bg-slate-50 border-slate-300"
+                        }`}>
+                            <div className="text-sm font-extrabold mb-1">
+                                {(summary?.net_position || 0) > 0.01 ? "🟢 له علينا"
+                                    : (summary?.net_position || 0) < -0.01 ? "🔴 عليه للنظام"
+                                        : "⚪ متوازن"}:{" "}
+                                <span className={`num text-lg ${(summary?.net_position || 0) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                                    {fmt(Math.abs(summary?.net_position || 0))} ر.س
                                 </span>
                             </div>
-                            <div className="text-[10px] text-slate-500 mt-1">
-                                صافي = (مستحق له) − (سلفة + عهدة) — موجب يعني نحن ندين له، سالب يعني هو مدين لنا.
+                            <div className="text-[10px] text-slate-600 leading-relaxed">
+                                <strong>الصافي الاقتصادي =</strong>{" "}
+                                <span className="num">{fmt(summary?.salary_payable?.outstanding_debt || 0)}</span> (راتب مستحق)
+                                {" − "}
+                                <span className="num">{fmt(summary?.advance?.net_balance || 0)}</span> (سلفة)
+                                {" − "}
+                                <span className="num">{fmt(summary?.custody?.net_balance || 0)}</span> (عهدة)
+                                {" = "}
+                                <span className="num font-bold">{fmt(summary?.net_position || 0)}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-1 italic">
+                                * هذا عرض اقتصادي فقط — القيود في دفتر الأستاذ تبقى منفصلة (التزام + أصلين).
                             </div>
                         </div>
 
