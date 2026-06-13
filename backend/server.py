@@ -1900,6 +1900,19 @@ async def dashboard(
     # exclude them entirely to avoid skewing the user-curated totals. Users
     # who want their old data filtered by status must reprocess those analyses.
     legacy_analyses: list[dict] = []
+    # Keyword sets used by the legacy-analyses payment_breakdown
+    # classifier below. Defined here (not in the inline loop) so the
+    # references survive even when the new normalize_payment_method
+    # path skips the legacy branch.
+    tamara_keywords = ("تمارا", "tamara")
+    tabby_keywords = ("تابي", "tabby")
+    emkan_keywords = ("إمكان", "امكان", "emkan", "amkan")
+    cod_keywords = ("عند الاستلام", "عند الاستلم", "cod",
+                     "cash on delivery", "cash_on_delivery")
+    bank_keywords = (
+        "تحويل بنكي", "حوالة بنكية", "تحويل البنك", "تحويل بنوك",
+        "bank transfer", "bank_transfer", "wire transfer",
+    )
     if not included_statuses:
         legacy_q: dict = {
             "user_id": user["id"],
@@ -1976,7 +1989,13 @@ async def dashboard(
         if to_date: df["$lte"] = to_date
         tt_q["date"] = df
     tt_rows = await db.tiktok_ads_daily.find(tt_q, {"_id": 0}).to_list(1000)
-    tiktok_spend = sum(float(r.get("spend") or 0) for r in tt_rows)
+    # Iter-160 SSOT (Message #737): TikTok spend from ledger only.
+    _fd = from_date or "0000-01-01"
+    _td = to_date or "9999-12-31"
+    _tt_ledger = await _spend_by_date_from_ledger(
+        db, user["id"], ("tiktok",), _fd, _td,
+    )
+    tiktok_spend = sum(_tt_ledger.values())
     tiktok_purchases = sum(int(r.get("purchases") or 0) for r in tt_rows)
     tiktok_revenue = sum(float(r.get("revenue") or 0) for r in tt_rows)
     tiktok_roas = round(tiktok_revenue / tiktok_spend, 2) if tiktok_spend > 0 else 0.0
@@ -1989,26 +2008,31 @@ async def dashboard(
         if to_date: df["$lte"] = to_date
         meta_q["date"] = df
     meta_rows = await db.meta_ads_daily.find(meta_q, {"_id": 0}).to_list(2000)
-    meta_spend_total = sum(float(r.get("spend") or 0) for r in meta_rows)
+    # Iter-160 SSOT (Message #737): Meta spend from ledger only.
+    _meta_ledger = await _spend_by_date_from_ledger(
+        db, user["id"], ("meta", "facebook", "instagram"), _fd, _td,
+    )
+    meta_spend_total = sum(_meta_ledger.values())
     meta_purchases_total = sum(int(r.get("purchases") or 0) for r in meta_rows)
     meta_revenue_total = sum(float(r.get("revenue") or 0) for r in meta_rows)
 
     # ── Total ads cost across all platforms ──────────────────────────────
-    # IMPORTANT (iteration 16 fix): the legacy `daily_costs.tiktok_ads`
-    # path was the ONLY TikTok source in this sum, but Make.com webhooks
-    # populate `tiktok_ads_daily` (collection above) — NOT `daily_costs`.
-    # As a result, every merchant whose TikTok feed went through the
-    # webhook (the supported path) had their TikTok spend dropped from
-    # the master "إجمالي تكلفة الإعلانات" card. Take the MAX per-day to
-    # avoid double-counting if someone happens to have both sources.
-    dc_tt_total = sum((d.get("tiktok_ads", 0) or 0) for d in daily)
-    tiktok_total_for_dashboard = max(tiktok_spend, dc_tt_total)
-    daily_ads_total = sum(
-        (d.get("snapchat_ads", 0) or 0) + (d.get("snapchat_ads_2", 0) or 0)
-        + (d.get("instagram_ads", 0) or 0)
-        + (d.get("google_ads", 0) or 0)
-        for d in daily
-    ) + tiktok_total_for_dashboard + meta_spend_total
+    # Iter-160 SSOT (Message #737): all ad spend must come from
+    # ad_account_ledger. We no longer read daily_costs.snapchat_ads/
+    # snapchat_ads_2 / instagram_ads / google_ads / tiktok_ads for the
+    # aggregate spend. Those manual-entry fields are deprecated for
+    # accounting purposes — only the unified ledger counts.
+    _snap_ledger = await _spend_by_date_from_ledger(
+        db, user["id"], ("snapchat", "snap"), _fd, _td,
+    )
+    snap_spend_total = sum(_snap_ledger.values())
+    # Other providers (google/twitter/other) from ledger as well.
+    _other_ledger = await _spend_by_date_from_ledger(
+        db, user["id"], ("google", "twitter", "other"), _fd, _td,
+    )
+    other_spend_total = sum(_other_ledger.values())
+    daily_ads_total = (snap_spend_total + tiktok_spend
+                       + meta_spend_total + other_spend_total)
     daily_products_total = sum((d.get("product_costs", 0) or 0) for d in daily)
 
     # ── Computed product cost from order line-items (iteration 19) ─────────
@@ -2668,6 +2692,52 @@ async def _attributed_orders_from_store(
     return 0, 0.0
 
 
+# ── Iter-160 (Message #737 directive) ────────────────────────────────────────
+# Single Source of Truth: ad spend on the Dashboard MUST be aggregated
+# strictly from `ad_account_ledger` (type=spend). Old paths reading from
+# `daily_costs.snapchat_ads`, `snapchat_ads_daily`, `meta_ads_daily`,
+# `tiktok_ads_daily` are deprecated for spend totals. The raw API
+# collections remain for purchases/impressions/clicks (NON-accounting
+# metrics) but NEVER for the spend figure shown to merchants.
+async def _spend_by_date_from_ledger(
+    db, uid: str, providers: tuple, start: str, end: str,
+) -> dict[str, float]:
+    """Return {date_iso: total_spend} aggregated from ad_account_ledger
+    for the given user, ad_provider aliases, and date window.
+
+    Joins `ad_account_ledger.counterparty_id` → `counterparties.id` to
+    filter by `ad_provider`. Returns ONE row per calendar date with
+    the sum across all accounts of that provider for that user.
+    """
+    if not providers:
+        return {}
+    # Resolve counterparty ids matching any of these provider aliases.
+    cps = await db.counterparties.find(
+        {"user_id": uid, "kind": "ad_account",
+         "ad_provider": {"$in": list(providers)}},
+        {"_id": 0, "id": 1},
+    ).to_list(200)
+    cp_ids = [c["id"] for c in cps]
+    if not cp_ids:
+        return {}
+    pipeline = [
+        {"$match": {
+            "user_id": uid,
+            "counterparty_id": {"$in": cp_ids},
+            "type": "spend",
+            "date": {"$gte": start, "$lte": end},
+        }},
+        {"$group": {
+            "_id": "$date",
+            "spend": {"$sum": "$amount"},
+        }},
+    ]
+    out: dict[str, float] = {}
+    async for row in db.ad_account_ledger.aggregate(pipeline):
+        out[row["_id"]] = float(row.get("spend") or 0)
+    return out
+
+
 # ── Snapchat Ads dashboard summary ────────────────────────────────────────────
 @api.get("/dashboard/snapchat-summary")
 async def snapchat_summary(user: dict = Depends(current_user)):
@@ -2687,23 +2757,12 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     month_start_str = today_str[:8] + "01"
     d30_start_str = (today_d - timedelta(days=29)).isoformat()
 
-    # 1) Snapchat spend — from manually-logged daily_costs.
-    #    (Snapchat Marketing API pulls also drop into this collection.)
-    daily_rows = await db.daily_costs.find(
-        {
-            "user_id": uid,
-            "date": {"$gte": d30_start_str, "$lte": today_str},
-        },
-        {"_id": 0, "date": 1, "snapchat_ads": 1, "snapchat_ads_2": 1},
-    ).to_list(60)
-
-    by_date_spend: dict = {}
-    for r in daily_rows:
-        d = r.get("date")
-        if not d:
-            continue
-        s = float(r.get("snapchat_ads") or 0) + float(r.get("snapchat_ads_2") or 0)
-        by_date_spend[d] = by_date_spend.get(d, 0.0) + s
+    # 1) Snapchat spend — STRICTLY from ad_account_ledger (Iter-160 SSOT).
+    #    Old reads from daily_costs.snapchat_ads* are no longer used to
+    #    prevent double-counting between manual entries and API syncs.
+    by_date_spend = await _spend_by_date_from_ledger(
+        db, uid, ("snapchat", "snap"), d30_start_str, today_str,
+    )
 
     spend_today = round(by_date_spend.get(today_str, 0.0), 2)
     spend_month = round(sum(v for k, v in by_date_spend.items() if k >= month_start_str), 2)
@@ -2967,16 +3026,29 @@ async def meta_summary(user: dict = Depends(current_user)):
         {"_id": 0},
     ).to_list(2000)
 
+    # Iter-160 SSOT: spend now comes from ad_account_ledger (not from
+    # meta_ads_daily). Other Meta metrics (purchases, impressions, clicks,
+    # purchase_value) still come from meta_ads_daily as those are
+    # non-accounting performance metrics.
+    spend_by_date = await _spend_by_date_from_ledger(
+        db, uid, ("meta", "facebook", "instagram"), d30_start_str, today_str,
+    )
+
     def _agg(start: str, end: str):
         bucket = {"spend": 0.0, "purchases": 0, "purchase_value": 0.0,
                   "impressions": 0, "clicks": 0}
         for r in rows:
             if start <= r["date"] <= end:
-                bucket["spend"] += float(r.get("spend") or 0)
+                # NOTE: spend is intentionally NOT taken from r["spend"]
+                # anymore. We aggregate spend from the ledger below.
                 bucket["purchases"] += int(r.get("purchases") or 0)
                 bucket["purchase_value"] += float(r.get("purchase_value") or 0)
                 bucket["impressions"] += int(r.get("impressions") or 0)
                 bucket["clicks"] += int(r.get("clicks") or 0)
+        # Aggregate spend from ledger for this window
+        for d, s in spend_by_date.items():
+            if start <= d <= end:
+                bucket["spend"] += s
         spend = round(bucket["spend"], 2)
         purchases = bucket["purchases"]
         revenue = round(bucket["purchase_value"], 2)
@@ -3002,11 +3074,8 @@ async def meta_summary(user: dict = Depends(current_user)):
             "ctr": round((clicks / impressions) * 100, 2) if impressions > 0 else 0.0,
         }
 
-    # 30-day spend history for sparkline
-    by_date_spend: dict = {}
-    for r in rows:
-        d = r["date"]
-        by_date_spend[d] = by_date_spend.get(d, 0.0) + float(r.get("spend") or 0)
+    # 30-day spend history for sparkline — STRICTLY from ledger now.
+    by_date_spend = spend_by_date
     history: list = []
     for i in range(29, -1, -1):
         d = (today_d - timedelta(days=i)).isoformat()
@@ -3105,11 +3174,10 @@ async def tiktok_summary(user: dict = Depends(current_user)):
     month_start_str = today_str[:8] + "01"
     d30_start_str = (today_d - timedelta(days=29)).isoformat()
 
-    # tiktok_ads_daily: rich per-day rows (spend, purchases, revenue, +
-    # optional CPC/CPM/CTR fields from TikTok native fields). Make.com may
-    # push MULTIPLE rows per date (one per active campaign), so we MUST
-    # aggregate across rows for the same date — using a naive `{date: row}`
-    # dict would drop all-but-one campaign's spend (iteration 16 fix).
+    # Iter-160 SSOT: TikTok spend now comes STRICTLY from
+    # ad_account_ledger (Message #737 directive). tiktok_ads_daily is
+    # retained ONLY for the non-accounting metrics (purchases, revenue).
+    # Note: TikTok counterparties may have ad_provider="tiktok".
     tt_rows = await db.tiktok_ads_daily.find(
         {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
         {"_id": 0},
@@ -3119,34 +3187,21 @@ async def tiktok_summary(user: dict = Depends(current_user)):
         d = r.get("date")
         if not d:
             continue
-        agg = tt_by_date.setdefault(d, {"spend": 0.0, "purchases": 0, "revenue": 0.0})
-        agg["spend"] += float(r.get("spend") or 0)
+        agg = tt_by_date.setdefault(d, {"purchases": 0, "revenue": 0.0})
         agg["purchases"] += int(r.get("purchases") or 0)
         agg["revenue"] += float(r.get("revenue") or 0)
 
-    # daily_costs fallback (rare — most users will have webhook data)
-    daily_rows = await db.daily_costs.find(
-        {"user_id": uid, "date": {"$gte": d30_start_str, "$lte": today_str}},
-        {"_id": 0, "date": 1, "tiktok_ads": 1},
-    ).to_list(60)
-    dc_spend_by_date: dict = {r["date"]: float(r.get("tiktok_ads") or 0)
-                              for r in daily_rows if r.get("date")}
+    # Spend by date — STRICTLY from ledger.
+    spend_by_date = await _spend_by_date_from_ledger(
+        db, uid, ("tiktok",), d30_start_str, today_str,
+    )
 
     def _row_spend(date_key: str) -> float:
-        webhook = float((tt_by_date.get(date_key) or {}).get("spend") or 0)
-        manual = float(dc_spend_by_date.get(date_key) or 0)
-        # Use the bigger of the two so we never double-count, but we ALSO
-        # never silently drop webhook data when the merchant happens to
-        # have a 0-valued daily_costs row for the same date (this exact
-        # case broke /dashboard/tiktok-summary in iteration 15 — fixed in 16).
-        return max(webhook, manual)
+        return float(spend_by_date.get(date_key) or 0)
 
     def _agg(start: str, end: str):
-        # Iterate over the UNION of dates from BOTH sources — never
-        # restrict to one (the previous bug). For each date, use
-        # max(webhook, manual) so we never double-count.
         date_keys = {k for k in tt_by_date if start <= k <= end} \
-                    | {k for k in dc_spend_by_date if start <= k <= end}
+                    | {k for k in spend_by_date if start <= k <= end}
         spend = 0.0
         purchases = 0
         revenue = 0.0
@@ -3210,7 +3265,7 @@ async def tiktok_summary(user: dict = Depends(current_user)):
         "history": history,
         "last_fetched_at": last_fetched_at,
         "source": "make_webhook",
-        "has_data": len(tt_by_date) > 0 or any(v > 0 for v in dc_spend_by_date.values()),
+        "has_data": len(tt_by_date) > 0 or any(v > 0 for v in spend_by_date.values()),
     }
 
 
@@ -3265,16 +3320,10 @@ async def unified_ads_report(
         }
 
     # ── Snapchat ─────────────────────────────────────────────────────────
-    snap_spend_by_date: dict = {}
-    async for r in db.daily_costs.find(
-        {"user_id": uid, "date": {"$gte": fd_str, "$lte": td_str}},
-        {"_id": 0, "date": 1, "snapchat_ads": 1, "snapchat_ads_2": 1},
-    ):
-        d = r.get("date")
-        if not d:
-            continue
-        snap_spend_by_date[d] = snap_spend_by_date.get(d, 0.0) \
-            + float(r.get("snapchat_ads") or 0) + float(r.get("snapchat_ads_2") or 0)
+    # Iter-160 SSOT: spend comes from ad_account_ledger only.
+    snap_spend_by_date = await _spend_by_date_from_ledger(
+        db, uid, ("snapchat", "snap"), fd_str, td_str,
+    )
     snap_stats_by_date: dict = {}
     async for r in db.snapchat_daily_stats.find(
         {"user_id": uid, "date": {"$gte": fd_str, "$lte": td_str}},
@@ -3295,7 +3344,11 @@ async def unified_ads_report(
         {"user_id": uid, "date": {"$gte": fd_str, "$lte": td_str}},
         {"_id": 0},
     ).to_list(5000)
-    tt_spend = sum(float(r.get("spend") or 0) for r in tt_rows)
+    # Iter-160 SSOT: spend from ledger; other metrics from tiktok_ads_daily
+    tt_spend_by_date = await _spend_by_date_from_ledger(
+        db, uid, ("tiktok",), fd_str, td_str,
+    )
+    tt_spend = sum(tt_spend_by_date.values())
     tt_imp = sum(int(r.get("impressions") or 0) for r in tt_rows)
     tt_clicks = sum(int(r.get("clicks") or 0) for r in tt_rows)
     tt_purchases = sum(int(r.get("purchases") or 0) for r in tt_rows)
@@ -3305,16 +3358,17 @@ async def unified_ads_report(
         "label": "TikTok",
         **_metrics(tt_spend, tt_imp, tt_clicks, tt_purchases, tt_revenue),
     }
-    tt_spend_by_date: dict = {}
-    for r in tt_rows:
-        tt_spend_by_date[r["date"]] = tt_spend_by_date.get(r["date"], 0.0) + float(r.get("spend") or 0)
 
     # ── Meta ─────────────────────────────────────────────────────────────
     meta_rows = await db.meta_ads_daily.find(
         {"user_id": uid, "date": {"$gte": fd_str, "$lte": td_str}},
         {"_id": 0},
     ).to_list(5000)
-    m_spend = sum(float(r.get("spend") or 0) for r in meta_rows)
+    # Iter-160 SSOT: spend from ledger
+    meta_spend_by_date = await _spend_by_date_from_ledger(
+        db, uid, ("meta", "facebook", "instagram"), fd_str, td_str,
+    )
+    m_spend = sum(meta_spend_by_date.values())
     m_imp = sum(int(r.get("impressions") or 0) for r in meta_rows)
     m_clicks = sum(int(r.get("clicks") or 0) for r in meta_rows)
     m_purchases = sum(int(r.get("purchases") or 0) for r in meta_rows)
@@ -3324,9 +3378,6 @@ async def unified_ads_report(
         "label": "Meta",
         **_metrics(m_spend, m_imp, m_clicks, m_purchases, m_revenue),
     }
-    meta_spend_by_date: dict = {}
-    for r in meta_rows:
-        meta_spend_by_date[r["date"]] = meta_spend_by_date.get(r["date"], 0.0) + float(r.get("spend") or 0)
 
     # ── Daily series (one row per date in range) ─────────────────────────
     series = []
@@ -3409,6 +3460,9 @@ attach_accounting_cutoffs_routes(api, db, current_user)
 # Iter-159h — Smart Settlement Alerts (in-app notifications)
 from alerts_routes import attach_alerts_routes, ensure_alerts_indexes
 attach_alerts_routes(api, db, current_user)
+# Iter-160 — Universal Ledger + Audit Log (ERP-grade single source of truth)
+from ledger_routes import make_ledger_router
+api.include_router(make_ledger_router(db))
 app.include_router(api)
 
 # CORS
@@ -3444,6 +3498,9 @@ async def on_startup():
     await ensure_ad_account_indexes(db)
     await ensure_bnpl_indexes(db)
     await ensure_alerts_indexes(db)
+    # Iter-160 — Universal Ledger + Audit Log indexes
+    from ledger_core import ensure_indexes as ensure_ledger_indexes
+    await ensure_ledger_indexes(db)
     # Iter-139 — half-hourly ad-account sync (replaces the previous
     # 23:55 daily cron).  Runs every 30 minutes, syncs TODAY only,
     # uses force=True so each pass reverses prior cron rows for the

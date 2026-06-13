@@ -1,0 +1,47 @@
+{
+  "summary": "Iter-160 Universal Ledger + Dashboard SSOT refactor — backend-only review. All 3 pytest files pass (1 test each, single-test-per-file pattern to dodge motor + pytest-asyncio event-loop-closed quirk). Verified: reason-codes endpoint returns full Arabic dictionary; empty reason_code is rejected (422); /api/ledger/adjustments creates posted entry + audit row; reversal mirrors original on opposite side and double-reversal blocked; balance computed from POSTED entries only; ad-account-scoped /adjustments reduces displayed open_debt WITHOUT mutating underlying liabilities row; legacy daily_costs/snapchat_ads_daily/meta_ads_daily/tiktok_ads_daily values do NOT leak into dashboard summaries — only ad_account_ledger.type=spend rows surface; old destructive endpoints /reset-debt and /recompute-debt return 404; regression flows (topup with paid_from_account_id + transaction_date, credit-limit, /api/ad-accounts list, /audit-log, /adjustment-entries) all green. Public-URL spot checks via curl on REACT_APP_BACKEND_URL all return expected codes/payloads.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "tests pytest-asyncio + motor", "issue": "Multiple AsyncClient tests in one file cause 'Event loop is closed' because motor caches its connection across event loops. Mitigated by single-test-per-file pattern. Long-term: introduce an async fixture that resets the motor client per loop, or use pytest-asyncio scope='session' + a shared event loop fixture."},
+      {"endpoint": "ad_account_routes.py & several", "issue": "Many pydantic v1 @validator deprecation warnings (liabilities_routes.py, purchase_invoices_routes.py, webhook_routes.py) and FastAPI @app.on_event deprecation in server.py — not blocking but tech debt."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ledger_iter160.py",
+    "/app/backend/tests/test_dashboard_ledger_ssot_iter160.py",
+    "/app/backend/tests/test_ledger_iter160_extra.py",
+    "/app/test_reports/pytest/iter160_ledger.xml",
+    "/app/test_reports/pytest/iter160_ssot.xml",
+    "/app/test_reports/pytest/iter160_extra.xml"
+  ],
+  "action_items": [
+    "Consider migrating @validator → @field_validator (Pydantic v2) across liabilities_routes/purchase_invoices_routes/webhook_routes.",
+    "Consider migrating server.py @app.on_event startup/shutdown to lifespan context manager.",
+    "Optional: add a /api/ledger/entries/{id}/post test for the draft → posted promotion path (currently uncovered)."
+  ],
+  "critical_code_review_comments": [
+    "ledger_core.post_ledger_entry correctly enforces reason_code only for adjustment/settlement/writeoff/reversal — good; generic spend/topup/payment do not require it.",
+    "ledger_core.reverse_entry rejects double-reverse (reversed_by_entry_id check) and reversal of a reversal — correct.",
+    "_spend_by_date_from_ledger query joins counterparties by ad_provider list — make sure provider naming stays consistent (e.g. 'meta'/'facebook'/'instagram' grouped; 'snapchat'/'snap'; 'tiktok'). Any new provider added later must be wired into all 4 callers in server.py (snapchat-summary, meta-summary, tiktok-summary, /dashboard, /reports/ads).",
+    "ad_account_routes /adjustments wrapper duplicates reason-code validation that ledger_core also performs — fine for explicit 400s, but be aware of double-validation.",
+    "/api/ad-accounts list endpoint's _summarise must continue to read open_debt = expected_amount − paid_amount + ledger_credits − ledger_debits; verified via test that 500 - 200 = 300 open_debt after settlement.",
+    "general_ledger.entry_no uniqueness uses an aggregation max + 1 — under high concurrency two simultaneous posts could collide. The unique index (user_id, entry_no) will reject one; consider a retry loop or findOneAndUpdate counter doc.",
+    "Audit log inserts are not transactional with ledger inserts — if the audit insert fails after the entry insert, the entry is still posted. Low risk; acceptable for now."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ledger_iter160_extra.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "N/A (backend-only test)"},
+  "test_credentials": "admin@hesab.app / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Each test self-registers a fresh user (led-xxx@test.com, ssot-xxx@test.com, x160-xxx@test.com) and inserts counterparties/liabilities/ad_account_ledger/daily_costs/meta_ads_daily/tiktok_ads_daily rows; all rows are cleaned up at end of each test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run each iter160 test in its OWN pytest invocation: `pytest tests/test_ledger_iter160.py`, `pytest tests/test_dashboard_ledger_ssot_iter160.py`, `pytest tests/test_ledger_iter160_extra.py`. Running them together (same module-level motor client) yields false event-loop-closed failures. Public preview URL = https://salla-analytics.preview.emergentagent.com. Dashboard response wraps numerical totals under `totals` key (not top-level). Ad-account topup endpoint expects body fields `amount`, `transaction_date`, `paid_from_account_id` (not `account_id`/`date`).",
+  "rca of the issue": "N/A — no bugs reproduced. Refactor verified end-to-end on backend."
+}

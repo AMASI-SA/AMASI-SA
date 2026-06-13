@@ -259,6 +259,30 @@ async def _summarise(db, user_id: str, cp: dict) -> dict:
             {"_id": 0}, sort=[("created_at", -1)],
         )
         last_events[ev_type] = row
+    # Iter-160 — apply posted general_ledger adjustments to the
+    # open_debt figure. Settlements / writeoffs (debit side) REDUCE the
+    # outstanding debt; increase_debt adjustments (credit side) INCREASE it.
+    # The underlying liabilities row is NOT mutated — adjustments live
+    # exclusively in the immutable general_ledger.
+    adj_pipeline = [
+        {"$match": {"user_id": user_id, "entity_type": "ad_account",
+                     "entity_id": cp["id"], "status": "posted",
+                     "entry_type": {"$in": ["settlement", "writeoff",
+                                              "adjustment"]}}},
+        {"$group": {"_id": "$side", "total": {"$sum": "$amount"}}},
+    ]
+    adj_debit = 0.0
+    adj_credit = 0.0
+    async for row in db.general_ledger.aggregate(adj_pipeline):
+        if row["_id"] == "debit":
+            adj_debit = float(row.get("total") or 0)
+        elif row["_id"] == "credit":
+            adj_credit = float(row.get("total") or 0)
+    # Reduce outstanding debt by net debit-side adjustments;
+    # increase by credit-side adjustments. Floor at 0.
+    debt_remaining = _round(max(
+        debt_remaining - adj_debit + adj_credit, 0.0,
+    ))
     return {
         "id": cp["id"],
         "name": cp["name"],
@@ -277,6 +301,9 @@ async def _summarise(db, user_id: str, cp: dict) -> dict:
         # Iter-159i — per-account credit limit configuration.
         "credit_limit": cp.get("credit_limit"),
         "alert_threshold_pct": cp.get("alert_threshold_pct"),
+        # Iter-160 — adjustment totals for transparency in UI
+        "adjustments_total_debit": _round(adj_debit),
+        "adjustments_total_credit": _round(adj_credit),
     }
 
 
@@ -547,140 +574,108 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         cp = await _get_account(db, user["id"], cp_id)
         return await _summarise(db, user["id"], cp)
 
-    # ── Iter-159o — POST /{id}/reset-debt ────────────────────────────
-    # SAFE reset: wipes only the DEBT side of the ad account so the
-    # merchant can re-run the historical migration with a clean slate.
-    # Iter-159p — Refined behaviour (per user feedback):
-    #   • DELETE liabilities (kind=ad_account, counterparty_id=cp_id)
-    #   • DELETE ledger rows of `type=spend` ONLY
-    #   • KEEP   ledger rows of `type=topup` (the merchant's actual
-    #            bank-funded prepayments — these are an asset, not a
-    #            debt, and must survive the reset).
-    #   • KEEP   counterparty.balance untouched.
-    #   • DO NOT touch raw platform data (snapchat_ads_daily, etc.) or
-    #            bank-side account_transactions.
-    @router.post("/{cp_id}/reset-debt")
-    async def reset_debt(
+    # ── Iter-160 — Accounting Adjustments (replaces reset-debt/recompute-debt)
+    # Three operations available via the Universal Ledger:
+    #   • settlement: تسوية مديونية (reduces outstanding debt)
+    #   • writeoff:   شطب رصيد معتمد (reduces outstanding debt)
+    #   • adjustment: قيد تعديل عام (موجب أو سالب)
+    # All adjustments require a `reason_code` from REASON_CODES.
+    # All adjustments are POSTED entries — they NEVER delete or modify
+    # existing ledger entries. Full audit trail in accounting_audit_log.
+    #
+    # To "undo" a single ledger entry, use POST /ledger/entries/{id}/reverse.
+    # The OLD reset-debt and recompute-debt endpoints have been removed
+    # because they violated double-entry accounting (DELETE on a ledger).
+
+    @router.post("/{cp_id}/adjustments")
+    async def create_adjustment(
         cp_id: str,
+        payload: dict,
         user: dict = Depends(current_user),
     ):
-        cp = await _get_account(db, user["id"], cp_id)
-        liab_del = await db.liabilities.delete_many(
-            {"user_id": user["id"], "kind": "ad_account",
-             "counterparty_id": cp_id},
-        )
-        # Only spend rows — top-ups preserved.
-        ledger_del = await db.ad_account_ledger.delete_many(
-            {"user_id": user["id"], "counterparty_id": cp_id,
-             "type": "spend"},
-        )
-        # Clear ONLY the sync markers so the next half-hour cron starts
-        # fresh, but DO NOT zero the balance (it represents real money
-        # the merchant has on the ad platform).
-        await db.counterparties.update_one(
-            {"id": cp_id, "user_id": user["id"]},
-            {"$set": {"last_auto_sync_date": None,
-                      "last_yesterday_synced_for": None,
-                      "updated_at": _now()},
-             "$unset": {"last_auto_sync_at": ""}},
-        )
-        return {
-            "ok": True,
-            "counterparty_id": cp_id,
-            "name": cp.get("name"),
-            "liabilities_deleted": liab_del.deleted_count,
-            "ledger_rows_deleted": ledger_del.deleted_count,
-            "balance_preserved": cp.get("balance", 0.0),
-            "note": "تم تصفير المديونيات والمصروفات فقط — الرصيد والتعبئات محفوظة.",
-        }
+        """Create a settlement / writeoff / generic adjustment against
+        an ad-account's outstanding debt. Writes a posted entry to
+        general_ledger + an audit row.
 
-    # ── Iter-159n — POST /{id}/recompute-debt ────────────────────────
-    # Authoritative recompute: real outstanding debt = Σ(uncovered from
-    # ledger spend rows) − Σ(paid_amount across all this account's
-    # liabilities).  Useful when historical migrations bloated the open
-    # liability and the merchant wants to snap it back to truth.
-    # All historical liabilities for this account are closed
-    # ("rebuilt") and a single fresh open liability is created with the
-    # correct amount.
-    @router.post("/{cp_id}/recompute-debt")
-    async def recompute_debt(
-        cp_id: str,
+        body: {
+            kind: "settlement"|"writeoff"|"adjustment",
+            amount: float (>0),
+            direction: "reduce_debt"|"increase_debt" (default reduce_debt),
+            reason_code: str (required, from /api/ledger/reason-codes),
+            notes: str (optional)
+        }
+        """
+        from ledger_core import (
+            REASON_CODES as _RC,
+            post_ledger_entry as _post_le,
+        )
+        cp = await _get_account(db, user["id"], cp_id)
+        kind = (payload or {}).get("kind")
+        if kind not in ("settlement", "writeoff", "adjustment"):
+            raise HTTPException(400, "kind غير صحيح")
+        try:
+            amount = float(payload.get("amount") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "amount غير صحيح")
+        if amount <= 0:
+            raise HTTPException(400, "amount يجب أن يكون موجباً")
+        direction = payload.get("direction") or "reduce_debt"
+        if direction not in ("reduce_debt", "increase_debt"):
+            raise HTTPException(400, "direction غير صحيح")
+        reason_code = payload.get("reason_code") or ""
+        if not reason_code:
+            raise HTTPException(400, "reason_code إلزامي")
+        if reason_code not in _RC:
+            raise HTTPException(400, f"reason_code غير معتمد: {reason_code}")
+        notes = payload.get("notes") or ""
+
+        # reduce_debt → debit (lowers the credit side, i.e. lowers debt)
+        # increase_debt → credit (raises debt)
+        side = "debit" if direction == "reduce_debt" else "credit"
+        entry = await _post_le(
+            db, user_id=user["id"], actor_id=user["id"],
+            actor_name=user.get("name") or user.get("email") or "",
+            entity_type="ad_account", entity_id=cp_id,
+            entry_type=kind, amount=amount, side=side,
+            reason_code=reason_code, notes=notes,
+            metadata={"direction": direction,
+                      "ad_provider": cp.get("ad_provider"),
+                      "counterparty_name": cp.get("name")},
+            status="posted",
+        )
+        entry.pop("_id", None)
+        return {"ok": True, "entry": entry,
+                "account": await _summarise(db, user["id"], cp)}
+
+    @router.get("/{cp_id}/audit-log")
+    async def account_audit_log(
+        cp_id: str, limit: int = 100,
         user: dict = Depends(current_user),
     ):
-        cp = await _get_account(db, user["id"], cp_id)
+        await _get_account(db, user["id"], cp_id)
+        cur = db.accounting_audit_log.find(
+            {"user_id": user["id"], "entity_type": "ad_account",
+             "entity_id": cp_id}, {"_id": 0},
+        ).sort("timestamp", -1).limit(int(limit or 100))
+        items = await cur.to_list(int(limit or 100))
+        return {"items": items}
 
-        # Σ uncovered from ledger.spend (only spend that became debt,
-        # NOT the part covered by topup balance).
-        ledger_agg = await db.ad_account_ledger.aggregate([
-            {"$match": {"user_id": user["id"], "counterparty_id": cp_id,
-                         "type": "spend"}},
-            {"$group": {"_id": None,
-                         "uncovered": {"$sum": {"$ifNull": [
-                             "$breakdown.uncovered", 0]}}}},
-        ]).to_list(1)
-        total_uncovered = round(float(
-            ledger_agg[0]["uncovered"] if ledger_agg else 0), 2)
+    @router.get("/{cp_id}/adjustment-entries")
+    async def account_adjustment_entries(
+        cp_id: str, limit: int = 200,
+        user: dict = Depends(current_user),
+    ):
+        """List general_ledger entries for this ad account (all entry
+        types: settlement, writeoff, adjustment, reversal). Useful for
+        a 'view history' drawer in the UI."""
+        await _get_account(db, user["id"], cp_id)
+        cur = db.general_ledger.find(
+            {"user_id": user["id"], "entity_type": "ad_account",
+             "entity_id": cp_id}, {"_id": 0},
+        ).sort("entry_no", -1).limit(int(limit or 200))
+        items = await cur.to_list(int(limit or 200))
+        return {"items": items}
 
-        # Σ paid_amount across ALL ad_account liabilities for this acct
-        # (open + closed).
-        liab_agg = await db.liabilities.aggregate([
-            {"$match": {"user_id": user["id"], "kind": "ad_account",
-                         "counterparty_id": cp_id}},
-            {"$group": {"_id": None,
-                         "paid": {"$sum": "$paid_amount"},
-                         "open": {"$sum": {"$cond": [
-                             {"$in": ["$status", ["unpaid", "partial"]]},
-                             {"$subtract": ["$expected_amount",
-                                            "$paid_amount"]},
-                             0]}}}},
-        ]).to_list(1)
-        prior_paid = round(float(
-            liab_agg[0]["paid"] if liab_agg else 0), 2)
-        prior_open = round(float(
-            liab_agg[0]["open"] if liab_agg else 0), 2)
-
-        correct_outstanding = round(
-            max(total_uncovered - prior_paid, 0), 2)
-
-        # Close all existing open liabilities for this account (they're
-        # being rebuilt).
-        await db.liabilities.update_many(
-            {"user_id": user["id"], "kind": "ad_account",
-             "counterparty_id": cp_id,
-             "status": {"$in": ["unpaid", "partial"]}},
-            {"$set": {"status": "paid",
-                      "rebuilt_at": _now(),
-                      "updated_at": _now(),
-                      "rebuild_note": "Closed during /recompute-debt"}},
-        )
-
-        # If there's a real outstanding amount, create ONE clean
-        # liability with the corrected total.
-        new_liab_id = None
-        if correct_outstanding > 0:
-            new_liab_id = str(uuid.uuid4())
-            await db.liabilities.insert_one({
-                "id": new_liab_id, "user_id": user["id"],
-                "kind": "ad_account", "counterparty_id": cp_id,
-                "expected_amount": correct_outstanding,
-                "paid_amount": 0.0, "status": "unpaid",
-                "description": f"إعادة احتساب مديونية — {cp.get('name')}",
-                "source": "ad_account_recompute",
-                "auto_generated": True,
-                "due_date": riyadh_today_iso(),
-                "created_at": _now(), "updated_at": _now(),
-            })
-
-        return {
-            "ok": True,
-            "counterparty_id": cp_id,
-            "name": cp.get("name"),
-            "previous_open_debt": prior_open,
-            "total_ledger_uncovered": total_uncovered,
-            "total_paid": prior_paid,
-            "correct_outstanding": correct_outstanding,
-            "new_liability_id": new_liab_id,
-        }
 
     # ── POST /{id}/topup ──────────────────────────────────────────────
     @router.post("/{cp_id}/topup")

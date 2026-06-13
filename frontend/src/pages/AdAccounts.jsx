@@ -1251,8 +1251,8 @@ export default function AdAccounts() {
                             {/* Iter-159i — Per-account credit limit + alert threshold */}
                             <CreditLimitPanel row={row} onSaved={load} fmt={fmt} />
 
-                            {/* Iter-159n — Recompute debt button (one-click correction) */}
-                            <RecomputeDebtButton row={row} onDone={load} fmt={fmt} />
+                            {/* Iter-160 — Accounting actions (settlement/writeoff/adjustment/audit log) */}
+                            <AccountingActionsPanel row={row} onDone={load} fmt={fmt} />
 
                             <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex items-center gap-1.5">
@@ -1577,91 +1577,289 @@ function CreditLimitPanel({ row, onSaved, fmt }) {
 }
 
 // ── Iter-159n — Recompute debt button + confirmation dialog ────────
-function RecomputeDebtButton({ row, onDone, fmt }) {
-    const [showPreview, setShowPreview] = useState(false);
-    const [preview, setPreview] = useState(null);
+// Iter-160 — Accounting Actions Panel (Settlement / Write-off / Adjustment + Audit Log)
+// Replaces the destructive "Reset Debt" / "Recompute Debt" buttons with
+// proper double-entry accounting actions. All actions append to the
+// general_ledger; nothing is ever deleted.
+function AccountingActionsPanel({ row, onDone, fmt }) {
+    const [showForm, setShowForm] = useState(false);
+    const [kind, setKind] = useState("settlement");
+    const [amount, setAmount] = useState("");
+    const [reasonCode, setReasonCode] = useState("");
+    const [notes, setNotes] = useState("");
+    const [reasonCodes, setReasonCodes] = useState([]);
     const [busy, setBusy] = useState(false);
-    const [applied, setApplied] = useState(null);
+    const [showAudit, setShowAudit] = useState(false);
+    const [auditItems, setAuditItems] = useState([]);
+    const [ledgerItems, setLedgerItems] = useState([]);
 
-    const fetchPreview = async () => {
+    const KINDS = [
+        { value: "settlement", label: "تسوية", color: "emerald",
+          desc: "سداد فعلي يخفض المديونية", direction: "reduce_debt" },
+        { value: "writeoff",   label: "شطب",   color: "amber",
+          desc: "شطب معتمد يخفض المديونية", direction: "reduce_debt" },
+        { value: "adjustment", label: "تعديل", color: "sky",
+          desc: "قيد تعديل عام (موجب أو سالب)", direction: "reduce_debt" },
+    ];
+
+    const loadReasonCodes = async () => {
+        if (reasonCodes.length) return;
+        try {
+            const { data } = await api.get("/ledger/reason-codes");
+            setReasonCodes(data);
+            if (data.length) setReasonCode(data[0].code);
+        } catch (e) { /* ignore */ }
+    };
+
+    const loadAuditLog = async () => {
+        try {
+            const [aud, led] = await Promise.all([
+                api.get(`/ad-accounts/${row.id}/audit-log?limit=50`),
+                api.get(`/ad-accounts/${row.id}/adjustment-entries?limit=50`),
+            ]);
+            setAuditItems(aud.data?.items || []);
+            setLedgerItems(led.data?.items || []);
+        } catch (e) {
+            toast.error("فشل تحميل سجل التدقيق");
+        }
+    };
+
+    const openForm = async (k) => {
+        setKind(k);
+        await loadReasonCodes();
+        setShowForm(true);
+        setAmount("");
+        setNotes("");
+    };
+
+    const submit = async (direction = "reduce_debt") => {
+        const amt = Number(amount);
+        if (!amt || amt <= 0) {
+            toast.error("أدخل مبلغاً صحيحاً");
+            return;
+        }
+        if (!reasonCode) {
+            toast.error("اختر سبب العملية");
+            return;
+        }
         setBusy(true);
         try {
-            // We POST to compute, but the endpoint also applies. To "preview"
-            // we'd need a separate endpoint — for simplicity, show direct apply
-            // with confirmation, and we surface previous numbers + new ones.
-            // Confirm UX: show the computation before applying.
-            const confirmed = window.confirm(
-                "سيتم إعادة احتساب مديونية هذا الحساب من واقع سجل الصرف والمدفوعات.\n" +
-                "كل المديونيات المفتوحة الحالية سيتم إغلاقها وستُنشأ مديونية واحدة جديدة بالمبلغ الصحيح.\n\n" +
-                "هل أنت متأكد من المتابعة؟"
+            const { data } = await api.post(
+                `/ad-accounts/${row.id}/adjustments`,
+                { kind, amount: amt, direction, reason_code: reasonCode, notes },
             );
-            if (!confirmed) { setBusy(false); return; }
-            const { data } = await api.post(`/ad-accounts/${row.id}/recompute-debt`);
-            setApplied(data);
-            setShowPreview(true);
-            toast.success("تم إعادة احتساب المديونية بنجاح");
+            toast.success(
+                `تم تسجيل ${KINDS.find(x => x.value === kind)?.label} بقيمة ${fmt(amt)} ر.س — المديونية الجديدة: ${fmt(data.account?.open_debt)}`,
+                { duration: 7000 },
+            );
+            setShowForm(false);
             await onDone?.();
         } catch (e) {
-            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل إعادة الاحتساب");
-        } finally { setBusy(false); }
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشلت العملية");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const reverseEntry = async (entryId, entryNo) => {
+        const reasonCodeRev = window.prompt(
+            "سبب العكس (اختر من: actual_payment / data_entry_error / duplicate_entry / accounting_settle / other):",
+            "data_entry_error",
+        );
+        if (!reasonCodeRev) return;
+        const note = window.prompt("ملاحظات إضافية (اختياري):", "") || "";
+        if (!window.confirm(
+            `سيتم إنشاء قيد عكسي للقيد رقم ${entryNo}\n` +
+            "القيد الأصلي سيُحفظ تاريخياً مع status=reversed.\n\nمتابعة؟",
+        )) return;
+        try {
+            await api.post(
+                `/ledger/entries/${entryId}/reverse`,
+                { reason_code: reasonCodeRev, notes: note },
+            );
+            toast.success("تم إنشاء القيد العكسي بنجاح");
+            await loadAuditLog();
+            await onDone?.();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل عكس القيد");
+        }
     };
 
     return (
-        <div className="border-t border-slate-100 pt-3" data-testid={`adacc-recompute-${row.id}`}>
+        <div className="border-t border-slate-100 pt-3 space-y-2"
+             data-testid={`adacc-accounting-${row.id}`}>
             <div className="flex items-center justify-between gap-2">
-                <div className="text-[11px] text-slate-600">
-                    🔧 إصلاح/تصفير المديونية
+                <div className="text-[11px] font-bold text-slate-700">
+                    📒 العمليات المحاسبية
                 </div>
-                <div className="flex items-center gap-1.5">
-                    <button
-                        onClick={async () => {
-                            const ok = window.confirm(
-                                `⚠️ سيتم تصفير المديونيات والمصروفات لحساب «${row.name}»\n\n` +
-                                "ما سيُحذف:\n" +
-                                "• كل المديونيات (liabilities)\n" +
-                                "• كل سجلات الصرف (spend)\n\n" +
-                                "ما سيُحفظ ✅:\n" +
-                                "• الرصيد الحالي (balance)\n" +
-                                "• سجلات التعبئة من البنك (topups)\n\n" +
-                                "بعد التصفير: استخدم «ترحيل المديونيات التاريخية» لإعادة البناء.\n\n" +
-                                "هل أنت متأكد؟"
-                            );
-                            if (!ok) return;
-                            try {
-                                const { data } = await api.post(`/ad-accounts/${row.id}/reset-debt`);
-                                toast.success(
-                                    `تم التصفير: حذف ${data.liabilities_deleted} مديونية + ${data.ledger_rows_deleted} سجل صرف. الرصيد ${fmt(data.balance_preserved)} ر.س محفوظ.`,
-                                    { duration: 7000 }
-                                );
-                                await onDone?.();
-                            } catch (e) {
-                                toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التصفير");
-                            }
-                        }}
-                        className="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 px-2.5 py-1 rounded font-bold"
-                        data-testid={`adacc-reset-btn-${row.id}`}
-                        title="حذف المديونيات وسجلات الصرف (يبقى الرصيد والتعبئات)"
-                    >
-                        🗑 تصفير المديونيات
-                    </button>
-                    <button
-                        onClick={fetchPreview}
-                        disabled={busy}
-                        className="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded font-bold disabled:opacity-50"
-                        data-testid={`adacc-recompute-btn-${row.id}`}
-                    >
-                        {busy ? "جاري..." : "🔧 إعادة احتساب"}
-                    </button>
-                </div>
+                <button
+                    onClick={async () => {
+                        if (!showAudit) await loadAuditLog();
+                        setShowAudit(!showAudit);
+                    }}
+                    className="text-[10px] text-slate-600 hover:text-slate-900 underline"
+                    data-testid={`adacc-audit-toggle-${row.id}`}
+                >
+                    {showAudit ? "إخفاء السجل" : "📋 سجل التدقيق"}
+                </button>
             </div>
-            {applied && showPreview && (
-                <div className="mt-2 bg-amber-50/50 border border-amber-200 rounded-lg p-2.5 text-[11px] space-y-1" data-testid={`adacc-recompute-result-${row.id}`}>
-                    <div className="font-bold text-amber-900 mb-1">📊 نتيجة إعادة الاحتساب:</div>
-                    <div className="flex justify-between"><span className="text-slate-600">إجمالي الصرف غير المغطى (من السجل):</span><span className="num font-bold">{fmt(applied.total_ledger_uncovered)}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-600">إجمالي ما تم سداده:</span><span className="num font-bold text-emerald-700">{fmt(applied.total_paid)}</span></div>
-                    <div className="flex justify-between border-t border-amber-200 pt-1 mt-1"><span className="text-slate-600">المديونية قبل الإصلاح:</span><span className="num font-bold text-rose-700 line-through">{fmt(applied.previous_open_debt)}</span></div>
-                    <div className="flex justify-between"><span className="font-bold text-slate-900">المديونية الصحيحة الآن:</span><span className="num font-extrabold text-emerald-700 text-sm">{fmt(applied.correct_outstanding)} ر.س</span></div>
-                    <button onClick={() => setShowPreview(false)} className="text-[10px] text-slate-500 hover:text-slate-700 mt-1">إخفاء التفاصيل</button>
+
+            {(row.adjustments_total_debit > 0 || row.adjustments_total_credit > 0) && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-[10px]">
+                    <div className="flex justify-between">
+                        <span className="text-slate-600">إجمالي التسويات المخفّضة:</span>
+                        <span className="num font-bold text-emerald-700">{fmt(row.adjustments_total_debit)}</span>
+                    </div>
+                    {row.adjustments_total_credit > 0 && (
+                        <div className="flex justify-between mt-0.5">
+                            <span className="text-slate-600">إجمالي التعديلات المضافة:</span>
+                            <span className="num font-bold text-rose-700">{fmt(row.adjustments_total_credit)}</span>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <div className="flex flex-wrap gap-1.5">
+                {KINDS.map(k => (
+                    <button key={k.value}
+                        onClick={() => openForm(k.value)}
+                        className={`text-[11px] bg-${k.color}-50 hover:bg-${k.color}-100 text-${k.color}-800 border border-${k.color}-200 px-2.5 py-1 rounded font-bold flex-1 min-w-[80px]`}
+                        title={k.desc}
+                        data-testid={`adacc-${k.value}-btn-${row.id}`}
+                    >
+                        {k.value === "settlement" && "✓ تسوية"}
+                        {k.value === "writeoff" && "✂ شطب"}
+                        {k.value === "adjustment" && "± تعديل"}
+                    </button>
+                ))}
+            </div>
+
+            {showForm && (
+                <div className="bg-slate-50 border border-slate-300 rounded-lg p-3 space-y-2"
+                     data-testid={`adacc-adjustment-form-${row.id}`}>
+                    <div className="text-[11px] font-bold text-slate-700">
+                        {kind === "settlement" && "✓ تسوية مديونية"}
+                        {kind === "writeoff" && "✂ شطب رصيد معتمد"}
+                        {kind === "adjustment" && "± قيد تعديل"}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                        لن يتم حذف أي بيانات. سيُسجَّل قيد محاسبي جديد مع الحفاظ على السجل التاريخي.
+                    </div>
+                    <input type="number" step="0.01" placeholder="المبلغ"
+                        value={amount} onChange={e => setAmount(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs"
+                        data-testid={`adacc-adj-amount-${row.id}`}
+                    />
+                    <select value={reasonCode} onChange={e => setReasonCode(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs"
+                        data-testid={`adacc-adj-reason-${row.id}`}
+                    >
+                        <option value="">— اختر السبب —</option>
+                        {reasonCodes.map(rc => (
+                            <option key={rc.code} value={rc.code}>{rc.label}</option>
+                        ))}
+                    </select>
+                    <textarea placeholder="ملاحظات (اختياري)" rows={2}
+                        value={notes} onChange={e => setNotes(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs"
+                        data-testid={`adacc-adj-notes-${row.id}`}
+                    />
+                    <div className="flex gap-1.5">
+                        {kind === "adjustment" && (
+                            <>
+                                <button onClick={() => submit("reduce_debt")}
+                                    disabled={busy}
+                                    className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-[11px] rounded font-bold disabled:opacity-50">
+                                    تخفيض المديونية
+                                </button>
+                                <button onClick={() => submit("increase_debt")}
+                                    disabled={busy}
+                                    className="flex-1 px-2 py-1.5 bg-rose-600 text-white text-[11px] rounded font-bold disabled:opacity-50">
+                                    زيادة المديونية
+                                </button>
+                            </>
+                        )}
+                        {kind !== "adjustment" && (
+                            <button onClick={() => submit("reduce_debt")}
+                                disabled={busy}
+                                className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-[11px] rounded font-bold disabled:opacity-50"
+                                data-testid={`adacc-adj-submit-${row.id}`}>
+                                {busy ? "جاري..." : "اعتماد القيد"}
+                            </button>
+                        )}
+                        <button onClick={() => setShowForm(false)}
+                            className="px-2 py-1.5 bg-slate-200 text-slate-700 text-[11px] rounded">
+                            إلغاء
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {showAudit && (
+                <div className="bg-white border border-slate-300 rounded-lg p-3 max-h-80 overflow-y-auto space-y-2"
+                     data-testid={`adacc-audit-log-${row.id}`}>
+                    <div className="text-[11px] font-bold text-slate-800 mb-2">
+                        📒 قيود الـ Ledger ({ledgerItems.length})
+                    </div>
+                    {ledgerItems.length === 0 && (
+                        <div className="text-[10px] text-slate-400 text-center py-3">
+                            لا توجد قيود محاسبية حتى الآن
+                        </div>
+                    )}
+                    {ledgerItems.map(le => (
+                        <div key={le.id}
+                             className={`text-[10px] border rounded p-2 space-y-0.5 ${
+                                le.status === "reversed" ? "bg-slate-50 border-slate-200 opacity-60" :
+                                le.entry_type === "reversal" ? "bg-amber-50 border-amber-200" :
+                                "bg-emerald-50 border-emerald-200"
+                             }`}>
+                            <div className="flex items-center justify-between">
+                                <div className="font-bold text-slate-800">
+                                    #{le.entry_no} · {le.entry_type === "settlement" ? "تسوية" :
+                                                          le.entry_type === "writeoff" ? "شطب" :
+                                                          le.entry_type === "adjustment" ? "تعديل" :
+                                                          le.entry_type === "reversal" ? "قيد عكسي" :
+                                                          le.entry_type}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className={`num font-bold ${le.side === "debit" ? "text-emerald-700" : "text-rose-700"}`}>
+                                        {le.side === "debit" ? "+" : "−"} {fmt(le.amount)}
+                                    </span>
+                                    {le.status === "posted" && le.entry_type !== "reversal" && (
+                                        <button onClick={() => reverseEntry(le.id, le.entry_no)}
+                                            className="text-[10px] text-amber-700 hover:text-amber-900 underline"
+                                            data-testid={`adacc-reverse-${le.entry_no}`}>
+                                            عكس
+                                        </button>
+                                    )}
+                                    {le.status === "reversed" && (
+                                        <span className="text-[9px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                            معكوس
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="text-slate-600">
+                                {le.reason_code} {le.notes && `· ${le.notes}`}
+                            </div>
+                            <div className="text-[9px] text-slate-400">
+                                {le.created_at?.slice(0, 19).replace("T", " ")}
+                            </div>
+                        </div>
+                    ))}
+                    <div className="border-t border-slate-200 pt-2 mt-2">
+                        <div className="text-[11px] font-bold text-slate-800 mb-2">
+                            🔍 سجل التدقيق ({auditItems.length})
+                        </div>
+                        {auditItems.slice(0, 20).map(au => (
+                            <div key={au.id} className="text-[9px] text-slate-600 border-b border-slate-100 py-1">
+                                <span className="font-bold">{au.action}</span>
+                                {au.reason_code && ` · ${au.reason_code}`}
+                                {au.notes && ` · ${au.notes}`}
+                                <div className="text-slate-400">{au.timestamp?.slice(0, 19).replace("T", " ")}</div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
