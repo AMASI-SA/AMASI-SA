@@ -37,11 +37,17 @@ def _new_user():
 
 def test_supplier_liability_counts_under_liabilities():
     h = _new_user()
+    # Iter-165 — counterparty_id is now mandatory; create supplier first.
+    cp = requests.post(
+        f"{BASE_URL}/api/counterparties",
+        json={"name": "شركة التغليف الذهبي", "kind": "supplier"},
+        headers=h, timeout=10,
+    ).json()
     r = requests.post(
         f"{BASE_URL}/api/liabilities",
         json={
             "kind": "supplier",
-            "supplier_name": "شركة التغليف الذهبي",
+            "counterparty_id": cp["id"],
             "expected_amount": 1500,
             "due_date": "2026-07-01",
             "description": "فاتورة كرتون",
@@ -62,9 +68,12 @@ def test_supplier_liability_counts_under_liabilities():
 
 def test_supplier_requires_name():
     h = _new_user()
+    # Iter-165 — supplier without counterparty_id is rejected.
     r = requests.post(
         f"{BASE_URL}/api/liabilities",
-        json={"kind": "supplier", "expected_amount": 100, "due_date": "2026-07-01"},
+        json={"kind": "supplier", "expected_amount": 100,
+              "due_date": "2026-07-01",
+              "supplier_name": "بدون مرجع"},
         headers=h, timeout=10,
     )
     assert r.status_code in (400, 422)
@@ -112,9 +121,15 @@ def test_receivable_requires_counterparty_name():
 def test_mixed_kinds_in_summary():
     """Supplier liability + receivable asset → net = receivable − supplier."""
     h = _new_user()
+    # Iter-165 — supplier counterparty must exist first.
+    cp = requests.post(
+        f"{BASE_URL}/api/counterparties",
+        json={"name": "Vendor", "kind": "supplier"},
+        headers=h, timeout=10,
+    ).json()
     requests.post(
         f"{BASE_URL}/api/liabilities",
-        json={"kind": "supplier", "supplier_name": "Vendor",
+        json={"kind": "supplier", "counterparty_id": cp["id"],
               "expected_amount": 1000, "due_date": "2026-07-01"},
         headers=h, timeout=10,
     )

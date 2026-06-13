@@ -175,12 +175,18 @@ class LiabilityCreate(BaseModel):
 
     @validator("supplier_name")
     def _v_supp(cls, v, values):
-        # Iter-99 — supplier_name is required only if no counterparty_id
-        # was provided (counterparty supplies the name in that case).
-        if (values.get("kind") == "supplier"
-                and not (v and v.strip())
-                and not values.get("counterparty_id")):
-            raise ValueError("supplier_name or counterparty_id required for supplier")
+        # Iter-165 — STRICT GUARD: supplier liabilities MUST be linked
+        # to a registered counterparty (counterparty_id). The previous
+        # "name OR id" allowance produced "orphan" rows that could not
+        # be migrated to the Universal Ledger and confused the
+        # Reconciliation Report. Per merchant directive Feb 2026 we
+        # now refuse creation if counterparty_id is missing.
+        if values.get("kind") == "supplier":
+            if not values.get("counterparty_id"):
+                raise ValueError(
+                    "counterparty_id إلزامي لمديونيات الموردين — "
+                    "أنشئ المورد أولاً من «الأطراف» ثم اربطه بالمديونية."
+                )
         return v
 
     @validator("counterparty_name")

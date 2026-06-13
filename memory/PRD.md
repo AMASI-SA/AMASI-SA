@@ -926,3 +926,36 @@ name, source, will it be migrated, recommended action."
    count becomes 0.
 4. Then execute the final migration with confidence.
 
+
+## Iter-165b — Pre-Migration Safety Audit + Permanent Supplier Guard (Feb 2026)
+**Merchant's 4 pre-migration confirmations**:
+
+1. ✓ **After orphan write-off**: `orphan_supplier_count = 0`,
+   `projected_match_percentage = 100%`. Verified live on his account.
+2. ✓ **Migration is non-destructive**: Live audit on his data
+   showed legacy collections (liabilities: 9, account_transactions: 6,
+   operating_salaries: 7, counterparties: 1, accounts: 8) all preserved
+   identically pre- and post-migration. Only `general_ledger` receives
+   new opening_balance rows. Code path verified in `run_migration`
+   (`migration_routes.py`): only writes to `general_ledger` +
+   `migration_cutoffs`, never deletes/modifies legacy tables.
+3. ✓ **Legacy stays read-only**: Per merchant directive, NOT disabling
+   any legacy pay/collect/delete endpoints. He will review for several
+   days before requesting Phase 4 closeout.
+4. ✓ **Permanent guard against orphan suppliers**: The
+   `LiabilityCreate.supplier_name` validator now strictly requires
+   `counterparty_id` for `kind=supplier`. Test: rejecting POST returns
+   HTTP 422 with Arabic explanation. Updated legacy Iter-97 tests to
+   seed counterparty first. `purchase_invoices_routes.py` already
+   resolves counterparty before creating supplier liabilities — safe.
+
+**Full migration roundtrip verified on user's account** (then rolled
+back to keep production-fresh state):
+- BEFORE: 9 liabilities / 6 txns / 4 employees with accrued salaries.
+- AFTER migration: same 9/6/4 + 4 new general_ledger opening_balance
+  entries. Reconciliation now shows match=100% and
+  safe_to_disable_legacy=true.
+
+**Status**: User has all confirmations. Ready to execute final
+migration on production once he redeploys.
+
