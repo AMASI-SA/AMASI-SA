@@ -55,9 +55,29 @@ export default function SallaSettlements() {
     const onUpload = async (e) => {
         const f = e.target.files?.[0];
         if (!f) return;
+        // Iter-159g — Salla invoice files do NOT contain the issue date.
+        // Ask the merchant to enter it so it appears as "تاريخ التحويل"
+        // in the unified settlements overview.
+        const today = new Date().toISOString().slice(0, 10);
+        const dateInput = window.prompt(
+            "تاريخ إصدار الفاتورة من سلة (YYYY-MM-DD)\n" +
+            "هذا هو التاريخ الذي سيظهر كـ «تاريخ التحويل» في جدول التسويات.",
+            today,
+        );
+        if (dateInput === null) {
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            return;
+        }
+        const invoiceDate = (dateInput || "").trim();
+        if (invoiceDate && !/^\d{4}-\d{2}-\d{2}$/.test(invoiceDate)) {
+            toast.error("صيغة التاريخ يجب أن تكون YYYY-MM-DD");
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            return;
+        }
         const form = new FormData();
         form.append("file", f);
         form.append("provider_hint", "salla");
+        if (invoiceDate) form.append("invoice_date", invoiceDate);
         setUploading(true);
         try {
             const { data: r } = await api.post(

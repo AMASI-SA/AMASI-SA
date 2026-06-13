@@ -31,6 +31,7 @@ def attach_payment_settlements_routes(api_router: APIRouter, db) -> None:
     async def upload(
         file: UploadFile = File(...),
         provider_hint: Optional[str] = Form(default=None),
+        invoice_date: Optional[str] = Form(default=None),
         user: dict = Depends(current_user),
     ):
         content = await file.read()
@@ -47,6 +48,21 @@ def attach_payment_settlements_routes(api_router: APIRouter, db) -> None:
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        # Iter-159g — Persist the merchant-supplied invoice issue date as
+        # `header.settlement_date` so the unified overview's
+        # "تاريخ التحويل" column shows the platform issue date instead of
+        # the upload timestamp.
+        fid = result.get("file_id") if isinstance(result, dict) else None
+        if fid and invoice_date:
+            import re as _re
+            iso = str(invoice_date).strip()[:10]
+            if _re.match(r"^\d{4}-\d{2}-\d{2}$", iso):
+                await db.settlement_files.update_one(
+                    {"id": fid, "user_id": user["id"]},
+                    {"$set": {"header.settlement_date": iso}},
+                )
+                if isinstance(result, dict):
+                    result["invoice_date"] = iso
         return result
 
     # ── List uploaded files ────────────────────────────────────────────

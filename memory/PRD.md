@@ -29,6 +29,14 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159g (Feb 13 2026)**: 📅 طلب تاريخ إصدار الفاتورة عند رفع ملف سلة.
+  - **User confirmation**: "تاريخ التحويل في جدول التسويات = تاريخ إصدار الفاتورة من المنصة".
+  - **Root cause**: ملفات سلة (Excel) لا تحتوي على تاريخ إصدار الفاتورة، فالنظام كان يستخدم تاريخ الرفع كبديل.
+  - **Backend**: حقل اختياري جديد `invoice_date` في `POST /api/payment-settlements/upload` يُحفظ في `header.settlement_date` بعد التحقق من الصيغة `YYYY-MM-DD`. يظهر مباشرة في `unified-overview` بـ `source=manual`.
+  - **Frontend** (`SallaSettlements.jsx`): قبل بدء الرفع، يظهر `window.prompt` يطلب التاريخ (افتراضي: اليوم). إلغاء الـ prompt يلغي الرفع. صيغة غير صحيحة تظهر toast خطأ.
+  - **Test** (`test_settlement_upload_invoice_date_iter159g.py` — passed): رفع ملف سلة بـ `invoice_date=2026-05-20` ← `header.settlement_date=2026-05-20`, الجدول الموحَّد يعرضه بـ `source=manual` ✅
+
+
 - **Iter-159f (Feb 13 2026)**: 🧹 سجل تراكمي واحد يومياً لمديونية الإعلانات (إصلاح تكرار النصف ساعة).
   - **User feedback**: "عند إضافة مديونية الإعلانات كل نصف ساعة يتم إضافته تراكمي وليس كل طول اليوم يضيف سجلات جديدة. كل حساب إعلاني لديه باليوم سجل واحد تراكمي".
   - **Root cause**: `_run_sync_for_all` في `ad_account_routes.py` كان يستدعي `ad_account_ledger.insert_one(...)` في كل مزامنة (≈48 مرة يومياً) ← سجل جديد بكل نصف ساعة.
