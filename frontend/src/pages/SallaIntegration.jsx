@@ -482,7 +482,7 @@ export default function SallaIntegration() {
                             <div className="font-extrabold text-emerald-900">متصل بمتجر سلة</div>
                             <div className="text-[11px] text-emerald-700">
                                 {status?.last_refreshed_at && (
-                                    <>آخر تحديث للتوكن: {new Date(status.last_refreshed_at).toLocaleString("ar-SA")}</>
+                                    <>آخر تحديث للتوكن: {new Date(status.last_refreshed_at).toLocaleString("en-US")}</>
                                 )}
                             </div>
                         </div>
@@ -494,7 +494,7 @@ export default function SallaIntegration() {
                         <InfoRow icon={EnvelopeSimple} label="البريد" value={liveStoreInfo?.email || ""} testid="salla-info-email" mono />
                         <InfoRow icon={ShieldCheck} label="الباقة" value={liveStoreInfo?.plan || status?.store_plan} testid="salla-info-plan" />
                         <InfoRow icon={Info} label="حالة المتجر" value={liveStoreInfo?.status || status?.store_status} testid="salla-info-status" />
-                        <InfoRow icon={Clock} label="تنتهي التوكن" value={status?.expires_at ? new Date(status.expires_at).toLocaleString("ar-SA") : ""} testid="salla-info-expires" />
+                        <InfoRow icon={Clock} label="تنتهي التوكن" value={status?.expires_at ? new Date(status.expires_at).toLocaleString("en-US") : ""} testid="salla-info-expires" />
                         <InfoRow icon={Lock} label="Scopes" value={status?.scope} testid="salla-info-scope" mono />
                     </div>
                     <div className="border-t border-slate-100 p-4 flex flex-wrap gap-2 bg-slate-50">
@@ -635,7 +635,7 @@ export default function SallaIntegration() {
                                                 <td className="px-3 py-2 text-rose-700 font-bold">{log.errors_count || 0}</td>
                                                 <td className="px-3 py-2 text-slate-500">{log.pages_fetched || 0}</td>
                                                 <td className="px-3 py-2 text-slate-500 text-[11px]" dir="ltr">
-                                                    {log.started_at ? new Date(log.started_at).toLocaleString("ar-SA") : "—"}
+                                                    {log.started_at ? new Date(log.started_at).toLocaleString("en-US") : "—"}
                                                 </td>
                                             </tr>
                                         ))}

@@ -265,7 +265,7 @@ function formatDate(iso) {
     if (!iso) return "—";
     try {
         const d = new Date(iso);
-        return d.toLocaleDateString("ar-SA", { year: "numeric", month: "short", day: "numeric" });
+        return d.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "numeric" });
     } catch {
         return iso;
     }

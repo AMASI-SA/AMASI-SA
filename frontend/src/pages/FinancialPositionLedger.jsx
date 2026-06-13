@@ -8,7 +8,7 @@ import api from "../lib/api";
 import { toast } from "sonner";
 
 const fmt = (n) => Number(n || 0).toLocaleString(
-    "ar-SA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const ASSET_LABELS = {
     bank: "النقدية والبنوك",

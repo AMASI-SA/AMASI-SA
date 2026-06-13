@@ -35,7 +35,7 @@ const fmtMoney = (n) => {
 const fmtDate = (iso) => {
     if (!iso) return "—";
     try {
-        return new Date(iso).toLocaleString("ar-SA");
+        return new Date(iso).toLocaleString("en-US");
     } catch {
         return iso;
     }
@@ -995,7 +995,7 @@ export default function BnplDiagnostics() {
                             <div className="text-end text-xs text-slate-600">
                                 <div>آخر تشغيل تلقائي</div>
                                 <div className="font-bold text-slate-800 num">
-                                    {new Date(syncStatus.last_run.started_at).toLocaleString("ar-SA", {
+                                    {new Date(syncStatus.last_run.started_at).toLocaleString("en-US", {
                                         dateStyle: "short",
                                         timeStyle: "short",
                                     })}
@@ -1043,7 +1043,7 @@ export default function BnplDiagnostics() {
                                             <span className="text-slate-400">آخر مزامنة:</span>{" "}
                                             <span className="font-semibold text-slate-800 num">
                                                 {p.last_auto_sync_at
-                                                    ? new Date(p.last_auto_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })
+                                                    ? new Date(p.last_auto_sync_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })
                                                     : "—"}
                                             </span>
                                         </div>

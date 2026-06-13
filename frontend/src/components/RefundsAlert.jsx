@@ -22,7 +22,7 @@ function fmtMoney(n) {
 
 function fmtDate(d) {
     if (!d) return "—";
-    try { return new Date(d).toLocaleDateString("ar-SA"); } catch { return d; }
+    try { return new Date(d).toLocaleDateString("en-GB"); } catch { return d; }
 }
 
 

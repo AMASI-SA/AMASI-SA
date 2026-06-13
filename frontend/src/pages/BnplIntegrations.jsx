@@ -191,7 +191,7 @@ function WebhookUrlBlock({ provider, webhookSecret, lastWebhookAt }) {
 
             {lastWebhookAt && (
                 <div className="mt-2 text-[10px] text-emerald-700">
-                    ✓ آخر إشعار مستلَم: {new Date(lastWebhookAt).toLocaleString("ar-SA")}
+                    ✓ آخر إشعار مستلَم: {new Date(lastWebhookAt).toLocaleString("en-US")}
                 </div>
             )}
         </div>
@@ -779,7 +779,7 @@ function ProviderCard({ provider, label, Icon, settings, onReload }) {
                 )}
                 {settings.last_sync_at && (
                     <span className="text-[11px] text-slate-500">
-                        آخر مزامنة: {new Date(settings.last_sync_at).toLocaleString("ar-SA")}
+                        آخر مزامنة: {new Date(settings.last_sync_at).toLocaleString("en-US")}
                     </span>
                 )}
                 <div className="flex-1" />

@@ -266,7 +266,7 @@ export default function ProductImages() {
                                 <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
                                     {it.product_id ? <div>رقم: <span className="font-mono">{it.product_id}</span></div> : null}
                                     {it.sku ? <div>SKU: <span className="font-mono">{it.sku}</span></div> : null}
-                                    {it.updated_at ? <div>محدّث: {new Date(it.updated_at).toLocaleDateString("ar-SA")}</div> : null}
+                                    {it.updated_at ? <div>محدّث: {new Date(it.updated_at).toLocaleDateString("en-GB")}</div> : null}
                                 </div>
                                 <div className="flex gap-1.5 mt-3 pt-3 border-t border-slate-100">
                                     <input

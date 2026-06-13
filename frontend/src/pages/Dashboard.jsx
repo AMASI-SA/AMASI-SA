@@ -712,7 +712,7 @@ export default function Dashboard() {
                                                 ? "الطلبات والعائد من Snapchat Pixel — تحديث تلقائي مع زر التحديث"
                                                 : "الطلبات والعائد من المتجر (لا يوجد Pixel نشط بعد) — اضغط تحديث لجلب بيانات Snapchat"}
                                             {snapSummary.last_fetched_at && (
-                                                <span className="ms-2 text-yellow-700">• آخر جلب: {new Date(snapSummary.last_fetched_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
+                                                <span className="ms-2 text-yellow-700">• آخر جلب: {new Date(snapSummary.last_fetched_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}</span>
                                             )}
                                         </p>
                                     </div>
@@ -1015,7 +1015,7 @@ export default function Dashboard() {
                                         <p className="text-xs text-muted-foreground">
                                             البيانات تأتي من Make.com webhook (ربط مباشر مع TikTok API قادم لاحقاً)
                                             {tiktokSummary.last_fetched_at && (
-                                                <span className="ms-2 text-pink-700">• آخر تحديث: {new Date(tiktokSummary.last_fetched_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
+                                                <span className="ms-2 text-pink-700">• آخر تحديث: {new Date(tiktokSummary.last_fetched_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}</span>
                                             )}
                                         </p>
                                     </div>
@@ -1163,7 +1163,7 @@ export default function Dashboard() {
                                         <p className="text-xs text-muted-foreground">
                                             ربط مباشر مع Meta Marketing API — اضغط الزر للتحديث الفوري لصرف اليوم
                                             {metaSummary.last_sync_at && (
-                                                <span className="ms-2 text-blue-700">• آخر مزامنة: {new Date(metaSummary.last_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</span>
+                                                <span className="ms-2 text-blue-700">• آخر مزامنة: {new Date(metaSummary.last_sync_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}</span>
                                             )}
                                         </p>
                                     </div>

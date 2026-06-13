@@ -259,7 +259,7 @@ export default function OperationalReports() {
                     </div>
 
                     <div className="text-center text-[10px] text-slate-500 mt-8 pt-4 border-t border-slate-200">
-                        تم إنشاء التقرير في {new Date().toLocaleString("ar-SA")} · MEZAN
+                        تم إنشاء التقرير في {new Date().toLocaleString("en-US")} · MEZAN
                     </div>
                 </div>
             </div>

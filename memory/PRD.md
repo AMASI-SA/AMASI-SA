@@ -29,6 +29,25 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 
+## Completed Work — Iter-161 Phase 4 Polish (Feb 13 2026): English Digits Everywhere
+
+**User directive**: "أريد توحيد عرض الأرقام بالأرقام الإنجليزية فقط (0-9) وليس العربية (٠-٩). النص يبقى عربي وRTL، لكن الأرقام إنجليزية دائماً."
+
+**Implementation**
+1. **15 frontend files updated**: `toLocaleString("ar-SA", …)` → `toLocaleString("en-US", …)`
+2. **Date locales**: `toLocaleDateString("ar-SA")` → `toLocaleDateString("en-GB")` in 6 files (Settings, ImageCatalog, ProductImages, RefundsAlert, ProductCostCard, lib/format.js)
+3. **CSS safety net** in `index.css`:
+   - `font-variant-numeric: tabular-nums` on `.num`, `table`, `.num-cell`
+   - `-webkit-locale: "en-US"` globally
+4. **Result**: All amounts now display as `3,000.00 ر.س` (Western digits with comma separator), unit text stays in Arabic.
+
+**Visual verification**
+- `/employees-ledger`: `3,000.00` راتب الموظف ✓
+- `/accounting/reconciliation`: `100%`, `0.00`, `2` ✓
+- `/financial-position-ledger`: all amounts Western ✓
+
+
+
 ## Completed Work — Iter-161 Phase 4 Closeout (Feb 13 2026): Reconciliation Report
 
 **New endpoint**: `GET /api/accounting/migration/reconciliation`

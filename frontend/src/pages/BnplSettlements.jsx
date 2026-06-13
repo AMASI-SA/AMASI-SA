@@ -360,7 +360,7 @@ export default function BnplSettlements() {
                                     : "📌 توجد مبالغ متبقية لدى المزودين بانتظار التحويل"}
                             </div>
                             <div className="text-xs text-slate-600 mt-0.5">
-                                آخر حساب: {new Date(data.computed_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}
+                                آخر حساب: {new Date(data.computed_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
                             </div>
                         </div>
                     </div>

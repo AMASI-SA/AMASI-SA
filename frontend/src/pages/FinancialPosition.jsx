@@ -470,7 +470,7 @@ export default function FinancialPosition() {
             <div className="text-center text-[11px] text-slate-400 mt-4">
                 البيانات مأخوذة مباشرةً من Reconciliation و Liabilities — لا يوجد تخزين أو إعادة حساب.
                 {summary.generated_at && (
-                    <span> آخر تحديث: {new Date(summary.generated_at).toLocaleString("ar-SA")}</span>
+                    <span> آخر تحديث: {new Date(summary.generated_at).toLocaleString("en-US")}</span>
                 )}
             </div>
         </div>

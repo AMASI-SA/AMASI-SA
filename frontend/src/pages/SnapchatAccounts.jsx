@@ -34,7 +34,7 @@ const fmtNative = (v, cur) => {
 const fmtDateAr = (iso) => {
     if (!iso) return "—";
     try {
-        return new Date(iso).toLocaleString("ar-SA", {
+        return new Date(iso).toLocaleString("en-US", {
             dateStyle: "medium", timeStyle: "short",
         });
     } catch { return iso; }

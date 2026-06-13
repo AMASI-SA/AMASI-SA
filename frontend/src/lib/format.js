@@ -29,7 +29,7 @@ export function formatDateAr(iso) {
     if (!iso) return "—";
     try {
         const d = new Date(iso);
-        return d.toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" });
+        return d.toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
     } catch {
         return iso;
     }

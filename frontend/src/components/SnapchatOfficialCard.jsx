@@ -138,7 +138,7 @@ export default function SnapchatOfficialCard() {
     const yRoasBad = (y.spend_sar || 0) > 0 && (y.roas || 0) < 2;
     const mRoasBad = (m.spend_sar || 0) > 0 && (m.roas || 0) < 2;
     const lastSyncLocal = data.last_sync_at
-        ? new Date(data.last_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "medium" })
+        ? new Date(data.last_sync_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "medium" })
         : "—";
 
     return (

@@ -8,7 +8,7 @@ import api, { formatApiErrorDetail } from "../lib/api";
 
 const fmtInt = (v) => Number(v || 0).toLocaleString("en-US");
 const fmtDateTime = (s) =>
-    s ? new Date(s).toLocaleString("ar-SA", { hour12: false }) : "—";
+    s ? new Date(s).toLocaleString("en-US", { hour12: false }) : "—";
 
 const STATUS_META = {
     queued:     { label: "في الانتظار",  cls: "bg-slate-100 text-slate-800 border-slate-300", Icon: ClockClockwise },

@@ -123,8 +123,20 @@ code, pre {
    when the .num class lands on a table cell (was breaking row heights
    in mezan-table because <td class="num"> would become inline-block,
    shrinking to content and visually misaligning columns). */
-.num { direction: ltr; unicode-bidi: embed; display: inline-block; }
+.num { direction: ltr; unicode-bidi: embed; display: inline-block;
+       font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 td.num, th.num { display: table-cell; }
+
+/* Iter-161 Phase 4 — force Western (Latin) digits everywhere even when
+   the surrounding language is Arabic. Without this, browsers default to
+   the Arabic-Indic numeral substitution for ar-SA locale. */
+html, body, * {
+    -webkit-locale: "en-US";
+    -moz-locale: "en-US";
+}
+.num, table, .num-cell {
+    font-variant-numeric: tabular-nums;
+}
 
 /* Reusable input style for forms (Operating Expenses modal etc.) */
 .oe-input {

@@ -560,7 +560,7 @@ function formatDateTime(iso) {
     if (!iso) return "—";
     try {
         const d = new Date(iso);
-        return d.toLocaleString("ar-SA", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+        return d.toLocaleString("en-US", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
     } catch {
         return iso;
     }

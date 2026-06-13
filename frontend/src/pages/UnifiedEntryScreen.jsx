@@ -522,7 +522,7 @@ export default function UnifiedEntryScreen() {
                                                 </td>
                                                 <td className="py-1">{e.acc}</td>
                                                 <td className="text-left py-1 num font-bold">
-                                                    {e.amt.toLocaleString("ar-SA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    {e.amt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </td>
                                             </tr>
                                         ))}

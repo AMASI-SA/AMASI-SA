@@ -63,7 +63,7 @@ export default function MigrationWizard() {
     };
 
     const fmt = (n) => Number(n || 0).toLocaleString(
-        "ar-SA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const renderDiffTable = (title, rows, fieldLabel) => {
         if (!rows?.length) return null;

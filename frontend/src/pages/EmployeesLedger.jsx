@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
 const fmt = (n) => Number(n || 0).toLocaleString(
-    "ar-SA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function EmployeesLedger() {
     const [rows, setRows] = useState([]);

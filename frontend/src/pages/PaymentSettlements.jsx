@@ -452,7 +452,7 @@ export default function PaymentSettlements() {
                                             )}
                                         </td>
                                         <td className="px-4 py-2 text-slate-500 text-[11px]" dir="ltr">
-                                            {f.uploaded_at ? new Date(f.uploaded_at).toLocaleString("ar-SA") : "—"}
+                                            {f.uploaded_at ? new Date(f.uploaded_at).toLocaleString("en-US") : "—"}
                                         </td>
                                         {allowDelete && (
                                             <td className="px-4 py-2 sticky left-0 bg-white border-l border-rose-200 text-center" data-testid={`delete-cell-${f.id}`}>

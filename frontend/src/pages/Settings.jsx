@@ -305,7 +305,7 @@ export default function Settings() {
                 ? `${data.token_expires_in_days} يوم`
                 : "غير محدد";
             const expiresAt = data.token_expires_at
-                ? new Date(data.token_expires_at).toLocaleDateString("ar-SA", {
+                ? new Date(data.token_expires_at).toLocaleDateString("en-GB", {
                     year: "numeric", month: "short", day: "numeric",
                 })
                 : "—";
@@ -1601,7 +1601,7 @@ export default function Settings() {
                         <span dir="ltr">{metaConfig.ad_account_id}</span>
                         {metaConfig.last_sync_at && (
                             <span className="ms-3 text-xs text-muted-foreground">
-                                آخر مزامنة: {new Date(metaConfig.last_sync_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}
+                                آخر مزامنة: {new Date(metaConfig.last_sync_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
                             </span>
                         )}
                     </div>
@@ -1623,7 +1623,7 @@ export default function Settings() {
                                 </div>
                                 {metaConfig.last_error_at && (
                                     <div className="text-xs text-red-700/80 mt-1">
-                                        منذ: {new Date(metaConfig.last_error_at).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}
+                                        منذ: {new Date(metaConfig.last_error_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
                                     </div>
                                 )}
                             </div>
@@ -1705,7 +1705,7 @@ export default function Settings() {
                                     data-testid="meta-token-expiry-info"
                                 >
                                     <span className="font-bold">⏰ ينتهي التوكن الحالي:</span>{" "}
-                                    {new Date(metaConfig.token_expires_at).toLocaleString("ar-SA", {
+                                    {new Date(metaConfig.token_expires_at).toLocaleString("en-US", {
                                         dateStyle: "medium", timeStyle: "short",
                                     })}
                                     {(() => {
