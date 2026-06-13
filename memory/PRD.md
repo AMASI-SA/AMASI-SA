@@ -1243,3 +1243,29 @@ automatically on:
   • And the dashboard's daily costs chart (already worked).
 Same for the Meta refresh.
 
+
+## Iter-173 — Smart source-account filter on Unified Entry (Feb 2026)
+**User request**: The «خصم من حساب» dropdown showed bank accounts AND
+payment platforms (Salla/Tamara/Tabby/Imkan/COD) for every operation.
+The merchant correctly pointed out that giving a salary advance can't
+be funded from Tamara — those balances are still held by the platform.
+
+**Fix**:
+- Added `allowedSourceAccountTypes(opType)` helper in
+  `UnifiedEntryScreen.jsx`.
+- For cash outflows (`advance_grant, salary_settle, custody_grant,
+  supplier_pay, external_grant, expense_record`) AND cash inflows
+  (`custody_return, external_collect`): only `bank` + `cash`
+  optgroups are rendered.
+- For `bank_transfer` and any future settlement op: returns `null` →
+  ALL optgroups shown (bank / payment platform / COD / courier / other).
+- Helpful Arabic hint shown above the dropdown when filtered: «هذه
+  العملية صرف نقدي حقيقي — متاحة فقط من البنوك والصندوق …».
+- Added new optgroup «💵 الصندوق النقدي» for `account_type=cash` if
+  the user has manual cash accounts.
+
+**Action for user**: Save to GitHub → Redeploy. Open Unified Entry,
+choose «💰 سلفة موظف» → only banks (and cash if any) appear. Choose
+«🔄 تحويل بين الحسابات» → all account types appear (including Salla,
+Tamara, Tabby, COD).
+

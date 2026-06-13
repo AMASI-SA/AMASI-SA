@@ -30,6 +30,31 @@ export default function UnifiedEntryScreen() {
     const [busy, setBusy] = useState(false);
     const [employees, setEmployees] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
+
+    // Iter-173 — Smart source-account filter based on the operation type.
+    // Cash outflows (sending money to an employee/supplier/external/expense)
+    // can ONLY be funded from a real cash account: a bank or a manual
+    // cash account. Pulling them from Salla/Tamara/Tabby/Imkan/COD is
+    // accounting nonsense — those balances represent money STILL HELD
+    // by the payment platforms, not money in the merchant's wallet.
+    //
+    // Returns the allowed account_type list for the «خصم من حساب»
+    // dropdown. `null` means «show all groups» (used by bank_transfer
+    // since transfers between platforms ARE legitimate).
+    const allowedSourceAccountTypes = (op) => {
+        const cashOut = [
+            "advance_grant", "salary_settle", "custody_grant",
+            "supplier_pay", "external_grant", "expense_record",
+        ];
+        const cashIn = [
+            "custody_return", "external_collect",
+        ];
+        if (cashOut.includes(op) || cashIn.includes(op)) {
+            return ["bank", "cash"];
+        }
+        // bank_transfer + any future settlement op → allow everything
+        return null;
+    };
     const [externals, setExternals] = useState([]);
     const [banks, setBanks] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -374,6 +399,13 @@ export default function UnifiedEntryScreen() {
                                         ? "إيداع في حساب:"
                                         : opType === "bank_transfer" ? "من حساب:" : "خصم من حساب:"}
                                 </label>
+                                {/* Iter-173 — smart filter; show a hint when restricted */}
+                                {allowedSourceAccountTypes(opType) && (
+                                    <div className="text-[11px] text-slate-500 mb-1 leading-tight">
+                                        💡 هذه العملية صرف نقدي حقيقي — متاحة فقط من البنوك والصندوق
+                                        (لا تظهر بوابات الدفع ولا الـ COD لأن أرصدتها مُحتجَزة لدى المنصة).
+                                    </div>
+                                )}
                                 <select value={bankId} onChange={e => setBankId(e.target.value)}
                                     className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
                                     data-testid="unified-bank">
@@ -382,27 +414,37 @@ export default function UnifiedEntryScreen() {
                                         {banks.filter(b => b.account_type === "bank").map(b =>
                                             <option key={b.id} value={b.id}>{b.name} · بنك</option>)}
                                     </optgroup>
-                                    <optgroup label="💳 بوابات الدفع">
-                                        {banks.filter(b => b.account_type === "payment_platform" && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
-                                            <option key={b.id} value={b.id}>{b.name} · بوابة دفع</option>)}
-                                    </optgroup>
-                                    {banks.some(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")) && (
-                                        <optgroup label="💵 الدفع عند الاستلام">
-                                            {banks.filter(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
-                                                <option key={b.id} value={b.id}>{b.name} · COD</option>)}
+                                    {banks.some(b => b.account_type === "cash") && (
+                                        <optgroup label="💵 الصندوق النقدي">
+                                            {banks.filter(b => b.account_type === "cash").map(b =>
+                                                <option key={b.id} value={b.id}>{b.name} · صندوق</option>)}
                                         </optgroup>
                                     )}
-                                    {banks.some(b => b.account_type === "courier") && (
-                                        <optgroup label="📦 شركات الشحن">
-                                            {banks.filter(b => b.account_type === "courier").map(b =>
-                                                <option key={b.id} value={b.id}>{b.name} · شركة شحن</option>)}
-                                        </optgroup>
-                                    )}
-                                    {banks.some(b => b.account_type && !["bank","payment_platform","courier"].includes(b.account_type)) && (
-                                        <optgroup label="📁 أخرى">
-                                            {banks.filter(b => b.account_type && !["bank","payment_platform","courier"].includes(b.account_type)).map(b =>
-                                                <option key={b.id} value={b.id}>{b.name} · {b.account_type}</option>)}
-                                        </optgroup>
+                                    {(!allowedSourceAccountTypes(opType)) && (
+                                        <>
+                                            <optgroup label="💳 بوابات الدفع">
+                                                {banks.filter(b => b.account_type === "payment_platform" && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                                    <option key={b.id} value={b.id}>{b.name} · بوابة دفع</option>)}
+                                            </optgroup>
+                                            {banks.some(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")) && (
+                                                <optgroup label="💵 الدفع عند الاستلام">
+                                                    {banks.filter(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                                        <option key={b.id} value={b.id}>{b.name} · COD</option>)}
+                                                </optgroup>
+                                            )}
+                                            {banks.some(b => b.account_type === "courier") && (
+                                                <optgroup label="📦 شركات الشحن">
+                                                    {banks.filter(b => b.account_type === "courier").map(b =>
+                                                        <option key={b.id} value={b.id}>{b.name} · شركة شحن</option>)}
+                                                </optgroup>
+                                            )}
+                                            {banks.some(b => b.account_type && !["bank","cash","payment_platform","courier"].includes(b.account_type)) && (
+                                                <optgroup label="📁 أخرى">
+                                                    {banks.filter(b => b.account_type && !["bank","cash","payment_platform","courier"].includes(b.account_type)).map(b =>
+                                                        <option key={b.id} value={b.id}>{b.name} · {b.account_type}</option>)}
+                                                </optgroup>
+                                            )}
+                                        </>
                                     )}
                                 </select>
                             </div>
