@@ -1094,6 +1094,235 @@ def make_universal_router(db) -> APIRouter:
         }
 
     # ═══════════════════════════════════════════════════════════════
+    # Phase 4 — Universal list endpoints (Ledger-only)
+    # ═══════════════════════════════════════════════════════════════
+    @router.get("/employees/list")
+    async def employees_with_balances(user: dict = Depends(current_user)):
+        """All employees + their LIVE ledger balances (3 sub_accounts).
+        This is the Phase-4 replacement for the legacy
+        `/api/liabilities/salary-accrual-summary` view."""
+        uid = user["id"]
+        emps = await db.operating_salaries.find(
+            {"user_id": uid, "category": "employee"}, {"_id": 0},
+        ).to_list(500)
+        emp_ids = [e["id"] for e in emps]
+        # Bulk-aggregate the 3 sub-accounts in one pipeline
+        agg = await db.general_ledger.aggregate([
+            {"$match": {"user_id": uid, "entity_type": "employee",
+                          "entity_id": {"$in": emp_ids},
+                          "status": "posted"}},
+            {"$group": {
+                "_id": {"emp": "$entity_id", "sub": "$sub_account",
+                          "side": "$side"},
+                "total": {"$sum": "$amount"},
+            }},
+        ]).to_list(5000)
+        # Build {emp_id: {sub_account: {debit, credit}}}
+        by_emp: dict = {}
+        for r in agg:
+            eid = r["_id"]["emp"]; sub = r["_id"]["sub"] or "_"; side = r["_id"]["side"]
+            by_emp.setdefault(eid, {}).setdefault(sub, {}).setdefault(side, 0.0)
+            by_emp[eid][sub][side] = float(r["total"])
+
+        def _net(emp_id, sub):
+            x = (by_emp.get(emp_id) or {}).get(sub) or {}
+            return round(float(x.get("debit", 0)) - float(x.get("credit", 0)), 2)
+
+        rows = []
+        total_payable = 0.0
+        total_advance = 0.0
+        total_custody = 0.0
+        for e in emps:
+            payable = max(-_net(e["id"], "salary_payable"), 0.0)
+            advance = max(_net(e["id"], "advance"), 0.0)
+            custody = max(_net(e["id"], "custody"), 0.0)
+            net_pos = round(payable - advance - custody, 2)
+            rows.append({
+                "id": e["id"], "name": e.get("name"),
+                "monthly_amount": round(float(e.get("monthly_amount") or 0), 2),
+                "status": e.get("status") or "active",
+                "salary_payable": payable,
+                "advance": advance,
+                "custody": custody,
+                "net_position": net_pos,
+            })
+            total_payable += payable; total_advance += advance; total_custody += custody
+        return {
+            "employees": rows,
+            "totals": {
+                "salary_payable": round(total_payable, 2),
+                "advance": round(total_advance, 2),
+                "custody": round(total_custody, 2),
+                "net_position": round(total_payable - total_advance - total_custody, 2),
+            },
+        }
+
+    @router.get("/suppliers/list")
+    async def suppliers_with_balances(user: dict = Depends(current_user)):
+        uid = user["id"]
+        cps = await db.counterparties.find(
+            {"user_id": uid, "kind": "supplier"}, {"_id": 0},
+        ).to_list(500)
+        ids = [c["id"] for c in cps]
+        balances = await __import__("ledger_core").compute_balances_bulk(
+            db, user_id=uid, entity_type="supplier", entity_ids=ids,
+        ) if ids else {}
+        rows = []
+        total_owed = 0.0
+        for c in cps:
+            b = balances.get(c["id"], {})
+            owed = b.get("outstanding_debt", 0.0)
+            total_owed += owed
+            rows.append({
+                "id": c["id"], "name": c.get("name"),
+                "outstanding_debt": owed,
+                "debits": b.get("debits", 0.0),
+                "credits": b.get("credits", 0.0),
+            })
+        return {"suppliers": rows,
+                 "totals": {"outstanding_debt": round(total_owed, 2)}}
+
+    @router.get("/externals/list")
+    async def externals_with_balances(user: dict = Depends(current_user)):
+        uid = user["id"]
+        cps = await db.counterparties.find(
+            {"user_id": uid, "kind": {"$nin": [
+                "ad_account", "supplier", "courier"]}},
+            {"_id": 0},
+        ).to_list(500)
+        ids = [c["id"] for c in cps]
+        balances = await __import__("ledger_core").compute_balances_bulk(
+            db, user_id=uid, entity_type="external_person", entity_ids=ids,
+        ) if ids else {}
+        rows = []
+        total_recv = 0.0
+        for c in cps:
+            b = balances.get(c["id"], {})
+            recv = b.get("net_balance", 0.0)
+            total_recv += recv
+            rows.append({
+                "id": c["id"], "name": c.get("name"),
+                "kind": c.get("kind"),
+                "receivable": recv,
+                "debits": b.get("debits", 0.0),
+                "credits": b.get("credits", 0.0),
+            })
+        return {"externals": rows,
+                 "totals": {"receivable": round(total_recv, 2)}}
+
+    @router.get("/couriers/list")
+    async def couriers_with_balances(user: dict = Depends(current_user)):
+        uid = user["id"]
+        cps = await db.counterparties.find(
+            {"user_id": uid, "kind": "courier"}, {"_id": 0},
+        ).to_list(500)
+        rows = []
+        total_payable = 0.0
+        total_cod = 0.0
+        for c in cps:
+            pay = await compute_balance(
+                db, user_id=uid, entity_type="courier",
+                entity_id=c["id"], sub_account="payable")
+            cod = await compute_balance(
+                db, user_id=uid, entity_type="courier",
+                entity_id=c["id"], sub_account="cod_receivable")
+            owed = pay["outstanding_debt"]
+            cod_open = cod["net_balance"]
+            total_payable += owed
+            total_cod += cod_open
+            rows.append({
+                "id": c["id"], "name": c.get("name"),
+                "payable": owed,
+                "cod_receivable": cod_open,
+            })
+        return {"couriers": rows,
+                 "totals": {"payable": round(total_payable, 2),
+                              "cod_receivable": round(total_cod, 2)}}
+
+    # ═══════════════════════════════════════════════════════════════
+    # Phase 4 — Financial Position (ALL from Ledger)
+    # ═══════════════════════════════════════════════════════════════
+    @router.get("/financial-position")
+    async def financial_position(user: dict = Depends(current_user)):
+        """Live financial position computed STRICTLY from general_ledger.
+        Returns assets + liabilities + net position. No reads from
+        legacy `liabilities` or `account_transactions` tables."""
+        uid = user["id"]
+        pipeline = [
+            {"$match": {"user_id": uid, "status": "posted"}},
+            {"$group": {
+                "_id": {"entity_type": "$entity_type",
+                          "sub_account": "$sub_account"},
+                "debits":  {"$sum": {"$cond": [
+                    {"$eq": ["$side", "debit"]}, "$amount", 0]}},
+                "credits": {"$sum": {"$cond": [
+                    {"$eq": ["$side", "credit"]}, "$amount", 0]}},
+            }},
+        ]
+        agg = await db.general_ledger.aggregate(pipeline).to_list(500)
+
+        # Classify by accounting nature
+        # Assets: bank, employee.advance, employee.custody,
+        #         external_person.receivable, courier.cod_receivable,
+        #         ad_account.prepaid (positive net)
+        # Liabilities: employee.salary_payable, supplier.payable,
+        #         courier.payable, external_person.payable, ad_account (negative net)
+        # Expenses: tracked but not on balance sheet
+        # Revenue: same
+        assets: dict = {"bank": 0.0, "employee_advance": 0.0,
+                         "employee_custody": 0.0, "external_receivable": 0.0,
+                         "courier_cod_receivable": 0.0, "ad_account_prepaid": 0.0}
+        liabilities: dict = {"employee_salary_payable": 0.0,
+                              "supplier_payable": 0.0,
+                              "courier_payable": 0.0,
+                              "external_payable": 0.0,
+                              "ad_account_debt": 0.0}
+        for r in agg:
+            et = r["_id"]["entity_type"]
+            sub = r["_id"].get("sub_account")
+            net = round(float(r["debits"]) - float(r["credits"]), 2)
+            if et == "bank":
+                assets["bank"] += net  # debit-positive
+            elif et == "employee" and sub == "advance":
+                assets["employee_advance"] += max(net, 0.0)
+            elif et == "employee" and sub == "custody":
+                assets["employee_custody"] += max(net, 0.0)
+            elif et == "employee" and sub == "salary_payable":
+                liabilities["employee_salary_payable"] += max(-net, 0.0)
+            elif et == "supplier" and sub == "payable":
+                liabilities["supplier_payable"] += max(-net, 0.0)
+            elif et == "courier" and sub == "payable":
+                liabilities["courier_payable"] += max(-net, 0.0)
+            elif et == "courier" and sub == "cod_receivable":
+                assets["courier_cod_receivable"] += max(net, 0.0)
+            elif et == "external_person" and sub == "receivable":
+                assets["external_receivable"] += max(net, 0.0)
+            elif et == "external_person" and sub == "payable":
+                liabilities["external_payable"] += max(-net, 0.0)
+            elif et == "ad_account":
+                if net > 0:
+                    assets["ad_account_prepaid"] += net
+                else:
+                    liabilities["ad_account_debt"] += -net
+
+        assets = {k: round(v, 2) for k, v in assets.items()}
+        liabilities = {k: round(v, 2) for k, v in liabilities.items()}
+        total_assets = round(sum(assets.values()), 2)
+        total_liabilities = round(sum(liabilities.values()), 2)
+        net_position = round(total_assets - total_liabilities, 2)
+
+        return {
+            "assets": assets,
+            "liabilities": liabilities,
+            "totals": {
+                "total_assets": total_assets,
+                "total_liabilities": total_liabilities,
+                "net_position": net_position,
+            },
+            "source": "general_ledger (Phase 4)",
+        }
+
+    # ═══════════════════════════════════════════════════════════════
     # Trial Balance — unified accounting report across all entities
     # ═══════════════════════════════════════════════════════════════
     @router.get("/trial-balance")

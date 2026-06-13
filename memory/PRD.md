@@ -29,6 +29,41 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 
+## Completed Work — Iter-161 Phase 4 (Feb 13 2026): Ledger-Only Listings + Financial Position + Employees Page
+
+**5 new backend endpoints (all read STRICTLY from general_ledger)**
+- `GET /api/accounting/employees/list` — كل الموظفين + 3 sub-account balances (salary_payable/advance/custody) + net_position. Bulk aggregation in ONE pipeline.
+- `GET /api/accounting/suppliers/list` — موردون + outstanding_debt + debits/credits
+- `GET /api/accounting/externals/list` — أشخاص خارجيون + receivable
+- `GET /api/accounting/couriers/list` — شركات شحن + payable + cod_receivable
+- `GET /api/accounting/financial-position` — تصنيف كامل assets / liabilities / net_position من Ledger فقط (لا يقرأ من liabilities أو account_transactions)
+
+**Frontend: New page `/employees-ledger` (EmployeesLedger.jsx)**
+- Header + 4 summary cards (totals from /list endpoint)
+- Sortable table: name, monthly salary, مستحق له, سلفة, عهدة, صافي
+- Click row → **Employee Detail Drawer**:
+  - 3 balance cards + net position
+  - Full ledger statement **grouped by txn_group_id** (each transaction shown as a block)
+  - Per-entry "عكس" button (calls /api/ledger/entries/{id}/reverse)
+  - Reversed entries grayed out
+  - Total of N transactions + M entries displayed
+- Sidebar menu: «👥 الموظفون (Ledger)»
+
+**Tests** — all green individually
+- `/app/backend/tests/test_phase4_iter161.py` — seeds employees/suppliers/external/courier/bank, posts ledger txns, verifies all 4 list endpoints AND financial-position with exact expected numbers
+
+**What's DONE in Phase 4 (this session)**
+- ✅ Backend endpoints reading purely from Ledger
+- ✅ Employees page (Ledger-only UI with statement drawer)
+- ✅ Financial Position endpoint (Ledger-only)
+
+**What's NOT done yet (Phase 4 continuation)**
+- 🟡 Frontend pages for /suppliers, /externals, /couriers (Ledger views) — endpoints ready
+- 🟡 Wire `/financial-position` page to use new endpoint instead of legacy aggregation
+- 🟡 Disable legacy `/api/liabilities/{id}/pay`, `/collect`, `DELETE` (return 410 Gone with deprecation message)
+
+
+
 ## Completed Work — Iter-161 Phase 3 (Feb 13 2026): Couriers + Migration Verify + Snapchat Dashboard Sync Fix
 
 **Confirmation on user concerns**
