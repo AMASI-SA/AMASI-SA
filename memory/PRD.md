@@ -29,6 +29,18 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159o (Feb 13 2026)**: 🗑 زر «تصفير المديونية» للحسابات الإعلانية.
+  - **User request**: "أبغى أصفّر المديونيات في الحسابات الإعلانية والمديونية أضيفها من جديد عبر إضافة المديونيات التاريخية. يوجد لخبطة في الأرصدة."
+  - **Backend**: endpoint جديد `POST /api/ad-accounts/{cp_id}/reset-debt`:
+    - يحذف كل `liabilities` (kind=ad_account) للحساب
+    - يحذف كل `ad_account_ledger` للحساب
+    - يصفّر `counterparty.balance` ويمسح markers المزامنة (`last_auto_sync_date`, `last_yesterday_synced_for`)
+    - يُرجع counts لما تم حذفه
+  - **Frontend**: زر «🗑 تصفير» (أحمر) بجانب «🔧 إعادة احتساب» في كل بطاقة حساب إعلاني، مع تحذير قبل التنفيذ.
+  - **Workflow الموصى به**: تصفير ← ثم استخدام «ترحيل المديونيات التاريخية» لإعادة البناء من API بشكل نظيف.
+  - **Test** (`test_reset_debt_iter159o.py` — passed): 3 ledger rows + 2 liabilities + balance=999 ← بعد reset: 0/0/0 ✅
+
+
 - **Iter-159n (Feb 13 2026)**: 🔧 زر «إعادة احتساب المديونية» في صفحة الحسابات الإعلانية.
   - **User report**: "المديونية في META = 8,784.09 رغم أن الحقيقية 2,977.99 والباقي مسدد. الأرقام مكررة وليست حقيقية."
   - **Root cause**: قبل Iter-159m، عمليات الترحيل التاريخية المتكررة كانت تستدعي `_apply_uncovered` التي تضيف للـ liability المفتوحة الموجودة (سواء كانت بمصدر cron أو migration). خطوة الـ Reversal كانت تبحث فقط عن source=ad_account_migration ← لا تستطيع التراجع عن الإضافات على liabilities الـ cron ← تضخّم الـ liability تراكمياً.

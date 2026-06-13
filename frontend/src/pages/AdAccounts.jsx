@@ -1608,18 +1608,46 @@ function RecomputeDebtButton({ row, onDone, fmt }) {
 
     return (
         <div className="border-t border-slate-100 pt-3" data-testid={`adacc-recompute-${row.id}`}>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
                 <div className="text-[11px] text-slate-600">
-                    🔧 إعادة احتساب المديونية من واقع البيانات
+                    🔧 إصلاح/تصفير المديونية
                 </div>
-                <button
-                    onClick={fetchPreview}
-                    disabled={busy}
-                    className="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded font-bold disabled:opacity-50"
-                    data-testid={`adacc-recompute-btn-${row.id}`}
-                >
-                    {busy ? "جاري الاحتساب..." : "🔧 إعادة احتساب"}
-                </button>
+                <div className="flex items-center gap-1.5">
+                    <button
+                        onClick={async () => {
+                            const ok = window.confirm(
+                                `⚠️ تحذير: سيتم حذف كل المديونيات وسجلات الصرف لحساب «${row.name}».\n\n` +
+                                "هذا الإجراء لا يمكن التراجع عنه.\n" +
+                                "بعد التصفير، استخدم «ترحيل المديونيات التاريخية» لإعادة البناء من API.\n\n" +
+                                "هل أنت متأكد؟"
+                            );
+                            if (!ok) return;
+                            try {
+                                const { data } = await api.post(`/ad-accounts/${row.id}/reset-debt`);
+                                toast.success(
+                                    `تم التصفير: حذف ${data.liabilities_deleted} مديونية + ${data.ledger_rows_deleted} سجل صرف`,
+                                    { duration: 6000 }
+                                );
+                                await onDone?.();
+                            } catch (e) {
+                                toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التصفير");
+                            }
+                        }}
+                        className="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 px-2.5 py-1 rounded font-bold"
+                        data-testid={`adacc-reset-btn-${row.id}`}
+                        title="حذف كل المديونيات والسجلات + تصفير الرصيد"
+                    >
+                        🗑 تصفير
+                    </button>
+                    <button
+                        onClick={fetchPreview}
+                        disabled={busy}
+                        className="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded font-bold disabled:opacity-50"
+                        data-testid={`adacc-recompute-btn-${row.id}`}
+                    >
+                        {busy ? "جاري..." : "🔧 إعادة احتساب"}
+                    </button>
+                </div>
             </div>
             {applied && showPreview && (
                 <div className="mt-2 bg-amber-50/50 border border-amber-200 rounded-lg p-2.5 text-[11px] space-y-1" data-testid={`adacc-recompute-result-${row.id}`}>

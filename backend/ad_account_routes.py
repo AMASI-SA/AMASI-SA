@@ -547,6 +547,41 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         cp = await _get_account(db, user["id"], cp_id)
         return await _summarise(db, user["id"], cp)
 
+    # ── Iter-159o — POST /{id}/reset-debt ────────────────────────────
+    # Nuclear option: WIPE all liabilities + ledger rows + reset balance
+    # for a single ad account.  Designed for the workflow:
+    #   1. تصفير ← clean slate
+    #   2. ترحيل المديونيات التاريخية ← rebuild from platform API
+    # Returns counts of what was deleted so the UI can confirm.
+    @router.post("/{cp_id}/reset-debt")
+    async def reset_debt(
+        cp_id: str,
+        user: dict = Depends(current_user),
+    ):
+        cp = await _get_account(db, user["id"], cp_id)
+        liab_del = await db.liabilities.delete_many(
+            {"user_id": user["id"], "kind": "ad_account",
+             "counterparty_id": cp_id},
+        )
+        ledger_del = await db.ad_account_ledger.delete_many(
+            {"user_id": user["id"], "counterparty_id": cp_id},
+        )
+        await db.counterparties.update_one(
+            {"id": cp_id, "user_id": user["id"]},
+            {"$set": {"balance": 0.0,
+                      "last_auto_sync_date": None,
+                      "last_yesterday_synced_for": None,
+                      "updated_at": _now()},
+             "$unset": {"last_auto_sync_at": ""}},
+        )
+        return {
+            "ok": True,
+            "counterparty_id": cp_id,
+            "name": cp.get("name"),
+            "liabilities_deleted": liab_del.deleted_count,
+            "ledger_rows_deleted": ledger_del.deleted_count,
+        }
+
     # ── Iter-159n — POST /{id}/recompute-debt ────────────────────────
     # Authoritative recompute: real outstanding debt = Σ(uncovered from
     # ledger spend rows) − Σ(paid_amount across all this account's
