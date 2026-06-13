@@ -28,6 +28,59 @@
 - **Financial Input Hub**: search-based counterparty + cumulative balance.
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
+
+## Completed Work — Iter-160 (Feb 13 2026): 🏛 ERP-Grade Universal Ledger + Audit Log
+**User directive**: "لا أريد حذف الديون أو تصفيرها فعلياً من قاعدة البيانات. محاسبياً لا يجوز حذف المصروف أو المديونية بعد تسجيلها لأنها تمثل حركة مالية حدثت بالفعل. البديل: تسوية / قيد عكسي / شطب بموافقة." + Message #737 Single-Source-of-Truth for ad spending.
+
+**Architecture**
+- New `general_ledger` collection — append-only, ERP-grade. Fields: `id, user_id, entry_no (monotonic), entity_type, entity_id, entry_type (spend|topup|payment|adjustment|reversal|settlement|writeoff|accrual|opening_balance), amount, side (debit|credit), currency, status (draft|posted|reversed), reverses_entry_id, reversed_by_entry_id, reason_code, notes, metadata, posted_at, posted_by`
+- New `accounting_audit_log` collection — every accounting action writes a row: `actor_id, action, reason_code, before_state, after_state, ledger_entry_id`
+- Canonical reason codes (Arabic): `actual_payment / data_entry_error / duplicate_entry / accounting_settle / approved_writeoff / platform_correction / balance_transfer / other`
+
+**Removed (destructive endpoints)**
+- ❌ `POST /api/ad-accounts/{id}/reset-debt` (Iter-159p) — violated immutable ledger
+- ❌ `POST /api/ad-accounts/{id}/recompute-debt` (Iter-159n) — closed-and-rebuilt liabilities, also destructive
+- Frontend: `RecomputeDebtButton` and `🗑 تصفير المديونيات` button removed
+
+**New endpoints**
+- `GET /api/ledger/reason-codes` — Arabic dictionary
+- `POST /api/ledger/entries` — create draft or auto-posted entry (low-level)
+- `POST /api/ledger/entries/{id}/post` — promote draft → posted
+- `POST /api/ledger/entries/{id}/reverse` — append mirror entry, mark original `reversed`
+- `POST /api/ledger/adjustments` — settlement / writeoff / adjustment with mandatory reason
+- `GET /api/ledger/entries` — list (filter by entity_type/id/type/status)
+- `GET /api/ledger/balance` — compute net from POSTED entries only
+- `GET /api/ledger/audit-log` — list audit rows
+- `POST /api/ad-accounts/{cp_id}/adjustments` — ad-account-scoped wrapper
+- `GET /api/ad-accounts/{cp_id}/audit-log` — scoped audit list
+- `GET /api/ad-accounts/{cp_id}/adjustment-entries` — scoped ledger list
+
+**Single Source of Truth (Message #737)**
+All ad-spend on Dashboard now reads strictly from `ad_account_ledger.type=spend` joined to `counterparties.ad_provider`:
+- `/api/dashboard/snapchat-summary` — ledger only ✅
+- `/api/dashboard/meta-summary` — ledger only ✅
+- `/api/dashboard/tiktok-summary` — ledger only ✅
+- `/api/dashboard` (master) — `daily_ads_total` = Σ all providers from ledger ✅
+- `/api/reports/ads` (unified) — ledger only ✅
+- Legacy fields `daily_costs.snapchat_ads/snapchat_ads_2/tiktok_ads`, `meta_ads_daily.spend`, `tiktok_ads_daily.spend` no longer count for accounting (still kept for non-accounting metrics: purchases/impressions/clicks).
+
+**Frontend** (`AdAccounts.jsx`)
+- New `AccountingActionsPanel` component per ad account:
+  - 3 action buttons: ✓ تسوية (Settlement) · ✂ شطب (Write-off) · ± تعديل (Adjustment)
+  - Form: amount + reason dropdown (loaded from `/api/ledger/reason-codes`) + notes
+  - For Adjustment: direction picker (reduce/increase debt)
+  - "📋 سجل التدقيق" drawer: shows ledger entries (with per-row "Reverse" button) + audit log
+  - Reversal flow: prompts for reason_code + notes, confirms, posts to `/api/ledger/entries/{id}/reverse`
+- `data-testid` attributes on every action
+
+**Tests** (all pass)
+- `test_ledger_iter160.py` — end-to-end: reason codes, mandatory reason, adjustments, reversal (mirror + status flip + double-reverse blocked), balance from POSTED only, ad-account adjustment reduces open_debt without touching liability row, old endpoints return 404/405
+- `test_dashboard_ledger_ssot_iter160.py` — seed legacy collections with huge bogus values, verify dashboard summaries return only ledger values
+- Backend regression: all existing pytest files green
+
+**Side fix**: pre-existing latent `NameError: tamara_keywords` in legacy_analyses path of `/api/dashboard` — keywords now defined before the loop.
+
+
 ## Completed Work
 - **Iter-159p (Feb 13 2026)**: 🛡 تعديل سلوك «تصفير المديونيات» — حفظ الرصيد والتعبئات.
   - **User clarification**: "عدّل الزر الحالي ليصفّر المديونيات فقط (يبقي الرصيد والتعبئات)."
