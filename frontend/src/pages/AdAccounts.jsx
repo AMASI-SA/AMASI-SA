@@ -1248,6 +1248,9 @@ export default function AdAccounts() {
                                 </div>
                             </div>
 
+                            {/* Iter-159i — Per-account credit limit + alert threshold */}
+                            <CreditLimitPanel row={row} onSaved={load} fmt={fmt} />
+
                             <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex items-center gap-1.5">
                                     <Clock size={11} className="text-slate-400" /> آخر تعبئة:
@@ -1401,6 +1404,168 @@ export default function AdAccounts() {
                         <div className="p-5 border-t border-slate-100 flex justify-end">
                             <button onClick={() => setDiagnose(null)} className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-bold" data-testid="adacc-diag-close">إغلاق</button>
                         </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+
+// ── Iter-159i — Per-account credit limit + alert threshold panel ────
+function CreditLimitPanel({ row, onSaved, fmt }) {
+    const [editing, setEditing] = useState(false);
+    const [limit, setLimit] = useState(
+        row.credit_limit != null ? String(row.credit_limit) : ""
+    );
+    const [pct, setPct] = useState(
+        row.alert_threshold_pct != null ? String(row.alert_threshold_pct) : "80"
+    );
+    const [busy, setBusy] = useState(false);
+
+    useEffect(() => {
+        setLimit(row.credit_limit != null ? String(row.credit_limit) : "");
+        setPct(row.alert_threshold_pct != null ? String(row.alert_threshold_pct) : "80");
+    }, [row.id, row.credit_limit, row.alert_threshold_pct]);
+
+    const save = async () => {
+        const limitNum = limit.trim() === "" ? null : Number(limit);
+        const pctNum = Number(pct);
+        if (limit.trim() !== "" && (!Number.isFinite(limitNum) || limitNum < 0)) {
+            toast.error("حد المديونية يجب أن يكون رقماً موجباً");
+            return;
+        }
+        if (!Number.isFinite(pctNum) || pctNum < 0 || pctNum > 100) {
+            toast.error("نسبة الصرف يجب أن تكون بين 0 و 100");
+            return;
+        }
+        setBusy(true);
+        try {
+            await api.put(`/ad-accounts/${row.id}/credit-limit`, {
+                credit_limit: limitNum,
+                alert_threshold_pct: pctNum,
+            });
+            toast.success("تم حفظ إعدادات حد المديونية");
+            setEditing(false);
+            await onSaved?.();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل الحفظ");
+        } finally { setBusy(false); }
+    };
+
+    const hasLimit = row.credit_limit != null && Number(row.credit_limit) > 0;
+    const usage = hasLimit ? (Number(row.open_debt || 0) / Number(row.credit_limit)) * 100 : 0;
+    const threshold = Number(row.alert_threshold_pct ?? 80);
+    const isOverThreshold = hasLimit && usage >= threshold;
+    const isOverLimit = hasLimit && usage >= 100;
+
+    return (
+        <div className="border-t border-slate-100 pt-3" data-testid={`adacc-credit-limit-${row.id}`}>
+            <div className="flex items-center justify-between mb-2">
+                <div className="text-[11px] font-bold text-slate-700 inline-flex items-center gap-1.5">
+                    💳 حد المديونية
+                </div>
+                {!editing && (
+                    <button
+                        onClick={() => setEditing(true)}
+                        className="text-[10px] text-indigo-700 hover:text-indigo-900 font-bold"
+                        data-testid={`adacc-credit-limit-edit-${row.id}`}
+                    >
+                        {hasLimit ? "تعديل" : "ضبط الحد"}
+                    </button>
+                )}
+            </div>
+
+            {!editing ? (
+                hasLimit ? (
+                    <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="bg-slate-50 border border-slate-200 rounded p-2">
+                                <div className="text-slate-500">السقف المسموح</div>
+                                <div className="num font-extrabold text-slate-900 text-sm">{fmt(row.credit_limit)} ر.س</div>
+                            </div>
+                            <div className="bg-slate-50 border border-slate-200 rounded p-2">
+                                <div className="text-slate-500">نسبة التنبيه</div>
+                                <div className="num font-extrabold text-slate-900 text-sm">{threshold.toFixed(0)}%</div>
+                            </div>
+                        </div>
+                        {/* Usage progress bar */}
+                        <div className="space-y-1">
+                            <div className="flex justify-between text-[10px]">
+                                <span className="text-slate-500">الاستهلاك</span>
+                                <span className={`font-extrabold ${isOverLimit ? "text-rose-700" : isOverThreshold ? "text-amber-700" : "text-emerald-700"}`}>
+                                    {usage.toFixed(0)}%
+                                </span>
+                            </div>
+                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                    className={`h-full transition-all ${isOverLimit ? "bg-rose-500" : isOverThreshold ? "bg-amber-500" : "bg-emerald-500"}`}
+                                    style={{ width: `${Math.min(usage, 100)}%` }}
+                                    data-testid={`adacc-credit-limit-bar-${row.id}`}
+                                ></div>
+                            </div>
+                            {isOverLimit && (
+                                <div className="text-[10px] text-rose-700 font-bold mt-1">⚠ تجاوزت الحد!</div>
+                            )}
+                            {isOverThreshold && !isOverLimit && (
+                                <div className="text-[10px] text-amber-700 font-bold mt-1">⚠ على وشك النفاذ — بلغت {usage.toFixed(0)}% من السقف</div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-[11px] text-slate-400 italic">
+                        لم يتم ضبط حد للمديونية لهذا الحساب — اضغط «ضبط الحد» لإضافة سقف وتفعيل التنبيهات المخصّصة.
+                    </div>
+                )
+            ) : (
+                <div className="space-y-2 bg-indigo-50/40 border border-indigo-200 rounded-lg p-3">
+                    <div>
+                        <label className="text-[11px] text-slate-700 font-bold">حد المديونية (ر.س)</label>
+                        <input
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={limit}
+                            onChange={(e) => setLimit(e.target.value)}
+                            className="w-full mt-1 px-2 py-1.5 border border-slate-300 rounded text-sm num"
+                            placeholder="مثلاً 10000 (اتركه فارغاً = بدون حد)"
+                            data-testid={`adacc-credit-limit-input-${row.id}`}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-[11px] text-slate-700 font-bold">نسبة الصرف لتفعيل التنبيه (%)</label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="5"
+                            value={pct}
+                            onChange={(e) => setPct(e.target.value)}
+                            className="w-full mt-1 px-2 py-1.5 border border-slate-300 rounded text-sm num"
+                            placeholder="80"
+                            data-testid={`adacc-credit-threshold-input-${row.id}`}
+                        />
+                        <div className="text-[10px] text-slate-500 mt-1">
+                            عند بلوغ هذه النسبة من الحد سيظهر إشعار «المديونية على وشك النفاذ».
+                        </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                        <button
+                            onClick={save}
+                            disabled={busy}
+                            className="flex-1 px-3 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:opacity-50 font-bold"
+                            data-testid={`adacc-credit-limit-save-${row.id}`}
+                        >
+                            {busy ? "جاري الحفظ..." : "💾 حفظ"}
+                        </button>
+                        <button
+                            onClick={() => setEditing(false)}
+                            disabled={busy}
+                            className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs rounded hover:bg-slate-200 font-bold"
+                            data-testid={`adacc-credit-limit-cancel-${row.id}`}
+                        >
+                            إلغاء
+                        </button>
                     </div>
                 </div>
             )}

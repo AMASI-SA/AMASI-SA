@@ -259,12 +259,19 @@ async def _gen_unmatched_order(db, user_id: str, settings: dict) -> int:
 
 
 async def _gen_high_ad_debt(db, user_id: str, settings: dict) -> int:
-    """Ad accounts where debt > X% of (debt + available balance)."""
-    pct = float(settings.get("ad_debt_pct", DEFAULT_AD_DEBT_PCT))
-    # All ad_account counterparties + their open debt.
+    """Ad accounts approaching their credit limit.
+
+    Iter-159i — each ad-account can configure its own `credit_limit`
+    (cap in SAR) and `alert_threshold_pct` (e.g. 80 ⇒ warn at 80 %).
+    When no per-account limit is set we fall back to the legacy
+    ratio-of-balance rule (`ad_debt_pct`, default 50 %).
+    """
+    fallback_pct = float(settings.get("ad_debt_pct", DEFAULT_AD_DEBT_PCT))
+    default_threshold_pct = 80.0  # used when account has limit but no pct
     accts = await db.counterparties.find(
         {"user_id": user_id, "kind": "ad_account"},
-        {"_id": 0, "id": 1, "name": 1, "balance": 1},
+        {"_id": 0, "id": 1, "name": 1, "balance": 1,
+         "credit_limit": 1, "alert_threshold_pct": 1},
     ).to_list(200)
     n = 0
     for a in accts:
@@ -280,27 +287,60 @@ async def _gen_high_ad_debt(db, user_id: str, settings: dict) -> int:
         debt = float(debt_rows[0]["open"]) if debt_rows else 0.0
         if debt <= 0:
             continue
-        denom = debt + max(balance, 0)
-        ratio = debt / denom if denom > 0 else 1.0
-        if ratio < pct:
-            continue
-        await _upsert_alert(db, user_id, {
-            "alert_type": "high_ad_debt",
-            "severity": "warning" if ratio < 0.8 else "critical",
-            "title": f"مديونية {a.get('name')} مرتفعة",
-            "message": f"المديونية الحالية {debt:,.2f} ر.س تمثّل "
-                       f"{ratio * 100:.0f}% من السقف الائتماني الفعلي. "
-                       "يُنصح بالسداد قريباً.",
-            "related_entity_type": "ad_account",
-            "related_entity_id": a["id"],
-            "related_entity_url": "/ad-accounts",
-            "fingerprint": _fp("high_ad_debt", "ad_account", a["id"]),
-            "metadata": {"open_debt": round(debt, 2),
-                         "balance": round(balance, 2),
-                         "ratio_pct": round(ratio * 100, 1),
-                         "threshold_pct": round(pct * 100, 1)},
-        })
-        n += 1
+
+        credit_limit = a.get("credit_limit")
+        if credit_limit and float(credit_limit) > 0:
+            # ── Per-account credit-limit mode ──
+            limit = float(credit_limit)
+            threshold_pct = float(a.get("alert_threshold_pct")
+                                   or default_threshold_pct)
+            usage_pct = (debt / limit) * 100.0
+            if usage_pct < threshold_pct:
+                continue
+            severity = "critical" if usage_pct >= 95 else "warning"
+            await _upsert_alert(db, user_id, {
+                "alert_type": "high_ad_debt",
+                "severity": severity,
+                "title": f"مديونية {a.get('name')} على وشك النفاذ",
+                "message": f"المديونية الحالية {debt:,.2f} ر.س بلغت "
+                           f"{usage_pct:.0f}% من حد المديونية "
+                           f"({limit:,.2f} ر.س). "
+                           f"السقف المسموح: {threshold_pct:.0f}%.",
+                "related_entity_type": "ad_account",
+                "related_entity_id": a["id"],
+                "related_entity_url": "/ad-accounts",
+                "fingerprint": _fp("high_ad_debt", "ad_account", a["id"]),
+                "metadata": {"open_debt": round(debt, 2),
+                             "credit_limit": round(limit, 2),
+                             "usage_pct": round(usage_pct, 1),
+                             "threshold_pct": round(threshold_pct, 1),
+                             "mode": "per_account_limit"},
+            })
+            n += 1
+        else:
+            # ── Legacy fallback (ratio of balance+debt) ──
+            denom = debt + max(balance, 0)
+            ratio = debt / denom if denom > 0 else 1.0
+            if ratio < fallback_pct:
+                continue
+            await _upsert_alert(db, user_id, {
+                "alert_type": "high_ad_debt",
+                "severity": "warning" if ratio < 0.8 else "critical",
+                "title": f"مديونية {a.get('name')} مرتفعة",
+                "message": f"المديونية الحالية {debt:,.2f} ر.س تمثّل "
+                           f"{ratio * 100:.0f}% من السقف الائتماني الفعلي. "
+                           "يُنصح بضبط حد مديونية لهذا الحساب.",
+                "related_entity_type": "ad_account",
+                "related_entity_id": a["id"],
+                "related_entity_url": "/ad-accounts",
+                "fingerprint": _fp("high_ad_debt", "ad_account", a["id"]),
+                "metadata": {"open_debt": round(debt, 2),
+                             "balance": round(balance, 2),
+                             "ratio_pct": round(ratio * 100, 1),
+                             "threshold_pct": round(fallback_pct * 100, 1),
+                             "mode": "legacy_ratio"},
+            })
+            n += 1
     return n
 
 

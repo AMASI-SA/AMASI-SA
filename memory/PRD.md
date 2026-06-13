@@ -29,6 +29,26 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159i (Feb 13 2026)**: 💳 حد المديونية ونسبة الصرف لكل حساب إعلاني.
+  - **User request**: "لكل حساب إعلاني — حد المديونية الحد المسموح مبلغ ونسبة الصرف التي يظهر بعدها الإشعار بأن المديونية على وشك النفاذ".
+  - **Backend**:
+    - حقلان جديدان في `counterparties`: `credit_limit` (SAR) و `alert_threshold_pct` (0-100).
+    - Endpoint جديد `PUT /api/ad-accounts/{cp_id}/credit-limit` مع Pydantic validation (ge=0, le=100). يدعم إرسال أي حقل وحده أو كليهما، رفض الـ body الفارغ.
+    - مولّد `_gen_high_ad_debt` في `alerts_routes.py` أُعيد كتابته: إذا كان `credit_limit > 0` يستخدم نسبة (debt/credit_limit) ويقارنها بـ `alert_threshold_pct` (افتراضي 80%). عند ≥95% → `critical`، وإلا → `warning`. عناوين التنبيهات: «مديونية {الاسم} على وشك النفاذ» مع رسالة تشرح المبلغ والنسبة والسقف.
+    - السلوك القديم (نسبة من balance+debt) محفوظ كـ fallback للحسابات التي لم تُضبط لها حدود.
+    - `_summarise` يُرجع الآن `credit_limit` و `alert_threshold_pct`.
+  - **Frontend** (`AdAccounts.jsx` — مكوّن `CreditLimitPanel`):
+    - بطاقة جديدة أسفل صف الإحصائيات (الرصيد/المديونية/الصرف) في كل بطاقة حساب إعلاني.
+    - عرض السقف + نسبة التنبيه + **progress bar ملوّن** (أخضر عادي، أصفر فوق العتبة، أحمر فوق الحد).
+    - رسائل تحذير مدمجة: «⚠ على وشك النفاذ — بلغت X%» / «⚠ تجاوزت الحد!».
+    - زر «ضبط الحد» يفتح فورم بحقلين، حفظ بـ PUT ثم إعادة تحميل القائمة. validation كامل في الواجهة.
+  - **Tests** (`test_ad_credit_limit_iter159i.py` — passed):
+    - 500/1000 = 50% (تحت 60%) ⇒ لا تنبيه ✅
+    - 700/1000 = 70% (فوق 60%) ⇒ warning ✅
+    - 980/1000 = 98% ⇒ critical مع كلمة «النفاذ» في العنوان ✅
+    - Validation: حد سلبي / نسبة > 100 / body فارغ ⇒ 422/400 ✅
+
+
 - **Iter-159h (Feb 13 2026)**: 🔔 إشعارات/تنبيهات التسويات الذكية.
   - **User selection**: g (كل الأنواع الستة) + a (7 أيام لـ BNPL) + a (5% للفرق) + a (جرس) + b (بطاقة في الداشبورد قابلة للطي) + d (كل التصرفات).
   - **Backend** (`alerts_routes.py`): 6 مولّدات تنبيهات idempotent عبر `fingerprint = type:entity:id`:

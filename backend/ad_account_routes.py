@@ -74,6 +74,12 @@ class SettingsIn(BaseModel):
     debt_mode: Literal["auto", "manual"]
 
 
+# Iter-159i — per-account credit limit + alert threshold.
+class CreditLimitIn(BaseModel):
+    credit_limit: Optional[float] = Field(None, ge=0, le=10_000_000)
+    alert_threshold_pct: Optional[float] = Field(None, ge=0, le=100)
+
+
 # Iter-107 — inline ad-account create + daily-platform sync
 class CreateAdAccountIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=160)
@@ -268,6 +274,9 @@ async def _summarise(db, user_id: str, cp: dict) -> dict:
         "last_debt": last_events["debt"],
         "last_auto_sync_date": cp.get("last_auto_sync_date"),
         "notes": cp.get("notes"),
+        # Iter-159i — per-account credit limit configuration.
+        "credit_limit": cp.get("credit_limit"),
+        "alert_threshold_pct": cp.get("alert_threshold_pct"),
     }
 
 
@@ -509,6 +518,31 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         await db.counterparties.update_one(
             {"id": cp_id, "user_id": user["id"]},
             {"$set": {"debt_mode": payload.debt_mode, "updated_at": _now()}},
+        )
+        cp = await _get_account(db, user["id"], cp_id)
+        return await _summarise(db, user["id"], cp)
+
+    # ── Iter-159i — PUT /{id}/credit-limit ────────────────────────────
+    # Per-ad-account configurable credit limit + alert threshold.
+    # `credit_limit`        — max debt allowed (SAR).  None ⇒ unlimited.
+    # `alert_threshold_pct` — % of limit at which the "debt is about to
+    #                         max out" alert is generated.  Default 80.
+    @router.put("/{cp_id}/credit-limit")
+    async def set_credit_limit(
+        cp_id: str, payload: CreditLimitIn,
+        user: dict = Depends(current_user),
+    ):
+        await _get_account(db, user["id"], cp_id)
+        upd: dict = {"updated_at": _now()}
+        if payload.credit_limit is not None:
+            upd["credit_limit"] = float(payload.credit_limit)
+        if payload.alert_threshold_pct is not None:
+            upd["alert_threshold_pct"] = float(payload.alert_threshold_pct)
+        if len(upd) == 1:
+            raise HTTPException(400, "أرسل على الأقل أحد الحقلين: "
+                                       "credit_limit أو alert_threshold_pct")
+        await db.counterparties.update_one(
+            {"id": cp_id, "user_id": user["id"]}, {"$set": upd},
         )
         cp = await _get_account(db, user["id"], cp_id)
         return await _summarise(db, user["id"], cp)
