@@ -1988,22 +1988,77 @@ async def _run_sync_for_all(
                 description=f"مديونية تلقائية (cron) — {cp['name']}",
                 source_tag="ad_account_cron",
             )
-            await db.ad_account_ledger.insert_one({
-                "id": str(uuid.uuid4()), "user_id": user_id,
-                "counterparty_id": cp["id"], "type": "spend",
-                "amount": delta, "balance_after": new_balance,
-                "debt_after": debt_after,
-                "related_liability_id": liab_id,
-                "description": f"مزامنة مجدولة من {cp['ad_provider']} ({from_date} → {to_date})",
-                "breakdown": {"from_balance": covered, "uncovered": uncovered,
-                              "mode": mode, "auto_cron": True,
-                              "source_collection": source,
-                              "created_debt": uncovered if mode == "auto" else 0.0,
-                              "delta_applied": delta,
-                              "platform_total": total,
-                              "prev_total_applied": prev_total_applied},
-                "date": to_date, "created_at": _now(),
-            })
+            # Iter-159f — ONE cumulative ledger row per (account, day).
+            # Earlier this inserted a NEW row every half-hour, cluttering
+            # the ledger with ~48 duplicate auto_cron entries per day.
+            # Now we look for the existing same-day auto_cron row and
+            # bump its `amount` to the fresh cumulative platform total
+            # (and refresh balance_after/debt_after). Only inserts on
+            # the FIRST sync of the day.
+            existing_ledger_rows = await db.ad_account_ledger.find(
+                {"user_id": user_id, "counterparty_id": cp["id"],
+                 "type": "spend", "date": to_date,
+                 "breakdown.auto_cron": True},
+                {"_id": 0, "id": 1, "amount": 1, "breakdown": 1,
+                 "created_at": 1},
+            ).sort("created_at", 1).to_list(200)
+
+            # Iter-159f cleanup — collapse any pre-existing duplicates
+            # (created by the previous "row-per-sync" behavior) into the
+            # oldest row of the day.  Idempotent: on subsequent passes
+            # only one row exists, so the delete is a no-op.
+            existing_ledger = (
+                existing_ledger_rows[0] if existing_ledger_rows else None)
+            if len(existing_ledger_rows) > 1:
+                dupe_ids = [r["id"] for r in existing_ledger_rows[1:]]
+                await db.ad_account_ledger.delete_many(
+                    {"id": {"$in": dupe_ids}, "user_id": user_id})
+
+            if existing_ledger:
+                merged_bd = dict(existing_ledger.get("breakdown") or {})
+                merged_bd.update({
+                    "from_balance": merged_bd.get("from_balance", 0.0) + covered,
+                    "uncovered": merged_bd.get("uncovered", 0.0) + uncovered,
+                    "mode": mode,
+                    "auto_cron": True,
+                    "source_collection": source,
+                    "created_debt": (
+                        merged_bd.get("created_debt", 0.0)
+                        + (uncovered if mode == "auto" else 0.0)),
+                    "delta_applied": (merged_bd.get("delta_applied", 0.0) + delta),
+                    "platform_total": total,
+                    "prev_total_applied": prev_total_applied,
+                    "last_sync_at": _now(),
+                })
+                await db.ad_account_ledger.update_one(
+                    {"id": existing_ledger["id"]},
+                    {"$set": {
+                        "amount": total,            # cumulative for the day
+                        "balance_after": new_balance,
+                        "debt_after": debt_after,
+                        "related_liability_id": liab_id,
+                        "description": f"مزامنة تراكمية من {cp['ad_provider']} — {to_date}",
+                        "breakdown": merged_bd,
+                    }},
+                )
+            else:
+                await db.ad_account_ledger.insert_one({
+                    "id": str(uuid.uuid4()), "user_id": user_id,
+                    "counterparty_id": cp["id"], "type": "spend",
+                    "amount": total,                # cumulative from the start
+                    "balance_after": new_balance,
+                    "debt_after": debt_after,
+                    "related_liability_id": liab_id,
+                    "description": f"مزامنة تراكمية من {cp['ad_provider']} — {to_date}",
+                    "breakdown": {"from_balance": covered, "uncovered": uncovered,
+                                  "mode": mode, "auto_cron": True,
+                                  "source_collection": source,
+                                  "created_debt": uncovered if mode == "auto" else 0.0,
+                                  "delta_applied": delta,
+                                  "platform_total": total,
+                                  "prev_total_applied": prev_total_applied},
+                    "date": to_date, "created_at": _now(),
+                })
             out.append({
                 "id": cp["id"], "name": cp["name"], "spend": total,
                 "covered": covered, "uncovered": uncovered,

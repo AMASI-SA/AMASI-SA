@@ -29,6 +29,18 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159f (Feb 13 2026)**: 🧹 سجل تراكمي واحد يومياً لمديونية الإعلانات (إصلاح تكرار النصف ساعة).
+  - **User feedback**: "عند إضافة مديونية الإعلانات كل نصف ساعة يتم إضافته تراكمي وليس كل طول اليوم يضيف سجلات جديدة. كل حساب إعلاني لديه باليوم سجل واحد تراكمي".
+  - **Root cause**: `_run_sync_for_all` في `ad_account_routes.py` كان يستدعي `ad_account_ledger.insert_one(...)` في كل مزامنة (≈48 مرة يومياً) ← سجل جديد بكل نصف ساعة.
+  - **Fix**:
+    1. **Find-then-update**: قبل الإدراج، البحث عن سجل `auto_cron` لنفس (counterparty, date). إن وُجد ← تحديث `amount` ليصير الإجمالي التراكمي للمنصة + دمج `breakdown` (from_balance, uncovered, delta_applied, last_sync_at).
+    2. **Self-healing collapse**: إن وُجدت سجلات قديمة مكررة من قبل الإصلاح (find يُرجع >1) ← الإبقاء على الأقدم وحذف الباقي.
+  - **Tests** (`tests/test_ad_account_cumulative_iter159f.py`):
+    - مزامنتان متتاليتان في نفس اليوم → سطر واحد فقط بالمجموع التراكمي ✅
+    - زرع 3 سجلات مكررة قديمة (20+30+30) → بعد المزامنة التالية تنطوي إلى سطر واحد (amount=100) ✅
+  - **Idempotency**: المزامنة الثالثة بنفس البيانات = no-op (delta=0 لا يُنشئ شيئاً).
+
+
 - **Iter-159e (Feb 13 2026)**: 📅 تاريخ التحويل الفعلي في "جميع التسويات الموحَّدة".
   - **User feedback**: "تاريخ التحويل يكون تاريخ التسوية نفسه مو تاريخ إضافة الفاتورة".
   - **Backend**: aggregation على `settlement_entries` لاستخراج `MAX(settlement_date)` لكل ملف. تم تعريف ترتيب أولوية واضح: header.settlement_date (manual override) → max من الصفوف → header.transfer_date → uploaded_at. حقل جديد `settlement_date_source` في الاستجابة (`manual` / `file_rows` / `uploaded_at`).
