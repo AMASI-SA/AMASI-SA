@@ -1608,6 +1608,164 @@ def _build_router(db) -> APIRouter:
         )
         return result
 
+    # ── Iter-159l — Diagnose billing API permissions ─────────────────────
+    # Health check that probes Snapchat billing endpoints with the
+    # user's current OAuth token and reports which capabilities are
+    # available.  Used by the upcoming "Sync historical debt" feature
+    # to verify scopes BEFORE attempting reconciliation.
+    @router.get("/diagnose-billing-permissions")
+    async def diagnose_billing_permissions(user: dict = Depends(current_user)):
+        conn = await _get_conn(user["id"])
+        if not conn or not conn.get("refresh_token"):
+            return {
+                "connected": False,
+                "checks": [],
+                "summary": "حساب سناب شات غير مربوط. اربطه أولاً من الإعدادات.",
+            }
+
+        access_token, _ = await _ensure_access_token(user["id"])
+        headers = {"Authorization": f"Bearer {access_token}",
+                   "Accept": "application/json"}
+        checks: list[dict] = []
+
+        async with httpx.AsyncClient(timeout=20.0) as http:
+            # 1) Fetch user's organizations to extract org IDs.
+            org_id, ad_account_id = None, None
+            try:
+                resp = await http.get(
+                    f"{SNAPCHAT_API_BASE}/me/organizations",
+                    headers=headers,
+                    params={"with_ad_accounts": "true"},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for wrap in data.get("organizations", []) or []:
+                        org = wrap.get("organization") or wrap
+                        if isinstance(org, dict):
+                            org_id = org.get("id")
+                            for acc_wrap in (
+                                org.get("ad_accounts")
+                                or org.get("adaccounts") or []
+                            ):
+                                acc = acc_wrap.get("adaccount") or acc_wrap
+                                if isinstance(acc, dict) and acc.get("id"):
+                                    ad_account_id = acc["id"]
+                                    break
+                            if ad_account_id:
+                                break
+                    checks.append({
+                        "name": "قراءة المنظمات والحسابات الإعلانية",
+                        "endpoint": "/me/organizations",
+                        "status": "✅ مسموح",
+                        "ok": True,
+                    })
+                else:
+                    checks.append({
+                        "name": "قراءة المنظمات والحسابات الإعلانية",
+                        "endpoint": "/me/organizations",
+                        "status": f"❌ ممنوع (HTTP {resp.status_code})",
+                        "detail": resp.text[:200],
+                        "ok": False,
+                    })
+            except Exception as e:
+                checks.append({
+                    "name": "قراءة المنظمات والحسابات الإعلانية",
+                    "endpoint": "/me/organizations",
+                    "status": f"❌ خطأ شبكة: {e}",
+                    "ok": False,
+                })
+
+            # 2) List billing centers (requires billing.read scope).
+            if org_id:
+                try:
+                    resp = await http.get(
+                        f"{SNAPCHAT_API_BASE}/organizations/{org_id}"
+                        "/billing_centers",
+                        headers=headers,
+                    )
+                    if resp.status_code == 200:
+                        bcs = (resp.json().get("billing_centers") or [])
+                        checks.append({
+                            "name": "قراءة مراكز الفوترة (Billing Centers)",
+                            "endpoint": "/organizations/{org}/billing_centers",
+                            "status": f"✅ مسموح ({len(bcs)} مركز)",
+                            "ok": True,
+                            "count": len(bcs),
+                        })
+                    elif resp.status_code in (401, 403):
+                        checks.append({
+                            "name": "قراءة مراكز الفوترة (Billing Centers)",
+                            "endpoint": "/organizations/{org}/billing_centers",
+                            "status": "❌ ممنوع — تحتاج صلاحية billing.read",
+                            "detail": resp.text[:200],
+                            "ok": False,
+                            "missing_scope": "billing.read",
+                        })
+                    else:
+                        checks.append({
+                            "name": "قراءة مراكز الفوترة (Billing Centers)",
+                            "endpoint": "/organizations/{org}/billing_centers",
+                            "status": f"⚠ غير متاح (HTTP {resp.status_code})",
+                            "detail": resp.text[:200],
+                            "ok": False,
+                        })
+                except Exception as e:
+                    checks.append({
+                        "name": "قراءة مراكز الفوترة (Billing Centers)",
+                        "status": f"❌ خطأ: {e}",
+                        "ok": False,
+                    })
+
+            # 3) Per-ad-account stats (always works, no scope issue).
+            if ad_account_id:
+                try:
+                    resp = await http.get(
+                        f"{SNAPCHAT_API_BASE}/adaccounts/{ad_account_id}",
+                        headers=headers,
+                    )
+                    checks.append({
+                        "name": "قراءة بيانات الحساب الإعلاني",
+                        "endpoint": "/adaccounts/{id}",
+                        "status": ("✅ مسموح"
+                                   if resp.status_code == 200
+                                   else f"❌ HTTP {resp.status_code}"),
+                        "ok": resp.status_code == 200,
+                    })
+                except Exception as e:
+                    checks.append({
+                        "name": "قراءة بيانات الحساب الإعلاني",
+                        "status": f"❌ خطأ: {e}",
+                        "ok": False,
+                    })
+
+        # Build summary message.
+        billing_ok = any(c.get("name", "").startswith("قراءة مراكز")
+                          and c.get("ok")
+                          for c in checks)
+        if billing_ok:
+            summary = ("✅ صلاحياتك كاملة — يمكنك مزامنة المديونيات "
+                       "التاريخية من سناب شات.")
+            level = "ok"
+        elif any(c.get("missing_scope") == "billing.read" for c in checks):
+            summary = ("⚠ التوكن الحالي لا يحتوي صلاحية billing.read. "
+                       "لإصلاح ذلك: اذهب إلى Snapchat Business Manager → "
+                       "Apps & Integrations → اختر التطبيق المربوط → "
+                       "Permissions → فعّل 'Billing' → ثم أعد الربط من "
+                       "صفحة الإعدادات في التطبيق.")
+            level = "missing_scope"
+        else:
+            summary = ("⚠ لا توجد منظمة أو حساب إعلاني مفعّل تحت توكنك. "
+                       "تأكد من ربط التطبيق بحساب يحتوي على منظمة.")
+            level = "no_org"
+
+        return {
+            "connected": True,
+            "checks": checks,
+            "summary": summary,
+            "level": level,
+            "platform": "snapchat",
+        }
+
     return router
 
 
