@@ -1616,17 +1616,22 @@ function RecomputeDebtButton({ row, onDone, fmt }) {
                     <button
                         onClick={async () => {
                             const ok = window.confirm(
-                                `⚠️ تحذير: سيتم حذف كل المديونيات وسجلات الصرف لحساب «${row.name}».\n\n` +
-                                "هذا الإجراء لا يمكن التراجع عنه.\n" +
-                                "بعد التصفير، استخدم «ترحيل المديونيات التاريخية» لإعادة البناء من API.\n\n" +
+                                `⚠️ سيتم تصفير المديونيات والمصروفات لحساب «${row.name}»\n\n` +
+                                "ما سيُحذف:\n" +
+                                "• كل المديونيات (liabilities)\n" +
+                                "• كل سجلات الصرف (spend)\n\n" +
+                                "ما سيُحفظ ✅:\n" +
+                                "• الرصيد الحالي (balance)\n" +
+                                "• سجلات التعبئة من البنك (topups)\n\n" +
+                                "بعد التصفير: استخدم «ترحيل المديونيات التاريخية» لإعادة البناء.\n\n" +
                                 "هل أنت متأكد؟"
                             );
                             if (!ok) return;
                             try {
                                 const { data } = await api.post(`/ad-accounts/${row.id}/reset-debt`);
                                 toast.success(
-                                    `تم التصفير: حذف ${data.liabilities_deleted} مديونية + ${data.ledger_rows_deleted} سجل صرف`,
-                                    { duration: 6000 }
+                                    `تم التصفير: حذف ${data.liabilities_deleted} مديونية + ${data.ledger_rows_deleted} سجل صرف. الرصيد ${fmt(data.balance_preserved)} ر.س محفوظ.`,
+                                    { duration: 7000 }
                                 );
                                 await onDone?.();
                             } catch (e) {
@@ -1635,9 +1640,9 @@ function RecomputeDebtButton({ row, onDone, fmt }) {
                         }}
                         className="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 px-2.5 py-1 rounded font-bold"
                         data-testid={`adacc-reset-btn-${row.id}`}
-                        title="حذف كل المديونيات والسجلات + تصفير الرصيد"
+                        title="حذف المديونيات وسجلات الصرف (يبقى الرصيد والتعبئات)"
                     >
-                        🗑 تصفير
+                        🗑 تصفير المديونيات
                     </button>
                     <button
                         onClick={fetchPreview}

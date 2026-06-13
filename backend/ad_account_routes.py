@@ -548,11 +548,17 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         return await _summarise(db, user["id"], cp)
 
     # ── Iter-159o — POST /{id}/reset-debt ────────────────────────────
-    # Nuclear option: WIPE all liabilities + ledger rows + reset balance
-    # for a single ad account.  Designed for the workflow:
-    #   1. تصفير ← clean slate
-    #   2. ترحيل المديونيات التاريخية ← rebuild from platform API
-    # Returns counts of what was deleted so the UI can confirm.
+    # SAFE reset: wipes only the DEBT side of the ad account so the
+    # merchant can re-run the historical migration with a clean slate.
+    # Iter-159p — Refined behaviour (per user feedback):
+    #   • DELETE liabilities (kind=ad_account, counterparty_id=cp_id)
+    #   • DELETE ledger rows of `type=spend` ONLY
+    #   • KEEP   ledger rows of `type=topup` (the merchant's actual
+    #            bank-funded prepayments — these are an asset, not a
+    #            debt, and must survive the reset).
+    #   • KEEP   counterparty.balance untouched.
+    #   • DO NOT touch raw platform data (snapchat_ads_daily, etc.) or
+    #            bank-side account_transactions.
     @router.post("/{cp_id}/reset-debt")
     async def reset_debt(
         cp_id: str,
@@ -563,13 +569,17 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             {"user_id": user["id"], "kind": "ad_account",
              "counterparty_id": cp_id},
         )
+        # Only spend rows — top-ups preserved.
         ledger_del = await db.ad_account_ledger.delete_many(
-            {"user_id": user["id"], "counterparty_id": cp_id},
+            {"user_id": user["id"], "counterparty_id": cp_id,
+             "type": "spend"},
         )
+        # Clear ONLY the sync markers so the next half-hour cron starts
+        # fresh, but DO NOT zero the balance (it represents real money
+        # the merchant has on the ad platform).
         await db.counterparties.update_one(
             {"id": cp_id, "user_id": user["id"]},
-            {"$set": {"balance": 0.0,
-                      "last_auto_sync_date": None,
+            {"$set": {"last_auto_sync_date": None,
                       "last_yesterday_synced_for": None,
                       "updated_at": _now()},
              "$unset": {"last_auto_sync_at": ""}},
@@ -580,6 +590,8 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             "name": cp.get("name"),
             "liabilities_deleted": liab_del.deleted_count,
             "ledger_rows_deleted": ledger_del.deleted_count,
+            "balance_preserved": cp.get("balance", 0.0),
+            "note": "تم تصفير المديونيات والمصروفات فقط — الرصيد والتعبئات محفوظة.",
         }
 
     # ── Iter-159n — POST /{id}/recompute-debt ────────────────────────

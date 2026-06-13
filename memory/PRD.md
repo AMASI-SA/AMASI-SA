@@ -29,6 +29,19 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159p (Feb 13 2026)**: 🛡 تعديل سلوك «تصفير المديونيات» — حفظ الرصيد والتعبئات.
+  - **User clarification**: "عدّل الزر الحالي ليصفّر المديونيات فقط (يبقي الرصيد والتعبئات)."
+  - **Backend**: تعديل `/api/ad-accounts/{cp_id}/reset-debt`:
+    - يحذف `liabilities` (kind=ad_account, counterparty_id=cp_id) ✅
+    - يحذف `ad_account_ledger` **فقط من نوع `type=spend`** ✅
+    - **يحتفظ بـ** `ad_account_ledger` نوع `topup` ✅ (تمثل أصل: مبالغ شحنتها من البنك)
+    - **لا يصفّر** `counterparty.balance` ✅
+    - يمسح فقط markers المزامنة (`last_auto_sync_date`, `last_yesterday_synced_for`)
+    - الـ response يتضمن `balance_preserved` للشفافية
+  - **Frontend**: تحديث رسالة التأكيد لتوضّح ما سيُحذف وما سيُحفظ. زر «🗑 تصفير المديونيات».
+  - **Test** (`test_reset_debt_iter159o.py` — passed): seed بـ 2 spend + 1 topup + 1 liability + balance=1500 → بعد reset: liab=0, spend=0, **topup=1 محفوظ**, **balance=1500 محفوظ** ✅
+
+
 - **Iter-159o (Feb 13 2026)**: 🗑 زر «تصفير المديونية» للحسابات الإعلانية.
   - **User request**: "أبغى أصفّر المديونيات في الحسابات الإعلانية والمديونية أضيفها من جديد عبر إضافة المديونيات التاريخية. يوجد لخبطة في الأرصدة."
   - **Backend**: endpoint جديد `POST /api/ad-accounts/{cp_id}/reset-debt`:
