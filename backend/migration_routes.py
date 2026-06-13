@@ -547,9 +547,7 @@ def make_migration_router(db) -> APIRouter:
             {"user_id": uid, "kind": "supplier",
              "status": {"$ne": "paid"},
              "is_pre_accounting": {"$ne": True}},
-            {"_id": 0, "supplier_name": 1, "counterparty_id": 1,
-             "expected_amount": 1, "paid_amount": 1, "description": 1,
-             "id": 1},
+            {"_id": 0},
         ):
             cp_id = r.get("counterparty_id")
             sup_name = r.get("supplier_name") or ""
@@ -562,12 +560,37 @@ def make_migration_router(db) -> APIRouter:
                 - float(r.get("paid_amount") or 0), 2)
             if remaining <= 0:
                 continue
+            # Iter-165 — surface full diagnostic so the user can decide
+            # whether to keep, write-off, or link the row before running
+            # the migration.
             orphan_sups.append({
                 "id": r.get("id"),
-                "supplier_name": sup_name,
+                "supplier_name": sup_name or "(بدون اسم)",
                 "counterparty_id": cp_id,
+                "counterparty_link_status": (
+                    "broken_link" if cp_id else "no_link"),
+                "expected_amount": round(
+                    float(r.get("expected_amount") or 0), 2),
+                "paid_amount": round(
+                    float(r.get("paid_amount") or 0), 2),
                 "remaining": remaining,
                 "description": r.get("description") or "",
+                "created_at": r.get("created_at"),
+                "updated_at": r.get("updated_at"),
+                "due_date": r.get("due_date"),
+                "status": r.get("status"),
+                "source": r.get("source") or "manual_entry",
+                "auto_generated": bool(r.get("auto_generated")),
+                # The merchant explicitly asked for clarity on this:
+                "will_be_migrated": False,
+                "reason_not_migrated": (
+                    "هذا السجل غير مرتبط بأي مورد مُسجَّل (no matching "
+                    "counterparty). الترحيل يرحّل فقط السجلات المرتبطة "
+                    "بـ counterparties.kind=supplier."),
+                "recommended_action": (
+                    "إذا قيمته صغيرة جداً وغير مهم → اتركه كما هو، لن "
+                    "يؤثر على دفتر الأستاذ. إذا أردت تسجيله محاسبياً "
+                    "→ أنشئ مورداً بنفس الاسم ثم اربط هذا السجل به."),
             })
         orphan_sup_total = round(sum(
             x["remaining"] for x in orphan_sups), 2)
@@ -765,6 +788,45 @@ def make_migration_router(db) -> APIRouter:
             "banks": bank_rows,
             "orphan_suppliers": orphan_sups,
         }
+
+    # ── POST /orphan-suppliers/{liab_id}/write-off (Iter-165) ───────
+    @router.post("/orphan-suppliers/{liab_id}/write-off")
+    async def write_off_orphan_supplier(
+        liab_id: str,
+        user: dict = Depends(current_user),
+    ):
+        """One-click dispose of an orphan supplier liability. Marks it
+        as paid (amounts zeroed) and stamps a recovery note. The row is
+        NOT deleted so it remains in the audit trail.
+
+        Use case: the user reviewed the orphan list and confirmed the
+        record is stale/insignificant and should not be migrated.
+        """
+        uid = user["id"]
+        r = await db.liabilities.find_one(
+            {"user_id": uid, "id": liab_id, "kind": "supplier"},
+            {"_id": 0},
+        )
+        if not r:
+            raise HTTPException(404, "السجل غير موجود")
+        await db.liabilities.update_one(
+            {"user_id": uid, "id": liab_id},
+            {"$set": {
+                "expected_amount": 0.0,
+                "paid_amount": 0.0,
+                "status": "paid",
+                "updated_at": _now(),
+                "write_off_note": (
+                    "شطب يدوي قبل ترحيل المرحلة 4 — orphan supplier "
+                    "(غير مرتبط بأي مورد مُسجَّل)"),
+                "written_off_by": user.get("email"),
+                "written_off_at": _now(),
+            }},
+        )
+        return {"ok": True, "id": liab_id,
+                "amount_written_off": round(
+                    float(r.get("expected_amount") or 0)
+                    - float(r.get("paid_amount") or 0), 2)}
 
     @router.get("/verify")
     async def verify_migration(user: dict = Depends(current_user)):

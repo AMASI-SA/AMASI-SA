@@ -134,17 +134,58 @@ export default function ReconciliationReport() {
                             ⚠ مديونيات موردين بدون ربط: {s.orphan_supplier_count} ({fmt(s.orphan_supplier_total)} ر.س)
                         </div>
                         <div className="text-xs text-amber-800 mt-1">
-                            هذه الصفوف موجودة في النظام القديم لكنها غير مرتبطة بأي مورد مُسجَّل. لن تُرحَّل تلقائياً.
-                            إما أنشئ موردًا بنفس الاسم أولاً، أو سدّد/احذف الفاتورة يدوياً، أو تجاهلها إذا كانت قديمة.
+                            هذه السجلات موجودة في النظام القديم لكنها غير مرتبطة بأي مورد مُسجَّل.
+                            <strong> لن تُرحَّل تلقائياً عند تنفيذ الترحيل.</strong>
                         </div>
-                        <details className="mt-2">
-                            <summary className="cursor-pointer text-xs font-bold text-amber-900">عرض القائمة</summary>
-                            <ul className="text-[11px] mt-2 space-y-1 max-h-40 overflow-y-auto">
+                        <details className="mt-2" open>
+                            <summary className="cursor-pointer text-xs font-bold text-amber-900">عرض التفاصيل الكاملة</summary>
+                            <ul className="text-[11px] mt-2 space-y-2">
                                 {data.orphan_suppliers.map((x) => (
                                     <li key={x.id}
-                                        className="flex justify-between bg-white p-1.5 rounded border border-amber-100">
-                                        <span>{x.supplier_name || "(بدون اسم)"} — {x.description || "—"}</span>
-                                        <span className="num font-bold text-amber-900">{fmt(x.remaining)} ر.س</span>
+                                        className="bg-white p-2 rounded border border-amber-100"
+                                        data-testid={`orphan-supplier-${x.id}`}>
+                                        <div className="grid grid-cols-2 gap-1 mb-2">
+                                            <div><span className="text-slate-500">رقم السجل:</span> <code className="text-[10px]">{x.id}</code></div>
+                                            <div><span className="text-slate-500">اسم المورد:</span> <strong>{x.supplier_name}</strong></div>
+                                            <div><span className="text-slate-500">القيمة المتبقية:</span> <span className="num font-bold text-amber-900">{fmt(x.remaining)} ر.س</span></div>
+                                            <div><span className="text-slate-500">إجمالي/مدفوع:</span> <span className="num">{fmt(x.expected_amount)} / {fmt(x.paid_amount)}</span></div>
+                                            <div><span className="text-slate-500">المصدر:</span> {x.source}{x.auto_generated ? " (تلقائي)" : ""}</div>
+                                            <div><span className="text-slate-500">الحالة:</span> {x.status}</div>
+                                            <div><span className="text-slate-500">تاريخ الإنشاء:</span> <span className="num">{(x.created_at || "").slice(0,10)}</span></div>
+                                            <div><span className="text-slate-500">تاريخ الاستحقاق:</span> <span className="num">{x.due_date || "—"}</span></div>
+                                            <div className="col-span-2"><span className="text-slate-500">الوصف:</span> {x.description || "—"}</div>
+                                            <div className="col-span-2"><span className="text-slate-500">حالة الربط:</span>{" "}
+                                                <span className={x.counterparty_link_status === "no_link" ? "text-rose-700 font-bold" : "text-amber-700 font-bold"}>
+                                                    {x.counterparty_link_status === "no_link" ? "بدون أي ربط" : "ربط مكسور (counterparty محذوف)"}
+                                                </span>
+                                            </div>
+                                            <div className="col-span-2"><span className="text-slate-500">سيُرحَّل؟</span>{" "}
+                                                <span className="text-rose-700 font-bold">لا — {x.reason_not_migrated}</span>
+                                            </div>
+                                            <div className="col-span-2 bg-slate-50 p-1.5 rounded mt-1">
+                                                <span className="text-slate-700 font-bold">💡 التوصية:</span> {x.recommended_action}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 justify-end">
+                                            <button
+                                                onClick={async () => {
+                                                    if (!window.confirm(
+                                                        `سيتم شطب هذا السجل (تصفيره) وعدم ترحيله. ` +
+                                                        `قيمة: ${fmt(x.remaining)} ر.س.\nالمتابعة؟`)) return;
+                                                    try {
+                                                        await api.post(`/accounting/migration/orphan-suppliers/${x.id}/write-off`);
+                                                        toast.success(`تم شطب السجل (${fmt(x.remaining)} ر.س)`);
+                                                        load();
+                                                    } catch (e) {
+                                                        toast.error(e?.response?.data?.detail || "فشل");
+                                                    }
+                                                }}
+                                                className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold"
+                                                data-testid={`orphan-writeoff-${x.id}`}
+                                                title="يصفر السجل ويحفظه في السجل التاريخي بدون ترحيله">
+                                                🗑 شطب وعدم ترحيل
+                                            </button>
+                                        </div>
                                     </li>
                                 ))}
                             </ul>

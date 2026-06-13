@@ -897,3 +897,32 @@ tests). All passing.
 
 the Snap counterparty OR remove the counterparty.
 
+
+## Iter-165 — Orphan Supplier Diagnostic + Write-Off (Feb 2026)
+**User question (after Iter-164)**: "I see one orphan supplier of 1 SAR.
+Before I run the final migration I want to know: record id, supplier
+name, source, will it be migrated, recommended action."
+
+**Fix**:
+- Expanded the `orphan_suppliers` entries returned by `/api/accounting/migration/reconciliation`
+  to include all diagnostic fields: `expected_amount`, `paid_amount`,
+  `remaining`, `created_at`, `updated_at`, `due_date`, `status`, `source`,
+  `auto_generated`, `counterparty_link_status`, `will_be_migrated: false`,
+  `reason_not_migrated`, `recommended_action`.
+- New endpoint `POST /api/accounting/migration/orphan-suppliers/{liab_id}/write-off`
+  — zeroes the row's amounts, sets status=paid, adds an audit note
+  (`write_off_note`, `written_off_by`, `written_off_at`). Row is NOT
+  deleted, preserving the audit trail.
+- UI: orphan list now shows the full diagnostic card per record + a
+  "🗑 شطب وعدم ترحيل" one-click button. Tested live on Preview
+  (seeded an orphan row, verified diagnostic, wrote it off, verified
+  it disappears from the report).
+
+**Action for user**:
+1. Save to GitHub → Redeploy.
+2. Open `/reconciliation` → expand the orphan supplier card to see the
+   full diagnostic for the 1 SAR record.
+3. If the record is insignificant → click "🗑 شطب وعدم ترحيل" → orphan
+   count becomes 0.
+4. Then execute the final migration with confidence.
+
