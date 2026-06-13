@@ -56,6 +56,10 @@ import AlertsPage from "./pages/AlertsPage";
 import UnifiedEntryScreen from "./pages/UnifiedEntryScreen";
 import MigrationWizard from "./pages/MigrationWizard";
 import EmployeesLedger from "./pages/EmployeesLedger";
+import SuppliersLedger from "./pages/SuppliersLedger";
+import ExternalsLedger from "./pages/ExternalsLedger";
+import CouriersLedger from "./pages/CouriersLedger";
+import FinancialPositionLedger from "./pages/FinancialPositionLedger";
 import ApiPermissionsDiagnostic from "./pages/ApiPermissionsDiagnostic";
 import AccountingCutoffs from "./pages/AccountingCutoffs";
 import BnplBalancesDiagnostic from "./pages/BnplBalancesDiagnostic";
@@ -123,6 +127,10 @@ function AppRoutes() {
             <Route path="/new-transaction" element={<ProtectedRoute><Layout><UnifiedEntryScreen /></Layout></ProtectedRoute>} />
             <Route path="/accounting/migration" element={<ProtectedRoute><Layout><MigrationWizard /></Layout></ProtectedRoute>} />
             <Route path="/employees-ledger" element={<ProtectedRoute><Layout><EmployeesLedger /></Layout></ProtectedRoute>} />
+            <Route path="/suppliers-ledger" element={<ProtectedRoute><Layout><SuppliersLedger /></Layout></ProtectedRoute>} />
+            <Route path="/externals-ledger" element={<ProtectedRoute><Layout><ExternalsLedger /></Layout></ProtectedRoute>} />
+            <Route path="/couriers-ledger" element={<ProtectedRoute><Layout><CouriersLedger /></Layout></ProtectedRoute>} />
+            <Route path="/financial-position-ledger" element={<ProtectedRoute><Layout><FinancialPositionLedger /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics/api-permissions" element={<ProtectedRoute><Layout><ApiPermissionsDiagnostic /></Layout></ProtectedRoute>} />
             <Route path="/settings/accounting-cutoffs" element={<ProtectedRoute><Layout><AccountingCutoffs /></Layout></ProtectedRoute>} />
             <Route path="/bnpl-balances" element={<ProtectedRoute><Layout><BnplBalancesDiagnostic /></Layout></ProtectedRoute>} />

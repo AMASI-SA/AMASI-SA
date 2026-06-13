@@ -29,6 +29,42 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 
+## Completed Work — Iter-161 Phase 4 Part 2 (Feb 13 2026): 4 Ledger Pages + Grouped Accounts
+
+**New frontend pages (all reading STRICTLY from /api/accounting/* endpoints)**
+- `/suppliers-ledger` — الموردون مع رصيد متبقي + كشف الحساب
+- `/externals-ledger` — الأشخاص الخارجيون
+- `/couriers-ledger` — شركات الشحن (payable + COD)
+- `/financial-position-ledger` — المركز المالي الكامل (أصول + التزامات + صافي)
+
+**Shared component**
+- `/app/frontend/src/components/EntityLedgerPage.jsx` — generic ledger page with:
+  - Configurable header, summary cards, columns, testid prefix
+  - Per-row click → drawer with full ledger statement
+  - Statement entries grouped by `txn_group_id`
+  - "Reverse" button per posted entry (calls `/api/ledger/entries/{id}/reverse`)
+  - Reversed entries grayed out + tagged
+
+**Unified Entry Screen improvement**
+- Bank dropdowns now group accounts:
+  - 🏦 الحسابات البنكية (account_type=bank)
+  - 💳 بوابات الدفع (account_type=payment_platform — Salla/Tamara/Tabby/Emkan)
+  - 📦 أخرى (any other account_type)
+
+**Tests** — all 6 pytest files green individually (159k, 160, 160-SSOT, 161-P2, 161-P3, 161-P4)
+
+**Phase 4 — Frontend coverage complete**
+- All 4 entity types have dedicated Ledger-only pages ✓
+- Financial Position page reads only from general_ledger ✓
+- Sidebar: 5 new menu items linking to Ledger system
+
+**What's NOT done yet (Phase 4 closeout)**
+- 🟡 Comprehensive RECONCILIATION REPORT (legacy vs ledger, per-entity match %) — backend has `/migration/verify` but it only checks pre-migration; need a runtime side-by-side comparator
+- 🟡 Disable legacy mutation endpoints `/api/liabilities/{id}/pay,collect,DELETE` (still active — required until existing UIs are deprecated)
+- 🟡 Replace old `/financial-position` route with redirect to `/financial-position-ledger`
+
+
+
 ## Completed Work — Iter-161 Phase 4 (Feb 13 2026): Ledger-Only Listings + Financial Position + Employees Page
 
 **5 new backend endpoints (all read STRICTLY from general_ledger)**

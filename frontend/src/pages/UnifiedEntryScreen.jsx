@@ -66,7 +66,17 @@ export default function UnifiedEntryScreen() {
             setSuppliers(sup.data?.items || sup.data || []);
             setExternals((ext.data?.items || ext.data || []).filter(
                 x => !["ad_account", "supplier", "courier"].includes(x.kind)));
-            setBanks(bnk.data?.items || bnk.data || []);
+            // Phase 4 — also load payment_platform accounts so they can be
+            // selected in the unified entry. Stored as a single flat list
+            // but rendered grouped in the UI.
+            const bankItems = bnk.data?.items || bnk.data || [];
+            let allAccounts = bankItems;
+            try {
+                const pp = await api.get("/accounts?type=payment_platform&limit=200");
+                const ppItems = pp.data?.items || pp.data || [];
+                allAccounts = [...bankItems, ...ppItems];
+            } catch (e) { /* optional */ }
+            setBanks(allAccounts);
             setCategories(cat.data || []);
             if (cat.data?.length) setExpCategory(cat.data[0].code);
         } catch (e) {
@@ -359,7 +369,20 @@ export default function UnifiedEntryScreen() {
                                     className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
                                     data-testid="unified-bank">
                                     <option value="">— اختر —</option>
-                                    {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    <optgroup label="🏦 الحسابات البنكية">
+                                        {banks.filter(b => b.account_type === "bank").map(b =>
+                                            <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    </optgroup>
+                                    <optgroup label="💳 بوابات الدفع">
+                                        {banks.filter(b => b.account_type === "payment_platform").map(b =>
+                                            <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    </optgroup>
+                                    {banks.some(b => b.account_type && !["bank","payment_platform"].includes(b.account_type)) && (
+                                        <optgroup label="📦 أخرى">
+                                            {banks.filter(b => b.account_type && !["bank","payment_platform"].includes(b.account_type)).map(b =>
+                                                <option key={b.id} value={b.id}>{b.name}</option>)}
+                                        </optgroup>
+                                    )}
                                 </select>
                             </div>
                         )}
@@ -370,8 +393,14 @@ export default function UnifiedEntryScreen() {
                                     className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
                                     data-testid="unified-bank-to">
                                     <option value="">— اختر —</option>
-                                    {banks.filter(b => b.id !== bankId).map(b =>
-                                        <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    <optgroup label="🏦 الحسابات البنكية">
+                                        {banks.filter(b => b.account_type === "bank" && b.id !== bankId).map(b =>
+                                            <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    </optgroup>
+                                    <optgroup label="💳 بوابات الدفع">
+                                        {banks.filter(b => b.account_type === "payment_platform" && b.id !== bankId).map(b =>
+                                            <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    </optgroup>
                                 </select>
                             </div>
                         )}
