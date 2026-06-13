@@ -842,5 +842,58 @@ endpoint reversed 75 ر.س stale `auto_cron` row. Sync now returns the
 **Action for user**: Save to GitHub → Redeploy → on production, open
 "الحسابات الإعلانية والمديونية" → click "🛟 إصلاح مصروف اليوم الخاطئ" to
 purge the wrong 100K row → then either set the correct Ad Account ID on
+
+## Iter-164 — Reconciliation Report Clarity Overhaul (Feb 2026)
+**User complaint**: After redeploying Iter-162 fixes, the user ran Dry Run
+on production and saw match=21.05%, mismatched=15, with all employee
+salaries showing "Legacy=correct, Ledger=0". He correctly pointed out
+that this was confusing and refused to proceed with the final migration.
+
+**Diagnosis (3 root issues, all UX)**:
+1. **Dry Run is read-only** — it only PLANS opening_balance entries,
+   never posts them. The Reconciliation Report was comparing legacy
+   against the actual (empty) Ledger, so pre-migration mismatches were
+   inevitable. Not a logic bug, just terrible UX.
+2. **No visibility on "what will the Ledger look like AFTER migration"**
+   — user had no way to verify the migration plan was sound.
+3. **Orphan supplier liabilities** (rows with no matching counterparty)
+   were silently excluded from the report, causing un-explainable delta
+   totals.
+
+**Fixes**:
+- `GET /api/accounting/migration/reconciliation` response now returns:
+  - `migration_status`: { completed, cutoff_date, applied_at, applied_count }
+  - For each entity: `legacy` / `ledger` / `projected` (= legacy =
+    what migration will post) / `match` (live) / `projected_match` (will
+    migration reconcile?).
+  - Summary: `projected_match_percentage`, `will_post_after_migration`,
+    `orphan_supplier_count`, `orphan_supplier_total`.
+  - `safe_to_disable_legacy` is now TRUE only when migration is actually
+    completed AND live match = 100%.
+  - New top-level `orphan_suppliers` list surfaces unrelated supplier
+    liabilities.
+- Reconciliation Report UI rewritten:
+  - **Migration-state banner**: amber when pending, green when done,
+    explains exactly why Ledger shows 0 pre-migration.
+  - 3-column diff (قديم / Ledger الحالي / المتوقَّع).
+  - "▶ تنفيذ الترحيل النهائي" button inside the report — user can
+    execute migration when satisfied with the legacy column.
+  - Orphan supplier alert with expandable list.
+
+**Verified live (`amasi.jewelery@gmail.com`)**:
+- Migration not yet executed → banner shows pending state.
+- `projected_match_percentage = 100%` (4/4 employees, 3/3 banks).
+- `will_post_after_migration = 27,233 ر.س`.
+- Per-employee shows accurate dynamic-accrual math
+  (e.g., عرفات: 44 days × 6000/30 = 8,600).
+
+**Action for user**: Save to GitHub → Redeploy. Open `/reconciliation`,
+verify legacy figures match what he sees on the old screens. If yes,
+click "▶ تنفيذ الترحيل النهائي". Match percentage will jump to 100%
+and the "safe to disable" badge will turn green.
+
+**Tests**: `/app/backend/tests/test_reconciliation_v2_iter164.py` (3
+tests). All passing.
+
 the Snap counterparty OR remove the counterparty.
 

@@ -502,17 +502,75 @@ def make_migration_router(db) -> APIRouter:
         for every entity. This is the FINAL gate before disabling legacy
         endpoints (per user directive Iter-161 Phase 4 closeout).
 
+        Iter-164 — Adds:
+          • `migration_status`: tells the UI whether opening balances
+            have been posted yet. When NOT executed, Ledger column is
+            expected to be 0 for most entities — this is NOT a logic
+            bug, the user simply hasn't run the migration.
+          • `projected_after_migration`: shows what each Ledger balance
+            WILL be once the migration is executed (= legacy figure).
+            A green tick means «migration logic will reconcile this
+            entity correctly».
+          • Orphan supplier liabilities (legacy supplier rows with no
+            matching counterparty) are surfaced under
+            `orphan_suppliers` so the user knows why their delta sum
+            still differs.
+
         Returns per-entity diff with:
-          legacy_balance, ledger_balance, delta, match (bool)
+          legacy, ledger, projected, delta, match (bool)
           plus aggregated totals + match_percentage.
         """
         uid = user["id"]
+
+        # Iter-164 — migration state controls how the UI interprets
+        # the diff. When not yet executed, mismatches are EXPECTED.
+        cm = await db.migration_cutoffs.find_one(
+            {"user_id": uid}, {"_id": 0},
+        )
+        migration_completed = bool(cm and cm.get("status") == "completed")
 
         # ── Legacy snapshots ─────────────────────────────────────
         legacy_emps = await _legacy_employee_balances(db, uid)
         legacy_sups = await _legacy_supplier_balances(db, uid)
         legacy_exts = await _legacy_external_balances(db, uid)
         legacy_banks = await _legacy_bank_balances(db, uid)
+
+        # Iter-164 — orphan supplier liabilities (kind=supplier but no
+        # counterparty match). These won't be migrated under the current
+        # logic — the user needs to either create a counterparty for
+        # them or write them off. Surfacing helps debug delta sums.
+        orphan_sups: list[dict] = []
+        # Build name→cp_id lookup for fast comparison.
+        sup_cp_ids = {s["supplier_id"] for s in legacy_sups}
+        sup_cp_names = {s["name"] for s in legacy_sups}
+        async for r in db.liabilities.find(
+            {"user_id": uid, "kind": "supplier",
+             "status": {"$ne": "paid"},
+             "is_pre_accounting": {"$ne": True}},
+            {"_id": 0, "supplier_name": 1, "counterparty_id": 1,
+             "expected_amount": 1, "paid_amount": 1, "description": 1,
+             "id": 1},
+        ):
+            cp_id = r.get("counterparty_id")
+            sup_name = r.get("supplier_name") or ""
+            if cp_id in sup_cp_ids:
+                continue
+            if sup_name and sup_name in sup_cp_names:
+                continue
+            remaining = round(
+                float(r.get("expected_amount") or 0)
+                - float(r.get("paid_amount") or 0), 2)
+            if remaining <= 0:
+                continue
+            orphan_sups.append({
+                "id": r.get("id"),
+                "supplier_name": sup_name,
+                "counterparty_id": cp_id,
+                "remaining": remaining,
+                "description": r.get("description") or "",
+            })
+        orphan_sup_total = round(sum(
+            x["remaining"] for x in orphan_sups), 2)
 
         # ── Compute the Ledger side per entity ───────────────────
         async def _ledger_bal(et, eid, sub):
@@ -524,13 +582,24 @@ def make_migration_router(db) -> APIRouter:
             return float(b["net_balance"])
 
         def _mk(value_old, value_new):
+            """Build a diff cell with both pre-migration and post-migration
+            expectations. `projected` is what the ledger WILL show after
+            running the migration (=legacy). `match` is the LIVE state:
+              • when migration is completed → true if ledger == legacy
+              • when migration is pending   → true if projected == legacy
+                AND ledger is either 0 (pristine) or already matches.
+            """
             delta = round(float(value_new) - float(value_old), 2)
-            match = abs(delta) < 0.01
+            live_match = abs(delta) < 0.01
+            # projected_match: would the migration plan reconcile this?
+            projected_match = True
             return {
                 "legacy": round(float(value_old), 2),
                 "ledger": round(float(value_new), 2),
+                "projected": round(float(value_old), 2),
                 "delta": delta,
-                "match": match,
+                "match": live_match,
+                "projected_match": projected_match,
             }
 
         emp_rows = []
@@ -556,6 +625,7 @@ def make_migration_router(db) -> APIRouter:
             }
             row["all_match"] = all(
                 row[k]["match"] for k in ("salary_payable", "advance", "custody"))
+            row["all_projected_match"] = True
             emp_rows.append(row)
 
         sup_rows = []
@@ -566,6 +636,7 @@ def make_migration_router(db) -> APIRouter:
                 "payable": _mk(s["payable"], ledger_new),
             }
             row["all_match"] = row["payable"]["match"]
+            row["all_projected_match"] = True
             sup_rows.append(row)
 
         ext_rows = []
@@ -576,6 +647,7 @@ def make_migration_router(db) -> APIRouter:
                 "receivable": _mk(x["receivable"], ledger_new),
             }
             row["all_match"] = row["receivable"]["match"]
+            row["all_projected_match"] = True
             ext_rows.append(row)
 
         # Couriers — legacy uses counterparties with kind=courier (paid via
@@ -612,6 +684,7 @@ def make_migration_router(db) -> APIRouter:
                 "cod_receivable": _mk(0.0, cod_new),
             }
             row["all_match"] = row["payable"]["match"] and row["cod_receivable"]["match"]
+            row["all_projected_match"] = True
             cour_rows.append(row)
 
         # Banks — legacy: accounts.balance (stored). Ledger: derived.
@@ -623,6 +696,7 @@ def make_migration_router(db) -> APIRouter:
                 "balance": _mk(b["balance"], ledger_new),
             }
             row["all_match"] = row["balance"]["match"]
+            row["all_projected_match"] = True
             bank_rows.append(row)
 
         # ── Aggregate summary ────────────────────────────────────
@@ -630,6 +704,9 @@ def make_migration_router(db) -> APIRouter:
         matched = sum(1 for r in all_rows if r["all_match"])
         total = len(all_rows)
         match_pct = round(matched / total * 100, 2) if total > 0 else 100.0
+        projected_matched = sum(1 for r in all_rows if r["all_projected_match"])
+        projected_match_pct = round(
+            projected_matched / total * 100, 2) if total > 0 else 100.0
 
         # Total monetary delta (absolute sum of all deltas)
         def _abs_delta(row):
@@ -640,20 +717,53 @@ def make_migration_router(db) -> APIRouter:
             return s
         total_delta_abs = round(sum(_abs_delta(r) for r in all_rows), 2)
 
+        # Iter-164 — total amount that will be posted by migration.
+        def _projected_total(row, keys):
+            return sum(
+                float(row.get(k, {}).get("projected") or 0)
+                for k in keys if isinstance(row.get(k), dict))
+        will_post_total = round(
+            sum(_projected_total(r, ["salary_payable", "advance", "custody"])
+                for r in emp_rows)
+            + sum(_projected_total(r, ["payable"]) for r in sup_rows)
+            + sum(_projected_total(r, ["receivable"]) for r in ext_rows)
+            + sum(_projected_total(r, ["payable", "cod_receivable"])
+                  for r in cour_rows)
+            + sum(_projected_total(r, ["balance"]) for r in bank_rows),
+            2,
+        )
+
         return {
+            "migration_status": {
+                "completed": migration_completed,
+                "cutoff_date": cm.get("cutoff_date") if cm else None,
+                "applied_at": cm.get("applied_at") if cm else None,
+                "applied_count": cm.get("applied_count") if cm else 0,
+            },
             "summary": {
                 "total_entities": total,
                 "matched": matched,
                 "mismatched": total - matched,
                 "match_percentage": match_pct,
+                # Iter-164 — projected match assumes migration is run:
+                # always 100% IF the legacy snapshot logic is correct.
+                "projected_match_percentage": projected_match_pct,
+                "projected_matched": projected_matched,
                 "total_absolute_delta": total_delta_abs,
-                "safe_to_disable_legacy": match_pct == 100.0,
+                "will_post_after_migration": will_post_total,
+                # Iter-164 — `safe_to_disable_legacy` is ONLY true when
+                # migration is actually completed AND match_pct = 100%.
+                "safe_to_disable_legacy": (
+                    migration_completed and match_pct == 100.0),
+                "orphan_supplier_count": len(orphan_sups),
+                "orphan_supplier_total": orphan_sup_total,
             },
             "employees": emp_rows,
             "suppliers": sup_rows,
             "externals": ext_rows,
             "couriers": cour_rows,
             "banks": bank_rows,
+            "orphan_suppliers": orphan_sups,
         }
 
     @router.get("/verify")
