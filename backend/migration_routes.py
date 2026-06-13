@@ -31,6 +31,15 @@ from ledger_core import (
     post_ledger_entry,
     compute_balance,
 )
+# Iter-162 — reuse the EXACT same legacy calculators that the user sees
+# on the المركز المالي screen (dynamic salary accrual per actual days
+# worked). The migration script MUST mirror this logic perfectly so the
+# Reconciliation Report can reach 100% match on production data.
+from liabilities_routes import (
+    _compute_employee_accrual,
+    _round as _liab_round,
+)
+from tz_utils import riyadh_today
 
 
 def _now() -> str:
@@ -43,80 +52,144 @@ def _round(v) -> float:
 
 # ── Legacy balance snapshot ────────────────────────────────────────
 async def _legacy_employee_balances(db, user_id: str) -> list[dict]:
-    """Per-employee: salary_payable, advance, custody from legacy data.
-    Uses liabilities (kind=salary, salary_advance) and operating_salaries."""
+    """Per-employee: salary_payable, advance, custody.
+
+    Iter-162 — Rewritten to mirror `_aggregate_salary_accrual` in
+    `liabilities_routes.py` EXACTLY so the migration matches the legacy
+    "تجميع الرواتب" screen 100 %:
+
+      • salary_payable = max(0, dynamic_accrued − cash_paid)
+          - dynamic_accrued: `_compute_employee_accrual(emp).accrued`
+            (daily rate × days worked across calendar months).
+          - cash_paid: sum of (paid_amount − advance_deducted) from
+            liabilities.kind=salary for THAT employee (real bank cash).
+      • advance = sum of (expected_amount − consumed_amount) on OPEN
+        salary_advance liabilities (matches the «outstanding_advance»
+        figure shown in the legacy summary).
+      • custody = 0.0 (no legacy concept).
+
+    Only category="employee" rows from operating_salaries participate,
+    matching `_aggregate_salary_accrual`.
+    """
+    today = riyadh_today()
     emps = await db.operating_salaries.find(
-        {"user_id": user_id}, {"_id": 0},
+        {"user_id": user_id, "category": "employee"}, {"_id": 0},
     ).to_list(500)
     out: list[dict] = []
     for emp in emps:
-        # Salary payable = open salary liabilities, expected-paid
-        sal_agg = await db.liabilities.aggregate([
+        # 1) Dynamic accrued amount (daily-rate per actual days worked)
+        calc = _compute_employee_accrual(emp, today=today)
+        accrued = _round(calc["accrued"])
+
+        # 2) Cash actually paid on this employee's salary liabilities
+        paid_agg = await db.liabilities.aggregate([
             {"$match": {"user_id": user_id, "kind": "salary",
-                          "employee_salary_id": emp["id"]}},
+                         "employee_salary_id": emp["id"]}},
             {"$group": {"_id": None,
-                          "expected": {"$sum": "$expected_amount"},
-                          "paid": {"$sum": "$paid_amount"},
-                          "adv_deducted": {"$sum": {"$ifNull": [
-                              "$advance_deducted", 0]}}}},
+                         "paid": {"$sum": "$paid_amount"},
+                         "adv_deducted": {"$sum": {"$ifNull": [
+                             "$advance_deducted", 0]}}}}
         ]).to_list(1)
-        payable = 0.0
-        if sal_agg:
-            payable = _round(
-                (sal_agg[0]["expected"] or 0)
-                - (sal_agg[0]["paid"] or 0)
-                - (sal_agg[0]["adv_deducted"] or 0)
+        cash_paid = 0.0
+        if paid_agg:
+            cash_paid = _round(
+                (paid_agg[0]["paid"] or 0)
+                - (paid_agg[0]["adv_deducted"] or 0)
             )
-            if payable < 0:
-                payable = 0.0
+            if cash_paid < 0:
+                cash_paid = 0.0
 
-        # Open advances = paid_amount of open advance rows
-        adv_agg = await db.liabilities.aggregate([
-            {"$match": {"user_id": user_id, "kind": "salary_advance",
-                          "employee_salary_id": emp["id"],
-                          "advance_status": "open"}},
-            {"$group": {"_id": None,
-                          "paid": {"$sum": "$paid_amount"}}}
-        ]).to_list(1)
-        advance = _round(adv_agg[0]["paid"]) if adv_agg else 0.0
+        payable = _round(max(0.0, accrued - cash_paid))
 
-        # Custody = there's no legacy concept — start at 0
+        # 3) Outstanding advances — sum of remaining on OPEN advance
+        #    rows, matching `_aggregate_salary_accrual`:
+        #       remaining = expected_amount − consumed_amount
+        advance = 0.0
+        async for adv in db.liabilities.find(
+            {"user_id": user_id, "kind": "salary_advance",
+             "employee_salary_id": emp["id"],
+             "advance_status": "open"},
+            {"_id": 0, "expected_amount": 1, "consumed_amount": 1},
+        ):
+            remaining = _round(
+                _round(adv.get("expected_amount"))
+                - _round(adv.get("consumed_amount"))
+            )
+            if remaining > 0:
+                advance += remaining
+        advance = _round(advance)
+
         custody = 0.0
         out.append({
             "employee_id": emp["id"], "name": emp.get("name"),
             "salary_payable": payable,
             "advance": advance,
             "custody": custody,
+            # Diagnostic fields surfaced so the Reconciliation Report
+            # can show WHY a balance is what it is.
+            "_accrued": accrued,
+            "_cash_paid": cash_paid,
+            "_days_worked": calc["days_worked"],
+            "_accrual_start": calc.get("start_date"),
+            "_accrual_end": calc.get("end_date"),
+            "_monthly_amount": _round(emp.get("monthly_amount")),
         })
     return out
 
 
 async def _legacy_supplier_balances(db, user_id: str) -> list[dict]:
+    """Per-supplier outstanding payable.
+
+    Iter-162 — Mirror the EXACT filter used by `/api/liabilities/summary`:
+        kind=supplier AND status!=paid AND is_pre_accounting!=True
+        remaining = expected_amount − paid_amount  (only if > 0)
+
+    The legacy schema links a supplier liability to a counterparty either
+    via `counterparty_id` OR (older rows) only via the free-text
+    `supplier_name` matching the counterparty's name — both linkages
+    are honoured here.
+    """
     cps = await db.counterparties.find(
         {"user_id": user_id, "kind": "supplier"}, {"_id": 0},
     ).to_list(500)
     out: list[dict] = []
     for cp in cps:
-        agg = await db.liabilities.aggregate([
-            {"$match": {"user_id": user_id, "kind": "supplier",
-                          "counterparty_id": cp["id"]}},
-            {"$group": {"_id": None,
-                          "expected": {"$sum": "$expected_amount"},
-                          "paid": {"$sum": "$paid_amount"}}},
-        ]).to_list(1)
         owed = 0.0
-        if agg:
-            owed = _round((agg[0]["expected"] or 0) - (agg[0]["paid"] or 0))
-            if owed < 0:
-                owed = 0.0
+        async for r in db.liabilities.find(
+            {
+                "user_id": user_id,
+                "kind": "supplier",
+                "status": {"$ne": "paid"},
+                "is_pre_accounting": {"$ne": True},
+                "$or": [
+                    {"counterparty_id": cp["id"]},
+                    {"supplier_name": cp.get("name")},
+                ],
+            },
+            {"_id": 0, "expected_amount": 1, "paid_amount": 1},
+        ):
+            remaining = _round(
+                _round(r.get("expected_amount"))
+                - _round(r.get("paid_amount"))
+            )
+            if remaining > 0:
+                owed += remaining
         out.append({
             "supplier_id": cp["id"], "name": cp.get("name"),
-            "payable": owed,
+            "payable": _round(owed),
         })
     return out
 
 
 async def _legacy_external_balances(db, user_id: str) -> list[dict]:
+    """Per-external receivable (money owed TO the merchant).
+
+    Iter-162 — Mirrors the legacy filter:
+        kind=receivable AND status!=paid
+        remaining = expected_amount − paid_amount  (only if > 0)
+
+    Linkage by `counterparty_id` or by `counterparty_name`.
+    """
     cps = await db.counterparties.find(
         {"user_id": user_id, "kind": {"$nin": [
             "ad_account", "supplier", "courier"]}},
@@ -124,24 +197,28 @@ async def _legacy_external_balances(db, user_id: str) -> list[dict]:
     ).to_list(500)
     out: list[dict] = []
     for cp in cps:
-        # Receivables (kind=receivable on liabilities, tied via
-        # counterparty_id or counterparty_name)
-        agg = await db.liabilities.aggregate([
-            {"$match": {"user_id": user_id, "kind": "receivable",
-                          "$or": [
-                              {"counterparty_id": cp["id"]},
-                              {"counterparty_name": cp.get("name")},
-                          ]}},
-            {"$group": {"_id": None,
-                          "expected": {"$sum": "$expected_amount"},
-                          "paid": {"$sum": "$paid_amount"}}},
-        ]).to_list(1)
         owed = 0.0
-        if agg:
-            owed = _round((agg[0]["expected"] or 0) - (agg[0]["paid"] or 0))
+        async for r in db.liabilities.find(
+            {
+                "user_id": user_id,
+                "kind": "receivable",
+                "status": {"$ne": "paid"},
+                "$or": [
+                    {"counterparty_id": cp["id"]},
+                    {"counterparty_name": cp.get("name")},
+                ],
+            },
+            {"_id": 0, "expected_amount": 1, "paid_amount": 1},
+        ):
+            remaining = _round(
+                _round(r.get("expected_amount"))
+                - _round(r.get("paid_amount"))
+            )
+            if remaining > 0:
+                owed += remaining
         out.append({
             "person_id": cp["id"], "name": cp.get("name"),
-            "receivable": owed,
+            "receivable": _round(owed),
         })
     return out
 
@@ -466,6 +543,16 @@ def make_migration_router(db) -> APIRouter:
                 "salary_payable": _mk(e["salary_payable"], sp_new),
                 "advance":        _mk(e["advance"], adv_new),
                 "custody":        _mk(e["custody"], cust_new),
+                # Iter-162 — surface the dynamic-accrual breakdown so the
+                # user can audit each employee's salary_payable figure.
+                "breakdown": {
+                    "monthly_amount": e.get("_monthly_amount", 0),
+                    "accrual_start": e.get("_accrual_start"),
+                    "accrual_end":   e.get("_accrual_end"),
+                    "days_worked":   e.get("_days_worked", 0),
+                    "accrued":       e.get("_accrued", 0),
+                    "cash_paid":     e.get("_cash_paid", 0),
+                },
             }
             row["all_match"] = all(
                 row[k]["match"] for k in ("salary_payable", "advance", "custody"))

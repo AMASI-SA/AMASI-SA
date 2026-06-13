@@ -80,7 +80,7 @@ export default function ReconciliationReport() {
                     { key: "salary_payable", label: "راتب مستحق" },
                     { key: "advance", label: "سلفة" },
                     { key: "custody", label: "عهدة" },
-                ]} />
+                ]} showBreakdown={true} />
                 <Section title="🏭 الموردون" rows={data.suppliers} columns={[
                     { key: "payable", label: "المستحق" },
                 ]} />
@@ -108,7 +108,7 @@ function SumCard({ label, value, color, suffix }) {
     );
 }
 
-function Section({ title, rows, columns }) {
+function Section({ title, rows, columns, showBreakdown }) {
     if (!rows || rows.length === 0) {
         return (
             <div className="mb-6">
@@ -139,27 +139,49 @@ function Section({ title, rows, columns }) {
                     </thead>
                     <tbody>
                         {rows.map(r => (
-                            <tr key={r.id}
-                                className={`border-b border-slate-100 ${r.all_match ? "" : "bg-rose-50/40"}`}>
-                                <td className="py-1.5 px-2 font-bold">{r.name}</td>
-                                {columns.map(col => {
-                                    const f = r[col.key] || { legacy: 0, ledger: 0, delta: 0, match: true };
-                                    return (
-                                        <React.Fragment key={col.key}>
-                                            <td className="text-left py-1.5 px-1 num">{fmt(f.legacy)}</td>
-                                            <td className="text-left py-1.5 px-1 num">{fmt(f.ledger)}</td>
-                                            <td className={`text-center py-1.5 px-1 num font-bold ${f.match ? "text-slate-400" : "text-rose-700"}`}>
-                                                {f.match ? "—" : fmt(f.delta)}
-                                            </td>
-                                        </React.Fragment>
-                                    );
-                                })}
-                                <td className="text-center py-1.5 px-2">
-                                    {r.all_match
-                                        ? <span className="text-emerald-700 font-extrabold">✓</span>
-                                        : <span className="text-rose-700 font-extrabold">✗</span>}
-                                </td>
-                            </tr>
+                            <React.Fragment key={r.id}>
+                                <tr
+                                    className={`border-b border-slate-100 ${r.all_match ? "" : "bg-rose-50/40"}`}>
+                                    <td className="py-1.5 px-2 font-bold">{r.name}</td>
+                                    {columns.map(col => {
+                                        const f = r[col.key] || { legacy: 0, ledger: 0, delta: 0, match: true };
+                                        return (
+                                            <React.Fragment key={col.key}>
+                                                <td className="text-left py-1.5 px-1 num">{fmt(f.legacy)}</td>
+                                                <td className="text-left py-1.5 px-1 num">{fmt(f.ledger)}</td>
+                                                <td className={`text-center py-1.5 px-1 num font-bold ${f.match ? "text-slate-400" : "text-rose-700"}`}>
+                                                    {f.match ? "—" : fmt(f.delta)}
+                                                </td>
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                    <td className="text-center py-1.5 px-2">
+                                        {r.all_match
+                                            ? <span className="text-emerald-700 font-extrabold">✓</span>
+                                            : <span className="text-rose-700 font-extrabold">✗</span>}
+                                    </td>
+                                </tr>
+                                {showBreakdown && r.breakdown && (
+                                    <tr className="bg-slate-50/60 border-b border-slate-100"
+                                        data-testid={`emp-breakdown-${r.id}`}>
+                                        <td colSpan={columns.length * 3 + 2}
+                                            className="py-1.5 px-2 text-[11px] text-slate-600">
+                                            <span className="font-bold text-slate-700">تفصيل الراتب المستحق:</span>
+                                            <span className="mx-2">راتب شهري: <span className="num font-bold">{fmt(r.breakdown.monthly_amount)}</span></span>
+                                            ·
+                                            <span className="mx-2">من <span className="num">{r.breakdown.accrual_start || "—"}</span> إلى <span className="num">{r.breakdown.accrual_end || "—"}</span></span>
+                                            ·
+                                            <span className="mx-2">أيام عمل: <span className="num font-bold">{r.breakdown.days_worked}</span></span>
+                                            ·
+                                            <span className="mx-2">مستحق: <span className="num font-bold">{fmt(r.breakdown.accrued)}</span></span>
+                                            ·
+                                            <span className="mx-2">نقد مدفوع: <span className="num font-bold">{fmt(r.breakdown.cash_paid)}</span></span>
+                                            ·
+                                            <span className="mx-2 text-slate-800">صافي = <span className="num font-extrabold">{fmt(Math.max(0, (r.breakdown.accrued || 0) - (r.breakdown.cash_paid || 0)))}</span></span>
+                                        </td>
+                                    </tr>
+                                )}
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>

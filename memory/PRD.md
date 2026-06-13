@@ -779,3 +779,31 @@ All ad-spend on Dashboard now reads strictly from `ad_account_ledger.type=spend`
 - **Empty list vs absent in DB**: `[]` = user cleared. `key missing` = use defaults.
 - **Cloudflare 524**: wrap long-running endpoints in `try/except` returning JSON.
 - **Production access**: agent edits Preview only. User redeploys.
+
+## Iter-162 — Migration Dynamic Salary Accrual Fix (Feb 2026)
+**Problem (reported on production)**: Reconciliation Report showed 13 mismatches
+because `migration_routes._legacy_employee_balances` was reading STATIC rows
+from the `liabilities` table while the legacy `salary-accrual-summary` endpoint
+calculates accrued salaries DYNAMICALLY (`monthly_amount / days_in_month × actual_days_worked`).
+User reported: عرفات 8,600 (44 days), خالد 8,600, عزوز 5,733.33, ابو جمال 4,300.
+
+**Fix**:
+- `_legacy_employee_balances` now uses `_compute_employee_accrual` (same code path
+  as `_aggregate_salary_accrual`). `salary_payable = max(0, accrued − cash_paid)`.
+- Advances now use `expected_amount − consumed_amount` (was `paid_amount`).
+- Filter `category='employee'` on `operating_salaries` (was unfiltered).
+- `_legacy_supplier_balances` now filters `status!=paid` AND `is_pre_accounting!=True`
+  and matches via `counterparty_id` OR `supplier_name` (older rows without id).
+- Returns diagnostic fields (`_accrued`, `_cash_paid`, `_days_worked`, etc.) so the
+  Reconciliation Report can show per-employee breakdown.
+- New tests: `/app/backend/tests/test_migration_dynamic_accrual_iter162.py` (4 tests, all pass).
+- Reconciliation Report UI now displays the breakdown row for each employee under
+  the salary row.
+
+**Verified on production data**: عرفات now correctly shows 8,600 / 44 days; same
+as the legacy `تجميع الرواتب` screen. User must run Migration (`dry_run=false`)
+to post opening balances; then the Report will reach 100% match.
+
+**Pending**: User to re-run Dry Run + Migration after redeploy, then approve Phase 4
+closeout (disable legacy `pay`/`collect`/`delete` endpoints).
+
