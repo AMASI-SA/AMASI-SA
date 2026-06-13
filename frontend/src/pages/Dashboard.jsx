@@ -33,6 +33,7 @@ import { ALL_KPI_CARDS } from "../lib/dashboardCards";
 import ProductCostCard from "../components/ProductCostCard";
 import ProfitSummaryCard from "../components/ProfitSummaryCard";
 import SnapchatOfficialCard from "../components/SnapchatOfficialCard";
+import SnapchatAccountsCards from "../components/SnapchatAccountsCards";
 import AlertsCard from "../components/AlertsCard";
 import ElectronicNetDebugModal from "../components/ElectronicNetDebugModal";
 
@@ -974,6 +975,12 @@ export default function Dashboard() {
                                 `snapchat_reference_stats`. Never feeds any system
                                 calculation — purely for visual comparison. */}
                             <SnapchatOfficialCard />
+
+                            {/* Iter-159j — Per-Snapchat-ad-account cards.
+                                Only renders when the user has ≥2 Snapchat accounts.
+                                Shows month spend / orders / avg cost / sales /
+                                credit-limit per account. */}
+                            <SnapchatAccountsCards />
 
                             {/* Footer: link to detailed report */}
                             <div className="mt-4 flex justify-end">

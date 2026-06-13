@@ -2846,6 +2846,105 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     }
 
 
+# ── Iter-159j — Per-Snapchat-account dashboard summary ─────────────────
+# Same numbers as `snapchat-summary` but BROKEN OUT per ad-account so the
+# merchant can see each account's contribution independently in the
+# dashboard. Orders + revenue are prorated by spend share (Snapchat Pixel
+# doesn't report which ad-account drove each conversion).
+@api.get("/dashboard/snapchat-accounts-summary")
+async def snapchat_accounts_summary(user: dict = Depends(current_user)):
+    uid = user["id"]
+    today_d = _local_today_date()
+    today_str = today_d.isoformat()
+    month_start_str = today_str[:8] + "01"
+
+    # All snapchat ad-account counterparties for this user.
+    accts = await db.counterparties.find(
+        {"user_id": uid, "kind": "ad_account", "ad_provider": "snapchat"},
+        {"_id": 0, "id": 1, "name": 1, "external_account_id": 1,
+         "credit_limit": 1, "alert_threshold_pct": 1},
+    ).sort("name", 1).to_list(50)
+
+    if not accts:
+        return {"accounts": [], "month_start": month_start_str,
+                "today": today_str}
+
+    # Per-account month spend — from ad_account_ledger.type=spend.
+    spend_pipeline = await db.ad_account_ledger.aggregate([
+        {"$match": {"user_id": uid, "type": "spend",
+                    "date": {"$gte": month_start_str, "$lte": today_str},
+                    "counterparty_id": {"$in": [a["id"] for a in accts]}}},
+        {"$group": {"_id": "$counterparty_id",
+                    "spend": {"$sum": "$amount"}}},
+    ]).to_list(100)
+    spend_by_acct = {r["_id"]: float(r["spend"] or 0) for r in spend_pipeline}
+
+    # Combined Snapchat orders + revenue this month (Pixel → fallback store).
+    snap_stats = await db.snapchat_daily_stats.find(
+        {"user_id": uid, "date": {"$gte": month_start_str, "$lte": today_str}},
+        {"_id": 0, "purchases": 1, "revenue": 1},
+    ).to_list(60)
+    total_orders = sum(int(r.get("purchases") or 0) for r in snap_stats)
+    total_revenue = round(
+        sum(float(r.get("revenue") or 0) for r in snap_stats), 2)
+    if total_orders == 0 and total_revenue == 0:
+        # Fallback to store attribution
+        total_orders, total_revenue = await _attributed_orders_from_store(
+            db, uid, ("snapchat", "snap"), month_start_str, today_str,
+        )
+
+    total_spend = round(sum(spend_by_acct.values()), 2)
+
+    # Per-account open debt (for the "near limit" indicator).
+    debt_pipeline = await db.liabilities.aggregate([
+        {"$match": {"user_id": uid, "kind": "ad_account",
+                    "counterparty_id": {"$in": [a["id"] for a in accts]},
+                    "status": {"$in": ["unpaid", "partial"]}}},
+        {"$group": {"_id": "$counterparty_id",
+                    "open": {"$sum": {"$subtract": [
+                        "$expected_amount", "$paid_amount"]}}}},
+    ]).to_list(100)
+    debt_by_acct = {r["_id"]: round(float(r["open"] or 0), 2)
+                    for r in debt_pipeline}
+
+    rows = []
+    for a in accts:
+        spend = round(spend_by_acct.get(a["id"], 0.0), 2)
+        share = (spend / total_spend) if total_spend > 0 else 0
+        # Prorate orders + revenue by spend share. When the merchant has
+        # only one account, this is 100 %; if total_spend is 0 we
+        # don't pretend the account drove anything.
+        acc_orders = int(round(total_orders * share)) if share else 0
+        acc_revenue = round(total_revenue * share, 2) if share else 0.0
+        cpo = round(spend / acc_orders, 2) if acc_orders > 0 and spend > 0 else None
+        roas = round(acc_revenue / spend, 2) if spend > 0 else 0.0
+        rows.append({
+            "id": a["id"],
+            "name": a.get("name"),
+            "external_account_id": a.get("external_account_id"),
+            "spend": spend,
+            "spend_share_pct": round(share * 100, 1),
+            "orders": acc_orders,
+            "revenue": acc_revenue,
+            "cost_per_order": cpo,
+            "roas": roas,
+            "open_debt": debt_by_acct.get(a["id"], 0.0),
+            "credit_limit": a.get("credit_limit"),
+            "alert_threshold_pct": a.get("alert_threshold_pct"),
+        })
+
+    return {
+        "accounts": rows,
+        "month_start": month_start_str,
+        "today": today_str,
+        "totals": {
+            "spend": total_spend,
+            "orders": total_orders,
+            "revenue": total_revenue,
+        },
+    }
+
+
 # ── Meta Ads dashboard summary ────────────────────────────────────────────────
 @api.get("/dashboard/meta-summary")
 async def meta_summary(user: dict = Depends(current_user)):

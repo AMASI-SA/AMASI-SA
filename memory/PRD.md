@@ -29,6 +29,26 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159j (Feb 13 2026)**: 👻 بطاقات منفصلة لكل حساب سناب شات في لوحة التحكم.
+  - **User request**: "فصل بطاقة الحسابات الإعلانية سناب شات في لوحة التحكم كل حساب يكون مستقل: الصرف، الطلبات، متوسط تكلفة الطلب، المبيعات، الصرف خلال الشهر الحالي. بدون التعديل على البطاقة الحالية".
+  - **Backend** — endpoint جديد `GET /api/dashboard/snapchat-accounts-summary`:
+    - يجلب كل حسابات سناب الإعلانية (`counterparties.ad_provider=snapchat`).
+    - **الصرف**: من `ad_account_ledger.type=spend` للشهر الحالي مجمَّعاً لكل counterparty.
+    - **الطلبات والمبيعات**: من `snapchat_daily_stats` (Pixel) أو fallback لـ store attribution، مع **تقسيم proportional حسب نسبة صرف كل حساب** (لأن Pixel لا يعطي per-account breakdown).
+    - **متوسط تكلفة الطلب**: spend ÷ orders.
+    - **ROAS**: revenue ÷ spend.
+    - **المديونية والحد الائتماني**: من `liabilities` و `counterparties.credit_limit`.
+  - **Frontend** — مكوّن `SnapchatAccountsCards.jsx`:
+    - بطاقة مستقلة في الـ Dashboard **بعد** `SnapchatOfficialCard` (بدون لمسها).
+    - تظهر فقط عند وجود ≥ 2 حسابات سناب (تجنّب التكرار).
+    - Grid بـ 2 أعمدة، كل بطاقة فيها: اسم الحساب، نسبة الصرف (badge)، 4 إحصائيات ملوّنة (الصرف/الطلبات/متوسط تكلفة الطلب/المبيعات+ROAS)، شريط مديونية ملوّن، رابط «إدارة الحساب →».
+  - **التحقق**:
+    - Snap A: spend=1500 (65.2%) → orders=15, CPO=100, revenue=3000, ROAS=2.0× ✅
+    - Snap B: spend=800 (34.8%) → orders=8, CPO=100, revenue=1600, ROAS=2.0× ✅
+    - Test pytest نجح بـ split 75/25 لمدخلات spend=1500+500=2000 و orders=20 ✅
+    - اللقطة من Preview تؤكد ظهور البطاقتين بـ البطاقة الأصلية فوقها سليمة.
+
+
 - **Iter-159i (Feb 13 2026)**: 💳 حد المديونية ونسبة الصرف لكل حساب إعلاني.
   - **User request**: "لكل حساب إعلاني — حد المديونية الحد المسموح مبلغ ونسبة الصرف التي يظهر بعدها الإشعار بأن المديونية على وشك النفاذ".
   - **Backend**:
