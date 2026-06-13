@@ -3449,7 +3449,7 @@ async def on_startup():
     # uses force=True so each pass reverses prior cron rows for the
     # same day and applies fresh totals — ad-balance + ad-liability
     # stay near-realtime without double-counting.
-    from ad_account_routes import run_daily_cron
+    from ad_account_routes import run_daily_cron, run_yesterday_final_sync
     import asyncio as _asyncio
     from datetime import datetime as _dt, timedelta as _td
 
@@ -3468,6 +3468,23 @@ async def on_startup():
                     result.get("users_processed", 0),
                     result.get("today"),
                 )
+                # Iter-159k — once per day, finalise YESTERDAY's spend
+                # to catch delayed conversions/impressions posted after
+                # midnight.  Idempotent via the per-user marker.
+                try:
+                    y_result = await run_yesterday_final_sync(db)
+                    if y_result.get("users_processed", 0) > 0:
+                        logger.info(
+                            "iter-159k: yesterday final sync done — "
+                            "%d users processed (yesterday=%s)",
+                            y_result["users_processed"],
+                            y_result["yesterday"],
+                        )
+                except Exception as _e:
+                    logger.warning(
+                        "iter-159k: yesterday sync failed: %s", _e,
+                    )
+
                 # Persist run report so the UI / diagnostics can show
                 # the last successful pass.
                 try:

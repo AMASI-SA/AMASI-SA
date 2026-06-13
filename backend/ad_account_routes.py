@@ -2175,3 +2175,54 @@ async def run_daily_cron(db) -> dict:
         users_done.append({"user_id": cp["user_id"], "results": results})
     return {"ran_at": _now(), "today": today,
             "users_processed": len(users_done), "details": users_done}
+
+
+# ── Iter-159k — Final sync for YESTERDAY (runs once per day) ───────────
+# The half-hour cron above only syncs `today`.  At midnight Riyadh time
+# we still need one last pull for the *previous* day to ensure delayed
+# platform impressions (Snapchat/Meta sometimes post conversions 2-6 h
+# after midnight) are captured.  This task is idempotent thanks to the
+# cumulative-ledger logic (Iter-159f) — running it again on the same
+# day is a no-op when no new platform data arrived.
+async def run_yesterday_final_sync(db) -> dict:
+    """For each user with ad accounts, do ONE final sync for the
+    Riyadh-yesterday date.  A `last_yesterday_sync_date` marker on the
+    counterparty prevents running more than once per calendar day.
+    """
+    from datetime import timedelta as _td
+    today = riyadh_today_iso()
+    yesterday = (datetime.fromisoformat(today) - _td(days=1)) \
+        .date().isoformat()
+    users_done = []
+    seen_users = set()
+    async for cp in db.counterparties.find(
+        {"kind": "ad_account"},
+        {"_id": 0, "user_id": 1, "last_yesterday_sync_date": 1},
+    ):
+        uid = cp["user_id"]
+        if uid in seen_users:
+            continue
+        seen_users.add(uid)
+        # Guard: if any account for this user already finalised yesterday
+        # today, skip the whole batch.
+        marker = await db.counterparties.find_one(
+            {"user_id": uid, "kind": "ad_account",
+             "last_yesterday_sync_date": today,
+             "last_yesterday_synced_for": yesterday},
+            {"_id": 0, "id": 1},
+        )
+        if marker:
+            continue
+        results = await _run_sync_for_all(
+            db, uid, yesterday, yesterday, force=True,
+        )
+        await db.counterparties.update_many(
+            {"user_id": uid, "kind": "ad_account"},
+            {"$set": {"last_yesterday_sync_date": today,
+                      "last_yesterday_synced_for": yesterday,
+                      "updated_at": _now()}},
+        )
+        users_done.append({"user_id": uid, "results": results})
+    return {"ran_at": _now(), "yesterday": yesterday,
+            "users_processed": len(users_done), "details": users_done}
+

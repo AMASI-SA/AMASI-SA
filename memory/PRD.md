@@ -29,6 +29,19 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159k (Feb 13 2026)**: ✅ اختبارات شاملة + مزامنة "اليوم السابق" مرة واحدة.
+  - **User request**: "اختبار إضافة تكلفة الإعلانات اليومية تلقائي من الحسابات الإعلانية كمديونية. كل حساب يضاف له صف واحد باليوم. تحديث تراكمي. بدون تكرار. مزامنة كل نصف ساعة. مزامنة اليوم السابق مرة واحدة للتأكد من تسجيل أمس كاملاً."
+  - **Backend**: 
+    - دالة جديدة `run_yesterday_final_sync(db)` في `ad_account_routes.py` ← تدير `_run_sync_for_all` لتاريخ الأمس مرة واحدة لكل مستخدم، تستخدم marker `last_yesterday_synced_for` على counterparty لمنع التكرار في نفس اليوم الشمسي.
+    - الـ scheduler في `server.py` يستدعي الآن `run_yesterday_final_sync` بعد كل دورة نصف ساعة (idempotent لذا آمن للتشغيل بشكل متكرر).
+  - **Tests** (`test_ad_account_accounting_iter159k.py` — 5/5 passed ✅):
+    1. **One ledger row per account per day** — حسابان منفصلان × 5 passes نصف ساعية = صفّان فقط بمبلغ صحيح لكل حساب (100, 50).
+    2. **Cumulative update** — 100→150→150 (no-op)→200 = صف نهائي بمبلغ 200 وliability واحد بقيمة 200.
+    3. **Balance covers spend then overflow** — حساب رصيده 60، صرف 100 ← يستهلك الـ 60 ثم ينشئ دين 40 = توازن محاسبي سليم.
+    4. **Yesterday final sync runs once per day** — 3 استدعاءات متتالية = اسـترداد واحد فقط لـ this user (marker stable).
+    5. **No duplicate liability across passes** — 10 passes بمبالغ متزايدة (50→140) = liability واحد بمبلغ 140 وledger واحد.
+
+
 - **Iter-159j (Feb 13 2026)**: 👻 بطاقات منفصلة لكل حساب سناب شات في لوحة التحكم.
   - **User request**: "فصل بطاقة الحسابات الإعلانية سناب شات في لوحة التحكم كل حساب يكون مستقل: الصرف، الطلبات، متوسط تكلفة الطلب، المبيعات، الصرف خلال الشهر الحالي. بدون التعديل على البطاقة الحالية".
   - **Backend** — endpoint جديد `GET /api/dashboard/snapchat-accounts-summary`:
