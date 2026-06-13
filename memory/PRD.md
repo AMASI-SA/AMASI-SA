@@ -1168,3 +1168,40 @@ and click شهاب → drawer shows: «🔴 عليه للنظام: 2,795 ر.س»
 breakdown 100 − 2,895 − 0 = −2,795. Reconciliation report also surfaces
 this under each employee's accrual breakdown.
 
+
+## Iter-171b — Recompute also fixes the stale balance (Feb 2026)
+**Production bug** (after running Iter-169 recompute):
+  الرصيد = 116,351.99 (wrong — actual should be 0)
+  المديونية = 90,364.08 (correct — fixed by Iter-169)
+  الصرف = 158,800.08
+
+**Root cause**: Iter-169 only updated the `liabilities` row. It left
+`counterparties.balance` cached at the inflated «refund» value that the
+buggy correction had applied earlier (the 116,351.99 was a phantom
+refund of fake spend that never really happened).
+
+**Fix**:
+- The recompute endpoint now walks the ledger chronologically and
+  replays the sync engine's logic for EACH event type:
+  - `topup/opening` → balance += amount
+  - `spend` (positive) → covered = min(balance, amount), uncovered →
+    debt; balance -= covered
+  - `spend` (negative, correction) → unwind debt first (Iter-169 logic),
+    then refund remainder to balance
+  - `settlement/writeoff` → debt -= amount
+- Final `balance_walk` is written to `counterparties.balance`. Final
+  `debt_walk` is used to set the liability's `expected_amount`.
+- The response now exposes `previous_balance`, `new_balance`,
+  `balance_delta` alongside the debt fields.
+- Frontend toast was updated to show BOTH balance and debt changes
+  in one message.
+- New test: `test_recompute_balance_iter171b.py` reproduces the user's
+  scenario (1 topup 116K + 1 spend 200K + 1 correction -84K) and
+  confirms balance ends at 0 (instead of stale 116K).
+
+**Action for user**: Save to GitHub → Redeploy. Open the affected Snap
+card → click «🔄 إعادة احتساب من السجل». The toast will now show
+something like «الرصيد: 116,351.99 → 0.00» and the card refreshes
+showing the correct balance, debt, AND spend totals all matching the
+audit log.
+

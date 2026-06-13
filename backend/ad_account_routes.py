@@ -1190,27 +1190,55 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             raise HTTPException(404, "الحساب غير موجود")
 
         # 1) Compute true totals from the audit-log ledger.
+        # Iter-171b — also reconstruct the TRUE current balance by
+        # walking the ledger row-by-row in chronological order. This
+        # mirrors what the sync engine actually does and ensures the
+        # card's «الرصيد» figure matches the merchant's reality, not a
+        # stale cached value from earlier buggy syncs.
         spend_total = 0.0       # net spend (incl. corrections)
         covered_total = 0.0     # how much was covered out of balance
         topup_total = 0.0       # opening_balance + manual topups
+        balance_walk = 0.0      # ← true balance derived from ledger
+        debt_walk = 0.0         # ← true debt derived from ledger
         async for r in db.ad_account_ledger.find(
             {"user_id": uid, "counterparty_id": cp_id},
             {"_id": 0},
-        ):
+        ).sort([("date", 1), ("created_at", 1)]):
             ev = r.get("type")
             amt = float(r.get("amount") or 0)
-            bd = r.get("breakdown") or {}
-            if ev == "spend":
-                spend_total += amt
-                covered_total += float(bd.get("from_balance") or 0)
-            elif ev in ("topup", "opening"):
+            if ev in ("topup", "opening"):
                 topup_total += amt
+                balance_walk += amt
+            elif ev == "spend":
+                spend_total += amt
+                if amt >= 0:
+                    # Positive spend → consume balance first, rest → debt
+                    covered = min(balance_walk, amt)
+                    covered_total += covered
+                    balance_walk -= covered
+                    debt_walk += (amt - covered)
+                else:
+                    # Negative spend = correction. Refund to balance,
+                    # then unwind debt (Iter-169 logic).
+                    refund = -amt
+                    if debt_walk > 0:
+                        unwind = min(debt_walk, refund)
+                        debt_walk -= unwind
+                        refund -= unwind
+                    balance_walk += refund
+            elif ev == "settlement":
+                # Cash payment that closes part of the debt
+                debt_walk = max(0.0, debt_walk - amt)
+            elif ev == "writeoff":
+                debt_walk = max(0.0, debt_walk - amt)
         spend_total = round(spend_total, 2)
+        balance_walk = round(balance_walk, 2)
+        debt_walk = round(debt_walk, 2)
 
         # 2) True remaining debt = spend that wasn't covered by topups.
-        # (Negative result means the user has surplus balance — that's
-        # fine, we floor at 0.)
-        true_debt = max(0.0, round(spend_total - topup_total, 2))
+        # Use the walked value (more accurate than the simple subtract).
+        true_debt = max(0.0, debt_walk)
+        true_balance = max(0.0, balance_walk)
 
         # 3) Find the auto-generated open liability for this account.
         existing = await db.liabilities.find_one(
@@ -1257,16 +1285,31 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
                 "created_at": _now(), "updated_at": _now(),
             })
 
+        # Iter-171b — also fix the cached counterparty.balance so the
+        # card's «الرصيد» figure mirrors the ledger walk.
+        await db.counterparties.update_one(
+            {"id": cp_id, "user_id": uid},
+            {"$set": {"balance": true_balance,
+                       "updated_at": _now()}},
+        )
+
         return {
             "ok": True,
             "counterparty_id": cp_id,
             "previous_open_debt": prev_open,
             "new_open_debt": true_debt,
             "delta": round(true_debt - prev_open, 2),
+            # Iter-171b — also expose the recomputed balance
+            "previous_balance": round(float(cp.get("balance") or 0), 2),
+            "new_balance": true_balance,
+            "balance_delta": round(
+                true_balance - float(cp.get("balance") or 0), 2),
             "diagnostic": {
                 "net_spend_from_ledger": spend_total,
                 "topup_total": round(topup_total, 2),
                 "covered_from_balance": round(covered_total, 2),
+                "balance_walk_final": balance_walk,
+                "debt_walk_final": debt_walk,
             },
         }
 

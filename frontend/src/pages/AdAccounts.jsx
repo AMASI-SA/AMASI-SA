@@ -1345,9 +1345,10 @@ export default function AdAccounts() {
                                                 const { data } = await api.post(
                                                     `/ad-accounts/${row.id}/recover/recompute-debt-from-ledger`);
                                                 toast.success(
-                                                    `تم: ${fmt(data.previous_open_debt)} → ${fmt(data.new_open_debt)} ر.س ` +
-                                                    `(فرق ${fmt(data.delta)})`,
-                                                    { duration: 7000 });
+                                                    `تم التحديث:\n` +
+                                                    `• المديونية: ${fmt(data.previous_open_debt)} → ${fmt(data.new_open_debt)} ر.س (${data.delta >= 0 ? "+" : ""}${fmt(data.delta)})\n` +
+                                                    `• الرصيد: ${fmt(data.previous_balance)} → ${fmt(data.new_balance)} ر.س (${data.balance_delta >= 0 ? "+" : ""}${fmt(data.balance_delta)})`,
+                                                    { duration: 9000 });
                                                 load();
                                             } catch (e) {
                                                 toast.error(e?.response?.data?.detail || "فشل");
