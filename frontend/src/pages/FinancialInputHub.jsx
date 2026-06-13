@@ -1833,6 +1833,7 @@ function RecentEntriesTable({ reloadKey }) {
                         <tr>
                             <th className="p-2 text-right">العملية</th>
                             <th className="p-2 text-right">المورد / الموظف / الحساب</th>
+                            <th className="p-2 text-right text-indigo-700">المستفيد</th>
                             <th className="p-2 num text-right">المبلغ</th>
                             <th className="p-2 num text-right text-rose-700" title="ما عليك للجهة (مديونيتك تجاهها)">كم له</th>
                             <th className="p-2 num text-right text-emerald-700" title="ما لك على الجهة (مديونيتها تجاهك)">كم عليه</th>
@@ -1842,13 +1843,16 @@ function RecentEntriesTable({ reloadKey }) {
                     </thead>
                     <tbody>
                         {data.items.length === 0 ? (
-                            <tr><td colSpan={7} className="p-4 text-center text-slate-500">
+                            <tr><td colSpan={8} className="p-4 text-center text-slate-500">
                                 {busy ? "جاري التحميل..." : "لا توجد عمليات بعد"}
                             </td></tr>
                         ) : data.items.map((it) => (
                             <tr key={`${it.type}-${it.id}`} className="border-t border-slate-100 hover:bg-slate-50" data-testid={`hub-recent-row-${it.id}`}>
                                 <td className="p-2 font-bold text-slate-800">{it.operation}</td>
                                 <td className="p-2 truncate max-w-xs" title={it.party_name}>{it.party_name}</td>
+                                <td className="p-2 truncate max-w-xs text-indigo-700 font-semibold" title={it.beneficiary_name || ""} data-testid={`hub-recent-beneficiary-${it.id}`}>
+                                    {it.beneficiary_name || <span className="text-slate-300">—</span>}
+                                </td>
                                 <td className="p-2 num text-right font-extrabold text-slate-900">{Number(it.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 <td className="p-2 num text-right text-rose-700 font-semibold" data-testid={`hub-recent-owed-to-${it.id}`}>
                                     {it.party_id && Number(it.owed_to_party) > 0

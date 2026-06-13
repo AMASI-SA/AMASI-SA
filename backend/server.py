@@ -944,17 +944,46 @@ async def financial_input_hub_recent(
 
     # Step 2 — fetch those liabilities to map (liability_id) → party_id.
     item_to_party = {}    # liability_id → party_id
+    item_to_party_kind = {}  # liability_id → "counterparty" | "employee"
     party_ids_all = set()
+    counterparty_ids = set()
+    employee_salary_ids = set()
     if liab_id_refs:
         rows = await db.liabilities.find(
             {"user_id": uid, "id": {"$in": list(liab_id_refs)}},
             {"_id": 0, "id": 1, "counterparty_id": 1, "employee_salary_id": 1},
         ).to_list(2000)
         for r in rows:
-            pid = r.get("counterparty_id") or r.get("employee_salary_id")
+            cp = r.get("counterparty_id")
+            es = r.get("employee_salary_id")
+            pid = cp or es
             if pid:
                 item_to_party[r["id"]] = pid
                 party_ids_all.add(pid)
+                if cp:
+                    counterparty_ids.add(cp)
+                    item_to_party_kind[r["id"]] = "counterparty"
+                else:
+                    employee_salary_ids.add(es)
+                    item_to_party_kind[r["id"]] = "employee"
+
+    # Step 2b — resolve party_id → clean beneficiary name from canonical
+    # entities (counterparties + operating_salaries).  This fixes rows like
+    # "تسوية سلفة" where description was used as a placeholder for the
+    # actual employee name.
+    party_name_map = {}
+    if counterparty_ids:
+        for r in await db.counterparties.find(
+            {"user_id": uid, "id": {"$in": list(counterparty_ids)}},
+            {"_id": 0, "id": 1, "name": 1},
+        ).to_list(2000):
+            party_name_map[r["id"]] = r.get("name") or ""
+    if employee_salary_ids:
+        for r in await db.operating_salaries.find(
+            {"user_id": uid, "id": {"$in": list(employee_salary_ids)}},
+            {"_id": 0, "id": 1, "name": 1},
+        ).to_list(2000):
+            party_name_map[r["id"]] = r.get("name") or ""
 
     # Step 3 — for each unique party, compute both directional balances in
     # a single aggregation grouped by kind.
@@ -1004,6 +1033,8 @@ async def financial_input_hub_recent(
         # Keep legacy field for backward compatibility (net open balance).
         it["party_open_balance"] = round(owed_to - owed_from, 2) \
             if party_id else None
+        # Beneficiary — clean canonical name (supplier or employee).
+        it["beneficiary_name"] = party_name_map.get(party_id) or None
 
     # Step 5 — totals across the FULL filtered feed.  Each party counted
     # once (not per operation row) to avoid double-counting when the same
