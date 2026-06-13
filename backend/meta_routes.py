@@ -769,4 +769,153 @@ def attach_meta_routes(parent_router, db):
         )
         return {"connected": True, "synced": True, **summary}
 
+    # ── Iter-159l — Diagnose Meta billing API permissions ────────────────
+    @router.get("/diagnose-billing-permissions")
+    async def diagnose_billing_permissions(user: dict = Depends(current_user)):
+        conn = await _get_conn(user["id"])
+        if not conn or not conn.get("access_token"):
+            return {
+                "connected": False,
+                "checks": [],
+                "platform": "meta",
+                "summary": "حساب Meta غير مربوط. اربطه أولاً من الإعدادات.",
+            }
+        token = conn["access_token"]
+        checks: list[dict] = []
+        ad_account_id: Optional[str] = None
+
+        async with httpx.AsyncClient(timeout=20.0) as http:
+            # 1) Token's granted scopes via /debug_token (best source of truth)
+            try:
+                resp = await http.get(
+                    f"{META_API_BASE}/debug_token",
+                    params={"input_token": token, "access_token": token},
+                )
+                if resp.status_code == 200:
+                    data = resp.json().get("data", {})
+                    scopes = data.get("scopes", []) or []
+                    has_read = "ads_read" in scopes
+                    has_mgmt = "ads_management" in scopes
+                    checks.append({
+                        "name": "صلاحيات التوكن (debug_token)",
+                        "endpoint": "/debug_token",
+                        "status": (f"✅ {len(scopes)} صلاحية"
+                                   if scopes else "⚠ بلا صلاحيات معلنة"),
+                        "ok": True,
+                        "scopes": scopes,
+                        "has_ads_read": has_read,
+                        "has_ads_management": has_mgmt,
+                    })
+                else:
+                    checks.append({
+                        "name": "صلاحيات التوكن (debug_token)",
+                        "status": f"❌ HTTP {resp.status_code}",
+                        "detail": resp.text[:200],
+                        "ok": False,
+                    })
+            except Exception as e:
+                checks.append({"name": "صلاحيات التوكن",
+                                "status": f"❌ خطأ: {e}", "ok": False})
+
+            # 2) List ad accounts (requires ads_read)
+            try:
+                resp = await http.get(
+                    f"{META_API_BASE}/me/adaccounts",
+                    params={"access_token": token, "limit": 5,
+                            "fields": "id,name,account_status,balance,"
+                                       "amount_spent,currency"},
+                )
+                if resp.status_code == 200:
+                    accts = resp.json().get("data", []) or []
+                    checks.append({
+                        "name": "قراءة الحسابات الإعلانية",
+                        "endpoint": "/me/adaccounts",
+                        "status": f"✅ مسموح ({len(accts)} حساب)",
+                        "ok": True,
+                        "count": len(accts),
+                    })
+                    if accts:
+                        ad_account_id = accts[0].get("id")
+                elif resp.status_code in (400, 401, 403):
+                    checks.append({
+                        "name": "قراءة الحسابات الإعلانية",
+                        "endpoint": "/me/adaccounts",
+                        "status": f"❌ ممنوع (HTTP {resp.status_code})",
+                        "detail": resp.text[:200],
+                        "ok": False,
+                        "missing_scope": "ads_read",
+                    })
+                else:
+                    checks.append({
+                        "name": "قراءة الحسابات الإعلانية",
+                        "status": f"⚠ HTTP {resp.status_code}",
+                        "ok": False,
+                    })
+            except Exception as e:
+                checks.append({"name": "قراءة الحسابات الإعلانية",
+                                "status": f"❌ خطأ: {e}", "ok": False})
+
+            # 3) Billing / spend cap fields (uses ads_management for some)
+            if ad_account_id:
+                try:
+                    resp = await http.get(
+                        f"{META_API_BASE}/{ad_account_id}",
+                        params={"access_token": token,
+                                "fields": "balance,amount_spent,spend_cap,"
+                                           "currency,funding_source_details"},
+                    )
+                    if resp.status_code == 200:
+                        d = resp.json()
+                        checks.append({
+                            "name": "قراءة الرصيد والمصروف (billing fields)",
+                            "endpoint": "/{ad_account_id}",
+                            "status": "✅ مسموح",
+                            "ok": True,
+                            "sample": {
+                                "balance": d.get("balance"),
+                                "amount_spent": d.get("amount_spent"),
+                                "currency": d.get("currency"),
+                            },
+                        })
+                    else:
+                        checks.append({
+                            "name": "قراءة الرصيد والمصروف",
+                            "status": f"❌ HTTP {resp.status_code}",
+                            "detail": resp.text[:200],
+                            "ok": False,
+                        })
+                except Exception as e:
+                    checks.append({"name": "قراءة الرصيد والمصروف",
+                                    "status": f"❌ خطأ: {e}", "ok": False})
+
+        # Build summary
+        ads_read_ok = any(
+            c.get("name", "").startswith("قراءة الحسابات") and c.get("ok")
+            for c in checks)
+        billing_ok = any(
+            c.get("name", "").startswith("قراءة الرصيد") and c.get("ok")
+            for c in checks)
+        if billing_ok:
+            summary = ("✅ صلاحياتك كاملة على Meta — يمكنك مزامنة "
+                       "المديونيات (الرصيد والمصروف) من Meta API.")
+            level = "ok"
+        elif ads_read_ok:
+            summary = ("⚠ تستطيع قراءة الحسابات لكن ليس الرصيد التفصيلي. "
+                       "تأكد من أن التوكن مُولَّد عبر تطبيق Business "
+                       "بصلاحية ads_management.")
+            level = "partial"
+        else:
+            summary = ("❌ التوكن الحالي لا يحتوي صلاحية ads_read. "
+                       "أعد توليد التوكن من Meta Business Manager → "
+                       "Apps → Permissions and Features → فعّل ads_read.")
+            level = "missing_scope"
+
+        return {
+            "connected": True,
+            "platform": "meta",
+            "checks": checks,
+            "summary": summary,
+            "level": level,
+        }
+
     parent_router.include_router(router)
