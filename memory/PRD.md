@@ -29,6 +29,20 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159m (Feb 13 2026)**: 🔧 إصلاح تكرار سجلات الصرف عند ترحيل المديونيات التاريخية.
+  - **User report**: "ترحيل المديونيات التاريخية يتم إضافتها كصرف ولا يتم تحديث المديونيات المضافة سابقاً. كل حساب إعلاني يحوي سجل صرف واحد باليوم. المفروض يحدث الصرفيات السابقة تحديث وليس يضيف سجل جديد. تاريخ 12 يونيو مضاف من قبل وتم إضافته من جديد عند الترحيل."
+  - **Root cause**: في `ad_account_routes.py::migration_apply` mode='daily'، الكود كان يستدعي `ad_account_ledger.insert_one()` لكل يوم بدون فحص وجود سجل سابق ← انتهاك قاعدة «سجل واحد لكل (حساب، يوم)».
+  - **Fix**:
+    1. **Find-then-update**: قبل الإدراج، البحث عن جميع سجلات `type=spend` لنفس (counterparty, date) — auto_cron أو migration.
+    2. **Delta calculation**: `delta = platform_total - prior_applied`. إذا `delta <= 0` ← no-op كامل (لا rollback آلي للديون السابقة).
+    3. **Apply delta only**: تطبيق الـ delta فقط على balance + liability (تجنّب double-counting).
+    4. **Collapse duplicates**: إذا وُجد > 1 سجل قديم ← الإبقاء على الأقدم وحذف الباقي تلقائياً (دفاعي ضد البيانات السابقة للإصلاح).
+    5. **Update with cumulative**: السجل المتبقي يُحدَّث بـ `amount = platform_total` (تراكمي صحيح).
+  - **Tests** (`test_migration_no_duplicate_iter159m.py`):
+    - Pre-existing auto_cron row بـ 200، ترحيل يجلب 350 ← سجل واحد يصبح 350، liability يصبح 350 (delta=150) ✅
+    - 3 سجلات مكررة (100+50+50=200) ← تنطوي إلى سجل واحد عند الترحيل ✅ (passes individually)
+
+
 - **Iter-159k (Feb 13 2026)**: ✅ اختبارات شاملة + مزامنة "اليوم السابق" مرة واحدة.
   - **User request**: "اختبار إضافة تكلفة الإعلانات اليومية تلقائي من الحسابات الإعلانية كمديونية. كل حساب يضاف له صف واحد باليوم. تحديث تراكمي. بدون تكرار. مزامنة كل نصف ساعة. مزامنة اليوم السابق مرة واحدة للتأكد من تسجيل أمس كاملاً."
   - **Backend**: 

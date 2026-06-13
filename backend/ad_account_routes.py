@@ -1314,33 +1314,108 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
                 rows_posted = 1
                 total_spend = lump_total
             else:
-                # daily mode — one ledger row per day
+                # daily mode — one ledger row per (account, day).
+                # Iter-159m FIX: previously this INSERTED a new ledger row
+                # per day without checking if a same-day row already
+                # existed (from the half-hour cron or a prior migration).
+                # This violated the global rule "ONE ledger row per
+                # account per day".  Now we look up the existing row,
+                # compute the delta (new platform total − previously
+                # applied), apply only the delta to balance/liability,
+                # and either UPDATE the existing row's amount or INSERT
+                # a new one when no prior row exists.
                 for r in rows:
                     amt = round(float(r["spend"]), 2)
-                    covered = min(amt, balance_now)
-                    uncovered = round(amt - covered, 2)
+                    day = r["date"]
+
+                    # Find ALL prior spend rows for the same (account, day)
+                    # — auto_cron / migration / both.
+                    prior_rows = await db.ad_account_ledger.find(
+                        {"user_id": user["id"],
+                         "counterparty_id": cp_id,
+                         "type": "spend",
+                         "date": day},
+                        {"_id": 0, "id": 1, "amount": 1, "breakdown": 1,
+                         "created_at": 1},
+                    ).sort("created_at", 1).to_list(50)
+
+                    prior_applied = round(
+                        sum(float(p.get("amount") or 0) for p in prior_rows),
+                        2)
+                    delta = round(amt - prior_applied, 2)
+
+                    if delta <= 0:
+                        # Platform reports same-or-less than what's already
+                        # on the books for this day → no-op (we don't
+                        # roll back historical debt automatically).
+                        continue
+
+                    # Apply ONLY the delta to balance + liability.
+                    covered = min(delta, balance_now)
+                    uncovered = round(delta - covered, 2)
                     balance_now = round(balance_now - covered, 2)
                     liab_id, debt_after = await _apply_uncovered(
-                        db, user["id"], cp, uncovered, mode, r["date"],
-                        description=f"ترحيل تاريخي يوم {r['date']}",
+                        db, user["id"], cp, uncovered, mode, day,
+                        description=f"ترحيل تاريخي يوم {day}",
                         source_tag="ad_account_migration",
                     )
                     if uncovered > 0 and mode == "auto":
                         total_debt_created += uncovered
-                    await db.ad_account_ledger.insert_one({
-                        "id": str(uuid.uuid4()), "user_id": user["id"],
-                        "counterparty_id": cp_id, "type": "spend",
-                        "amount": amt, "balance_after": balance_now,
-                        "debt_after": debt_after,
-                        "related_liability_id": liab_id,
-                        "description": f"ترحيل تاريخي — {r['date']}",
-                        "breakdown": {"from_balance": covered, "uncovered": uncovered,
-                                      "mode": mode, "migration": True,
-                                      "source_collection": source},
-                        "date": r["date"], "created_at": _now(),
-                    })
-                    total_spend += amt
+
+                    if prior_rows:
+                        # Collapse + update the OLDEST prior row.  Delete
+                        # any extras (defensive cleanup of pre-fix data).
+                        keep = prior_rows[0]
+                        dupes = [p["id"] for p in prior_rows[1:]]
+                        if dupes:
+                            await db.ad_account_ledger.delete_many(
+                                {"user_id": user["id"],
+                                 "id": {"$in": dupes}},
+                            )
+                        merged_bd = dict(keep.get("breakdown") or {})
+                        merged_bd.update({
+                            "migration": True,
+                            "mode": mode,
+                            "source_collection": source,
+                            "from_balance": (merged_bd.get("from_balance", 0.0)
+                                             + covered),
+                            "uncovered": (merged_bd.get("uncovered", 0.0)
+                                          + uncovered),
+                            "delta_applied": (merged_bd.get("delta_applied", 0.0)
+                                              + delta),
+                            "platform_total": amt,
+                            "last_migration_at": _now(),
+                        })
+                        await db.ad_account_ledger.update_one(
+                            {"id": keep["id"], "user_id": user["id"]},
+                            {"$set": {
+                                "amount": amt,           # cumulative
+                                "balance_after": balance_now,
+                                "debt_after": debt_after,
+                                "related_liability_id": liab_id,
+                                "description": (f"ترحيل تاريخي — {day} "
+                                                 "(تحديث تراكمي)"),
+                                "breakdown": merged_bd,
+                            }},
+                        )
+                    else:
+                        await db.ad_account_ledger.insert_one({
+                            "id": str(uuid.uuid4()), "user_id": user["id"],
+                            "counterparty_id": cp_id, "type": "spend",
+                            "amount": amt, "balance_after": balance_now,
+                            "debt_after": debt_after,
+                            "related_liability_id": liab_id,
+                            "description": f"ترحيل تاريخي — {day}",
+                            "breakdown": {"from_balance": covered,
+                                          "uncovered": uncovered,
+                                          "mode": mode, "migration": True,
+                                          "source_collection": source,
+                                          "platform_total": amt,
+                                          "delta_applied": delta},
+                            "date": day, "created_at": _now(),
+                        })
                     rows_posted += 1
+                    total_spend += delta
 
             # Persist final balance + mark migration sync date
             await db.counterparties.update_one(
