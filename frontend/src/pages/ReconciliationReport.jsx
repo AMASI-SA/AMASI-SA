@@ -234,6 +234,9 @@ export default function ReconciliationReport() {
                     { key: "payable", label: "Payable" },
                     { key: "cod_receivable", label: "COD" },
                 ]} migrationCompleted={ms.completed} />
+                <Section title="💳 منصات الدفع (سلة / تمارا / تابي / إمكان / COD)" rows={data.payment_platforms} columns={[
+                    { key: "balance", label: "الرصيد" },
+                ]} showBankBreakdown={true} migrationCompleted={ms.completed} />
                 <Section title="🏦 الحسابات البنكية" rows={data.banks} columns={[
                     { key: "balance", label: "الرصيد" },
                 ]} showBankBreakdown={true} migrationCompleted={ms.completed} />

@@ -257,6 +257,94 @@ async def _legacy_bank_balances(db, user_id: str) -> list[dict]:
     return out
 
 
+async def _legacy_payment_platform_balances(
+    db, user_id: str,
+) -> list[dict]:
+    """Per-platform current balance (Tabby, Tamara, Salla, Imkan, COD).
+
+    Iter-167 — These accounts represent **assets in transit**: money the
+    merchant has earned through customer orders but hasn't yet
+    transferred to a bank account. They MUST be carried into the
+    Universal Ledger as opening_balance debit entries; otherwise the
+    new Financial Position would understate liquid assets by 100% of
+    the platforms' balances.
+
+    For Tabby/Tamara we prefer the BNPL SSOT (`get_bnpl_provider_balance`)
+    over the stored `current_balance` to stay consistent with the BNPL
+    Settlements page. Other platforms fall back to `current_balance`.
+    """
+    accs = await db.accounts.find(
+        {"user_id": user_id, "account_type": "payment_platform"},
+        {"_id": 0},
+    ).to_list(500)
+    out = []
+    try:
+        from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
+    except Exception:  # noqa: BLE001
+        is_bnpl_account = lambda _a: None  # noqa: E731
+        get_bnpl_provider_balance = None
+    for a in accs:
+        bnpl_provider = is_bnpl_account(a) if a else None
+        cur = a.get("current_balance")
+        balance_source = "current_balance"
+        if bnpl_provider and get_bnpl_provider_balance:
+            try:
+                canon = await get_bnpl_provider_balance(
+                    db, user_id, bnpl_provider)
+                cur = float(canon.get("balance") or 0)
+                balance_source = "bnpl_ssot"
+            except Exception:  # noqa: BLE001
+                # Stay with stored current_balance if BNPL SSOT fails
+                pass
+        if cur is None:
+            cur = a.get("balance")
+        out.append({
+            "account_id": a["id"],
+            "name": a.get("name"),
+            "balance": _round(cur),
+            "_opening_balance": _round(a.get("opening_balance")),
+            "_expected_orders_balance": _round(a.get("expected_orders_balance")),
+            "_currency": a.get("currency") or "SAR",
+            "_balance_source": balance_source,
+            "_bnpl_provider": bnpl_provider,
+        })
+    return out
+
+
+async def _legacy_courier_balances(
+    db, user_id: str,
+) -> list[dict]:
+    """Per-courier payable from legacy `liabilities` (shipping/courier).
+
+    Iter-167 — Used by both the migration and the Reconciliation Report
+    so they share a single source of truth.
+    """
+    cps = await db.counterparties.find(
+        {"user_id": user_id, "kind": "courier"}, {"_id": 0},
+    ).to_list(500)
+    out = []
+    for c in cps:
+        agg = await db.liabilities.aggregate([
+            {"$match": {"user_id": user_id,
+                          "kind": {"$in": ["shipping", "courier"]},
+                          "counterparty_id": c["id"],
+                          "status": {"$ne": "paid"},
+                          "is_pre_accounting": {"$ne": True}}},
+            {"$group": {"_id": None,
+                          "owed": {"$sum": {"$subtract": [
+                              "$expected_amount",
+                              {"$ifNull": ["$paid_amount", 0]}]}}}}
+        ]).to_list(1)
+        owed = _round(agg[0]["owed"]) if agg else 0.0
+        if owed < 0:
+            owed = 0.0
+        out.append({
+            "courier_id": c["id"], "name": c.get("name"),
+            "payable": owed,
+        })
+    return out
+
+
 async def _new_ledger_balance(
     db, user_id: str, entity_type: str, entity_id: str,
     sub_account: Optional[str] = None,
@@ -311,6 +399,20 @@ async def _compute_after_balances(
             "account_id": b["account_id"], "name": b["name"],
             "balance": await _new_ledger_balance(
                 db, user_id, "bank", b["account_id"], "main"),
+        })
+
+    # Iter-167 — payment platforms & couriers
+    for p in before.get("payment_platforms", []):
+        after.setdefault("payment_platforms", []).append({
+            "account_id": p["account_id"], "name": p["name"],
+            "balance": await _new_ledger_balance(
+                db, user_id, "payment_platform", p["account_id"], "main"),
+        })
+    for c in before.get("couriers", []):
+        after.setdefault("couriers", []).append({
+            "courier_id": c["courier_id"], "name": c["name"],
+            "payable": await _new_ledger_balance(
+                db, user_id, "courier", c["courier_id"], "payable"),
         })
 
     return after
@@ -381,6 +483,9 @@ def make_migration_router(db) -> APIRouter:
             "suppliers": await _legacy_supplier_balances(db, uid),
             "externals": await _legacy_external_balances(db, uid),
             "banks": await _legacy_bank_balances(db, uid),
+            # Iter-167 — payment platforms & couriers are now migrated.
+            "payment_platforms": await _legacy_payment_platform_balances(db, uid),
+            "couriers": await _legacy_courier_balances(db, uid),
         }
         return snap
 
@@ -417,6 +522,9 @@ def make_migration_router(db) -> APIRouter:
             "suppliers": await _legacy_supplier_balances(db, uid),
             "externals": await _legacy_external_balances(db, uid),
             "banks": await _legacy_bank_balances(db, uid),
+            # Iter-167 — extended migration scope.
+            "payment_platforms": await _legacy_payment_platform_balances(db, uid),
+            "couriers": await _legacy_courier_balances(db, uid),
         }
 
         cutoff_iso = payload.cutoff_date
@@ -467,6 +575,34 @@ def make_migration_router(db) -> APIRouter:
                     "side": "debit" if b["balance"] > 0 else "credit",
                     "amount": abs(b["balance"]),
                     "metadata": {"account_name": b["name"]},
+                })
+
+        # Iter-167 — payment platforms (assets in transit).
+        for p in before.get("payment_platforms", []):
+            if abs(p["balance"]) > 0.01:
+                ops_planned.append({
+                    "entity_type": "payment_platform",
+                    "entity_id": p["account_id"],
+                    "sub_account": "main",
+                    "side": "debit" if p["balance"] > 0 else "credit",
+                    "amount": abs(p["balance"]),
+                    "metadata": {
+                        "account_name": p["name"],
+                        "bnpl_provider": p.get("_bnpl_provider"),
+                        "balance_source": p.get("_balance_source"),
+                    },
+                })
+
+        # Iter-167 — couriers (shipping payables).
+        for c in before.get("couriers", []):
+            if c["payable"] > 0.01:
+                ops_planned.append({
+                    "entity_type": "courier",
+                    "entity_id": c["courier_id"],
+                    "sub_account": "payable",
+                    "side": "credit",
+                    "amount": c["payable"],
+                    "metadata": {"courier_name": c["name"]},
                 })
 
         applied_count = 0
@@ -559,6 +695,9 @@ def make_migration_router(db) -> APIRouter:
         legacy_sups = await _legacy_supplier_balances(db, uid)
         legacy_exts = await _legacy_external_balances(db, uid)
         legacy_banks = await _legacy_bank_balances(db, uid)
+        # Iter-167 — payment platforms & couriers participate in the report.
+        legacy_platforms = await _legacy_payment_platform_balances(db, uid)
+        legacy_couriers_data = await _legacy_courier_balances(db, uid)
 
         # Iter-164 — orphan supplier liabilities (kind=supplier but no
         # counterparty match). These won't be migrated under the current
@@ -698,37 +837,22 @@ def make_migration_router(db) -> APIRouter:
             row["all_projected_match"] = True
             ext_rows.append(row)
 
-        # Couriers — legacy uses counterparties with kind=courier (paid via
-        # liabilities kind=shipping or similar). For now we read directly
-        # from existing courier counterparties + their open liabilities.
+        # Iter-167 — Couriers now use the shared `_legacy_courier_balances`
+        # helper so the migration and the report agree byte-for-byte.
         from ledger_core import compute_balance as _cb
-        couriers = await db.counterparties.find(
-            {"user_id": uid, "kind": "courier"}, {"_id": 0},
-        ).to_list(500)
         cour_rows = []
-        for c in couriers:
-            # Legacy: open liabilities tied to this courier id
-            agg = await db.liabilities.aggregate([
-                {"$match": {"user_id": uid,
-                              "kind": {"$in": ["shipping", "courier"]},
-                              "counterparty_id": c["id"]}},
-                {"$group": {"_id": None,
-                              "owed": {"$sum": {"$subtract": [
-                                  "$expected_amount", "$paid_amount"]}}}}
-            ]).to_list(1)
-            legacy_owed = float(agg[0]["owed"]) if agg else 0.0
-            if legacy_owed < 0:
-                legacy_owed = 0.0
+        couriers_by_id = {c["courier_id"]: c for c in legacy_couriers_data}
+        for c in couriers_by_id.values():
+            cid = c["courier_id"]
             pay_new = (await _cb(
                 db, user_id=uid, entity_type="courier",
-                entity_id=c["id"], sub_account="payable"))["outstanding_debt"]
+                entity_id=cid, sub_account="payable"))["outstanding_debt"]
             cod_new = (await _cb(
                 db, user_id=uid, entity_type="courier",
-                entity_id=c["id"], sub_account="cod_receivable"))["net_balance"]
-            # Legacy doesn't track COD; mark legacy_cod = 0
+                entity_id=cid, sub_account="cod_receivable"))["net_balance"]
             row = {
-                "id": c["id"], "name": c.get("name"),
-                "payable":        _mk(legacy_owed, pay_new),
+                "id": cid, "name": c.get("name"),
+                "payable":        _mk(c["payable"], pay_new),
                 "cod_receivable": _mk(0.0, cod_new),
             }
             row["all_match"] = row["payable"]["match"] and row["cod_receivable"]["match"]
@@ -756,8 +880,34 @@ def make_migration_router(db) -> APIRouter:
             row["all_projected_match"] = True
             bank_rows.append(row)
 
+        # Iter-167 — Payment platforms (Tabby, Tamara, Salla, Imkan, COD).
+        # These are ASSETS in transit (debit side). Without including them
+        # in the migration, the Universal Ledger's «Assets» total would
+        # understate liquid assets by hundreds of thousands of SAR.
+        platform_rows = []
+        for p in legacy_platforms:
+            ledger_new = await _ledger_bal(
+                "payment_platform", p["account_id"], "main")
+            row = {
+                "id": p["account_id"], "name": p["name"],
+                "balance": _mk(p["balance"], ledger_new),
+                "breakdown": {
+                    "opening_balance": p.get("_opening_balance", 0),
+                    "expected_orders_balance": p.get(
+                        "_expected_orders_balance", 0),
+                    "current_balance": p["balance"],
+                    "currency": p.get("_currency", "SAR"),
+                    "balance_source": p.get("_balance_source"),
+                    "bnpl_provider": p.get("_bnpl_provider"),
+                },
+            }
+            row["all_match"] = row["balance"]["match"]
+            row["all_projected_match"] = True
+            platform_rows.append(row)
+
         # ── Aggregate summary ────────────────────────────────────
-        all_rows = emp_rows + sup_rows + ext_rows + cour_rows + bank_rows
+        all_rows = (emp_rows + sup_rows + ext_rows
+                    + cour_rows + bank_rows + platform_rows)
         matched = sum(1 for r in all_rows if r["all_match"])
         total = len(all_rows)
         match_pct = round(matched / total * 100, 2) if total > 0 else 100.0
@@ -786,7 +936,8 @@ def make_migration_router(db) -> APIRouter:
             + sum(_projected_total(r, ["receivable"]) for r in ext_rows)
             + sum(_projected_total(r, ["payable", "cod_receivable"])
                   for r in cour_rows)
-            + sum(_projected_total(r, ["balance"]) for r in bank_rows),
+            + sum(_projected_total(r, ["balance"]) for r in bank_rows)
+            + sum(_projected_total(r, ["balance"]) for r in platform_rows),
             2,
         )
 
@@ -820,6 +971,8 @@ def make_migration_router(db) -> APIRouter:
             "externals": ext_rows,
             "couriers": cour_rows,
             "banks": bank_rows,
+            # Iter-167 — payment platforms are now migrated too.
+            "payment_platforms": platform_rows,
             "orphan_suppliers": orphan_sups,
         }
 

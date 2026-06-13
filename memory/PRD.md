@@ -1001,3 +1001,50 @@ to the Ledger for every bank.
 report → verify legacy column now shows the same bank totals he sees
 on the Assets page. Then proceed with the final migration.
 
+
+## Iter-167 — Payment Platforms & Couriers Now Migrate (Feb 2026)
+**Severity: P0 — would have missed ~330K SAR of assets-in-transit.**
+
+**Reported by merchant**: After Iter-166 fixed bank balances, he asked
+about Salla / Tamara / Tabby / Imkan / COD platforms and shipping
+courier balances — these were NOT in the reconciliation report nor in
+the migration ops_planned. They represent the bulk of his liquid assets
+(money paid by customers, in transit to bank).
+
+**Fix**:
+- New helper `_legacy_payment_platform_balances`: reads `current_balance`
+  for Salla/Imkan/COD; for Tabby/Tamara prefers BNPL SSOT
+  (`get_bnpl_provider_balance`) to stay consistent with the BNPL
+  Settlements page. Tracks `balance_source` and `bnpl_provider` in
+  diagnostic fields for full audit transparency.
+- New helper `_legacy_courier_balances`: aggregates open
+  `liabilities.kind∈{shipping,courier}` per courier counterparty.
+  Excludes paid + pre-accounting rows.
+- Migration's `before` snapshot, `run_migration` ops_planned, and
+  `_compute_after_balances` extended to handle these two new entity
+  types: `payment_platform` (debit/credit based on sign) and `courier`
+  (credit, payable sub_account).
+- Reconciliation Report includes a new `payment_platforms` section
+  with the same 3-column diff and breakdown shown for banks.
+- UI: new "💳 منصات الدفع" section between externals and banks; reuses
+  the bank breakdown row layout to show opening / expected_orders /
+  current / currency / balance_source / bnpl_provider.
+
+**Verified end-to-end on merchant's Preview** (then rolled back):
+- 12 entities total: 4 employees + 5 payment platforms + 3 banks.
+- `will_post_after_migration = 333,406.35 ر.س`.
+- After migration: ledger matches legacy 100% for ALL 12 entities;
+  `safe_to_disable_legacy = true`.
+- Tamara correctly shows -10,001.72 (BNPL SSOT — we owe Tamara from a
+  past settlement). Source = `bnpl_ssot`.
+- Tabby -106.90 via BNPL SSOT.
+- Salla 211,680.67 via `current_balance`.
+
+**Tests**: 3 in `test_platforms_couriers_migration_iter167.py`.
+
+**Action for user**: Save to GitHub → Redeploy. Re-open the
+reconciliation report. The new "منصات الدفع" section should show all 5
+platforms with the production figures matching the Assets page.
+After verifying, execute the final migration. All assets and
+liabilities will be carried over.
+
