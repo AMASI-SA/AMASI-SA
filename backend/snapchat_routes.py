@@ -629,6 +629,43 @@ def _build_router(db) -> APIRouter:
             currency = await _resolve_ad_account_currency(http2, access_token, ad_id, conn)
         spend_sar, fx_rate = _to_sar(spend_native, currency)
 
+        # Iter-172 — persist the fetched spend so the rest of the app
+        # (ad-account cards, financial summary, executive profit panel)
+        # picks it up automatically. Previously this endpoint just
+        # returned the number; the merchant had to manually rerun
+        # /sync-all to see it reflected on the cards.
+        try:
+            await db.snapchat_account_daily.update_one(
+                {"user_id": user["id"], "ad_account_id": ad_id,
+                 "date": date},
+                {"$set": {
+                    "spend": spend_sar,
+                    "spend_native": spend_native,
+                    "native_currency": currency,
+                    "fx_rate": fx_rate,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                 "$setOnInsert": {
+                     "user_id": user["id"], "ad_account_id": ad_id,
+                     "date": date,
+                     "created_at": datetime.now(timezone.utc).isoformat(),
+                 }},
+                upsert=True,
+            )
+            # Push fresh spend into ad_account_ledger + reconcile the
+            # ad-account card's balance/debt for all snap counterparties
+            # tied to this ad_account_id.
+            try:
+                from ad_account_routes import _run_sync_for_all
+                await _run_sync_for_all(
+                    db, user["id"], date, date, force=True)
+            except Exception:  # noqa: BLE001
+                # Don't fail the foreground fetch if cron sync errors —
+                # the snapchat_account_daily row is already saved.
+                pass
+        except Exception:  # noqa: BLE001
+            pass
+
         return {
             "date": date,  # Always the Riyadh business date the merchant requested.
             "ad_account_id": ad_id,
@@ -644,6 +681,8 @@ def _build_router(db) -> APIRouter:
             "snap_day_start_riyadh": start_riyadh.strftime("%Y-%m-%d %H:%M"),
             "snap_day_end_riyadh": end_riyadh.strftime("%Y-%m-%d %H:%M"),
             "aggregation_method": "hourly_riyadh",
+            # Iter-172 — let the UI know the write-through happened.
+            "synced_to_ad_account_ledger": True,
         }
 
     class BulkSpendIn(BaseModel):

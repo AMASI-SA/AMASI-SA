@@ -685,6 +685,15 @@ def attach_meta_routes(parent_router, db):
             {"user_id": user["id"]},
             {"$set": {"last_sync_at": now_iso, "last_sync_summary": summary}},
         )
+        # Iter-172 — push fresh Meta spend into ad_account_ledger so the
+        # ad-account cards + executive profit panel pick it up.
+        try:
+            from ad_account_routes import _run_sync_for_all
+            await _run_sync_for_all(
+                db, user["id"], start_d.isoformat(),
+                end_d.isoformat(), force=True)
+        except Exception:  # noqa: BLE001
+            pass
         return {"ok": True, **summary}
 
     @router.post("/auto-sync-if-stale")
@@ -767,6 +776,15 @@ def attach_meta_routes(parent_router, db):
             {"user_id": user["id"]},
             {"$set": {"last_sync_at": now_iso, "last_sync_summary": summary}},
         )
+        # Iter-172 — same write-through to ad_account_ledger as the
+        # manual sync, so the silent auto-sync also refreshes cards.
+        try:
+            from ad_account_routes import _run_sync_for_all
+            await _run_sync_for_all(
+                db, user["id"], start_d.isoformat(),
+                today.isoformat(), force=True)
+        except Exception:  # noqa: BLE001
+            pass
         return {"connected": True, "synced": True, **summary}
 
     # ── Iter-159l — Diagnose Meta billing API permissions ────────────────

@@ -1205,3 +1205,41 @@ something like «الرصيد: 116,351.99 → 0.00» and the card refreshes
 showing the correct balance, debt, AND spend totals all matching the
 audit log.
 
+
+## Iter-172 — Daily Spend Refresh Now Updates Cards (Feb 2026)
+**Reported by merchant**: Pressing «تحديث فوري للصرف اليوم» on the
+Snap dashboard popped a toast with the amount, but neither the
+ad-account cards NOR the executive profit panel updated. Same issue
+for Meta refresh.
+
+**Root cause**: `GET /api/snapchat/daily-spend` fetched the spend from
+Snap's API and returned it, but it didn't persist into
+`snapchat_account_daily` (the SSOT the cards' sync engine reads) and
+didn't trigger the ad-account ledger sync. Meta's `/auto-sync-if-stale`
+and manual sync wrote to `meta_ads_daily` but never pushed to
+`ad_account_ledger` either.
+
+**Fix**:
+- `GET /api/snapchat/daily-spend` now upserts into
+  `snapchat_account_daily` then calls `_run_sync_for_all` (Iter-167
+  Phase 4 logic) to push the spend into `ad_account_ledger` and
+  recompute each Snap counterparty's balance/debt.
+- `POST /api/meta/sync` AND `POST /api/meta/auto-sync-if-stale` both
+  now call `_run_sync_for_all` after the upsert pass so the new spend
+  reflects on Meta ad-account cards.
+- All three call sites wrap the cross-cutting sync in try/except so
+  any sync error doesn't fail the foreground fetch (the underlying
+  data is already persisted).
+- Test: `test_snap_daily_writethrough_iter172.py` — seeds a snap
+  account_daily row, calls `_run_sync_for_all`, asserts that
+  `ad_account_ledger` has the new spend row and the counterparty's
+  cached `balance` was decreased correctly.
+
+**Action for user**: Save to GitHub → Redeploy. Press «تحديث فوري
+للصرف اليوم» on the Snap dashboard → the spend now appears
+automatically on:
+  • The Snap card في الحسابات الإعلانية والمديونية
+  • الملخص التنفيذي للأرباح
+  • And the dashboard's daily costs chart (already worked).
+Same for the Meta refresh.
+
