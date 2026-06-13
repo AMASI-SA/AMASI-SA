@@ -1251,6 +1251,9 @@ export default function AdAccounts() {
                             {/* Iter-159i — Per-account credit limit + alert threshold */}
                             <CreditLimitPanel row={row} onSaved={load} fmt={fmt} />
 
+                            {/* Iter-159n — Recompute debt button (one-click correction) */}
+                            <RecomputeDebtButton row={row} onDone={load} fmt={fmt} />
+
                             <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex items-center gap-1.5">
                                     <Clock size={11} className="text-slate-400" /> آخر تعبئة:
@@ -1572,3 +1575,63 @@ function CreditLimitPanel({ row, onSaved, fmt }) {
         </div>
     );
 }
+
+// ── Iter-159n — Recompute debt button + confirmation dialog ────────
+function RecomputeDebtButton({ row, onDone, fmt }) {
+    const [showPreview, setShowPreview] = useState(false);
+    const [preview, setPreview] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [applied, setApplied] = useState(null);
+
+    const fetchPreview = async () => {
+        setBusy(true);
+        try {
+            // We POST to compute, but the endpoint also applies. To "preview"
+            // we'd need a separate endpoint — for simplicity, show direct apply
+            // with confirmation, and we surface previous numbers + new ones.
+            // Confirm UX: show the computation before applying.
+            const confirmed = window.confirm(
+                "سيتم إعادة احتساب مديونية هذا الحساب من واقع سجل الصرف والمدفوعات.\n" +
+                "كل المديونيات المفتوحة الحالية سيتم إغلاقها وستُنشأ مديونية واحدة جديدة بالمبلغ الصحيح.\n\n" +
+                "هل أنت متأكد من المتابعة؟"
+            );
+            if (!confirmed) { setBusy(false); return; }
+            const { data } = await api.post(`/ad-accounts/${row.id}/recompute-debt`);
+            setApplied(data);
+            setShowPreview(true);
+            toast.success("تم إعادة احتساب المديونية بنجاح");
+            await onDone?.();
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل إعادة الاحتساب");
+        } finally { setBusy(false); }
+    };
+
+    return (
+        <div className="border-t border-slate-100 pt-3" data-testid={`adacc-recompute-${row.id}`}>
+            <div className="flex items-center justify-between">
+                <div className="text-[11px] text-slate-600">
+                    🔧 إعادة احتساب المديونية من واقع البيانات
+                </div>
+                <button
+                    onClick={fetchPreview}
+                    disabled={busy}
+                    className="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded font-bold disabled:opacity-50"
+                    data-testid={`adacc-recompute-btn-${row.id}`}
+                >
+                    {busy ? "جاري الاحتساب..." : "🔧 إعادة احتساب"}
+                </button>
+            </div>
+            {applied && showPreview && (
+                <div className="mt-2 bg-amber-50/50 border border-amber-200 rounded-lg p-2.5 text-[11px] space-y-1" data-testid={`adacc-recompute-result-${row.id}`}>
+                    <div className="font-bold text-amber-900 mb-1">📊 نتيجة إعادة الاحتساب:</div>
+                    <div className="flex justify-between"><span className="text-slate-600">إجمالي الصرف غير المغطى (من السجل):</span><span className="num font-bold">{fmt(applied.total_ledger_uncovered)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-600">إجمالي ما تم سداده:</span><span className="num font-bold text-emerald-700">{fmt(applied.total_paid)}</span></div>
+                    <div className="flex justify-between border-t border-amber-200 pt-1 mt-1"><span className="text-slate-600">المديونية قبل الإصلاح:</span><span className="num font-bold text-rose-700 line-through">{fmt(applied.previous_open_debt)}</span></div>
+                    <div className="flex justify-between"><span className="font-bold text-slate-900">المديونية الصحيحة الآن:</span><span className="num font-extrabold text-emerald-700 text-sm">{fmt(applied.correct_outstanding)} ر.س</span></div>
+                    <button onClick={() => setShowPreview(false)} className="text-[10px] text-slate-500 hover:text-slate-700 mt-1">إخفاء التفاصيل</button>
+                </div>
+            )}
+        </div>
+    );
+}
+

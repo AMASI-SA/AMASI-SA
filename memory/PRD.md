@@ -29,6 +29,20 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159n (Feb 13 2026)**: 🔧 زر «إعادة احتساب المديونية» في صفحة الحسابات الإعلانية.
+  - **User report**: "المديونية في META = 8,784.09 رغم أن الحقيقية 2,977.99 والباقي مسدد. الأرقام مكررة وليست حقيقية."
+  - **Root cause**: قبل Iter-159m، عمليات الترحيل التاريخية المتكررة كانت تستدعي `_apply_uncovered` التي تضيف للـ liability المفتوحة الموجودة (سواء كانت بمصدر cron أو migration). خطوة الـ Reversal كانت تبحث فقط عن source=ad_account_migration ← لا تستطيع التراجع عن الإضافات على liabilities الـ cron ← تضخّم الـ liability تراكمياً.
+  - **Fix**:
+    - **Backend**: endpoint جديد `POST /api/ad-accounts/{cp_id}/recompute-debt` يحسب المديونية الصحيحة من قاعدتي حساب صلبة:
+      - `Σ uncovered من ledger.spend` (إجمالي الصرف الذي تحوّل لدين فعلاً)
+      - `Σ paid_amount من liabilities` (إجمالي المسدد)
+      - المديونية الصحيحة = `max(uncovered - paid, 0)`
+    - يُغلق كل الـ liabilities المفتوحة (`status: paid`, `rebuild_note`) ويُنشئ liability واحدة جديدة بالمصدر `ad_account_recompute`.
+    - **Frontend**: مكوّن `RecomputeDebtButton` في كل بطاقة حساب إعلاني: زر «🔧 إعادة احتساب» مع `confirm()` ثم عرض النتيجة (قبل/بعد + إجمالي الصرف والمسدد).
+  - **Test** (`test_recompute_debt_iter159n.py`): سيناريو واقعي بـ ledger=3000، paid=1000، liability مضخّمة بـ 6500 ← بعد الـ recompute = liability واحدة بـ 2000. ✅
+  - **Use**: المستخدم يضغط زرّ «إعادة احتساب» على كل حساب إعلاني (META, Snapchat A, Snapchat B) → يتم تصحيح المديونية تلقائياً من واقع البيانات.
+
+
 - **Iter-159m (Feb 13 2026)**: 🔧 إصلاح تكرار سجلات الصرف عند ترحيل المديونيات التاريخية.
   - **User report**: "ترحيل المديونيات التاريخية يتم إضافتها كصرف ولا يتم تحديث المديونيات المضافة سابقاً. كل حساب إعلاني يحوي سجل صرف واحد باليوم. المفروض يحدث الصرفيات السابقة تحديث وليس يضيف سجل جديد. تاريخ 12 يونيو مضاف من قبل وتم إضافته من جديد عند الترحيل."
   - **Root cause**: في `ad_account_routes.py::migration_apply` mode='daily'، الكود كان يستدعي `ad_account_ledger.insert_one()` لكل يوم بدون فحص وجود سجل سابق ← انتهاك قاعدة «سجل واحد لكل (حساب، يوم)».

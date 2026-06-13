@@ -547,6 +547,94 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         cp = await _get_account(db, user["id"], cp_id)
         return await _summarise(db, user["id"], cp)
 
+    # ── Iter-159n — POST /{id}/recompute-debt ────────────────────────
+    # Authoritative recompute: real outstanding debt = Σ(uncovered from
+    # ledger spend rows) − Σ(paid_amount across all this account's
+    # liabilities).  Useful when historical migrations bloated the open
+    # liability and the merchant wants to snap it back to truth.
+    # All historical liabilities for this account are closed
+    # ("rebuilt") and a single fresh open liability is created with the
+    # correct amount.
+    @router.post("/{cp_id}/recompute-debt")
+    async def recompute_debt(
+        cp_id: str,
+        user: dict = Depends(current_user),
+    ):
+        cp = await _get_account(db, user["id"], cp_id)
+
+        # Σ uncovered from ledger.spend (only spend that became debt,
+        # NOT the part covered by topup balance).
+        ledger_agg = await db.ad_account_ledger.aggregate([
+            {"$match": {"user_id": user["id"], "counterparty_id": cp_id,
+                         "type": "spend"}},
+            {"$group": {"_id": None,
+                         "uncovered": {"$sum": {"$ifNull": [
+                             "$breakdown.uncovered", 0]}}}},
+        ]).to_list(1)
+        total_uncovered = round(float(
+            ledger_agg[0]["uncovered"] if ledger_agg else 0), 2)
+
+        # Σ paid_amount across ALL ad_account liabilities for this acct
+        # (open + closed).
+        liab_agg = await db.liabilities.aggregate([
+            {"$match": {"user_id": user["id"], "kind": "ad_account",
+                         "counterparty_id": cp_id}},
+            {"$group": {"_id": None,
+                         "paid": {"$sum": "$paid_amount"},
+                         "open": {"$sum": {"$cond": [
+                             {"$in": ["$status", ["unpaid", "partial"]]},
+                             {"$subtract": ["$expected_amount",
+                                            "$paid_amount"]},
+                             0]}}}},
+        ]).to_list(1)
+        prior_paid = round(float(
+            liab_agg[0]["paid"] if liab_agg else 0), 2)
+        prior_open = round(float(
+            liab_agg[0]["open"] if liab_agg else 0), 2)
+
+        correct_outstanding = round(
+            max(total_uncovered - prior_paid, 0), 2)
+
+        # Close all existing open liabilities for this account (they're
+        # being rebuilt).
+        await db.liabilities.update_many(
+            {"user_id": user["id"], "kind": "ad_account",
+             "counterparty_id": cp_id,
+             "status": {"$in": ["unpaid", "partial"]}},
+            {"$set": {"status": "paid",
+                      "rebuilt_at": _now(),
+                      "updated_at": _now(),
+                      "rebuild_note": "Closed during /recompute-debt"}},
+        )
+
+        # If there's a real outstanding amount, create ONE clean
+        # liability with the corrected total.
+        new_liab_id = None
+        if correct_outstanding > 0:
+            new_liab_id = str(uuid.uuid4())
+            await db.liabilities.insert_one({
+                "id": new_liab_id, "user_id": user["id"],
+                "kind": "ad_account", "counterparty_id": cp_id,
+                "expected_amount": correct_outstanding,
+                "paid_amount": 0.0, "status": "unpaid",
+                "description": f"إعادة احتساب مديونية — {cp.get('name')}",
+                "source": "ad_account_recompute",
+                "auto_generated": True,
+                "due_date": riyadh_today_iso(),
+                "created_at": _now(), "updated_at": _now(),
+            })
+
+        return {
+            "ok": True,
+            "counterparty_id": cp_id,
+            "name": cp.get("name"),
+            "previous_open_debt": prior_open,
+            "total_ledger_uncovered": total_uncovered,
+            "total_paid": prior_paid,
+            "correct_outstanding": correct_outstanding,
+            "new_liability_id": new_liab_id,
+        }
+
     # ── POST /{id}/topup ──────────────────────────────────────────────
     @router.post("/{cp_id}/topup")
     async def topup(
