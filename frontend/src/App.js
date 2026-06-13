@@ -52,6 +52,7 @@ import RefundAudit from "./pages/RefundAudit";
 import BnplSettlements from "./pages/BnplSettlements";
 import SallaSettlements from "./pages/SallaSettlements";
 import SettlementsOverview from "./pages/SettlementsOverview";
+import AlertsPage from "./pages/AlertsPage";
 import AccountingCutoffs from "./pages/AccountingCutoffs";
 import BnplBalancesDiagnostic from "./pages/BnplBalancesDiagnostic";
 import { Toaster } from "./components/ui/sonner";
@@ -114,6 +115,7 @@ function AppRoutes() {
             <Route path="/bnpl-settlements" element={<ProtectedRoute><Layout><BnplSettlements /></Layout></ProtectedRoute>} />
             <Route path="/salla-settlements" element={<ProtectedRoute><Layout><SallaSettlements /></Layout></ProtectedRoute>} />
             <Route path="/settlements-overview" element={<ProtectedRoute><Layout><SettlementsOverview /></Layout></ProtectedRoute>} />
+            <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
             <Route path="/settings/accounting-cutoffs" element={<ProtectedRoute><Layout><AccountingCutoffs /></Layout></ProtectedRoute>} />
             <Route path="/bnpl-balances" element={<ProtectedRoute><Layout><BnplBalancesDiagnostic /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />

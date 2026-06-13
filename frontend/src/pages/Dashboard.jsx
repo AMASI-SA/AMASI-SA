@@ -33,6 +33,7 @@ import { ALL_KPI_CARDS } from "../lib/dashboardCards";
 import ProductCostCard from "../components/ProductCostCard";
 import ProfitSummaryCard from "../components/ProfitSummaryCard";
 import SnapchatOfficialCard from "../components/SnapchatOfficialCard";
+import AlertsCard from "../components/AlertsCard";
 import ElectronicNetDebugModal from "../components/ElectronicNetDebugModal";
 
 function formatRelative(ms) {
@@ -476,6 +477,9 @@ export default function Dashboard() {
                     </p>
                 </div>
             </div>
+
+            {/* Iter-159h — Smart Settlement Alerts card */}
+            <AlertsCard />
 
             {/* Advanced filters: date preset + payment + shipping */}
             <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">

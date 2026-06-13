@@ -4,6 +4,7 @@ import { List } from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
+import NotificationBell from "./NotificationBell";
 
 export default function Layout({ children }) {
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -56,6 +57,23 @@ export default function Layout({ children }) {
                     </button>
                 </div>
             </header>
+
+            {/* Iter-159h — Floating Notification Bell.  Sits in the top-LEFT
+                corner on desktop (the sidebar is on the right in RTL) and
+                inside the mobile header bar.  Lives outside Sidebar so it
+                follows the user across every page. */}
+            <div
+                className="fixed top-3 end-3 z-40 hidden lg:block"
+                data-testid="desktop-notification-bell-wrap"
+            >
+                <NotificationBell />
+            </div>
+            <div
+                className="lg:hidden fixed top-2 end-16 z-40"
+                data-testid="mobile-notification-bell-wrap"
+            >
+                <NotificationBell />
+            </div>
 
             <main className="lg:ps-64 min-h-screen" data-testid="main-content">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-4 sm:py-6 lg:py-8">

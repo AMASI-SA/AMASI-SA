@@ -29,6 +29,24 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159h (Feb 13 2026)**: 🔔 إشعارات/تنبيهات التسويات الذكية.
+  - **User selection**: g (كل الأنواع الستة) + a (7 أيام لـ BNPL) + a (5% للفرق) + a (جرس) + b (بطاقة في الداشبورد قابلة للطي) + d (كل التصرفات).
+  - **Backend** (`alerts_routes.py`): 6 مولّدات تنبيهات idempotent عبر `fingerprint = type:entity:id`:
+    1. `overdue_bnpl` — طلبات tabby/tamara > 7 أيام بلا تسوية
+    2. `amount_diff` — الفعلي ≠ المتوقع بأكثر من 5%
+    3. `missing_salla` — لا فاتورة سلة منذ 14 يوم
+    4. `high_courier_balance` — رصيد شركة شحن > 5000 ر.س
+    5. `unmatched_order` — طلبات بدون مطابقة منذ 10 أيام
+    6. `high_ad_debt` — مديونية حساب إعلاني > 50% من السقف
+  - **APIs** (8 endpoints): `/alerts/refresh`, `/alerts`, `/alerts/unread-count`, `/alerts/{id}/{read|snooze|dismiss}`, `/alerts/read-all`, `/alerts/settings` (GET/PATCH).
+  - **DB**: collections `settlement_alerts` (indexed on user+status, user+fingerprint+status) و `alert_settings`. Auto-expire للـ snoozed alerts عند انتهاء المدة.
+  - **Frontend**:
+    1. **🔔 NotificationBell** — جرس عائم أعلى يسار الصفحة (desktop + mobile) مع شارة عداد و polling كل 60 ثانية. لوحة منسدلة بأزرار: فتح، مقروء، تأجيل (1س/1ي/1أ)، تجاهل.
+    2. **📊 AlertsCard** — بطاقة قابلة للطي في لوحة التحكم تعرض أهم 5 تنبيهات + pills بعدد كل خطورة (حرج/تحذير/معلومة). حالة الطي محفوظة في localStorage.
+    3. **📋 /alerts** — صفحة كاملة مع فلاتر (حالة + خطورة + نوع) وكل التصرفات على كل تنبيه.
+  - **Tests** (`test_alerts_iter159h.py` — passed): دورة حياة كاملة (refresh → list → idempotency على re-refresh → mark-read → snooze → settings).
+
+
 - **Iter-159g (Feb 13 2026)**: 📅 طلب تاريخ إصدار الفاتورة عند رفع ملف سلة.
   - **User confirmation**: "تاريخ التحويل في جدول التسويات = تاريخ إصدار الفاتورة من المنصة".
   - **Root cause**: ملفات سلة (Excel) لا تحتوي على تاريخ إصدار الفاتورة، فالنظام كان يستخدم تاريخ الرفع كبديل.

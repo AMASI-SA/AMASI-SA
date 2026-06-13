@@ -3307,6 +3307,9 @@ attach_operational_reports_routes(api, db, current_user)
 # Iter-149 — Per-provider accounting cutoff dates
 from accounting_cutoffs_routes import attach_accounting_cutoffs_routes
 attach_accounting_cutoffs_routes(api, db, current_user)
+# Iter-159h — Smart Settlement Alerts (in-app notifications)
+from alerts_routes import attach_alerts_routes, ensure_alerts_indexes
+attach_alerts_routes(api, db, current_user)
 app.include_router(api)
 
 # CORS
@@ -3341,6 +3344,7 @@ async def on_startup():
     await ensure_custom_app_indexes(db)
     await ensure_ad_account_indexes(db)
     await ensure_bnpl_indexes(db)
+    await ensure_alerts_indexes(db)
     # Iter-139 — half-hourly ad-account sync (replaces the previous
     # 23:55 daily cron).  Runs every 30 minutes, syncs TODAY only,
     # uses force=True so each pass reverses prior cron rows for the
