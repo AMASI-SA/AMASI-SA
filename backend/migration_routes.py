@@ -224,12 +224,37 @@ async def _legacy_external_balances(db, user_id: str) -> list[dict]:
 
 
 async def _legacy_bank_balances(db, user_id: str) -> list[dict]:
+    """Per-bank current balance from the legacy `accounts` collection.
+
+    Iter-166 — BUG FIX. Previously we read `accounts.balance` which is
+    None for accounts created via the default-banks bootstrap; the real
+    SSOT is `accounts.current_balance` (computed by `_recompute_balance`
+    from the transaction history + opening_balance). Reading the wrong
+    field would have posted Ledger opening balances = 0 for every bank
+    on production, EFFECTIVELY ZEROING the user's bank balances inside
+    the new Universal Ledger. Reported by merchant Feb 2026.
+    """
     accs = await db.accounts.find(
         {"user_id": user_id, "account_type": "bank"}, {"_id": 0},
     ).to_list(500)
-    return [{"account_id": a["id"], "name": a.get("name"),
-              "balance": _round(a.get("balance"))}
-            for a in accs]
+    out = []
+    for a in accs:
+        # Prefer current_balance (computed SSOT). Fall back to legacy
+        # `balance` field if a third-party account never went through
+        # the new computation path.
+        cur = a.get("current_balance")
+        if cur is None:
+            cur = a.get("balance")
+        out.append({
+            "account_id": a["id"],
+            "name": a.get("name"),
+            "balance": _round(cur),
+            # Diagnostic fields surfaced in the Reconciliation Report
+            "_opening_balance": _round(a.get("opening_balance")),
+            "_expected_orders_balance": _round(a.get("expected_orders_balance")),
+            "_currency": a.get("currency") or "SAR",
+        })
+    return out
 
 
 async def _new_ledger_balance(
@@ -710,13 +735,22 @@ def make_migration_router(db) -> APIRouter:
             row["all_projected_match"] = True
             cour_rows.append(row)
 
-        # Banks — legacy: accounts.balance (stored). Ledger: derived.
+        # Banks — legacy: accounts.current_balance (SSOT). Ledger: derived.
         bank_rows = []
         for b in legacy_banks:
             ledger_new = await _ledger_bal("bank", b["account_id"], "main")
             row = {
                 "id": b["account_id"], "name": b["name"],
                 "balance": _mk(b["balance"], ledger_new),
+                # Iter-166 — show the user how this bank's balance was
+                # composed so they can verify the figure before migrating.
+                "breakdown": {
+                    "opening_balance": b.get("_opening_balance", 0),
+                    "expected_orders_balance": b.get(
+                        "_expected_orders_balance", 0),
+                    "current_balance": b["balance"],
+                    "currency": b.get("_currency", "SAR"),
+                },
             }
             row["all_match"] = row["balance"]["match"]
             row["all_projected_match"] = True

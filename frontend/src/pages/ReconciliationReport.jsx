@@ -236,7 +236,7 @@ export default function ReconciliationReport() {
                 ]} migrationCompleted={ms.completed} />
                 <Section title="🏦 الحسابات البنكية" rows={data.banks} columns={[
                     { key: "balance", label: "الرصيد" },
-                ]} migrationCompleted={ms.completed} />
+                ]} showBankBreakdown={true} migrationCompleted={ms.completed} />
             </div>
         </div>
     );
@@ -314,7 +314,7 @@ function SumCard({ label, value, color, suffix }) {
     );
 }
 
-function Section({ title, rows, columns, showBreakdown, migrationCompleted }) {
+function Section({ title, rows, columns, showBreakdown, showBankBreakdown, migrationCompleted }) {
     if (!rows || rows.length === 0) {
         return (
             <div className="mb-6">
@@ -394,6 +394,22 @@ function Section({ title, rows, columns, showBreakdown, migrationCompleted }) {
                                             <span className="mx-2">نقد مدفوع: <span className="num font-bold">{fmt(r.breakdown.cash_paid)}</span></span>
                                             ·
                                             <span className="mx-2 text-slate-800">صافي = <span className="num font-extrabold">{fmt(Math.max(0, (r.breakdown.accrued || 0) - (r.breakdown.cash_paid || 0)))}</span></span>
+                                        </td>
+                                    </tr>
+                                )}
+                                {showBankBreakdown && r.breakdown && (
+                                    <tr className="bg-slate-50/60 border-b border-slate-100"
+                                        data-testid={`bank-breakdown-${r.id}`}>
+                                        <td colSpan={columns.length * (migrationCompleted ? 3 : 4) + 2}
+                                            className="py-1.5 px-2 text-[11px] text-slate-600">
+                                            <span className="font-bold text-slate-700">تفصيل رصيد البنك:</span>
+                                            <span className="mx-2">رصيد افتتاحي: <span className="num font-bold">{fmt(r.breakdown.opening_balance)}</span></span>
+                                            ·
+                                            <span className="mx-2">طلبات معلَّقة: <span className="num font-bold">{fmt(r.breakdown.expected_orders_balance)}</span></span>
+                                            ·
+                                            <span className="mx-2">العملة: <span className="num font-bold">{r.breakdown.currency}</span></span>
+                                            ·
+                                            <span className="mx-2 text-slate-800">الرصيد الحالي = <span className="num font-extrabold">{fmt(r.breakdown.current_balance)}</span></span>
                                         </td>
                                     </tr>
                                 )}

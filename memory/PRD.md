@@ -959,3 +959,45 @@ back to keep production-fresh state):
 **Status**: User has all confirmations. Ready to execute final
 migration on production once he redeploys.
 
+
+## Iter-166 — CRITICAL Bank Balance Field Bug (Feb 2026)
+**Severity: P0 — would have ZEROED bank balances inside the new Ledger.**
+
+**Reported by merchant**: On production reconciliation report, the 3
+bank accounts showed legacy=0:
+- بنك الإنماء: 212,363.30 ر.س in Assets page → 0 in report
+- بنك الأهلي: 2,207.45 ر.س → 0
+- بنك الراجحي: 29,964.04 ر.س → 0
+
+He refused to migrate, asking: "Will banks be lost or zeroed in Ledger?"
+
+**Root cause**: `_legacy_bank_balances` in `migration_routes.py` was
+reading `accounts.balance` — but the canonical SSOT is
+`accounts.current_balance` (computed by `_recompute_balance` in
+`accounts_routes.py` from transaction history + opening_balance).
+Default-banks bootstrap creates accounts with `balance=None`. So the
+migration was reading None → 0 → would have posted opening_balance=0
+to the Ledger for every bank.
+
+**Fix**:
+- Read `current_balance` first; fall back to `balance` for older
+  accounts; defensive default to 0.
+- Surface diagnostic breakdown in the Reconciliation Report:
+  `opening_balance`, `expected_orders_balance`, `currency`.
+- Frontend: new `showBankBreakdown` prop on the Section component
+  renders a sub-row with the composition under each bank.
+- Tests: `/app/backend/tests/test_bank_balance_migration_iter166.py`
+  (3 tests, all pass).
+
+**Verified on merchant's account** (Preview):
+- Pre-fix: all 3 banks showed legacy=0 in report.
+- Post-fix: الإنماء=56,040.59 / الأهلي=2,742.99 / الراجحي=36,319.84
+  (Preview values; production has larger amounts).
+- Full migration roundtrip: 7 opening_balance entries posted
+  (4 employees + 3 banks). Match=100%. safe_to_disable_legacy=true.
+  Then rolled back to keep production-fresh state.
+
+**Action for user**: Save to GitHub → Redeploy. Open reconciliation
+report → verify legacy column now shows the same bank totals he sees
+on the Assets page. Then proceed with the final migration.
+
