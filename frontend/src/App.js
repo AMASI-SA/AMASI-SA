@@ -60,6 +60,7 @@ import SuppliersLedger from "./pages/SuppliersLedger";
 import ExternalsLedger from "./pages/ExternalsLedger";
 import CouriersLedger from "./pages/CouriersLedger";
 import FinancialPositionLedger from "./pages/FinancialPositionLedger";
+import ReconciliationReport from "./pages/ReconciliationReport";
 import ApiPermissionsDiagnostic from "./pages/ApiPermissionsDiagnostic";
 import AccountingCutoffs from "./pages/AccountingCutoffs";
 import BnplBalancesDiagnostic from "./pages/BnplBalancesDiagnostic";
@@ -131,6 +132,7 @@ function AppRoutes() {
             <Route path="/externals-ledger" element={<ProtectedRoute><Layout><ExternalsLedger /></Layout></ProtectedRoute>} />
             <Route path="/couriers-ledger" element={<ProtectedRoute><Layout><CouriersLedger /></Layout></ProtectedRoute>} />
             <Route path="/financial-position-ledger" element={<ProtectedRoute><Layout><FinancialPositionLedger /></Layout></ProtectedRoute>} />
+            <Route path="/accounting/reconciliation" element={<ProtectedRoute><Layout><ReconciliationReport /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics/api-permissions" element={<ProtectedRoute><Layout><ApiPermissionsDiagnostic /></Layout></ProtectedRoute>} />
             <Route path="/settings/accounting-cutoffs" element={<ProtectedRoute><Layout><AccountingCutoffs /></Layout></ProtectedRoute>} />
             <Route path="/bnpl-balances" element={<ProtectedRoute><Layout><BnplBalancesDiagnostic /></Layout></ProtectedRoute>} />

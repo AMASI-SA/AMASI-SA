@@ -419,6 +419,156 @@ def make_migration_router(db) -> APIRouter:
         }
 
     # ── GET /verify — comprehensive post-migration report ───────────
+    @router.get("/reconciliation")
+    async def reconciliation_report(user: dict = Depends(current_user)):
+        """Side-by-side comparison of legacy balances vs Ledger balances
+        for every entity. This is the FINAL gate before disabling legacy
+        endpoints (per user directive Iter-161 Phase 4 closeout).
+
+        Returns per-entity diff with:
+          legacy_balance, ledger_balance, delta, match (bool)
+          plus aggregated totals + match_percentage.
+        """
+        uid = user["id"]
+
+        # ── Legacy snapshots ─────────────────────────────────────
+        legacy_emps = await _legacy_employee_balances(db, uid)
+        legacy_sups = await _legacy_supplier_balances(db, uid)
+        legacy_exts = await _legacy_external_balances(db, uid)
+        legacy_banks = await _legacy_bank_balances(db, uid)
+
+        # ── Compute the Ledger side per entity ───────────────────
+        async def _ledger_bal(et, eid, sub):
+            from ledger_core import compute_balance as _cb
+            b = await _cb(db, user_id=uid, entity_type=et,
+                          entity_id=eid, sub_account=sub)
+            if sub in ("salary_payable", "payable"):
+                return float(b["outstanding_debt"])
+            return float(b["net_balance"])
+
+        def _mk(value_old, value_new):
+            delta = round(float(value_new) - float(value_old), 2)
+            match = abs(delta) < 0.01
+            return {
+                "legacy": round(float(value_old), 2),
+                "ledger": round(float(value_new), 2),
+                "delta": delta,
+                "match": match,
+            }
+
+        emp_rows = []
+        for e in legacy_emps:
+            sp_new = await _ledger_bal("employee", e["employee_id"], "salary_payable")
+            adv_new = await _ledger_bal("employee", e["employee_id"], "advance")
+            cust_new = await _ledger_bal("employee", e["employee_id"], "custody")
+            row = {
+                "id": e["employee_id"], "name": e["name"],
+                "salary_payable": _mk(e["salary_payable"], sp_new),
+                "advance":        _mk(e["advance"], adv_new),
+                "custody":        _mk(e["custody"], cust_new),
+            }
+            row["all_match"] = all(
+                row[k]["match"] for k in ("salary_payable", "advance", "custody"))
+            emp_rows.append(row)
+
+        sup_rows = []
+        for s in legacy_sups:
+            ledger_new = await _ledger_bal("supplier", s["supplier_id"], "payable")
+            row = {
+                "id": s["supplier_id"], "name": s["name"],
+                "payable": _mk(s["payable"], ledger_new),
+            }
+            row["all_match"] = row["payable"]["match"]
+            sup_rows.append(row)
+
+        ext_rows = []
+        for x in legacy_exts:
+            ledger_new = await _ledger_bal("external_person", x["person_id"], "receivable")
+            row = {
+                "id": x["person_id"], "name": x["name"],
+                "receivable": _mk(x["receivable"], ledger_new),
+            }
+            row["all_match"] = row["receivable"]["match"]
+            ext_rows.append(row)
+
+        # Couriers — legacy uses counterparties with kind=courier (paid via
+        # liabilities kind=shipping or similar). For now we read directly
+        # from existing courier counterparties + their open liabilities.
+        from ledger_core import compute_balance as _cb
+        couriers = await db.counterparties.find(
+            {"user_id": uid, "kind": "courier"}, {"_id": 0},
+        ).to_list(500)
+        cour_rows = []
+        for c in couriers:
+            # Legacy: open liabilities tied to this courier id
+            agg = await db.liabilities.aggregate([
+                {"$match": {"user_id": uid,
+                              "kind": {"$in": ["shipping", "courier"]},
+                              "counterparty_id": c["id"]}},
+                {"$group": {"_id": None,
+                              "owed": {"$sum": {"$subtract": [
+                                  "$expected_amount", "$paid_amount"]}}}}
+            ]).to_list(1)
+            legacy_owed = float(agg[0]["owed"]) if agg else 0.0
+            if legacy_owed < 0:
+                legacy_owed = 0.0
+            pay_new = (await _cb(
+                db, user_id=uid, entity_type="courier",
+                entity_id=c["id"], sub_account="payable"))["outstanding_debt"]
+            cod_new = (await _cb(
+                db, user_id=uid, entity_type="courier",
+                entity_id=c["id"], sub_account="cod_receivable"))["net_balance"]
+            # Legacy doesn't track COD; mark legacy_cod = 0
+            row = {
+                "id": c["id"], "name": c.get("name"),
+                "payable":        _mk(legacy_owed, pay_new),
+                "cod_receivable": _mk(0.0, cod_new),
+            }
+            row["all_match"] = row["payable"]["match"] and row["cod_receivable"]["match"]
+            cour_rows.append(row)
+
+        # Banks — legacy: accounts.balance (stored). Ledger: derived.
+        bank_rows = []
+        for b in legacy_banks:
+            ledger_new = await _ledger_bal("bank", b["account_id"], "main")
+            row = {
+                "id": b["account_id"], "name": b["name"],
+                "balance": _mk(b["balance"], ledger_new),
+            }
+            row["all_match"] = row["balance"]["match"]
+            bank_rows.append(row)
+
+        # ── Aggregate summary ────────────────────────────────────
+        all_rows = emp_rows + sup_rows + ext_rows + cour_rows + bank_rows
+        matched = sum(1 for r in all_rows if r["all_match"])
+        total = len(all_rows)
+        match_pct = round(matched / total * 100, 2) if total > 0 else 100.0
+
+        # Total monetary delta (absolute sum of all deltas)
+        def _abs_delta(row):
+            s = 0.0
+            for k, v in row.items():
+                if isinstance(v, dict) and "delta" in v:
+                    s += abs(v["delta"])
+            return s
+        total_delta_abs = round(sum(_abs_delta(r) for r in all_rows), 2)
+
+        return {
+            "summary": {
+                "total_entities": total,
+                "matched": matched,
+                "mismatched": total - matched,
+                "match_percentage": match_pct,
+                "total_absolute_delta": total_delta_abs,
+                "safe_to_disable_legacy": match_pct == 100.0,
+            },
+            "employees": emp_rows,
+            "suppliers": sup_rows,
+            "externals": ext_rows,
+            "couriers": cour_rows,
+            "banks": bank_rows,
+        }
+
     @router.get("/verify")
     async def verify_migration(user: dict = Depends(current_user)):
         """Comprehensive verification report: counts of migrated entities

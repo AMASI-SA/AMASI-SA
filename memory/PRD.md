@@ -29,6 +29,39 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 
+## Completed Work — Iter-161 Phase 4 Closeout (Feb 13 2026): Reconciliation Report
+
+**New endpoint**: `GET /api/accounting/migration/reconciliation`
+Side-by-side comparison for every entity:
+- Employees: legacy vs ledger for {salary_payable, advance, custody}
+- Suppliers: legacy vs ledger for {payable}
+- Externals: legacy vs ledger for {receivable}
+- Couriers: legacy vs ledger for {payable, cod_receivable}
+- Banks: stored `accounts.balance` vs ledger-computed bank.main net
+
+Each comparison returns `{legacy, ledger, delta, match}`. The summary
+includes `safe_to_disable_legacy: bool` — true ONLY when ALL entities
+match within 0.01.
+
+**New page**: `/accounting/reconciliation` (ReconciliationReport.jsx)
+- 4 summary cards (total / matched / mismatched / match %)
+- Green/red status banner based on `safe_to_disable_legacy`
+- Per-section tables with row highlight when mismatch
+- Refresh button
+- Sidebar: «🔍 تقرير المطابقة»
+
+**Test**: `/app/backend/tests/test_reconciliation_iter161.py` — verifies safe flag toggles correctly when legacy data exists but ledger is empty; passes.
+
+**Phase 4 — Closing checklist**
+- ✅ Ledger pages for: employees, suppliers, externals, couriers
+- ✅ Financial Position page reads Ledger only
+- ✅ Reconciliation report endpoint + page
+- ⏳ User to verify 100% match on production then approve disabling legacy endpoints
+- ⏳ Redirect `/financial-position` → `/financial-position-ledger`
+- ⏳ Disable `liabilities.pay`, `.collect`, `.delete`
+
+
+
 ## Completed Work — Iter-161 Phase 4 Part 2 (Feb 13 2026): 4 Ledger Pages + Grouped Accounts
 
 **New frontend pages (all reading STRICTLY from /api/accounting/* endpoints)**

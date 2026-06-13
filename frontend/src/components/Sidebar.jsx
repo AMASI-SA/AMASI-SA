@@ -52,6 +52,7 @@ const SECTIONS = [
             { to: "/externals-ledger", label: "🤝 خارجيون (Ledger)", icon: PaperPlaneRight, testid: "nav-externals-ledger" },
             { to: "/couriers-ledger", label: "📦 شركات شحن (Ledger)", icon: PaperPlaneRight, testid: "nav-couriers-ledger" },
             { to: "/financial-position-ledger", label: "💰 المركز المالي (Ledger)", icon: PaperPlaneRight, testid: "nav-financial-position-ledger" },
+            { to: "/accounting/reconciliation", label: "🔍 تقرير المطابقة", icon: ArrowsLeftRight, testid: "nav-reconciliation" },
             { to: "/financial-input-hub", label: "مركز الإدخال المالي", icon: PaperPlaneRight, testid: "nav-financial-input-hub" },
             { to: "/counterparties", label: "قائمة الأطراف الموحَّدة", icon: UsersThree, testid: "nav-counterparties" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
