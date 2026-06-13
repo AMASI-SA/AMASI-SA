@@ -74,6 +74,37 @@ def attach_payment_settlements_routes(api_router: APIRouter, db) -> None:
             raise HTTPException(status_code=404, detail="الملف غير موجود.")
         return {"ok": True, **result}
 
+    # ── Iter-159e — Manual override of settlement/transfer date ───────
+    # For providers whose files don't contain a transfer date (e.g.
+    # Salla payment invoices), the merchant can set/edit it manually so
+    # the unified overview correctly shows when the money actually
+    # landed in the bank instead of the file upload timestamp.
+    @router.patch("/{file_id}/settlement-date")
+    async def patch_settlement_date(
+        file_id: str,
+        payload: dict,
+        user: dict = Depends(current_user),
+    ):
+        new_date = (payload or {}).get("settlement_date")
+        if new_date in (None, ""):
+            # Allow clearing the manual override → fall back to derived.
+            new_date = None
+        else:
+            new_date = str(new_date).strip()[:10]
+            # Lightweight validation: YYYY-MM-DD shape only.
+            import re as _re
+            if not _re.match(r"^\d{4}-\d{2}-\d{2}$", new_date):
+                raise HTTPException(
+                    status_code=400,
+                    detail="صيغة التاريخ يجب أن تكون YYYY-MM-DD")
+        res = await db.settlement_files.update_one(
+            {"id": file_id, "user_id": user["id"]},
+            {"$set": {"header.settlement_date": new_date}},
+        )
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="الملف غير موجود.")
+        return {"ok": True, "settlement_date": new_date}
+
     # ── Coverage analytics (estimated vs actual) ──────────────────────
     @router.get("/_analytics/coverage")
     async def analytics(user: dict = Depends(current_user)):
@@ -161,17 +192,51 @@ def attach_payment_settlements_routes(api_router: APIRouter, db) -> None:
             {"_id": 0},
         ).sort("uploaded_at", -1).to_list(2000)
 
+        # Iter-159e — Build {file_id → max entry settlement_date} so the
+        # "تاريخ التحويل" column shows the actual settlement/transfer date
+        # captured from the file rows (e.g. Tabby `Transfer Date`,
+        # Tamara `event_date`) instead of the file upload timestamp.
+        file_ids = [f["id"] for f in files]
+        entry_settlement_dates: dict[str, str] = {}
+        if file_ids:
+            cur = db.settlement_entries.aggregate([
+                {"$match": {"user_id": user["id"],
+                            "file_id": {"$in": file_ids},
+                            "settlement_date": {"$ne": None}}},
+                {"$group": {"_id": "$file_id",
+                            "max_date": {"$max": "$settlement_date"}}},
+            ])
+            async for r in cur:
+                v = r.get("max_date")
+                if v is None:
+                    continue
+                if hasattr(v, "isoformat"):
+                    v = v.isoformat()
+                entry_settlement_dates[r["_id"]] = str(v)[:10]
+
         rows = []
         for f in files:
             uploaded_at = f.get("uploaded_at")
             if hasattr(uploaded_at, "isoformat"):
                 uploaded_at = uploaded_at.isoformat()
             uploaded_at = str(uploaded_at or "")
-            settlement_date = (
-                f.get("header", {}).get("settlement_date")
-                or f.get("header", {}).get("transfer_date")
-                or uploaded_at[:10]
-            )
+
+            manual = f.get("header", {}).get("settlement_date")
+            derived = entry_settlement_dates.get(f["id"])
+            transfer = f.get("header", {}).get("transfer_date")
+            if manual:
+                settlement_date = manual
+                date_source = "manual"
+            elif derived:
+                settlement_date = derived
+                date_source = "file_rows"
+            elif transfer:
+                settlement_date = transfer
+                date_source = "file_rows"
+            else:
+                settlement_date = uploaded_at[:10]
+                date_source = "uploaded_at"  # ⚠ requires manual override
+
             sd = (settlement_date or "")[:10]
             if not (from_dt <= sd <= to_dt):
                 continue
@@ -183,6 +248,7 @@ def attach_payment_settlements_routes(api_router: APIRouter, db) -> None:
                 "invoice_number": (f.get("header") or {}).get("invoice_number"),
                 "payment_method": (f.get("header") or {}).get("payment_method", "متعدد"),
                 "settlement_date": sd,
+                "settlement_date_source": date_source,
                 "gross": round(totals.get("gross") or 0, 2),
                 "fees": round(totals.get("fees") or 0, 2),
                 "vat": round(totals.get("vat") or 0, 2),

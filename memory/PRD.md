@@ -29,6 +29,23 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 ## Completed Work
+- **Iter-159e (Feb 13 2026)**: 📅 تاريخ التحويل الفعلي في "جميع التسويات الموحَّدة".
+  - **User feedback**: "تاريخ التحويل يكون تاريخ التسوية نفسه مو تاريخ إضافة الفاتورة".
+  - **Backend**: aggregation على `settlement_entries` لاستخراج `MAX(settlement_date)` لكل ملف. تم تعريف ترتيب أولوية واضح: header.settlement_date (manual override) → max من الصفوف → header.transfer_date → uploaded_at. حقل جديد `settlement_date_source` في الاستجابة (`manual` / `file_rows` / `uploaded_at`).
+  - **PATCH endpoint جديد** `/api/payment-settlements/{file_id}/settlement-date` — تعديل/مسح يدوي مع validation للصيغة YYYY-MM-DD.
+  - **Frontend**: التاريخ في الجدول قابل للنقر يفتح prompt للتعديل. Badge 🟦 "يدوي" أو ⚠ "رفع" حسب المصدر.
+
+- **Iter-159d (Feb 13 2026)**: 🔎 Drawer تفاصيل الجهة عند النقر على اسم المستفيد.
+  - **User request**: "اجعل اسم المستفيد قابلاً للنقر فيفتح صفحة تفاصيل ذلك المورد/الموظف".
+  - **Backend**: endpoint جديد `GET /api/parties/{party_id}/details` يبحث في `counterparties` ثم `operating_salaries` ويُرجع:
+    - بيانات الجهة (الاسم، النوع، الفئة، الراتب الشهري للموظفين، الحالة، الملاحظات)
+    - الإجماليات: owed_to_party / owed_from_party / net_balance
+    - كل الالتزامات (مفتوحة + مغلقة) مرتبة من الأحدث
+    - كل الحركات البنكية المرتبطة عبر `peer_liability_id`
+    - تاريخ آخر نشاط + counts
+  - **Frontend**: drawer جانبي (max-w-2xl) ينفتح من اليمين عند النقر على اسم المستفيد في جدول العمليات. يعرض 3 بطاقات إجماليات + meta info + جدولين (الالتزامات والحركات البنكية).
+
+
 - **Iter-159c (Feb 13 2026)**: 👤 عمود "المستفيد" — اسم الجهة الفعلي.
   - **User feedback**: "اسم الشخص صاحب العملية الموظف مثلاً لا يظهر، تظهر اسم عملية الإدخال (تسوية سلفة)... أبغى أضيف عمود يظهر اسم المستفيد من هذي العملية".
   - **Root cause**: لرواتب الموظفين والسلف، الحقل `description` كان يحتوي وصف العملية ("تسوية سلفة"، "راتب يونيو") بدلاً من اسم الموظف.

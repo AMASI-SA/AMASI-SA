@@ -67,6 +67,25 @@ export default function SettlementsOverview() {
         setMonth(m); setYear(y);
     };
 
+    // Iter-159e — Inline edit of settlement (transfer) date.
+    const editSettlementDate = async (row) => {
+        const next = window.prompt(
+            `تاريخ التحويل لـ #${row.invoice_number || row.file_id}\n` +
+            `(YYYY-MM-DD — اتركه فارغاً للعودة إلى التاريخ التلقائي)`,
+            row.settlement_date || ""
+        );
+        if (next === null) return; // cancelled
+        const trimmed = (next || "").trim();
+        try {
+            await api.patch(`/payment-settlements/${row.file_id}/settlement-date`,
+                { settlement_date: trimmed || null });
+            toast.success("تم تحديث تاريخ التحويل");
+            load(year, month);
+        } catch (e) {
+            toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل التحديث");
+        }
+    };
+
     const exportSelected = async () => {
         if (selected.size === 0) {
             toast.error("اختر تسوية واحدة على الأقل");
@@ -168,7 +187,25 @@ export default function SettlementsOverview() {
                                         </td>
                                         <td className="p-2 num font-bold">{r.invoice_number || "—"}</td>
                                         <td className="p-2 text-slate-700">{r.payment_method || "متعدد"}</td>
-                                        <td className="p-2 text-slate-600" dir="ltr">{r.settlement_date || "—"}</td>
+                                        <td className="p-2 text-slate-600">
+                                            <div className="flex items-center gap-1.5 justify-end">
+                                                <button
+                                                    onClick={() => editSettlementDate(r)}
+                                                    className="text-slate-700 hover:text-emerald-700 hover:underline decoration-dotted underline-offset-2"
+                                                    dir="ltr"
+                                                    title="تعديل تاريخ التحويل"
+                                                    data-testid={`settlement-date-edit-${r.file_id}`}
+                                                >
+                                                    {r.settlement_date || "—"}
+                                                </button>
+                                                {r.settlement_date_source === "manual" && (
+                                                    <span className="text-[9px] bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded font-bold" title="تاريخ مُحرَّر يدوياً">يدوي</span>
+                                                )}
+                                                {r.settlement_date_source === "uploaded_at" && (
+                                                    <span className="text-[9px] bg-amber-50 text-amber-700 px-1 py-0.5 rounded font-bold" title="لا يوجد تاريخ تحويل في الملف — هذا تاريخ الرفع. اضغط لتعديله.">⚠ رفع</span>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="p-2 num text-right">{fmt(r.gross)}</td>
                                         <td className="p-2 num text-right text-rose-700">{fmt(r.fees)}</td>
                                         <td className="p-2 num text-right font-extrabold text-emerald-700">{fmt(r.net_to_bank)}</td>

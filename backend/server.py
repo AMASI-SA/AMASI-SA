@@ -1060,6 +1060,107 @@ async def financial_input_hub_recent(
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Iter-159d — Party (Counterparty / Employee) Details Drawer
+# ─────────────────────────────────────────────────────────────────────────────
+# Returns a 360° view of a single party — used by the "المستفيد" column in the
+# Financial Input Hub recent-entries table.  Aggregates open balances,
+# liability history and bank-transaction history in one call.
+@api.get("/parties/{party_id}/details")
+async def party_details(party_id: str, user: dict = Depends(current_user)):
+    uid = user["id"]
+
+    # Try counterparty first, then operating_salaries.
+    party = None
+    party_type = None
+    cp = await db.counterparties.find_one(
+        {"id": party_id, "user_id": uid}, {"_id": 0})
+    if cp:
+        party = cp
+        party_type = "counterparty"
+    else:
+        es = await db.operating_salaries.find_one(
+            {"id": party_id, "user_id": uid}, {"_id": 0})
+        if es:
+            party = es
+            party_type = "employee"
+
+    if not party:
+        raise HTTPException(status_code=404, detail="الجهة غير موجودة")
+
+    # All liabilities for this party (open + closed, latest first).
+    liab_query = {
+        "user_id": uid,
+        "$or": [
+            {"counterparty_id": party_id},
+            {"employee_salary_id": party_id},
+        ],
+    }
+    liabs = await db.liabilities.find(liab_query, {"_id": 0}) \
+        .sort("created_at", -1).to_list(2000)
+
+    # All bank transactions linked via peer_liability_id ∈ this party's
+    # liabilities. (Transactions don't store party_id directly.)
+    liab_ids = [l["id"] for l in liabs]
+    txs = []
+    if liab_ids:
+        txs = await db.account_transactions.find(
+            {"user_id": uid, "peer_liability_id": {"$in": liab_ids}},
+            {"_id": 0},
+        ).sort("created_at", -1).to_list(2000)
+
+    # Compute directional balances.
+    OWE_THEM_KINDS = ("supplier", "salary", "ad_account")
+    THEY_OWE_KINDS = ("salary_advance", "receivable")
+    owed_to = 0.0
+    owed_from = 0.0
+    for l in liabs:
+        if l.get("status") not in ("unpaid", "partial"):
+            continue
+        rem = float(l.get("expected_amount") or 0) - \
+              float(l.get("paid_amount") or 0)
+        kind = l.get("kind")
+        if kind in OWE_THEM_KINDS:
+            owed_to += rem
+        elif kind in THEY_OWE_KINDS:
+            owed_from += rem
+
+    # Last activity = newest of liabs.created_at or txs.created_at.
+    last_activity = None
+    for src in (liabs, txs):
+        if src and src[0].get("created_at"):
+            ts = src[0]["created_at"]
+            if last_activity is None or ts > last_activity:
+                last_activity = ts
+
+    return {
+        "party": {
+            "id": party["id"],
+            "type": party_type,
+            "name": party.get("name"),
+            "kind": party.get("kind"),                # counterparty kind
+            "category": party.get("category"),        # employee category
+            "country": party.get("country"),
+            "monthly_amount": party.get("monthly_amount"),
+            "status": party.get("status"),
+            "notes": party.get("notes"),
+            "created_at": party.get("created_at"),
+        },
+        "totals": {
+            "owed_to_party": round(owed_to, 2),
+            "owed_from_party": round(owed_from, 2),
+            "net_balance": round(owed_to - owed_from, 2),
+        },
+        "liabilities": liabs,
+        "transactions": txs,
+        "last_activity": last_activity,
+        "counts": {
+            "liabilities": len(liabs),
+            "transactions": len(txs),
+        },
+    }
+
+
 # ── Global App Config (singleton — affects all users) ────────────────────────
 # `app_config` is a single-document collection (id='global'). It holds settings
 # that affect the public-facing UI (e.g. whether the "create new account" link

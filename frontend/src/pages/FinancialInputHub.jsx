@@ -1743,6 +1743,7 @@ function RecentEntriesTable({ reloadKey }) {
     const [busy, setBusy] = useState(false);
     const [q, setQ] = useState("");
     const [opFilter, setOpFilter] = useState("all");
+    const [partyDetailsId, setPartyDetailsId] = useState(null);
 
     const load = async (p = page, search = q, filter = opFilter) => {
         setBusy(true);
@@ -1851,7 +1852,18 @@ function RecentEntriesTable({ reloadKey }) {
                                 <td className="p-2 font-bold text-slate-800">{it.operation}</td>
                                 <td className="p-2 truncate max-w-xs" title={it.party_name}>{it.party_name}</td>
                                 <td className="p-2 truncate max-w-xs text-indigo-700 font-semibold" title={it.beneficiary_name || ""} data-testid={`hub-recent-beneficiary-${it.id}`}>
-                                    {it.beneficiary_name || <span className="text-slate-300">—</span>}
+                                    {it.beneficiary_name
+                                        ? (
+                                            <button
+                                                onClick={() => setPartyDetailsId(it.party_id)}
+                                                className="text-indigo-700 hover:text-indigo-900 underline decoration-dotted underline-offset-2 font-semibold text-right"
+                                                data-testid={`hub-recent-beneficiary-link-${it.id}`}
+                                                title="عرض ملف الجهة الكامل"
+                                            >
+                                                {it.beneficiary_name}
+                                            </button>
+                                          )
+                                        : <span className="text-slate-300">—</span>}
                                 </td>
                                 <td className="p-2 num text-right font-extrabold text-slate-900">{Number(it.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 <td className="p-2 num text-right text-rose-700 font-semibold" data-testid={`hub-recent-owed-to-${it.id}`}>
@@ -1912,6 +1924,190 @@ function RecentEntriesTable({ reloadKey }) {
                     <button onClick={() => load(page + 1, q, opFilter)} disabled={page >= data.total_pages || busy} className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-xs rounded disabled:opacity-40">التالي ›</button>
                 </div>
             )}
+
+            {/* Iter-159d — Party details drawer */}
+            {partyDetailsId && (
+                <PartyDetailsDrawer
+                    partyId={partyDetailsId}
+                    onClose={() => setPartyDetailsId(null)}
+                />
+            )}
+        </div>
+    );
+
+}
+
+// ── Iter-159d — Party details drawer (modal) ────────────────────────────
+function PartyDetailsDrawer({ partyId, onClose }) {
+    const [data, setData] = useState(null);
+    const [busy, setBusy] = useState(true);
+    const [err, setErr] = useState("");
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            setBusy(true); setErr("");
+            try {
+                const { data } = await api.get(`/parties/${partyId}/details`);
+                if (!cancelled) setData(data);
+            } catch (e) {
+                if (!cancelled) setErr(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر تحميل التفاصيل");
+            } finally { if (!cancelled) setBusy(false); }
+        })();
+        return () => { cancelled = true; };
+    }, [partyId]);
+
+    const fmt = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const kindLabel = (k) => ({
+        supplier: "مورد", ad_account: "حساب إعلاني", receivable: "عميل دائن",
+        salary: "راتب", salary_advance: "سلفة موظف",
+    }[k] || k || "—");
+    const txLabel = (t) => ({
+        debt_payment: "سداد التزام", salary_advance: "صرف سلفة",
+        ad_account_topup: "شحن حساب إعلاني", salary_settlement: "تسوية موظف",
+        expense: "مصروف", expense_payment: "دفع مصروف",
+        deposit: "إيداع", withdrawal: "سحب",
+        courier_transfer: "تحويل شحن", cod_transfer: "تحويل COD",
+        receivable_collect: "تحصيل من عميل", shipping_payment: "دفع شركة شحن",
+        topup: "شحن",
+    }[t] || t);
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-start justify-end" onClick={onClose} data-testid="party-details-overlay">
+            <div className="bg-white h-full w-full max-w-2xl shadow-2xl overflow-y-auto" onClick={(e) => e.stopPropagation()} data-testid="party-details-drawer">
+                <div className="sticky top-0 z-10 bg-white border-b border-slate-200 p-4 flex items-center justify-between">
+                    <div>
+                        <h2 className="text-lg font-extrabold text-slate-900" data-testid="party-details-name">
+                            {data?.party?.name || "ملف الجهة"}
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            {data?.party?.type === "employee" ? "موظف" : "جهة"}
+                            {data?.party?.kind && ` • ${kindLabel(data.party.kind)}`}
+                            {data?.party?.category && data.party.type === "employee" && ` • ${data.party.category === "employee" ? "موظف" : data.party.category === "household" ? "منزلي" : "خيري"}`}
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-2xl leading-none" data-testid="party-details-close">×</button>
+                </div>
+
+                {busy && (
+                    <div className="p-8 text-center text-slate-500" data-testid="party-details-loading">جاري التحميل...</div>
+                )}
+                {err && (
+                    <div className="p-4 m-4 bg-rose-50 text-rose-700 rounded text-sm" data-testid="party-details-error">{err}</div>
+                )}
+                {data && !busy && (
+                    <div className="p-4 space-y-4">
+                        {/* Totals cards */}
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5">
+                                <div className="text-rose-700 font-bold text-[11px]">كم له (علينا)</div>
+                                <div className="num font-extrabold text-rose-700 text-base mt-1" data-testid="party-details-owed-to">{fmt(data.totals.owed_to_party)}</div>
+                            </div>
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5">
+                                <div className="text-emerald-700 font-bold text-[11px]">كم عليه (لنا)</div>
+                                <div className="num font-extrabold text-emerald-700 text-base mt-1" data-testid="party-details-owed-from">{fmt(data.totals.owed_from_party)}</div>
+                            </div>
+                            <div className={`border rounded-lg p-2.5 ${data.totals.net_balance >= 0 ? "bg-slate-100 border-slate-300" : "bg-amber-50 border-amber-200"}`}>
+                                <div className="text-slate-700 font-bold text-[11px]">صافي المركز</div>
+                                <div className={`num font-extrabold text-base mt-1 ${data.totals.net_balance >= 0 ? "text-slate-900" : "text-amber-800"}`} data-testid="party-details-net">{fmt(data.totals.net_balance)}</div>
+                            </div>
+                        </div>
+
+                        {/* Meta */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1">
+                            {data.party.type === "employee" && data.party.monthly_amount && (
+                                <div className="flex justify-between"><span className="text-slate-500">الراتب الشهري:</span><span className="num font-bold">{fmt(data.party.monthly_amount)}</span></div>
+                            )}
+                            {data.party.status && (
+                                <div className="flex justify-between"><span className="text-slate-500">الحالة:</span><span className={`font-bold ${data.party.status === "active" ? "text-emerald-700" : "text-rose-600"}`}>{data.party.status === "active" ? "نشط" : "متوقف"}</span></div>
+                            )}
+                            <div className="flex justify-between"><span className="text-slate-500">عدد الالتزامات:</span><span className="num font-bold">{data.counts.liabilities}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-500">عدد الحركات البنكية:</span><span className="num font-bold">{data.counts.transactions}</span></div>
+                            {data.last_activity && (
+                                <div className="flex justify-between"><span className="text-slate-500">آخر نشاط:</span><span className="text-slate-700 text-[11px]" dir="ltr">{(data.last_activity || "").slice(0, 16).replace("T", " ")}</span></div>
+                            )}
+                            {data.party.notes && (
+                                <div className="pt-2 mt-2 border-t border-slate-200">
+                                    <span className="text-slate-500">ملاحظات:</span>
+                                    <p className="text-slate-700 mt-1">{data.party.notes}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Liabilities */}
+                        <div>
+                            <h3 className="text-xs font-bold text-slate-800 mb-2">📋 الالتزامات ({data.liabilities.length})</h3>
+                            {data.liabilities.length === 0 ? (
+                                <div className="text-xs text-slate-400 text-center py-3 border border-dashed border-slate-200 rounded">لا توجد التزامات</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-[11px]" data-testid="party-details-liabilities-table">
+                                        <thead className="bg-slate-50 text-slate-600">
+                                            <tr>
+                                                <th className="p-1.5 text-right">النوع</th>
+                                                <th className="p-1.5 text-right">الوصف</th>
+                                                <th className="p-1.5 num text-right">المبلغ</th>
+                                                <th className="p-1.5 num text-right">المدفوع</th>
+                                                <th className="p-1.5 num text-right">المتبقي</th>
+                                                <th className="p-1.5 text-right">الحالة</th>
+                                                <th className="p-1.5 text-right">التاريخ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {data.liabilities.map((l) => {
+                                                const remaining = (l.expected_amount || 0) - (l.paid_amount || 0);
+                                                const stClr = l.status === "paid" ? "text-emerald-600 bg-emerald-50" : l.status === "partial" ? "text-amber-700 bg-amber-50" : "text-rose-700 bg-rose-50";
+                                                return (
+                                                    <tr key={l.id} className="border-t border-slate-100">
+                                                        <td className="p-1.5 font-semibold text-slate-700">{kindLabel(l.kind)}</td>
+                                                        <td className="p-1.5 text-slate-600 truncate max-w-[140px]" title={l.description}>{l.description || "—"}</td>
+                                                        <td className="p-1.5 num text-right text-slate-900 font-bold">{fmt(l.expected_amount)}</td>
+                                                        <td className="p-1.5 num text-right text-emerald-700">{fmt(l.paid_amount)}</td>
+                                                        <td className="p-1.5 num text-right text-rose-700 font-bold">{fmt(remaining)}</td>
+                                                        <td className="p-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${stClr}`}>{l.status === "paid" ? "مسددة" : l.status === "partial" ? "جزئي" : "غير مسددة"}</span></td>
+                                                        <td className="p-1.5 text-[10px] text-slate-500" dir="ltr">{(l.created_at || "").slice(0, 10)}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Transactions */}
+                        <div>
+                            <h3 className="text-xs font-bold text-slate-800 mb-2">🏦 الحركات البنكية ({data.transactions.length})</h3>
+                            {data.transactions.length === 0 ? (
+                                <div className="text-xs text-slate-400 text-center py-3 border border-dashed border-slate-200 rounded">لا توجد حركات</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-[11px]" data-testid="party-details-transactions-table">
+                                        <thead className="bg-slate-50 text-slate-600">
+                                            <tr>
+                                                <th className="p-1.5 text-right">النوع</th>
+                                                <th className="p-1.5 text-right">الوصف</th>
+                                                <th className="p-1.5 num text-right">المبلغ</th>
+                                                <th className="p-1.5 text-right">التاريخ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {data.transactions.map((t) => (
+                                                <tr key={t.id} className="border-t border-slate-100">
+                                                    <td className="p-1.5 font-semibold text-slate-700">{txLabel(t.transaction_type)}</td>
+                                                    <td className="p-1.5 text-slate-600 truncate max-w-[200px]" title={t.description}>{t.description || "—"}</td>
+                                                    <td className="p-1.5 num text-right font-bold text-slate-900">{fmt(t.amount)}</td>
+                                                    <td className="p-1.5 text-[10px] text-slate-500" dir="ltr">{(t.transaction_date || t.created_at || "").slice(0, 10)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 
