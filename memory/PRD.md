@@ -1269,3 +1269,49 @@ choose «💰 سلفة موظف» → only banks (and cash if any) appear. Choos
 «🔄 تحويل بين الحسابات» → all account types appear (including Salla,
 Tamara, Tabby, COD).
 
+
+## Iter-174 — PERMANENT FIX: Ad-Account Cards Always Derive from Ledger (Feb 2026)
+**Merchant's frustration**: "كل شوي بينه مشكله هذيي الصفحه شوفله حل نهائي".
+Reported Meta card showing balance=25,893.59, debt=26,122.36, spend=26,187.81
+— numbers don't match the ledger, repeatedly.
+
+**Why previous fixes weren't permanent**: Iter-163/169/171b were patches
+that re-synced the cached `counterparties.balance` and `liabilities.expected_amount`
+when the merchant clicked a recovery button. Any new sync corner case
+could re-introduce drift.
+
+**The permanent fix**: `_summarise()` in `ad_account_routes.py` no
+longer reads `counterparties.balance` or `liabilities.expected_amount`
+for display. Instead, EVERY card read does a chronological walk over
+`ad_account_ledger` (the audit log = canonical source of truth):
+
+  • topup/opening → balance += amount
+  • spend (positive) → cover from balance first, rest → debt
+  • spend (negative, correction) → unwind debt first, refund balance
+  • settlement / writeoff → debt -= amount
+
+The cached `counterparties.balance` is now exposed as `_cached_balance`
+for diagnostics but NEVER displayed. General-ledger adjustments
+(settlement/writeoff/adjustment posted entries) still apply on top.
+
+**Effect**: No matter how badly the cache drifts, the card matches the
+audit log. The recurring «🔄 إعادة احتساب من السجل» button becomes
+optional — only useful if the merchant wants to physically realign
+the cached fields with the displayed value.
+
+**Tests** (`test_card_ledger_walk_iter174.py`):
+1. `test_card_ignores_corrupt_cached_balance` — sets corrupt cache to
+   25,893.59 (the merchant's exact reported number), seeds ledger
+   truth of 5K topup + 3K spend → card shows balance=2K, debt=0,
+   spend=3K. PASS.
+2. `test_card_handles_correction_after_inflated_sync` — replays the
+   production 116K topup + 200K spend + -84K correction scenario →
+   card shows balance=0, debt=0, spend=116K. PASS.
+3. All existing ad-account tests (5) still pass.
+
+**Action for user**: Save to GitHub → Redeploy. The card numbers on
+`/ad-accounts` immediately self-correct to match the audit log — no
+manual intervention needed. Production Meta card will now show the
+real balance/debt/spend from its `ad_account_ledger`, not the corrupt
+26K cached values.
+

@@ -253,58 +253,82 @@ async def _current_open_debt(db, user_id: str, cp_id: str) -> Optional[dict]:
 
 
 async def _summarise(db, user_id: str, cp: dict) -> dict:
-    debt = await _current_open_debt(db, user_id, cp["id"])
-    debt_remaining = 0.0
-    if debt:
-        debt_remaining = _round(
-            (debt.get("expected_amount") or 0) - (debt.get("paid_amount") or 0)
-        )
-    # Lifetime spend = sum of ledger spend rows
+    # Iter-174 — PERMANENT FIX: derive balance and open_debt from a
+    # chronological walk over `ad_account_ledger` (the merchant's visible
+    # audit log). This guarantees the displayed numbers ALWAYS match
+    # what the user sees in the audit log, eliminating the recurring
+    # "stale cached balance" class of bugs that previously required
+    # manual "🔄 إعادة احتساب من السجل" intervention.
+    #
+    # The walk replays the sync engine's logic:
+    #   topup/opening → balance += amount
+    #   spend (positive) → cover from balance, rest → debt
+    #   spend (negative, correction) → unwind debt first, refund balance
+    #   settlement / writeoff → debt -= amount
+    balance_walk = 0.0
+    debt_walk = 0.0
     total_spend = 0.0
-    async for row in db.ad_account_ledger.find(
-        {"user_id": user_id, "counterparty_id": cp["id"], "type": "spend"},
-        {"_id": 0, "amount": 1},
-    ):
-        total_spend += float(row.get("amount") or 0)
     last_events = {"topup": None, "spend": None, "debt": None}
-    for ev_type in ("topup", "spend", "debt"):
-        row = await db.ad_account_ledger.find_one(
-            {"user_id": user_id, "counterparty_id": cp["id"], "type": ev_type},
-            {"_id": 0}, sort=[("created_at", -1)],
-        )
-        last_events[ev_type] = row
-    # Iter-160 — apply posted general_ledger adjustments to the
-    # open_debt figure. Settlements / writeoffs (debit side) REDUCE the
-    # outstanding debt; increase_debt adjustments (credit side) INCREASE it.
-    # The underlying liabilities row is NOT mutated — adjustments live
-    # exclusively in the immutable general_ledger.
-    adj_pipeline = [
+
+    async for row in db.ad_account_ledger.find(
+        {"user_id": user_id, "counterparty_id": cp["id"]},
+        {"_id": 0},
+    ).sort([("date", 1), ("created_at", 1)]):
+        ev = row.get("type")
+        amt = float(row.get("amount") or 0)
+        if ev in ("topup", "opening"):
+            balance_walk += amt
+            last_events["topup"] = row
+        elif ev == "spend":
+            total_spend += amt
+            if amt >= 0:
+                covered = min(balance_walk, amt)
+                balance_walk -= covered
+                debt_walk += (amt - covered)
+            else:
+                refund = -amt
+                if debt_walk > 0:
+                    unwind = min(debt_walk, refund)
+                    debt_walk -= unwind
+                    refund -= unwind
+                balance_walk += refund
+            last_events["spend"] = row
+        elif ev == "settlement":
+            debt_walk = max(0.0, debt_walk - amt)
+        elif ev == "writeoff":
+            debt_walk = max(0.0, debt_walk - amt)
+        elif ev == "debt":
+            last_events["debt"] = row
+
+    # Iter-160 — apply posted general_ledger adjustments on top of the
+    # ledger-derived debt (settlement/writeoff/adjustment).
+    adj_debit = 0.0
+    adj_credit = 0.0
+    async for row in db.general_ledger.aggregate([
         {"$match": {"user_id": user_id, "entity_type": "ad_account",
                      "entity_id": cp["id"], "status": "posted",
                      "entry_type": {"$in": ["settlement", "writeoff",
                                               "adjustment"]}}},
         {"$group": {"_id": "$side", "total": {"$sum": "$amount"}}},
-    ]
-    adj_debit = 0.0
-    adj_credit = 0.0
-    async for row in db.general_ledger.aggregate(adj_pipeline):
+    ]):
         if row["_id"] == "debit":
             adj_debit = float(row.get("total") or 0)
         elif row["_id"] == "credit":
             adj_credit = float(row.get("total") or 0)
-    # Reduce outstanding debt by net debit-side adjustments;
-    # increase by credit-side adjustments. Floor at 0.
-    debt_remaining = _round(max(
-        debt_remaining - adj_debit + adj_credit, 0.0,
-    ))
+    debt_walk = max(0.0, debt_walk - adj_debit + adj_credit)
+
+    # Reference the auto-cron liability id (if any) so the UI's
+    # «liability detail» link still works.
+    debt = await _current_open_debt(db, user_id, cp["id"])
+
     return {
         "id": cp["id"],
         "name": cp["name"],
         "ad_provider": cp.get("ad_provider"),
         "external_account_id": cp.get("external_account_id"),
-        "balance": _round(cp.get("balance") or 0),
+        "balance": _round(balance_walk),
         "debt_mode": cp.get("debt_mode") or "auto",
-        "open_debt": debt_remaining,
+        "open_debt": _round(debt_walk),
         "open_debt_id": debt["id"] if debt else None,
         "total_spend": _round(total_spend),
         "last_topup": last_events["topup"],
@@ -312,12 +336,12 @@ async def _summarise(db, user_id: str, cp: dict) -> dict:
         "last_debt": last_events["debt"],
         "last_auto_sync_date": cp.get("last_auto_sync_date"),
         "notes": cp.get("notes"),
-        # Iter-159i — per-account credit limit configuration.
         "credit_limit": cp.get("credit_limit"),
         "alert_threshold_pct": cp.get("alert_threshold_pct"),
-        # Iter-160 — adjustment totals for transparency in UI
         "adjustments_total_debit": _round(adj_debit),
         "adjustments_total_credit": _round(adj_credit),
+        # Iter-174 — expose the cached value for debugging/comparison.
+        "_cached_balance": _round(cp.get("balance") or 0),
     }
 
 
