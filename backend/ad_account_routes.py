@@ -253,15 +253,18 @@ async def _current_open_debt(db, user_id: str, cp_id: str) -> Optional[dict]:
 
 
 async def _summarise(db, user_id: str, cp: dict) -> dict:
-    # Iter-174 — PERMANENT FIX: derive balance and open_debt from a
-    # chronological walk over `ad_account_ledger` (the merchant's visible
-    # audit log). This guarantees the displayed numbers ALWAYS match
-    # what the user sees in the audit log, eliminating the recurring
-    # "stale cached balance" class of bugs that previously required
-    # manual "🔄 إعادة احتساب من السجل" intervention.
+    # Iter-175 — PERMANENT FIX (extends Iter-174):
+    # The Iter-174 walk treated `topup` events as "balance += amount" only,
+    # which DOUBLE-COUNTED debt whenever a topup paid down an existing
+    # liability (because the topup endpoint allocates part of the cash to
+    # debt and part to balance, but the walk ignored the debt portion).
+    # This caused balance AND debt to inflate on every half-hour cron
+    # sync — repeatedly reported on Snap/Meta cards.
     #
-    # The walk replays the sync engine's logic:
-    #   topup/opening → balance += amount
+    # The walk now mirrors the actual `POST /topup` endpoint logic:
+    #   topup   → pay off outstanding debt_walk first, remainder ↑ balance
+    #   opening → ↑ balance (openings are pure asset posting; debt openings
+    #             come from a separate ad_account_opening liability row)
     #   spend (positive) → cover from balance, rest → debt
     #   spend (negative, correction) → unwind debt first, refund balance
     #   settlement / writeoff → debt -= amount
@@ -276,7 +279,13 @@ async def _summarise(db, user_id: str, cp: dict) -> dict:
     ).sort([("date", 1), ("created_at", 1)]):
         ev = row.get("type")
         amt = float(row.get("amount") or 0)
-        if ev in ("topup", "opening"):
+        if ev == "topup":
+            # Iter-175 — mirror /topup endpoint: pay debt first, then balance.
+            to_debt = min(debt_walk, amt) if amt > 0 else 0.0
+            debt_walk = max(0.0, debt_walk - to_debt)
+            balance_walk += (amt - to_debt)
+            last_events["topup"] = row
+        elif ev == "opening":
             balance_walk += amt
             last_events["topup"] = row
         elif ev == "spend":
@@ -1230,7 +1239,14 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         ).sort([("date", 1), ("created_at", 1)]):
             ev = r.get("type")
             amt = float(r.get("amount") or 0)
-            if ev in ("topup", "opening"):
+            if ev == "topup":
+                # Iter-175 — pay off debt first, then balance (mirrors
+                # /topup endpoint to avoid double-counting).
+                topup_total += amt
+                to_debt = min(debt_walk, amt) if amt > 0 else 0.0
+                debt_walk = max(0.0, debt_walk - to_debt)
+                balance_walk += (amt - to_debt)
+            elif ev == "opening":
                 topup_total += amt
                 balance_walk += amt
             elif ev == "spend":

@@ -1315,3 +1315,45 @@ manual intervention needed. Production Meta card will now show the
 real balance/debt/spend from its `ad_account_ledger`, not the corrupt
 26K cached values.
 
+
+
+## Iter-175 — Topup-Paydown Fix in Ledger Walk (Feb 2026)
+**Merchant's complaint** (recurring): "الأرصدة والمديونيات بهذي الصفحة
+تزيد بشكل كبير جداً وغير حقيقي. عندما أقوم بمزامنة الكل تزيد الأرصدة
+ولا تتعالج بشكل نهائي". Snap/Meta cards displaying inflated balance
+(25,883.38) AND debt (26,122.36) simultaneously — getting worse on
+every half-hour cron sync. Reported despite Iter-174 walk-based fix.
+
+**Root cause**: Iter-174's walk added topups straight to balance
+without paying off existing debt first — but the actual `POST /topup`
+endpoint allocates part of the cash to debt (`amount_to_debt`) and
+part to balance (`amount_to_balance`). This mismatch caused debt to
+keep accumulating in the walk while balance grew via topups,
+producing the inflation pattern the merchant kept seeing.
+
+**The fix** (`_summarise()` and `recompute_debt_from_ledger()`):
+  • `topup` event → pay off `debt_walk` first (up to amount), then
+    push remainder to `balance_walk`. Mirrors the endpoint logic.
+  • `opening` event → still pure balance increase (openings are
+    asset postings; debt openings go through a separate liability).
+
+**Why only TikTok worked before**: TikTok cards rarely have topups
+(no per-account scope_field requirement, the spend is recorded
+manually via /spend), so the walk's bug rarely fired. Snap/Meta
+flows topup ↔ cron-spend continuously → bug triggered every sync.
+
+**Tests** (`test_ad_account_summarise_topup_paydown_iter175.py`):
+1. `test_topup_pays_down_debt_in_walk` — opening 50 + spend 100 +
+   topup 100 → balance=50, debt=0. PASS.
+2. `test_cumulative_spend_then_topup_no_inflation` — replays the
+   production scenario (cumulative spend row + interleaved topup).
+   PASS.
+3. `test_multiple_sync_cycles_no_unbounded_growth` — 5 cron cycles
+   with topups never inflate balance or debt across days. PASS.
+4. `test_topup_without_debt_goes_to_balance` — topups with no debt
+   still go fully to balance. PASS.
+
+**Effect**: Snap/Meta cards no longer inflate on cron sync. The
+underlying cached `counterparties.balance` may still drift, but the
+displayed value (from walk) is canonical and always correct. Merchant
+should `Save to Github → Redeploy` to push to mezansalla.com.
