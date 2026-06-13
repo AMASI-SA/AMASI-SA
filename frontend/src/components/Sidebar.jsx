@@ -56,6 +56,8 @@ const SECTIONS = [
             { to: "/bnpl-balances", label: "أرصدة BNPL (المصدر الموحَّد)", icon: Receipt, testid: "nav-bnpl-balances" },
             { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
             { to: "/refund-audit", label: "تدقيق المسترجعات (BNPL)", icon: MagnifyingGlass, testid: "nav-refund-audit" },
+            { to: "/alerts", label: "🔔 التنبيهات الذكية", icon: Lightning, testid: "nav-alerts" },
+            { to: "/diagnostics/api-permissions", label: "🩺 فحص صلاحيات API", icon: Plug, testid: "nav-api-diagnostics" },
         ],
     },
     {
