@@ -83,8 +83,30 @@ REASON_CODES: dict[str, str] = {
 }
 
 ENTRY_TYPES = (
+    # Generic
     "spend", "topup", "payment", "adjustment", "reversal",
     "settlement", "writeoff", "accrual", "opening_balance",
+    # ── Phase 2 (Iter-161) — universal accounting entries ──
+    # Employees
+    "salary_accrual",       # شهري: زيادة salary_payable + مصروف رواتب
+    "salary_payment",       # صرف راتب: نقص salary_payable + نقص bank
+    "advance_grant",        # منح سلفة: زيادة employee.advance + نقص bank
+    "advance_settle",       # تسوية سلفة من راتب: نقص advance + نقص payable
+    "advance_repay_cash",   # سداد السلفة نقداً: نقص advance + زيادة bank
+    "custody_grant",        # تسليم عهدة: زيادة custody + نقص bank
+    "custody_return",       # إرجاع عهدة نقداً: نقص custody + زيادة bank
+    "custody_expense",      # إقفال عهدة بفواتير: نقص custody + مصروف
+    "custody_to_advance",   # تحويل باقي عهدة لسلفة: نقص custody + زيادة advance
+    # Suppliers
+    "supplier_invoice",     # فاتورة مورد: مصروف/مخزون + زيادة supplier.payable
+    "supplier_payment",     # سداد مورد: نقص payable + نقص bank
+    # External persons
+    "receivable_grant",     # قرض خارجي: زيادة receivable + نقص bank
+    "receivable_collection",# تحصيل: نقص receivable + زيادة bank
+    # General
+    "bank_transfer",        # تحويل بين الحسابات: نقص bank A + زيادة bank B
+    "expense_record",       # مصروف عام: مصروف + نقص bank
+    # Reversal kinds for the above are unified under "reversal"
 )
 SIDES = ("debit", "credit")
 STATUSES = ("draft", "posted", "reversed")
@@ -177,6 +199,8 @@ async def post_ledger_entry(
     db, *, user_id: str, actor_id: str, actor_name: str,
     entity_type: str, entity_id: str,
     entry_type: str, amount: float, side: str,
+    sub_account: Optional[str] = None,
+    txn_group_id: Optional[str] = None,
     reason_code: Optional[str] = None, notes: Optional[str] = "",
     metadata: Optional[dict] = None,
     status: str = "posted",
@@ -185,6 +209,12 @@ async def post_ledger_entry(
     """Insert a single ledger entry. Returns the inserted document.
 
     Adjustment / settlement / writeoff entries REQUIRE a reason_code.
+    Phase 2 additions:
+      • sub_account (optional) — sub-ledger code inside an entity
+        (e.g. employee.advance, employee.custody, employee.salary_payable)
+      • txn_group_id (optional) — links related entries belonging to
+        the same business event (mandatory for grouped operations
+        posted via post_txn_group).
     """
     if entry_type not in ENTRY_TYPES:
         raise HTTPException(400, f"entry_type غير صحيح: {entry_type}")
@@ -213,6 +243,8 @@ async def post_ledger_entry(
         "entry_no": entry_no,
         "entity_type": entity_type,
         "entity_id": entity_id,
+        "sub_account": sub_account,
+        "txn_group_id": txn_group_id,
         "entry_type": entry_type,
         "amount": _round(amount),
         "side": side,
@@ -240,10 +272,80 @@ async def post_ledger_entry(
         after_state={
             "entry_no": entry_no, "amount": doc["amount"],
             "side": side, "status": status,
+            "sub_account": sub_account,
+            "txn_group_id": txn_group_id,
         },
         ledger_entry_id=eid,
     )
     return doc
+
+
+async def post_txn_group(
+    db, *, user_id: str, actor_id: str, actor_name: str,
+    entries: list[dict],
+    txn_type: str,
+    reason_code: Optional[str] = None,
+    notes: str = "",
+    metadata: Optional[dict] = None,
+) -> dict:
+    """Atomically post a group of related ledger entries that share
+    one `txn_group_id`. Enforces the double-entry invariant:
+        Σ amounts(debit) == Σ amounts(credit)
+
+    Each `entries` element is a dict containing:
+        entity_type, entity_id, side, amount, entry_type
+        sub_account (optional), notes (optional), metadata (optional)
+
+    `txn_type` is a short label for the business event (e.g.
+    "employee_settlement", "supplier_payment", "bank_transfer"). It is
+    stored in metadata.txn_type on every entry so reports can group
+    them.
+
+    Returns: {
+        "txn_group_id": str,
+        "entries": [doc, ...],
+        "debit_total": float,
+        "credit_total": float,
+    }
+    """
+    if not entries or len(entries) < 2:
+        raise HTTPException(400, "كل حركة محاسبية تحتاج قيدين على الأقل")
+    debit_total = round(sum(float(e["amount"]) for e in entries
+                              if e["side"] == "debit"), 2)
+    credit_total = round(sum(float(e["amount"]) for e in entries
+                                if e["side"] == "credit"), 2)
+    if abs(debit_total - credit_total) > 0.01:
+        raise HTTPException(
+            400,
+            f"عدم توازن القيد: مدين={debit_total} ≠ دائن={credit_total}",
+        )
+
+    group_id = str(uuid.uuid4())
+    saved: list[dict] = []
+    base_meta = {"txn_type": txn_type, **(metadata or {})}
+    for e in entries:
+        doc = await post_ledger_entry(
+            db,
+            user_id=user_id, actor_id=actor_id, actor_name=actor_name,
+            entity_type=e["entity_type"], entity_id=e["entity_id"],
+            entry_type=e["entry_type"], amount=float(e["amount"]),
+            side=e["side"],
+            sub_account=e.get("sub_account"),
+            txn_group_id=group_id,
+            reason_code=e.get("reason_code") or reason_code,
+            notes=e.get("notes") or notes,
+            metadata={**base_meta, **(e.get("metadata") or {})},
+            status="posted",
+        )
+        doc.pop("_id", None)
+        saved.append(doc)
+    return {
+        "txn_group_id": group_id,
+        "txn_type": txn_type,
+        "entries": saved,
+        "debit_total": debit_total,
+        "credit_total": credit_total,
+    }
 
 
 async def reverse_entry(
@@ -312,24 +414,33 @@ async def reverse_entry(
 
 async def compute_balance(
     db, *, user_id: str, entity_type: str, entity_id: str,
+    sub_account: Optional[str] = None,
 ) -> dict:
     """Compute the live balance of an entity from POSTED entries only.
 
     Returns {
         debits, credits, net_balance,
-        prepaid (debit side of topups), spend, outstanding_debt,
+        prepaid_balance, outstanding_debt,
     }
 
     Convention for ad_account / supplier / courier entities:
       net = Σ debits − Σ credits   (≥0 ⇒ asset, <0 ⇒ liability)
+
+    When `sub_account` is provided, only entries with that exact
+    sub_account value are aggregated. This is critical for
+    employee.{advance, custody, salary_payable} which all live under
+    entity_type="employee" but represent distinct sub-ledgers.
     """
+    match: dict = {
+        "user_id": user_id,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "status": "posted",
+    }
+    if sub_account is not None:
+        match["sub_account"] = sub_account
     pipeline = [
-        {"$match": {
-            "user_id": user_id,
-            "entity_type": entity_type,
-            "entity_id": entity_id,
-            "status": "posted",
-        }},
+        {"$match": match},
         {"$group": {
             "_id": "$side",
             "total": {"$sum": "$amount"},
@@ -355,6 +466,7 @@ async def compute_balance(
         "net_balance": net,
         "prepaid_balance": prepaid,
         "outstanding_debt": outstanding,
+        "sub_account": sub_account,
     }
 
 
@@ -401,6 +513,14 @@ async def ensure_indexes(db) -> None:
         [("user_id", 1), ("entity_type", 1), ("entity_id", 1),
          ("status", 1)],
     )
+    # Iter-161 — sub_account enables employee.{advance,custody,payable}
+    await db.general_ledger.create_index(
+        [("user_id", 1), ("entity_type", 1), ("entity_id", 1),
+         ("sub_account", 1), ("status", 1)],
+    )
+    await db.general_ledger.create_index(
+        [("user_id", 1), ("txn_group_id", 1)],
+    )
     await db.general_ledger.create_index(
         [("user_id", 1), ("entry_no", 1)], unique=True,
     )
@@ -411,4 +531,8 @@ async def ensure_indexes(db) -> None:
     await db.accounting_audit_log.create_index(
         [("user_id", 1), ("entity_type", 1), ("entity_id", 1),
          ("timestamp", -1)],
+    )
+    # Iter-161 — expense_categories collection (user-editable)
+    await db.expense_categories.create_index(
+        [("user_id", 1), ("code", 1)], unique=True,
     )

@@ -3463,6 +3463,12 @@ attach_alerts_routes(api, db, current_user)
 # Iter-160 — Universal Ledger + Audit Log (ERP-grade single source of truth)
 from ledger_routes import make_ledger_router
 api.include_router(make_ledger_router(db))
+# Iter-161 — Phase 2: Universal Accounting (employees, suppliers, externals, bank, expenses)
+from universal_accounting_routes import make_universal_router
+api.include_router(make_universal_router(db))
+# Iter-161 — Migration with dry-run + before/after comparison
+from migration_routes import make_migration_router
+api.include_router(make_migration_router(db))
 app.include_router(api)
 
 # CORS

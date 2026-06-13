@@ -1,0 +1,39 @@
+{
+  "summary": "Iter-161 — Universal Accounting (Phase 2) backend-only review. Ran the existing /app/backend/tests/test_universal_accounting_iter161.py (1 passed) and authored /app/backend/tests/test_universal_accounting_iter161_extra.py (1 passed) that covers the negative-paths + endpoints not exercised in Phase-2's main e2e: expense-categories duplicate/PATCH/DELETE/system/in-use protection; custody/return over-balance; custody/settle-with-receipts unknown-category + over-balance; /expenses unknown-category + happy path; bank-transfer same source/dest rejection; /trial-balance is_balanced True; /statement returns entries+balance+audit_log; /ledger/balance?sub_account=... filter returns correct net; /migration/snapshot + /status + /run dry_run twice + apply once + second apply returns 400. The double-entry invariant Σdebits == Σcredits per txn_group_id was re-asserted at end of each test (zero unbalanced groups across all flows). Public preview URL spot-checked with admin@hesab.app token — GET expense-categories / migration/status / migration/snapshot / trial-balance / ledger/balance?sub_account all return 200. Iter-160 regression (test_ledger_iter160_extra.py, test_dashboard_ledger_ssot_iter160.py) still passes individually.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "tests pytest-asyncio + motor", "issue": "Pre-existing quirk: running two AsyncClient-based tests in the same pytest invocation causes 'Event loop is closed' (motor caches its connection at module import). Mitigated by single-test-per-file pattern. Documented in iteration_160.json — unchanged."},
+      {"endpoint": "ad_account_routes.py, liabilities_routes.py, server.py", "issue": "Pydantic v1 @validator + FastAPI @app.on_event deprecation warnings (pre-existing). Not blocking."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_universal_accounting_iter161.py",
+    "/app/backend/tests/test_universal_accounting_iter161_extra.py",
+    "/app/test_reports/pytest/iter161_universal.xml",
+    "/app/test_reports/pytest/iter161_extra.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "post_txn_group is the single chokepoint that guarantees the double-entry invariant — every endpoint in universal_accounting_routes.py composes balanced entries[] and calls it. Verified empirically: zero unbalanced txn_groups across ~20 different flows in two test files.",
+    "expense_categories.DELETE correctly blocks (a) system=True and (b) any category whose code appears as entity_id in general_ledger with entity_type='expense'. Edge case to keep in mind: if a category is renamed via PATCH but the new code is later re-used for entries, the historical ledger rows still reference the OLD code (immutable ledger is correct — but the trial-balance name lookup will show the NEW code's name only if cat_map still has the old code; consider keeping a code→name history map if rename is common).",
+    "migration_routes /run idempotency check is uses {'user_id': uid, 'status': 'completed'} — correct. Dry-run is unconditional (allowed any number of times). Verified: second dry-run after apply also still works (it just re-reads legacy balances and re-prints diff vs. now-non-empty ledger).",
+    "Migration snapshot is purely read-only — no writes to general_ledger or migration_cutoffs from /snapshot or /status. Verified.",
+    "universal_accounting_routes.py is 1048 lines — at the soft threshold. Consider splitting per-entity-type modules (employees_routes.py, suppliers_routes.py, externals_routes.py) for maintainability, but not blocking.",
+    "Custody settle-with-receipts validates total ≤ custody balance BEFORE posting (good) and looks up each item's expense_category against expense_categories — unknown categories are rejected. ✅",
+    "/api/ledger/balance Phase 2 sub_account filter works correctly — verified custody=400 after grant(1000)+return-rejected+settle(600).",
+    "Bank transfer correctly normalises both legs as bank.main sub_account; rejects same source/dest with 400 (verified).",
+    "Trial-balance is_balanced check uses rounded sums to 2dp with 0.01 tolerance — matches the per-group invariant; both pass on the fresh user after ~10 ops including migration apply."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_universal_accounting_iter161_extra.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "N/A (backend-only test)"},
+  "test_credentials": "admin@hesab.app / admin123 (used for public-URL spot checks only). The pytest tests register their own fresh user per test (p2-*, p2x-*).",
+  "seed_data_creation": "Each test self-registers a fresh user and seeds 1 employee in operating_salaries + 1 supplier + 1 external_person in counterparties + 1–2 bank accounts in accounts. All collections (operating_salaries, counterparties, accounts, general_ledger, accounting_audit_log, expense_categories, migration_cutoffs) cleaned up for that user at end of each test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Always run iter161 pytest files INDIVIDUALLY (pytest tests/test_universal_accounting_iter161.py THEN pytest tests/test_universal_accounting_iter161_extra.py) — the motor module-level cache will fail the second test if both run in one invocation. Apply the same to iter160 tests. Public URL = https://salla-analytics.preview.emergentagent.com. Migration cutoff_date format is ISO date string 'YYYY-MM-DD'. /api/accounting/employees/{id}/salary-accrual is rejected (HTTP 400) if a record for the same period already exists. /api/ledger/balance now supports optional sub_account query param — verified.",
+  "rca of the issue": "N/A — no bugs reproduced. Phase-2 universal accounting + cutoff migration verified end-to-end via 2 pytest files covering both happy paths and all negative/idempotency cases mentioned in the review request."
+}

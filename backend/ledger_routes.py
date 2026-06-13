@@ -156,11 +156,13 @@ def make_ledger_router(db) -> APIRouter:
     async def get_balance(
         entity_type: str,
         entity_id: str,
+        sub_account: Optional[str] = None,
         user: dict = Depends(current_user),
     ):
         return await compute_balance(
             db, user_id=user["id"],
             entity_type=entity_type, entity_id=entity_id,
+            sub_account=sub_account,
         )
 
     # ── GET /audit-log ───────────────────────────────────────────────
