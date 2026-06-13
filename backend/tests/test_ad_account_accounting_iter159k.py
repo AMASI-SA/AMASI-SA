@@ -98,6 +98,7 @@ async def test_cumulative_update_when_spend_grows(db, monkeypatch):
         "id": cp, "user_id": uid, "kind": "ad_account",
         "name": "X", "name_lower": "x",
         "ad_provider": "snapchat", "balance": 0.0, "debt_mode": "auto",
+        "external_account_id": "ext-iter159k-x",
     })
 
     import ad_account_routes as mod
@@ -142,6 +143,7 @@ async def test_balance_covers_spend_then_overflow_creates_debt(db, monkeypatch):
         "id": cp, "user_id": uid, "kind": "ad_account",
         "name": "Y", "name_lower": "y",
         "ad_provider": "snapchat", "balance": 60.0, "debt_mode": "auto",
+        "external_account_id": "ext-iter159k-y",
     })
 
     import ad_account_routes as mod
@@ -171,6 +173,7 @@ async def test_yesterday_final_sync_runs_once_per_day(db, monkeypatch):
         "id": cp, "user_id": uid, "kind": "ad_account",
         "name": "Z", "name_lower": "z",
         "ad_provider": "snapchat", "balance": 0.0, "debt_mode": "auto",
+        "external_account_id": "ext-iter159k-z",
     })
 
     call_count = {"n": 0}
@@ -223,6 +226,7 @@ async def test_no_duplicate_liability_across_passes(db, monkeypatch):
         "id": cp, "user_id": uid, "kind": "ad_account",
         "name": "W", "name_lower": "w",
         "ad_provider": "snapchat", "balance": 0.0, "debt_mode": "auto",
+        "external_account_id": "ext-iter159k-w",
     })
 
     import ad_account_routes as mod

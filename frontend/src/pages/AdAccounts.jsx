@@ -1140,6 +1140,39 @@ export default function AdAccounts() {
                     >
                         🧹 تنظيف الترحيلات المُكرّرة
                     </button>
+                    <button
+                        onClick={async () => {
+                            const ok = window.confirm(
+                                "هذا الإصلاح سيمحو أي مصاريف خاطئة تم ترحيلها تلقائياً من " +
+                                "النظام لحسابات إعلانية لا تحتوي على Ad Account ID (Snap/Meta) " +
+                                "خلال آخر 7 أيام. هذا لمعالجة خطأ تجمّع المصاريف الذي ظهر في " +
+                                "فبراير 2026 (مثلاً 100,000 ر.س خاطئة).\n\nمتابعة؟"
+                            );
+                            if (!ok) return;
+                            try {
+                                const { data } = await api.post(
+                                    "/ad-accounts/recover/cross-account-leak");
+                                if (!data.recovered || data.recovered.length === 0) {
+                                    toast.success("لا توجد سطور خاطئة لمعالجتها — حسابك سليم ✓");
+                                    return;
+                                }
+                                const lines = data.recovered.map(
+                                    (r) => `${r.name}: حذف ${r.rows_deleted} سطر بقيمة ${fmt(r.amount_reversed)} ر.س`);
+                                toast.success(
+                                    `تم الإصلاح · إجمالي ${fmt(data.total_amount_reversed)} ر.س\n` + lines.join("\n"),
+                                    { duration: 9000 }
+                                );
+                                load();
+                            } catch (e) {
+                                toast.error(formatApiErrorDetail(e.response?.data?.detail) || "فشل");
+                            }
+                        }}
+                        className="px-4 py-2.5 rounded-lg bg-amber-100 text-amber-900 text-sm font-bold hover:bg-amber-200 flex items-center gap-2"
+                        data-testid="adacc-recover-leak-btn"
+                        title="يصحّح مصاريف اليوم الخاطئة الناتجة عن خلل المزامنة (Iter-163)"
+                    >
+                        🛟 إصلاح مصروف اليوم الخاطئ
+                    </button>
                     <button onClick={async () => {
                         const today = todayIso();
                         const doSync = async (force = false) => {
@@ -1150,6 +1183,18 @@ export default function AdAccounts() {
                                 const processed = data.results.filter((r) => !r.skipped).length;
                                 const skipped   = data.results.filter((r) =>  r.skipped).length;
                                 const debt = data.results.reduce((s, r) => s + (r.debt_created || 0), 0);
+                                // Iter-163 — surface accounts skipped due to
+                                // missing external_account_id so the merchant
+                                // knows the cross-account spend bug is prevented.
+                                const missingExt = data.results.filter(
+                                    (r) => r.reason === "missing_external_account_id");
+                                if (missingExt.length > 0) {
+                                    const names = missingExt.map((r) => r.name).join("، ");
+                                    toast.warning(
+                                        `الحسابات التالية لم يتم مزامنتها لعدم وجود معرّف خارجي: ${names}. عدّل الحساب وأضف external_account_id.`,
+                                        { duration: 8000 }
+                                    );
+                                }
 
                                 // Iter-110 — auto-offer a forced retry if EVERYTHING was skipped
                                 // (signals a stale `last_auto_sync_date` flag from a previous

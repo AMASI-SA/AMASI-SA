@@ -807,3 +807,40 @@ to post opening balances; then the Report will reach 100% match.
 **Pending**: User to re-run Dry Run + Migration after redeploy, then approve Phase 4
 closeout (disable legacy `pay`/`collect`/`delete` endpoints).
 
+
+## Iter-163 — Critical Ad-Sync Cross-Account Leak Fix (Feb 2026)
+**Problem (production)**: User clicked "مزامنة الكل الآن" on the Ad Accounts
+page. A Snap counterparty with no `external_account_id` set absorbed spend
+from EVERY other Snap account of the user — today's spend ballooned to
+~100,000 SAR on the dashboard and on every ad-account card.
+
+**Root cause**: `_fetch_daily_spend` silently dropped the per-account
+filter when `external_id` was missing. For Snap/Meta the scoped sources
+(`snapchat_account_daily.ad_account_id`, `meta_ads_daily.account_id`)
+were queried WITHOUT the filter, aggregating spend across all sibling
+accounts of the same user into the one un-scoped counterparty.
+
+**Fixes**:
+- `_fetch_daily_spend` now SKIPS scoped sources whenever `external_id`
+  is missing (no more silent cross-account aggregation).
+- `_run_sync_for_all` now strictly REQUIRES `external_account_id` for
+  Snap/Meta; otherwise the account is skipped and returned with
+  `reason="missing_external_account_id"` + Arabic warning. The UI
+  toasts a clear message.
+- New endpoint `POST /api/ad-accounts/recover/cross-account-leak` —
+  deletes buggy `auto_cron` ledger rows from the last 7 days for Snap/Meta
+  accounts lacking external_id, zeroes their auto-generated liabilities,
+  and resets sync markers. Surfaced in the UI as the
+  `🛟 إصلاح مصروف اليوم الخاطئ` button.
+- Tests: `/app/backend/tests/test_ad_account_cross_account_leak_iter163.py`
+  (3 tests, all pass). Legacy tests updated to seed `external_account_id`.
+
+**Verified on user's preview env (`amasi.jewelery@gmail.com`)**: Recovery
+endpoint reversed 75 ر.س stale `auto_cron` row. Sync now returns the
+"missing external id" warning instead of leaking spend.
+
+**Action for user**: Save to GitHub → Redeploy → on production, open
+"الحسابات الإعلانية والمديونية" → click "🛟 إصلاح مصروف اليوم الخاطئ" to
+purge the wrong 100K row → then either set the correct Ad Account ID on
+the Snap counterparty OR remove the counterparty.
+

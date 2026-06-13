@@ -26,15 +26,24 @@ def _ctx():
     return {"headers": h, "uid": me["id"]}
 
 
-def _seed_spend(uid, col, date, amount):
+def _seed_spend(uid, col, date, amount, ad_account_id=None):
     load_dotenv("/app/backend/.env")
     mdb = MongoClient(os.environ["MONGO_URL"])[os.environ["DB_NAME"]]
-    mdb[col].insert_one({
+    doc = {
         "id": str(uuid.uuid4()), "user_id": uid,
         "date": date, "spend": amount,
         "campaign_id": "C1", "purchases": 0, "revenue": 0,
         "created_at": date, "updated_at": date,
-    })
+    }
+    # Iter-163 — when seeding a per-account source (e.g.
+    # snapchat_account_daily, meta_ads_daily) we must include the scope
+    # field so the new strict sync logic picks the row up.
+    if ad_account_id:
+        if col == "snapchat_account_daily":
+            doc["ad_account_id"] = ad_account_id
+        elif col == "meta_ads_daily":
+            doc["account_id"] = ad_account_id
+    mdb[col].insert_one(doc)
 
 
 def test_sync_all_processes_all_supported_accounts():
@@ -42,16 +51,19 @@ def test_sync_all_processes_all_supported_accounts():
     spend seeded. /sync-all should process all 3 in one call."""
     c = _ctx()
     cps = {}
-    for prov, col, name in [
-        ("snapchat", "snapchat_ads_daily", "Snap Main"),
-        ("tiktok",   "tiktok_ads_daily",   "TT Main"),
-        ("meta",     "meta_ads_daily",     "FB Main"),
+    for prov, col, name, ext_id in [
+        ("snapchat", "snapchat_account_daily", "Snap Main", "snap-ext-1"),
+        ("tiktok",   "tiktok_ads_daily",       "TT Main",   None),
+        ("meta",     "meta_ads_daily",         "FB Main",   "meta-ext-1"),
     ]:
+        body = {"name": name, "ad_provider": prov}
+        if ext_id:
+            body["external_account_id"] = ext_id
         cp = requests.post(f"{BASE_URL}/api/ad-accounts",
-                            json={"name": name, "ad_provider": prov},
+                            json=body,
                             headers=c["headers"], timeout=10).json()
         cps[prov] = cp
-        _seed_spend(c["uid"], col, "2026-06-10", 200)
+        _seed_spend(c["uid"], col, "2026-06-10", 200, ad_account_id=ext_id)
 
     # Run sync-all
     r = requests.post(f"{BASE_URL}/api/ad-accounts/sync-all",
@@ -69,9 +81,11 @@ def test_sync_all_is_idempotent_per_to_date():
     """Re-running sync-all for the same `to_date` must NOT double-debit."""
     c = _ctx()
     cp = requests.post(f"{BASE_URL}/api/ad-accounts",
-                        json={"name": "Snap I", "ad_provider": "snapchat"},
+                        json={"name": "Snap I", "ad_provider": "snapchat",
+                              "external_account_id": "snap-idem"},
                         headers=c["headers"], timeout=10).json()
-    _seed_spend(c["uid"], "snapchat_ads_daily", "2026-06-11", 100)
+    _seed_spend(c["uid"], "snapchat_account_daily", "2026-06-11", 100,
+                ad_account_id="snap-idem")
 
     # First run
     r1 = requests.post(f"{BASE_URL}/api/ad-accounts/sync-all",

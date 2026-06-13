@@ -41,6 +41,7 @@ async def test_half_hour_sync_consolidates_into_one_row(db, monkeypatch):
     await db.counterparties.insert_one({
         "id": cp_id, "user_id": uid, "kind": "ad_account",
         "name": "TestAd", "ad_provider": "snapchat", "balance": 0.0,
+        "external_account_id": "test-snap-acc",  # Iter-163 — required
         "debt_mode": "auto",
     })
 
@@ -101,6 +102,7 @@ async def test_pre_existing_duplicates_are_collapsed(db, monkeypatch):
     await db.counterparties.insert_one({
         "id": cp_id, "user_id": uid, "kind": "ad_account",
         "name": "TestAd2", "ad_provider": "snapchat", "balance": 0.0,
+        "external_account_id": "test-snap-acc-2",  # Iter-163
         "debt_mode": "auto",
     })
     # Seed 3 pre-existing duplicate rows (sum = 80, simulating
