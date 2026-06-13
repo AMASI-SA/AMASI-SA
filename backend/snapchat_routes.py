@@ -1186,6 +1186,26 @@ def _build_router(db) -> APIRouter:
         for d in dates:
             await _reaggregate_snap_daily(uid, d.isoformat())
 
+        # Iter-161 Phase 3 — push fresh spend straight into ad_account_ledger
+        # so the Dashboard's "صرف اليوم" card reflects the manual sync
+        # immediately (previously waited up to 30 min for the next cron pass).
+        # We force=True to keep the ledger row in sync with the latest
+        # cumulative platform total.
+        try:
+            from ad_account_routes import _run_sync_for_all
+            if dates:
+                min_d = min(dates).isoformat()
+                max_d = max(dates).isoformat()
+                await _run_sync_for_all(db, uid, min_d, max_d, force=True)
+        except Exception as _e:
+            # Don't fail the user-facing sync if the secondary push fails;
+            # the next half-hour cron will catch up.
+            import logging as _lg
+            _lg.getLogger(__name__).warning(
+                "iter-161p3: ad_account_ledger push after snap sync failed: %s",
+                _e,
+            )
+
         return {
             "accounts_synced": len(accounts_summary),
             "items": accounts_summary,

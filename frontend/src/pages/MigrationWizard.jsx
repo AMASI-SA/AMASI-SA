@@ -126,6 +126,32 @@ export default function MigrationWizard() {
                             عدد القيود الافتتاحية: {status.cutoff?.applied_count} ·
                             وقت التطبيق: {status.cutoff?.applied_at?.slice(0, 19).replace("T", " ")}
                         </div>
+                        <button onClick={async () => {
+                            try {
+                                const { data } = await api.get("/accounting/migration/verify");
+                                const lines = [
+                                    `الموظفون: ${data.counts.employees_with_balance}`,
+                                    `الموردون: ${data.counts.suppliers_with_balance}`,
+                                    `الأشخاص الخارجيون: ${data.counts.externals_with_balance}`,
+                                    `الحسابات البنكية: ${data.counts.banks_with_balance}`,
+                                    `إجمالي القيود الافتتاحية: ${data.counts.opening_entries_total}`,
+                                    "",
+                                    "مقارنة الأرصدة:",
+                                    `راتب مستحق: قديم=${data.legacy_totals.salary_payable} ↔ جديد=${data.opening_totals.salary_payable} ${data.match.salary_payable ? "✓" : "✗"}`,
+                                    `سلف موظفين: قديم=${data.legacy_totals.advance} ↔ جديد=${data.opening_totals.advance} ${data.match.advance ? "✓" : "✗"}`,
+                                    `موردون: قديم=${data.legacy_totals.supplier_payable} ↔ جديد=${data.opening_totals.supplier_payable} ${data.match.supplier_payable ? "✓" : "✗"}`,
+                                    `مستحقات خارجية: قديم=${data.legacy_totals.external_receivable} ↔ جديد=${data.opening_totals.external_receivable} ${data.match.external_receivable ? "✓" : "✗"}`,
+                                    `أرصدة بنوك: قديم=${data.legacy_totals.bank_balance} ↔ جديد=${data.opening_totals.bank_balance} ${data.match.bank_balance ? "✓" : "✗"}`,
+                                    "",
+                                    data.all_match ? "✅ كل الأرصدة متطابقة 100%" : "⚠ يوجد اختلاف في بعض الأرصدة",
+                                ];
+                                alert(lines.join("\n"));
+                            } catch (e) { toast.error("فشل تحميل التقرير"); }
+                        }}
+                            className="mt-2 text-xs text-emerald-800 underline hover:text-emerald-950"
+                            data-testid="mig-verify-btn">
+                            📊 عرض تقرير التحقق
+                        </button>
                     </div>
                 ) : (
                     <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-4 mb-4">

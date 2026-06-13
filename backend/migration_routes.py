@@ -418,4 +418,86 @@ def make_migration_router(db) -> APIRouter:
                         else "applied_with_mismatches"),
         }
 
+    # ── GET /verify — comprehensive post-migration report ───────────
+    @router.get("/verify")
+    async def verify_migration(user: dict = Depends(current_user)):
+        """Comprehensive verification report: counts of migrated entities
+        + sum of opening balances + sum of legacy balances + match flag."""
+        uid = user["id"]
+        cm = await db.migration_cutoffs.find_one(
+            {"user_id": uid}, {"_id": 0},
+        )
+        # Legacy snapshot
+        legacy = {
+            "employees": await _legacy_employee_balances(db, uid),
+            "suppliers": await _legacy_supplier_balances(db, uid),
+            "externals": await _legacy_external_balances(db, uid),
+            "banks": await _legacy_bank_balances(db, uid),
+        }
+        # Opening balance entries
+        opening = await db.general_ledger.find(
+            {"user_id": uid, "entry_type": "opening_balance",
+             "status": "posted"},
+            {"_id": 0},
+        ).to_list(2000)
+
+        def _agg(lst, key):
+            return round(sum(float(r.get(key) or 0) for r in lst), 2)
+
+        opening_by_type: dict = {}
+        for op in opening:
+            k = (op["entity_type"], op.get("sub_account") or "")
+            opening_by_type[k] = opening_by_type.get(k, 0.0) + (
+                op["amount"] if op["side"] == "debit" else -op["amount"]
+            )
+        opening_by_type = {k: round(v, 2) for k, v in opening_by_type.items()}
+
+        # Per-section totals
+        legacy_totals = {
+            "salary_payable": _agg(legacy["employees"], "salary_payable"),
+            "advance":        _agg(legacy["employees"], "advance"),
+            "custody":        _agg(legacy["employees"], "custody"),
+            "supplier_payable": _agg(legacy["suppliers"], "payable"),
+            "external_receivable": _agg(legacy["externals"], "receivable"),
+            "bank_balance":   _agg(legacy["banks"], "balance"),
+        }
+        opening_totals = {
+            # opening is signed (debit-credit): for payable types we
+            # expect negative (credit side), so invert for display.
+            "salary_payable":     round(-opening_by_type.get(
+                ("employee", "salary_payable"), 0.0), 2),
+            "advance":            opening_by_type.get(
+                ("employee", "advance"), 0.0),
+            "custody":            opening_by_type.get(
+                ("employee", "custody"), 0.0),
+            "supplier_payable":   round(-opening_by_type.get(
+                ("supplier", "payable"), 0.0), 2),
+            "external_receivable": opening_by_type.get(
+                ("external_person", "receivable"), 0.0),
+            "bank_balance":       opening_by_type.get(
+                ("bank", "main"), 0.0),
+        }
+        match = {k: abs(legacy_totals[k] - opening_totals[k]) < 0.01
+                  for k in legacy_totals}
+
+        return {
+            "cutoff": cm,
+            "counts": {
+                "employees_with_balance": sum(
+                    1 for e in legacy["employees"]
+                    if e["salary_payable"] > 0 or e["advance"] > 0),
+                "suppliers_with_balance": sum(
+                    1 for s in legacy["suppliers"] if s["payable"] > 0),
+                "externals_with_balance": sum(
+                    1 for x in legacy["externals"] if x["receivable"] > 0),
+                "banks_with_balance": sum(
+                    1 for b in legacy["banks"] if abs(b["balance"]) > 0.01),
+                "opening_entries_total": len(opening),
+            },
+            "legacy_totals": legacy_totals,
+            "opening_totals": opening_totals,
+            "match": match,
+            "all_match": all(match.values()),
+        }
+
     return router

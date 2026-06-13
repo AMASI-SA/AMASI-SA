@@ -29,6 +29,40 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 
+## Completed Work — Iter-161 Phase 3 (Feb 13 2026): Couriers + Migration Verify + Snapchat Dashboard Sync Fix
+
+**Confirmation on user concerns**
+- ❌ **لا يوجد cron يخلق قيود رواتب يومية** — التحقق من الكود: لا توجد عملية تلقائية تنشئ قيود في liabilities يومياً. الموجود فقط `accrue-monthly` (manual, واحد لكل موظف شهرياً) و `salary-accrual-summary` (read-only، يحسب الـ accrual عند العرض). كل شيء بالفعل **monthly + display-time accrual**.
+
+**Bug fix: Snapchat «صرف اليوم = 0»**
+- **Root cause**: عند الضغط على «تحديث فوري» في صفحة الحسابات، الكود كان يكتب لـ `snapchat_account_daily` + `daily_costs` فقط — وليس `ad_account_ledger`. وبما أن الـ dashboard refactor (Iter-160) يقرأ حصراً من `ad_account_ledger`، فكان الصرف اليومي يظهر صفر حتى يشتغل cron نصف الساعة.
+- **Fix**: في `snapchat_routes.py`، بعد `_reaggregate_snap_daily` نستدعي `_run_sync_for_all(force=True)` فوراً لدفع البيانات للـ ledger بنفس الـ request.
+
+**New: Couriers (Shipping Companies) في الـ Ledger الموحد**
+- 3 endpoints جديدة:
+  - `POST /api/accounting/couriers/{id}/charge` — رسوم شحن (مصروف + courier.payable)
+  - `POST /api/accounting/couriers/{id}/pay` — سداد للشركة
+  - `POST /api/accounting/couriers/{id}/cod-deposit` — إيداع COD (يقلل courier.cod_receivable + يزيد bank)
+- Sub_accounts: `payable` (ما عليك للشركة) + `cod_receivable` (ما حصلته الشركة من العملاء)
+
+**New: Migration Verification Report**
+- `GET /api/accounting/migration/verify` — تقرير شامل بعد الترحيل:
+  - عدد الكيانات المرحلة (employees / suppliers / externals / banks)
+  - عدد القيود الافتتاحية
+  - **مقارنة الأرصدة قبل/بعد لكل قسم** مع flag `all_match: true/false`
+- زر «📊 عرض تقرير التحقق» في Migration Wizard UI
+
+**Tests** (all pass individually)
+- `/app/backend/tests/test_phase3_iter161.py` — courier charge/pay/COD + verify endpoint
+- جميع tests السابقة (iter-159, 160, 161 Phase 2) خضراء
+
+**ما لم يُنفَّذ بعد (Phase 4 لاحق)**:
+- تحويل صفحات الموظفين/الالتزامات الموجودة لتقرأ من الـ Ledger الجديد بدل `liabilities` (تتطلب UI rework لأكثر من 10 ملفات frontend)
+- تعطيل endpoints الـ legacy `/api/liabilities/{id}/pay`, `/collect`, `DELETE` (بعد توصيل الواجهات للجديد)
+- ربط SMSA/iMile APIs لمزامنة فواتير الشحن تلقائياً
+
+
+
 ## Completed Work — Iter-161 (Feb 13 2026): 🏛 PHASE 2 — Universal Append-Only Accounting Engine
 
 **User directive**: "أريد نظاماً محاسبياً موحداً يفهم الفرق بين راتب/سلفة/عهدة/مصروف/التزام مورد/ذمم مدينة/ذمم دائنة وتكون جميع الأرصدة محسوبة من Ledger فقط مع إمكانية تتبع كل حركة." Plus: one unified entry screen replacing scattered screens; cutoff migration at 2026-06-13; monthly salary (no daily accrual); custody stays open; user-editable expense categories.

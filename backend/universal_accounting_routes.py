@@ -908,6 +908,131 @@ def make_universal_router(db) -> APIRouter:
         return {"ok": True, **result}
 
     # ═══════════════════════════════════════════════════════════════
+    # Couriers / Shipping companies (same shape as suppliers)
+    # ═══════════════════════════════════════════════════════════════
+    @router.post("/couriers/{courier_id}/charge")
+    async def courier_charge(
+        courier_id: str, payload: SupplierInvoiceIn,
+        user: dict = Depends(current_user),
+    ):
+        """Post a shipping-charge owed to a courier (e.g. monthly invoice
+        from SMSA / iMile). Sub_account=payable (we owe them)."""
+        cp = await db.counterparties.find_one(
+            {"id": courier_id, "user_id": user["id"], "kind": "courier"},
+            {"_id": 0, "name": 1},
+        )
+        if not cp:
+            raise HTTPException(404, "شركة الشحن غير موجودة")
+        actor_id, actor_name = await _resolve_actor(user)
+        result = await post_txn_group(
+            db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
+            txn_type="courier_charge",
+            notes=payload.notes or f"رسوم شحن — {cp.get('name')}",
+            metadata={"courier_name": cp.get("name"),
+                       "invoice_no": payload.invoice_no,
+                       "invoice_date": payload.invoice_date},
+            entries=[
+                {"entity_type": "expense",
+                 "entity_id": payload.expense_category or "shipping",
+                 "side": "debit", "amount": payload.amount,
+                 "entry_type": "supplier_invoice"},
+                {"entity_type": "courier", "entity_id": courier_id,
+                 "sub_account": "payable", "side": "credit",
+                 "amount": payload.amount,
+                 "entry_type": "supplier_invoice"},
+            ],
+        )
+        return {"ok": True, **result,
+                "balance": await compute_balance(
+                    db, user_id=user["id"], entity_type="courier",
+                    entity_id=courier_id, sub_account="payable")}
+
+    @router.post("/couriers/{courier_id}/pay")
+    async def courier_pay(
+        courier_id: str, payload: SupplierPaymentIn,
+        user: dict = Depends(current_user),
+    ):
+        cp = await db.counterparties.find_one(
+            {"id": courier_id, "user_id": user["id"], "kind": "courier"},
+            {"_id": 0, "name": 1},
+        )
+        if not cp:
+            raise HTTPException(404, "شركة الشحن غير موجودة")
+        acc = await db.accounts.find_one(
+            {"id": payload.paid_from_account_id, "user_id": user["id"]},
+            {"_id": 0, "name": 1},
+        )
+        if not acc:
+            raise HTTPException(404, "الحساب البنكي غير موجود")
+        actor_id, actor_name = await _resolve_actor(user)
+        result = await post_txn_group(
+            db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
+            txn_type="courier_payment",
+            notes=payload.notes or f"سداد شركة شحن — {cp.get('name')}",
+            metadata={"courier_name": cp.get("name"),
+                       "payment_date": payload.payment_date},
+            entries=[
+                {"entity_type": "courier", "entity_id": courier_id,
+                 "sub_account": "payable", "side": "debit",
+                 "amount": payload.amount,
+                 "entry_type": "supplier_payment"},
+                {"entity_type": "bank",
+                 "entity_id": payload.paid_from_account_id,
+                 "sub_account": "main", "side": "credit",
+                 "amount": payload.amount,
+                 "entry_type": "supplier_payment"},
+            ],
+        )
+        return {"ok": True, **result,
+                "balance": await compute_balance(
+                    db, user_id=user["id"], entity_type="courier",
+                    entity_id=courier_id, sub_account="payable")}
+
+    @router.post("/couriers/{courier_id}/cod-deposit")
+    async def courier_cod_deposit(
+        courier_id: str, payload: SupplierPaymentIn,
+        user: dict = Depends(current_user),
+    ):
+        """The courier has collected COD from buyers and deposits to
+        our bank. This INCREASES our bank and DECREASES what the courier
+        owes us (i.e. raises sub_account=receivable balance toward 0)."""
+        cp = await db.counterparties.find_one(
+            {"id": courier_id, "user_id": user["id"], "kind": "courier"},
+            {"_id": 0, "name": 1},
+        )
+        if not cp:
+            raise HTTPException(404, "شركة الشحن غير موجودة")
+        acc = await db.accounts.find_one(
+            {"id": payload.paid_from_account_id, "user_id": user["id"]},
+            {"_id": 0, "name": 1},
+        )
+        if not acc:
+            raise HTTPException(404, "الحساب البنكي غير موجود")
+        actor_id, actor_name = await _resolve_actor(user)
+        result = await post_txn_group(
+            db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
+            txn_type="courier_cod_deposit",
+            notes=payload.notes or f"إيداع COD — {cp.get('name')}",
+            metadata={"courier_name": cp.get("name"),
+                       "payment_date": payload.payment_date},
+            entries=[
+                {"entity_type": "bank",
+                 "entity_id": payload.paid_from_account_id,
+                 "sub_account": "main", "side": "debit",
+                 "amount": payload.amount,
+                 "entry_type": "receivable_collection"},
+                {"entity_type": "courier", "entity_id": courier_id,
+                 "sub_account": "cod_receivable", "side": "credit",
+                 "amount": payload.amount,
+                 "entry_type": "receivable_collection"},
+            ],
+        )
+        return {"ok": True, **result,
+                "cod_balance": await compute_balance(
+                    db, user_id=user["id"], entity_type="courier",
+                    entity_id=courier_id, sub_account="cod_receivable")}
+
+    # ═══════════════════════════════════════════════════════════════
     # Unified statements (single endpoint to view everything)
     # ═══════════════════════════════════════════════════════════════
     @router.get("/statement")
