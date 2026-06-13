@@ -29,6 +29,61 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 
+## Completed Work — Iter-161 (Feb 13 2026): 🏛 PHASE 2 — Universal Append-Only Accounting Engine
+
+**User directive**: "أريد نظاماً محاسبياً موحداً يفهم الفرق بين راتب/سلفة/عهدة/مصروف/التزام مورد/ذمم مدينة/ذمم دائنة وتكون جميع الأرصدة محسوبة من Ledger فقط مع إمكانية تتبع كل حركة." Plus: one unified entry screen replacing scattered screens; cutoff migration at 2026-06-13; monthly salary (no daily accrual); custody stays open; user-editable expense categories.
+
+**Schema extensions**
+- `general_ledger`: added `sub_account` (string) + `txn_group_id` (string)
+- New entry_types: salary_accrual, salary_payment, advance_grant, advance_settle, advance_repay_cash, custody_grant, custody_return, custody_expense, custody_to_advance, supplier_invoice, supplier_payment, receivable_grant, receivable_collection, bank_transfer, expense_record
+- New collections: `expense_categories` (user-editable), `migration_cutoffs`
+- Added `post_txn_group(...)` helper — atomically posts ≥2 linked entries, enforces Σ debits == Σ credits
+
+**Entity model (sub_account-based)**
+| entity_type | sub_account | nature |
+|---|---|---|
+| bank | main | asset |
+| employee | salary_payable | liability |
+| employee | advance | asset (emp owes us) |
+| employee | custody | asset (business funds in emp's hands) |
+| supplier | payable | liability |
+| external_person | receivable | asset |
+| ad_account | (existing) | mixed |
+| expense | <category_code> | expense |
+
+**New endpoints — /api/accounting/***
+- **Employees**: `/employees/{id}/advances`, `/custody`, `/custody/return`, `/custody/settle-with-receipts`, `/salary-accrual`, `/settle`, `/financial-summary`
+- **Suppliers**: `/suppliers/{id}/invoice`, `/pay`
+- **Externals**: `/external-persons/{id}/grant`, `/collect`
+- **General**: `/bank-transfer`, `/expenses`
+- **Categories CRUD**: `/expense-categories` (GET/POST/PATCH/DELETE) with 16 Arabic defaults auto-seeded
+- **Reports**: `/trial-balance`, `/statement?entity_type=&entity_id=&sub_account=`
+
+**Migration** — `/api/accounting/migration/*`
+- `GET /snapshot` — read-only legacy balances (employees + suppliers + externals + banks)
+- `GET /status` — completion state
+- `POST /run` — `dry_run=True` (always allowed) returns before/after/diff/mismatch_count; `dry_run=False` (once only) writes opening_balance entries with sub_account preserved + marks cutoff
+- IDEMPOTENT: second non-dry-run returns HTTP 400
+
+**Frontend**
+- **`/new-transaction`** — `UnifiedEntryScreen.jsx`: ONE form for every operation type (12 types) with live double-entry preview (مدين/دائن) + balanced flag
+- **`/accounting/migration`** — `MigrationWizard.jsx`: dry-run with side-by-side BEFORE/AFTER diff per entity + confirmation phrase "أوافق على الترحيل" required to apply
+- Sidebar: 2 new menu items
+
+**Tests** (all pass individually)
+- `/app/backend/tests/test_universal_accounting_iter161.py` — end-to-end (advance, salary accrual+settle, custody full lifecycle, supplier inv+pay, external grant+collect, bank transfer, category CRUD, double-entry invariant, dry-run)
+- `/app/backend/tests/test_universal_accounting_iter161_extra.py` — negative paths + edge cases (created by testing agent)
+
+**Testing agent result**: backend success_rate **100%**, no critical/minor blocking issues, no frontend issues.
+
+**What's NOT migrated yet (intentional — to be done in Phase 3)**
+- Legacy endpoints `/api/liabilities/*` still active (read-only sources for migration; user UI still works via them)
+- The cron job that creates daily salary accruals in `liabilities` still runs (user wants monthly accrual via new endpoint — this needs disabling in a follow-up)
+- Shipping companies + courier accounts not yet wired to universal entries (will be similar to suppliers)
+- Existing pages (Employees, Liabilities, BNPL, AdAccounts) untouched — they continue using legacy endpoints
+
+
+
 ## Completed Work — Iter-160 (Feb 13 2026): 🏛 ERP-Grade Universal Ledger + Audit Log
 **User directive**: "لا أريد حذف الديون أو تصفيرها فعلياً من قاعدة البيانات. محاسبياً لا يجوز حذف المصروف أو المديونية بعد تسجيلها لأنها تمثل حركة مالية حدثت بالفعل. البديل: تسوية / قيد عكسي / شطب بموافقة." + Message #737 Single-Source-of-Truth for ad spending.
 
