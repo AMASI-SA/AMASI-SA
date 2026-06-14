@@ -355,4 +355,284 @@ def make_reversals_router(db, current_user):
             _ = grp  # ensure variable is used (lint-friendly)
         return {"reversals": list(seen.values())}
 
+    # ─────────────────────────────────────────────────────────
+    # Iter-201 — Expense Reversal (expense_record)
+    #
+    # Same mirror-every-leg pattern as Iter-199 but applies to
+    # entry_type='expense_record'. The reversal flips ALL legs
+    # (whether the expense was paid from a bank, cash account,
+    # employee custody, or payment_platform), so the source
+    # account always gets the money back EXACTLY where it left.
+    # ─────────────────────────────────────────────────────────
+    @router.get("/expenses/reversible")
+    async def list_reversible_expenses(
+        user: dict = Depends(current_user),
+    ):
+        """Lists every expense_record group that hasn't been
+        reversed yet, with the source account (the credit leg)
+        for context."""
+        uid = user["id"]
+        # Use group-by aggregation to pull each txn_group once.
+        # The merchant typically wants the newest 200.
+        pipeline = [
+            {"$match": {"user_id": uid,
+                         "entry_type": "expense_record",
+                         "status": "posted"}},
+            {"$sort": {"posted_at": -1}},
+            {"$group": {
+                "_id": "$txn_group_id",
+                "posted_at": {"$first": "$posted_at"},
+                "amount": {"$max": "$amount"},
+                "notes": {"$first": "$notes"},
+                "metadata": {"$first": "$metadata"},
+            }},
+            {"$sort": {"posted_at": -1}},
+            {"$limit": 200},
+        ]
+        groups = []
+        async for g in db.general_ledger.aggregate(pipeline):
+            groups.append(g)
+
+        out: list = []
+        for g in groups:
+            gid = g["_id"]
+            if not gid:
+                continue
+            already = await db.general_ledger.find_one(
+                {"user_id": uid, "entry_type": "reversal",
+                 "reversal_of_txn_group_id": gid,
+                 "status": "posted"},
+                {"_id": 1},
+            )
+            # Source-of-funds leg (whatever has the CREDIT side).
+            src_leg = await db.general_ledger.find_one(
+                {"user_id": uid, "txn_group_id": gid,
+                 "side": "credit",
+                 "entity_type": {"$in": [
+                     "bank", "cash", "payment_platform",
+                     "employee",
+                 ]},
+                 "status": "posted"},
+                {"_id": 0, "entity_type": 1, "entity_id": 1,
+                 "sub_account": 1, "amount": 1},
+            )
+            source_name = None
+            source_type = src_leg.get("entity_type") if src_leg else None
+            if src_leg:
+                if source_type in ("bank", "cash",
+                                    "payment_platform"):
+                    acc = await db.accounts.find_one(
+                        {"id": src_leg["entity_id"],
+                         "user_id": uid},
+                        {"_id": 0, "name": 1},
+                    )
+                    source_name = acc.get("name") if acc else None
+                elif source_type == "employee":
+                    emp = await db.operating_salaries.find_one(
+                        {"id": src_leg["entity_id"],
+                         "user_id": uid},
+                        {"_id": 0, "name": 1},
+                    ) or await db.employees.find_one(
+                        {"id": src_leg["entity_id"],
+                         "user_id": uid},
+                        {"_id": 0, "name": 1},
+                    )
+                    source_name = emp.get("name") if emp else None
+            out.append({
+                "txn_group_id": gid,
+                "amount": round(float(g.get("amount") or 0), 2),
+                "source_type": source_type,
+                "source_name": source_name,
+                "posted_at": g.get("posted_at"),
+                "notes": g.get("notes"),
+                "already_reversed": bool(already),
+            })
+        return {"operations": out}
+
+    @router.post("/expenses/reverse")
+    async def reverse_expense(
+        payload: ReverseSalaryPaymentIn,
+        user: dict = Depends(current_user),
+    ):
+        """Reverse a posted expense_record group by mirroring
+        every leg with the opposite side. The original is never
+        modified or deleted."""
+        uid = user["id"]
+        original_rows = await db.general_ledger.find(
+            {"user_id": uid,
+             "txn_group_id": payload.original_txn_group_id,
+             "status": "posted"},
+            {"_id": 0},
+        ).to_list(50)
+        if not original_rows:
+            raise HTTPException(
+                404, "العملية الأصلية غير موجودة أو غير مرحَّلة.",
+            )
+        types = {r.get("entry_type") for r in original_rows}
+        if types != {"expense_record"}:
+            raise HTTPException(
+                400, "هذه العملية ليست مصروفاً.",
+            )
+        # Block double-reverse
+        already = await db.general_ledger.find_one(
+            {"user_id": uid, "entry_type": "reversal",
+             "reversal_of_txn_group_id":
+                 payload.original_txn_group_id,
+             "status": "posted"},
+            {"_id": 1},
+        )
+        if already:
+            raise HTTPException(
+                400, "هذا المصروف مَعكوس مسبقاً.",
+            )
+        if any(r.get("reversal_of_txn_group_id")
+               for r in original_rows):
+            raise HTTPException(
+                400, "لا يمكن عكس قيد عَكسي.")
+        if any(r.get("corrects_txn_group_id")
+               for r in original_rows):
+            raise HTTPException(
+                400, "لا يمكن عكس قيد تصحيح.")
+
+        # Pull source/dest context for metadata
+        src_leg = next(
+            (r for r in original_rows
+             if r.get("side") == "credit"
+             and r.get("entity_type") in (
+                 "bank", "cash", "payment_platform", "employee")),
+            None,
+        )
+        src_id = src_leg.get("entity_id") if src_leg else None
+        src_type = src_leg.get("entity_type") if src_leg else None
+        src_name = None
+        if src_leg and src_type in (
+                "bank", "cash", "payment_platform"):
+            sa = await db.accounts.find_one(
+                {"id": src_id, "user_id": uid},
+                {"_id": 0, "name": 1})
+            src_name = sa.get("name") if sa else None
+        elif src_leg and src_type == "employee":
+            se = await db.operating_salaries.find_one(
+                {"id": src_id, "user_id": uid},
+                {"_id": 0, "name": 1}) or {}
+            src_name = se.get("name")
+
+        actor_name = (
+            user.get("name") or user.get("email") or "user"
+        )
+        now_iso = datetime.now(timezone.utc).isoformat()
+        total_amount = round(
+            float(src_leg.get("amount") or 0), 2,
+        ) if src_leg else 0.0
+
+        meta_common = {
+            "reversal_type": "full",
+            "original_operation": "expense_record",
+            "original_txn_group_id":
+                payload.original_txn_group_id,
+            "original_amount": total_amount,
+            "source_account_id": src_id,
+            "source_account_type": src_type,
+            "source_account_name": src_name,
+            "reason": payload.reason.strip(),
+            "reversed_by": uid,
+            "reversed_at": now_iso,
+        }
+
+        mirrored_entries = []
+        for src in original_rows:
+            flipped_side = (
+                "credit" if src.get("side") == "debit"
+                else "debit"
+            )
+            mirrored_entries.append({
+                "entity_type": src.get("entity_type"),
+                "entity_id":   src.get("entity_id"),
+                "side":        flipped_side,
+                "amount":      round(
+                    float(src.get("amount") or 0), 2),
+                "entry_type":  "reversal",
+                "sub_account": src.get("sub_account") or "main",
+                "reason_code": "data_entry_error",
+                "notes":
+                    f"عكس مصروف — {payload.reason.strip()}",
+                "metadata":    {**meta_common,
+                                "leg":
+                                "source_restore"
+                                if (src.get("side") == "credit"
+                                    and src.get("entity_type") in (
+                                        "bank", "cash",
+                                        "payment_platform",
+                                        "employee"))
+                                else "expense_restore"},
+            })
+
+        from ledger_core import post_txn_group
+        result = await post_txn_group(
+            db, user_id=uid, actor_id=uid, actor_name=actor_name,
+            entries=mirrored_entries,
+            txn_type="expense_reversal",
+            notes=f"عكس مصروف — {payload.reason.strip()}",
+            metadata={"reversal_of_txn_group_id":
+                      payload.original_txn_group_id},
+        )
+        reversal_gid = result["txn_group_id"]
+        await db.general_ledger.update_many(
+            {"user_id": uid, "txn_group_id": reversal_gid},
+            {"$set": {"reversal_of_txn_group_id":
+                      payload.original_txn_group_id}},
+        )
+
+        return {
+            "reversal_group_id": reversal_gid,
+            "reversal_of_txn_group_id":
+                payload.original_txn_group_id,
+            "amount": total_amount,
+            "source_account": {
+                "id": src_id, "type": src_type, "name": src_name,
+            },
+            "reason": payload.reason.strip(),
+            "bank_impact_direction": "restored_inflow",
+            "summary": (
+                f"تم عكس مصروف {total_amount:.2f} ر.س — "
+                f"عاد المبلغ إلى {src_name or 'مصدر المصروف'}."
+            ),
+        }
+
+    @router.get("/expenses/reversals")
+    async def list_expense_reversals(
+        user: dict = Depends(current_user),
+    ):
+        """Audit log of expense reversals only."""
+        uid = user["id"]
+        seen: dict = {}
+        async for row in db.general_ledger.find(
+            {"user_id": uid,
+             "entry_type": "reversal", "status": "posted",
+             "reversal_of_txn_group_id": {"$ne": None}},
+            {"_id": 0, "txn_group_id": 1,
+             "reversal_of_txn_group_id": 1,
+             "posted_at": 1, "metadata": 1},
+        ).sort("posted_at", -1).limit(500):
+            gid = row.get("txn_group_id")
+            md = row.get("metadata") or {}
+            if not gid or \
+                    md.get("original_operation") != "expense_record":
+                continue
+            seen.setdefault(gid, {
+                "reversal_group_id": gid,
+                "reversal_of_txn_group_id":
+                    row.get("reversal_of_txn_group_id"),
+                "posted_at": row.get("posted_at"),
+                "amount": md.get("original_amount"),
+                "reason": md.get("reason"),
+                "reversed_by": md.get("reversed_by"),
+                "source_account": {
+                    "id": md.get("source_account_id"),
+                    "type": md.get("source_account_type"),
+                    "name": md.get("source_account_name"),
+                },
+            })
+        return {"reversals": list(seen.values())}
+
     return router

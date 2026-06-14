@@ -58,6 +58,7 @@ import MigrationWizard from "./pages/MigrationWizard";
 import EmployeesLedger from "./pages/EmployeesLedger";
 import EmployeeCorrections from "./pages/EmployeeCorrections";
 import SalaryReversals from "./pages/SalaryReversals";
+import ExpenseReversals from "./pages/ExpenseReversals";
 import SuppliersLedger from "./pages/SuppliersLedger";
 import ExternalsLedger from "./pages/ExternalsLedger";
 import CouriersLedger from "./pages/CouriersLedger";
@@ -137,6 +138,7 @@ function AppRoutes() {
             <Route path="/employees-ledger" element={<ProtectedRoute><Layout><EmployeesLedger /></Layout></ProtectedRoute>} />
             <Route path="/employee-corrections" element={<ProtectedRoute><Layout><EmployeeCorrections /></Layout></ProtectedRoute>} />
             <Route path="/salary-reversals" element={<ProtectedRoute><Layout><SalaryReversals /></Layout></ProtectedRoute>} />
+            <Route path="/expense-reversals" element={<ProtectedRoute><Layout><ExpenseReversals /></Layout></ProtectedRoute>} />
             <Route path="/suppliers-ledger" element={<ProtectedRoute><Layout><SuppliersLedger /></Layout></ProtectedRoute>} />
             <Route path="/externals-ledger" element={<ProtectedRoute><Layout><ExternalsLedger /></Layout></ProtectedRoute>} />
             <Route path="/couriers-ledger" element={<ProtectedRoute><Layout><CouriersLedger /></Layout></ProtectedRoute>} />

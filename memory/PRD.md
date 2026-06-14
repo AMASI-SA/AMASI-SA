@@ -2274,3 +2274,52 @@ every row of the ledger-based transactions feed:
   statement enhancements deferred.
 
 
+## Checkpoint — Iter-201 (Expense Reversal)
+
+### What & Why
+Same mirror-every-leg pattern as Iter-199 (salary reversal),
+applied to `entry_type=expense_record`. The reversal returns
+the money to the EXACT source account it left from — whether
+that's a bank, cash, payment_platform, or employee custody.
+
+### Backend (added to `/app/backend/reversals_routes.py`)
+- `GET  /api/accounting/expenses/reversible`
+  Lists expense_record groups with source-account name and
+  `already_reversed` flag. Aggregates by txn_group_id (one row
+  per group, not per leg).
+- `POST /api/accounting/expenses/reverse`
+  Mirrors every leg of the original; new rows carry
+  entry_type='reversal', reversal_of_txn_group_id, and
+  reason_code='data_entry_error'. Blocks double-reverse,
+  reversing a reversal, and reversing a correction.
+- `GET  /api/accounting/expenses/reversals`
+  Audit log of expense reversals only (filters out salary).
+
+### Frontend
+- New route `/expense-reversals` (`ExpenseReversals.jsx`) with
+  a list of reversible expenses (showing source type + name +
+  `مَعكوس` badge if already reversed), required reason
+  textarea, and confirmation modal stating the source account.
+- Sidebar link `nav-expense-reversals` ("↩️ عكس مصروف").
+- data-testids: `expense-reversals-page`,
+  `expense-op-{txn_group_id}`, `expense-reversal-reason`,
+  `submit-expense-reversal`, `expense-reversal-confirm-modal`,
+  `confirm-expense-reversal`, `cancel-expense-reversal`,
+  `expense-rev-log-{group_id}`.
+
+### Tests
+- `/app/backend/tests/test_expense_reversal_iter201.py`
+  (9 assertions): bank balance restored, original byte-
+  identical, every leg flipped (expense leg becomes credit,
+  bank/source leg becomes debit), double-reverse → 400,
+  reason validation, audit-log separation between salary and
+  expense reversal endpoints.
+- ✅ Passes. Iter-196/198/199/200 regression all green.
+
+### Visual Verification on Preview
+Confirmed via screenshot: the page surfaces a real expense
+(3,000 ر.س, "اشتراك") from the merchant's data, the Sidebar
+shows three distinct operations (تصحيح موظف / عكس صرف راتب /
+عكس مصروف), and the audit-log card on the right is wired up.
+
+
