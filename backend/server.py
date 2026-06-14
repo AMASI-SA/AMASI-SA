@@ -10,7 +10,7 @@ import uuid
 import logging
 from datetime import datetime, timezone, timedelta
 from tz_utils import riyadh_date_from_utc, riyadh_today_iso
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 try:
     from zoneinfo import ZoneInfo
@@ -381,6 +381,13 @@ class SettingsIn(BaseModel):
     # screen. Stored as a list of OP_TYPES.value strings. Empty list
     # means "show all" (default). Setting is account-wide.
     hidden_transaction_types: Optional[List[str]] = None
+    # Iter-184 — per-operation allowed-accounts binding. Maps an
+    # operation type (e.g. "salary_settle", "supplier_pay") to the
+    # list of account IDs the merchant explicitly allows for that
+    # operation. Empty list / missing key = "السماح للكل" (legacy
+    # default). The Backend enforces the binding in every
+    # cash-touching endpoint, not just the UI.
+    operation_account_bindings: Optional[Dict[str, List[str]]] = None
     # NEW (Phase 3): toggles for what gets deducted from "net sales" KPI.
     net_sales_config: Optional[NetSalesConfig] = None
     # NEW: hide Make.com orders with inferred (approximate) date from dashboard/reports.
@@ -756,6 +763,10 @@ async def get_settings(user: dict = Depends(current_user)):
         "settlements_allow_delete": bool(s.get("settlements_allow_delete", False)),
         # Iter-110 — ad-account delete-button visibility
         "ad_account_allow_delete": bool(s.get("ad_account_allow_delete", False)),
+        # Iter-182 — operation types hidden from "new transaction" picker.
+        "hidden_transaction_types": s.get("hidden_transaction_types", []),
+        # Iter-184 — operation→accounts binding (per-op allow-list).
+        "operation_account_bindings": s.get("operation_account_bindings", {}),
     }
 
 
@@ -797,6 +808,24 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["settlements_allow_delete"] = bool(payload.settlements_allow_delete)
     if payload.ad_account_allow_delete is not None:
         update_doc["ad_account_allow_delete"] = bool(payload.ad_account_allow_delete)
+    # Iter-182 — hidden transaction types in the unified entry picker.
+    if payload.hidden_transaction_types is not None:
+        update_doc["hidden_transaction_types"] = [
+            s.strip() for s in payload.hidden_transaction_types if s and s.strip()
+        ]
+    # Iter-184 — operation→accounts binding. Empty list per op means
+    # "السماح للكل". We sanitize each value to strings and drop dups.
+    if payload.operation_account_bindings is not None:
+        cleaned: Dict[str, List[str]] = {}
+        for op, accs in payload.operation_account_bindings.items():
+            if not isinstance(op, str) or not op.strip():
+                continue
+            seen: set = set()
+            cleaned[op.strip()] = [
+                a for a in (accs or [])
+                if isinstance(a, str) and a.strip() and not (a in seen or seen.add(a))
+            ]
+        update_doc["operation_account_bindings"] = cleaned
     await db.settings.update_one(
         {"user_id": user["id"]},
         {"$set": update_doc},

@@ -129,6 +129,7 @@ const SECTIONS = [
             { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
             { to: "/profile", label: "حسابي", icon: UserCircle, testid: "nav-profile" },
             { to: "/settings/accounting-cutoffs", label: "تواريخ بدء المحاسبة", icon: Gear, testid: "nav-accounting-cutoffs" },
+            { to: "/settings/operation-account-bindings", label: "🔗 ربط العمليات بالحسابات", icon: Gear, testid: "nav-op-account-bindings" },
             // Owner-only: pushed in at render time.
             { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" },
         ],

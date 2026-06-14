@@ -83,6 +83,10 @@ export default function UnifiedEntryScreen() {
     const [hiddenTypes, setHiddenTypes] = useState([]);
     const [showVisibilityModal, setShowVisibilityModal] = useState(false);
     const [savingVisibility, setSavingVisibility] = useState(false);
+    // Iter-184 — operation→accounts binding loaded from /settings.
+    // Shape: { [op_type]: [account_id, ...] }. Empty / missing key
+    // means «السماح للكل» (no UI filtering for that op).
+    const [accountBindings, setAccountBindings] = useState({});
 
     const visibleOpTypes = useMemo(
         () => OP_TYPES.filter(o => !hiddenTypes.includes(o.value)),
@@ -94,11 +98,40 @@ export default function UnifiedEntryScreen() {
         (async () => {
             try {
                 const r = await api.get("/settings");
-                if (alive) setHiddenTypes(r.data?.hidden_transaction_types || []);
+                if (alive) {
+                    setHiddenTypes(r.data?.hidden_transaction_types || []);
+                    setAccountBindings(r.data?.operation_account_bindings || {});
+                }
             } catch (_) { /* swallow — defaults to all visible */ }
         })();
         return () => { alive = false; };
     }, []);
+
+    // Iter-184 — Filter the bank dropdown by the binding configured
+    // for the current op. Empty / missing list = no filter.
+    const allowedAccountIds = useMemo(() => {
+        const list = accountBindings?.[opType];
+        if (!Array.isArray(list) || list.length === 0) return null; // no filter
+        return new Set(list);
+    }, [accountBindings, opType]);
+
+    const filterAccounts = (list) => {
+        if (!allowedAccountIds) return list;
+        return list.filter((b) => allowedAccountIds.has(b.id));
+    };
+
+    const noAccountsAllowed = useMemo(() => {
+        if (!opType) return false;
+        if (!allowedAccountIds) return false;
+        return banks.filter((b) => allowedAccountIds.has(b.id)).length === 0;
+    }, [allowedAccountIds, banks, opType]);
+
+    // The filtered bank list used by both source and destination dropdowns.
+    const filteredBanks = useMemo(
+        () => filterAccounts(banks),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [banks, allowedAccountIds]
+    );
 
     const toggleHidden = (value) => {
         setHiddenTypes((prev) =>
@@ -512,41 +545,52 @@ export default function UnifiedEntryScreen() {
                                         (لا تظهر بوابات الدفع ولا الـ COD لأن أرصدتها مُحتجَزة لدى المنصة).
                                     </div>
                                 )}
+                                {/* Iter-184 — show inline warning when the
+                                    binding configured in Settings would block
+                                    the picker entirely. */}
+                                {noAccountsAllowed && (
+                                    <div className="mb-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 font-bold"
+                                         data-testid="unified-bank-blocked">
+                                        ⚠️ لا يوجد حساب مرتبط بهذه العملية في الإعدادات.
+                                        أضِف حساباً واحداً على الأقل من «الإعدادات → ربط العمليات بالحسابات»
+                                        ثم أعد المحاولة.
+                                    </div>
+                                )}
                                 <select value={bankId} onChange={e => setBankId(e.target.value)}
                                     className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
                                     data-testid="unified-bank">
                                     <option value="">— اختر —</option>
                                     <optgroup label="🏦 الحسابات البنكية">
-                                        {banks.filter(b => b.account_type === "bank").map(b =>
+                                        {filteredBanks.filter(b => b.account_type === "bank").map(b =>
                                             <option key={b.id} value={b.id}>{b.name} · بنك</option>)}
                                     </optgroup>
-                                    {banks.some(b => b.account_type === "cash") && (
+                                    {filteredBanks.some(b => b.account_type === "cash") && (
                                         <optgroup label="💵 الصندوق النقدي">
-                                            {banks.filter(b => b.account_type === "cash").map(b =>
+                                            {filteredBanks.filter(b => b.account_type === "cash").map(b =>
                                                 <option key={b.id} value={b.id}>{b.name} · صندوق</option>)}
                                         </optgroup>
                                     )}
                                     {(!allowedSourceAccountTypes(opType)) && (
                                         <>
                                             <optgroup label="💳 بوابات الدفع">
-                                                {banks.filter(b => b.account_type === "payment_platform" && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                                {filteredBanks.filter(b => b.account_type === "payment_platform" && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
                                                     <option key={b.id} value={b.id}>{b.name} · بوابة دفع</option>)}
                                             </optgroup>
-                                            {banks.some(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")) && (
+                                            {filteredBanks.some(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")) && (
                                                 <optgroup label="💵 الدفع عند الاستلام">
-                                                    {banks.filter(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                                    {filteredBanks.filter(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
                                                         <option key={b.id} value={b.id}>{b.name} · COD</option>)}
                                                 </optgroup>
                                             )}
-                                            {banks.some(b => b.account_type === "courier") && (
+                                            {filteredBanks.some(b => b.account_type === "courier") && (
                                                 <optgroup label="📦 شركات الشحن">
-                                                    {banks.filter(b => b.account_type === "courier").map(b =>
+                                                    {filteredBanks.filter(b => b.account_type === "courier").map(b =>
                                                         <option key={b.id} value={b.id}>{b.name} · شركة شحن</option>)}
                                                 </optgroup>
                                             )}
-                                            {banks.some(b => b.account_type && !["bank","cash","payment_platform","courier"].includes(b.account_type)) && (
+                                            {filteredBanks.some(b => b.account_type && !["bank","cash","payment_platform","courier"].includes(b.account_type)) && (
                                                 <optgroup label="📁 أخرى">
-                                                    {banks.filter(b => b.account_type && !["bank","cash","payment_platform","courier"].includes(b.account_type)).map(b =>
+                                                    {filteredBanks.filter(b => b.account_type && !["bank","cash","payment_platform","courier"].includes(b.account_type)).map(b =>
                                                         <option key={b.id} value={b.id}>{b.name} · {b.account_type}</option>)}
                                                 </optgroup>
                                             )}
@@ -563,16 +607,16 @@ export default function UnifiedEntryScreen() {
                                     data-testid="unified-bank-to">
                                     <option value="">— اختر —</option>
                                     <optgroup label="🏦 الحسابات البنكية">
-                                        {banks.filter(b => b.account_type === "bank" && b.id !== bankId).map(b =>
+                                        {filteredBanks.filter(b => b.account_type === "bank" && b.id !== bankId).map(b =>
                                             <option key={b.id} value={b.id}>{b.name} · بنك</option>)}
                                     </optgroup>
                                     <optgroup label="💳 بوابات الدفع">
-                                        {banks.filter(b => b.account_type === "payment_platform" && b.id !== bankId && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                        {filteredBanks.filter(b => b.account_type === "payment_platform" && b.id !== bankId && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
                                             <option key={b.id} value={b.id}>{b.name} · بوابة دفع</option>)}
                                     </optgroup>
-                                    {banks.some(b => b.account_type === "payment_platform" && b.id !== bankId && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")) && (
+                                    {filteredBanks.some(b => b.account_type === "payment_platform" && b.id !== bankId && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")) && (
                                         <optgroup label="💵 الدفع عند الاستلام">
-                                            {banks.filter(b => b.account_type === "payment_platform" && b.id !== bankId && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
+                                            {filteredBanks.filter(b => b.account_type === "payment_platform" && b.id !== bankId && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
                                                 <option key={b.id} value={b.id}>{b.name} · COD</option>)}
                                         </optgroup>
                                     )}

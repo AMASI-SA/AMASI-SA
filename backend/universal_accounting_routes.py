@@ -196,6 +196,51 @@ async def _resolve_actor(user: dict) -> tuple[str, str]:
     return user["id"], (user.get("name") or user.get("email") or "")
 
 
+# ── Iter-184 — Operation→Accounts binding enforcement ───────────────
+# All operation types whose UI exposes an account picker. The keys
+# MUST mirror the OP_TYPES values used by the frontend
+# UnifiedEntryScreen so the same string powers both UX filtering and
+# backend validation.
+ACCOUNT_BOUND_OPS = (
+    "advance_grant",
+    "salary_settle",
+    "custody_grant",
+    "custody_return",
+    "supplier_pay",
+    "external_grant",
+    "external_collect",
+    "expense_record",
+    "bank_transfer",
+)
+
+
+async def _enforce_account_binding(
+    db, *, user_id: str, op_type: str, account_id: str,
+) -> None:
+    """Raise 400 if `account_id` is not in the merchant's allow-list for
+    `op_type`. An empty / missing list is treated as «السماح للكل» —
+    backwards-compatible default so legacy users see no change until
+    they opt in from Settings → «ربط العمليات بالحسابات».
+    """
+    if not op_type or not account_id:
+        return
+    s = await db.settings.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "operation_account_bindings": 1},
+    )
+    bindings = (s or {}).get("operation_account_bindings") or {}
+    allowed = bindings.get(op_type)
+    if not allowed:           # empty list / missing → allow all
+        return
+    if account_id not in allowed:
+        raise HTTPException(
+            400,
+            "هذا الحساب غير مسموح لهذه العملية وفقاً لإعدادات "
+            "«ربط العمليات بالحسابات». فعّله من «الإعدادات → "
+            "إعدادات ربط العمليات بالحسابات المالية» ثم أعد المحاولة.",
+        )
+
+
 # ── Router builder ──────────────────────────────────────────────────
 def make_universal_router(db) -> APIRouter:
     router = APIRouter(prefix="/accounting", tags=["accounting"])
@@ -312,6 +357,10 @@ def make_universal_router(db) -> APIRouter:
         if not acc:
             raise HTTPException(404, "الحساب البنكي غير موجود")
 
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="advance_grant",
+            account_id=payload.paid_from_account_id,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         notes = payload.notes or f"منح سلفة — {emp.get('name')}"
         result = await post_txn_group(
@@ -357,6 +406,10 @@ def make_universal_router(db) -> APIRouter:
         )
         if not acc:
             raise HTTPException(404, "الحساب البنكي غير موجود")
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="custody_grant",
+            account_id=payload.paid_from_account_id,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         notes = payload.notes or f"تسليم عهدة — {emp.get('name')}"
         result = await post_txn_group(
@@ -404,6 +457,10 @@ def make_universal_router(db) -> APIRouter:
         )
         if not acc:
             raise HTTPException(404, "الحساب البنكي غير موجود")
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="custody_return",
+            account_id=payload.deposited_to_account_id,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
             db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
@@ -759,6 +816,11 @@ def make_universal_router(db) -> APIRouter:
         if not acc:
             raise HTTPException(404, "الحساب البنكي غير موجود")
 
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="salary_settle",
+            account_id=payload.paid_from_account_id,
+        )
+
         payable_bal = (await compute_balance(
             db, user_id=user["id"], entity_type="employee",
             entity_id=emp_id, sub_account="salary_payable",
@@ -911,6 +973,10 @@ def make_universal_router(db) -> APIRouter:
         )
         if not acc:
             raise HTTPException(404, "الحساب البنكي غير موجود")
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="supplier_pay",
+            account_id=payload.paid_from_account_id,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
             db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
@@ -955,6 +1021,10 @@ def make_universal_router(db) -> APIRouter:
         )
         if not acc:
             raise HTTPException(404, "الحساب البنكي غير موجود")
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="external_grant",
+            account_id=payload.paid_from_account_id,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
             db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
@@ -996,6 +1066,10 @@ def make_universal_router(db) -> APIRouter:
         )
         if not acc:
             raise HTTPException(404, "الحساب البنكي غير موجود")
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="external_collect",
+            account_id=payload.deposited_to_account_id,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
             db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
@@ -1038,6 +1112,14 @@ def make_universal_router(db) -> APIRouter:
         ).to_list(2)
         if len(accs) != 2:
             raise HTTPException(404, "أحد الحسابات البنكية غير موجود")
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="bank_transfer",
+            account_id=payload.from_account_id,
+        )
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="bank_transfer",
+            account_id=payload.to_account_id,
+        )
         names = {a["id"]: a["name"] for a in accs}
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
@@ -1081,6 +1163,10 @@ def make_universal_router(db) -> APIRouter:
         )
         if not acc:
             raise HTTPException(404, "الحساب البنكي غير موجود")
+        await _enforce_account_binding(
+            db, user_id=user["id"], op_type="expense_record",
+            account_id=payload.paid_from_account_id,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
             db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
