@@ -367,6 +367,43 @@ export default function AccountDetails() {
                                         ) : (
                                             tx.type_label || tx.transaction_type
                                         )}
+                                        {/* Iter-200 — Audit badges */}
+                                        {tx.was_reversed && (
+                                            <span
+                                                data-testid={`badge-was-reversed-${tx.id}`}
+                                                title={`تم عكس هذه العملية${tx.reversal_info?.reversed_at ? ` بتاريخ ${tx.reversal_info.reversed_at.slice(0,10)}` : ""}${tx.reversal_info?.reason ? ` — السبب: ${tx.reversal_info.reason}` : ""}`}
+                                                className="ms-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200"
+                                            >
+                                                ↩️ تم عكسه
+                                            </span>
+                                        )}
+                                        {tx.was_corrected && (
+                                            <span
+                                                data-testid={`badge-was-corrected-${tx.id}`}
+                                                title={`تم تصحيح هذه العملية ${tx.correction_info?.correction_count || 1} مرة${tx.correction_info?.last_reason ? ` — آخر سبب: ${tx.correction_info.last_reason}` : ""}`}
+                                                className="ms-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200"
+                                            >
+                                                🔄 مُصحَّحة{tx.correction_info?.correction_count > 1 ? ` (${tx.correction_info.correction_count})` : ""}
+                                            </span>
+                                        )}
+                                        {tx.is_reversal && (
+                                            <span
+                                                data-testid={`badge-is-reversal-${tx.id}`}
+                                                title="هذا قيد عكسي"
+                                                className="ms-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200"
+                                            >
+                                                قيد عكسي
+                                            </span>
+                                        )}
+                                        {tx.is_correction && (
+                                            <span
+                                                data-testid={`badge-is-correction-${tx.id}`}
+                                                title="هذا قيد تصحيح"
+                                                className="ms-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-800 border border-violet-200"
+                                            >
+                                                قيد تصحيح
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-4 py-2.5 text-xs text-foreground max-w-[20ch] truncate" title={tx.description}>
                                         {tx.description || "—"}

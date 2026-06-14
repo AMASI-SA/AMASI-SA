@@ -2229,3 +2229,48 @@ paid.
 - **Iter-199 (full reversal):**  bank ALWAYS touched (restored).
 
 
+## Checkpoint — Iter-200 (Audit Badges on Ledger Feed)
+
+### What & Why
+Now that the system has both reversal (Iter-199) and correction
+(Iter-196) operations, the merchant needs to see the audit
+lineage on the ORIGINAL entries — without leaving the bank or
+employee statement screens. Iter-200 surfaces four flags on
+every row of the ledger-based transactions feed:
+    • `is_reversal`         — this row itself is a reversal leg.
+    • `is_correction`       — this row itself is a correction leg.
+    • `was_reversed`        — this original has been reversed.
+    • `was_corrected`       — this original has been corrected
+                              (with `correction_count`).
+
+### Backend
+- `_ledger_based_tx_feed()` in `/app/backend/accounts_routes.py`
+  now performs ONE batch query for reversals and ONE batch for
+  corrections per request (no N+1), keyed by `txn_group_id`.
+- Each row exposes `reversal_info` (`reversal_group_id`,
+  `reversed_at`, `reason`, `amount`) and `correction_info`
+  (`correction_count`, `total_amount`, `last_at`,
+  `last_reason`).
+
+### Frontend
+- `AccountDetails.jsx` transactions table renders four badges
+  next to each type label:
+    • 🟥 `↩️ تم عكسه` (rose) — was_reversed
+    • 🟨 `🔄 مُصحَّحة (N)` (amber) — was_corrected
+    • 🟦 `قيد عكسي` (sky) — is_reversal
+    • 🟪 `قيد تصحيح` (violet) — is_correction
+  Each carries a hover tooltip with date + reason.
+
+### Tests
+- `/app/backend/tests/test_audit_badges_iter200.py` — verifies
+  the four flags and `reversal_info`/`correction_info` payloads
+  for a flow involving a reversed salary payment and a partial
+  correction. ✅ passes.
+
+### Notes
+- Correction badges only surface on the EMPLOYEE leg of the
+  original (bank leg is intentionally untouched by corrections).
+  The bank-statement feed shows reversal badges; employee-
+  statement enhancements deferred.
+
+

@@ -200,8 +200,65 @@ async def _ledger_based_tx_feed(db, user_id: str, account_id: str) -> list:
          "status": "posted"},
         {"_id": 0, "id": 1, "entry_type": 1, "side": 1, "amount": 1,
          "notes": 1, "posted_at": 1, "created_at": 1,
-         "txn_group_id": 1, "metadata": 1, "actor_name": 1},
+         "txn_group_id": 1, "metadata": 1, "actor_name": 1,
+         "reversal_of_txn_group_id": 1,
+         "corrects_txn_group_id": 1},
     ).sort([("posted_at", 1), ("created_at", 1), ("id", 1)]).to_list(50000)
+
+    # Iter-200 — gather all txn_group_ids that have been
+    # reversed or corrected, in one batch query each, so we can
+    # decorate the rows without N+1 round-trips.
+    src_group_ids = list({
+        r.get("txn_group_id") for r in rows if r.get("txn_group_id")
+    })
+    reversed_map: dict = {}
+    if src_group_ids:
+        async for rv in db.general_ledger.find(
+            {"user_id": user_id,
+             "entry_type": "reversal",
+             "reversal_of_txn_group_id": {"$in": src_group_ids},
+             "status": "posted"},
+            {"_id": 0, "reversal_of_txn_group_id": 1,
+             "txn_group_id": 1, "posted_at": 1, "metadata": 1},
+        ):
+            target = rv.get("reversal_of_txn_group_id")
+            if target and target not in reversed_map:
+                md = rv.get("metadata") or {}
+                reversed_map[target] = {
+                    "reversal_group_id": rv.get("txn_group_id"),
+                    "reversed_at": rv.get("posted_at"),
+                    "reason": md.get("reason"),
+                    "amount": md.get("original_amount"),
+                }
+    corrected_map: dict = {}
+    if src_group_ids:
+        async for cr in db.general_ledger.find(
+            {"user_id": user_id,
+             "entry_type": "correction",
+             "corrects_txn_group_id": {"$in": src_group_ids},
+             "status": "posted"},
+            {"_id": 0, "corrects_txn_group_id": 1,
+             "txn_group_id": 1, "posted_at": 1, "metadata": 1,
+             "amount": 1},
+        ):
+            target = cr.get("corrects_txn_group_id")
+            if not target:
+                continue
+            md = cr.get("metadata") or {}
+            grp = corrected_map.setdefault(target, {
+                "groups": set(),
+                "total_amount": 0.0,
+                "last_at": cr.get("posted_at"),
+                "last_reason": md.get("reason"),
+            })
+            grp["groups"].add(cr.get("txn_group_id"))
+            grp["total_amount"] += float(cr.get("amount") or 0) / 2.0
+            if cr.get("posted_at") and (
+                not grp["last_at"]
+                or cr.get("posted_at") > grp["last_at"]
+            ):
+                grp["last_at"] = cr.get("posted_at")
+                grp["last_reason"] = md.get("reason")
 
     running = 0.0
     out: list = []
@@ -216,6 +273,10 @@ async def _ledger_based_tx_feed(db, user_id: str, account_id: str) -> list:
             direction = "out"
         ttype = r.get("entry_type") or "adjustment"
         md = r.get("metadata") or {}
+        gid = r.get("txn_group_id")
+        rev_info = reversed_map.get(gid) if gid else None
+        corr_info = corrected_map.get(gid) if gid else None
+
         out.append({
             "id": r.get("id"),
             "transaction_type": ttype,
@@ -235,10 +296,28 @@ async def _ledger_based_tx_feed(db, user_id: str, account_id: str) -> list:
             "balance_after": round(running, 2),
             "status": "posted",
             "created_at": r.get("created_at"),
-            "txn_group_id": r.get("txn_group_id"),
+            "txn_group_id": gid,
             "actor_name": r.get("actor_name"),
             "metadata": md,
             "source": "ledger",
+            # Iter-200 — audit badges
+            "is_reversal": ttype == "reversal",
+            "is_correction": ttype == "correction",
+            "reversal_of_txn_group_id":
+                r.get("reversal_of_txn_group_id"),
+            "corrects_txn_group_id":
+                r.get("corrects_txn_group_id"),
+            "was_reversed": rev_info is not None,
+            "reversal_info": rev_info,
+            "was_corrected": corr_info is not None,
+            "correction_info": (
+                {"correction_count": len(corr_info["groups"]),
+                 "total_amount":
+                     round(corr_info["total_amount"], 2),
+                 "last_at": corr_info["last_at"],
+                 "last_reason": corr_info["last_reason"]}
+                if corr_info else None
+            ),
         })
 
     # Reverse so newest is first (matches current UI ORDER BY desc).
