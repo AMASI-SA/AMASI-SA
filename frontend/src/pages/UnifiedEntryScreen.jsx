@@ -76,6 +76,57 @@ export default function UnifiedEntryScreen() {
         { expense_category: "", amount: "", notes: "" },
     ]);
 
+    // Iter-182 — hidden transaction types loaded from /settings, plus
+    // visibility-management modal state.
+    const [hiddenTypes, setHiddenTypes] = useState([]);
+    const [showVisibilityModal, setShowVisibilityModal] = useState(false);
+    const [savingVisibility, setSavingVisibility] = useState(false);
+
+    const visibleOpTypes = useMemo(
+        () => OP_TYPES.filter(o => !hiddenTypes.includes(o.value)),
+        [hiddenTypes],
+    );
+
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            try {
+                const r = await api.get("/settings");
+                if (alive) setHiddenTypes(r.data?.hidden_transaction_types || []);
+            } catch (_) { /* swallow — defaults to all visible */ }
+        })();
+        return () => { alive = false; };
+    }, []);
+
+    const toggleHidden = (value) => {
+        setHiddenTypes((prev) =>
+            prev.includes(value)
+                ? prev.filter(v => v !== value)
+                : [...prev, value]
+        );
+    };
+
+    const saveVisibility = async () => {
+        setSavingVisibility(true);
+        try {
+            // PUT /settings expects the FULL settings object — read first,
+            // patch the field, write back. Avoids accidentally clearing
+            // other settings.
+            const cur = await api.get("/settings");
+            await api.put("/settings", {
+                ...cur.data,
+                hidden_transaction_types: hiddenTypes,
+            });
+            toast.success("تم حفظ إعدادات الإظهار");
+            setShowVisibilityModal(false);
+        } catch (e) {
+            toast.error("فشل الحفظ — راجع الكونسول");
+            console.error(e);
+        } finally {
+            setSavingVisibility(false);
+        }
+    };
+
     useEffect(() => { (async () => {
         try {
             const [emp, sup, ext, bnk, cat] = await Promise.all([
@@ -297,9 +348,20 @@ export default function UnifiedEntryScreen() {
     return (
         <div className="p-6 max-w-4xl mx-auto" data-testid="unified-entry-screen">
             <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h1 className="text-2xl font-extrabold text-slate-900 mb-1">
-                    ➕ حركة مالية جديدة
-                </h1>
+                <div className="flex items-start justify-between gap-3 mb-1">
+                    <h1 className="text-2xl font-extrabold text-slate-900">
+                        ➕ حركة مالية جديدة
+                    </h1>
+                    <button
+                        type="button"
+                        onClick={() => setShowVisibilityModal(true)}
+                        className="text-xs font-bold text-slate-600 hover:text-emerald-700 border border-slate-300 hover:border-emerald-400 rounded-lg px-3 py-1.5 transition-colors"
+                        data-testid="unified-manage-visibility-btn"
+                        title="إظهار/إخفاء أنواع العمليات"
+                    >
+                        ⚙️ إدارة الأنواع
+                    </button>
+                </div>
                 <p className="text-sm text-slate-500 mb-6">
                     شاشة موحدة لكل العمليات المحاسبية. ينشئ النظام القيود المزدوجة تلقائياً.
                 </p>
@@ -314,19 +376,19 @@ export default function UnifiedEntryScreen() {
                         data-testid="unified-op-type">
                         <option value="">— اختر نوع العملية —</option>
                         <optgroup label="موظفون">
-                            {OP_TYPES.filter(x => x.section === "employees").map(o =>
+                            {visibleOpTypes.filter(x => x.section === "employees").map(o =>
                                 <option key={o.value} value={o.value}>{o.label}</option>)}
                         </optgroup>
                         <optgroup label="موردون">
-                            {OP_TYPES.filter(x => x.section === "suppliers").map(o =>
+                            {visibleOpTypes.filter(x => x.section === "suppliers").map(o =>
                                 <option key={o.value} value={o.value}>{o.label}</option>)}
                         </optgroup>
                         <optgroup label="أشخاص خارجيون">
-                            {OP_TYPES.filter(x => x.section === "externals").map(o =>
+                            {visibleOpTypes.filter(x => x.section === "externals").map(o =>
                                 <option key={o.value} value={o.value}>{o.label}</option>)}
                         </optgroup>
                         <optgroup label="عمليات عامة">
-                            {OP_TYPES.filter(x => x.section === "general").map(o =>
+                            {visibleOpTypes.filter(x => x.section === "general").map(o =>
                                 <option key={o.value} value={o.value}>{o.label}</option>)}
                         </optgroup>
                     </select>
@@ -633,6 +695,81 @@ export default function UnifiedEntryScreen() {
                     </div>
                 )}
             </div>
+
+            {/* Iter-182 — Visibility management modal. */}
+            {showVisibilityModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" data-testid="visibility-modal">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b border-slate-200 p-5 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-extrabold text-slate-900">⚙️ إدارة أنواع العمليات</h2>
+                                <p className="text-xs text-slate-500 mt-0.5">اختر الأنواع التي تريد إخفاءها من شاشة «حركة مالية جديدة». الإعداد عام لكل الحساب.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowVisibilityModal(false)}
+                                className="text-slate-500 hover:text-slate-800 text-2xl leading-none"
+                                data-testid="visibility-modal-close"
+                            >×</button>
+                        </div>
+
+                        <div className="p-5 space-y-4">
+                            {["employees", "suppliers", "externals", "general"].map(sec => {
+                                const sectionLabel = {
+                                    employees: "موظفون",
+                                    suppliers: "موردون",
+                                    externals: "أشخاص خارجيون",
+                                    general: "عمليات عامة",
+                                }[sec];
+                                const items = OP_TYPES.filter(x => x.section === sec);
+                                return (
+                                    <div key={sec} className="border border-slate-200 rounded-xl p-3">
+                                        <div className="text-sm font-extrabold text-slate-700 mb-2">{sectionLabel}</div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {items.map(o => {
+                                                const hidden = hiddenTypes.includes(o.value);
+                                                return (
+                                                    <label
+                                                        key={o.value}
+                                                        className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg cursor-pointer border-2 transition-colors ${
+                                                            hidden ? "bg-rose-50 border-rose-200" : "bg-emerald-50 border-emerald-200"
+                                                        }`}
+                                                        data-testid={`visibility-toggle-${o.value}`}
+                                                    >
+                                                        <span className="text-sm font-bold">{o.label}</span>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={!hidden}
+                                                            onChange={() => toggleHidden(o.value)}
+                                                            className="w-5 h-5 accent-emerald-600 cursor-pointer"
+                                                        />
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowVisibilityModal(false)}
+                                className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900 rounded-lg"
+                                data-testid="visibility-cancel-btn"
+                            >إلغاء</button>
+                            <button
+                                type="button"
+                                onClick={saveVisibility}
+                                disabled={savingVisibility}
+                                className="px-6 py-2 text-sm font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50"
+                                data-testid="visibility-save-btn"
+                            >{savingVisibility ? "جاري الحفظ…" : "حفظ"}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

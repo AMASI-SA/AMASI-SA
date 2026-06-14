@@ -377,6 +377,10 @@ class SettingsIn(BaseModel):
     # device the merchant logs in from (replaces the old
     # localStorage-only `mezan.sidebar.hidden_pages`).
     sidebar_hidden_pages: Optional[List[str]] = None
+    # Iter-182 — operation types hidden from the «حركة مالية جديدة»
+    # screen. Stored as a list of OP_TYPES.value strings. Empty list
+    # means "show all" (default). Setting is account-wide.
+    hidden_transaction_types: Optional[List[str]] = None
     # NEW (Phase 3): toggles for what gets deducted from "net sales" KPI.
     net_sales_config: Optional[NetSalesConfig] = None
     # NEW: hide Make.com orders with inferred (approximate) date from dashboard/reports.
