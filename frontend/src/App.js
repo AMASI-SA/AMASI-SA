@@ -68,6 +68,7 @@ import CODDiagnostic from "./pages/CODDiagnostic";
 import PostMigrationAudit from "./pages/PostMigrationAudit";
 import CustodyOpenBalances from "./pages/CustodyOpenBalances";
 import OperationAccountBindings from "./pages/OperationAccountBindings";
+import ShippingLedger from "./pages/ShippingLedger";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -144,6 +145,7 @@ function AppRoutes() {
             <Route path="/audit/post-migration" element={<ProtectedRoute><Layout><PostMigrationAudit /></Layout></ProtectedRoute>} />
             <Route path="/employees/custody-balances" element={<ProtectedRoute><Layout><CustodyOpenBalances /></Layout></ProtectedRoute>} />
             <Route path="/settings/operation-account-bindings" element={<ProtectedRoute><Layout><OperationAccountBindings /></Layout></ProtectedRoute>} />
+            <Route path="/shipping/orders-ledger" element={<ProtectedRoute><Layout><ShippingLedger /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />
