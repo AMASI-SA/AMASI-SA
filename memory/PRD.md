@@ -1724,3 +1724,119 @@ diagnostic.
 **Tests**: Live Preview verification confirms the endpoint
 returns plausible output even before migration (correctly reports
 "no_cutoff" and "bank_mismatch" because no Apply has run).
+
+
+---
+
+## Completed Work — Iter-183 to Iter-187 (Feb 14 2026): Cumulative UX & Accounting Hardening
+
+### Iter-183 — Custody Transfer Between Employees + Open Custody Report
+- **New op**: `🔄 نقل عهدة بين موظفين` (`custody_transfer`).
+- **Endpoint**: `POST /api/accounting/employees/custody/transfer`.
+  Posts a balanced txn_group with `entity_type=employee, sub_account=custody`
+  on BOTH sides; **no bank/cash touched**.
+- **Guards**: same-employee rejected (400), insufficient custody rejected (400),
+  unknown employee rejected (404).
+- **Endpoint**: `GET /api/accounting/employees/custody/open-balances` aggregates
+  `general_ledger` by `(employee, entry_type, side)` and returns per-employee
+  breakdown (granted / settled_receipts / returned_cash / transferred_in /
+  transferred_out / opening / open_balance).
+- **UI page**: `/employees/custody-balances` — searchable table with totals.
+- **Test**: `tests/test_custody_transfer_iter183.py`.
+
+### Iter-184 — Operation→Account Bindings + hidden_transaction_types Fix
+- **Settings field**: `operation_account_bindings: dict[op_type, [account_id]]`.
+  Empty list = "السماح للكل" (back-compat default).
+- **Helper**: `_enforce_account_binding(db, user_id, op_type, account_id)`
+  raises 400 if account not in the merchant's allow-list.
+- **Applied to 9 cash-touching ops**: advance_grant, salary_settle,
+  custody_grant, custody_return, supplier_pay, external_grant, external_collect,
+  expense_record, bank_transfer (both sides).
+- **UI page**: `/settings/operation-account-bindings` — matrix of operations ×
+  accounts with per-op "السماح للكل ↔ وضع التقييد" toggle and empty-state warning.
+- **UnifiedEntryScreen** now filters the bank dropdown via the bindings.
+- **Bug-fix**: `hidden_transaction_types` (Iter-182) was not being persisted nor
+  returned by GET; now properly wired in `server.py`.
+- **Test**: `tests/test_op_account_binding_iter184.py`.
+
+### Iter-185 — Insufficient-Funds Guard + Employee Summary Card
+- **Helper**: `_account_live_balance(db, user_id, account_id)` = stored
+  `current_balance` + ledger delta (`entity_type=bank` net) → single source of
+  truth for "can I afford this".
+- **Helper**: `_enforce_sufficient_funds()` raises 400 with:
+  > لا يمكن تنفيذ العملية، رصيد الحساب المختار غير كافٍ.
+- **Applied to 7 cash-OUT ops**: advance_grant, salary_settle, custody_grant,
+  supplier_pay, external_grant, expense_record, bank_transfer (source side).
+- **New endpoint**: `GET /api/accounting/cash-accounts-with-balances` —
+  one round-trip live balances for all cash-touchable accounts.
+- **New endpoint**: `GET /api/accounting/employees/{id}/summary-balance` —
+  `net_due_to_employee = salary_payable_outstanding − advance_open − custody_open`.
+- **UI in UnifiedEntryScreen**:
+  • Bank dropdown is LOCKED until an amount > 0 is entered.
+  • Each option shows its live balance.
+  • Options with balance < amount render as **disabled** with
+    "🚫 مجمد — الرصيد غير كافٍ".
+  • Employee-summary card renders next to the entity picker; green when company
+    owes the employee, red when employee owes the company.
+  • Live balances refresh after every successful submit.
+- **Test**: `tests/test_insufficient_funds_iter185.py`.
+
+### Iter-186 — Smart Employee Picker (search + custody freeze)
+- **Component**: `EmployeePicker` — type-ahead search, inline custody-balance
+  badge per row (red when > 0), accepts `freezeZeroCustody` to disable
+  employees with `custody = 0` (used by `custody_return` & `custody_settle`).
+- **Custody-only context card**: for any custody op, the summary card shows
+  ONLY `custody_open` (red when > 0, green when = 0).
+- **Bulk loader**: `reloadCustodyBalances()` consumes the iter-183 endpoint and
+  refreshes after every ledger post.
+
+### Iter-187 — Cash Account (صندوق نقدي) as a First-Class Account Type
+- **Backend** (`accounts_routes.py`):
+  • Added `"cash"` to `ACCOUNT_TYPES`, label "صندوق نقدي".
+  • Suggested providers: الصندوق الرئيسي / صندوق المعرض / صندوق المستودع /
+    صندوق الفرع / خزينة المدير / نقدية في يد الموظف.
+- **Audit endpoint** extended to include cash in lookups.
+- **No new endpoints needed** — cash flows through the same `entity_type=bank`
+  ledger key, so every existing cash-out endpoint works automatically
+  (advance / expense / supplier-pay / custody / bank-transfer / etc.).
+- **Frontend** (`Accounts.jsx`):
+  • New `TYPE_META.cash` with amber Wallet icon.
+  • New "الصناديق النقدية" tab + 4-column type grid in the Add modal.
+- **financial-position** already groups cash under «النقدية والبنوك».
+- **Test**: `tests/test_cash_account_iter187.py`.
+
+### Iter-188 — Golden Rule: Block Advances When Salary is Pending (UNCONFIRMED)
+- **AdvanceGrantIn** gets `acknowledge_pending_salary: bool = False`.
+- **Guard**: if `salary_payable > 0` and flag is `False` → **409 Conflict**
+  with structured detail:
+    ```json
+    { "code": "PENDING_SALARY_BLOCK",
+      "salary_payable": 8800,
+      "employee_id": "...", "employee_name": "...",
+      "message": "..." }
+    ```
+- **Frontend**: amber suggestion banner appears in real-time with two CTAs:
+  • 🔄 «حوّل إلى صرف راتب» — switches `opType` to `salary_settle`.
+  • ✓ «هي سلفة فعلاً — تابع» — sets the override flag.
+  Override resets automatically when op/employee/amount changes.
+- Server-side 409 still handled in the catch block as defense-in-depth.
+- **Test**: `tests/test_golden_rule_iter188.py`.
+
+### Key Files Touched in This Window
+- `/app/backend/universal_accounting_routes.py` (major)
+- `/app/backend/ledger_core.py` (`custody_transfer` added to `ENTRY_TYPES`)
+- `/app/backend/server.py` (settings model + persistence)
+- `/app/backend/accounts_routes.py` (cash type)
+- `/app/backend/audit_routes.py` (cash inclusion)
+- `/app/frontend/src/pages/UnifiedEntryScreen.jsx` (largest delta)
+- `/app/frontend/src/pages/Accounts.jsx` (cash UI)
+- `/app/frontend/src/pages/CustodyOpenBalances.jsx` (new)
+- `/app/frontend/src/pages/OperationAccountBindings.jsx` (new)
+- `/app/frontend/src/components/Sidebar.jsx`
+- `/app/frontend/src/App.js`
+
+### Open Items at Checkpoint
+- ⏳ **Iter-188** awaits user acceptance (functionally complete, tested).
+- 🟠 **P1**: Sprint شركات الشحن — about to start with an audit-first pass.
+- 🟠 **P1**: Tabby negative balance investigation.
+- 🟠 **P0** (blocked): 15 orphan employees on production — awaiting JSON.
