@@ -158,6 +158,106 @@ function RawStatusTable({ rows }) {
     );
 }
 
+function PostSyncDriftBlock({ drift }) {
+    const amtDiff = drift.cache_vs_walk_amount_diff || 0;
+    const countDiff = drift.cache_vs_walk_count_diff || 0;
+    const orders = drift.orders || [];
+    const healthy = Math.abs(amtDiff) < 0.5 && countDiff === 0;
+    const lastSync = drift.last_synced_at
+        ? new Date(drift.last_synced_at).toLocaleString("en-GB", {
+            timeZone: "Asia/Riyadh",
+            hour12: false,
+        })
+        : "—";
+
+    return (
+        <div className={`rounded-2xl shadow p-5 mb-6 border-2 ${healthy ? "bg-emerald-50 border-emerald-300" : "bg-amber-50 border-amber-300"}`}
+             data-testid="cod-post-sync-drift">
+            <h3 className="font-extrabold text-slate-900 mb-3">
+                ⏱️ تحليل الفرق بين الـ Cache و الـ Walk
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                <div className="rounded-lg bg-white border border-slate-200 p-3">
+                    <div className="text-[11px] text-slate-500 font-bold mb-1">آخر مزامنة للحساب</div>
+                    <div className="text-xs font-extrabold text-slate-900">{lastSync}</div>
+                </div>
+                <div className="rounded-lg bg-white border border-slate-200 p-3">
+                    <div className="text-[11px] text-slate-500 font-bold mb-1">عدد الطلبات (Walk / Cache)</div>
+                    <div className="text-base num font-extrabold text-slate-900">
+                        {intf(drift.walk_total_orders_count)} / {intf(drift.cache_orders_count)}
+                    </div>
+                    <div className={`text-[11px] mt-0.5 font-bold ${countDiff === 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                        {countDiff > 0 ? "+" : ""}{intf(countDiff)} طلب
+                    </div>
+                </div>
+                <div className="rounded-lg bg-white border border-slate-200 p-3">
+                    <div className="text-[11px] text-slate-500 font-bold mb-1">المبلغ (Walk Confirmed / Cache)</div>
+                    <div className="text-xs num font-extrabold text-slate-900">
+                        {fmt(drift.walk_confirmed_total)} / {fmt(drift.cache_current_balance)}
+                    </div>
+                    <div className={`text-[11px] mt-0.5 font-bold ${Math.abs(amtDiff) < 0.5 ? "text-emerald-700" : "text-amber-700"}`}>
+                        فرق: {fmt(amtDiff)}
+                    </div>
+                </div>
+                <div className="rounded-lg bg-white border border-slate-200 p-3">
+                    <div className="text-[11px] text-slate-500 font-bold mb-1">طلبات بعد المزامنة</div>
+                    <div className="text-xl num font-extrabold text-slate-900">{intf(drift.post_sync_orders_count)}</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                        مجموعها {fmt(drift.post_sync_total_confirmed)} ر.س (Confirmed)
+                    </div>
+                </div>
+            </div>
+
+            <div className="text-sm leading-relaxed text-slate-800 bg-white/70 rounded-lg p-3 border border-slate-200 mb-3">
+                <strong className="text-slate-900">التفسير: </strong>
+                {drift.interpretation}
+            </div>
+
+            {orders.length > 0 && (
+                <details className="bg-white rounded-lg border border-slate-200">
+                    <summary className="cursor-pointer p-3 font-extrabold text-slate-900 select-none text-sm">
+                        📋 قائمة الطلبات ({intf(orders.length)}) — اضغط للعرض
+                    </summary>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs" data-testid="cod-post-sync-orders-table">
+                            <thead className="bg-slate-50 text-slate-700">
+                                <tr>
+                                    <th className="px-3 py-2 text-right font-bold">رقم الطلب</th>
+                                    <th className="px-3 py-2 text-right font-bold">تاريخ الاستلام</th>
+                                    <th className="px-3 py-2 text-right font-bold">الحالة</th>
+                                    <th className="px-3 py-2 text-right font-bold">شركة الشحن</th>
+                                    <th className="px-3 py-2 text-left font-bold">المبلغ</th>
+                                    <th className="px-3 py-2 text-center font-bold">يدخل في Confirmed؟</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {orders.map((o) => (
+                                    <tr key={o.order_id} className="border-t border-slate-100">
+                                        <td className="px-3 py-2 text-right font-mono text-[11px]">{o.order_id}</td>
+                                        <td className="px-3 py-2 text-right">
+                                            {new Date(o.received_at).toLocaleString("en-GB", { timeZone: "Asia/Riyadh", hour12: false })}
+                                        </td>
+                                        <td className="px-3 py-2 text-right">{o.order_status}</td>
+                                        <td className="px-3 py-2 text-right">{o.shipping_company}</td>
+                                        <td className="px-3 py-2 num text-left font-bold">{fmt(o.gross)}</td>
+                                        <td className="px-3 py-2 text-center">
+                                            {o.counted_in_confirmed ? (
+                                                <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">✓</span>
+                                            ) : (
+                                                <span className="inline-block px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold">—</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            )}
+        </div>
+    );
+}
+
 export default function CODDiagnostic() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -371,6 +471,11 @@ export default function CODDiagnostic() {
                     </div>
                 )}
             </div>
+
+            {/* POST-SYNC DRIFT BLOCK — Iter-180 */}
+            {data.post_sync_drift && (
+                <PostSyncDriftBlock drift={data.post_sync_drift} />
+            )}
 
             {/* CONFIRMED vs DELIVERED COMPARISON */}
             <div className="bg-white rounded-2xl shadow p-5 mb-6 border-2 border-emerald-200" data-testid="cod-confirmed-vs-delivered">

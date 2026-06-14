@@ -78,6 +78,21 @@ def make_cod_diagnostic_router(db, current_user):
         orders_count_on_account = int(
             cod_account.get("orders_count") or 0
         )
+        last_synced_at_raw = cod_account.get("last_synced_at")
+        # Normalize last_synced_at to a comparable datetime (UTC aware).
+        from datetime import datetime, timezone
+        last_synced_dt = None
+        if isinstance(last_synced_at_raw, datetime):
+            last_synced_dt = last_synced_at_raw
+        elif isinstance(last_synced_at_raw, str) and last_synced_at_raw:
+            try:
+                last_synced_dt = datetime.fromisoformat(
+                    last_synced_at_raw.replace("Z", "+00:00")
+                )
+            except Exception:  # noqa: BLE001
+                last_synced_dt = None
+        if last_synced_dt and last_synced_dt.tzinfo is None:
+            last_synced_dt = last_synced_dt.replace(tzinfo=timezone.utc)
 
         # ── 2) Order-status policy used by the central metrics engine.
         # This is what determines whether the system uses Confirmed/
@@ -106,17 +121,29 @@ def make_cod_diagnostic_router(db, current_user):
         delivered_per_company: dict[str, dict] = {}
 
         total_orders = 0
+        # Iter-180 — Orders that arrived AFTER the COD account was last
+        # synced. These explain any drift between current_balance (cached)
+        # and the live walk total (which includes them).
+        post_sync_orders: list[dict] = []
+        post_sync_total_gross = 0.0
+        post_sync_total_confirmed = 0.0
 
         async for o in db.unified_orders.find(
             {"user_id": uid, "is_pre_accounting": {"$ne": True}},
             {
                 "_id": 0,
+                "id": 1,
+                "order_id": 1,
+                "reference_id": 1,
                 "payment_method": 1,
                 "actual_payment_method": 1,
                 "order_status": 1,
                 "order_status_slug": 1,
                 "shipping_company": 1,
                 "total_amount": 1,
+                "received_at": 1,
+                "created_at": 1,
+                "order_date": 1,
             },
         ):
             method = (
@@ -153,6 +180,43 @@ def make_cod_diagnostic_router(db, current_user):
             )
             cbucket["count"] += 1
             cbucket["gross"] += gross
+
+            # Iter-180 — flag orders that arrived after the cached
+            # current_balance was computed. These are the ones causing
+            # any walk-vs-cache drift.
+            if last_synced_dt is not None:
+                recv = o.get("received_at") or o.get("created_at")
+                recv_dt = None
+                if isinstance(recv, datetime):
+                    recv_dt = recv
+                elif isinstance(recv, str) and recv:
+                    try:
+                        recv_dt = datetime.fromisoformat(
+                            recv.replace("Z", "+00:00")
+                        )
+                    except Exception:  # noqa: BLE001
+                        recv_dt = None
+                if recv_dt and recv_dt.tzinfo is None:
+                    recv_dt = recv_dt.replace(tzinfo=timezone.utc)
+                if recv_dt and recv_dt > last_synced_dt:
+                    is_confirmed_after = cat_key == "confirmed"
+                    post_sync_orders.append({
+                        "order_id": (
+                            o.get("order_id")
+                            or o.get("reference_id")
+                            or o.get("id")
+                            or "—"
+                        ),
+                        "received_at": recv_dt.isoformat(),
+                        "order_status": raw_status,
+                        "shipping_company": company,
+                        "gross": round(gross, 2),
+                        "policy_category": cat_key,
+                        "counted_in_confirmed": is_confirmed_after,
+                    })
+                    post_sync_total_gross += gross
+                    if is_confirmed_after:
+                        post_sync_total_confirmed += gross
 
             # Per-company DELIVERED-only bucket (manual heuristic)
             is_delivered = any(
@@ -229,6 +293,27 @@ def make_cod_diagnostic_router(db, current_user):
             "expected_orders_balance."
         )
 
+        # ── 6.5) Sort post-sync orders newest-first for display.
+        post_sync_orders.sort(key=lambda x: x["received_at"], reverse=True)
+
+        # Walk-vs-cache drift summary. The "walk" = live aggregation of
+        # unified_orders we just performed; the "cache" = the value on
+        # the account doc. A non-zero `walk_vs_cache_diff` is normal and
+        # simply means orders arrived after the last sync — it is NOT
+        # a corruption.
+        walk_confirmed_total = round(per_category["confirmed"]["gross"], 2)
+        walk_confirmed_count = int(per_category["confirmed"]["count"])
+        # Iter-180 — Amount comparison: walk Confirmed gross vs the
+        # cached current_balance (which excludes IN/OUT here for purity
+        # because the merchant's typical case has no manual IN/OUT yet).
+        amount_diff_confirmed_vs_balance = round(
+            walk_confirmed_total - current_balance, 2
+        )
+        # Count comparison: walk's TOTAL cod orders vs the account's
+        # cached orders_count (both should track ALL cod orders, not
+        # just Confirmed).
+        count_diff_total_vs_cache = total_orders - orders_count_on_account
+
         return {
             "found_cod_account": True,
             "account": {
@@ -237,6 +322,9 @@ def make_cod_diagnostic_router(db, current_user):
                 "current_balance": round(current_balance, 2),
                 "expected_orders_balance": round(expected_orders_balance, 2),
                 "orders_count_on_account": orders_count_on_account,
+                "last_synced_at": (
+                    last_synced_dt.isoformat() if last_synced_dt else None
+                ),
             },
             "basis": {
                 "current_logic": "Confirmed (per order_status_policy)",
@@ -267,6 +355,35 @@ def make_cod_diagnostic_router(db, current_user):
                     "إذا كان diff_should_be_zero = 0 فالحساب متطابق. "
                     "أي فرق يشير لتعديل يدوي خارج الحركات أو "
                     "إعادة مزامنة الطلبات بعد التحويلات."
+                ),
+            },
+            # Iter-180 — explains any discrepancy between the live walk
+            # (what the diagnostic shows) and the cached current_balance.
+            "post_sync_drift": {
+                "last_synced_at": (
+                    last_synced_dt.isoformat() if last_synced_dt else None
+                ),
+                "post_sync_orders_count": len(post_sync_orders),
+                "post_sync_total_gross": round(post_sync_total_gross, 2),
+                "post_sync_total_confirmed": round(post_sync_total_confirmed, 2),
+                "walk_confirmed_total": walk_confirmed_total,
+                "walk_confirmed_count": walk_confirmed_count,
+                "walk_total_orders_count": total_orders,
+                "cache_orders_count": orders_count_on_account,
+                "cache_current_balance": round(current_balance, 2),
+                "cache_vs_walk_amount_diff": amount_diff_confirmed_vs_balance,
+                "cache_vs_walk_count_diff": count_diff_total_vs_cache,
+                "orders": post_sync_orders[:25],  # cap UI list
+                "interpretation": (
+                    "هذه الطلبات وصلت إلى النظام بعد آخر مزامنة "
+                    "لحساب COD. لذلك تظهر في «المحسوب الآن» (Walk) "
+                    "لكنها غير موجودة في current_balance (Cache). "
+                    "هذا سلوك طبيعي ولا يؤثر على الترحيل لأن COD "
+                    "مُستبعد من Phase 4 أصلاً."
+                ) if last_synced_dt else (
+                    "الحساب لا يحتوي على last_synced_at — لا يمكن "
+                    "تحديد طلبات ما بعد المزامنة. شغّل مزامنة "
+                    "للحساب أو راجع expected_orders_balance يدوياً."
                 ),
             },
         }

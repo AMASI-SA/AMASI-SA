@@ -1642,3 +1642,34 @@ notes for the Sprint:
   • The diagnostic endpoint already exposes per-company
     Delivered-only totals (`by_shipping_company_delivered_only`)
     — Sprint can use this as the authoritative shape.
+
+
+## Iter-180 — Post-Sync Drift Block in COD Diagnostic (Feb 2026)
+**Merchant's question** (before Apply): on production they saw
+  • current_balance = 40,123.78 (cache)
+  • walk Confirmed = 40,308.54 (live diagnostic)
+  • cache orders_count = 234
+  • walk total orders = 235
+  • diff = 184.76 SAR (= 1 order)
+
+They asked: which order caused the drift, can they trust the data,
+and will it affect the migration?
+
+**Cause**: orders arriving after the COD account's `last_synced_at`
+timestamp are visible to the live diagnostic walk but not yet
+reflected in the cached `current_balance` / `orders_count` fields.
+This is normal — `compute_metrics` only refreshes the cache during
+explicit sync runs.
+
+**Enhancement**: `cod_diagnostic_routes.py` and the UI page now
+expose a "Post-Sync Drift" section that:
+  • Shows `last_synced_at` of the account.
+  • Lists every COD order with `received_at > last_synced_at`.
+  • Marks each one's `policy_category` (Confirmed / Pending / …).
+  • Computes the exact `cache_vs_walk_amount_diff` and
+    `cache_vs_walk_count_diff` and surfaces them as cards.
+  • Explicit interpretation: "هذا سلوك طبيعي ولا يؤثر على الترحيل
+    لأن COD مُستبعد من Phase 4 أصلاً."
+
+**Confirmed: drift does NOT affect Phase 4** because COD is
+excluded from the migration entirely (Iter-179).
