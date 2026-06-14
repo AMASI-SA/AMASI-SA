@@ -56,7 +56,7 @@ async def test_custody_transfer_and_open_balances_report():
         ])
         await db.accounts.insert_one({
             "id": bank, "user_id": uid, "account_type": "bank",
-            "name": "الراجحي", "balance": 0,
+            "name": "الراجحي", "balance": 0, "current_balance": 50000,
         })
 
         # Grant 2,000 custody to A.

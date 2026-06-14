@@ -52,9 +52,9 @@ async def test_operation_account_binding_enforcement():
         })
         await db.accounts.insert_many([
             {"id": bank_a, "user_id": uid, "account_type": "bank",
-             "name": "الراجحي", "balance": 0},
+             "name": "الراجحي", "balance": 0, "current_balance": 50000},
             {"id": bank_b, "user_id": uid, "account_type": "bank",
-             "name": "الأهلي", "balance": 0},
+             "name": "الأهلي", "balance": 0, "current_balance": 50000},
         ])
 
         # ── 1) GET /settings returns the new fields with sensible defaults

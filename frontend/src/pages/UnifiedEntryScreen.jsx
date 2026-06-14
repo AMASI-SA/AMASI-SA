@@ -11,6 +11,96 @@ import api from "../lib/api";
 import { toast } from "sonner";
 import { todaySA, monthISO_SA } from "../lib/dates";
 
+// Iter-186 — Searchable employee picker.
+//   • Type-ahead search over the employee list.
+//   • Inline custody-balance badge per row (red when > 0).
+//   • When `freezeZeroCustody` is true, employees with custody = 0
+//     are rendered disabled — used by «إرجاع عهدة نقداً» and
+//     «تسوية عهدة بفواتير» since both operations require an open
+//     custody to act on.
+function EmployeePicker({
+    employees, custodyBalances, selectedId, onSelect,
+    freezeZeroCustody = false, label = "الموظف",
+    testidSuffix = "",
+    excludeIds = [],
+}) {
+    const [q, setQ] = useState("");
+    const [open, setOpen] = useState(false);
+    const selected = employees.find((e) => e.id === selectedId);
+    const list = employees.filter(
+        (e) => !excludeIds.includes(e.id)
+                && (e.name || "").toLowerCase().includes(q.trim().toLowerCase()),
+    );
+    return (
+        <div className="relative">
+            <label className="block text-sm font-bold text-slate-700 mb-1">
+                {label}:
+            </label>
+            <input
+                type="text"
+                value={selected ? selected.name : q}
+                onChange={(ev) => {
+                    if (selected) onSelect("");
+                    setQ(ev.target.value);
+                    setOpen(true);
+                }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 200)}
+                placeholder="🔍 ابحث باسم الموظف…"
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                data-testid={`unified-employee-search${testidSuffix}`}
+            />
+            {open && (
+                <div className="absolute z-20 mt-1 w-full max-h-72 overflow-y-auto bg-white border border-slate-300 rounded-lg shadow-lg"
+                     data-testid={`unified-employee-list${testidSuffix}`}>
+                    {list.length === 0 && (
+                        <div className="p-3 text-xs text-slate-500">
+                            — لا توجد نتائج —
+                        </div>
+                    )}
+                    {list.map((e) => {
+                        const cust = Number(custodyBalances?.[e.id] || 0);
+                        const hasCustody = cust > 0.005;
+                        const frozen = freezeZeroCustody && !hasCustody;
+                        return (
+                            <button
+                                key={e.id}
+                                type="button"
+                                disabled={frozen}
+                                onMouseDown={(ev) => {
+                                    if (frozen) return;
+                                    ev.preventDefault();
+                                    onSelect(e.id);
+                                    setQ("");
+                                    setOpen(false);
+                                }}
+                                className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-right border-b border-slate-100 last:border-b-0 ${
+                                    frozen
+                                        ? "bg-slate-50 text-slate-400 cursor-not-allowed"
+                                        : "hover:bg-emerald-50 text-slate-800 cursor-pointer"
+                                }`}
+                                data-testid={`unified-employee-opt${testidSuffix}-${e.id}`}
+                            >
+                                <span className="font-bold">{e.name}</span>
+                                {hasCustody && (
+                                    <span className="text-[11px] font-extrabold text-rose-700 num">
+                                        عهدة: {cust.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                                    </span>
+                                )}
+                                {!hasCustody && freezeZeroCustody && (
+                                    <span className="text-[11px] text-slate-400 font-bold">
+                                        🔒 لا توجد عهدة
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
 const OP_TYPES = [
     { value: "advance_grant",        label: "💰 سلفة موظف",         section: "employees" },
     { value: "salary_settle",        label: "📅 صرف راتب",            section: "employees" },
@@ -97,6 +187,11 @@ export default function UnifiedEntryScreen() {
     //   net < 0  → employee owes company (red)
     const [employeeSummary, setEmployeeSummary] = useState(null);
     const [employeeSummaryLoading, setEmployeeSummaryLoading] = useState(false);
+    // Iter-186 — Bulk custody balances map { employee_id: open_balance }.
+    // Loaded from /accounting/employees/custody/open-balances. Used to
+    // decorate the searchable picker and freeze 0-balance employees in
+    // custody_return / custody_settle.
+    const [custodyBalances, setCustodyBalances] = useState({});
 
     const visibleOpTypes = useMemo(
         () => OP_TYPES.filter(o => !hiddenTypes.includes(o.value)),
@@ -154,7 +249,19 @@ export default function UnifiedEntryScreen() {
             setAccountLiveBalances(map);
         } catch (_) { /* swallow — feature degrades gracefully */ }
     };
+    // Iter-186 — Load all-employees custody balances.
+    const reloadCustodyBalances = async () => {
+        try {
+            const r = await api.get("/accounting/employees/custody/open-balances");
+            const map = {};
+            for (const row of (r.data?.rows || [])) {
+                map[row.employee_id] = Number(row.open_balance || 0);
+            }
+            setCustodyBalances(map);
+        } catch (_) { /* swallow */ }
+    };
     useEffect(() => { reloadLiveBalances(); }, []);
+    useEffect(() => { reloadCustodyBalances(); }, []);
 
     // Iter-185 — Cash-out ops where the source account must have
     // enough funds. Mirrors backend `_enforce_sufficient_funds` calls.
@@ -457,6 +564,9 @@ export default function UnifiedEntryScreen() {
             setResult(data);
             // Iter-185 — refresh live balances so the UI freeze stays honest.
             reloadLiveBalances();
+            // Iter-186 — refresh custody balances after every successful
+            // ledger post (covers grant / return / settle / transfer).
+            reloadCustodyBalances();
         } catch (e) {
             const det = e.response?.data?.detail;
             toast.error(typeof det === "string" ? det : (det?.[0]?.msg || "فشل الاعتماد"));
@@ -524,75 +634,119 @@ export default function UnifiedEntryScreen() {
 
                 {opType && (
                     <div className="space-y-4 border-t border-slate-200 pt-4">
-                        {/* Entity */}
+                        {/* Iter-186 — Searchable employee picker with
+                            custody-aware decorations. Used for every
+                            employee-bound operation. Freezes 0-balance
+                            employees on return / settle since both
+                            operations require an open custody to act on. */}
                         {needsEmployee && (
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">
-                                    {opType === "custody_transfer" ? "من الموظف (المحوِّل):" : "الموظف:"}
-                                </label>
-                                <select value={entityId} onChange={e => setEntityId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
-                                    data-testid="unified-entity-employee">
-                                    <option value="">— اختر —</option>
-                                    {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                                </select>
-                            </div>
+                            <EmployeePicker
+                                employees={employees}
+                                custodyBalances={custodyBalances}
+                                selectedId={entityId}
+                                onSelect={setEntityId}
+                                freezeZeroCustody={["custody_return",
+                                                    "custody_settle"].includes(opType)}
+                                label={opType === "custody_transfer"
+                                    ? "من الموظف (المحوِّل)" : "الموظف"}
+                                testidSuffix=""
+                            />
                         )}
                         {needsEmployeeTo && (
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">
-                                    إلى الموظف (المستلم):
-                                </label>
-                                <select value={entityToId} onChange={e => setEntityToId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
-                                    data-testid="unified-entity-employee-to">
-                                    <option value="">— اختر —</option>
-                                    {employees.filter(e => e.id !== entityId).map(e =>
-                                        <option key={e.id} value={e.id}>{e.name}</option>)}
-                                </select>
+                            <>
+                                <EmployeePicker
+                                    employees={employees}
+                                    custodyBalances={custodyBalances}
+                                    selectedId={entityToId}
+                                    onSelect={setEntityToId}
+                                    label="إلى الموظف (المستلم)"
+                                    testidSuffix="-to"
+                                    excludeIds={entityId ? [entityId] : []}
+                                />
                                 <p className="text-[11px] text-slate-500 mt-1 leading-tight">
                                     💡 العملية تنقل رصيد العهدة من المحوِّل إلى المستلم بدون أي تأثير على البنك أو الصندوق.
                                 </p>
-                            </div>
+                            </>
                         )}
 
-                        {/* Iter-185 — Employee net-balance card. Shown for
-                            any operation that targets an employee. */}
-                        {needsEmployee && entityId && (
-                            <div
-                                className={`rounded-xl border-2 px-4 py-3 ${
-                                    employeeSummaryLoading
-                                        ? "border-slate-200 bg-slate-50"
-                                        : (employeeSummary?.net_due_to_employee ?? 0) > 0.005
-                                            ? "border-emerald-300 bg-emerald-50"
-                                            : (employeeSummary?.net_due_to_employee ?? 0) < -0.005
-                                                ? "border-rose-300 bg-rose-50"
-                                                : "border-slate-200 bg-slate-50"
-                                }`}
-                                data-testid="unified-employee-summary-card"
-                            >
-                                <div className="text-[11px] text-slate-600 font-bold mb-0.5">
-                                    {employeeSummaryLoading
-                                        ? "جاري حساب رصيد الموظف…"
-                                        : (employeeSummary?.net_due_to_employee ?? 0) > 0.005
-                                            ? "💚 رصيد مستحق للموظف"
-                                            : (employeeSummary?.net_due_to_employee ?? 0) < -0.005
-                                                ? "❤️ مبلغ على الموظف للشركة"
-                                                : "💼 رصيد الموظف"}
+                        {/* Iter-185/186 — Employee context card.
+                            For CUSTODY operations we show ONLY the open
+                            custody balance (red when employee holds
+                            money, green when the slate is clean). For
+                            other employee ops we show the net amount
+                            owed/owed-to. */}
+                        {needsEmployee && entityId && (() => {
+                            const isCustodyOp = ["custody_grant",
+                                                  "custody_return",
+                                                  "custody_settle",
+                                                  "custody_transfer"].includes(opType);
+                            if (isCustodyOp) {
+                                const cust = Number(
+                                    employeeSummary?.custody_open
+                                    ?? custodyBalances[entityId]
+                                    ?? 0);
+                                const hasCustody = cust > 0.005;
+                                return (
+                                    <div
+                                        className={`rounded-xl border-2 px-4 py-3 ${
+                                            employeeSummaryLoading
+                                                ? "border-slate-200 bg-slate-50"
+                                                : hasCustody
+                                                    ? "border-rose-300 bg-rose-50"
+                                                    : "border-emerald-300 bg-emerald-50"
+                                        }`}
+                                        data-testid="unified-employee-summary-card"
+                                    >
+                                        <div className="text-[11px] text-slate-600 font-bold mb-0.5">
+                                            {employeeSummaryLoading
+                                                ? "جاري حساب رصيد العهدة…"
+                                                : hasCustody
+                                                    ? "❤️ إجمالي العهدة الحالية"
+                                                    : "💚 لا توجد عهدة مفتوحة"}
+                                        </div>
+                                        <div className={`text-xl font-extrabold num ${
+                                            hasCustody ? "text-rose-800" : "text-emerald-800"
+                                        }`} data-testid="unified-employee-summary-amount">
+                                            {cust.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            const net = employeeSummary?.net_due_to_employee ?? 0;
+                            return (
+                                <div
+                                    className={`rounded-xl border-2 px-4 py-3 ${
+                                        employeeSummaryLoading
+                                            ? "border-slate-200 bg-slate-50"
+                                            : net > 0.005
+                                                ? "border-emerald-300 bg-emerald-50"
+                                                : net < -0.005
+                                                    ? "border-rose-300 bg-rose-50"
+                                                    : "border-slate-200 bg-slate-50"
+                                    }`}
+                                    data-testid="unified-employee-summary-card"
+                                >
+                                    <div className="text-[11px] text-slate-600 font-bold mb-0.5">
+                                        {employeeSummaryLoading
+                                            ? "جاري حساب رصيد الموظف…"
+                                            : net > 0.005
+                                                ? "💚 رصيد مستحق للموظف"
+                                                : net < -0.005
+                                                    ? "❤️ مبلغ على الموظف للشركة"
+                                                    : "💼 رصيد الموظف"}
+                                    </div>
+                                    <div className={`text-xl font-extrabold num ${
+                                        net > 0.005 ? "text-emerald-800"
+                                            : net < -0.005 ? "text-rose-800"
+                                                : "text-slate-700"
+                                    }`} data-testid="unified-employee-summary-amount">
+                                        {employeeSummary
+                                            ? `${Math.abs(net).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`
+                                            : "—"}
+                                    </div>
                                 </div>
-                                <div className={`text-xl font-extrabold num ${
-                                    (employeeSummary?.net_due_to_employee ?? 0) > 0.005
-                                        ? "text-emerald-800"
-                                        : (employeeSummary?.net_due_to_employee ?? 0) < -0.005
-                                            ? "text-rose-800"
-                                            : "text-slate-700"
-                                }`} data-testid="unified-employee-summary-amount">
-                                    {employeeSummary
-                                        ? `${Math.abs(employeeSummary.net_due_to_employee).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`
-                                        : "—"}
-                                </div>
-                            </div>
-                        )}
+                            );
+                        })()}
                         {needsSupplier && (
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-1">المورد:</label>
