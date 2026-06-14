@@ -62,6 +62,7 @@ const SECTIONS = [
             { to: "/settlements-overview", label: "📑 جميع التسويات", icon: Receipt, testid: "nav-settlements-overview" },
             { to: "/bnpl-balances", label: "أرصدة BNPL (المصدر الموحَّد)", icon: Receipt, testid: "nav-bnpl-balances" },
             { to: "/diagnostics/cod-source", label: "🔍 تشخيص مصدر COD", icon: MagnifyingGlass, testid: "nav-cod-diagnostic" },
+            { to: "/audit/post-migration", label: "🔬 فحص ما بعد الترحيل", icon: MagnifyingGlass, testid: "nav-post-migration-audit" },
             { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
             { to: "/refund-audit", label: "تدقيق المسترجعات (BNPL)", icon: MagnifyingGlass, testid: "nav-refund-audit" },
             { to: "/alerts", label: "🔔 التنبيهات الذكية", icon: Lightning, testid: "nav-alerts" },

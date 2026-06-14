@@ -65,6 +65,7 @@ import ApiPermissionsDiagnostic from "./pages/ApiPermissionsDiagnostic";
 import AccountingCutoffs from "./pages/AccountingCutoffs";
 import BnplBalancesDiagnostic from "./pages/BnplBalancesDiagnostic";
 import CODDiagnostic from "./pages/CODDiagnostic";
+import PostMigrationAudit from "./pages/PostMigrationAudit";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -138,6 +139,7 @@ function AppRoutes() {
             <Route path="/settings/accounting-cutoffs" element={<ProtectedRoute><Layout><AccountingCutoffs /></Layout></ProtectedRoute>} />
             <Route path="/bnpl-balances" element={<ProtectedRoute><Layout><BnplBalancesDiagnostic /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics/cod-source" element={<ProtectedRoute><Layout><CODDiagnostic /></Layout></ProtectedRoute>} />
+            <Route path="/audit/post-migration" element={<ProtectedRoute><Layout><PostMigrationAudit /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />

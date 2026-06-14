@@ -1673,3 +1673,54 @@ expose a "Post-Sync Drift" section that:
 
 **Confirmed: drift does NOT affect Phase 4** because COD is
 excluded from the migration entirely (Iter-179).
+
+
+## Iter-181 — Post-Migration Audit (Feb 2026)
+**Merchant's request after successful Phase 4 Apply**: a final
+read-only audit confirming:
+  • No discrepancies between legacy data and the Universal Ledger
+  • No duplicate opening entries
+  • No unexplained negative balances
+  • Integrity of references and reports
+
+**Endpoint shipped**: `GET /api/audit/post-migration` (read-only).
+Returns:
+  • `verdict`: pass / warnings / fail
+  • `issues[]`: list of detected issues with severity (high/medium/info)
+  • `cutoff`: migration cutoff record
+  • `duplicates`: count + samples of duplicate opening_balance entries
+    grouped by (entity_type, entity_id, sub_account)
+  • `orphans`: count + samples of opening entries referencing
+    deleted entities (counterparties, accounts, employees)
+  • `ledger_sums_by_entity`: debit/credit totals + counts per
+    entity_type (bank, employee, supplier, …)
+  • `negative_balances`: bank/payment_platform accounts with
+    current_balance < 0, flagged as "expected" for BNPL providers
+    (Tabby/Tamara) and "unexplained" for others
+  • `cod_exclusion`: confirms 0 COD entries leaked into the ledger
+  • `bank_reconciliation`: legacy_total vs ledger_net + diff
+
+**UI page shipped**: `/audit/post-migration` (`PostMigrationAudit.jsx`)
+displays the audit as a friendly dashboard:
+  • Verdict banner (color-coded by status)
+  • Three top cards: cutoff status, COD exclusion confirmation,
+    bank reconciliation
+  • Ledger sums table per entity_type
+  • Duplicate / orphan counters (must be 0)
+  • Expandable negative-balance details with BNPL whitelist
+
+Linked in Sidebar as "🔬 فحص ما بعد الترحيل" beside the COD
+diagnostic.
+
+**Merchant workflow**:
+  1. Save to GitHub → Redeploy
+  2. Open `/audit/post-migration` on mezansalla.com
+  3. Verdict should be **pass** (✅) or **warnings** only
+  4. If any **high** severity issue → investigate before
+     disabling legacy endpoints
+  5. After confirmation → proceed with legacy decommissioning
+     (separate task, requires explicit merchant approval)
+
+**Tests**: Live Preview verification confirms the endpoint
+returns plausible output even before migration (correctly reports
+"no_cutoff" and "bank_mismatch" because no Apply has run).

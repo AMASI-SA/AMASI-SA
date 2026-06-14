@@ -3472,6 +3472,8 @@ from migration_routes import make_migration_router
 api.include_router(make_migration_router(db))
 from cod_diagnostic_routes import make_cod_diagnostic_router
 api.include_router(make_cod_diagnostic_router(db, current_user))
+from audit_routes import make_audit_router
+api.include_router(make_audit_router(db, current_user))
 app.include_router(api)
 
 # CORS
