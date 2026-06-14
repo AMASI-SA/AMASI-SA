@@ -115,6 +115,7 @@ const OP_TYPES = [
     { value: "external_collect",     label: "💵 تحصيل من شخص خارجي",  section: "externals" },
     { value: "expense_record",       label: "🛒 مصروف عام",             section: "general" },
     { value: "bank_transfer",        label: "🔄 تحويل بين الحسابات",   section: "general" },
+    { value: "courier_cod_settle",   label: "🚚 تسوية COD مع شركة شحن", section: "shipping" },
 ];
 
 export default function UnifiedEntryScreen() {
@@ -150,6 +151,19 @@ export default function UnifiedEntryScreen() {
     const [externals, setExternals] = useState([]);
     const [banks, setBanks] = useState([]);
     const [categories, setCategories] = useState([]);
+    // Iter-191 — couriers list + per-courier open COD balance map.
+    // Powers the «تسوية COD مع شركة شحن» operation: the merchant picks
+    // a courier and the UI shows its current cod_receivable so they
+    // can split the settlement into bank / shipping / cod_fee / other.
+    const [couriers, setCouriers] = useState([]);
+    const [courierCodBalances, setCourierCodBalances] = useState({});
+    // Iter-191 — COD settlement legs (kept separate from the generic
+    // `amount` field which doesn't make sense for multi-leg ops).
+    const [codBankAmount,    setCodBankAmount]    = useState("");
+    const [codShippingCost,  setCodShippingCost]  = useState("");
+    const [codFee,           setCodFee]           = useState("");
+    const [codOtherFees,     setCodOtherFees]     = useState("");
+    const [codOtherCategory, setCodOtherCategory] = useState("");
     const [result, setResult] = useState(null);
 
     // Form fields (used by various ops)
@@ -269,8 +283,22 @@ export default function UnifiedEntryScreen() {
             setCustodyBalances(map);
         } catch (_) { /* swallow */ }
     };
+    // Iter-191 — Load couriers + their open COD balances.
+    const reloadCouriers = async () => {
+        try {
+            const r = await api.get("/accounting/couriers/list");
+            const items = r.data?.couriers || [];
+            setCouriers(items);
+            const map = {};
+            for (const c of items) {
+                map[c.id] = Number(c.cod_receivable || 0);
+            }
+            setCourierCodBalances(map);
+        } catch (_) { /* swallow */ }
+    };
     useEffect(() => { reloadLiveBalances(); }, []);
     useEffect(() => { reloadCustodyBalances(); }, []);
+    useEffect(() => { reloadCouriers(); }, []);
 
     // Iter-185 — Cash-out ops where the source account must have
     // enough funds. Mirrors backend `_enforce_sufficient_funds` calls.
@@ -390,6 +418,9 @@ export default function UnifiedEntryScreen() {
         setEntityId(""); setEntityToId(""); setAmount(""); setBankId(""); setBankToId("");
         setNotes(""); setInvoiceNo(""); setResult(null);
         setCustodyItems([{ expense_category: "", amount: "", notes: "" }]);
+        // Iter-191 — COD settlement legs.
+        setCodBankAmount(""); setCodShippingCost("");
+        setCodFee(""); setCodOtherFees(""); setCodOtherCategory("");
     };
 
     useEffect(() => { resetForm(); }, [opType]);
@@ -480,7 +511,11 @@ export default function UnifiedEntryScreen() {
 
     const submit = async () => {
         const amt = Number(amount) || 0;
-        if (opType !== "custody_settle" && amt <= 0) {
+        // Iter-191 — `courier_cod_settle` doesn't use the generic
+        // amount field; it has its own multi-leg validation below.
+        if (opType !== "custody_settle"
+            && opType !== "courier_cod_settle"
+            && amt <= 0) {
             toast.error("أدخل مبلغاً صحيحاً"); return;
         }
         setBusy(true); setResult(null);
@@ -569,6 +604,45 @@ export default function UnifiedEntryScreen() {
                     body = { amount: amt, from_account_id: bankId,
                              to_account_id: bankToId, ...common };
                     break;
+                case "courier_cod_settle": {
+                    // Iter-191 — multi-leg COD settlement.
+                    const bankAmtN  = Number(codBankAmount   || 0);
+                    const shipAmtN  = Number(codShippingCost || 0);
+                    const feeAmtN   = Number(codFee          || 0);
+                    const otherAmtN = Number(codOtherFees    || 0);
+                    const total = bankAmtN + shipAmtN + feeAmtN + otherAmtN;
+                    if (!entityId) {
+                        toast.error("اختر شركة الشحن"); setBusy(false); return;
+                    }
+                    if (total <= 0) {
+                        toast.error("أدخل قيمة واحدة على الأقل (تحويل / شحن / رسوم)");
+                        setBusy(false); return;
+                    }
+                    if (bankAmtN > 0 && !bankId) {
+                        toast.error("اختر حساب الإيداع للمبلغ المحول");
+                        setBusy(false); return;
+                    }
+                    if (otherAmtN > 0 && !codOtherCategory) {
+                        toast.error("اختر فئة المصروف للرسوم الأخرى");
+                        setBusy(false); return;
+                    }
+                    const codBalNow = Number(courierCodBalances[entityId] || 0);
+                    if (total > codBalNow + 0.005) {
+                        toast.error("إجمالي التسوية يتجاوز الرصيد المتاح");
+                        setBusy(false); return;
+                    }
+                    url = `/accounting/couriers/${entityId}/cod-settle`;
+                    body = {
+                        bank_amount:        bankAmtN > 0 ? bankAmtN : 0,
+                        bank_account_id:    bankAmtN > 0 ? bankId   : null,
+                        shipping_cost:      shipAmtN,
+                        cod_fee:            feeAmtN,
+                        other_fees:         otherAmtN,
+                        other_fees_category: otherAmtN > 0 ? codOtherCategory : null,
+                        ...common,
+                    };
+                    break;
+                }
                 default:
                     toast.error("اختر نوع العملية"); setBusy(false); return;
             }
@@ -580,6 +654,9 @@ export default function UnifiedEntryScreen() {
             // Iter-186 — refresh custody balances after every successful
             // ledger post (covers grant / return / settle / transfer).
             reloadCustodyBalances();
+            // Iter-191 — refresh couriers' open COD after every post
+            // that touches them (settlement, deposit, payment, charge).
+            reloadCouriers();
         } catch (e) {
             const det = e.response?.data?.detail;
             // Iter-188 — Server-side Golden Rule (defense in depth): if
@@ -597,14 +674,20 @@ export default function UnifiedEntryScreen() {
     };
 
     const op = OP_TYPES.find(x => x.value === opType);
-    const needsEmployee = ["advance_grant","salary_settle","salary_accrual",
+    // Iter-191 — `courier_cod_settle` is a brand-new shape: it owns
+    // its own picker (courier), its own 4 amount fields, and its own
+    // preview/submit path. The generic "amount + employee + bank"
+    // scaffolding is disabled for it.
+    const isCodSettle = opType === "courier_cod_settle";
+    const needsEmployee = !isCodSettle && ["advance_grant","salary_settle","salary_accrual",
         "custody_grant","custody_return","custody_settle","custody_transfer"].includes(opType);
     const needsEmployeeTo = opType === "custody_transfer";
     const needsSupplier = ["supplier_invoice","supplier_pay"].includes(opType);
     const needsExternal = ["external_grant","external_collect"].includes(opType);
-    const needsBank = !["salary_accrual","custody_settle","supplier_invoice","custody_transfer"].includes(opType);
+    const needsBank = !isCodSettle && !["salary_accrual","custody_settle","supplier_invoice","custody_transfer"].includes(opType);
     const needsBankTo = opType === "bank_transfer";
     const needsCategory = ["supplier_invoice","expense_record"].includes(opType);
+    const needsCourier = isCodSettle;
 
     return (
         <div className="p-6 max-w-4xl mx-auto" data-testid="unified-entry-screen">
@@ -650,6 +733,10 @@ export default function UnifiedEntryScreen() {
                         </optgroup>
                         <optgroup label="عمليات عامة">
                             {visibleOpTypes.filter(x => x.section === "general").map(o =>
+                                <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </optgroup>
+                        <optgroup label="شركات الشحن">
+                            {visibleOpTypes.filter(x => x.section === "shipping").map(o =>
                                 <option key={o.value} value={o.value}>{o.label}</option>)}
                         </optgroup>
                     </select>
@@ -860,8 +947,230 @@ export default function UnifiedEntryScreen() {
                             </div>
                         )}
 
-                        {/* Amount (or items for custody settle) */}
-                        {opType !== "custody_settle" && (
+                        {/* ───────────────────────────────────────────
+                            Iter-191 — COD settlement with a courier
+                            ─────────────────────────────────────────── */}
+                        {needsCourier && (() => {
+                            const selectedCourier = couriers.find(c => c.id === entityId);
+                            const codBal = Number(courierCodBalances[entityId] || 0);
+                            const bankAmt    = Number(codBankAmount    || 0);
+                            const shipAmt    = Number(codShippingCost  || 0);
+                            const feeAmt     = Number(codFee           || 0);
+                            const otherAmt   = Number(codOtherFees     || 0);
+                            const totalSettle = Math.round(
+                                (bankAmt + shipAmt + feeAmt + otherAmt) * 100) / 100;
+                            const remaining = Math.round((codBal - totalSettle) * 100) / 100;
+                            const overSettled = totalSettle > codBal + 0.005;
+
+                            const fmt = (v) => Number(v || 0).toLocaleString("en-US", {
+                                minimumFractionDigits: 2, maximumFractionDigits: 2,
+                            });
+
+                            // Bank/cash only — courier settlement never lands
+                            // in a payment_platform / courier / ads account.
+                            const bankCashOnly = banks.filter(
+                                b => b.account_type === "bank" || b.account_type === "cash");
+
+                            return (<>
+                                {/* Courier picker (search + COD badge) */}
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">
+                                        شركة الشحن:
+                                    </label>
+                                    <select value={entityId}
+                                        onChange={e => setEntityId(e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                                        data-testid="unified-entity-courier">
+                                        <option value="">— اختر —</option>
+                                        {couriers.map(c => {
+                                            const bal = Number(courierCodBalances[c.id] || 0);
+                                            const hasCod = bal > 0.005;
+                                            return (
+                                                <option key={c.id} value={c.id}
+                                                    disabled={!hasCod}
+                                                    data-testid={`unified-courier-opt-${c.id}`}>
+                                                    {c.name}
+                                                    {hasCod
+                                                        ? ` · COD ${fmt(bal)} ر.س`
+                                                        : " · 🔒 لا يوجد COD مستحق"}
+                                                </option>
+                                            );
+                                        })}
+                                    </select>
+                                    {couriers.length === 0 && (
+                                        <p className="text-[11px] text-slate-500 mt-1">
+                                            💡 لا توجد شركات شحن مسجلة بعد — أنشئها من
+                                            «الإعدادات → شركات الشحن».
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* COD balance card */}
+                                {entityId && (
+                                    <div className={`rounded-xl border-2 px-4 py-3 ${
+                                        codBal > 0.005
+                                            ? "border-emerald-300 bg-emerald-50"
+                                            : "border-rose-300 bg-rose-50"
+                                    }`} data-testid="unified-courier-cod-card">
+                                        <div className="text-[11px] text-slate-600 font-bold mb-0.5">
+                                            {codBal > 0.005
+                                                ? "💚 رصيد COD مستحق على الشركة"
+                                                : "❤️ لا يوجد رصيد COD على هذه الشركة"}
+                                        </div>
+                                        <div className={`text-xl font-extrabold num ${
+                                            codBal > 0.005 ? "text-emerald-800" : "text-rose-800"
+                                        }`} data-testid="unified-courier-cod-amount">
+                                            {fmt(codBal)} ر.س
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Multi-leg amount fields */}
+                                {entityId && codBal > 0.005 && (
+                                    <div className="space-y-3">
+                                        {/* Leg 1 — Bank/cash transfer */}
+                                        <div className="border border-slate-200 rounded-xl p-3 bg-white">
+                                            <div className="text-xs font-extrabold text-slate-700 mb-2">
+                                                💰 المبلغ المحول
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <input type="number" step="0.01"
+                                                    placeholder="مبلغ التحويل"
+                                                    value={codBankAmount}
+                                                    onChange={e => setCodBankAmount(e.target.value)}
+                                                    className="px-3 py-2 border border-slate-300 rounded text-sm"
+                                                    data-testid="cod-bank-amount" />
+                                                <select value={bankId}
+                                                    onChange={e => setBankId(e.target.value)}
+                                                    className="px-3 py-2 border border-slate-300 rounded text-sm"
+                                                    data-testid="cod-bank-account">
+                                                    <option value="">— حساب الإيداع —</option>
+                                                    <optgroup label="🏦 بنوك">
+                                                        {bankCashOnly.filter(b => b.account_type === "bank").map(b =>
+                                                            <option key={b.id} value={b.id}>{b.name}</option>)}
+                                                    </optgroup>
+                                                    {bankCashOnly.some(b => b.account_type === "cash") && (
+                                                        <optgroup label="💵 صناديق نقدية">
+                                                            {bankCashOnly.filter(b => b.account_type === "cash").map(b =>
+                                                                <option key={b.id} value={b.id}>{b.name}</option>)}
+                                                        </optgroup>
+                                                    )}
+                                                </select>
+                                            </div>
+                                            <p className="text-[11px] text-slate-500 mt-1">
+                                                لا يُسمح بالإيداع في بوابات الدفع أو حسابات الإعلانات.
+                                            </p>
+                                        </div>
+
+                                        {/* Leg 2 — Withheld shipping cost */}
+                                        <div className="border border-slate-200 rounded-xl p-3 bg-white">
+                                            <div className="text-xs font-extrabold text-slate-700 mb-2">
+                                                📦 تكلفة الشحن المخصومة
+                                            </div>
+                                            <input type="number" step="0.01"
+                                                placeholder="0.00"
+                                                value={codShippingCost}
+                                                onChange={e => setCodShippingCost(e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                                                data-testid="cod-shipping-cost" />
+                                        </div>
+
+                                        {/* Leg 3 — Withheld COD fee */}
+                                        <div className="border border-slate-200 rounded-xl p-3 bg-white">
+                                            <div className="text-xs font-extrabold text-slate-700 mb-2">
+                                                💳 رسوم COD المخصومة
+                                            </div>
+                                            <input type="number" step="0.01"
+                                                placeholder="0.00"
+                                                value={codFee}
+                                                onChange={e => setCodFee(e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                                                data-testid="cod-fee" />
+                                        </div>
+
+                                        {/* Leg 4 — Other fees + category */}
+                                        <div className="border border-slate-200 rounded-xl p-3 bg-white">
+                                            <div className="text-xs font-extrabold text-slate-700 mb-2">
+                                                🧾 رسوم أخرى (اختياري)
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <input type="number" step="0.01"
+                                                    placeholder="0.00"
+                                                    value={codOtherFees}
+                                                    onChange={e => setCodOtherFees(e.target.value)}
+                                                    className="px-3 py-2 border border-slate-300 rounded text-sm"
+                                                    data-testid="cod-other-fees" />
+                                                <select value={codOtherCategory}
+                                                    onChange={e => setCodOtherCategory(e.target.value)}
+                                                    disabled={otherAmt <= 0}
+                                                    className={`px-3 py-2 border border-slate-300 rounded text-sm ${
+                                                        otherAmt <= 0 ? "bg-slate-100 text-slate-400" : ""
+                                                    }`}
+                                                    data-testid="cod-other-category">
+                                                    <option value="">— فئة المصروف —</option>
+                                                    {categories.map(c =>
+                                                        <option key={c.code} value={c.code}>{c.name}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* Live preview block */}
+                                        <div className={`rounded-xl border-2 p-3 ${
+                                            overSettled
+                                                ? "border-rose-300 bg-rose-50"
+                                                : "border-emerald-200 bg-emerald-50"
+                                        }`} data-testid="cod-preview-block">
+                                            <div className="text-xs font-extrabold text-slate-700 mb-2">
+                                                📊 ملخص التسوية
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-1 text-[12px]">
+                                                <div className="text-slate-600">الرصيد الحالي:</div>
+                                                <div className="text-left font-bold num">{fmt(codBal)} ر.س</div>
+                                                <div className="text-slate-600">تحويل للبنك:</div>
+                                                <div className="text-left font-bold num">{fmt(bankAmt)} ر.س</div>
+                                                <div className="text-slate-600">تكلفة شحن:</div>
+                                                <div className="text-left font-bold num">{fmt(shipAmt)} ر.س</div>
+                                                <div className="text-slate-600">رسوم COD:</div>
+                                                <div className="text-left font-bold num">{fmt(feeAmt)} ر.س</div>
+                                                <div className="text-slate-600">رسوم أخرى:</div>
+                                                <div className="text-left font-bold num">{fmt(otherAmt)} ر.س</div>
+                                                <div className="font-extrabold text-slate-800 border-t border-slate-300 pt-1 mt-0.5">
+                                                    إجمالي التسوية:
+                                                </div>
+                                                <div className="text-left font-extrabold num border-t border-slate-300 pt-1 mt-0.5"
+                                                     data-testid="cod-total-settle">
+                                                    {fmt(totalSettle)} ر.س
+                                                </div>
+                                                <div className={`font-extrabold ${
+                                                    overSettled ? "text-rose-800"
+                                                        : remaining < 0.005 ? "text-emerald-800"
+                                                            : "text-amber-800"
+                                                }`}>
+                                                    الرصيد المتبقي بعد العملية:
+                                                </div>
+                                                <div className={`text-left font-extrabold num ${
+                                                    overSettled ? "text-rose-800"
+                                                        : remaining < 0.005 ? "text-emerald-800"
+                                                            : "text-amber-800"
+                                                }`} data-testid="cod-remaining">
+                                                    {fmt(remaining)} ر.س
+                                                </div>
+                                            </div>
+                                            {overSettled && (
+                                                <div className="mt-2 text-[11px] text-rose-700 font-bold"
+                                                     data-testid="cod-overflow-warning">
+                                                    ⚠️ إجمالي التسوية يتجاوز رصيد COD المتاح —
+                                                    عدّل القيم قبل الحفظ.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </>);
+                        })()}
+
+                        {/* Amount (or items for custody settle / multi-leg for cod settle) */}
+                        {opType !== "custody_settle" && !isCodSettle && (
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-1">المبلغ (ر.س):</label>
                                 <input type="number" step="0.01" value={amount}
@@ -1190,6 +1499,31 @@ export default function UnifiedEntryScreen() {
                                     إجمالي مدين: {result.debit_total} ·
                                     إجمالي دائن: {result.credit_total}
                                 </div>
+                                {/* Iter-191 — Courier COD settlement audit block. */}
+                                {opType === "courier_cod_settle"
+                                  && result.settlement_total !== undefined && (
+                                    <div className="mt-2 pt-2 border-t border-emerald-200 grid grid-cols-2 gap-1 text-[11px]">
+                                        <div className="text-slate-600">شركة الشحن:</div>
+                                        <div className="text-left font-bold">
+                                            {couriers.find(c => c.id === entityId)?.name || "—"}
+                                        </div>
+                                        <div className="text-slate-600">إجمالي التسوية:</div>
+                                        <div className="text-left font-bold num">
+                                            {Number(result.settlement_total).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                                        </div>
+                                        <div className="text-slate-600">الرصيد السابق:</div>
+                                        <div className="text-left font-bold num">
+                                            {Number(result.previous_cod_balance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                                        </div>
+                                        <div className="text-slate-600">الرصيد المتبقي:</div>
+                                        <div className={`text-left font-extrabold num ${
+                                            Number(result.remaining_cod_balance) < 0.005
+                                                ? "text-emerald-700" : "text-amber-700"
+                                        }`}>
+                                            {Number(result.remaining_cod_balance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -1214,12 +1548,13 @@ export default function UnifiedEntryScreen() {
                         </div>
 
                         <div className="p-5 space-y-4">
-                            {["employees", "suppliers", "externals", "general"].map(sec => {
+                            {["employees", "suppliers", "externals", "general", "shipping"].map(sec => {
                                 const sectionLabel = {
                                     employees: "موظفون",
                                     suppliers: "موردون",
                                     externals: "أشخاص خارجيون",
                                     general: "عمليات عامة",
+                                    shipping: "شركات الشحن",
                                 }[sec];
                                 const items = OP_TYPES.filter(x => x.section === sec);
                                 return (
