@@ -87,6 +87,16 @@ export default function UnifiedEntryScreen() {
     // Shape: { [op_type]: [account_id, ...] }. Empty / missing key
     // means «السماح للكل» (no UI filtering for that op).
     const [accountBindings, setAccountBindings] = useState({});
+    // Iter-185 — Live (insufficient-funds-aware) balance map keyed by
+    // account_id. Filled from /accounting/cash-accounts-with-balances
+    // and refreshed after every successful submit so the UI keeps the
+    // freeze state honest.
+    const [accountLiveBalances, setAccountLiveBalances] = useState({});
+    // Iter-185 — Selected employee's net balance card.
+    //   net > 0  → company owes employee (green)
+    //   net < 0  → employee owes company (red)
+    const [employeeSummary, setEmployeeSummary] = useState(null);
+    const [employeeSummaryLoading, setEmployeeSummaryLoading] = useState(false);
 
     const visibleOpTypes = useMemo(
         () => OP_TYPES.filter(o => !hiddenTypes.includes(o.value)),
@@ -132,6 +142,63 @@ export default function UnifiedEntryScreen() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [banks, allowedAccountIds]
     );
+
+    // Iter-185 — Load live cash balances on mount and after each submit.
+    const reloadLiveBalances = async () => {
+        try {
+            const r = await api.get("/accounting/cash-accounts-with-balances");
+            const map = {};
+            for (const a of (r.data?.accounts || [])) {
+                map[a.id] = Number(a.live_balance || 0);
+            }
+            setAccountLiveBalances(map);
+        } catch (_) { /* swallow — feature degrades gracefully */ }
+    };
+    useEffect(() => { reloadLiveBalances(); }, []);
+
+    // Iter-185 — Cash-out ops where the source account must have
+    // enough funds. Mirrors backend `_enforce_sufficient_funds` calls.
+    const isCashOutOp = (op) => [
+        "advance_grant", "salary_settle", "custody_grant",
+        "supplier_pay", "external_grant", "expense_record",
+        "bank_transfer",
+    ].includes(op);
+
+    const amt = Number(amount) || 0;
+    const bankPickerLocked = isCashOutOp(opType) && amt <= 0;
+
+    const isInsufficient = (acc) => {
+        if (!isCashOutOp(opType)) return false;
+        if (amt <= 0) return false;
+        const bal = accountLiveBalances[acc.id];
+        if (bal === undefined) return false;   // unknown → don't freeze
+        return bal < amt - 0.005;
+    };
+
+    // Iter-185 — Auto-load the selected employee's net summary card.
+    useEffect(() => {
+        if (!entityId || !["advance_grant", "salary_settle",
+                            "salary_accrual", "custody_grant",
+                            "custody_return", "custody_settle",
+                            "custody_transfer"].includes(opType)) {
+            setEmployeeSummary(null);
+            return;
+        }
+        let alive = true;
+        setEmployeeSummaryLoading(true);
+        (async () => {
+            try {
+                const r = await api.get(
+                    `/accounting/employees/${entityId}/summary-balance`);
+                if (alive) setEmployeeSummary(r.data);
+            } catch (_) {
+                if (alive) setEmployeeSummary(null);
+            } finally {
+                if (alive) setEmployeeSummaryLoading(false);
+            }
+        })();
+        return () => { alive = false; };
+    }, [entityId, opType]);
 
     const toggleHidden = (value) => {
         setHiddenTypes((prev) =>
@@ -388,6 +455,8 @@ export default function UnifiedEntryScreen() {
             const { data } = await api.post(url, body);
             toast.success("تم اعتماد القيد بنجاح");
             setResult(data);
+            // Iter-185 — refresh live balances so the UI freeze stays honest.
+            reloadLiveBalances();
         } catch (e) {
             const det = e.response?.data?.detail;
             toast.error(typeof det === "string" ? det : (det?.[0]?.msg || "فشل الاعتماد"));
@@ -486,6 +555,44 @@ export default function UnifiedEntryScreen() {
                                 </p>
                             </div>
                         )}
+
+                        {/* Iter-185 — Employee net-balance card. Shown for
+                            any operation that targets an employee. */}
+                        {needsEmployee && entityId && (
+                            <div
+                                className={`rounded-xl border-2 px-4 py-3 ${
+                                    employeeSummaryLoading
+                                        ? "border-slate-200 bg-slate-50"
+                                        : (employeeSummary?.net_due_to_employee ?? 0) > 0.005
+                                            ? "border-emerald-300 bg-emerald-50"
+                                            : (employeeSummary?.net_due_to_employee ?? 0) < -0.005
+                                                ? "border-rose-300 bg-rose-50"
+                                                : "border-slate-200 bg-slate-50"
+                                }`}
+                                data-testid="unified-employee-summary-card"
+                            >
+                                <div className="text-[11px] text-slate-600 font-bold mb-0.5">
+                                    {employeeSummaryLoading
+                                        ? "جاري حساب رصيد الموظف…"
+                                        : (employeeSummary?.net_due_to_employee ?? 0) > 0.005
+                                            ? "💚 رصيد مستحق للموظف"
+                                            : (employeeSummary?.net_due_to_employee ?? 0) < -0.005
+                                                ? "❤️ مبلغ على الموظف للشركة"
+                                                : "💼 رصيد الموظف"}
+                                </div>
+                                <div className={`text-xl font-extrabold num ${
+                                    (employeeSummary?.net_due_to_employee ?? 0) > 0.005
+                                        ? "text-emerald-800"
+                                        : (employeeSummary?.net_due_to_employee ?? 0) < -0.005
+                                            ? "text-rose-800"
+                                            : "text-slate-700"
+                                }`} data-testid="unified-employee-summary-amount">
+                                    {employeeSummary
+                                        ? `${Math.abs(employeeSummary.net_due_to_employee).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`
+                                        : "—"}
+                                </div>
+                            </div>
+                        )}
                         {needsSupplier && (
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-1">المورد:</label>
@@ -556,42 +663,112 @@ export default function UnifiedEntryScreen() {
                                         ثم أعد المحاولة.
                                     </div>
                                 )}
+                                {/* Iter-185 — Lock the picker until the
+                                    merchant enters an amount. */}
+                                {bankPickerLocked && (
+                                    <div className="mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 font-bold"
+                                         data-testid="unified-bank-locked">
+                                        🔒 أدخل مبلغ العملية أولاً لإظهار الحسابات المتاحة وفلترة غير الكافية منها.
+                                    </div>
+                                )}
                                 <select value={bankId} onChange={e => setBankId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                                    disabled={bankPickerLocked}
+                                    className={`w-full px-3 py-2 border border-slate-300 rounded text-sm ${bankPickerLocked ? "bg-slate-100 cursor-not-allowed text-slate-400" : ""}`}
                                     data-testid="unified-bank">
                                     <option value="">— اختر —</option>
                                     <optgroup label="🏦 الحسابات البنكية">
-                                        {filteredBanks.filter(b => b.account_type === "bank").map(b =>
-                                            <option key={b.id} value={b.id}>{b.name} · بنك</option>)}
+                                        {filteredBanks.filter(b => b.account_type === "bank").map(b => {
+                                            const insufficient = isInsufficient(b);
+                                            const bal = accountLiveBalances[b.id];
+                                            return (
+                                                <option key={b.id} value={b.id}
+                                                    disabled={insufficient}
+                                                    data-testid={`unified-bank-opt-${b.id}`}>
+                                                    {b.name}
+                                                    {bal !== undefined ? ` · ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س` : ""}
+                                                    {insufficient ? " · 🚫 مجمد — الرصيد غير كافٍ" : " · بنك"}
+                                                </option>
+                                            );
+                                        })}
                                     </optgroup>
                                     {filteredBanks.some(b => b.account_type === "cash") && (
                                         <optgroup label="💵 الصندوق النقدي">
-                                            {filteredBanks.filter(b => b.account_type === "cash").map(b =>
-                                                <option key={b.id} value={b.id}>{b.name} · صندوق</option>)}
+                                            {filteredBanks.filter(b => b.account_type === "cash").map(b => {
+                                                const insufficient = isInsufficient(b);
+                                                const bal = accountLiveBalances[b.id];
+                                                return (
+                                                    <option key={b.id} value={b.id}
+                                                        disabled={insufficient}>
+                                                        {b.name}
+                                                        {bal !== undefined ? ` · ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س` : ""}
+                                                        {insufficient ? " · 🚫 مجمد — الرصيد غير كافٍ" : " · صندوق"}
+                                                    </option>
+                                                );
+                                            })}
                                         </optgroup>
                                     )}
                                     {(!allowedSourceAccountTypes(opType)) && (
                                         <>
                                             <optgroup label="💳 بوابات الدفع">
-                                                {filteredBanks.filter(b => b.account_type === "payment_platform" && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
-                                                    <option key={b.id} value={b.id}>{b.name} · بوابة دفع</option>)}
+                                                {filteredBanks.filter(b => b.account_type === "payment_platform" && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b => {
+                                                    const insufficient = isInsufficient(b);
+                                                    const bal = accountLiveBalances[b.id];
+                                                    return (
+                                                        <option key={b.id} value={b.id}
+                                                            disabled={insufficient}>
+                                                            {b.name}
+                                                            {bal !== undefined ? ` · ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س` : ""}
+                                                            {insufficient ? " · 🚫 مجمد — الرصيد غير كافٍ" : " · بوابة دفع"}
+                                                        </option>
+                                                    );
+                                                })}
                                             </optgroup>
                                             {filteredBanks.some(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")) && (
                                                 <optgroup label="💵 الدفع عند الاستلام">
-                                                    {filteredBanks.filter(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
-                                                        <option key={b.id} value={b.id}>{b.name} · COD</option>)}
+                                                    {filteredBanks.filter(b => b.account_type === "payment_platform" && /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b => {
+                                                        const insufficient = isInsufficient(b);
+                                                        const bal = accountLiveBalances[b.id];
+                                                        return (
+                                                            <option key={b.id} value={b.id}
+                                                                disabled={insufficient}>
+                                                                {b.name}
+                                                                {bal !== undefined ? ` · ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س` : ""}
+                                                                {insufficient ? " · 🚫 مجمد — الرصيد غير كافٍ" : " · COD"}
+                                                            </option>
+                                                        );
+                                                    })}
                                                 </optgroup>
                                             )}
                                             {filteredBanks.some(b => b.account_type === "courier") && (
                                                 <optgroup label="📦 شركات الشحن">
-                                                    {filteredBanks.filter(b => b.account_type === "courier").map(b =>
-                                                        <option key={b.id} value={b.id}>{b.name} · شركة شحن</option>)}
+                                                    {filteredBanks.filter(b => b.account_type === "courier").map(b => {
+                                                        const insufficient = isInsufficient(b);
+                                                        const bal = accountLiveBalances[b.id];
+                                                        return (
+                                                            <option key={b.id} value={b.id}
+                                                                disabled={insufficient}>
+                                                                {b.name}
+                                                                {bal !== undefined ? ` · ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س` : ""}
+                                                                {insufficient ? " · 🚫 مجمد — الرصيد غير كافٍ" : " · شركة شحن"}
+                                                            </option>
+                                                        );
+                                                    })}
                                                 </optgroup>
                                             )}
                                             {filteredBanks.some(b => b.account_type && !["bank","cash","payment_platform","courier"].includes(b.account_type)) && (
                                                 <optgroup label="📁 أخرى">
-                                                    {filteredBanks.filter(b => b.account_type && !["bank","cash","payment_platform","courier"].includes(b.account_type)).map(b =>
-                                                        <option key={b.id} value={b.id}>{b.name} · {b.account_type}</option>)}
+                                                    {filteredBanks.filter(b => b.account_type && !["bank","cash","payment_platform","courier"].includes(b.account_type)).map(b => {
+                                                        const insufficient = isInsufficient(b);
+                                                        const bal = accountLiveBalances[b.id];
+                                                        return (
+                                                            <option key={b.id} value={b.id}
+                                                                disabled={insufficient}>
+                                                                {b.name}
+                                                                {bal !== undefined ? ` · ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س` : ""}
+                                                                {insufficient ? " · 🚫 مجمد — الرصيد غير كافٍ" : " · " + b.account_type}
+                                                            </option>
+                                                        );
+                                                    })}
                                                 </optgroup>
                                             )}
                                         </>

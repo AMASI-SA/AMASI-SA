@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 from auth import get_current_user_from_db
 from ledger_core import (
     compute_balance,
+    compute_balances_bulk,
     post_txn_group,
     write_audit,
     REASON_CODES,
@@ -241,6 +242,49 @@ async def _enforce_account_binding(
         )
 
 
+# ── Iter-185 — Account live-balance helper & insufficient-funds guard
+# Live balance = legacy stored balance (account_transactions sum, kept in
+# `db.accounts.current_balance`) + ledger delta for entity_type=bank.
+# This way both legacy entries AND ledger entries posted by the universal
+# accounting flow are reflected in the same number that the merchant
+# sees on the Accounts page.
+async def _account_live_balance(
+    db, *, user_id: str, account_id: str,
+) -> tuple[float, dict]:
+    acc = await db.accounts.find_one(
+        {"id": account_id, "user_id": user_id},
+        {"_id": 0, "id": 1, "name": 1, "account_type": 1,
+         "current_balance": 1, "opening_balance": 1,
+         "expected_orders_balance": 1},
+    )
+    if not acc:
+        return 0.0, {}
+    base = float(acc.get("current_balance") or 0)
+    bal = await compute_balance(
+        db, user_id=user_id, entity_type="bank",
+        entity_id=account_id, sub_account="main",
+    )
+    live = round(base + bal["net_balance"], 2)
+    return live, acc
+
+
+async def _enforce_sufficient_funds(
+    db, *, user_id: str, account_id: str, amount: float,
+) -> None:
+    """Block cash-out transactions whose amount exceeds the source
+    account's live balance. Raises 400 with the merchant-facing error
+    message specified in the iter-185 requirement.
+    """
+    live, _acc = await _account_live_balance(
+        db, user_id=user_id, account_id=account_id,
+    )
+    if live < amount - 0.005:
+        raise HTTPException(
+            400,
+            "لا يمكن تنفيذ العملية، رصيد الحساب المختار غير كافٍ.",
+        )
+
+
 # ── Router builder ──────────────────────────────────────────────────
 def make_universal_router(db) -> APIRouter:
     router = APIRouter(prefix="/accounting", tags=["accounting"])
@@ -361,6 +405,11 @@ def make_universal_router(db) -> APIRouter:
             db, user_id=user["id"], op_type="advance_grant",
             account_id=payload.paid_from_account_id,
         )
+        await _enforce_sufficient_funds(
+            db, user_id=user["id"],
+            account_id=payload.paid_from_account_id,
+            amount=payload.amount,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         notes = payload.notes or f"منح سلفة — {emp.get('name')}"
         result = await post_txn_group(
@@ -409,6 +458,11 @@ def make_universal_router(db) -> APIRouter:
         await _enforce_account_binding(
             db, user_id=user["id"], op_type="custody_grant",
             account_id=payload.paid_from_account_id,
+        )
+        await _enforce_sufficient_funds(
+            db, user_id=user["id"],
+            account_id=payload.paid_from_account_id,
+            amount=payload.amount,
         )
         actor_id, actor_name = await _resolve_actor(user)
         notes = payload.notes or f"تسليم عهدة — {emp.get('name')}"
@@ -727,6 +781,99 @@ def make_universal_router(db) -> APIRouter:
         total_open = round(sum(r["open_balance"] for r in rows), 2)
         return {"rows": rows, "total_open_balance": total_open}
 
+    # ───────────────────────────────────────────────────────────────
+    # Iter-185 — Cash accounts with LIVE balance for UI freeze logic.
+    # Returns every account the merchant can fund operations from
+    # (bank / cash / payment_platform / courier) along with its true
+    # live balance computed from BOTH the legacy account_transactions
+    # ledger AND the universal general_ledger. Used by
+    # UnifiedEntryScreen to freeze options whose balance < amount.
+    # ───────────────────────────────────────────────────────────────
+    @router.get("/cash-accounts-with-balances")
+    async def cash_accounts_with_balances(
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        docs = await db.accounts.find(
+            {"user_id": uid,
+             "account_type": {"$in": [
+                 "bank", "cash", "payment_platform", "courier",
+             ]},
+             "status": {"$ne": "hidden"}},
+            {"_id": 0, "id": 1, "name": 1, "account_type": 1,
+             "current_balance": 1, "opening_balance": 1,
+             "provider_name": 1},
+        ).sort("name", 1).to_list(2000)
+
+        # Bulk-compute the ledger delta to keep this endpoint cheap.
+        # Banks only use sub_account="main"; compute_balances_bulk sums
+        # all entries for entity_type=bank, which is fine.
+        ids = [d["id"] for d in docs]
+        bulk = await compute_balances_bulk(
+            db, user_id=uid, entity_type="bank", entity_ids=ids,
+        ) if ids else {}
+
+        out = []
+        for d in docs:
+            base = float(d.get("current_balance") or 0)
+            ledger_net = float(bulk.get(d["id"], {}).get("net_balance", 0) or 0)
+            live = round(base + ledger_net, 2)
+            out.append({
+                "id": d["id"],
+                "name": d.get("name"),
+                "account_type": d.get("account_type"),
+                "provider_name": d.get("provider_name"),
+                "current_balance": round(base, 2),
+                "ledger_delta": round(ledger_net, 2),
+                "live_balance": live,
+            })
+        return {"accounts": out}
+
+    # ───────────────────────────────────────────────────────────────
+    # Iter-185 — Single-employee net summary card. Returns ONE number
+    # that the UI shows next to the picked employee:
+    #   net_due_to_employee = salary_payable_outstanding
+    #                         − advance_net
+    #                         − custody_net
+    # Positive ⇒ company OWES the employee (شركة عليها → عرض أخضر).
+    # Negative ⇒ employee owes the company (موظف عليه → عرض أحمر).
+    # ───────────────────────────────────────────────────────────────
+    @router.get("/employees/{emp_id}/summary-balance")
+    async def employee_summary_balance(
+        emp_id: str,
+        user: dict = Depends(current_user),
+    ):
+        emp = await db.operating_salaries.find_one(
+            {"id": emp_id, "user_id": user["id"]},
+            {"_id": 0, "id": 1, "name": 1},
+        )
+        if not emp:
+            raise HTTPException(404, "الموظف غير موجود")
+        uid = user["id"]
+        payable = await compute_balance(
+            db, user_id=uid, entity_type="employee",
+            entity_id=emp_id, sub_account="salary_payable")
+        advance = await compute_balance(
+            db, user_id=uid, entity_type="employee",
+            entity_id=emp_id, sub_account="advance")
+        custody = await compute_balance(
+            db, user_id=uid, entity_type="employee",
+            entity_id=emp_id, sub_account="custody")
+        net_due = round(
+            payable["outstanding_debt"]
+            - advance["net_balance"]
+            - custody["net_balance"],
+            2,
+        )
+        return {
+            "employee_id": emp_id,
+            "name": emp.get("name"),
+            "net_due_to_employee": net_due,
+            "salary_payable": payable["outstanding_debt"],
+            "advance_open": advance["net_balance"],
+            "custody_open": custody["net_balance"],
+        }
+
     # ═══════════════════════════════════════════════════════════════
     # Employee: Salary Settlement
     # ═══════════════════════════════════════════════════════════════
@@ -819,6 +966,11 @@ def make_universal_router(db) -> APIRouter:
         await _enforce_account_binding(
             db, user_id=user["id"], op_type="salary_settle",
             account_id=payload.paid_from_account_id,
+        )
+        await _enforce_sufficient_funds(
+            db, user_id=user["id"],
+            account_id=payload.paid_from_account_id,
+            amount=payload.amount,
         )
 
         payable_bal = (await compute_balance(
@@ -977,6 +1129,11 @@ def make_universal_router(db) -> APIRouter:
             db, user_id=user["id"], op_type="supplier_pay",
             account_id=payload.paid_from_account_id,
         )
+        await _enforce_sufficient_funds(
+            db, user_id=user["id"],
+            account_id=payload.paid_from_account_id,
+            amount=payload.amount,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
             db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
@@ -1024,6 +1181,11 @@ def make_universal_router(db) -> APIRouter:
         await _enforce_account_binding(
             db, user_id=user["id"], op_type="external_grant",
             account_id=payload.paid_from_account_id,
+        )
+        await _enforce_sufficient_funds(
+            db, user_id=user["id"],
+            account_id=payload.paid_from_account_id,
+            amount=payload.amount,
         )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
@@ -1120,6 +1282,11 @@ def make_universal_router(db) -> APIRouter:
             db, user_id=user["id"], op_type="bank_transfer",
             account_id=payload.to_account_id,
         )
+        await _enforce_sufficient_funds(
+            db, user_id=user["id"],
+            account_id=payload.from_account_id,
+            amount=payload.amount,
+        )
         names = {a["id"]: a["name"] for a in accs}
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
@@ -1166,6 +1333,11 @@ def make_universal_router(db) -> APIRouter:
         await _enforce_account_binding(
             db, user_id=user["id"], op_type="expense_record",
             account_id=payload.paid_from_account_id,
+        )
+        await _enforce_sufficient_funds(
+            db, user_id=user["id"],
+            account_id=payload.paid_from_account_id,
+            amount=payload.amount,
         )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
