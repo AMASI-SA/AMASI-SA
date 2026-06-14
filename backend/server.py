@@ -37,7 +37,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Respons
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
 from auth import (
     hash_password,
@@ -291,13 +291,41 @@ class ShippingCompany(BaseModel):
     name: str
     cost_per_order: float = Field(ge=0)
     vat_percent: float = Field(ge=0, le=100, default=0.0)
-    is_deferred: bool = False  # if True: cost not deducted from Salla→bank transfer (accounts payable)
+    # Iter-189 — `payment_mode` is the new merchant-facing label that
+    # supersedes the boolean `is_deferred`. Both fields are accepted on
+    # write and BOTH are returned on read so the existing UIs that
+    # still read `is_deferred` keep working unchanged. Internally only
+    # `is_deferred` is persisted (single source of truth).
+    #   payment_mode="prepaid"  ⇒ is_deferred=False (دفع مقدم)
+    #   payment_mode="deferred" ⇒ is_deferred=True  (دفع آجل)
+    payment_mode: Optional[str] = Field(default=None,
+                                        description="prepaid|deferred")
+    is_deferred: bool = False  # SSOT field persisted to the DB
     # Iter-155 — COD fee fields used by the new ShippingCompanySettings
     # page. The frontend persists these into shipping_companies but
     # they were previously stripped on the way out because they
     # weren't declared here.
     cod_fee_percent: Optional[float] = Field(default=0.0, ge=0, le=1)
     cod_fee_fixed_per_order: Optional[float] = Field(default=0.0, ge=0)
+
+    @root_validator(pre=False, skip_on_failure=True)
+    def _sync_payment_mode(cls, values):  # noqa: N805
+        """Bi-directional sync between `payment_mode` and `is_deferred`.
+        `payment_mode` is the merchant-facing label; `is_deferred` is the
+        persisted SSOT. If both are provided, `payment_mode` wins.
+        """
+        pm = values.get("payment_mode")
+        if isinstance(pm, str):
+            pm = pm.strip().lower()
+            if pm not in ("prepaid", "deferred"):
+                raise ValueError(
+                    "payment_mode must be 'prepaid' or 'deferred'")
+            values["payment_mode"] = pm
+            values["is_deferred"] = (pm == "deferred")
+        else:
+            values["payment_mode"] = (
+                "deferred" if values.get("is_deferred") else "prepaid")
+        return values
 
 
 class NetSalesConfig(BaseModel):
@@ -743,9 +771,16 @@ DEFAULT_COD_APPROVED = ["تم التوصيل", "delivered", "completed"]
 @api.get("/settings")
 async def get_settings(user: dict = Depends(current_user)):
     s = await ensure_user_settings(db, user["id"])
+    # Iter-189 — augment every shipping_companies entry with a derived
+    # `payment_mode` so the UI can render it without recomputing.
+    sc_raw = s.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES) or []
+    sc_enriched = [
+        {**c, "payment_mode": "deferred" if c.get("is_deferred") else "prepaid"}
+        for c in sc_raw
+    ]
     return {
         "payment_methods": s.get("payment_methods", DEFAULT_PAYMENT_METHODS),
-        "shipping_companies": s.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        "shipping_companies": sc_enriched,
         "shipping_approved_statuses": s.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
         "cod_approved_statuses": s.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
         "report_included_statuses": s.get("report_included_statuses", []),
@@ -1338,11 +1373,13 @@ async def discover_shipping_companies(user: dict = Depends(current_user)):
             cost_f = float(cost) if cost is not None else 0.0
         except (TypeError, ValueError):
             cost_f = 0.0
+        is_def = bool(c.get("is_deferred"))
         configured.append({
             "name": (c.get("name") or "").strip(),
             "cost": cost_f,
             "vat_rate": float(c.get("vat_rate") or 0),
-            "is_deferred": bool(c.get("is_deferred")),
+            "is_deferred": is_def,
+            "payment_mode": "deferred" if is_def else "prepaid",
             "status": "ok" if cost_f > 0 else "missing_cost",
         })
 

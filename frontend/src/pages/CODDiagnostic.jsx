@@ -14,6 +14,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
 import api from "../lib/api";
+import { PaymentModeBadge } from "../components/PaymentModeBadge";
 
 const errMsg = (e, fb) =>
     e?.response?.data?.error || e?.response?.data?.detail || e?.message || fb;
@@ -100,7 +101,7 @@ function CategoryTable({ rows }) {
     );
 }
 
-function CompanyTable({ rows, testid, emphasize = false }) {
+function CompanyTable({ rows, testid, emphasize = false, paymentModeMap = {} }) {
     if (!rows?.length) {
         return (
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-slate-500 text-sm" data-testid={`${testid}-empty`}>
@@ -114,18 +115,27 @@ function CompanyTable({ rows, testid, emphasize = false }) {
                 <thead className={`${emphasize ? "bg-emerald-50 text-emerald-900" : "bg-slate-50 text-slate-700"}`}>
                     <tr>
                         <th className="px-3 py-2 text-right font-bold">شركة الشحن</th>
+                        <th className="px-3 py-2 text-center font-bold">طريقة السداد</th>
                         <th className="px-3 py-2 text-left font-bold">عدد الطلبات</th>
                         <th className="px-3 py-2 text-left font-bold">إجمالي COD</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {rows.map((r) => (
-                        <tr key={r.company} className="border-t border-slate-100">
-                            <td className="px-3 py-2 text-right font-semibold">{r.company}</td>
-                            <td className="px-3 py-2 num text-left">{intf(r.count)}</td>
-                            <td className="px-3 py-2 num text-left font-bold">{fmt(r.gross)}</td>
-                        </tr>
-                    ))}
+                    {rows.map((r) => {
+                        const mode = paymentModeMap[(r.company || "").trim()];
+                        return (
+                            <tr key={r.company} className="border-t border-slate-100">
+                                <td className="px-3 py-2 text-right font-semibold">{r.company}</td>
+                                <td className="px-3 py-2 text-center">
+                                    {mode != null
+                                        ? <PaymentModeBadge payment_mode={mode} size="xs" />
+                                        : <span className="text-[10px] text-slate-400">—</span>}
+                                </td>
+                                <td className="px-3 py-2 num text-left">{intf(r.count)}</td>
+                                <td className="px-3 py-2 num text-left font-bold">{fmt(r.gross)}</td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>
@@ -262,6 +272,22 @@ export default function CODDiagnostic() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    // Iter-189 — payment_mode lookup by company name (normalized).
+    const [paymentModeMap, setPaymentModeMap] = useState({});
+
+    const loadPaymentModes = useCallback(async () => {
+        try {
+            const r = await api.get("/settings");
+            const map = {};
+            for (const c of (r.data?.shipping_companies || [])) {
+                if (c?.name) {
+                    map[c.name.trim()] = c.payment_mode
+                        || (c.is_deferred ? "deferred" : "prepaid");
+                }
+            }
+            setPaymentModeMap(map);
+        } catch (_) { /* swallow — badge will just show "—" */ }
+    }, []);
 
     const load = useCallback(async (showLoading = false) => {
         if (showLoading) setLoading(true);
@@ -292,6 +318,7 @@ export default function CODDiagnostic() {
                 if (alive) setLoading(false);
             }
         })();
+        loadPaymentModes();
         return () => { alive = false; };
     }, []);
 
@@ -523,6 +550,7 @@ export default function CODDiagnostic() {
                     <CompanyTable
                         rows={data.by_shipping_company_all || []}
                         testid="cod-company-all-table"
+                        paymentModeMap={paymentModeMap}
                     />
                 </div>
                 <div>
@@ -533,6 +561,7 @@ export default function CODDiagnostic() {
                         rows={data.by_shipping_company_delivered_only || []}
                         testid="cod-company-delivered-table"
                         emphasize
+                        paymentModeMap={paymentModeMap}
                     />
                 </div>
             </div>

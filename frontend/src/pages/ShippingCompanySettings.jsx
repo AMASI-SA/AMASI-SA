@@ -127,7 +127,7 @@ export default function ShippingCompanySettings() {
                     <thead className="bg-slate-50 text-slate-700">
                         <tr>
                             <th className="p-2 text-right">الاسم</th>
-                            <th className="p-2 text-right">النوع</th>
+                            <th className="p-2 text-right">طريقة السداد</th>
                             <th className="p-2 num text-right">تكلفة/طلب</th>
                             <th className="p-2 num text-right">VAT %</th>
                             <th className="p-2 num text-right">رسوم COD %</th>
@@ -140,9 +140,37 @@ export default function ShippingCompanySettings() {
                             <tr key={c.name + idx} className="border-t border-slate-100" data-testid={`settings-row-${c.name}`}>
                                 <td className="p-2 font-bold">{c.name}</td>
                                 <td className="p-2">
-                                    <div className="inline-flex bg-slate-100 rounded-full p-0.5">
-                                        <button type="button" onClick={() => updateCompany(idx, { is_deferred: true })} className={`px-3 py-1 rounded-full text-[10px] font-extrabold ${c.is_deferred ? "bg-emerald-600 text-white" : "text-slate-600"}`} data-testid={`type-deferred-${c.name}`}>آجلة</button>
-                                        <button type="button" onClick={() => updateCompany(idx, { is_deferred: false })} className={`px-3 py-1 rounded-full text-[10px] font-extrabold ${!c.is_deferred ? "bg-slate-500 text-white" : "text-slate-600"}`} data-testid={`type-immediate-${c.name}`}>فورية</button>
+                                    {/* Iter-189 — Prominent payment-mode picker.
+                                        Replaces the old "آجلة / فورية" pill with
+                                        clear two-card toggle showing icon + label. */}
+                                    <div className="inline-flex gap-1 bg-slate-50 rounded-lg p-1 border border-slate-200">
+                                        <button type="button"
+                                            onClick={() => updateCompany(idx, { is_deferred: false, payment_mode: "prepaid" })}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-extrabold transition-colors ${
+                                                !c.is_deferred
+                                                    ? "bg-emerald-600 text-white shadow-sm"
+                                                    : "text-slate-600 hover:bg-slate-100"
+                                            }`}
+                                            data-testid={`payment-mode-prepaid-${c.name}`}>
+                                            <span>🟢</span>
+                                            <span>دفع مقدم</span>
+                                        </button>
+                                        <button type="button"
+                                            onClick={() => updateCompany(idx, { is_deferred: true, payment_mode: "deferred" })}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-extrabold transition-colors ${
+                                                c.is_deferred
+                                                    ? "bg-amber-600 text-white shadow-sm"
+                                                    : "text-slate-600 hover:bg-slate-100"
+                                            }`}
+                                            data-testid={`payment-mode-deferred-${c.name}`}>
+                                            <span>🟠</span>
+                                            <span>دفع آجل</span>
+                                        </button>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 mt-1 leading-tight max-w-[180px]">
+                                        {c.is_deferred
+                                            ? "تكلفة الشحن مستحقة على الشركة (ذمة)."
+                                            : "مخصومة مسبقاً من مستحقات سلة."}
                                     </div>
                                 </td>
                                 <td className="p-2"><input type="number" step="0.01" value={c.cost_per_order ?? c.cost ?? 0} onChange={(e) => updateCompany(idx, { cost_per_order: Number(e.target.value), cost: Number(e.target.value) })} className="w-24 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cost-${c.name}`} /></td>
