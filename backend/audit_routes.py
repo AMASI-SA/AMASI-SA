@@ -880,3 +880,460 @@ def make_forensic_report_router(db, current_user):
         }
 
     return router
+
+
+def make_tabby_phase2_router(db, current_user):
+    """Iter-194 — Tabby Forensic Phase 2 (Read-Only).
+
+    Deep dive into the negative balance via the four source-of-truth
+    tables: payment_transactions, payment_refunds, account_transactions,
+    general_ledger. Explains the gap between BNPL SSOT and ledger.
+    Strictly READ-ONLY.
+    """
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    @router.get("/tabby-phase2")
+    async def tabby_phase2(user: dict = Depends(current_user)):
+        from collections import defaultdict
+        uid = user["id"]
+        provider = "tabby"
+        cutoff_iso_prefix = "2026-06-14"
+
+        # ── 1) Locate Tabby account(s) ────────────────────────────
+        tabby_accounts = []
+        async for a in db.accounts.find(
+            {"user_id": uid,
+             "$or": [
+                 {"normalized_payment_method": "tabby"},
+                 {"name": {"$regex": "tabby|تابي", "$options": "i"}},
+                 {"provider_name": {"$regex": "tabby|تابي",
+                                    "$options": "i"}},
+             ]},
+            {"_id": 0, "id": 1, "name": 1, "account_type": 1,
+             "current_balance": 1, "opening_balance": 1,
+             "expected_orders_balance": 1,
+             "normalized_payment_method": 1},
+        ):
+            tabby_accounts.append({
+                "id": a["id"],
+                "name": a.get("name"),
+                "account_type": a.get("account_type"),
+                "current_balance": round(
+                    float(a.get("current_balance") or 0), 2),
+                "opening_balance_field": round(
+                    float(a.get("opening_balance") or 0), 2),
+                "expected_orders_balance": round(
+                    float(a.get("expected_orders_balance") or 0), 2),
+                "normalized_payment_method":
+                    a.get("normalized_payment_method"),
+            })
+        tabby_ids = [a["id"] for a in tabby_accounts]
+
+        # ── 2) payment_transactions analysis ──────────────────────
+        pt_total_count = 0
+        pt_total_sales = 0.0
+        pt_first_date = None
+        pt_last_date = None
+        pt_by_month: dict = defaultdict(
+            lambda: {"count": 0, "amount": 0.0})
+        pt_by_status: dict = defaultdict(
+            lambda: {"count": 0, "amount": 0.0})
+        pt_by_source: dict = defaultdict(
+            lambda: {"count": 0, "amount": 0.0})
+        pt_before_cutoff = {"count": 0, "amount": 0.0}
+        pt_after_cutoff = {"count": 0, "amount": 0.0}
+
+        async for t in db.payment_transactions.find(
+            {"user_id": uid, "provider": provider},
+            {"_id": 0, "amount": 1, "status": 1, "source": 1,
+             "import_source": 1, "created_at_provider": 1,
+             "created_at": 1},
+        ):
+            amt = float(t.get("amount") or 0)
+            pt_total_count += 1
+            pt_total_sales += amt
+            d = t.get("created_at_provider") or t.get("created_at")
+            d_iso = (d.isoformat()
+                     if hasattr(d, "isoformat") else d) or ""
+            month = d_iso[:7] if d_iso else "_unknown"
+            pt_by_month[month]["count"] += 1
+            pt_by_month[month]["amount"] += amt
+            status_key = (t.get("status") or "_null")
+            pt_by_status[status_key]["count"] += 1
+            pt_by_status[status_key]["amount"] += amt
+            source_key = (t.get("source")
+                          or t.get("import_source") or "_null")
+            pt_by_source[source_key]["count"] += 1
+            pt_by_source[source_key]["amount"] += amt
+            if d_iso:
+                if pt_first_date is None or d_iso < pt_first_date:
+                    pt_first_date = d_iso
+                if pt_last_date is None or d_iso > pt_last_date:
+                    pt_last_date = d_iso
+                if d_iso[:10] < cutoff_iso_prefix:
+                    pt_before_cutoff["count"] += 1
+                    pt_before_cutoff["amount"] += amt
+                else:
+                    pt_after_cutoff["count"] += 1
+                    pt_after_cutoff["amount"] += amt
+
+        # ── 3) payment_refunds analysis ───────────────────────────
+        pr_count = 0
+        pr_total = 0.0
+        pr_first = None
+        pr_last = None
+        pr_before_cutoff = {"count": 0, "amount": 0.0}
+        pr_after_cutoff = {"count": 0, "amount": 0.0}
+        async for r in db.payment_refunds.find(
+            {"user_id": uid, "provider": provider},
+            {"_id": 0, "amount": 1, "refunded_at": 1, "status": 1},
+        ):
+            amt = float(r.get("amount") or 0)
+            pr_count += 1
+            pr_total += amt
+            d = r.get("refunded_at")
+            d_iso = (d.isoformat()
+                     if hasattr(d, "isoformat") else d) or ""
+            if d_iso:
+                if pr_first is None or d_iso < pr_first:
+                    pr_first = d_iso
+                if pr_last is None or d_iso > pr_last:
+                    pr_last = d_iso
+                if d_iso[:10] < cutoff_iso_prefix:
+                    pr_before_cutoff["count"] += 1
+                    pr_before_cutoff["amount"] += amt
+                else:
+                    pr_after_cutoff["count"] += 1
+                    pr_after_cutoff["amount"] += amt
+
+        # ── 4) account_transactions analysis ──────────────────────
+        at_total_count = 0
+        at_total_out = 0.0
+        at_total_in = 0.0
+        at_first = None
+        at_last = None
+        at_by_month: dict = defaultdict(
+            lambda: {"count": 0, "out_amount": 0.0,
+                     "in_amount": 0.0})
+        at_before_cutoff = {"count": 0, "out_amount": 0.0,
+                            "in_amount": 0.0}
+        at_after_cutoff = {"count": 0, "out_amount": 0.0,
+                           "in_amount": 0.0}
+        at_no_reference = {"count": 0, "out_amount": 0.0}
+        at_no_txn_group = {"count": 0, "out_amount": 0.0}
+        at_seen_signature: dict = defaultdict(list)
+        at_samples = []
+        async for tx in db.account_transactions.find(
+            {"user_id": uid,
+             "account_id": {"$in": tabby_ids}},
+            {"_id": 0, "id": 1, "amount": 1, "direction": 1,
+             "transaction_date": 1, "created_at": 1, "notes": 1,
+             "reference": 1, "txn_group_id": 1, "external_id": 1,
+             "linked_account_id": 1, "metadata": 1, "type": 1,
+             "transaction_type": 1, "balance_after": 1},
+        ).sort("transaction_date", 1):
+            at_total_count += 1
+            amt = float(tx.get("amount") or 0)
+            direction = tx.get("direction")
+            d = tx.get("transaction_date") or tx.get("created_at")
+            d_iso = (d.isoformat()
+                     if hasattr(d, "isoformat") else d) or ""
+            month = d_iso[:7] if d_iso else "_unknown"
+            if direction == "out":
+                at_total_out += amt
+                at_by_month[month]["count"] += 1
+                at_by_month[month]["out_amount"] += amt
+                if d_iso:
+                    if d_iso[:10] < cutoff_iso_prefix:
+                        at_before_cutoff["count"] += 1
+                        at_before_cutoff["out_amount"] += amt
+                    else:
+                        at_after_cutoff["count"] += 1
+                        at_after_cutoff["out_amount"] += amt
+                if not tx.get("reference"):
+                    at_no_reference["count"] += 1
+                    at_no_reference["out_amount"] += amt
+                if not tx.get("txn_group_id"):
+                    at_no_txn_group["count"] += 1
+                    at_no_txn_group["out_amount"] += amt
+                sig = (d_iso[:10], round(amt, 2), direction,
+                       tx.get("linked_account_id"))
+                at_seen_signature[sig].append({
+                    "id": tx.get("id"),
+                    "reference": tx.get("reference"),
+                    "txn_group_id": tx.get("txn_group_id"),
+                    "notes": tx.get("notes"),
+                    "transaction_date": d_iso,
+                })
+            else:
+                at_total_in += amt
+                at_by_month[month]["in_amount"] += amt
+                if d_iso:
+                    if d_iso[:10] < cutoff_iso_prefix:
+                        at_before_cutoff["in_amount"] += amt
+                    else:
+                        at_after_cutoff["in_amount"] += amt
+            if d_iso:
+                if at_first is None or d_iso < at_first:
+                    at_first = d_iso
+                if at_last is None or d_iso > at_last:
+                    at_last = d_iso
+            if len(at_samples) < 50:
+                at_samples.append({
+                    "id": tx.get("id"),
+                    "amount": round(amt, 2),
+                    "direction": direction,
+                    "transaction_date": d_iso,
+                    "notes": tx.get("notes"),
+                    "reference": tx.get("reference"),
+                    "txn_group_id": tx.get("txn_group_id"),
+                    "external_id": tx.get("external_id"),
+                    "type": tx.get("type") or tx.get("transaction_type"),
+                    "linked_account_id": tx.get("linked_account_id"),
+                    "balance_after": tx.get("balance_after"),
+                    "metadata": tx.get("metadata") or {},
+                })
+
+        duplicates = []
+        for sig, rows in at_seen_signature.items():
+            if len(rows) >= 2:
+                duplicates.append({
+                    "signature": {
+                        "date": sig[0],
+                        "amount": sig[1],
+                        "direction": sig[2],
+                        "linked_account_id": sig[3],
+                    },
+                    "count": len(rows),
+                    "entries": rows,
+                })
+
+        # ── 5) general_ledger Tabby snapshot ──────────────────────
+        gl_count = 0
+        gl_debit = 0.0
+        gl_credit = 0.0
+        gl_entries = []
+        async for row in db.general_ledger.find(
+            {"user_id": uid,
+             "entity_id": {"$in": tabby_ids}},
+            {"_id": 0, "id": 1, "entry_type": 1, "sub_account": 1,
+             "side": 1, "amount": 1, "created_at": 1,
+             "metadata": 1, "notes": 1, "txn_group_id": 1,
+             "order_id": 1},
+        ):
+            gl_count += 1
+            amt = float(row.get("amount") or 0)
+            side = row.get("side")
+            if side == "debit":
+                gl_debit += amt
+            else:
+                gl_credit += amt
+            d = row.get("created_at")
+            d_iso = (d.isoformat()
+                     if hasattr(d, "isoformat") else d) or ""
+            gl_entries.append({
+                "ledger_id": row.get("id"),
+                "entry_type": row.get("entry_type"),
+                "sub_account": row.get("sub_account"),
+                "side": side,
+                "amount": round(amt, 2),
+                "created_at": d_iso,
+                "txn_group_id": row.get("txn_group_id"),
+                "order_id": row.get("order_id"),
+                "notes": row.get("notes"),
+                "metadata": row.get("metadata") or {},
+            })
+        gl_net = round(gl_debit - gl_credit, 2)
+
+        # ── 6) BNPL SSOT formula reconstruction ───────────────────
+        bnpl_balance = 0.0
+        bnpl_components: dict = {}
+        try:
+            from bnpl.balance_service import get_bnpl_provider_balance
+            canon = await get_bnpl_provider_balance(db, uid, provider)
+            bnpl_balance = float(canon.get("balance") or 0)
+            bnpl_components = canon.get("components") or {}
+        except Exception as exc:  # noqa: BLE001
+            bnpl_components = {"error": str(exc)}
+
+        current_balance_sum = round(
+            sum(a["current_balance"] for a in tabby_accounts), 2)
+        bnpl_vs_current_diff = round(
+            bnpl_balance - current_balance_sum, 2)
+        bnpl_vs_ledger_diff = round(bnpl_balance - gl_net, 2)
+
+        # ── 7) Diagnostic findings ────────────────────────────────
+        net_sales = pt_total_sales - pr_total
+        rough_balance_no_fees = round(net_sales - at_total_out, 2)
+
+        findings = []
+        if pt_total_count == 0:
+            findings.append({
+                "severity": "critical",
+                "code": "no_payment_transactions",
+                "msg": "لا يوجد أي سجل في payment_transactions لـ Tabby — السبب الجذري الأول للرصيد السالب.",
+            })
+        elif pt_before_cutoff["amount"] < 1:
+            findings.append({
+                "severity": "high",
+                "code": "missing_historical_sales",
+                "msg": f"لا توجد مبيعات Tabby قبل تاريخ القطع. كل المبيعات ({round(pt_total_sales,2)} ر.س) بعد القطع، بينما التحويلات الخارجة قبل القطع تساوي {round(at_before_cutoff['out_amount'],2)} ر.س.",
+            })
+        if at_before_cutoff["out_amount"] > pt_before_cutoff["amount"] + 1:
+            findings.append({
+                "severity": "high",
+                "code": "pre_cutoff_transfers_without_sales",
+                "msg": f"تحويلات قبل القطع ({round(at_before_cutoff['out_amount'],2)}) > المبيعات قبل القطع ({round(pt_before_cutoff['amount'],2)}).",
+            })
+        if duplicates:
+            findings.append({
+                "severity": "medium",
+                "code": "potential_duplicate_transfers",
+                "msg": f"{len(duplicates)} مجموعة تحويلات قد تكون مكررة (نفس التاريخ + المبلغ + الاتجاه).",
+            })
+        if at_no_reference["count"] > 0:
+            findings.append({
+                "severity": "low",
+                "code": "transfers_without_reference",
+                "msg": f"{at_no_reference['count']} تحويل بدون reference (إجمالي {round(at_no_reference['out_amount'],2)} ر.س).",
+            })
+        if at_no_txn_group["count"] > 0:
+            findings.append({
+                "severity": "info",
+                "code": "transfers_without_txn_group",
+                "msg": f"{at_no_txn_group['count']} تحويل بدون txn_group_id (إجمالي {round(at_no_txn_group['out_amount'],2)} ر.س).",
+            })
+        if gl_count <= 1:
+            findings.append({
+                "severity": "critical",
+                "code": "ledger_only_has_opening",
+                "msg": f"general_ledger يحتوي فقط على {gl_count} قيد لـ Tabby — مبيعات/تسويات/تحويلات Tabby اللاحقة لا تُكتب في الـ Universal Ledger (انتهاك SSOT).",
+            })
+        if abs(bnpl_vs_current_diff) > 0.01:
+            findings.append({
+                "severity": "high",
+                "code": "bnpl_vs_current_balance_drift",
+                "msg": f"اختلاف بين BNPL SSOT ({round(bnpl_balance,2)}) و accounts.current_balance ({current_balance_sum}). الفرق: {bnpl_vs_current_diff}.",
+            })
+
+        return {
+            "report_type": "tabby_forensic_phase2",
+            "read_only": True,
+            "user_id": uid,
+            "cutoff_date": cutoff_iso_prefix,
+            "accounts": tabby_accounts,
+            "accounts_count": len(tabby_accounts),
+            "current_balance_sum": current_balance_sum,
+            "payment_transactions": {
+                "count": pt_total_count,
+                "total_sales": round(pt_total_sales, 2),
+                "first_date": pt_first_date,
+                "last_date": pt_last_date,
+                "by_month": [
+                    {"month": k, "count": v["count"],
+                     "amount": round(v["amount"], 2)}
+                    for k, v in sorted(pt_by_month.items())
+                ],
+                "by_status": [
+                    {"status": k, "count": v["count"],
+                     "amount": round(v["amount"], 2)}
+                    for k, v in sorted(pt_by_status.items(),
+                                       key=lambda x: -x[1]["amount"])
+                ],
+                "by_source": [
+                    {"source": k, "count": v["count"],
+                     "amount": round(v["amount"], 2)}
+                    for k, v in sorted(pt_by_source.items(),
+                                       key=lambda x: -x[1]["amount"])
+                ],
+                "before_cutoff": {
+                    "count": pt_before_cutoff["count"],
+                    "amount": round(pt_before_cutoff["amount"], 2),
+                },
+                "after_cutoff": {
+                    "count": pt_after_cutoff["count"],
+                    "amount": round(pt_after_cutoff["amount"], 2),
+                },
+            },
+            "payment_refunds": {
+                "count": pr_count,
+                "total_refunded": round(pr_total, 2),
+                "first_date": pr_first,
+                "last_date": pr_last,
+                "before_cutoff": {
+                    "count": pr_before_cutoff["count"],
+                    "amount": round(pr_before_cutoff["amount"], 2),
+                },
+                "after_cutoff": {
+                    "count": pr_after_cutoff["count"],
+                    "amount": round(pr_after_cutoff["amount"], 2),
+                },
+            },
+            "net_sales_minus_refunds": round(net_sales, 2),
+            "account_transactions": {
+                "total_count": at_total_count,
+                "total_out": round(at_total_out, 2),
+                "total_in": round(at_total_in, 2),
+                "first_date": at_first,
+                "last_date": at_last,
+                "by_month": [
+                    {"month": k, "count": v["count"],
+                     "out_amount": round(v["out_amount"], 2),
+                     "in_amount": round(v["in_amount"], 2)}
+                    for k, v in sorted(at_by_month.items())
+                ],
+                "before_cutoff": {
+                    "count": at_before_cutoff["count"],
+                    "out_amount": round(
+                        at_before_cutoff["out_amount"], 2),
+                    "in_amount": round(
+                        at_before_cutoff["in_amount"], 2),
+                },
+                "after_cutoff": {
+                    "count": at_after_cutoff["count"],
+                    "out_amount": round(
+                        at_after_cutoff["out_amount"], 2),
+                    "in_amount": round(
+                        at_after_cutoff["in_amount"], 2),
+                },
+                "without_reference": at_no_reference,
+                "without_txn_group_id": at_no_txn_group,
+                "duplicate_groups_count": len(duplicates),
+                "duplicate_groups": duplicates[:20],
+                "samples_first_50": at_samples,
+            },
+            "general_ledger": {
+                "count": gl_count,
+                "total_debit": round(gl_debit, 2),
+                "total_credit": round(gl_credit, 2),
+                "net": gl_net,
+                "entries": gl_entries,
+            },
+            "bnpl_ssot": {
+                "balance": round(bnpl_balance, 2),
+                "components": bnpl_components,
+                "vs_current_balance_diff": bnpl_vs_current_diff,
+                "vs_ledger_net_diff": bnpl_vs_ledger_diff,
+            },
+            "reconstruction_check": {
+                "formula": (
+                    "rough_balance_no_fees = total_sales - refunds - "
+                    "total_out_transfers (without commission/vat/fees)"
+                ),
+                "total_sales": round(pt_total_sales, 2),
+                "refunds": round(pr_total, 2),
+                "total_out_transfers": round(at_total_out, 2),
+                "rough_balance_no_fees": rough_balance_no_fees,
+                "actual_bnpl_balance": round(bnpl_balance, 2),
+                "delta_due_to_fees_commission": round(
+                    rough_balance_no_fees - bnpl_balance, 2),
+            },
+            "findings": findings,
+            "guidance": (
+                "هذا تقرير قراءة فقط. كل القيم محسوبة من المصادر "
+                "الأصلية. لا يوجد أي تعديل على البيانات."
+            ),
+        }
+
+    return router
+
