@@ -155,9 +155,95 @@ TRANSACTION_TYPE_LABELS = {
     "debt_payment":      "سداد دين",
     "shipping_debt_payment": "سداد مستحقات شحن",
     "manual_adjustment": "تسوية يدوية",
+    # ── Iter-198 — ledger-sourced transaction labels for migrated banks
+    "sale":              "مبيعات",
+    "topup":             "تعبئة",
+    "spend":             "صرف إعلانات",
+    "salary_payment":    "صرف راتب",
+    "salary_accrual":    "استحقاق راتب",
+    "advance_grant":     "منح سُلفة",
+    "advance_repay_cash": "استرداد سُلفة",
+    "custody_grant":     "تسليم عهدة",
+    "custody_return":    "استرداد عهدة",
+    "custody_transfer":  "تحويل عهدة",
+    "purchase_invoice":  "فاتورة مشتريات",
+    "salary_settle":     "تسوية راتب",
+    "supplier_payment":  "سداد مورد",
+    "external_loan":     "إقراض",
+    "external_loan_repayment": "استرداد إقراض",
+    "courier_cod_settle": "تسوية مندوب COD",
+    "correction":        "تصحيح",
+    "reversal":          "عكس",
+    "adjustment":        "تسوية",
+    "payment":           "دفعة",
 }
 
 TRANSACTION_STATUSES = ("posted", "pending", "reconciled")
+
+
+async def _ledger_based_tx_feed(db, user_id: str, account_id: str) -> list:
+    """Iter-198 — derive a transactions feed from `general_ledger` for
+    migrated bank/cash accounts so the running balance matches the
+    iter-192 SSOT used by the top card.
+
+    Returns rows in DESCENDING chronological order (newest first) to
+    preserve the existing UI contract. Each row carries:
+        id, transaction_type, type_label, amount, direction (in/out),
+        description, transaction_date, balance_after, status,
+        created_at, txn_group_id, source='ledger', metadata.
+    """
+    rows = await db.general_ledger.find(
+        {"user_id": user_id,
+         "entity_type": "bank",
+         "entity_id": account_id,
+         "sub_account": "main",
+         "status": "posted"},
+        {"_id": 0, "id": 1, "entry_type": 1, "side": 1, "amount": 1,
+         "notes": 1, "posted_at": 1, "created_at": 1,
+         "txn_group_id": 1, "metadata": 1, "actor_name": 1},
+    ).sort([("posted_at", 1), ("created_at", 1), ("id", 1)]).to_list(50000)
+
+    running = 0.0
+    out: list = []
+    for r in rows:
+        amt = float(r.get("amount") or 0)
+        side = r.get("side")
+        if side == "debit":
+            running += amt
+            direction = "in"
+        else:
+            running -= amt
+            direction = "out"
+        ttype = r.get("entry_type") or "adjustment"
+        md = r.get("metadata") or {}
+        out.append({
+            "id": r.get("id"),
+            "transaction_type": ttype,
+            "type_label": TRANSACTION_TYPE_LABELS.get(ttype, ttype),
+            "amount": round(amt, 2),
+            "direction": direction,
+            "description": (
+                r.get("notes")
+                or md.get("description")
+                or md.get("party_name")
+                or md.get("employee_name")
+                or ""
+            ),
+            "transaction_date": (
+                r.get("posted_at") or r.get("created_at")
+            ),
+            "balance_after": round(running, 2),
+            "status": "posted",
+            "created_at": r.get("created_at"),
+            "txn_group_id": r.get("txn_group_id"),
+            "actor_name": r.get("actor_name"),
+            "metadata": md,
+            "source": "ledger",
+        })
+
+    # Reverse so newest is first (matches current UI ORDER BY desc).
+    out.reverse()
+    return out
 
 
 # ── Pydantic ───────────────────────────────────────────────────────────────
@@ -729,16 +815,47 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
     # ── Transactions ───────────────────────────────────────────────────────
     @router.get("/{account_id}/transactions")
     async def list_transactions(account_id: str, user: dict = Depends(current_user)):
-        exists = await db.accounts.find_one(
-            {"id": account_id, "user_id": user["id"]}, {"_id": 0, "id": 1}
+        # Iter-198 — SSOT for the transactions log.
+        # Production bug: top-card balance (from `_account_with_meta`,
+        # which honours the iter-192 ledger SSOT) diverged from the
+        # last `balance_after` in this list by 87k+ SAR because every
+        # post-migration operation is now written to `general_ledger`
+        # ONLY — `account_transactions` is frozen at the migration
+        # snapshot. Solution: for migrated bank/cash accounts, derive
+        # the transactions feed FROM the ledger so the running balance
+        # walks the same source the top card consumes.
+        uid = user["id"]
+        acc = await db.accounts.find_one(
+            {"id": account_id, "user_id": uid},
+            {"_id": 0, "id": 1, "account_type": 1, "currency": 1},
         )
-        if not exists:
+        if not acc:
             raise HTTPException(404, "Account not found")
+
+        # Detect migration anchor (opening_balance posted in ledger).
+        # Only `bank` / `cash` accounts route through the ledger.
+        is_migrated = False
+        if acc.get("account_type") in ("bank", "cash"):
+            anchor = await db.general_ledger.find_one(
+                {"user_id": uid, "entity_type": "bank",
+                 "entity_id": account_id,
+                 "entry_type": "opening_balance",
+                 "status": "posted"},
+                {"_id": 1},
+            )
+            is_migrated = bool(anchor)
+
+        if is_migrated:
+            return await _ledger_based_tx_feed(db, uid, account_id)
+
+        # Legacy path — pre-migration accounts keep the old behaviour.
         docs = await db.account_transactions.find(
-            {"user_id": user["id"], "account_id": account_id}, {"_id": 0},
+            {"user_id": uid, "account_id": account_id}, {"_id": 0},
         ).sort([("transaction_date", -1), ("created_at", -1)]).to_list(20000)
         for d in docs:
-            d["type_label"] = TRANSACTION_TYPE_LABELS.get(d.get("transaction_type"), d.get("transaction_type"))
+            d["type_label"] = TRANSACTION_TYPE_LABELS.get(
+                d.get("transaction_type"), d.get("transaction_type"))
+            d["source"] = "account_tx"
         return docs
 
     @router.post("/{account_id}/transactions")
