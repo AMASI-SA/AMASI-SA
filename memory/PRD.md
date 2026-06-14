@@ -2175,3 +2175,57 @@ All five sources unified.
   audit and to support non-migrated accounts.
 
 
+## Checkpoint — Iter-199 (Salary Payment Full Reversal)
+
+### What & Why
+A second corrective operation, distinct from Iter-196. Iter-196
+moves the employee-side impact only (bank untouched). Iter-199
+FULLY REVERSES a salary_payment — every leg is mirrored,
+including the bank/cash side, so the bank balance is restored.
+Use when the salary was booked by mistake or was never actually
+paid.
+
+### Backend
+- New module `/app/backend/reversals_routes.py`:
+  - `GET  /api/accounting/employees/{emp_id}/reversible-salary-payments`
+    — lists salary_payments with `already_reversed` flag and the
+    bank/cash account name for context.
+  - `POST /api/accounting/employees/reverse-salary-payment`
+    — mirrors every leg of the original txn_group with the
+    opposite `side`, posts as a new group, tags each row with
+    `reversal_of_txn_group_id`, blocks double reversal, blocks
+    reversing a reversal or correction, requires reason ≥ 5 chars.
+  - `GET  /api/accounting/employees/salary-reversals` — audit log.
+- Reuses existing `entry_type: "reversal"` and the strict
+  `reason_code` invariant from `ledger_core` (uses
+  `data_entry_error` since the feature targets entry mistakes).
+
+### Frontend
+- New route `/salary-reversals` (`SalaryReversals.jsx`) with
+  employee picker, salary-payment list (showing bank account +
+  `already_reversed` badge), required reason textarea, and
+  confirmation modal that explicitly states the BANK WILL BE
+  AFFECTED (in contrast to the corrections page which states the
+  BANK WILL NOT BE TOUCHED).
+- Sidebar link `nav-salary-reversals`.
+- data-testids: `reversal-employee-picker`, `reversal-op-{id}`,
+  `reversal-reason`, `submit-reversal`, `reversal-confirm-modal`,
+  `confirm-reversal`, `cancel-reversal`,
+  `reversal-log-{group_id}`.
+
+### Tests
+- `/app/backend/tests/test_salary_payment_reversal_iter199.py`
+  (13 assertions in one consolidated test):
+  bank balance restored to pre-payment value after reversal,
+  original ledger group byte-identical, every leg's side is
+  flipped, every reversal row carries `reversal_of_txn_group_id`
+  and entry_type='reversal', double-reverse → 400, reverse a
+  reversal → 400, reverse a non-existent group → 404, audit log
+  surfaces the reversal, reversible-list flags the original.
+- ✅ Passes. Iter-195/196/197/198 regression tests still green.
+
+### Distinction Rules
+- **Iter-196 (correction):**     bank NEVER touched.
+- **Iter-199 (full reversal):**  bank ALWAYS touched (restored).
+
+

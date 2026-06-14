@@ -49,6 +49,7 @@ const SECTIONS = [
             { to: "/new-transaction", label: "➕ حركة مالية جديدة (موحدة)", icon: PaperPlaneRight, testid: "nav-new-transaction" },
             { to: "/employees-ledger", label: "👥 الموظفون (Ledger)", icon: PaperPlaneRight, testid: "nav-employees-ledger" },
             { to: "/employee-corrections", label: "🔄 تصحيح عملية موظف", icon: ArrowsLeftRight, testid: "nav-employee-corrections" },
+            { to: "/salary-reversals", label: "↩️ عكس صرف راتب", icon: ArrowsLeftRight, testid: "nav-salary-reversals" },
             { to: "/employees/custody-balances", label: "🎒 أرصدة العهد المفتوحة", icon: PaperPlaneRight, testid: "nav-custody-open-balances" },
             { to: "/suppliers-ledger", label: "🏭 الموردون (Ledger)", icon: PaperPlaneRight, testid: "nav-suppliers-ledger" },
             { to: "/externals-ledger", label: "🤝 خارجيون (Ledger)", icon: PaperPlaneRight, testid: "nav-externals-ledger" },
