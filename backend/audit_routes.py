@@ -129,51 +129,123 @@ def make_audit_router(db, current_user):
             ],
         })
 
-        # ── 6) Orphan opening entries ──────────────────────────────
+        # ── 6) Orphan opening entries (detailed) ──────────────────
         orphans = []
-        # Sample counterparties referenced by ledger that no longer exist.
-        # Walk a bounded set (last 500 opening entries) to keep cost low.
+        # Build valid ID indexes — try MULTIPLE keys per collection
+        # so we don't false-positive entries that linked via legacy ID
+        # shapes (e.g. employees keyed by `employee_id` vs `id` vs `_id`).
         valid_cp_ids: set = set()
         async for cp in db.counterparties.find(
-            {"user_id": uid}, {"_id": 0, "id": 1}
+            {"user_id": uid},
+            {"_id": 1, "id": 1, "name": 1, "kind": 1, "external_id": 1},
         ):
-            valid_cp_ids.add(cp["id"])
+            for k in ("id", "external_id"):
+                if cp.get(k):
+                    valid_cp_ids.add(str(cp[k]))
+            if cp.get("_id"):
+                valid_cp_ids.add(str(cp["_id"]))
+
         valid_account_ids: set = set()
         async for a in db.accounts.find(
-            {"user_id": uid}, {"_id": 0, "id": 1}
+            {"user_id": uid}, {"_id": 1, "id": 1, "name": 1},
         ):
-            valid_account_ids.add(a["id"])
+            for k in ("id",):
+                if a.get(k):
+                    valid_account_ids.add(str(a[k]))
+            if a.get("_id"):
+                valid_account_ids.add(str(a["_id"]))
+
         valid_emp_ids: set = set()
         async for e in db.employees.find(
-            {"user_id": uid}, {"_id": 0, "id": 1, "employee_id": 1}
+            {"user_id": uid},
+            {"_id": 1, "id": 1, "employee_id": 1, "name": 1,
+             "external_id": 1, "legacy_id": 1},
         ):
-            valid_emp_ids.add(e.get("employee_id") or e.get("id"))
+            for k in ("id", "employee_id", "external_id", "legacy_id"):
+                if e.get(k):
+                    valid_emp_ids.add(str(e[k]))
+            if e.get("_id"):
+                valid_emp_ids.add(str(e["_id"]))
 
+        # Enumerate ALL orphans (no 25-cap; the merchant explicitly
+        # requested the full list for the post-migration audit).
         async for row in db.general_ledger.find(
             {"user_id": uid, "entry_type": "opening_balance"},
             {"_id": 0, "id": 1, "entity_type": 1, "entity_id": 1,
-             "amount": 1, "side": 1},
-        ).limit(2000):
+             "amount": 1, "side": 1, "sub_account": 1,
+             "metadata": 1, "created_at": 1, "notes": 1},
+        ):
             et = row.get("entity_type")
             eid = row.get("entity_id")
             if not eid:
+                # No entity_id at all — almost certainly migration noise.
+                orphans.append({
+                    "ledger_id": row.get("id"),
+                    "entity_type": et,
+                    "entity_id": None,
+                    "entity_name": (row.get("metadata") or {}).get(
+                        "platform_name"
+                    ) or (row.get("metadata") or {}).get("account_name")
+                    or (row.get("metadata") or {}).get("employee_name")
+                    or (row.get("metadata") or {}).get("supplier_name"),
+                    "amount": row.get("amount"),
+                    "side": row.get("side"),
+                    "sub_account": row.get("sub_account"),
+                    "debit": row.get("amount") if row.get("side") == "debit" else 0,
+                    "credit": row.get("amount") if row.get("side") == "credit" else 0,
+                    "created_at": (
+                        row.get("created_at").isoformat()
+                        if hasattr(row.get("created_at"), "isoformat")
+                        else row.get("created_at")
+                    ),
+                    "classification": "no_entity_id",
+                    "metadata": row.get("metadata") or {},
+                })
                 continue
             valid = False
             if et in ("supplier", "external", "courier", "ad_account"):
-                valid = eid in valid_cp_ids
+                valid = str(eid) in valid_cp_ids
             elif et in ("bank", "payment_platform"):
-                valid = eid in valid_account_ids
+                valid = str(eid) in valid_account_ids
             elif et == "employee":
-                valid = eid in valid_emp_ids
+                valid = str(eid) in valid_emp_ids
             else:
                 valid = True  # unknown type → skip flagging
-            if not valid and len(orphans) < 25:
+            if not valid:
+                md = row.get("metadata") or {}
+                # Try to surface a human-readable name from migration metadata.
+                ename = (
+                    md.get("employee_name")
+                    or md.get("supplier_name")
+                    or md.get("counterparty_name")
+                    or md.get("platform_name")
+                    or md.get("account_name")
+                    or md.get("courier_name")
+                    or md.get("name")
+                )
+                # Classify the likely cause to help the merchant.
+                classification = "deleted_entity"
+                if et == "employee" and valid_emp_ids:
+                    classification = "employee_id_mismatch"
+                elif et in ("bank", "payment_platform") and valid_account_ids:
+                    classification = "account_id_mismatch"
                 orphans.append({
                     "ledger_id": row.get("id"),
                     "entity_type": et,
                     "entity_id": eid,
+                    "entity_name": ename,
                     "amount": row.get("amount"),
                     "side": row.get("side"),
+                    "sub_account": row.get("sub_account"),
+                    "debit": row.get("amount") if row.get("side") == "debit" else 0,
+                    "credit": row.get("amount") if row.get("side") == "credit" else 0,
+                    "created_at": (
+                        row.get("created_at").isoformat()
+                        if hasattr(row.get("created_at"), "isoformat")
+                        else row.get("created_at")
+                    ),
+                    "classification": classification,
+                    "metadata": md,
                 })
 
         # ── 7) Legacy vs ledger reconciliation ──────────────────────
@@ -238,6 +310,33 @@ def make_audit_router(db, current_user):
         verdict = "pass" if not issues else "warnings" if all(
             i["severity"] != "high" for i in issues) else "fail"
 
+        # Iter-181b — Orphan analysis breakdown for the merchant.
+        # Group by entity_type + classification + financial impact.
+        orphans_by_type: dict = {}
+        orphans_by_class: dict = {}
+        orphans_total_debit = 0.0
+        orphans_total_credit = 0.0
+        for o in orphans:
+            et = o.get("entity_type") or "_unknown"
+            cls = o.get("classification") or "_unknown"
+            orphans_by_type.setdefault(et, {
+                "entity_type": et, "count": 0,
+                "debit_total": 0.0, "credit_total": 0.0,
+            })
+            orphans_by_type[et]["count"] += 1
+            orphans_by_type[et]["debit_total"] += float(o.get("debit") or 0)
+            orphans_by_type[et]["credit_total"] += float(o.get("credit") or 0)
+            orphans_by_class.setdefault(cls, 0)
+            orphans_by_class[cls] += 1
+            orphans_total_debit += float(o.get("debit") or 0)
+            orphans_total_credit += float(o.get("credit") or 0)
+
+        # Round + finalize.
+        for v in orphans_by_type.values():
+            v["debit_total"] = round(v["debit_total"], 2)
+            v["credit_total"] = round(v["credit_total"], 2)
+            v["net"] = round(v["debit_total"] - v["credit_total"], 2)
+
         return {
             "verdict": verdict,
             "issues": issues,
@@ -248,7 +347,26 @@ def make_audit_router(db, current_user):
             },
             "orphans": {
                 "count": len(orphans),
-                "samples": orphans[:10],
+                "samples": orphans[:50],
+                "all": orphans,
+                "by_type": list(orphans_by_type.values()),
+                "by_classification": orphans_by_class,
+                "total_debit": round(orphans_total_debit, 2),
+                "total_credit": round(orphans_total_credit, 2),
+                "net_impact": round(
+                    orphans_total_debit - orphans_total_credit, 2
+                ),
+                "interpretation": (
+                    "Reconciliation = 100% يعني الإجمالي صحيح. "
+                    "لكن وجود قيود يتيمة يعني أن مرجع الـ counterparty/employee "
+                    "في الـ ledger لا يطابق أي سجل حالي. "
+                    "إذا كان classification = 'employee_id_mismatch' أو "
+                    "'account_id_mismatch' فالأرجح أن الـ ID تغيّر بين النظام "
+                    "القديم والجديد (false positive محتمل في أداة الفحص "
+                    "إذا كان الإجمالي يطابق). إذا كان 'deleted_entity' فالكيان "
+                    "محذوف فعلاً. إذا كان 'no_entity_id' فالقيد ترحَّل بدون "
+                    "ربط — يحتاج مراجعة يدوية."
+                ),
             },
             "ledger_sums_by_entity": ledger_sums,
             "negative_balances": {

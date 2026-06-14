@@ -168,9 +168,101 @@ export default function PostMigrationAudit() {
                     <div className={`text-3xl font-extrabold ${data.orphans.count ? "text-rose-700" : "text-emerald-700"}`}>
                         {intf(data.orphans.count)}
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">يجب أن يكون = 0</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                        صافي الأثر المحاسبي: {fmt(data.orphans.net_impact || 0)} ر.س
+                    </div>
                 </div>
             </div>
+
+            {/* Iter-181b — Detailed orphan analysis */}
+            {data.orphans.count > 0 && (
+                <div className="bg-white rounded-2xl shadow p-5 mb-6 border-2 border-rose-200" data-testid="audit-orphan-details">
+                    <h3 className="font-extrabold text-slate-900 mb-3">🔍 تحليل تفصيلي للقيود اليتيمة ({intf(data.orphans.count)})</h3>
+
+                    <div className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4 leading-relaxed">
+                        <strong>التفسير: </strong>{data.orphans.interpretation}
+                    </div>
+
+                    <h4 className="font-bold text-slate-800 mb-2 text-sm">حسب نوع الكيان:</h4>
+                    <div className="overflow-x-auto mb-4">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="px-3 py-2 text-right">النوع</th>
+                                    <th className="px-3 py-2 text-left">العدد</th>
+                                    <th className="px-3 py-2 text-left">مدين</th>
+                                    <th className="px-3 py-2 text-left">دائن</th>
+                                    <th className="px-3 py-2 text-left">صافي</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(data.orphans.by_type || []).map((t) => (
+                                    <tr key={t.entity_type} className="border-t border-slate-100">
+                                        <td className="px-3 py-2 font-bold text-right">{t.entity_type}</td>
+                                        <td className="px-3 py-2 num text-left">{intf(t.count)}</td>
+                                        <td className="px-3 py-2 num text-left">{fmt(t.debit_total)}</td>
+                                        <td className="px-3 py-2 num text-left">{fmt(t.credit_total)}</td>
+                                        <td className="px-3 py-2 num text-left font-bold">{fmt(t.net)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h4 className="font-bold text-slate-800 mb-2 text-sm">حسب التصنيف:</h4>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {Object.entries(data.orphans.by_classification || {}).map(([cls, cnt]) => (
+                            <span key={cls} className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">
+                                {cls}: {intf(cnt)}
+                            </span>
+                        ))}
+                    </div>
+
+                    <details>
+                        <summary className="cursor-pointer font-bold text-slate-900 text-sm select-none">
+                            📋 جدول كل القيود اليتيمة ({intf(data.orphans.count)}) — اضغط للعرض
+                        </summary>
+                        <div className="overflow-x-auto mt-3">
+                            <table className="w-full text-xs" data-testid="audit-orphan-list">
+                                <thead className="bg-slate-50 text-slate-700">
+                                    <tr>
+                                        <th className="px-2 py-2 text-right">Ledger ID</th>
+                                        <th className="px-2 py-2 text-right">النوع</th>
+                                        <th className="px-2 py-2 text-right">Entity ID</th>
+                                        <th className="px-2 py-2 text-right">الاسم</th>
+                                        <th className="px-2 py-2 text-right">Sub Account</th>
+                                        <th className="px-2 py-2 text-left">مدين</th>
+                                        <th className="px-2 py-2 text-left">دائن</th>
+                                        <th className="px-2 py-2 text-right">التصنيف</th>
+                                        <th className="px-2 py-2 text-right">التاريخ</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(data.orphans.all || []).map((o, idx) => (
+                                        <tr key={o.ledger_id || idx} className="border-t border-slate-100">
+                                            <td className="px-2 py-2 font-mono text-[10px] text-right">{o.ledger_id?.slice(0, 12) || "—"}</td>
+                                            <td className="px-2 py-2 text-right">{o.entity_type}</td>
+                                            <td className="px-2 py-2 font-mono text-[10px] text-right">{(o.entity_id || "—").toString().slice(0, 16)}</td>
+                                            <td className="px-2 py-2 text-right font-bold">{o.entity_name || "—"}</td>
+                                            <td className="px-2 py-2 text-right">{o.sub_account || "—"}</td>
+                                            <td className="px-2 py-2 num text-left">{fmt(o.debit)}</td>
+                                            <td className="px-2 py-2 num text-left">{fmt(o.credit)}</td>
+                                            <td className="px-2 py-2 text-right">
+                                                <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[10px] font-bold">
+                                                    {o.classification}
+                                                </span>
+                                            </td>
+                                            <td className="px-2 py-2 text-right text-[10px]">
+                                                {o.created_at ? new Date(o.created_at).toLocaleString("en-GB", { timeZone: "Asia/Riyadh", hour12: false }) : "—"}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                </div>
+            )}
 
             {negs.count > 0 && (
                 <details className="bg-white rounded-2xl shadow p-5 mb-6 border border-slate-200" data-testid="audit-negative-balances">
