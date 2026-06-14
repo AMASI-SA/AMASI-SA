@@ -5,7 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
-import { todaySA } from "../lib/dates";
+import { todaySA, monthStartSA } from "../lib/dates";
 
 const PROVIDER_TONES = {
     salla:         { label: "سلة",                cls: "bg-emerald-100 text-emerald-800 border-emerald-200" },
@@ -220,9 +220,7 @@ function SettlementModal({ initial, onClose, onSaved }) {
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function Settlements() {
     const today = todaySA();
-    const firstDayOfMonth = new Date();
-    firstDayOfMonth.setDate(1);
-    const fromDefault = firstDayOfMonth.toISOString().slice(0, 10);
+    const fromDefault = monthStartSA();
 
     const [fromDate, setFromDate] = useState(fromDefault);
     const [toDate, setToDate]     = useState(today);

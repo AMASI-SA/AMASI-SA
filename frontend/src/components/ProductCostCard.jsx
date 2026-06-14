@@ -150,7 +150,7 @@ export default function ProductCostCard({ refreshKey = 0 }) {
 
             {updatedAt && (
                 <div className="mt-3 text-[10px] text-muted-foreground text-end">
-                    آخر تحديث: {updatedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    آخر تحديث: {updatedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Riyadh" })}
                 </div>
             )}
         </div>

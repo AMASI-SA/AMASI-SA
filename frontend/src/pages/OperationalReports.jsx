@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import { toast } from "sonner";
+import { formatRiyadhDateTime } from "../lib/dates";
 import { SalaryAccrualSummaryCard } from "../components/EmployeeBalanceCard";
 
 const fmt = (n) =>
@@ -259,7 +260,7 @@ export default function OperationalReports() {
                     </div>
 
                     <div className="text-center text-[10px] text-slate-500 mt-8 pt-4 border-t border-slate-200">
-                        تم إنشاء التقرير في {new Date().toLocaleString("en-US")} · MEZAN
+                        تم إنشاء التقرير في {formatRiyadhDateTime(new Date())} · MEZAN
                     </div>
                 </div>
             </div>

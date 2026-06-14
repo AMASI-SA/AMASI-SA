@@ -9,6 +9,7 @@ import os
 import uuid
 import logging
 from datetime import datetime, timezone, timedelta
+from tz_utils import riyadh_date_from_utc, riyadh_today_iso
 from typing import List, Optional
 
 try:
@@ -3820,7 +3821,11 @@ async def on_startup():
         date_str: Optional[str] = None
         if recv:
             try:
-                date_str = datetime.fromisoformat(str(recv).replace("Z", "+00:00")).date().isoformat()
+                # Iter-177 — interpret UTC `received_at` as Riyadh date
+                # so orders received at 21:30 UTC (00:30 KSA next day)
+                # land on the merchant's actual calendar day.
+                _dt = datetime.fromisoformat(str(recv).replace("Z", "+00:00"))
+                date_str = riyadh_date_from_utc(_dt).isoformat()
             except Exception:
                 date_str = None
         if not date_str:
@@ -3860,9 +3865,11 @@ async def on_startup():
     async for o in fake_today_cursor:
         # The fallback set order_date to the day the webhook arrived (UTC).
         try:
-            recv_day = datetime.fromisoformat(
+            # Iter-177 — interpret UTC `received_at` as Riyadh date.
+            _dt = datetime.fromisoformat(
                 str(o["received_at"]).replace("Z", "+00:00")
-            ).date().isoformat()
+            )
+            recv_day = riyadh_date_from_utc(_dt).isoformat()
         except Exception:
             continue
         if o.get("order_date") == recv_day:
@@ -3885,9 +3892,11 @@ async def on_startup():
     restored = 0
     async for o in cleared_cursor:
         try:
-            recv_day = datetime.fromisoformat(
+            # Iter-177 — interpret UTC `received_at` as Riyadh date.
+            _dt = datetime.fromisoformat(
                 str(o["received_at"]).replace("Z", "+00:00")
-            ).date().isoformat()
+            )
+            recv_day = riyadh_date_from_utc(_dt).isoformat()
         except Exception:
             continue
         await db.unified_orders.update_one(

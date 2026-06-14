@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { todaySA } from "../lib/dates";
 
 const fmt = (n) =>
     Number(n || 0).toLocaleString("en-US", {
@@ -58,7 +59,7 @@ export default function SallaSettlements() {
         // Iter-159g — Salla invoice files do NOT contain the issue date.
         // Ask the merchant to enter it so it appears as "تاريخ التحويل"
         // in the unified settlements overview.
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todaySA();
         const dateInput = window.prompt(
             "تاريخ إصدار الفاتورة من سلة (YYYY-MM-DD)\n" +
             "هذا هو التاريخ الذي سيظهر كـ «تاريخ التحويل» في جدول التسويات.",

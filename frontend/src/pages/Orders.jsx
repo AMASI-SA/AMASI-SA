@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
+import { fileStampSA } from "../lib/dates";
 import { toast } from "sonner";
 
 const CAT_META = {
@@ -141,7 +142,7 @@ export default function Orders() {
             const blob = new Blob([resp.data], {
                 type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             });
-            const ts = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
+            const ts = fileStampSA();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;

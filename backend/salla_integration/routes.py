@@ -62,13 +62,27 @@ from .sync import (
 
 
 # Where the frontend wants to land after the callback completes
-# (success or failure). Computed from REACT_APP_BACKEND_URL minus the
-# trailing /api so it points at the SPA. Override via SALLA_RETURN_URL
-# if you ever want the redirect to go to a different host.
-def _frontend_origin() -> str:
+# (success or failure).
+#
+# Iter-177 — derive the redirect target from the actual request
+# headers (X-Forwarded-Host stripped by the K8s ingress). This way
+# the callback redirect always returns the merchant to the same
+# domain they came from (e.g. mezansalla.com in production,
+# *.preview.emergentagent.com in preview, localhost in dev) —
+# without needing per-environment FRONTEND_URL env vars.
+#
+# An explicit override via SALLA_RETURN_URL is still honored for
+# the rare case where the OAuth flow should land on a different
+# host (e.g. a marketing landing page).
+def _frontend_origin(request: Optional[Request] = None) -> str:
     explicit = os.environ.get("SALLA_RETURN_URL", "").strip()
     if explicit:
         return explicit.rstrip("/")
+    if request is not None:
+        try:
+            return _public_base_url(request).rstrip("/")
+        except Exception:  # noqa: BLE001 — fall through to env fallback
+            pass
     raw = (os.environ.get("FRONTEND_URL") or "http://localhost:3000").strip().rstrip("/")
     return raw
 
@@ -141,7 +155,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         error: Optional[str] = Query(default=None),
         error_description: Optional[str] = Query(default=None),
     ):
-        frontend = _frontend_origin()
+        frontend = _frontend_origin(request)
         # 3a. Did Salla bounce us back with an error?
         if error:
             return RedirectResponse(

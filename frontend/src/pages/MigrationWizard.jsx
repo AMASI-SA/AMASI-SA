@@ -7,11 +7,11 @@
 import React, { useState, useEffect } from "react";
 import api from "../lib/api";
 import { toast } from "sonner";
+import { todaySA } from "../lib/dates";
 
 export default function MigrationWizard() {
     const [status, setStatus] = useState(null);
-    const [cutoffDate, setCutoffDate] = useState(
-        () => new Date().toISOString().slice(0, 10));
+    const [cutoffDate, setCutoffDate] = useState(() => todaySA());
     const [dryRun, setDryRun] = useState(null);
     const [busy, setBusy] = useState(false);
     const [confirmText, setConfirmText] = useState("");

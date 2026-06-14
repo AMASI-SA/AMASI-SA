@@ -2,54 +2,44 @@ import { useEffect, useMemo, useState } from "react";
 import { Funnel, CalendarBlank, CaretDown, X } from "@phosphor-icons/react";
 import api from "../lib/api";
 import { todayISO } from "../lib/format";
+import { todaySA, addDaysISO, monthStartSA, yearStartSA } from "../lib/dates";
 import DateInput from "./DateInput";
 
-/** Compute date range from preset key (returns {from, to} ISO strings) */
+/** Compute date range from preset key (returns {from, to} ISO strings).
+ *  All boundaries are computed in Asia/Riyadh — independent of the
+ *  user's browser timezone. */
 function presetRange(key) {
-    const t = new Date();
-    // IMPORTANT: use the user's LOCAL date, not UTC. `.toISOString()` shifts
-    // by the timezone offset, so at 00:30 local time in Asia/Riyadh (+3) it
-    // would return yesterday's date — making "هذا الشهر" wrongly start in
-    // the previous month on the 1st.
-    const iso = (d) => {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, "0");
-        const day = String(d.getDate()).padStart(2, "0");
-        return `${y}-${m}-${day}`;
-    };
-    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const today = todaySA();
 
     if (key === "today") {
-        const d = iso(startOfDay(t));
-        return { from: d, to: d };
+        return { from: today, to: today };
     }
     if (key === "yesterday") {
-        const y = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
-        const d = iso(y);
-        return { from: d, to: d };
+        const y = addDaysISO(today, -1);
+        return { from: y, to: y };
     }
     if (key === "last7") {
-        const s = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 6);
-        return { from: iso(s), to: iso(startOfDay(t)) };
+        return { from: addDaysISO(today, -6), to: today };
     }
     if (key === "last30") {
-        const s = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 29);
-        return { from: iso(s), to: iso(startOfDay(t)) };
+        return { from: addDaysISO(today, -29), to: today };
     }
     if (key === "this_month") {
-        // First day of current local month → today (inclusive). Auto-rolls
-        // forward when a new month begins, exactly as the user requested.
-        const s = new Date(t.getFullYear(), t.getMonth(), 1);
-        return { from: iso(s), to: iso(startOfDay(t)) };
+        return { from: monthStartSA(), to: today };
     }
     if (key === "last_month") {
-        const s = new Date(t.getFullYear(), t.getMonth() - 1, 1);
-        const e = new Date(t.getFullYear(), t.getMonth(), 0);
-        return { from: iso(s), to: iso(e) };
+        const [y, m] = today.split("-").map(Number);
+        const lastMonth = m === 1 ? 12 : m - 1;
+        const yearOfLast = m === 1 ? y - 1 : y;
+        const mm = String(lastMonth).padStart(2, "0");
+        const lastDay = new Date(Date.UTC(yearOfLast, lastMonth, 0)).getUTCDate();
+        return {
+            from: `${yearOfLast}-${mm}-01`,
+            to: `${yearOfLast}-${mm}-${String(lastDay).padStart(2, "0")}`,
+        };
     }
     if (key === "this_year") {
-        const s = new Date(t.getFullYear(), 0, 1);
-        return { from: iso(s), to: iso(startOfDay(t)) };
+        return { from: yearStartSA(), to: today };
     }
     return { from: "", to: "" };
 }

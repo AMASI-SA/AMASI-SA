@@ -475,7 +475,11 @@ def _build_router(db) -> APIRouter:
                 order_date_norm = authoritative_date
                 order_date_inferred = False
             else:
-                order_date_norm = datetime.now(timezone.utc).date().isoformat()
+                # Iter-177 — when Make.com sends no date, fall back to
+                # the current Riyadh calendar day (not UTC). UTC fallback
+                # would silently roll back to "yesterday" between 21:00
+                # and 24:00 UTC = 00:00–03:00 KSA.
+                order_date_norm = riyadh_today().isoformat()
                 order_date_inferred = True
 
             incoming = {

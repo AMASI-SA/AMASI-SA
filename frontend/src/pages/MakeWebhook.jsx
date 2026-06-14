@@ -7,12 +7,10 @@ import {
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { formatMoney, todayISO } from "../lib/format";
+import { monthStartSA } from "../lib/dates";
 import DateInput from "../components/DateInput";
 
-function firstOfMonth() {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-}
+const firstOfMonth = () => monthStartSA();
 
 export default function MakeWebhook() {
     const [settings, setSettings] = useState(null);

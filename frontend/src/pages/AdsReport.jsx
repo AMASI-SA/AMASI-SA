@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { formatMoney, formatInt, todayISO } from "../lib/format";
+import { monthStartSA } from "../lib/dates";
 import DateInput from "../components/DateInput";
 
 const PLATFORM_THEME = {
@@ -18,13 +19,8 @@ const PLATFORM_THEME = {
     meta:     { color: "#1877F2", label: "Meta",      bg: "#EFF6FF", border: "#BFDBFE" },
 };
 
-function monthStartISO() {
-    const t = new Date();
-    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
 export default function AdsReport() {
-    const [fromDate, setFromDate] = useState(monthStartISO());
+    const [fromDate, setFromDate] = useState(monthStartSA());
     const [toDate, setToDate] = useState(todayISO());
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);

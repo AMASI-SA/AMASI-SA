@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import api from "../lib/api";
 import { toast } from "sonner";
+import { todaySA, monthISO_SA } from "../lib/dates";
 
 const OP_TYPES = [
     { value: "advance_grant",        label: "💰 سلفة موظف",         section: "employees" },
@@ -65,11 +66,9 @@ export default function UnifiedEntryScreen() {
     const [amount, setAmount] = useState("");
     const [bankId, setBankId] = useState("");
     const [bankToId, setBankToId] = useState("");
-    const [paymentDate, setPaymentDate] = useState(
-        () => new Date().toISOString().slice(0, 10));
+    const [paymentDate, setPaymentDate] = useState(() => todaySA());
     const [notes, setNotes] = useState("");
-    const [period, setPeriod] = useState(
-        () => new Date().toISOString().slice(0, 7));
+    const [period, setPeriod] = useState(() => monthISO_SA());
     const [expCategory, setExpCategory] = useState("");
     const [invoiceNo, setInvoiceNo] = useState("");
     const [applyAdvances, setApplyAdvances] = useState(true);

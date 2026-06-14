@@ -26,6 +26,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
+from tz_utils import riyadh_now_aware
+
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
@@ -1047,7 +1049,7 @@ def _build_router(db) -> APIRouter:
 
         # Count distinct orders touched (for the toast in the UI)
         order_count = len({ln.order_number for ln in kept})
-        filename = f"product_preparation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = f"product_preparation_{riyadh_now_aware().strftime('%Y%m%d_%H%M%S')}.pdf"
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
