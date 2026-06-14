@@ -1965,3 +1965,80 @@ returns plausible output even before migration (correctly reports
 - 🟠 P1 — Tabby negative balance investigation.
 - 🔵 Iter-193 — per-order settlement linking (drill-down).
 - 🟠 P0 (blocked) — 15 orphan employees on production.
+
+---
+
+## Checkpoint — Iter-193, Iter-194, Iter-195 (Tabby Forensic Sprint)
+
+### Iter-193 — Forensic Audit Endpoint (Read-Only)
+- **What:** Added `GET /api/audit/forensic-report` combining:
+  - 15 orphan employee openings (names, amounts, classification)
+  - Tabby ledger snapshot with sub_account breakdown
+- **File:** `/app/backend/audit_routes.py::make_forensic_report_router`
+- **Production output:** confirmed 41,931.68 SAR net orphan impact;
+  Tabby `current_balance` -47,351.51 vs ledger +12,175.71.
+
+### Iter-194 — Tabby Forensic Phase 2 (Read-Only)
+- **What:** Added `GET /api/audit/tabby-phase2` deep-dive into:
+  - `payment_transactions` (849 sales / 175,442.13 SAR)
+  - `payment_refunds` (19 / 2,684.59 SAR)
+  - `account_transactions` (7 manual transfers / 144,621.89 SAR)
+  - `general_ledger` (1 opening entry / +12,175.71)
+  - BNPL SSOT formula reconstruction
+- **File:** `/app/backend/audit_routes.py::make_tabby_phase2_router`
+- **Root cause established:**
+  - 3 different sources show 3 different numbers (SSOT violation):
+    - `accounts.current_balance` = −47,351.51
+    - `BNPL SSOT formula` = +13,202.46 ← correct
+    - `general_ledger.net` = +12,175.71 (frozen at cutoff)
+  - The −47,351.51 comes from `expected_orders_balance` (97,270.38)
+    minus `Σ account_transactions(out)` (144,621.89) — and
+    `expected_orders_balance` is missing 60,554.87 SAR vs the
+    actual BNPL net sales.
+  - 7 manual transfers without reference / txn_group_id / linked
+    account — recorded outside the Universal Ledger.
+
+### Iter-195 — Phase 1 Quick Fix (Tabby SSOT)
+- **What:** Centralized live-balance resolver so every endpoint
+  displays the BNPL SSOT value for Tabby/Tamara, never the stale
+  `current_balance` field.
+- **New module:** `/app/backend/balance_resolver.py`
+  - `resolve_live_balance(db, *, user_id, account)` returns
+    `{balance, source, raw_balance, components}` with priority
+    `bnpl_ssot > ledger > current_balance`.
+- **Leak fixed:** `universal_accounting_routes.py`
+  - `_account_live_balance()` now routes through the resolver.
+  - `cash-accounts-with-balances` endpoint applies BNPL SSOT.
+  - Added `normalized_payment_method` to the projection so
+    `is_bnpl_account()` can detect Tabby/Tamara by the canonical
+    payment-method key (Arabic name alone was not matching the
+    English provider key).
+- **Frontend:** `/app/frontend/src/pages/Accounts.jsx`
+  - Added `BNPL SSOT` and `Ledger` badges next to each balance.
+  - Tooltip explains "محسوب لحظياً من payment_transactions —
+    لم يُكتب بعد في Universal Ledger".
+  - Data-testids: `account-balance-{id}`,
+    `balance-source-bnpl-{id}`, `balance-source-ledger-{id}`.
+- **Read-only guarantee:** every modified path is read-only; no
+  document is mutated by display endpoints.
+- **Tests:** `/app/backend/tests/test_tabby_ssot_phase1_iter195.py`
+  - resolver classifies Tabby as `bnpl_ssot`
+  - `/api/accounts` returns `balance_source` and the BNPL value
+    (not the stale −47,351.51)
+  - `/api/accounts/summary` aggregates with BNPL SSOT
+  - `/api/accounting/cash-accounts-with-balances` applies override
+  - bank accounts without opening_balance remain `current_balance`
+  - 3× calls to read endpoints leave `accounts.current_balance`,
+    `payment_transactions`, and `general_ledger` byte-identical.
+  - ✅ All assertions passed.
+
+### Phase 2 (P1 — pending user approval)
+- Write `general_ledger` entries whenever a new Tabby/Tamara
+  sale, refund, commission, VAT, fee, or transfer is recorded.
+- Goal: stop the gap from widening so the eventual backfill is a
+  clean snapshot to a known cut-off.
+
+### Phase 3 (P2 — pending user approval)
+- Historical backfill: synthesize ledger entries for the 849 sales,
+  19 refunds, 7 transfers, and fee accruals. Test extensively first.
+

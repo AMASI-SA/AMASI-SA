@@ -283,29 +283,17 @@ async def _enforce_account_binding(
 async def _account_live_balance(
     db, *, user_id: str, account_id: str,
 ) -> tuple[float, dict]:
-    acc = await db.accounts.find_one(
-        {"id": account_id, "user_id": user_id},
-        {"_id": 0, "id": 1, "name": 1, "account_type": 1,
-         "current_balance": 1, "opening_balance": 1,
-         "expected_orders_balance": 1},
+    # Iter-195 — Route through centralized resolver so that
+    # BNPL SSOT (Tabby/Tamara) takes priority over the stale
+    # `current_balance` field. Without this, cash-out validation
+    # for BNPL wallets compared against a drifted value.
+    from balance_resolver import resolve_live_balance_by_id
+    res = await resolve_live_balance_by_id(
+        db, user_id=user_id, account_id=account_id,
     )
-    if not acc:
+    if not res:
         return 0.0, {}
-    has_opening_ledger = await db.general_ledger.find_one(
-        {"user_id": user_id, "entity_type": "bank",
-         "entity_id": account_id, "entry_type": "opening_balance",
-         "status": "posted"},
-        {"_id": 1},
-    )
-    if has_opening_ledger:
-        bal = await compute_balance(
-            db, user_id=user_id, entity_type="bank",
-            entity_id=account_id, sub_account="main",
-        )
-        live = round(float(bal["net_balance"]), 2)
-    else:
-        live = round(float(acc.get("current_balance") or 0), 2)
-    return live, acc
+    return float(res["balance"]), res.get("account") or {}
 
 
 async def _ensure_opening_balance_seeded(
@@ -928,7 +916,8 @@ def make_universal_router(db) -> APIRouter:
              "status": {"$ne": "hidden"}},
             {"_id": 0, "id": 1, "name": 1, "account_type": 1,
              "current_balance": 1, "opening_balance": 1,
-             "provider_name": 1},
+             "provider_name": 1,
+             "normalized_payment_method": 1},
         ).sort("name", 1).to_list(2000)
 
         # Bulk-compute the ledger delta to keep this endpoint cheap.
@@ -954,11 +943,25 @@ def make_universal_router(db) -> APIRouter:
             ):
                 migrated_ids.add(row["entity_id"])
 
+        # Iter-195 — BNPL SSOT priority for Tabby/Tamara wallets.
+        from balance_resolver import resolve_live_balance
         out = []
         for d in docs:
             base = float(d.get("current_balance") or 0)
-            ledger_net = float(bulk.get(d["id"], {}).get("net_balance", 0) or 0)
-            if d["id"] in migrated_ids:
+            ledger_net = float(
+                bulk.get(d["id"], {}).get("net_balance", 0) or 0
+            )
+
+            # BNPL accounts: always trust the BNPL SSOT formula.
+            # Without this, the Unified Entry Screen shows Tabby's
+            # stale -47k while every other page shows +13k.
+            res = await resolve_live_balance(
+                db, user_id=uid, account=d,
+            )
+            if res["source"] == "bnpl_ssot":
+                live = res["balance"]
+                source = "bnpl_ssot"
+            elif d["id"] in migrated_ids:
                 live = round(ledger_net, 2)
                 source = "ledger"
             else:

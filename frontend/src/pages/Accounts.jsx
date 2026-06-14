@@ -639,7 +639,30 @@ export default function Accounts() {
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">{a.currency}</td>
                                         <td className={`px-4 py-3 num font-extrabold ${(a.current_balance || 0) < 0 ? "text-rose-600" : "text-emerald-700"}`}>
-                                            {fmt(a.current_balance, a.currency)}
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span data-testid={`account-balance-${a.id}`}>
+                                                    {fmt(a.current_balance, a.currency)}
+                                                </span>
+                                                {a.balance_source === "bnpl_ssot" && (
+                                                    <span
+                                                        data-testid={`balance-source-bnpl-${a.id}`}
+                                                        title="مصدر الرصيد: BNPL SSOT (محسوب لحظياً من payment_transactions و account_transactions). لم يُكتب بعد في Universal Ledger."
+                                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300"
+                                                    >
+                                                        <Lightning size={10} weight="fill" />
+                                                        BNPL SSOT
+                                                    </span>
+                                                )}
+                                                {a.balance_source === "ledger" && (
+                                                    <span
+                                                        data-testid={`balance-source-ledger-${a.id}`}
+                                                        title="مصدر الرصيد: Universal Ledger (القيد المزدوج)."
+                                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                                    >
+                                                        Ledger
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3 num text-muted-foreground">{fmt(a.opening_balance, a.currency)}</td>
                                         <td className="px-4 py-3">
