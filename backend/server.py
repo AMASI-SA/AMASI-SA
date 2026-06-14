@@ -3469,6 +3469,8 @@ api.include_router(make_universal_router(db))
 # Iter-161 — Migration with dry-run + before/after comparison
 from migration_routes import make_migration_router
 api.include_router(make_migration_router(db))
+from cod_diagnostic_routes import make_cod_diagnostic_router
+api.include_router(make_cod_diagnostic_router(db, current_user))
 app.include_router(api)
 
 # CORS
