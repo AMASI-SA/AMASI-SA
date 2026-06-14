@@ -391,3 +391,157 @@ def make_audit_router(db, current_user):
         }
 
     return router
+
+
+def make_employee_lookup_debug_router(db, current_user):
+    """Iter-181c — Read-only diagnostic for the 15 orphan openings.
+
+    Determines authoritatively whether the orphans are a false
+    positive of the audit tool (because the `employees` collection
+    uses a different link field) OR genuine missing records.
+
+    Strictly READ-ONLY: no insert, update, delete, or merge.
+    """
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    @router.get("/employee-lookup-debug")
+    async def employee_lookup_debug(user: dict = Depends(current_user)):
+        uid = user["id"]
+
+        # Step 1 — Count employees by every plausible link field.
+        counts_by_filter: dict = {}
+        candidate_link_fields = (
+            "user_id", "merchant_id", "owner_id", "store_id",
+            "tenant_id", "account_id",
+        )
+        for field in candidate_link_fields:
+            counts_by_filter[field] = await db.employees.count_documents(
+                {field: uid}
+            )
+        counts_by_filter["__no_filter__"] = await db.employees.count_documents({})
+
+        # Step 2 — Build a master index of employees from ALL fields,
+        # keyed by every possible ID variant. We index without filter
+        # AND with each candidate filter, then merge.
+        emp_by_id: dict = {}  # id_value → {fields_matched: [], name, raw_doc_summary}
+        seen_employees: set = set()
+        async for e in db.employees.find({}, {
+            "_id": 1, "id": 1, "employee_id": 1, "external_id": 1,
+            "legacy_id": 1, "user_id": 1, "merchant_id": 1,
+            "owner_id": 1, "name": 1,
+        }):
+            doc_key = str(e.get("_id") or e.get("id"))
+            seen_employees.add(doc_key)
+            link_field_value = None
+            link_field_name = None
+            for f in candidate_link_fields:
+                if e.get(f) == uid:
+                    link_field_value = e[f]
+                    link_field_name = f
+                    break
+            summary = {
+                "doc_id": str(e.get("_id")) if e.get("_id") else None,
+                "name": e.get("name"),
+                "link_field": link_field_name,
+                "link_value": link_field_value,
+            }
+            for k in ("id", "employee_id", "external_id", "legacy_id"):
+                v = e.get(k)
+                if v:
+                    s = str(v)
+                    emp_by_id.setdefault(s, {"matched_via": [], "doc": summary})
+                    emp_by_id[s]["matched_via"].append(k)
+            if e.get("_id"):
+                s = str(e["_id"])
+                emp_by_id.setdefault(s, {"matched_via": [], "doc": summary})
+                emp_by_id[s]["matched_via"].append("_id")
+
+        total_employees_seen = len(seen_employees)
+
+        # Step 3 — Replay the orphan check against this richer index.
+        per_orphan = []
+        false_positive_count = 0
+        genuinely_missing_count = 0
+        wrong_user_match_count = 0
+        async for row in db.general_ledger.find(
+            {"user_id": uid, "entry_type": "opening_balance",
+             "entity_type": "employee"},
+            {"_id": 0, "id": 1, "entity_id": 1, "amount": 1,
+             "side": 1, "sub_account": 1, "metadata": 1},
+        ):
+            eid = row.get("entity_id")
+            if not eid:
+                continue
+            key = str(eid)
+            hit = emp_by_id.get(key)
+            if hit:
+                belongs_to_user = (
+                    hit["doc"].get("link_value") == uid
+                )
+                if belongs_to_user:
+                    classification = "false_positive"
+                    false_positive_count += 1
+                else:
+                    classification = "wrong_user_link"
+                    wrong_user_match_count += 1
+                per_orphan.append({
+                    "ledger_id": row.get("id"),
+                    "entity_id": eid,
+                    "sub_account": row.get("sub_account"),
+                    "amount": row.get("amount"),
+                    "side": row.get("side"),
+                    "metadata_name": (row.get("metadata") or {}).get(
+                        "employee_name") or (row.get("metadata") or {}).get(
+                        "name"),
+                    "found_via": hit["matched_via"],
+                    "employee_doc_id": hit["doc"]["doc_id"],
+                    "employee_name": hit["doc"]["name"],
+                    "employee_link_field": hit["doc"]["link_field"],
+                    "employee_link_value": hit["doc"]["link_value"],
+                    "classification": classification,
+                })
+            else:
+                genuinely_missing_count += 1
+                per_orphan.append({
+                    "ledger_id": row.get("id"),
+                    "entity_id": eid,
+                    "sub_account": row.get("sub_account"),
+                    "amount": row.get("amount"),
+                    "side": row.get("side"),
+                    "metadata_name": (row.get("metadata") or {}).get(
+                        "employee_name") or (row.get("metadata") or {}).get(
+                        "name"),
+                    "found_via": [],
+                    "classification": "genuinely_missing",
+                })
+
+        verdict = (
+            "false_positive_likely" if false_positive_count == len(per_orphan)
+            else "wrong_user_link" if wrong_user_match_count > 0 and genuinely_missing_count == 0
+            else "data_issue" if genuinely_missing_count > 0
+            else "no_orphans"
+        )
+
+        return {
+            "verdict": verdict,
+            "summary": {
+                "total_employee_orphans_in_ledger": len(per_orphan),
+                "false_positive_count": false_positive_count,
+                "wrong_user_link_count": wrong_user_match_count,
+                "genuinely_missing_count": genuinely_missing_count,
+                "total_employees_in_collection": total_employees_seen,
+            },
+            "employee_counts_by_filter": counts_by_filter,
+            "interpretation": (
+                "false_positive_likely: كل القيود لها موظف مطابق بنفس "
+                "user_id — الأداة الأصلية أخطأت في الفحص. تحديث الأداة "
+                "كافٍ.\n"
+                "wrong_user_link: الموظفون موجودون لكن مربوطون بحقل "
+                "آخر غير user_id — يحتاج توحيد الربط في الـ schema.\n"
+                "data_issue: بعض الموظفين غير موجودين فعلاً في الـ "
+                "collection — يحتاج خطة ترميم بيانات منفصلة."
+            ),
+            "orphans_analysis": per_orphan,
+        }
+
+    return router
