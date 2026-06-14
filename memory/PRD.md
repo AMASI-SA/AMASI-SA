@@ -1452,3 +1452,101 @@ The deployment_agent flagged one **BLOCKER** unrelated to COD/TZ:
     reads `SALLA_RETURN_URL` env var with hardcoded localhost fallback.
     Recommendation: have frontend send `redirect_uri` derived from
     `window.location.origin`. **Not yet fixed; merchant aware.**
+
+
+## Iter-177 — Asia/Riyadh Timezone Standardization (Feb 2026)
+**Merchant requirement**: Unify entire system on `Asia/Riyadh` so
+all daily / monthly / yearly aggregations reflect the Saudi
+calendar regardless of server location or browser timezone. UTC
+remains the canonical storage format; only display + range
+boundaries shift to Riyadh.
+
+### Phase 1 — Backend foundation (DONE)
+Expanded `/app/backend/tz_utils.py` (was 40 lines, now 220+) with:
+  • `RIYADH_TZ` (ZoneInfo) and `DEFAULT_TIMEZONE` constants.
+  • `riyadh_now_aware()` (tz-aware) alongside legacy
+    `riyadh_now()` and `riyadh_today()`.
+  • UTC instant helpers for MongoDB ranges:
+    `riyadh_start_of_day_utc(d)`, `riyadh_end_of_day_utc(d)`,
+    `riyadh_start_of_month_utc(y, m)`,
+    `riyadh_end_of_month_utc(y, m)`,
+    `riyadh_start_of_year_utc(y)`,
+    `riyadh_end_of_year_utc(y)`.
+  • Pre-rolled ranges: `riyadh_today_range_utc()`,
+    `riyadh_yesterday_range_utc()`,
+    `riyadh_last_n_days_range_utc(n)`,
+    `riyadh_this_month_range_utc()`,
+    `riyadh_this_year_range_utc()`.
+  • Conversion: `utc_to_riyadh(dt)`,
+    `utc_to_riyadh_iso(dt)`,
+    `riyadh_date_from_utc(dt)`.
+Fixed the one bare `datetime.now()` in production code
+(`preparation_routes.py:1050` — PDF filename).
+Tests: `tests/test_tz_utils_iter177.py` — 18 unit tests passing.
+
+### Phase 2 — Frontend foundation (DONE)
+Created `/app/frontend/src/lib/tzUtils.js` mirroring the backend
+surface: `todayISO()`, `yesterdayISO()`, `addDaysISO()`,
+`riyadhStartOfDayUTC()`, `riyadhEndOfDayUTC()`,
+`riyadhTodayRangeUTC()`, `riyadhLastNDaysRangeUTC(n)`,
+`riyadhThisMonthRangeUTC()`, `riyadhThisYearRangeUTC()`,
+`formatRiyadh()`, `formatRiyadhDateTime()`,
+`formatRiyadhArabicLong()`, `toRiyadhISO()`, plus `RIYADH_PERIODS`
+preset map.
+
+Refactored `/app/frontend/src/lib/dates.js` to re-export the new
+helpers, plus added `yesterdaySA()`, `monthISO_SA()`,
+`yearStartSA()` aliases for backwards compatibility.
+
+Migrated all critical pages from bare `new Date()`:
+  • `Settlements.jsx` (first-of-month default)
+  • `SallaSettlements.jsx` (today prompt)
+  • `AdsReport.jsx` (month start)
+  • `MigrationWizard.jsx` (cutoff date)
+  • `UnifiedEntryScreen.jsx` (payment date + period)
+  • `MakeWebhook.jsx` (first of month)
+  • `Orders.jsx` (export filename timestamp)
+  • `OperationalReports.jsx` (report footer)
+  • `AdvancedFilters.jsx` (ALL date presets: today/yesterday/
+    last7/last30/this_month/last_month/this_year)
+  • `ProductCostCard.jsx` (last-updated timestamp display)
+
+### Phase 3 — Audit critical reports (DONE)
+Inspected report endpoints — most accept `YYYY-MM-DD` strings and
+match against `order_date` (also stored as `YYYY-MM-DD`), so the
+boundary work is consistent at the string level.
+
+Fixed the ONE class of bug that mattered: `received_at` (UTC
+timestamp) was being converted to UTC `.date()` instead of Riyadh
+date when inferring `order_date`. This silently misplaced any order
+received between 21:00–24:00 UTC (00:00–03:00 KSA) into the WRONG
+calendar day. Three callsites in `server.py` (lines 3823, 3868,
+3895) and one in `webhook_routes.py:478` now use
+`riyadh_date_from_utc()`.
+
+Meta (`meta_routes.py::_today_riyadh`), Snapchat
+(`snapchat_routes.py` already), and the ad-account cron
+(`ad_account_routes.py` using `riyadh_today_iso`) were already
+Riyadh-correct.
+
+### Phase 4 — Deployment blocker fix (DONE)
+Resolved the `_frontend_origin()` BLOCKER flagged by
+deployment_agent. `salla_integration/routes.py:_frontend_origin`
+now accepts a `Request` and derives the SPA target from the same
+ingress headers used for the OAuth callback redirect — so success
+/ error redirects land on the actual host the merchant came from
+(mezansalla.com in production, preview.emergentagent.com in
+preview, localhost in dev), without needing a per-environment
+`FRONTEND_URL`. SALLA_RETURN_URL override preserved.
+
+deployment_agent re-check: **PASS** — no remaining blockers.
+
+### Policy locked in
+  • Any new feature involving "today", "yesterday", "this month",
+    "last N days", or "this year" MUST use `tz_utils` (backend)
+    or `lib/dates` (frontend). Never `datetime.utcnow()`,
+    `date.today()`, or bare `new Date()` for daily aggregations.
+  • Storage in MongoDB stays UTC (`datetime.now(timezone.utc)`).
+    Only DISPLAY and RANGE BOUNDARIES convert to Riyadh.
+  • Backend never trusts `Date` from frontend without normalizing
+    via `tz_utils._coerce_date` or equivalent.
