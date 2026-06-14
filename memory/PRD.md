@@ -1919,3 +1919,49 @@ returns plausible output even before migration (correctly reports
 - 🔵 Iter-192-ext: per-order Shipping Ledger (delivered-only).
 - 🟠 P1 Tabby negative balance investigation.
 - 🟠 P0 (blocked, awaiting JSON): 15 orphan employees on production.
+
+
+---
+
+## Completed Work — Iter-189 + Iter-192-ext (Feb 14 2026): Shipping Sprint Foundation
+
+### Iter-189 — Payment Mode (Prepaid / Deferred) ✅ CONFIRMED
+- New `payment_mode: "prepaid" | "deferred"` on `ShippingCompany`.
+- Bi-directional sync with legacy `is_deferred` via `root_validator`.
+- `GET /api/settings` enriches every shipping company with `payment_mode`.
+- `/api/shipping-companies/discover` also returns the field.
+- Frontend: prominent two-card toggle in Settings page replacing the
+  cramped pill; new reusable `PaymentModeBadge.jsx` component (xs/sm/lg).
+- CODDiagnostic page now shows a per-company badge column.
+- Test: `tests/test_payment_mode_iter189.py`.
+
+### Iter-192-ext — Shipping Ledger (per-order, delivered-only) ✅ CONFIRMED
+- New backend module `shipping_ledger_routes.py`.
+- `GET /api/shipping-ledger` — strict filter: only orders whose
+  `order_status_policy` category == `"confirmed"` (delivered).
+- 7 query filters: date_from/to, courier, payment_mode, payment_method,
+  settlement_status, has_cod.
+- 8-card top summary (delivered_count, total_shipping_cost, total_cod,
+  total_cod_fees, total_settled, total_unsettled, total_prepaid_shipping,
+  total_deferred_shipping).
+- Per-order columns: order, date, courier, **PaymentModeBadge**,
+  payment_method, status, shipping_cost (+ "مدفوع مسبقاً" tag for
+  prepaid), cod_amount, cod_fee, net_due, settlement_status.
+- New page `/app/frontend/src/pages/ShippingLedger.jsx` at route
+  `/shipping/orders-ledger`. Sidebar link under shipping section.
+- CSV export with BOM (Arabic-safe in Excel).
+- Read-only — NO ledger writes. settlement_status placeholder
+  shows "unsettled" until Iter-193 wires per-order settlement links.
+
+### Files Touched
+- Backend: `server.py`, `shipping_ledger_routes.py` (new).
+- Frontend: `ShippingLedger.jsx` (new), `PaymentModeBadge.jsx` (new),
+  `ShippingCompanySettings.jsx`, `CODDiagnostic.jsx`,
+  `Sidebar.jsx`, `App.js`.
+
+### Open Items at This Checkpoint
+- 🟢 Next user-requested audit: verify Prepaid vs Deferred counts and
+  totals before moving to Tabby investigation.
+- 🟠 P1 — Tabby negative balance investigation.
+- 🔵 Iter-193 — per-order settlement linking (drill-down).
+- 🟠 P0 (blocked) — 15 orphan employees on production.
