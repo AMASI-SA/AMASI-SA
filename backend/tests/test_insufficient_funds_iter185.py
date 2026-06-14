@@ -183,10 +183,12 @@ async def test_insufficient_funds_and_employee_summary():
         assert r.json()["net_due_to_employee"] == 5000
 
         # Grant 1,500 advance from bank_full → company net owed = 3,500
+        # (Iter-188: must acknowledge pending salary since payable > 0)
         await client.post(f"/api/accounting/employees/{emp2}/advances",
                           headers=h,
                           json={"amount": 1500,
-                                "paid_from_account_id": bank_full})
+                                "paid_from_account_id": bank_full,
+                                "acknowledge_pending_salary": True})
         r = await client.get(
             f"/api/accounting/employees/{emp2}/summary-balance", headers=h,
         )

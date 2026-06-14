@@ -107,6 +107,8 @@ ENTRY_TYPES = (
     # General
     "bank_transfer",        # تحويل بين الحسابات: نقص bank A + زيادة bank B
     "expense_record",       # مصروف عام: مصروف + نقص bank
+    # Couriers / shipping companies
+    "courier_cod_settle",   # تسوية COD متعددة الأرجل (Iter-190): نقص cod_receivable + bank/cash + مصروفات
     # Reversal kinds for the above are unified under "reversal"
 )
 SIDES = ("debit", "credit")

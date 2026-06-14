@@ -55,6 +55,7 @@ DEFAULT_EXPENSE_CATEGORIES: list[dict] = [
     {"code": "tamara_fees",       "name": "رسوم تمارا"},
     {"code": "tabby_fees",        "name": "رسوم تابي"},
     {"code": "gateway_fees",      "name": "رسوم بوابات الدفع"},
+    {"code": "cod_fees",          "name": "رسوم الدفع عند الاستلام"},
     {"code": "insurance",         "name": "تأمينات"},
     {"code": "maintenance",       "name": "صيانة"},
     {"code": "other",             "name": "أخرى"},
@@ -165,6 +166,27 @@ class BankTransferIn(BaseModel):
     amount: float = Field(..., gt=0)
     from_account_id: str
     to_account_id: str
+    payment_date: Optional[str] = None
+    notes: Optional[str] = ""
+
+
+# Iter-190 — Multi-leg COD settlement with a shipping company.
+# Models the four real-world scenarios captured in the merchant's
+# courier statements:
+#   (1) full transfer to bank                        → bank_amount only
+#   (2) partial transfer + shipping cost withheld    → bank_amount + shipping_cost
+#   (3) partial transfer + COD fee                   → bank_amount + cod_fee
+#   (4) partial transfer + shipping + COD fee + ...  → all legs
+# Anything left unsettled stays on the courier's `cod_receivable`.
+class CodSettleIn(BaseModel):
+    bank_amount: float = Field(0, ge=0)
+    bank_account_id: Optional[str] = None
+    shipping_cost: float = Field(0, ge=0)
+    cod_fee: float = Field(0, ge=0)
+    other_fees: float = Field(0, ge=0)
+    other_fees_category: Optional[str] = Field(
+        None, description="Required when other_fees > 0. Expense "
+                          "category code (e.g. 'gateway_fees').")
     payment_date: Optional[str] = None
     notes: Optional[str] = ""
 
@@ -1520,6 +1542,166 @@ def make_universal_router(db) -> APIRouter:
                 "cod_balance": await compute_balance(
                     db, user_id=user["id"], entity_type="courier",
                     entity_id=courier_id, sub_account="cod_receivable")}
+
+    # ───────────────────────────────────────────────────────────────
+    # Iter-190 — Multi-leg COD settlement with a shipping company.
+    # Replaces the simple `cod-deposit` for non-trivial real-world
+    # settlements (partial transfer + withheld shipping + COD fee +
+    # other fees). Posts ONE balanced txn_group:
+    #   debit:  bank/cash  (if any)
+    #   debit:  expense:shipping   (if any)
+    #   debit:  expense:cod_fees   (if any)
+    #   debit:  expense:<chosen>   (if any)
+    #   credit: courier.cod_receivable  (total = sum of all debits)
+    # ───────────────────────────────────────────────────────────────
+    @router.post("/couriers/{courier_id}/cod-settle")
+    async def courier_cod_settle(
+        courier_id: str, payload: CodSettleIn,
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        cp = await db.counterparties.find_one(
+            {"id": courier_id, "user_id": uid, "kind": "courier"},
+            {"_id": 0, "name": 1},
+        )
+        if not cp:
+            raise HTTPException(404, "شركة الشحن غير موجودة")
+
+        # Round to 2dp once; sum of all legs.
+        bank_amt = round(float(payload.bank_amount or 0), 2)
+        ship_amt = round(float(payload.shipping_cost or 0), 2)
+        cod_fee  = round(float(payload.cod_fee or 0), 2)
+        other    = round(float(payload.other_fees or 0), 2)
+        total    = round(bank_amt + ship_amt + cod_fee + other, 2)
+
+        if total <= 0:
+            raise HTTPException(
+                400,
+                "أدخل قيمة واحدة على الأقل (التحويل / تكلفة الشحن / "
+                "رسوم COD / رسوم أخرى).",
+            )
+
+        # ── Cap at the courier's open COD receivable. ─────────────
+        cod_bal = (await compute_balance(
+            db, user_id=uid, entity_type="courier",
+            entity_id=courier_id, sub_account="cod_receivable"))["net_balance"]
+        if total > cod_bal + 0.01:
+            raise HTTPException(
+                400,
+                f"إجمالي التسوية ({total:,.2f} ر.س) أكبر من رصيد COD "
+                f"المستحق على «{cp.get('name')}» "
+                f"({cod_bal:,.2f} ر.س). راجع المبلغ.",
+            )
+
+        # ── Validate the bank/cash leg. ───────────────────────────
+        if bank_amt > 0:
+            if not payload.bank_account_id:
+                raise HTTPException(
+                    400,
+                    "اختر حساب الإيداع (بنك أو صندوق) عند تعبئة "
+                    "«المبلغ المحول للبنك».",
+                )
+            acc = await db.accounts.find_one(
+                {"id": payload.bank_account_id, "user_id": uid},
+                {"_id": 0, "id": 1, "name": 1, "account_type": 1},
+            )
+            if not acc:
+                raise HTTPException(404, "الحساب البنكي غير موجود")
+            if acc.get("account_type") not in ("bank", "cash"):
+                raise HTTPException(
+                    400,
+                    "حساب الإيداع يجب أن يكون من نوع «بنك» أو "
+                    "«صندوق نقدي» فقط.",
+                )
+
+        # ── Validate the other_fees category. ─────────────────────
+        if other > 0:
+            if not payload.other_fees_category:
+                raise HTTPException(
+                    400,
+                    "حدد فئة المصاريف للرسوم الأخرى (مثل: gateway_fees).",
+                )
+            valid = {c["code"] async for c in db.expense_categories.find(
+                {"user_id": uid}, {"_id": 0, "code": 1})}
+            if payload.other_fees_category not in valid:
+                raise HTTPException(
+                    400,
+                    f"فئة المصاريف غير معتمدة: {payload.other_fees_category}",
+                )
+
+        # ── Build the balanced txn_group. ─────────────────────────
+        entries: list[dict] = []
+        if bank_amt > 0:
+            entries.append({
+                "entity_type": "bank",
+                "entity_id": payload.bank_account_id,
+                "sub_account": "main",
+                "side": "debit", "amount": bank_amt,
+                "entry_type": "courier_cod_settle",
+                "metadata": {"leg": "bank_transfer"},
+            })
+        if ship_amt > 0:
+            entries.append({
+                "entity_type": "expense", "entity_id": "shipping",
+                "side": "debit", "amount": ship_amt,
+                "entry_type": "courier_cod_settle",
+                "metadata": {"leg": "shipping_cost",
+                              "courier_id": courier_id},
+            })
+        if cod_fee > 0:
+            entries.append({
+                "entity_type": "expense", "entity_id": "cod_fees",
+                "side": "debit", "amount": cod_fee,
+                "entry_type": "courier_cod_settle",
+                "metadata": {"leg": "cod_fee",
+                              "courier_id": courier_id},
+            })
+        if other > 0:
+            entries.append({
+                "entity_type": "expense",
+                "entity_id": payload.other_fees_category,
+                "side": "debit", "amount": other,
+                "entry_type": "courier_cod_settle",
+                "metadata": {"leg": "other_fees",
+                              "courier_id": courier_id},
+            })
+        # Single credit on the courier closing the COD receivable.
+        entries.append({
+            "entity_type": "courier", "entity_id": courier_id,
+            "sub_account": "cod_receivable",
+            "side": "credit", "amount": total,
+            "entry_type": "courier_cod_settle",
+        })
+
+        actor_id, actor_name = await _resolve_actor(user)
+        notes = (
+            payload.notes
+            or f"تسوية COD — {cp.get('name')} ({total:,.2f} ر.س)"
+        )
+        result = await post_txn_group(
+            db, user_id=uid, actor_id=actor_id, actor_name=actor_name,
+            txn_type="courier_cod_settlement", notes=notes,
+            metadata={
+                "courier_id": courier_id,
+                "courier_name": cp.get("name"),
+                "payment_date": payload.payment_date,
+                "bank_amount": bank_amt,
+                "shipping_cost": ship_amt,
+                "cod_fee": cod_fee,
+                "other_fees": other,
+                "other_fees_category": payload.other_fees_category,
+            },
+            entries=entries,
+        )
+        new_cod_balance = (await compute_balance(
+            db, user_id=uid, entity_type="courier",
+            entity_id=courier_id, sub_account="cod_receivable"))["net_balance"]
+        return {
+            "ok": True, **result,
+            "settlement_total": total,
+            "previous_cod_balance": round(cod_bal, 2),
+            "remaining_cod_balance": round(new_cod_balance, 2),
+        }
 
     # ═══════════════════════════════════════════════════════════════
     # Unified statements (single endpoint to view everything)
