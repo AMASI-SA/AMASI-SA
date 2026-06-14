@@ -1840,3 +1840,82 @@ returns plausible output even before migration (correctly reports
 - 🟠 **P1**: Sprint شركات الشحن — about to start with an audit-first pass.
 - 🟠 **P1**: Tabby negative balance investigation.
 - 🟠 **P0** (blocked): 15 orphan employees on production — awaiting JSON.
+
+
+---
+
+## Completed Work — Iter-188 to Iter-192 (Feb 14 2026 cont.): Shipping Sprint Kickoff + P0 Balance Fix
+
+### Iter-188 — Golden Rule: Block Advances When Salary is Pending ✅ CONFIRMED
+- `AdvanceGrantIn.acknowledge_pending_salary: bool = False`.
+- Backend returns **409 Conflict** with structured payload when an
+  employee has open salary_payable; UI shows an amber banner with a
+  one-click "حوّل إلى صرف راتب" (switches op_type) + "هي سلفة فعلاً —
+  تابع" (sets override).
+- Test: `tests/test_golden_rule_iter188.py`.
+
+### Iter-190 — Multi-leg COD Settlement (Backend) ✅ CONFIRMED
+- **New endpoint**: `POST /api/accounting/couriers/{id}/cod-settle`.
+- Input model `CodSettleIn`: `bank_amount`, `bank_account_id`,
+  `shipping_cost`, `cod_fee`, `other_fees`, `other_fees_category`.
+- Posts a single balanced txn_group with up to 5 legs (1–4 debit legs
+  + the courier `cod_receivable` credit).
+- Backed by Universal Ledger only — **no** writes to legacy
+  `shipping_payments` / `courier_transfers`.
+- Guards: (a) total ≤ open `cod_receivable`, (b) `bank_amount > 0` ⇒
+  `bank_account_id` of type `bank|cash` only, (c) `other_fees > 0`
+  ⇒ valid expense category, (d) all-zero legs rejected, (e) unknown
+  courier 404.
+- New default expense category: `cod_fees` («رسوم الدفع عند الاستلام»).
+- New `ENTRY_TYPES` literal: `"courier_cod_settle"`.
+- Test: `tests/test_courier_cod_settle_iter190.py` — 4 happy-path
+  scenarios + 7 rejection paths.
+
+### Iter-191 — COD Settlement UI ✅ CONFIRMED
+- New op type **«🚚 تسوية COD مع شركة شحن»** in UnifiedEntryScreen
+  under a brand-new "شركات الشحن" section.
+- Smart courier picker: shows COD balance next to each company,
+  **freezes** companies with `cod_receivable = 0`.
+- Per-courier COD card (green when > 0, red when = 0) auto-refreshes
+  after every successful post.
+- Four independent leg fields (bank/shipping/cod_fee/other_fees);
+  category dropdown auto-disabled when `other_fees = 0`.
+- Bank-account picker restricted to `bank|cash` only — no payment
+  platforms / ad accounts.
+- Live "📊 ملخص التسوية" preview (current balance / each leg /
+  settlement total / remaining balance) with overspend warning.
+- Dedicated success card after submit: courier name, settlement
+  total, previous COD balance, remaining COD balance.
+- Zero backend changes — uses iter-190 endpoint as-is.
+
+### Iter-192 — P0 Bug Fix: Bank Balance Double-Counting
+- **Symptom**: Accounts page showed bank balance X (e.g. 212,363.30);
+  «حركة مالية جديدة» showed 2X (424,726.60). Caused by adding the
+  legacy `current_balance` AND the migration `opening_balance` ledger
+  entry (which mirrored `current_balance`).
+- **Single Source of Truth (SSOT) rule**: if the account has any
+  posted `opening_balance` ledger entry → live balance comes from the
+  ledger ONLY (`compute_balance(entity_type=bank).net_balance`). Else
+  → `current_balance`. Never both.
+- **Lazy backfill** (`_ensure_opening_balance_seeded`) — on first
+  universal-accounting touch of a non-migrated account, write an
+  `opening_balance` ledger entry equal to `current_balance` so the
+  ledger becomes authoritative forever after.
+- Backfill called from every cash-touching op (outflows + inflows):
+  advance / salary / custody / supplier_pay / external_grant /
+  external_collect / custody_return / expense_record / bank_transfer
+  (both ends) / courier_cod_deposit / courier_cod_settle.
+- **Cross-page consistency**: `_account_with_meta` (`/api/accounts`,
+  `/api/accounts/summary`) now applies the SAME SSOT rule, so the
+  Accounts page, summary cards, and UnifiedEntry screen ALWAYS agree.
+- New transparency field on the live-balances endpoint:
+  `balance_source: "ledger" | "current_balance"`.
+- Test: `tests/test_balance_no_double_count_iter192.py` —
+  regression-blocks doubling AND cross-page mismatch.
+
+### Open Items at This Checkpoint
+- 🟢 **Next**: Iter-189 — `payment_mode: "prepaid" | "deferred"` per
+  shipping company + Settings UI clarification.
+- 🔵 Iter-192-ext: per-order Shipping Ledger (delivered-only).
+- 🟠 P1 Tabby negative balance investigation.
+- 🟠 P0 (blocked, awaiting JSON): 15 orphan employees on production.
