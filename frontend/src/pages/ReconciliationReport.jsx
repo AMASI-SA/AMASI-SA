@@ -17,11 +17,12 @@
 import React, { useState, useEffect } from "react";
 import api from "../lib/api";
 import { toast } from "sonner";
+import { todaySA } from "../lib/dates";
 
 const fmt = (n) => Number(n || 0).toLocaleString(
     "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = todaySA;
 
 export default function ReconciliationReport() {
     const [data, setData] = useState(null);
