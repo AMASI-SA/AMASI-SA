@@ -94,6 +94,21 @@ class CustodySettleReceiptsIn(BaseModel):
     notes: Optional[str] = ""
 
 
+class CustodyTransferIn(BaseModel):
+    """Transfer open custody from one employee to another.
+
+    Pure inter-employee movement: no bank/cash account is involved.
+    Posts a balanced 2-entry txn:
+        debit:  to_employee.custody     +amount
+        credit: from_employee.custody   -amount
+    """
+    from_employee_id: str = Field(..., min_length=1)
+    to_employee_id: str = Field(..., min_length=1)
+    amount: float = Field(..., gt=0)
+    payment_date: Optional[str] = None
+    notes: Optional[str] = ""
+
+
 class EmployeeSettleIn(BaseModel):
     """Pay salary (+ optionally consume advances + post excess as new advance)"""
     amount: float = Field(..., gt=0)
@@ -473,6 +488,187 @@ def make_universal_router(db) -> APIRouter:
                 "balance": await compute_balance(
                     db, user_id=user["id"], entity_type="employee",
                     entity_id=emp_id, sub_account="custody")}
+
+    # ───────────────────────────────────────────────────────────────
+    # Custody transfer between two employees (pure inter-employee
+    # movement; no bank/cash touched).
+    # ───────────────────────────────────────────────────────────────
+    @router.post("/employees/custody/transfer")
+    async def transfer_custody_between_employees(
+        payload: CustodyTransferIn,
+        user: dict = Depends(current_user),
+    ):
+        if payload.from_employee_id == payload.to_employee_id:
+            raise HTTPException(
+                400, "لا يمكن النقل لنفس الموظف",
+            )
+
+        from_emp = await db.operating_salaries.find_one(
+            {"id": payload.from_employee_id, "user_id": user["id"]},
+            {"_id": 0, "id": 1, "name": 1},
+        )
+        if not from_emp:
+            raise HTTPException(404, "الموظف المحوِّل غير موجود")
+        to_emp = await db.operating_salaries.find_one(
+            {"id": payload.to_employee_id, "user_id": user["id"]},
+            {"_id": 0, "id": 1, "name": 1},
+        )
+        if not to_emp:
+            raise HTTPException(404, "الموظف المستلم غير موجود")
+
+        # Guard: cannot transfer more than the open custody balance.
+        bal_from = await compute_balance(
+            db, user_id=user["id"], entity_type="employee",
+            entity_id=payload.from_employee_id, sub_account="custody",
+        )
+        if bal_from["net_balance"] < payload.amount - 0.01:
+            raise HTTPException(
+                400,
+                f"رصيد عهدة الموظف المحوِّل ({bal_from['net_balance']:.2f}) "
+                f"أقل من المبلغ المراد نقله ({payload.amount:.2f})",
+            )
+
+        actor_id, actor_name = await _resolve_actor(user)
+        notes = (
+            payload.notes
+            or f"نقل عهدة — من {from_emp.get('name')} إلى {to_emp.get('name')}"
+        )
+        result = await post_txn_group(
+            db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
+            txn_type="custody_transfer", notes=notes,
+            metadata={
+                "from_employee_id": payload.from_employee_id,
+                "from_employee_name": from_emp.get("name"),
+                "to_employee_id": payload.to_employee_id,
+                "to_employee_name": to_emp.get("name"),
+                "payment_date": payload.payment_date,
+            },
+            entries=[
+                {"entity_type": "employee",
+                 "entity_id": payload.to_employee_id,
+                 "sub_account": "custody", "side": "debit",
+                 "amount": payload.amount, "entry_type": "custody_transfer",
+                 "metadata": {"counterpart_employee_id": payload.from_employee_id,
+                              "counterpart_employee_name": from_emp.get("name"),
+                              "direction": "in"}},
+                {"entity_type": "employee",
+                 "entity_id": payload.from_employee_id,
+                 "sub_account": "custody", "side": "credit",
+                 "amount": payload.amount, "entry_type": "custody_transfer",
+                 "metadata": {"counterpart_employee_id": payload.to_employee_id,
+                              "counterpart_employee_name": to_emp.get("name"),
+                              "direction": "out"}},
+            ],
+        )
+        return {
+            "ok": True, **result,
+            "from_balance": await compute_balance(
+                db, user_id=user["id"], entity_type="employee",
+                entity_id=payload.from_employee_id, sub_account="custody"),
+            "to_balance": await compute_balance(
+                db, user_id=user["id"], entity_type="employee",
+                entity_id=payload.to_employee_id, sub_account="custody"),
+        }
+
+    # ───────────────────────────────────────────────────────────────
+    # Custody open balances report — one row per employee with
+    # breakdown by entry_type. Powers the "تقرير أرصدة العهد
+    # المفتوحة" page.
+    # ───────────────────────────────────────────────────────────────
+    @router.get("/employees/custody/open-balances")
+    async def custody_open_balances(
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        # Aggregate sub_account=custody entries grouped by
+        # (employee_id, entry_type, side). One DB roundtrip.
+        pipeline = [
+            {"$match": {
+                "user_id": uid,
+                "entity_type": "employee",
+                "sub_account": "custody",
+                "status": "posted",
+            }},
+            {"$group": {
+                "_id": {
+                    "emp": "$entity_id",
+                    "etype": "$entry_type",
+                    "side": "$side",
+                },
+                "total": {"$sum": "$amount"},
+            }},
+        ]
+        # employee_id -> bucket dict
+        buckets: dict[str, dict] = {}
+        async for row in db.general_ledger.aggregate(pipeline):
+            emp_id = row["_id"]["emp"]
+            etype = row["_id"]["etype"]
+            side = row["_id"]["side"]
+            amt = round(float(row["total"]), 2)
+            b = buckets.setdefault(emp_id, {
+                "granted": 0.0,
+                "settled_receipts": 0.0,
+                "returned_cash": 0.0,
+                "transferred_out": 0.0,
+                "transferred_in": 0.0,
+                "opening": 0.0,
+                "other_debit": 0.0,
+                "other_credit": 0.0,
+                "debits": 0.0,
+                "credits": 0.0,
+            })
+            if side == "debit":
+                b["debits"] += amt
+            else:
+                b["credits"] += amt
+            if etype == "custody_grant":
+                b["granted"] += amt
+            elif etype == "custody_expense":
+                b["settled_receipts"] += amt
+            elif etype == "custody_return":
+                b["returned_cash"] += amt
+            elif etype == "custody_transfer":
+                if side == "debit":
+                    b["transferred_in"] += amt
+                else:
+                    b["transferred_out"] += amt
+            elif etype == "opening_balance":
+                b["opening"] += amt if side == "debit" else -amt
+            else:
+                if side == "debit":
+                    b["other_debit"] += amt
+                else:
+                    b["other_credit"] += amt
+
+        if not buckets:
+            return {"rows": [], "total_open_balance": 0.0}
+
+        emp_ids = list(buckets.keys())
+        emp_docs = await db.operating_salaries.find(
+            {"user_id": uid, "id": {"$in": emp_ids}},
+            {"_id": 0, "id": 1, "name": 1},
+        ).to_list(2000)
+        name_map = {e["id"]: e.get("name") for e in emp_docs}
+
+        rows = []
+        for emp_id, b in buckets.items():
+            open_balance = round(b["debits"] - b["credits"], 2)
+            rows.append({
+                "employee_id": emp_id,
+                "name": name_map.get(emp_id) or "(موظف محذوف)",
+                "granted":            round(b["granted"], 2),
+                "settled_receipts":   round(b["settled_receipts"], 2),
+                "returned_cash":      round(b["returned_cash"], 2),
+                "transferred_out":    round(b["transferred_out"], 2),
+                "transferred_in":     round(b["transferred_in"], 2),
+                "opening":            round(b["opening"], 2),
+                "other_debit":        round(b["other_debit"], 2),
+                "other_credit":       round(b["other_credit"], 2),
+                "open_balance":       open_balance,
+            })
+        rows.sort(key=lambda r: (-r["open_balance"], r["name"] or ""))
+        total_open = round(sum(r["open_balance"] for r in rows), 2)
+        return {"rows": rows, "total_open_balance": total_open}
 
     # ═══════════════════════════════════════════════════════════════
     # Employee: Salary Settlement

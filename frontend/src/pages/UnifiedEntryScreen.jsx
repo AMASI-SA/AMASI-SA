@@ -18,6 +18,7 @@ const OP_TYPES = [
     { value: "custody_grant",        label: "🎒 تسليم عهدة",           section: "employees" },
     { value: "custody_return",       label: "🔙 إرجاع عهدة نقداً",     section: "employees" },
     { value: "custody_settle",       label: "🧾 تسوية عهدة بفواتير",  section: "employees" },
+    { value: "custody_transfer",     label: "🔄 نقل عهدة بين موظفين",  section: "employees" },
     { value: "supplier_invoice",     label: "📄 فاتورة مورد",          section: "suppliers" },
     { value: "supplier_pay",         label: "💸 سداد مورد",            section: "suppliers" },
     { value: "external_grant",       label: "🤝 سلفة لشخص خارجي",    section: "externals" },
@@ -63,6 +64,7 @@ export default function UnifiedEntryScreen() {
 
     // Form fields (used by various ops)
     const [entityId, setEntityId] = useState("");
+    const [entityToId, setEntityToId] = useState("");
     const [amount, setAmount] = useState("");
     const [bankId, setBankId] = useState("");
     const [bankToId, setBankToId] = useState("");
@@ -169,7 +171,7 @@ export default function UnifiedEntryScreen() {
     })(); }, []);
 
     const resetForm = () => {
-        setEntityId(""); setAmount(""); setBankId(""); setBankToId("");
+        setEntityId(""); setEntityToId(""); setAmount(""); setBankId(""); setBankToId("");
         setNotes(""); setInvoiceNo(""); setResult(null);
         setCustodyItems([{ expense_category: "", amount: "", notes: "" }]);
     };
@@ -223,6 +225,12 @@ export default function UnifiedEntryScreen() {
                 }
                 break;
             }
+            case "custody_transfer": {
+                const toName = employees.find(x => x.id === entityToId)?.name;
+                e.push({ side: "debit",  acc: `عهدة ${toName || ""}`,  amt });
+                e.push({ side: "credit", acc: `عهدة ${empName || ""}`, amt });
+                break;
+            }
             case "supplier_invoice":
                 e.push({ side: "debit",  acc: `مصروف: ${catName || ""}`, amt });
                 e.push({ side: "credit", acc: `مورد ${supName || ""}`,    amt });
@@ -251,7 +259,7 @@ export default function UnifiedEntryScreen() {
         const debit = e.filter(x => x.side === "debit").reduce((s, x) => s + x.amt, 0);
         const credit = e.filter(x => x.side === "credit").reduce((s, x) => s + x.amt, 0);
         return { entries: e, debit, credit, balanced: Math.abs(debit - credit) < 0.01 };
-    }, [opType, amount, entityId, bankId, bankToId, expCategory, custodyItems,
+    }, [opType, amount, entityId, entityToId, bankId, bankToId, expCategory, custodyItems,
         employees, suppliers, externals, banks, categories]);
 
     const submit = async () => {
@@ -297,6 +305,23 @@ export default function UnifiedEntryScreen() {
                         ...common,
                     };
                     break;
+                case "custody_transfer":
+                    if (!entityId || !entityToId) {
+                        toast.error("اختر الموظف المحوِّل والمستلم");
+                        setBusy(false); return;
+                    }
+                    if (entityId === entityToId) {
+                        toast.error("لا يمكن النقل لنفس الموظف");
+                        setBusy(false); return;
+                    }
+                    url = `/accounting/employees/custody/transfer`;
+                    body = {
+                        from_employee_id: entityId,
+                        to_employee_id: entityToId,
+                        amount: amt,
+                        ...common,
+                    };
+                    break;
                 case "supplier_invoice":
                     url = `/accounting/suppliers/${entityId}/invoice`;
                     body = { amount: amt, expense_category: expCategory,
@@ -338,10 +363,11 @@ export default function UnifiedEntryScreen() {
 
     const op = OP_TYPES.find(x => x.value === opType);
     const needsEmployee = ["advance_grant","salary_settle","salary_accrual",
-        "custody_grant","custody_return","custody_settle"].includes(opType);
+        "custody_grant","custody_return","custody_settle","custody_transfer"].includes(opType);
+    const needsEmployeeTo = opType === "custody_transfer";
     const needsSupplier = ["supplier_invoice","supplier_pay"].includes(opType);
     const needsExternal = ["external_grant","external_collect"].includes(opType);
-    const needsBank = !["salary_accrual","custody_settle","supplier_invoice"].includes(opType);
+    const needsBank = !["salary_accrual","custody_settle","supplier_invoice","custody_transfer"].includes(opType);
     const needsBankTo = opType === "bank_transfer";
     const needsCategory = ["supplier_invoice","expense_record"].includes(opType);
 
@@ -399,13 +425,32 @@ export default function UnifiedEntryScreen() {
                         {/* Entity */}
                         {needsEmployee && (
                             <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">الموظف:</label>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">
+                                    {opType === "custody_transfer" ? "من الموظف (المحوِّل):" : "الموظف:"}
+                                </label>
                                 <select value={entityId} onChange={e => setEntityId(e.target.value)}
                                     className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
                                     data-testid="unified-entity-employee">
                                     <option value="">— اختر —</option>
                                     {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                                 </select>
+                            </div>
+                        )}
+                        {needsEmployeeTo && (
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">
+                                    إلى الموظف (المستلم):
+                                </label>
+                                <select value={entityToId} onChange={e => setEntityToId(e.target.value)}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                                    data-testid="unified-entity-employee-to">
+                                    <option value="">— اختر —</option>
+                                    {employees.filter(e => e.id !== entityId).map(e =>
+                                        <option key={e.id} value={e.id}>{e.name}</option>)}
+                                </select>
+                                <p className="text-[11px] text-slate-500 mt-1 leading-tight">
+                                    💡 العملية تنقل رصيد العهدة من المحوِّل إلى المستلم بدون أي تأثير على البنك أو الصندوق.
+                                </p>
                             </div>
                         )}
                         {needsSupplier && (

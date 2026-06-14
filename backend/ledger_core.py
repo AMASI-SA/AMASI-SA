@@ -97,6 +97,7 @@ ENTRY_TYPES = (
     "custody_return",       # إرجاع عهدة نقداً: نقص custody + زيادة bank
     "custody_expense",      # إقفال عهدة بفواتير: نقص custody + مصروف
     "custody_to_advance",   # تحويل باقي عهدة لسلفة: نقص custody + زيادة advance
+    "custody_transfer",     # نقل عهدة بين موظفين: نقص custody (محوِّل) + زيادة custody (مستلم)
     # Suppliers
     "supplier_invoice",     # فاتورة مورد: مصروف/مخزون + زيادة supplier.payable
     "supplier_payment",     # سداد مورد: نقص payable + نقص bank
