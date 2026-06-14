@@ -2101,3 +2101,77 @@ returns plausible output even before migration (correctly reports
   salary_settle's advance offset leg after stability proven.
 
 
+## Checkpoint — Iter-197 (Reconciliation Forensic Endpoint)
+
+- New read-only endpoint
+  `GET /api/audit/reconciliation-forensic` in
+  `/app/backend/reconciliation_forensic_routes.py`.
+- Classifies every reconciliation diff (employees, banks, payment
+  platforms, suppliers, externals, couriers) into:
+  `no_ledger_entries | migration_iter161_only | opening_only |
+  post_cutoff_ops | mixed | legacy_formula_drift | no_legacy_data`.
+- Surfaces per-entity breakdowns by entry_type × side and iter161
+  vs post-cutoff totals so the merchant can root-cause each Δ
+  without touching any data.
+- Read-only verified on Preview (skeleton OK; awaits production
+  JSON for analysis).
+
+
+## Checkpoint — Iter-198 (Bank Detail SSOT Unification)
+
+### What & Why
+Merchant reported P0: top-card balance on the bank-detail page
+showed the iter-192 ledger SSOT (e.g. 166,449.30) while the last
+`balance_after` in the transactions log showed the stale frozen
+`account_transactions` value (e.g. 254,208.67). Drift = 87k SAR.
+Root cause: post-migration operations are now written to
+`general_ledger` ONLY; the legacy `account_transactions` log is
+frozen at the migration snapshot.
+
+### Backend
+- New `_ledger_based_tx_feed(db, user_id, account_id)` helper in
+  `/app/backend/accounts_routes.py` that builds the transactions
+  feed FROM `general_ledger` for migrated bank/cash accounts:
+  iterates posted rows chronologically, computes a running balance
+  that lands exactly on `compute_balance().net_balance`, and shapes
+  each row as `account_transactions` (id, type_label, direction
+  in/out, amount, description, transaction_date, balance_after,
+  status, txn_group_id, source='ledger', metadata).
+- `GET /api/accounts/{id}/transactions` now branches:
+  - If the bank/cash account has a posted `opening_balance` row
+    in `general_ledger` → ledger feed.
+  - Otherwise → legacy `account_transactions` feed
+    (source='account_tx') — unchanged.
+- Extended `TRANSACTION_TYPE_LABELS` to cover 20+ ledger entry
+  types (sale, salary_payment, advance_grant, custody_grant,
+  correction, courier_cod_settle, etc.) so the UI shows Arabic
+  labels for ledger-sourced rows.
+
+### Tests
+- `/app/backend/tests/test_bank_detail_ssot_iter198.py` (9
+  assertions in one consolidated test): ledger ground-truth ==
+  top card == last running balance in /transactions == summary
+  bank total; running balance walks correctly for every row;
+  adding a new ledger entry moves both top card and last running
+  balance in lock-step; non-migrated bank stays on the legacy
+  feed (regression guard).
+- ✅ Passes; iter-192/195/196 regression tests still green.
+
+### Preview Visual Verification
+Created a synthetic migrated bank on Preview (cleaned up
+afterwards) with a stale `current_balance=254,208.67` and a
+ledger chain summing to 116,449.30. Confirmed end-to-end:
+- Top card: 116,449.30 (source=ledger)
+- Last balance_after in transactions: 116,449.30 (source=ledger)
+- Accounts list: 116,449.30
+- Unified Entry cash-accounts-with-balances: 116,449.30
+- Summary by_type.bank includes 116,449.30
+All five sources unified.
+
+### Notes
+- Raw `accounts.current_balance` is INTENTIONALLY left untouched
+  (preserved as `current_balance_legacy` in the API response).
+- `account_transactions` is NOT modified or deleted — kept for
+  audit and to support non-migrated accounts.
+
+
