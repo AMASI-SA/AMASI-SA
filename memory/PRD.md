@@ -1357,3 +1357,98 @@ flows topup ↔ cron-spend continuously → bug triggered every sync.
 underlying cached `counterparties.balance` may still drift, but the
 displayed value (from walk) is canonical and always correct. Merchant
 should `Save to Github → Redeploy` to push to mezansalla.com.
+
+
+## Iter-176 — COD Source Diagnostic (Feb 2026)
+**Merchant's question** (before Phase 4 Closeout): "What does the COD
+balance (40,123.78 SAR on production) actually represent? Is it
+collected cash, pending orders, or expected receivable? Why is the
+shipping companies section empty? How much per SMSA/iMile?"
+
+**Investigation findings** (Preview DB):
+  • The COD account `الدفع عند الاستلام` is stored as
+    `accounts.account_type=payment_platform`, with the formula:
+    `current_balance = expected_orders_balance + IN − OUT`.
+  • `expected_orders_balance` is computed by
+    `payment_gateway_metrics.compute_metrics()` which classifies
+    orders by `order_status_policy` into Confirmed / Pending /
+    Cancelled / Refunded buckets.
+  • **The system uses "Confirmed" as the basis — NOT "Delivered".**
+    On Preview, 30 confirmed orders → 8,540.26 (= the balance), while
+    29 delivered orders → 8,357.39 (a 182.87 SAR gap representing
+    confirmed-but-not-yet-delivered orders).
+  • Shipping companies are present in `unified_orders.shipping_company`
+    (iMile 54 orders, مندوب الرياض 19, SMSA 7) BUT there are no
+    `counterparties(kind=courier)` records → the Reconciliation
+    Report's "Shipping Companies" section shows empty by design.
+
+**Endpoint shipped**: `GET /api/diagnostics/cod-source`
+(`cod_diagnostic_routes.py`) — read-only, returns:
+  • Account snapshot (id, current_balance, expected_orders_balance,
+    orders_count).
+  • Total COD orders found in DB.
+  • Per-policy-category breakdown (count + gross).
+  • Per-raw-status breakdown (e.g. "تم التوصيل", "جاري التوصيل").
+  • Per-shipping-company breakdown (ALL + Delivered-only).
+  • Manual transactions (IN/OUT) total + recent sample.
+  • Reconciliation check: expected + IN − OUT vs actual.
+  • Robust COD detection via `payment_methods.normalize_payment_method`
+    handles Arabic hamza variants (الإستلام vs الاستلام).
+
+**UI page shipped**: `/diagnostics/cod-source`
+(`CODDiagnostic.jsx`) — surfaces all of the above in tables/cards
+including:
+  • Prominent banner stating system uses Confirmed (not Delivered).
+  • Side-by-side Confirmed vs Delivered comparison block with the
+    pending-delivery gap.
+  • Reconciliation formula block (visible math).
+  • Decision-help block explaining what each scenario means for
+    Phase 4 migration.
+
+**Merchant decision pending**: After reviewing the page on
+mezansalla.com, choose between:
+  (a) migrate the current Confirmed balance as-is,
+  (b) tweak the logic to use Delivered-only,
+  (c) defer COD to the Shipping Sprint entirely.
+
+## Iter-177 — Timezone Standardization (in planning, Feb 2026)
+**Merchant requirement** (before any new feature like COD detailed
+or Meta/Snap CRON): Unify entire system on `Asia/Riyadh`. All
+date/time fields shown to merchant or used in daily/monthly
+aggregations must respect Riyadh timezone. UTC stays for storage.
+
+**Current state**:
+  • `tz_utils.py` exists (Iter-140) with `riyadh_today()`,
+    `riyadh_now()`, `riyadh_today_iso()`.
+  • Used in `migration_routes`, `webhook_routes`, `liabilities_routes`.
+  • `snapchat_routes.py` already implements Riyadh-day boundaries.
+  • Only ONE bare `datetime.now()` in non-test code:
+    `preparation_routes.py:1050` (PDF filename — non-critical).
+  • 46 files use `datetime.now(timezone.utc)` (correct for storage).
+  • Frontend has NO central `tzUtils.js`; 10+ files use bare
+    `new Date()`.
+
+**Planned scope** (Phase 1+2+3 per merchant approval pending):
+  1. Expand `tz_utils.py` with:
+     - `RIYADH_TZ` (ZoneInfo).
+     - `riyadh_start_of_day_utc(date_str) → datetime UTC` for mongo
+       range queries.
+     - `riyadh_end_of_day_utc`, `riyadh_start_of_month_utc`,
+       `riyadh_end_of_month_utc`.
+     - Convenience: `riyadh_range_today/yesterday/last_7d/last_30d`.
+     - `utc_to_riyadh_iso(dt)` for response formatting.
+  2. Create `/app/frontend/src/lib/tzUtils.js` with parallel helpers.
+  3. Audit endpoints accepting `from_date/to_date/period` and ensure
+     interpretation is Riyadh.
+  4. Fix `preparation_routes.py:1050`.
+  5. PRD policy entry to enforce future use.
+
+**Decision pending**: Merchant to choose Phase 1 / 1+2+3 / "priority
+double" mode.
+
+## Deployment Health Check Findings (Feb 2026)
+The deployment_agent flagged one **BLOCKER** unrelated to COD/TZ:
+  • `backend/salla_integration/routes.py:68-73` — `_frontend_origin()`
+    reads `SALLA_RETURN_URL` env var with hardcoded localhost fallback.
+    Recommendation: have frontend send `redirect_uri` derived from
+    `window.location.origin`. **Not yet fixed; merchant aware.**
