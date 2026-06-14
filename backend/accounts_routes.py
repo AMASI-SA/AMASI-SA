@@ -294,6 +294,37 @@ async def _account_with_meta(db, user_id: str, doc: dict) -> dict:
         {"user_id": user_id, "account_id": out["id"]}
     )
 
+    # Iter-192 — Single Source of Truth for bank/cash balances.
+    # When the account has any Universal Ledger activity (i.e. an
+    # opening_balance entry posted by Phase-4 migration or by the
+    # iter-192 auto-seed on first ledger touch), the live balance
+    # MUST come from the ledger only — never from the legacy
+    # `current_balance` field. Mixing the two double-counts the
+    # migration opening entry (which was equal to current_balance
+    # at cutoff time) and yields 2x balances in the new-transaction
+    # screen vs the Accounts page.
+    if out.get("account_type") in ("bank", "cash"):
+        try:
+            from ledger_core import compute_balance as _cb
+            has_opening = await db.general_ledger.find_one(
+                {"user_id": user_id, "entity_type": "bank",
+                 "entity_id": out["id"],
+                 "entry_type": "opening_balance",
+                 "status": "posted"},
+                {"_id": 1},
+            )
+            if has_opening:
+                bal = await _cb(
+                    db, user_id=user_id, entity_type="bank",
+                    entity_id=out["id"], sub_account="main",
+                )
+                out["current_balance_legacy"] = out.get("current_balance")
+                out["current_balance"] = round(float(bal["net_balance"]), 2)
+                out["balance_source"] = "ledger"
+                return out
+        except Exception:  # noqa: BLE001
+            pass
+
     # Iter-118 — SSOT for BNPL provider balances.  When this account
     # is a Tabby/Tamara wallet, override `current_balance` with the
     # canonical BNPL formula so the Accounts/Transfers page shows the
@@ -352,7 +383,11 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         # Iter-119 — apply BNPL SSOT when summing payment_platform totals
         # so the 4 summary cards on /accounts MATCH the per-row balances
         # (which already go through `_account_with_meta` → SSOT).
+        # Iter-192 — apply LEDGER SSOT for bank/cash accounts that have
+        # a migration opening_balance entry, otherwise the summary cards
+        # double-count exactly like the new-transaction screen did.
         from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
+        from ledger_core import compute_balance as _cb
         by_type: dict[str, float] = {t: 0.0 for t in ACCOUNT_TYPES}
         grand = 0.0
         async for d in cur:
@@ -365,6 +400,20 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
                         db, user["id"], bnpl_provider,
                     )
                     bal = float(canon["balance"])
+                elif t in ("bank", "cash"):
+                    has_opening = await db.general_ledger.find_one(
+                        {"user_id": user["id"], "entity_type": "bank",
+                         "entity_id": d["id"],
+                         "entry_type": "opening_balance",
+                         "status": "posted"},
+                        {"_id": 1},
+                    )
+                    if has_opening:
+                        x = await _cb(
+                            db, user_id=user["id"], entity_type="bank",
+                            entity_id=d["id"], sub_account="main",
+                        )
+                        bal = round(float(x["net_balance"]), 2)
             except Exception:  # noqa: BLE001
                 pass
             grand += bal

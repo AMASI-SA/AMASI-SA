@@ -271,11 +271,15 @@ async def _enforce_account_binding(
 
 
 # ── Iter-185 — Account live-balance helper & insufficient-funds guard
-# Live balance = legacy stored balance (account_transactions sum, kept in
-# `db.accounts.current_balance`) + ledger delta for entity_type=bank.
-# This way both legacy entries AND ledger entries posted by the universal
-# accounting flow are reflected in the same number that the merchant
-# sees on the Accounts page.
+# Iter-192 — DOUBLE-COUNTING BUG FIX. Phase 4 migration writes
+# `opening_balance` ledger entries that mirror `current_balance`. The
+# previous "current_balance + ledger.net_balance" calculation thus
+# doubled migrated accounts. New logic:
+#   • If the account has at least one `opening_balance` ledger entry
+#     ⇒ ledger is the single source of truth. live = ledger.net_balance.
+#   • Otherwise (legacy / pre-migration / freshly-created account)
+#     ⇒ live = current_balance (= legacy account_transactions sum).
+# Either way: live is computed from EXACTLY ONE source, never both.
 async def _account_live_balance(
     db, *, user_id: str, account_id: str,
 ) -> tuple[float, dict]:
@@ -287,13 +291,67 @@ async def _account_live_balance(
     )
     if not acc:
         return 0.0, {}
-    base = float(acc.get("current_balance") or 0)
-    bal = await compute_balance(
-        db, user_id=user_id, entity_type="bank",
-        entity_id=account_id, sub_account="main",
+    has_opening_ledger = await db.general_ledger.find_one(
+        {"user_id": user_id, "entity_type": "bank",
+         "entity_id": account_id, "entry_type": "opening_balance",
+         "status": "posted"},
+        {"_id": 1},
     )
-    live = round(base + bal["net_balance"], 2)
+    if has_opening_ledger:
+        bal = await compute_balance(
+            db, user_id=user_id, entity_type="bank",
+            entity_id=account_id, sub_account="main",
+        )
+        live = round(float(bal["net_balance"]), 2)
+    else:
+        live = round(float(acc.get("current_balance") or 0), 2)
     return live, acc
+
+
+async def _ensure_opening_balance_seeded(
+    db, *, user_id: str, account_id: str,
+) -> None:
+    """Iter-192 — lazy backfill so the ledger becomes the single source
+    of truth on the first universal-accounting touch of a non-migrated
+    account.
+
+    If the account has any ledger entry already, we assume the ledger
+    is authoritative (no action). Otherwise we copy its stored
+    `current_balance` into a synthetic `opening_balance` debit so the
+    subsequent universal op produces a consistent net balance.
+    """
+    has_any = await db.general_ledger.find_one(
+        {"user_id": user_id, "entity_type": "bank",
+         "entity_id": account_id, "status": "posted"},
+        {"_id": 1},
+    )
+    if has_any:
+        return
+    acc = await db.accounts.find_one(
+        {"id": account_id, "user_id": user_id},
+        {"_id": 0, "current_balance": 1, "name": 1},
+    )
+    if not acc:
+        return
+    cur = float(acc.get("current_balance") or 0)
+    if abs(cur) < 0.005:
+        return
+    from ledger_core import post_txn_group as _ptg
+    await _ptg(
+        db, user_id=user_id, actor_id=user_id, actor_name="auto-seed",
+        txn_type="adjustment",
+        notes=f"رصيد افتتاحي تلقائي عند أول قيد على «{acc.get('name')}»",
+        metadata={"source": "iter192_auto_seed"},
+        entries=[
+            {"entity_type": "bank", "entity_id": account_id,
+             "sub_account": "main", "side": "debit",
+             "amount": round(cur, 2),
+             "entry_type": "opening_balance"},
+            {"entity_type": "equity", "entity_id": "opening_balance",
+             "side": "credit", "amount": round(cur, 2),
+             "entry_type": "opening_balance"},
+        ],
+    )
 
 
 async def _enforce_sufficient_funds(
@@ -303,6 +361,11 @@ async def _enforce_sufficient_funds(
     account's live balance. Raises 400 with the merchant-facing error
     message specified in the iter-185 requirement.
     """
+    # Iter-192 — seed opening_balance if needed so the post-op live
+    # balance reads correctly from the ledger alone.
+    await _ensure_opening_balance_seeded(
+        db, user_id=user_id, account_id=account_id,
+    )
     live, _acc = await _account_live_balance(
         db, user_id=user_id, account_id=account_id,
     )
@@ -570,6 +633,12 @@ def make_universal_router(db) -> APIRouter:
             raise HTTPException(404, "الحساب البنكي غير موجود")
         await _enforce_account_binding(
             db, user_id=user["id"], op_type="custody_return",
+            account_id=payload.deposited_to_account_id,
+        )
+        # Iter-192 — seed opening_balance on inflow target so the live
+        # balance keeps a single source of truth (the ledger).
+        await _ensure_opening_balance_seeded(
+            db, user_id=user["id"],
             account_id=payload.deposited_to_account_id,
         )
         actor_id, actor_name = await _resolve_actor(user)
@@ -870,11 +939,31 @@ def make_universal_router(db) -> APIRouter:
             db, user_id=uid, entity_type="bank", entity_ids=ids,
         ) if ids else {}
 
+        # Iter-192 — Determine which accounts have a migration
+        # opening_balance entry. For those, ledger is the SINGLE source
+        # of truth; mixing in current_balance double-counts the
+        # opening. Everyone else falls back to current_balance.
+        migrated_ids: set[str] = set()
+        if ids:
+            async for row in db.general_ledger.find(
+                {"user_id": uid, "entity_type": "bank",
+                 "entity_id": {"$in": ids},
+                 "entry_type": "opening_balance",
+                 "status": "posted"},
+                {"_id": 0, "entity_id": 1},
+            ):
+                migrated_ids.add(row["entity_id"])
+
         out = []
         for d in docs:
             base = float(d.get("current_balance") or 0)
             ledger_net = float(bulk.get(d["id"], {}).get("net_balance", 0) or 0)
-            live = round(base + ledger_net, 2)
+            if d["id"] in migrated_ids:
+                live = round(ledger_net, 2)
+                source = "ledger"
+            else:
+                live = round(base, 2)
+                source = "current_balance"
             out.append({
                 "id": d["id"],
                 "name": d.get("name"),
@@ -883,6 +972,7 @@ def make_universal_router(db) -> APIRouter:
                 "current_balance": round(base, 2),
                 "ledger_delta": round(ledger_net, 2),
                 "live_balance": live,
+                "balance_source": source,
             })
         return {"accounts": out}
 
@@ -1289,6 +1379,10 @@ def make_universal_router(db) -> APIRouter:
             db, user_id=user["id"], op_type="external_collect",
             account_id=payload.deposited_to_account_id,
         )
+        await _ensure_opening_balance_seeded(
+            db, user_id=user["id"],
+            account_id=payload.deposited_to_account_id,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
             db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
@@ -1343,6 +1437,11 @@ def make_universal_router(db) -> APIRouter:
             db, user_id=user["id"],
             account_id=payload.from_account_id,
             amount=payload.amount,
+        )
+        # Iter-192 — seed destination account too (inflow side).
+        await _ensure_opening_balance_seeded(
+            db, user_id=user["id"],
+            account_id=payload.to_account_id,
         )
         names = {a["id"]: a["name"] for a in accs}
         actor_id, actor_name = await _resolve_actor(user)
@@ -1519,6 +1618,11 @@ def make_universal_router(db) -> APIRouter:
         )
         if not acc:
             raise HTTPException(404, "الحساب البنكي غير موجود")
+        # Iter-192 — seed opening_balance on first ledger touch.
+        await _ensure_opening_balance_seeded(
+            db, user_id=user["id"],
+            account_id=payload.paid_from_account_id,
+        )
         actor_id, actor_name = await _resolve_actor(user)
         result = await post_txn_group(
             db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
@@ -1613,6 +1717,10 @@ def make_universal_router(db) -> APIRouter:
                     "حساب الإيداع يجب أن يكون من نوع «بنك» أو "
                     "«صندوق نقدي» فقط.",
                 )
+            # Iter-192 — seed opening_balance on first ledger touch.
+            await _ensure_opening_balance_seeded(
+                db, user_id=uid, account_id=payload.bank_account_id,
+            )
 
         # ── Validate the other_fees category. ─────────────────────
         if other > 0:
