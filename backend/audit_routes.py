@@ -98,7 +98,7 @@ def make_audit_router(db, current_user):
         negative_accounts = []
         async for a in db.accounts.find(
             {"user_id": uid,
-             "account_type": {"$in": ["bank", "payment_platform"]},
+             "account_type": {"$in": ["bank", "cash", "payment_platform"]},
              "current_balance": {"$lt": 0}},
             {"_id": 0, "id": 1, "name": 1, "account_type": 1,
              "current_balance": 1, "normalized_payment_method": 1},

@@ -12,6 +12,7 @@ import PendingOrdersCard from "../components/PendingOrdersCard";
 
 const TYPE_META = {
     bank:             { label: "حساب بنكي",   icon: Bank,       cls: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+    cash:             { label: "صندوق نقدي",  icon: Wallet,     cls: "bg-amber-100 text-amber-800 border-amber-200" },
     payment_platform: { label: "منصة دفع",     icon: CreditCard, cls: "bg-sky-100 text-sky-800 border-sky-200" },
     ads_platform:     { label: "حساب إعلاني",  icon: Megaphone,  cls: "bg-violet-100 text-violet-800 border-violet-200" },
 };
@@ -334,7 +335,7 @@ function AccountFormModal({ initial, catalogue, banks, onClose, onSaved }) {
                     {!isEdit && (
                         <div>
                             <label className="block text-sm font-semibold mb-1.5">نوع الحساب</label>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 {Object.entries(TYPE_META).map(([key, m]) => {
                                     const Icon = m.icon;
                                     const active = form.account_type === key;
@@ -566,6 +567,7 @@ export default function Accounts() {
                 {[
                     { key: "all",              label: "الكل" },
                     { key: "bank",             label: "البنوك" },
+                    { key: "cash",             label: "الصناديق النقدية" },
                     { key: "payment_platform", label: "منصات الدفع" },
                     { key: "ads_platform",     label: "الإعلانات" },
                     { key: "hidden",           label: "المخفية" },

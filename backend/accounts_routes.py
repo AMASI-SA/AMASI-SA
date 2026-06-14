@@ -42,10 +42,11 @@ from reconciliation_routes import (
 
 
 # ── Catalogue ──────────────────────────────────────────────────────────────
-ACCOUNT_TYPES = ("bank", "payment_platform", "ads_platform")
+ACCOUNT_TYPES = ("bank", "cash", "payment_platform", "ads_platform")
 
 ACCOUNT_TYPE_LABELS = {
     "bank":             "حساب بنكي",
+    "cash":             "صندوق نقدي",
     "payment_platform": "منصة دفع",
     "ads_platform":     "حساب إعلاني",
 }
@@ -56,6 +57,10 @@ SUGGESTED_PROVIDERS = {
     "bank": [
         "بنك الراجحي", "بنك الأهلي", "بنك الإنماء", "بنك ساب",
         "بنك الرياض", "بنك البلاد", "بنك الجزيرة",
+    ],
+    "cash": [
+        "الصندوق الرئيسي", "صندوق المعرض", "صندوق المستودع",
+        "صندوق الفرع", "خزينة المدير", "نقدية في يد الموظف",
     ],
     "payment_platform": [
         "سلة", "تابي", "تمارا", "إمكان",
