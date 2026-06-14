@@ -1,0 +1,40 @@
+{
+  "summary": "Iter-196 Employee Misposting Correction — full backend + frontend E2E validated against live Preview URL. All 13 critical scenarios pass: validation rules (same employee 400, over-amount 400, short reason 422), partial correction, bank read-only invariant, audit log, correctable-operations listing, UI flow (employee pickers → operation list → confirm modal → success toast → audit row). Bank balance verified unchanged in Mongo before/after every correction.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/accounting/employees/corrections",
+        "issue": "audit-log `is_partial` is sourced from `metadata.partial = (amount < original_amount)` which is true for EVERY split correction, even the one that closes the residual. Review spec asked for the second 1500-of-3000 correction (which completes 3000) to surface `is_partial=false`. Current output: both rows show `is_partial=true`. Semantic mismatch with `POST correct-misposting` response's `is_partial` which correctly reflects 'remaining > 0 after this op'. Fix suggestion: in `list_corrections`, derive `is_partial` from `remaining_after_this > 0` per group, or change metadata.partial to mean 'residual remained'."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_employee_correction_iter196.py",
+    "/app/backend/tests/test_iter196_preview_e2e.py",
+    "/app/test_reports/pytest/iter196_correction.xml",
+    "/app/test_reports/pytest/iter196_preview.xml"
+  ],
+  "action_items": [
+    "Align audit-log `is_partial` semantics with the spec (second/closing correction should report is_partial=false). Either compute per-group residual at read time, or fix metadata.partial at write time to mean 'residual remains > 0 after this leg'."
+  ],
+  "critical_code_review_comments": [
+    "corrections_routes.py — `metadata.partial` is computed as `amount < original_amount - 0.001` regardless of already-corrected total. Should be `amount < remaining - 0.001` to match the response.is_partial contract and the spec wording (`partial only when residual remains`).",
+    "Frontend EmployeeCorrections.jsx — correction-amount input prefills with `remaining_correctable` on selection, which is good UX. Confirm-modal copy 'لن يتأثر البنك ولا الصندوق' matches spec exactly. data-testids are complete and stable."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter196_preview_e2e.py (new — live Preview E2E)"
+  ],
+  "success_rate": {"backend": "100% (1/1 internal pytest + 1/1 Preview E2E)", "frontend": "100% (full UI flow incl. confirm modal + audit row)"},
+  "test_credentials": "Registered fresh users per run via /api/auth/register (no real merchant account touched).",
+  "seed_data_creation": "Per-test temp user + bank account + 2 employees + salary accrual + settlement; all cleaned up via DB delete_many on user_id after run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Both pytest files (test_employee_correction_iter196.py for ASGI in-process and test_iter196_preview_e2e.py for live HTTPS) are now part of regression. Helper script `/tmp/iter196_ui_seed.json` was throwaway. The only outstanding semantic gap is `GET /employees/corrections.is_partial` showing True for the closing leg of a 2-step split correction.",
+  "rca_of_the_issue": "Audit-log is_partial divergence RCA: write-path sets `metadata.partial = amount < original_amount - 0.001` inside `correct_misposting` (corrections_routes.py:274). For 1500 of original 3000 it evaluates True; for the SECOND 1500 (which closes the residual) it also evaluates True because the comparison ignores already_corrected. Fix: change to `metadata.partial = (remaining - amount) > 0.001` (i.e. same logic the response `is_partial` already uses two lines above the return)."
+}
