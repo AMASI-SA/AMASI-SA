@@ -3552,6 +3552,9 @@ api.include_router(make_tabby_phase2_router(db, current_user))
 # Iter-196 — Employee misposting correction (employee ledger only)
 from corrections_routes import make_corrections_router
 api.include_router(make_corrections_router(db, current_user))
+# Iter-197 — Reconciliation Forensic (read-only diff classifier)
+from reconciliation_forensic_routes import make_reconciliation_forensic_router
+api.include_router(make_reconciliation_forensic_router(db, current_user))
 app.include_router(api)
 
 # CORS
