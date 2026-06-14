@@ -271,7 +271,11 @@ def make_corrections_router(db, current_user):
             "original_ledger_id": emp_leg.get("id"),
             "original_amount": original_amount,
             "amount_corrected": amount,
-            "partial": amount < original_amount - 0.001,
+            # `partial` = هل سيتبقى مبلغ غير مُصحَّح بعد هذا التصحيح؟
+            # سابقاً كان يُحسب مقارنةً بالأصلي → كان True دوماً عند تجزئة
+            # العملية حتى للقيد الذي يُكمل المبلغ، مما يخالف العقد المُعلَن
+            # في الـ response.is_partial. الآن يتطابق الاثنان.
+            "partial": round(remaining - amount, 2) > 0.001,
             "original_employee_id": payload.from_employee_id,
             "original_employee_name": from_emp.get("name"),
             "corrected_to_employee_id": payload.to_employee_id,

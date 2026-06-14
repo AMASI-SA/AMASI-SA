@@ -189,13 +189,12 @@ def test_full_correction_flow_preview(auth, seed):
         assert c["from_employee"]["id"] == khaled
         assert c["to_employee"]["id"] == mohammed
         assert c["reason"]
-    # one partial=true (first), one partial=false (completes)
+    # one partial=true (first), one partial=false (completes the residual)
     partials = sorted(c["is_partial"] for c in log)
-    # NOTE: current backend uses metadata.partial = (amount < original_amount)
-    # so BOTH 1500-of-3000 corrections show partial=True. The spec asked for
-    # the second one (which closes the residual) to be partial=False.
-    # We assert observed behavior and flag the divergence in the test report.
-    assert partials == [True, True]
+    # Iter-196 fix: metadata.partial now mirrors response.is_partial,
+    # i.e. True only when (remaining − amount) > 0.001. So the second
+    # correction that closes the residual reports False.
+    assert partials == [False, True]
 
     # 11) correctable-operations listing
     r = requests.get(
