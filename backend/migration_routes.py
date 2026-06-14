@@ -260,7 +260,7 @@ async def _legacy_bank_balances(db, user_id: str) -> list[dict]:
 async def _legacy_payment_platform_balances(
     db, user_id: str,
 ) -> list[dict]:
-    """Per-platform current balance (Tabby, Tamara, Salla, Imkan, COD).
+    """Per-platform current balance (Tabby, Tamara, Salla, Imkan).
 
     Iter-167 — These accounts represent **assets in transit**: money the
     merchant has earned through customer orders but hasn't yet
@@ -272,7 +272,44 @@ async def _legacy_payment_platform_balances(
     For Tabby/Tamara we prefer the BNPL SSOT (`get_bnpl_provider_balance`)
     over the stored `current_balance` to stay consistent with the BNPL
     Settlements page. Other platforms fall back to `current_balance`.
+
+    Iter-179 — **COD accounts are excluded from this migration**.
+    The merchant's accounting review (Feb 2026) concluded that the
+    current `expected_orders_balance` for COD is computed from
+    *Confirmed* orders (not Delivered), so it includes:
+      • orders still in transit (cash not collected yet),
+      • orders confirmed but not yet shipped (cash doesn't exist).
+    Migrating that gross figure as an opening balance would post
+    phantom assets. COD will be re-introduced via the dedicated
+    Shipping Ledger Sprint, which links each order's cash to its
+    actual courier and only counts Delivered.
     """
+    # Lazily import to keep top-level import surface stable.
+    try:
+        from balances import _is_cod_method
+    except Exception:  # noqa: BLE001
+        _is_cod_method = lambda _n: False  # noqa: E731
+    try:
+        from payment_methods import normalize_payment_method
+    except Exception:  # noqa: BLE001
+        normalize_payment_method = None  # type: ignore
+
+    def _is_cod_account(a: dict) -> bool:
+        name = (a.get("name") or "").strip()
+        normalized = (a.get("normalized_payment_method") or "").strip()
+        if normalized in ("cod", "cash_on_delivery"):
+            return True
+        if _is_cod_method(name):
+            return True
+        if normalize_payment_method:
+            try:
+                sub_key, _disp, _parent = normalize_payment_method(name)
+                if sub_key == "cash_on_delivery":
+                    return True
+            except Exception:  # noqa: BLE001
+                pass
+        return False
+
     accs = await db.accounts.find(
         {"user_id": user_id, "account_type": "payment_platform"},
         {"_id": 0},
@@ -284,6 +321,9 @@ async def _legacy_payment_platform_balances(
         is_bnpl_account = lambda _a: None  # noqa: E731
         get_bnpl_provider_balance = None
     for a in accs:
+        if _is_cod_account(a):
+            # Iter-179 — explicitly skipped. See docstring above.
+            continue
         bnpl_provider = is_bnpl_account(a) if a else None
         cur = a.get("current_balance")
         balance_source = "current_balance"

@@ -1582,3 +1582,63 @@ deployment_agent re-check: **PASS** — no remaining blockers.
 **Tests**: `tests/test_shipping_cod_fee_save_iter178.py` — 8 pydantic
 contract tests pin the schema and behavior (accept 0, 0.05, 1.0;
 reject 5, -0.01, -1; round-trip via SettingsIn).
+
+
+## Iter-179 — COD Excluded From Phase 4 Migration (Feb 2026)
+**Merchant's accounting decision** (after reviewing
+`/diagnostics/cod-source` on production):
+  • Confirmed: 40,123.78 SAR (183 orders)
+  • Delivered: 10,203.70 SAR (37 orders)
+  • Gap: 29,920.08 SAR — orders in transit OR confirmed-but-
+    not-yet-shipped where the cash literally doesn't exist
+    yet.
+
+> "محاسبياً هذا يعني أن رصيد COD الحالي يحتوي على طلبات تم
+>  تأكيدها فقط + طلبات قيد الشحن + طلبات لم يتم تحصيلها بعد.
+>  وبالتالي 40,123.78 لا يمثل ذمة COD محصَّلة فعلياً."
+
+**Decision**:
+  ❌ Do NOT migrate `الدفع عند الاستلام / COD` as an opening
+     balance in Phase 4.
+  ✅ Continue migrating banks, employees, suppliers, Tabby,
+     Tamara, Salla, Imkan as planned.
+  ✅ Reintroduce COD via the dedicated **Shipping Ledger Sprint**:
+     each cash movement linked to a courier (iMile / SMSA /
+     مندوب الرياض) and ONLY counted when `order_status` is in
+     the merchant-defined Delivered set (تم التوصيل /
+     completed / delivered).
+
+**Implementation**:
+  • `migration_routes._legacy_payment_platform_balances()` now
+    skips any account where the name matches a COD variant OR
+    where `normalized_payment_method ∈ {cod, cash_on_delivery}`.
+    Detection is robust against Arabic hamza variants.
+  • `MigrationWizard.jsx` shows a prominent amber notice
+    explaining the exclusion and linking to the diagnostic page.
+  • Verified live on Preview: post-fix migration snapshot
+    contains 4 payment_platforms (تمارا, تابي, سلة, إمكان) —
+    COD is gone.
+
+**Tests**: `tests/test_cod_excluded_from_migration_iter179.py`
+— 5 tests covering Arabic name, hamza variant, English aliases,
+`normalized_payment_method`, and the positive case (non-COD
+platforms still migrate).
+
+**Pending audit (for Shipping Sprint)**:
+The merchant requested an audit of every place the system
+currently uses `Confirmed` to compute COD-shaped totals so the
+new rule "Delivered-only" can replace it consistently. Scope
+notes for the Sprint:
+  • `payment_gateway_metrics.compute_metrics()` — category
+    resolver applies "confirmed" to most non-pending statuses.
+    The COD path needs a separate "cod_delivered_set" override
+    (already partially expressed in
+    `settings.cod_approved_statuses`).
+  • `accounts_routes._central_expected_for_account()` — drives
+    `expected_orders_balance` on the COD account.
+  • `shipping_accounts.py` — ALREADY uses delivered counts for
+    courier-level reports; reuse this engine for the COD
+    breakdown.
+  • The diagnostic endpoint already exposes per-company
+    Delivered-only totals (`by_shipping_company_delivered_only`)
+    — Sprint can use this as the authoritative shape.

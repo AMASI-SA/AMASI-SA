@@ -117,6 +117,29 @@ export default function MigrationWizard() {
                     البيانات القديمة محفوظة للقراءة فقط.
                 </p>
 
+                {/* Iter-179 — COD explicitly excluded from this migration.
+                    The current expected_orders_balance for COD is computed
+                    from Confirmed (not Delivered) orders, so migrating it
+                    as an opening balance would post phantom assets. COD
+                    will be reintroduced via the Shipping Ledger Sprint. */}
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-4" data-testid="migration-cod-notice">
+                    <div className="flex items-start gap-3">
+                        <div className="text-2xl shrink-0">⚠️</div>
+                        <div className="text-sm leading-relaxed">
+                            <div className="font-extrabold text-amber-900 mb-1">حساب «الدفع عند الاستلام (COD)» مُستبعد من هذا الترحيل</div>
+                            <div className="text-amber-900">
+                                رصيد COD الحالي يعتمد على الطلبات <strong>Confirmed</strong> وليس <strong>Delivered</strong>،
+                                لذلك يحتوي على طلبات في الطريق ومبالغ غير مُحصَّلة فعلياً.
+                                سيُعاد إدخال COD ضمن <strong>Sprint شركات الشحن</strong> القادم بحيث يُربط
+                                كل مبلغ بشركة الشحن الفعلية وحالة «تم التوصيل» فقط.
+                            </div>
+                            <a href="/diagnostics/cod-source" className="inline-block mt-2 text-xs font-bold text-amber-800 underline hover:text-amber-900">
+                                🔍 افتح تقرير تشخيص COD لمراجعة الأرقام
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
                 {status?.completed ? (
                     <div className="bg-emerald-50 border-2 border-emerald-200 rounded-lg p-4 mb-4">
                         <div className="text-sm font-bold text-emerald-900">
