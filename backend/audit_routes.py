@@ -545,3 +545,338 @@ def make_employee_lookup_debug_router(db, current_user):
         }
 
     return router
+
+
+def make_forensic_report_router(db, current_user):
+    """Iter-193 — Forensic Audit Report (Read-Only).
+
+    Combined diagnostic for the two anomalies surfaced after the
+    Phase 4 closeout:
+
+        (A) Orphan employee opening balances (15 entries, net
+            ~41,931.68 SAR). For each, surface metadata name,
+            sub_account, side, amount, created_at, and best-effort
+            employee match via every possible link key.
+
+        (B) Tabby negative balance (~-48,319.57 SAR). Aggregate
+            every general_ledger row whose entity_id maps to a
+            Tabby payment_platform account, grouped by entry_type
+            × sub_account × side, plus a chronological sample of
+            the most impactful entries (top 30 by |amount|).
+
+    Strictly READ-ONLY. No inserts, no updates, no deletes.
+    Safe to deploy to production and call ad-hoc.
+    """
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    @router.get("/forensic-report")
+    async def forensic_report(user: dict = Depends(current_user)):
+        uid = user["id"]
+
+        # ─────────────────────────────────────────────────────────
+        # PART A — Orphan Employee Openings (full detail)
+        # ─────────────────────────────────────────────────────────
+        # Build employee index across every plausible ID field so
+        # the analysis is robust to schema drift.
+        emp_index: dict = {}
+        async for e in db.employees.find({}, {
+            "_id": 1, "id": 1, "employee_id": 1, "external_id": 1,
+            "legacy_id": 1, "user_id": 1, "name": 1, "status": 1,
+            "deleted_at": 1,
+        }):
+            summary = {
+                "doc_id": str(e.get("_id")) if e.get("_id") else None,
+                "name": e.get("name"),
+                "status": e.get("status"),
+                "deleted_at": (
+                    e["deleted_at"].isoformat()
+                    if hasattr(e.get("deleted_at"), "isoformat")
+                    else e.get("deleted_at")
+                ),
+                "user_id": e.get("user_id"),
+                "belongs_to_current_user": e.get("user_id") == uid,
+            }
+            for k in ("id", "employee_id", "external_id", "legacy_id"):
+                v = e.get(k)
+                if v:
+                    emp_index.setdefault(str(v), []).append(
+                        {**summary, "matched_via": k}
+                    )
+            if e.get("_id"):
+                emp_index.setdefault(str(e["_id"]), []).append(
+                    {**summary, "matched_via": "_id"}
+                )
+
+        # Valid employee IDs for the current user (used to detect
+        # whether the ledger entity_id is a true orphan).
+        valid_emp_ids_for_user: set = set()
+        async for e in db.employees.find(
+            {"user_id": uid},
+            {"_id": 1, "id": 1, "employee_id": 1,
+             "external_id": 1, "legacy_id": 1},
+        ):
+            for k in ("id", "employee_id", "external_id", "legacy_id"):
+                if e.get(k):
+                    valid_emp_ids_for_user.add(str(e[k]))
+            if e.get("_id"):
+                valid_emp_ids_for_user.add(str(e["_id"]))
+
+        # Iterate every employee opening, classify, capture metadata.
+        emp_orphans = []
+        emp_orphan_debit = 0.0
+        emp_orphan_credit = 0.0
+        by_sub: dict = {}
+        async for row in db.general_ledger.find(
+            {"user_id": uid,
+             "entry_type": "opening_balance",
+             "entity_type": "employee"},
+            {"_id": 0, "id": 1, "entity_id": 1, "amount": 1,
+             "side": 1, "sub_account": 1, "metadata": 1,
+             "created_at": 1, "notes": 1},
+        ):
+            eid = row.get("entity_id")
+            if not eid:
+                continue
+            key = str(eid)
+            if key in valid_emp_ids_for_user:
+                continue  # not an orphan for the current user
+            md = row.get("metadata") or {}
+            amt = float(row.get("amount") or 0)
+            side = row.get("side")
+            sub = row.get("sub_account") or "_unknown"
+
+            # Cross-tenant / historical match attempt
+            hits = emp_index.get(key, [])
+            best_hit = next(
+                (h for h in hits if h.get("belongs_to_current_user")),
+                hits[0] if hits else None,
+            )
+            if best_hit:
+                if best_hit.get("belongs_to_current_user"):
+                    classification = "false_positive_belongs_to_user"
+                elif best_hit.get("user_id"):
+                    classification = "wrong_user_link"
+                else:
+                    classification = "match_without_user_id"
+            else:
+                classification = "deleted_or_unknown"
+
+            entry = {
+                "ledger_id": row.get("id"),
+                "entity_id": eid,
+                "sub_account": sub,
+                "side": side,
+                "amount": round(amt, 2),
+                "debit": round(amt, 2) if side == "debit" else 0,
+                "credit": round(amt, 2) if side == "credit" else 0,
+                "metadata_employee_name": (
+                    md.get("employee_name") or md.get("name")
+                ),
+                "metadata_notes": row.get("notes"),
+                "metadata_source": md.get("source") or md.get("origin"),
+                "metadata_raw": md,
+                "created_at": (
+                    row["created_at"].isoformat()
+                    if hasattr(row.get("created_at"), "isoformat")
+                    else row.get("created_at")
+                ),
+                "best_match_in_employees": best_hit,
+                "classification": classification,
+            }
+            emp_orphans.append(entry)
+            if side == "debit":
+                emp_orphan_debit += amt
+            else:
+                emp_orphan_credit += amt
+            by_sub.setdefault(sub, {
+                "sub_account": sub, "count": 0,
+                "debit_total": 0.0, "credit_total": 0.0,
+            })
+            by_sub[sub]["count"] += 1
+            if side == "debit":
+                by_sub[sub]["debit_total"] += amt
+            else:
+                by_sub[sub]["credit_total"] += amt
+        for v in by_sub.values():
+            v["debit_total"] = round(v["debit_total"], 2)
+            v["credit_total"] = round(v["credit_total"], 2)
+            v["net"] = round(v["debit_total"] - v["credit_total"], 2)
+
+        orphan_employees = {
+            "count": len(emp_orphans),
+            "total_debit": round(emp_orphan_debit, 2),
+            "total_credit": round(emp_orphan_credit, 2),
+            "net_impact": round(
+                emp_orphan_debit - emp_orphan_credit, 2
+            ),
+            "by_sub_account": list(by_sub.values()),
+            "entries": emp_orphans,
+            "interpretation": (
+                "salary_payable credits = رواتب مستحقة محفوظة في "
+                "السجل دون مرجع موظف صالح للمستخدم الحالي. "
+                "salary_advance debits = سُلف مدفوعة دون مرجع موظف. "
+                "raisez classification=deleted_or_unknown إذا الموظف "
+                "غير موجود فعلياً. classification=wrong_user_link "
+                "يعني الموظف ينتمي لمستخدم آخر."
+            ),
+        }
+
+        # ─────────────────────────────────────────────────────────
+        # PART B — Tabby Negative Balance Breakdown
+        # ─────────────────────────────────────────────────────────
+        # 1) Locate Tabby account(s) for this user.
+        tabby_accounts = []
+        async for a in db.accounts.find(
+            {"user_id": uid,
+             "$or": [
+                 {"normalized_payment_method": "tabby"},
+                 {"name": {"$regex": "tabby|تابي", "$options": "i"}},
+             ]},
+            {"_id": 0, "id": 1, "name": 1, "account_type": 1,
+             "current_balance": 1, "normalized_payment_method": 1},
+        ):
+            tabby_accounts.append({
+                "id": a["id"],
+                "name": a.get("name"),
+                "account_type": a.get("account_type"),
+                "current_balance": round(
+                    float(a.get("current_balance") or 0), 2
+                ),
+                "normalized_payment_method":
+                    a.get("normalized_payment_method"),
+            })
+
+        tabby_ids = {str(a["id"]) for a in tabby_accounts}
+
+        # 2) Aggregate the ledger by (entry_type, sub_account, side)
+        breakdown = []
+        ledger_total_debit = 0.0
+        ledger_total_credit = 0.0
+        if tabby_ids:
+            agg_pipeline = [
+                {"$match": {
+                    "user_id": uid,
+                    "entity_type": {"$in": [
+                        "payment_platform", "bank", "external",
+                    ]},
+                    "entity_id": {"$in": list(tabby_ids)},
+                }},
+                {"$group": {
+                    "_id": {
+                        "entry_type": "$entry_type",
+                        "sub_account": "$sub_account",
+                        "side": "$side",
+                    },
+                    "total": {"$sum": "$amount"},
+                    "count": {"$sum": 1},
+                }},
+                {"$sort": {"total": -1}},
+            ]
+            async for d in db.general_ledger.aggregate(agg_pipeline):
+                row = {
+                    "entry_type": d["_id"].get("entry_type"),
+                    "sub_account": d["_id"].get("sub_account"),
+                    "side": d["_id"].get("side"),
+                    "count": d["count"],
+                    "total": round(float(d["total"]), 2),
+                }
+                breakdown.append(row)
+                if row["side"] == "debit":
+                    ledger_total_debit += row["total"]
+                else:
+                    ledger_total_credit += row["total"]
+
+        # 3) Top-30 most-impactful individual entries (by |amount|)
+        top_entries = []
+        if tabby_ids:
+            async for row in db.general_ledger.find(
+                {"user_id": uid,
+                 "entity_id": {"$in": list(tabby_ids)}},
+                {"_id": 0, "id": 1, "entry_type": 1, "sub_account": 1,
+                 "side": 1, "amount": 1, "txn_group_id": 1,
+                 "metadata": 1, "created_at": 1, "notes": 1,
+                 "order_id": 1},
+            ).sort("amount", -1).limit(30):
+                top_entries.append({
+                    "ledger_id": row.get("id"),
+                    "entry_type": row.get("entry_type"),
+                    "sub_account": row.get("sub_account"),
+                    "side": row.get("side"),
+                    "amount": round(float(row.get("amount") or 0), 2),
+                    "txn_group_id": row.get("txn_group_id"),
+                    "order_id": row.get("order_id"),
+                    "notes": row.get("notes"),
+                    "created_at": (
+                        row["created_at"].isoformat()
+                        if hasattr(row.get("created_at"), "isoformat")
+                        else row.get("created_at")
+                    ),
+                    "metadata": row.get("metadata") or {},
+                })
+
+        # 4) Per-entry_type net for an at-a-glance summary
+        per_entry_type: dict = {}
+        for r in breakdown:
+            et = r["entry_type"] or "_unknown"
+            per_entry_type.setdefault(et, {
+                "entry_type": et,
+                "debit": 0.0, "credit": 0.0, "count": 0,
+            })
+            per_entry_type[et]["count"] += r["count"]
+            if r["side"] == "debit":
+                per_entry_type[et]["debit"] += r["total"]
+            else:
+                per_entry_type[et]["credit"] += r["total"]
+        for v in per_entry_type.values():
+            v["debit"] = round(v["debit"], 2)
+            v["credit"] = round(v["credit"], 2)
+            v["net"] = round(v["debit"] - v["credit"], 2)
+
+        ledger_net = round(
+            ledger_total_debit - ledger_total_credit, 2
+        )
+        current_balance_sum = round(
+            sum(a["current_balance"] for a in tabby_accounts), 2
+        )
+
+        tabby_section = {
+            "accounts": tabby_accounts,
+            "accounts_count": len(tabby_accounts),
+            "current_balance_sum": current_balance_sum,
+            "ledger_total_debit": round(ledger_total_debit, 2),
+            "ledger_total_credit": round(ledger_total_credit, 2),
+            "ledger_net": ledger_net,
+            "ledger_vs_balance_diff": round(
+                ledger_net - current_balance_sum, 2
+            ),
+            "per_entry_type": list(per_entry_type.values()),
+            "breakdown_detailed": breakdown,
+            "top_30_entries_by_amount": top_entries,
+            "interpretation": (
+                "ledger_net يجب أن يساوي current_balance_sum إذا "
+                "كان حساب الـ SSOT سليم. الفرق ledger_vs_balance_diff "
+                "يكشف عدم تطابق. سالب يعني أن مدفوعات/تسويات تم "
+                "ترحيلها كـ credit أكبر من المبيعات (debit) — "
+                "إما عمولات/خصومات Tabby، أو تسويات Over-transfer، "
+                "أو ترحيل migration بقيود credit زائدة. "
+                "راجع per_entry_type: settlement_credit الكبير يشير "
+                "إلى تحويلات بنكية من Tabby. opening_balance credit "
+                "يدل على رصيد افتتاحي سالب من migration. "
+                "fees/commission credits = خصم عمولات Tabby."
+            ),
+        }
+
+        return {
+            "report_type": "forensic_audit_v1",
+            "read_only": True,
+            "user_id": uid,
+            "orphan_employees": orphan_employees,
+            "tabby_balance": tabby_section,
+            "guidance": (
+                "هذا التقرير للقراءة فقط. لا تُجرى أي تعديلات على "
+                "قاعدة البيانات. يمكن مشاركته كما هو مع المحاسب أو "
+                "المهندس لتحديد خطة الإصلاح."
+            ),
+        }
+
+    return router
