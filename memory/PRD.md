@@ -1550,3 +1550,35 @@ deployment_agent re-check: **PASS** — no remaining blockers.
     Only DISPLAY and RANGE BOUNDARIES convert to Riyadh.
   • Backend never trusts `Date` from frontend without normalizing
     via `tz_utils._coerce_date` or equivalent.
+
+
+## Iter-178 — COD Fee Save Error Fix (Feb 2026)
+**Merchant's bug report**: "إعدادات شركات الشحن — عند إضافة عمولة
+الدفع عند الاستلام تظهر رسالة خطاء: فشل الحفظ — راجع الكونسول".
+
+**Root cause** (`ShippingCompanySettings.jsx`):
+  • Backend Pydantic schema constrains `cod_fee_percent` to
+    `[0, 1]` decimal (0.05 = 5%).
+  • Input field accepted percent-shaped values (no normalization).
+  • Merchant typed `5` (meaning 5%) → backend returned 422 →
+    toast displayed the generic "راجع الكونسول" message with no
+    actionable info.
+
+**Fix**:
+  1. UI now displays `cod_fee_percent` as a percentage (0-100) with
+     a "%" suffix. `pctToDecimal()` divides by 100 before persisting;
+     `decimalToPct()` multiplies for display. Convention now matches
+     payment_methods on the main Settings page.
+  2. Pre-save clamp on every shipping_company row guards against
+     stale percent-shaped values that may already exist in legacy
+     production data — without this, even a fresh row with 0 fails
+     because Pydantic rejects the entire array.
+  3. Error toast now surfaces the actual Pydantic detail string
+     (or each error message in an array) instead of the generic
+     "راجع الكونسول". Console.error logs the full detail.
+  4. New help banner explicitly states: "اكتب النسبة كرقم عادي
+     مثل 5 لتعني 5%".
+
+**Tests**: `tests/test_shipping_cod_fee_save_iter178.py` — 8 pydantic
+contract tests pin the schema and behavior (accept 0, 0.05, 1.0;
+reject 5, -0.01, -1; round-trip via SettingsIn).

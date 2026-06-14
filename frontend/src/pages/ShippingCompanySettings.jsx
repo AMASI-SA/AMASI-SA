@@ -25,6 +25,21 @@ export default function ShippingCompanySettings() {
     if (!settings) return <div className="p-8 text-center text-slate-500">جاري التحميل…</div>;
     const companies = settings.shipping_companies || [];
 
+    // Storage is 0-1 decimal (e.g. 0.05 = 5%); UI shows percent (e.g. 5).
+    // These helpers do the conversion at the edge so users type "5" and
+    // not "0.05" — matching the convention used by payment_methods on
+    // the main Settings page.
+    const pctToDecimal = (v) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return 0;
+        return Math.max(0, Math.min(100, n)) / 100;
+    };
+    const decimalToPct = (v) => {
+        const n = Number(v || 0);
+        if (!Number.isFinite(n)) return 0;
+        return Math.round(n * 10000) / 100; // 2-decimal percent
+    };
+
     const updateCompany = (idx, patch) => {
         const next = companies.map((c, i) => i === idx ? { ...c, ...patch } : c);
         setSettings({ ...settings, shipping_companies: next });
@@ -59,10 +74,33 @@ export default function ShippingCompanySettings() {
     const save = async () => {
         setBusy(true);
         try {
-            await api.put("/settings", settings);
+            // Iter-178 — clamp every cod_fee_percent to its valid 0-1
+            // decimal range BEFORE sending, in case any legacy row
+            // arrived with a stale percent-shaped value (e.g. 5 instead
+            // of 0.05). Without this guard the whole save fails when a
+            // user adds a NEW company because Pydantic rejects ANY row
+            // outside [0, 1].
+            const payload = {
+                ...settings,
+                shipping_companies: (settings.shipping_companies || []).map((c) => ({
+                    ...c,
+                    cod_fee_percent: Math.max(
+                        0, Math.min(1, Number(c.cod_fee_percent) || 0)),
+                    cod_fee_fixed_per_order: Math.max(
+                        0, Number(c.cod_fee_fixed_per_order) || 0),
+                })),
+            };
+            await api.put("/settings", payload);
             toast.success("تم حفظ الإعدادات");
         } catch (e) {
-            toast.error("فشل الحفظ — راجع الكونسول");
+            const detail = e?.response?.data?.detail;
+            const msg = typeof detail === "string"
+                ? detail
+                : Array.isArray(detail)
+                    ? detail.map((d) => d?.msg || JSON.stringify(d)).join(" · ")
+                    : "فشل الحفظ — راجع الكونسول";
+            toast.error(msg);
+            console.error("Settings save failed:", detail || e);
         } finally { setBusy(false); }
     };
 
@@ -79,6 +117,9 @@ export default function ShippingCompanySettings() {
                 <strong>نوع الشركة:</strong>
                 <span className="me-3"><span className="px-1.5 py-0.5 bg-emerald-200 rounded text-emerald-900 text-[10px] font-bold mx-1">آجلة</span> تدخل أرصدة شركات الشحن (دائن/مدين/COD/رسوم).</span>
                 <span><span className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-700 text-[10px] font-bold mx-1">فورية</span> تكلفة الشحن مصروف مباشر — لا يدخل الـ ledger.</span>
+                <div className="mt-2 pt-2 border-t border-blue-200">
+                    <strong>رسوم COD:</strong> اكتب النسبة كرقم عادي مثل <code className="bg-white px-1 rounded">5</code> لتعني 5%. الحقل الثاني للرسوم الثابتة بالريال لكل طلب موصَّل.
+                </div>
             </div>
 
             <div className="bg-white border-2 border-slate-200 rounded-xl overflow-hidden">
@@ -106,7 +147,24 @@ export default function ShippingCompanySettings() {
                                 </td>
                                 <td className="p-2"><input type="number" step="0.01" value={c.cost_per_order ?? c.cost ?? 0} onChange={(e) => updateCompany(idx, { cost_per_order: Number(e.target.value), cost: Number(e.target.value) })} className="w-24 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cost-${c.name}`} /></td>
                                 <td className="p-2"><input type="number" step="0.01" value={(c.vat_percent ?? (c.vat_rate || 0) * 100) || 0} onChange={(e) => updateCompany(idx, { vat_percent: Number(e.target.value), vat_rate: Number(e.target.value) / 100 })} className="w-16 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`vat-${c.name}`} /></td>
-                                <td className="p-2"><input type="number" step="0.001" min="0" max="1" value={c.cod_fee_percent ?? 0} onChange={(e) => updateCompany(idx, { cod_fee_percent: Number(e.target.value) })} className="w-20 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cod-pct-${c.name}`} placeholder="0.01" disabled={!c.is_deferred} /></td>
+                                <td className="p-2">
+                                    <div className="flex items-center border border-slate-300 rounded overflow-hidden bg-white">
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            max="100"
+                                            value={decimalToPct(c.cod_fee_percent)}
+                                            onChange={(e) => updateCompany(idx, { cod_fee_percent: pctToDecimal(e.target.value) })}
+                                            className="w-16 px-1 py-1 text-xs num text-right bg-transparent focus:outline-none"
+                                            data-testid={`cod-pct-${c.name}`}
+                                            placeholder="5"
+                                            disabled={!c.is_deferred}
+                                            title="نسبة مئوية مثل 5 = 5%"
+                                        />
+                                        <span className="px-1.5 text-[10px] text-slate-500 border-s border-slate-300 bg-slate-50">%</span>
+                                    </div>
+                                </td>
                                 <td className="p-2"><input type="number" step="0.01" min="0" value={c.cod_fee_fixed_per_order ?? 0} onChange={(e) => updateCompany(idx, { cod_fee_fixed_per_order: Number(e.target.value) })} className="w-20 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cod-fixed-${c.name}`} placeholder="5.00" disabled={!c.is_deferred} /></td>
                                 <td className="p-2">
                                     <button type="button" onClick={() => removeCompany(idx)} className="text-rose-500 hover:text-rose-700 text-sm font-extrabold" title="حذف من الإعدادات" data-testid={`remove-${c.name}`}>×</button>
