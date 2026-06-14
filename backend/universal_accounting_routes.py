@@ -67,6 +67,12 @@ class AdvanceGrantIn(BaseModel):
     paid_from_account_id: str
     payment_date: Optional[str] = None
     notes: Optional[str] = ""
+    # Iter-188 — "Golden Rule" guard. If the employee has an open
+    # salary_payable balance, granting a NEW advance is almost always
+    # an accounting mistake — the merchant probably wants to settle
+    # the salary, not bloat the advance account. The backend rejects
+    # with 409 unless this flag is true.
+    acknowledge_pending_salary: bool = False
 
 
 class CustodyGrantIn(BaseModel):
@@ -410,6 +416,35 @@ def make_universal_router(db) -> APIRouter:
             account_id=payload.paid_from_account_id,
             amount=payload.amount,
         )
+
+        # Iter-188 — "Golden Rule": paying an employee who already has
+        # an open salary_payable should be recorded as salary_settle,
+        # not a new advance. We block with 409 + a structured payload
+        # the UI can use to offer an in-place conversion.
+        if not payload.acknowledge_pending_salary:
+            pending = (await compute_balance(
+                db, user_id=user["id"], entity_type="employee",
+                entity_id=emp_id, sub_account="salary_payable",
+            ))["outstanding_debt"]
+            if pending > 0.005:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "PENDING_SALARY_BLOCK",
+                        "salary_payable": round(pending, 2),
+                        "employee_id": emp_id,
+                        "employee_name": emp.get("name"),
+                        "message": (
+                            f"يوجد للموظف رصيد راتب مستحق قدره "
+                            f"{pending:,.2f} ر.س. يفضّل تسجيل العملية "
+                            "كـ «صرف راتب» بدلاً من «سلفة موظف» — لأن "
+                            "السداد مقابل راتب مستحق ليس سلفة محاسبياً. "
+                            "إذا كنت متأكداً أنها سلفة حقيقية، أعد الإرسال "
+                            "مع acknowledge_pending_salary=true."
+                        ),
+                    },
+                )
+
         actor_id, actor_name = await _resolve_actor(user)
         notes = payload.notes or f"منح سلفة — {emp.get('name')}"
         result = await post_txn_group(

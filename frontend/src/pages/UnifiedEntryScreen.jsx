@@ -192,6 +192,12 @@ export default function UnifiedEntryScreen() {
     // decorate the searchable picker and freeze 0-balance employees in
     // custody_return / custody_settle.
     const [custodyBalances, setCustodyBalances] = useState({});
+    // Iter-188 — Golden-Rule override. The merchant must explicitly opt
+    // in to record an advance for an employee who already has open
+    // salary_payable (the system pushes them toward salary_settle
+    // first). Reset whenever opType / entity / amount change so the
+    // override is never silently reused.
+    const [acknowledgePendingSalary, setAcknowledgePendingSalary] = useState(false);
 
     const visibleOpTypes = useMemo(
         () => OP_TYPES.filter(o => !hiddenTypes.includes(o.value)),
@@ -212,8 +218,11 @@ export default function UnifiedEntryScreen() {
         return () => { alive = false; };
     }, []);
 
-    // Iter-184 — Filter the bank dropdown by the binding configured
-    // for the current op. Empty / missing list = no filter.
+    // Iter-188 — Reset the Golden-Rule override whenever the merchant
+    // changes the operation, the employee, or the amount. We never
+    // want the override to silently persist across edits.
+    useEffect(() => { setAcknowledgePendingSalary(false); },
+              [opType, entityId, amount]);
     const allowedAccountIds = useMemo(() => {
         const list = accountBindings?.[opType];
         if (!Array.isArray(list) || list.length === 0) return null; // no filter
@@ -481,7 +490,11 @@ export default function UnifiedEntryScreen() {
             switch (opType) {
                 case "advance_grant":
                     url = `/accounting/employees/${entityId}/advances`;
-                    body = { amount: amt, paid_from_account_id: bankId, ...common };
+                    body = {
+                        amount: amt, paid_from_account_id: bankId,
+                        acknowledge_pending_salary: acknowledgePendingSalary,
+                        ...common,
+                    };
                     break;
                 case "salary_settle":
                     url = `/accounting/employees/${entityId}/settle`;
@@ -569,7 +582,17 @@ export default function UnifiedEntryScreen() {
             reloadCustodyBalances();
         } catch (e) {
             const det = e.response?.data?.detail;
-            toast.error(typeof det === "string" ? det : (det?.[0]?.msg || "فشل الاعتماد"));
+            // Iter-188 — Server-side Golden Rule (defense in depth): if
+            // the merchant bypassed the in-page banner somehow (browser
+            // restored state, etc.), we still get a friendly 409.
+            if (e.response?.status === 409
+                && det && typeof det === "object"
+                && det.code === "PENDING_SALARY_BLOCK") {
+                toast.error(det.message || "يفضّل تسجيلها كصرف راتب");
+                return;
+            }
+            toast.error(typeof det === "string" ? det
+                : (det?.message || det?.[0]?.msg || "فشل الاعتماد"));
         } finally { setBusy(false); }
     };
 
@@ -747,6 +770,63 @@ export default function UnifiedEntryScreen() {
                                 </div>
                             );
                         })()}
+
+                        {/* Iter-188 — Golden-Rule suggestion banner.
+                            When the merchant picks "سلفة موظف" on an
+                            employee who already has open salary_payable,
+                            we strongly nudge toward "صرف راتب" instead.
+                            Two-click escape hatch is provided for the
+                            rare genuine-advance case (personal loan,
+                            etc). */}
+                        {opType === "advance_grant"
+                          && entityId
+                          && (employeeSummary?.salary_payable ?? 0) > 0.005
+                          && !acknowledgePendingSalary && (
+                            <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-3"
+                                 data-testid="unified-golden-rule-banner">
+                                <div className="text-sm font-extrabold text-amber-900 mb-1">
+                                    🟡 توصية محاسبية مهمة
+                                </div>
+                                <p className="text-[12px] text-amber-900 leading-relaxed mb-2.5">
+                                    يوجد للموظف رصيد راتب مستحق قدره{" "}
+                                    <strong className="num">
+                                        {Number(employeeSummary.salary_payable).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                                    </strong>
+                                    . القاعدة الذهبية: المبلغ المدفوع مقابل راتب مستحق
+                                    بالفعل يُسجَّل كـ <strong>«صرف راتب»</strong>،
+                                    وليس كسلفة. هذا يمنع تضخم حساب السلف بدون داعٍ.
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    <button type="button"
+                                        onClick={() => setOpType("salary_settle")}
+                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-lg"
+                                        data-testid="golden-rule-switch-to-salary-btn">
+                                        🔄 حوّل إلى «صرف راتب»
+                                    </button>
+                                    <button type="button"
+                                        onClick={() => setAcknowledgePendingSalary(true)}
+                                        className="px-3 py-1.5 bg-white border-2 border-amber-400 text-amber-900 text-xs font-extrabold rounded-lg hover:bg-amber-100"
+                                        data-testid="golden-rule-acknowledge-btn">
+                                        ✓ هي سلفة فعلاً — تابع
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        {opType === "advance_grant"
+                          && entityId
+                          && (employeeSummary?.salary_payable ?? 0) > 0.005
+                          && acknowledgePendingSalary && (
+                            <div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-[11px] text-rose-800 font-bold"
+                                 data-testid="unified-golden-rule-ack">
+                                ⚠️ تم تأكيدها كسلفة حقيقية رغم وجود راتب مستحق
+                                ({Number(employeeSummary.salary_payable).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س).
+                                <button type="button"
+                                    onClick={() => setAcknowledgePendingSalary(false)}
+                                    className="ms-2 underline text-rose-900">
+                                    تراجع
+                                </button>
+                            </div>
+                        )}
                         {needsSupplier && (
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-1">المورد:</label>
