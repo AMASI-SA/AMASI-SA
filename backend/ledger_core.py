@@ -109,6 +109,8 @@ ENTRY_TYPES = (
     "expense_record",       # مصروف عام: مصروف + نقص bank
     # Couriers / shipping companies
     "courier_cod_settle",   # تسوية COD متعددة الأرجل (Iter-190): نقص cod_receivable + bank/cash + مصروفات
+    # ── Phase 3 (Iter-196) — manual employee correction ──
+    "correction",           # تصحيح: نقل أثر بين كيانَين دون مساس بالبنك/الصندوق
     # Reversal kinds for the above are unified under "reversal"
 )
 SIDES = ("debit", "credit")

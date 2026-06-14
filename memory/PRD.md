@@ -2042,3 +2042,62 @@ returns plausible output even before migration (correctly reports
 - Historical backfill: synthesize ledger entries for the 849 sales,
   19 refunds, 7 transfers, and fee accruals. Test extensively first.
 
+
+## Checkpoint — Iter-196 (Employee Misposting Correction)
+
+### What & Why
+- Merchant needs to **move accounting impact** from a wrong employee
+  to the correct one when a salary_payment, advance_grant, or
+  custody_grant was misposted — WITHOUT re-touching the bank/cash
+  (the money already left in the real world).
+
+### Backend
+- `entry_type: "correction"` added to `ledger_core.ENTRY_TYPES`.
+- New module `/app/backend/corrections_routes.py`:
+  - `GET  /api/accounting/employees/{emp_id}/correctable-operations`
+    — lists original ops with remaining_correctable per txn_group.
+  - `POST /api/accounting/employees/correct-misposting`
+    — creates a balanced PAIR (CREDIT wrong + DEBIT correct) inside
+      the employee ledger only. `bank_impact = 0`.
+  - `GET  /api/accounting/employees/corrections` — audit log.
+- Every correction row carries `correction_group_id`,
+  `corrects_txn_group_id`, and rich metadata (original_operation,
+  original_employee_id/name, corrected_to_employee_id/name, reason,
+  corrected_by, corrected_at, partial flag).
+
+### Frontend
+- New route `/employee-corrections` (`EmployeeCorrections.jsx`)
+  with pickers, operation list (showing remaining_correctable per
+  txn), amount field (partial allowed), required reason textarea,
+  confirmation modal stating "البنك لن يتأثر", and audit log card.
+- Sidebar link `nav-employee-corrections` under العمليات المالية.
+- data-testids: `from-employee-picker`, `to-employee-picker`,
+  `operation-{ledger_id}`, `correction-amount`,
+  `correction-reason`, `submit-correction`,
+  `correction-confirm-modal`, `confirm-correction`,
+  `audit-row-{group_id}`.
+
+### Decisions Locked (per merchant approval)
+- **1a** partial corrections allowed.
+- **2b** opening_balance NOT correctable here (separate path).
+- **3b** a correction itself is NOT correctable.
+- **4a** original entry stays visible and untouched.
+- **5b** MVP scope: salary_payment, advance_grant, custody_grant.
+
+### Tests
+- `/app/backend/tests/test_employee_correction_iter196.py` covers
+  16 assertions: same-employee block, over-amount block, short
+  reason block, partial then full correction, correction-of-
+  correction block, bank-untouched invariant, original-byte-
+  identical invariant, employee balance movements, rich audit
+  metadata, listing and audit endpoints, advance_grant smoke.
+- ✅ Test passes (1/1).
+
+### Open Items
+- 🟢 Phase 2 (P1) — Bridge Tabby/Tamara writes into general_ledger.
+- 🟢 Phase 3 (P2) — Historical Tabby backfill.
+- 🟠 P0 — 15 orphan employees treatment plan.
+- 🟢 Extend correction MVP to advance_repay_cash, custody_return,
+  salary_settle's advance offset leg after stability proven.
+
+
