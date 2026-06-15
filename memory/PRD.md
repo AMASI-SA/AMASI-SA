@@ -2966,3 +2966,55 @@ matches because the originals are already `status="reversed"`.
 
 ### Endpoint used
 - `GET /api/ledger/entries?limit=N` (already enriched with `posted_by_name` / `reversed_by_name` in Iter-214).
+
+
+## Completed Work — Iter-217 (Feb 15 2026): Financial Position SSOT (Phases A+B+C)
+
+**P0 user report**: "القيود المحاسبية في general_ledger لا تنعكس على صفحة المركز المالي."
+
+### Audit findings (verified by code)
+Three pages were reading from THREE different sources:
+- `/financial-position` → legacy `accounts.current_balance` + `liabilities` collection (NOT SSOT).
+- `/financial-position-ledger` → `/accounting/financial-position` (SSOT, but a separate page).
+- `/accounts` → mixed (only partial SSOT via Iter-192 opening_balance check).
+
+### 🚨 Latent production bug uncovered & fixed
+`ledger_core.compute_balance` was DOUBLE-COUNTING reversals: after reversing a salary payment, the obligation jumped to -400 instead of restoring to -200. The reversed original was filtered out (status="reversed") but the reversal entry (status="posted", entry_type="reversal") was still counted. Pre-existing bug affecting ALL reversal flows in production.
+**Fix**: `compute_balance` + `compute_balances_bulk` now filter `entry_type: {$ne: "reversal"}` so each (reversed-original, its reversal) pair cancels by definition.
+Also fixed: `reverse_entry` was not propagating `sub_account` to the reversal entry, breaking compute_balance for entities with sub-accounts.
+
+### Phase A — Backend SSOT enrichment
+- New module `/app/backend/financial_position_ssot.py`:
+  - `compute_financial_position(db, user_id)` — assembles the legacy-compatible response shape exclusively from `general_ledger`.
+  - `account_balance_ssot(db, user_id, account)` — single SSOT rule reused by every page: BNPL formula > ledger net (+ implicit current_balance opening only if no active `opening_balance` entry exists) > legacy current_balance fallback.
+  - `salary_breakdown_ssot` — per-employee accrued/paid/advance derived from ledger.
+  - `by_ad_provider_ssot` — ad-account debt grouped by provider.
+- `/accounting/financial-position` endpoint now returns the enriched payload (assets, liabilities, totals, salary_breakdown, by_ad_provider, payment_platforms_remaining).
+
+### Phase A — Frontend
+- `FinancialPosition.jsx` swapped from `/liabilities/summary` → `/accounting/financial-position`. Old endpoints (`/liabilities/summary`, etc.) remain untouched per user directive.
+- `FinancialPositionLedger.jsx` is unchanged (it already consumed `/accounting/financial-position`; the enriched shape is a superset).
+
+### Phase B — `/accounts/summary` + per-row balances on SSOT
+- `accounts_routes.py::summary` rewritten to call `account_balance_ssot` for every visible account → grand_total now matches `/accounting/financial-position`.
+- `_account_with_meta` (per-row balance shown on /accounts and elsewhere) also delegates to `account_balance_ssot` so per-row matches the summary totals.
+- No bulk migration. Auto-implicit-opening rule kicks in for any account that has ANY ledger activity but no `opening_balance` entry yet (matches Iter-192 semantics).
+
+### Phase C — Tests
+- `/app/backend/tests/test_financial_position_ssot_iter217.py` (PASS):
+  1. baseline ↔ ledger empty → uses current_balance.
+  2. post `opening_balance` → financial position changes by the correct delta.
+  3. reverse the group → financial position returns to baseline.
+  4. `/accounts/summary` agrees with `/accounting/financial-position` (drives helper directly).
+  5. full round-trip post+reverse → net position lands on baseline (idempotency).
+- All other existing tests still PASS (`Iter-205`, `Iter-214`, `Iter-215`, `Iter-215b`).
+
+### Verification on preview (real merchant data)
+- `/accounting/financial-position`: banks=98,505.32 platforms=323,592.21 net=397,605.53.
+- `/accounts/summary`: bank=98,505.32 platform=323,592.21 grand=422,097.53.
+- ✅ Both pages now show exactly the same per-asset numbers, and net_position = grand_total − liabilities (28,500) + advances (4,008) = 397,605.53.
+
+### Constraints honoured
+- ✅ `/liabilities/summary` and other legacy endpoints NOT modified.
+- ✅ NO data migration; no production records touched.
+- ✅ `/financial-position-ledger` page kept intact (still works, redirect not needed since both pages now show the same data).

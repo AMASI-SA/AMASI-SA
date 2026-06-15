@@ -459,58 +459,28 @@ async def _account_with_meta(db, user_id: str, doc: dict) -> dict:
         {"user_id": user_id, "account_id": out["id"]}
     )
 
-    # Iter-192 — Single Source of Truth for bank/cash balances.
-    # When the account has any Universal Ledger activity (i.e. an
-    # opening_balance entry posted by Phase-4 migration or by the
-    # iter-192 auto-seed on first ledger touch), the live balance
-    # MUST come from the ledger only — never from the legacy
-    # `current_balance` field. Mixing the two double-counts the
-    # migration opening entry (which was equal to current_balance
-    # at cutoff time) and yields 2x balances in the new-transaction
-    # screen vs the Accounts page.
-    if out.get("account_type") in ("bank", "cash"):
+    # Iter-217 — SSOT for ALL bank/cash/payment_platform accounts.
+    # Delegates to `account_balance_ssot` so the per-row balance MATCHES
+    # `/accounts/summary` and `/accounting/financial-position`. Behaviour:
+    #   • BNPL platforms → canonical BNPL formula.
+    #   • Any account with ledger activity → ledger net (+ legacy
+    #     current_balance as implicit opening if no opening_balance
+    #     entry exists, mirroring Iter-192 semantics).
+    #   • No ledger activity → legacy current_balance fallback.
+    if out.get("account_type") in ("bank", "cash", "payment_platform"):
         try:
-            from ledger_core import compute_balance as _cb
-            has_opening = await db.general_ledger.find_one(
-                {"user_id": user_id, "entity_type": "bank",
-                 "entity_id": out["id"],
-                 "entry_type": "opening_balance",
-                 "status": "posted"},
-                {"_id": 1},
+            from financial_position_ssot import account_balance_ssot
+            ssot_bal = await account_balance_ssot(
+                db, user_id=user_id, account=out,
             )
-            if has_opening:
-                bal = await _cb(
-                    db, user_id=user_id, entity_type="bank",
-                    entity_id=out["id"], sub_account="main",
-                )
+            if abs(ssot_bal - float(out.get("current_balance") or 0)) > 0.005:
                 out["current_balance_legacy"] = out.get("current_balance")
-                out["current_balance"] = round(float(bal["net_balance"]), 2)
-                out["balance_source"] = "ledger"
-                return out
+            out["current_balance"] = round(float(ssot_bal), 2)
+            out["balance_source"] = "ssot"
+            return out
         except Exception:  # noqa: BLE001
-            pass
-
-    # Iter-118 — SSOT for BNPL provider balances.  When this account
-    # is a Tabby/Tamara wallet, override `current_balance` with the
-    # canonical BNPL formula so the Accounts/Transfers page shows the
-    # SAME number as the BNPL Settlements page.  Without this, the
-    # two pages disagreed (the local ledger only knows what's been
-    # explicitly recorded as in/out movements, while the BNPL formula
-    # uses `payment_transactions` as the source of truth).
-    try:
-        from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
-        bnpl_provider = is_bnpl_account(out)
-        if bnpl_provider:
-            canon = await get_bnpl_provider_balance(db, user_id, bnpl_provider)
-            out["current_balance_ledger"] = out.get("current_balance")
-            out["current_balance"] = float(canon["balance"])
-            out["bnpl_balance_components"] = canon["components"]
-            out["balance_source"] = "bnpl_ssot"
-        else:
-            out["balance_source"] = "ledger"
-    except Exception:  # noqa: BLE001
-        # Never let SSOT computation block account listing.
-        out["balance_source"] = "ledger"
+            # Never let SSOT computation block account listing.
+            out["balance_source"] = "legacy"
 
     return out
 
@@ -538,49 +508,27 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
 
     @router.get("/summary")
     async def summary(user: dict = Depends(current_user)):
-        """Powers the top 4 summary cards on /accounts."""
+        """Powers the top 4 summary cards on /accounts. Iter-217 —
+        delegates per-account balance to the shared SSOT rule so the
+        numbers here MATCH `/accounting/financial-position` and the
+        per-row balances rendered by `_account_with_meta`."""
+        from financial_position_ssot import account_balance_ssot
         cur = db.accounts.find(
             {"user_id": user["id"], "status": {"$ne": "hidden"}},
             {"_id": 0, "id": 1, "account_type": 1, "current_balance": 1,
              "status": 1, "provider_name": 1, "name": 1,
              "normalized_payment_method": 1},
         )
-        # Iter-119 — apply BNPL SSOT when summing payment_platform totals
-        # so the 4 summary cards on /accounts MATCH the per-row balances
-        # (which already go through `_account_with_meta` → SSOT).
-        # Iter-192 — apply LEDGER SSOT for bank/cash accounts that have
-        # a migration opening_balance entry, otherwise the summary cards
-        # double-count exactly like the new-transaction screen did.
-        from bnpl.balance_service import is_bnpl_account, get_bnpl_provider_balance
-        from ledger_core import compute_balance as _cb
         by_type: dict[str, float] = {t: 0.0 for t in ACCOUNT_TYPES}
         grand = 0.0
         async for d in cur:
             t = d.get("account_type")
-            bal = float(d.get("current_balance") or 0)
             try:
-                bnpl_provider = is_bnpl_account(d)
-                if bnpl_provider:
-                    canon = await get_bnpl_provider_balance(
-                        db, user["id"], bnpl_provider,
-                    )
-                    bal = float(canon["balance"])
-                elif t in ("bank", "cash"):
-                    has_opening = await db.general_ledger.find_one(
-                        {"user_id": user["id"], "entity_type": "bank",
-                         "entity_id": d["id"],
-                         "entry_type": "opening_balance",
-                         "status": "posted"},
-                        {"_id": 1},
-                    )
-                    if has_opening:
-                        x = await _cb(
-                            db, user_id=user["id"], entity_type="bank",
-                            entity_id=d["id"], sub_account="main",
-                        )
-                        bal = round(float(x["net_balance"]), 2)
+                bal = await account_balance_ssot(
+                    db, user_id=user["id"], account=d,
+                )
             except Exception:  # noqa: BLE001
-                pass
+                bal = float(d.get("current_balance") or 0)
             grand += bal
             if t in by_type:
                 by_type[t] += bal

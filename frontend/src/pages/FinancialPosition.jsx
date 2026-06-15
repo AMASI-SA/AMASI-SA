@@ -89,14 +89,56 @@ export default function FinancialPosition() {
     const load = async () => {
         setLoading(true);
         try {
-            // Parallel fetch — purely read-only. No calculations here.
-            const [s, r, listUnpaid, listPartial] = await Promise.all([
-                api.get("/liabilities/summary"),
+            // Iter-217 — Primary source is the SSOT endpoint. We map
+            // its enriched shape into the legacy `summary` shape the
+            // rest of this page expects. Reconciliation totals + open
+            // liability counters are still read from their legacy
+            // endpoints (they don't suffer from the SSOT drift bug).
+            const [pos, r, listUnpaid, listPartial] = await Promise.all([
+                api.get("/accounting/financial-position"),
                 api.get("/reconciliation/summary"),
                 api.get("/liabilities?status=unpaid&limit=1"),
                 api.get("/liabilities?status=partial&limit=1"),
             ]);
-            setSummary(s.data);
+            const p = pos.data || {};
+            const a = p.assets || {};
+            const li = p.liabilities || {};
+            const totals = p.totals || {};
+            const adapted = {
+                net_position: totals.net_position ?? p.net_position ?? 0,
+                assets: {
+                    banks: a.banks ?? 0,
+                    payment_platforms_remaining:
+                        a.payment_platforms_remaining ?? 0,
+                    payment_platforms_expected:
+                        a.payment_platforms_remaining ?? 0,
+                    employee_advance: a.employee_advance ?? 0,
+                    employee_custody: a.employee_custody ?? 0,
+                    external_receivable: a.external_receivable ?? 0,
+                    courier_cod_receivable: a.courier_cod_receivable ?? 0,
+                    ad_account_prepaid: a.ad_account_prepaid ?? 0,
+                    total: totals.total_assets ?? 0,
+                },
+                liabilities: {
+                    salaries_unpaid: li.salaries_unpaid ?? 0,
+                    ad_accounts_unpaid: li.ad_accounts_unpaid ?? 0,
+                    shipping_unpaid: li.courier_payable ?? 0,
+                    supplier_unpaid: li.supplier_payable ?? 0,
+                    external_payable: li.external_payable ?? 0,
+                    by_ad_provider: p.by_ad_provider || {},
+                    by_shipping_company: {},  // not derived from ledger
+                    total: totals.total_liabilities ?? 0,
+                },
+                salary_breakdown: p.salary_breakdown || {
+                    accrued_total: 0, advances_total: 0,
+                    paid_total: 0, net_due: 0,
+                    active_count: 0, suspended_count: 0,
+                    employees: [],
+                },
+                source: p.source || "general_ledger",
+                iter: p.iter || null,
+            };
+            setSummary(adapted);
             setRecon(r.data);
             setOpenCount(
                 (Number(listUnpaid?.data?.total) || 0)

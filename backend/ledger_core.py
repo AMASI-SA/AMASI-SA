@@ -385,6 +385,7 @@ async def reverse_entry(
         db,
         user_id=user_id, actor_id=actor_id, actor_name=actor_name,
         entity_type=orig["entity_type"], entity_id=orig["entity_id"],
+        sub_account=orig.get("sub_account"),
         entry_type="reversal", amount=orig["amount"], side=opposite_side,
         reason_code=reason_code, notes=notes,
         metadata={"reverses_entry_no": orig.get("entry_no")},
@@ -440,7 +441,14 @@ async def compute_balance(
         "user_id": user_id,
         "entity_type": entity_type,
         "entity_id": entity_id,
+        # Iter-217 — Exclude both reversed originals AND their
+        # reversal entries from the balance computation. Each pair
+        # cancels by definition; counting only one side (the previous
+        # behaviour) inflated balances by 2× the reversed amount.
+        # The "live" balance now reflects ONLY entries that are both
+        # `status=posted` AND NOT of `entry_type=reversal`.
         "status": "posted",
+        "entry_type": {"$ne": "reversal"},
     }
     if sub_account is not None:
         match["sub_account"] = sub_account
@@ -487,6 +495,8 @@ async def compute_balances_bulk(
             "entity_type": entity_type,
             "entity_id": {"$in": entity_ids},
             "status": "posted",
+            # Iter-217 — exclude reversal entries so pairs cancel.
+            "entry_type": {"$ne": "reversal"},
         }},
         {"$group": {
             "_id": {"entity_id": "$entity_id", "side": "$side"},

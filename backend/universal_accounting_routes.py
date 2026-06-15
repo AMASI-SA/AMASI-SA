@@ -2138,83 +2138,15 @@ def make_universal_router(db) -> APIRouter:
     # ═══════════════════════════════════════════════════════════════
     @router.get("/financial-position")
     async def financial_position(user: dict = Depends(current_user)):
-        """Live financial position computed STRICTLY from general_ledger.
-        Returns assets + liabilities + net position. No reads from
-        legacy `liabilities` or `account_transactions` tables."""
-        uid = user["id"]
-        pipeline = [
-            {"$match": {"user_id": uid, "status": "posted"}},
-            {"$group": {
-                "_id": {"entity_type": "$entity_type",
-                          "sub_account": "$sub_account"},
-                "debits":  {"$sum": {"$cond": [
-                    {"$eq": ["$side", "debit"]}, "$amount", 0]}},
-                "credits": {"$sum": {"$cond": [
-                    {"$eq": ["$side", "credit"]}, "$amount", 0]}},
-            }},
-        ]
-        agg = await db.general_ledger.aggregate(pipeline).to_list(500)
-
-        # Classify by accounting nature
-        # Assets: bank, employee.advance, employee.custody,
-        #         external_person.receivable, courier.cod_receivable,
-        #         ad_account.prepaid (positive net)
-        # Liabilities: employee.salary_payable, supplier.payable,
-        #         courier.payable, external_person.payable, ad_account (negative net)
-        # Expenses: tracked but not on balance sheet
-        # Revenue: same
-        assets: dict = {"bank": 0.0, "employee_advance": 0.0,
-                         "employee_custody": 0.0, "external_receivable": 0.0,
-                         "courier_cod_receivable": 0.0, "ad_account_prepaid": 0.0}
-        liabilities: dict = {"employee_salary_payable": 0.0,
-                              "supplier_payable": 0.0,
-                              "courier_payable": 0.0,
-                              "external_payable": 0.0,
-                              "ad_account_debt": 0.0}
-        for r in agg:
-            et = r["_id"]["entity_type"]
-            sub = r["_id"].get("sub_account")
-            net = round(float(r["debits"]) - float(r["credits"]), 2)
-            if et == "bank":
-                assets["bank"] += net  # debit-positive
-            elif et == "employee" and sub == "advance":
-                assets["employee_advance"] += max(net, 0.0)
-            elif et == "employee" and sub == "custody":
-                assets["employee_custody"] += max(net, 0.0)
-            elif et == "employee" and sub == "salary_payable":
-                liabilities["employee_salary_payable"] += max(-net, 0.0)
-            elif et == "supplier" and sub == "payable":
-                liabilities["supplier_payable"] += max(-net, 0.0)
-            elif et == "courier" and sub == "payable":
-                liabilities["courier_payable"] += max(-net, 0.0)
-            elif et == "courier" and sub == "cod_receivable":
-                assets["courier_cod_receivable"] += max(net, 0.0)
-            elif et == "external_person" and sub == "receivable":
-                assets["external_receivable"] += max(net, 0.0)
-            elif et == "external_person" and sub == "payable":
-                liabilities["external_payable"] += max(-net, 0.0)
-            elif et == "ad_account":
-                if net > 0:
-                    assets["ad_account_prepaid"] += net
-                else:
-                    liabilities["ad_account_debt"] += -net
-
-        assets = {k: round(v, 2) for k, v in assets.items()}
-        liabilities = {k: round(v, 2) for k, v in liabilities.items()}
-        total_assets = round(sum(assets.values()), 2)
-        total_liabilities = round(sum(liabilities.values()), 2)
-        net_position = round(total_assets - total_liabilities, 2)
-
-        return {
-            "assets": assets,
-            "liabilities": liabilities,
-            "totals": {
-                "total_assets": total_assets,
-                "total_liabilities": total_liabilities,
-                "net_position": net_position,
-            },
-            "source": "general_ledger (Phase 4)",
-        }
+        """Iter-217 — SSOT financial position computed strictly from
+        `general_ledger` (with the documented Iter-192/217 fallback
+        for accounts that have ZERO ledger activity). Returns a
+        backward-compatible superset of the Phase-4 shape so both
+        `/financial-position` (legacy page) and
+        `/financial-position-ledger` (new page) can consume it.
+        """
+        from financial_position_ssot import compute_financial_position
+        return await compute_financial_position(db, user["id"])
 
     # ═══════════════════════════════════════════════════════════════
     # Trial Balance — unified accounting report across all entities
