@@ -1825,6 +1825,7 @@ function timeAgo(iso) {
 }
 
 function RecentTxnsPanel({ rows, highlightGroupId, loading, onRefresh }) {
+    const [selectedTxn, setSelectedTxn] = useState(null);
     if (!rows || rows.length === 0) {
         return loading ? (
             <div className="max-w-5xl mx-auto px-4 pb-6">
@@ -1864,7 +1865,8 @@ function RecentTxnsPanel({ rows, highlightGroupId, loading, onRefresh }) {
                                 const isNew = g.txn_group_id === highlightGroupId;
                                 return (
                                     <tr key={g.txn_group_id}
-                                        className={`border-b border-slate-100 transition-colors duration-700 ${
+                                        onClick={() => setSelectedTxn(g)}
+                                        className={`border-b border-slate-100 transition-colors duration-700 cursor-pointer ${
                                             isNew
                                                 ? "bg-emerald-50 ring-2 ring-emerald-300 ring-inset"
                                                 : "hover:bg-slate-50"
@@ -1894,7 +1896,171 @@ function RecentTxnsPanel({ rows, highlightGroupId, loading, onRefresh }) {
                     </table>
                 </div>
                 <div className="px-5 py-2 bg-slate-50 border-t border-slate-200 text-[10px] text-slate-500">
-                    آخر {rows.length} حركة من القيد الموحد. الصف الأخضر = الحركة التي اعتُمدت للتو.
+                    آخر {rows.length} حركة من القيد الموحد. الصف الأخضر = الحركة التي اعتُمدت للتو. اضغط على أي صف لعرض التفاصيل المحاسبية.
+                </div>
+            </div>
+            <TxnDetailModal
+                txn={selectedTxn}
+                onClose={() => setSelectedTxn(null)}
+            />
+        </div>
+    );
+}
+
+// ── Iter-213 — Transaction detail modal ──────────────────────────────
+// Renders the double-entry breakdown of a clicked txn-group: every
+// debit/credit leg, what entity it touches, and a plain-Arabic
+// "كم له / كم عليه" summary so the merchant understands the impact at
+// a glance.
+
+const ENTITY_LABELS = {
+    employee: "موظف",
+    supplier: "مورّد",
+    external: "خارجي",
+    bank: "بنك",
+    cash: "صندوق نقدي",
+    expense: "مصروف",
+    ad_account: "حساب إعلاني",
+    courier: "شركة شحن",
+    customer: "عميل",
+    payment_gateway: "بوابة دفع",
+};
+
+const SUB_ACCOUNT_LABELS = {
+    salary_payable: "راتب مستحق",
+    advance: "سلفة",
+    custody: "عهدة",
+    main: "الرئيسي",
+    balance: "الرصيد",
+    debt: "المديونية",
+    payable: "ذمم دائنة",
+    receivable: "ذمم مدينة",
+    cod_receivable: "ذمم COD",
+};
+
+function entityLabel(t) { return ENTITY_LABELS[t] || t || "—"; }
+function subLabel(s) { return SUB_ACCOUNT_LABELS[s] || s || "—"; }
+
+function TxnDetailModal({ txn, onClose }) {
+    if (!txn) return null;
+    const debits = txn.legs.filter((l) => l.side === "debit");
+    const credits = txn.legs.filter((l) => l.side === "credit");
+    const totalDebit = debits.reduce((s, l) => s + l.amount, 0);
+    const totalCredit = credits.reduce((s, l) => s + l.amount, 0);
+    const balanced = Math.abs(totalDebit - totalCredit) < 0.01;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={onClose}
+            data-testid="txn-detail-modal">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+                onClick={(e) => e.stopPropagation()}>
+                {/* Header */}
+                <div className="px-5 py-3 bg-gradient-to-l from-sky-50 to-emerald-50 border-b border-sky-200 flex items-center justify-between">
+                    <div>
+                        <h3 className="font-extrabold text-slate-900" style={{ fontFamily: "Tajawal" }}>
+                            تفاصيل الحركة — {txnLabel(txn.txn_type)}
+                        </h3>
+                        <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                            {txn.txn_group_id}
+                        </p>
+                    </div>
+                    <button onClick={onClose}
+                        className="w-8 h-8 rounded-lg hover:bg-sky-100 flex items-center justify-center text-slate-600 font-bold"
+                        data-testid="txn-detail-modal-close">✕</button>
+                </div>
+
+                {/* Plain-Arabic summary */}
+                <div className="px-5 py-3 bg-amber-50/40 border-b border-amber-100">
+                    <p className="text-xs text-slate-600 mb-2 font-bold">📝 ملخص العملية</p>
+                    <p className="text-sm text-slate-800 leading-relaxed">
+                        {txn.notes || "—"}
+                    </p>
+                </div>
+
+                {/* Body — double-entry breakdown */}
+                <div className="flex-1 overflow-auto p-4 space-y-3">
+                    {/* Debits */}
+                    <div>
+                        <h4 className="text-xs font-extrabold text-emerald-800 mb-2 flex items-center gap-2">
+                            <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full"></span>
+                            مدين ({debits.length}) — ما زاد علينا أو ما دفعناه
+                        </h4>
+                        <div className="space-y-2">
+                            {debits.map((l, i) => (
+                                <div key={i} className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 flex items-center justify-between">
+                                    <div>
+                                        <div className="text-xs font-bold text-emerald-900">
+                                            {entityLabel(l.entity_type)}
+                                            {l.sub_account ? ` · ${subLabel(l.sub_account)}` : ""}
+                                        </div>
+                                        <div className="text-[10px] text-emerald-700 font-mono">
+                                            {l.entity_id}
+                                        </div>
+                                    </div>
+                                    <div className="text-base font-extrabold num text-emerald-800">
+                                        {fmtNum(l.amount)} <span className="text-[10px]">ر.س</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Credits */}
+                    <div>
+                        <h4 className="text-xs font-extrabold text-rose-800 mb-2 flex items-center gap-2">
+                            <span className="inline-block w-2 h-2 bg-rose-500 rounded-full"></span>
+                            دائن ({credits.length}) — ما خصم من رصيدنا أو ما استحق علينا
+                        </h4>
+                        <div className="space-y-2">
+                            {credits.map((l, i) => (
+                                <div key={i} className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 flex items-center justify-between">
+                                    <div>
+                                        <div className="text-xs font-bold text-rose-900">
+                                            {entityLabel(l.entity_type)}
+                                            {l.sub_account ? ` · ${subLabel(l.sub_account)}` : ""}
+                                        </div>
+                                        <div className="text-[10px] text-rose-700 font-mono">
+                                            {l.entity_id}
+                                        </div>
+                                    </div>
+                                    <div className="text-base font-extrabold num text-rose-800">
+                                        {fmtNum(l.amount)} <span className="text-[10px]">ر.س</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Balance check */}
+                    <div className={`mt-4 p-3 rounded-lg border-2 ${
+                        balanced
+                            ? "bg-emerald-50 border-emerald-300"
+                            : "bg-rose-50 border-rose-300"
+                    }`}>
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-extrabold text-slate-700">
+                                {balanced ? "✅ القيد متوازن" : "⚠️ القيد غير متوازن"}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                                {timeAgo(txn.posted_at)}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                                <span className="text-slate-500">إجمالي المدين: </span>
+                                <span className="num font-bold text-emerald-700">{fmtNum(totalDebit)}</span>
+                            </div>
+                            <div>
+                                <span className="text-slate-500">إجمالي الدائن: </span>
+                                <span className="num font-bold text-rose-700">{fmtNum(totalCredit)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-2 bg-slate-50 border-t border-slate-200 text-[10px] text-slate-500">
+                    💡 المدين (Debit) = ما دخل/ازداد عندنا. الدائن (Credit) = ما خرج/استحق علينا. مجموع المدين يجب أن يساوي مجموع الدائن دائماً.
                 </div>
             </div>
         </div>
