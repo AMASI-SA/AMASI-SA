@@ -36,6 +36,7 @@ from typing import Any, Dict, List, Optional
 
 from .clients.tamara import TamaraClient, TamaraError
 from .config_store import DEFAULTS, get_raw_secrets, record_sync
+from .ledger_bridge import safe_post_sale, safe_post_refund
 from .webhook_routes import (
     _extract_tamara_refunds,
     _normalise_tamara_order,
@@ -88,6 +89,11 @@ async def _persist_tamara_order(
     )
     res["stored_transaction"] = True
 
+    # Iter-219 — SSOT bridge. Cutoff env + idempotency guard means
+    # historical re-syncs do NOT create ledger entries; only NEW
+    # bookable sales get DEBIT receivable / CREDIT bnpl_sales.
+    await safe_post_sale(db, user_id=user_id, txn=txn)
+
     # Iter-146 — stamp billing_eligible_at idempotently when Tamara's
     # own status indicates the order has entered the settlement cycle.
     from .webhook_routes import _tamara_billing_eligible_event
@@ -120,6 +126,9 @@ async def _persist_tamara_order(
             upsert=True,
         )
         res["refunds_found"] += 1
+        # Iter-219 — refund bridge; skipped if underlying sale was
+        # never posted (e.g. historical/pre-cutoff order).
+        await safe_post_refund(db, user_id=user_id, refund=rfd)
 
     # Update unified_orders ONLY for existing rows — backfill never
     # creates new orders (user requirement).

@@ -111,6 +111,9 @@ ENTRY_TYPES = (
     "courier_cod_settle",   # تسوية COD متعددة الأرجل (Iter-190): نقص cod_receivable + bank/cash + مصروفات
     # ── Phase 3 (Iter-196) — manual employee correction ──
     "correction",           # تصحيح: نقل أثر بين كيانَين دون مساس بالبنك/الصندوق
+    # ── Iter-219 — BNPL bridge (Tabby/Tamara) ──
+    "bnpl_sale",            # بيع Tabby/Tamara: مدين receivable + دائن bnpl_sales
+    "bnpl_refund",          # استرجاع Tabby/Tamara: مدين bnpl_sales + دائن receivable
     # Reversal kinds for the above are unified under "reversal"
 )
 SIDES = ("debit", "credit")

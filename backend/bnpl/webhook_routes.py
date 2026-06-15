@@ -32,6 +32,7 @@ from .config_store import (
     DEFAULTS, _try_decrypt as _decrypt_blob,
     find_user_by_webhook_secret,
 )
+from .ledger_bridge import safe_post_sale, safe_post_refund
 from .sync_service import _merge_into_unified_orders
 
 
@@ -303,6 +304,8 @@ def attach_bnpl_webhook_routes(parent_router: APIRouter, db) -> None:
                  "$setOnInsert": {"id": txn["id"], "created_at": _now_iso()}},
                 upsert=True,
             )
+            # Iter-219 — SSOT bridge for Tamara sales arriving via webhook.
+            await safe_post_sale(db, user_id=user_id, txn=txn)
             # Iter-146 — stamp billing_eligible_at idempotently (first
             # billable transition wins).  Tamara's own captured/shipped
             # status is enough; if the order is not yet captured we rely
@@ -335,6 +338,8 @@ def attach_bnpl_webhook_routes(parent_router: APIRouter, db) -> None:
                  "$setOnInsert": {"id": rfd["id"], "created_at": _now_iso()}},
                 upsert=True,
             )
+            # Iter-219 — refund bridge (skips if sale wasn't booked).
+            await safe_post_refund(db, user_id=user_id, refund=rfd)
 
         if txn.get("order_reference_id") or txn.get("order_number"):
             await _merge_into_unified_orders(db, user_id, txn)

@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .clients.tabby import TabbyClient, TabbyError
 from .config_store import get_raw_secrets, record_sync
+from .ledger_bridge import safe_post_sale, safe_post_refund
 
 
 SOURCE_PRIORITY = {
@@ -347,6 +348,12 @@ async def sync_tabby_payments(
         )
         stats["transactions_upserted"] += 1
 
+        # Iter-219 — SSOT bridge. Posts a balanced double-entry into
+        # `general_ledger` on first sight of a bookable sale.
+        # Idempotent via metadata.idempotency_key; honours the
+        # BNPL_BRIDGE_CUTOFF_ISO env to guard against historical data.
+        await safe_post_sale(db, user_id=user_id, txn=txn)
+
         for rfd in _extract_refund_rows(p, user_id):
             rid = rfd.get("provider_refund_id") or ""
             if not rid:
@@ -358,6 +365,9 @@ async def sync_tabby_payments(
                 upsert=True,
             )
             stats["refunds_upserted"] += 1
+            # Iter-219 — refund bridge (skips if underlying sale not
+            # yet in ledger, e.g. pre-cutoff sale).
+            await safe_post_refund(db, user_id=user_id, refund=rfd)
 
         res = await _merge_into_unified_orders(db, user_id, txn)
         action = res.get("action") or "skipped"

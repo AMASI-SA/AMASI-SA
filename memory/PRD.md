@@ -3159,3 +3159,47 @@ Read-only. Filterable by:
 - ✅ Iter-218 (this iteration)
 
 All pass individually. The known multi-file `Event loop is closed` test-isolation issue persists and is unrelated to any of these iterations.
+
+
+
+## Completed Work — Iter-219 (Feb 16 2026): Tabby/Tamara → SSOT Bridge (Phase 2a — Sales & Refunds)
+
+**User request**: ربط مبيعات/مرتجعات Tabby و Tamara بالقيد المزدوج (general_ledger) للمعاملات الجديدة فقط بعد النشر. لا Backfill تاريخي. لا تسويات/عمولات/VAT الآن (تأتي في Phase 2b).
+
+### Architecture (A1 + B1 — confirmed by user)
+- **Sale** (status ∈ {closed, captured, authorized, fully_captured, approved, completed, partially_captured, shipped, fully_shipped}):
+  - DEBIT `payment_gateway.{tabby|tamara}/receivable` = amount
+  - CREDIT `revenue.bnpl_sales` = amount
+- **Refund**:
+  - DEBIT `revenue.bnpl_sales` = amount
+  - CREDIT `payment_gateway.{tabby|tamara}/receivable` = amount
+
+### Files
+- **NEW** `/app/backend/bnpl/ledger_bridge.py` — `post_bnpl_sale_to_ledger`, `post_bnpl_refund_to_ledger`, safe wrappers.
+- **MODIFIED** `/app/backend/ledger_core.py` — added `bnpl_sale`, `bnpl_refund` to `ENTRY_TYPES`.
+- **HOOKED** `/app/backend/bnpl/sync_service.py` (Tabby) — after every `payment_transactions` + `payment_refunds` upsert.
+- **HOOKED** `/app/backend/bnpl/tamara_backfill.py` `_persist_tamara_order` (Tamara incremental + lookup paths).
+- **HOOKED** `/app/backend/bnpl/webhook_routes.py` (Tamara orders webhook) — bridge runs after upsert.
+
+### Guards (preserve "no historical backfill")
+1. **Idempotency** — `metadata.idempotency_key`:
+   - `bnpl_sale:{provider}:{provider_id}`
+   - `bnpl_refund:{provider}:{provider_refund_id}`
+2. **Cutoff env** — `BNPL_BRIDGE_CUTOFF_ISO` (default `2026-02-12T00:00:00Z`). Any txn with `created_at_provider < cutoff` is silently skipped. Unset → no cutoff.
+3. **Status whitelist** — only bookable BNPL statuses post; pending/created/rejected do not.
+4. **Refund → sale dependency** — refund posts ONLY if the underlying sale is already in the ledger. Otherwise skipped (`underlying_sale_not_in_ledger`). Prevents a refund alone from creating a negative receivable when its sale is pre-cutoff.
+5. **Safe wrappers** — bridge errors are logged but never break the underlying upsert.
+
+### Test — `/app/backend/tests/test_bnpl_ssot_iter219.py` (8/8 PASS)
+1. Tabby sale → balanced 2-leg group; debit=credit; receivable +500, bnpl_sales +500.
+2. Re-running same sale → idempotent skip (no duplicate ledger row).
+3. Refund flips signs correctly; receivable -100, bnpl_sales -100.
+4. Refund without matching sale → skipped with reason `underlying_sale_not_in_ledger`.
+5. `BNPL_BRIDGE_CUTOFF_ISO` blocks historical sale; fresh post-cutoff sale books fine.
+6. Non-bookable status (`created`) → skipped.
+7. Tamara `fully_captured` sale books with provider isolation.
+8. Cross-provider isolation — tabby and tamara receivables don't bleed.
+
+### NOT included (Phase 2b — next iteration)
+- Settlement breakdown (bank + commission + VAT + fees) in `accounts_routes.py POST /transactions` for category=bank_transfer.
+- Historical backfill of 800+ Tabby ops (deferred to Phase 3 by user).
