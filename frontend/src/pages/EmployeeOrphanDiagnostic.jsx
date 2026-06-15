@@ -92,7 +92,34 @@ export default function EmployeeOrphanDiagnostic() {
 
     const summary = data?.summary || {};
     const perEmp = data?.per_employee || [];
+    const perGroup = data?.per_group || [];
     const entries = data?.entries || [];
+
+    const downloadJSON = () => {
+        if (!data) return;
+        const blob = new Blob(
+            [JSON.stringify(data, null, 2)],
+            { type: "application/json" },
+        );
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const stamp = new Date().toISOString().slice(0, 19)
+            .replace(/[:T]/g, "-");
+        a.download = `employee_orphans_${stamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("تم تنزيل التقرير الكامل (JSON)");
+    };
+
+    const REPAIR_META = {
+        KEEP:              { ar: "إبقاء (متعاكس)", tone: "emerald" },
+        RECREATE_EMPLOYEE: { ar: "إعادة إنشاء الموظف", tone: "violet" },
+        REVERSE:           { ar: "عكس", tone: "amber" },
+        MANUAL_REVIEW:     { ar: "مراجعة يدوية", tone: "rose" },
+    };
 
     const filtered = useMemo(() => {
         return entries.filter((e) => {
@@ -126,17 +153,31 @@ export default function EmployeeOrphanDiagnostic() {
                         قرار المعالجة.
                     </p>
                 </div>
-                <button
-                    type="button"
-                    onClick={load}
-                    disabled={loading}
-                    className="px-3 py-2 rounded-lg border border-slate-300
-                               text-xs font-bold text-slate-700
-                               hover:bg-slate-50 disabled:opacity-60"
-                    data-testid="refresh-btn"
-                >
-                    {loading ? "جارٍ التحديث…" : "تحديث"}
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={downloadJSON}
+                        disabled={loading || !data}
+                        className="px-3 py-2 rounded-lg border border-violet-300
+                                   bg-violet-50 hover:bg-violet-100
+                                   text-xs font-bold text-violet-800
+                                   disabled:opacity-60"
+                        data-testid="btn-export-json"
+                    >
+                        📤 تصدير JSON
+                    </button>
+                    <button
+                        type="button"
+                        onClick={load}
+                        disabled={loading}
+                        className="px-3 py-2 rounded-lg border border-slate-300
+                                   text-xs font-bold text-slate-700
+                                   hover:bg-slate-50 disabled:opacity-60"
+                        data-testid="refresh-btn"
+                    >
+                        {loading ? "جارٍ التحديث…" : "تحديث"}
+                    </button>
+                </div>
             </div>
 
             {/* Phase-2 placeholder buttons — disabled until we
@@ -231,7 +272,7 @@ export default function EmployeeOrphanDiagnostic() {
             {/* Classification breakdown */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5">
                 <h2 className="text-base font-extrabold text-slate-900 mb-3">
-                    التصنيف
+                    التصنيف ومقترح المعالجة
                 </h2>
                 {(summary.by_classification || []).length === 0 ? (
                     <div className="text-center text-emerald-600 py-4
@@ -239,6 +280,32 @@ export default function EmployeeOrphanDiagnostic() {
                         ✅ لا توجد قيود يتيمة على الموظفين.
                     </div>
                 ) : (
+                    <>
+                    {/* repair suggestion summary */}
+                    {(summary.by_repair_suggestion || []).length > 0 && (
+                        <div className="mb-3 flex flex-wrap gap-2"
+                             data-testid="repair-summary-pills">
+                            {summary.by_repair_suggestion.map((r) => {
+                                const m = REPAIR_META[r.repair_suggestion]
+                                    || { ar: r.repair_suggestion, tone: "slate" };
+                                return (
+                                    <span
+                                        key={r.repair_suggestion}
+                                        className={`px-3 py-1.5 rounded-lg
+                                                    text-[11px] font-bold border
+                                                    ${TONE[m.tone]}`}
+                                        data-testid={`repair-summary-${r.repair_suggestion}`}
+                                    >
+                                        {m.ar}: {r.count}
+                                        <span className="opacity-70 mr-2 num
+                                                         font-mono text-[10px]">
+                                            صافي {fmt(r.net)}
+                                        </span>
+                                    </span>
+                                );
+                            })}
+                        </div>
+                    )}
                     <div className="flex flex-wrap gap-2">
                         <button
                             type="button"
@@ -275,13 +342,15 @@ export default function EmployeeOrphanDiagnostic() {
                             );
                         })}
                     </div>
+                    </>
                 )}
             </div>
 
-            {/* Per-employee breakdown */}
+            {/* Per-employee deep breakdown */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5">
                 <h2 className="text-base font-extrabold text-slate-900 mb-3">
-                    حسب الموظف ({perEmp.length})
+                    حسب الموظف — تفصيل مدين/دائن لكل sub_account
+                    ({perEmp.length})
                 </h2>
                 {perEmp.length === 0 ? (
                     <div className="text-center text-slate-400 py-4 text-sm">
@@ -289,32 +358,77 @@ export default function EmployeeOrphanDiagnostic() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
+                        <table className="w-full text-[11px]">
                             <thead>
                                 <tr className="text-slate-500 font-bold
                                                border-b border-slate-200">
-                                    <th className="text-right py-2 px-2">
-                                        الاسم / المعرّف</th>
-                                    <th className="text-right py-2 px-2">
-                                        التصنيفات</th>
-                                    <th className="text-center py-2 px-2">
-                                        # القيود</th>
-                                    <th className="text-left py-2 px-2 num">
-                                        salary_payable الحالي
+                                    <th className="text-right py-2 px-2"
+                                        rowSpan={2}>
+                                        الاسم / employee_id
                                     </th>
-                                    <th className="text-left py-2 px-2 num">
-                                        salary_payable المتوقع بعد الإصلاح
+                                    <th className="text-center py-2 px-2"
+                                        rowSpan={2}>
+                                        # القيود
                                     </th>
-                                    <th className="text-left py-2 px-2 num">
-                                        الفرق
+                                    <th className="text-center py-2 px-2
+                                                   bg-slate-50"
+                                        colSpan={2}>
+                                        salary_payable
+                                    </th>
+                                    <th className="text-center py-2 px-2"
+                                        colSpan={2}>
+                                        advance
+                                    </th>
+                                    <th className="text-center py-2 px-2
+                                                   bg-slate-50"
+                                        colSpan={2}>
+                                        opening_balance
+                                    </th>
+                                    <th className="text-center py-2 px-2"
+                                        colSpan={2}>
+                                        reversal
+                                    </th>
+                                    <th className="text-left py-2 px-2 num"
+                                        rowSpan={2}>
+                                        net_effect
+                                    </th>
+                                    <th className="text-right py-2 px-2"
+                                        rowSpan={2}>
+                                        المعالجة المقترحة
+                                    </th>
+                                </tr>
+                                <tr className="text-slate-500 font-bold
+                                               border-b border-slate-200
+                                               text-[10px]">
+                                    <th className="text-left py-1 px-2 bg-slate-50 num">
+                                        مدين
+                                    </th>
+                                    <th className="text-left py-1 px-2 bg-slate-50 num">
+                                        دائن
+                                    </th>
+                                    <th className="text-left py-1 px-2 num">
+                                        مدين
+                                    </th>
+                                    <th className="text-left py-1 px-2 num">
+                                        دائن
+                                    </th>
+                                    <th className="text-left py-1 px-2 bg-slate-50 num">
+                                        مدين
+                                    </th>
+                                    <th className="text-left py-1 px-2 bg-slate-50 num">
+                                        دائن
+                                    </th>
+                                    <th className="text-left py-1 px-2 num">
+                                        مدين
+                                    </th>
+                                    <th className="text-left py-1 px-2 num">
+                                        دائن
                                     </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {perEmp.map((e) => {
-                                    const cur = e.current_balance?.salary_payable || 0;
-                                    const exp = e.expected_after_fix?.salary_payable || 0;
-                                    const diff = e.difference?.salary_payable || 0;
+                                    const net = e.net_effect || 0;
                                     return (
                                         <tr
                                             key={e.entity_id}
@@ -325,42 +439,184 @@ export default function EmployeeOrphanDiagnostic() {
                                             <td className="py-2 px-2">
                                                 <div className="font-bold
                                                                 text-slate-900">
-                                                    {e.name || "—"}
+                                                    {e.employee_name || e.name || "—"}
                                                 </div>
-                                                <div className="text-[10px]
+                                                <div className="text-[9px]
                                                                 font-mono
                                                                 text-slate-400">
-                                                    {e.entity_id}
-                                                </div>
-                                            </td>
-                                            <td className="py-2 px-2">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {e.classifications.map(c => (
-                                                        <ClassPill key={c} k={c} />
-                                                    ))}
+                                                    {e.employee_id}
                                                 </div>
                                             </td>
                                             <td className="py-2 px-2 text-center
                                                            font-bold num">
-                                                {e.affected_count}
+                                                {e.orphan_count}
                                             </td>
-                                            <td className="py-2 px-2 num
-                                                           text-left text-slate-700">
-                                                {fmt(cur)}
+                                            <td className="py-2 px-2 num text-left
+                                                           bg-slate-50/40">
+                                                {fmt(e.salary_payable_debit)}
                                             </td>
-                                            <td className="py-2 px-2 num
-                                                           text-left text-slate-700">
-                                                {fmt(exp)}
+                                            <td className="py-2 px-2 num text-left
+                                                           bg-slate-50/40">
+                                                {fmt(e.salary_payable_credit)}
+                                            </td>
+                                            <td className="py-2 px-2 num text-left">
+                                                {fmt(e.advance_debit)}
+                                            </td>
+                                            <td className="py-2 px-2 num text-left">
+                                                {fmt(e.advance_credit)}
+                                            </td>
+                                            <td className="py-2 px-2 num text-left
+                                                           bg-slate-50/40">
+                                                {fmt(e.opening_balance_debit)}
+                                            </td>
+                                            <td className="py-2 px-2 num text-left
+                                                           bg-slate-50/40">
+                                                {fmt(e.opening_balance_credit)}
+                                            </td>
+                                            <td className="py-2 px-2 num text-left">
+                                                {fmt(e.reversal_debit)}
+                                            </td>
+                                            <td className="py-2 px-2 num text-left">
+                                                {fmt(e.reversal_credit)}
                                             </td>
                                             <td className={`py-2 px-2 num text-left
-                                                            font-bold ${Math.abs(diff) > 0.01
-                                                ? "text-rose-700"
-                                                : "text-emerald-700"}`}>
-                                                {diff >= 0 ? "+" : "−"}{fmt(Math.abs(diff))}
+                                                            font-bold ${Math.abs(net) < 0.01
+                                                ? "text-emerald-700"
+                                                : net > 0
+                                                    ? "text-rose-700"
+                                                    : "text-violet-700"}`}>
+                                                {net >= 0 ? "+" : "−"}{fmt(Math.abs(net))}
+                                            </td>
+                                            <td className="py-2 px-2">
+                                                <div className="flex flex-wrap gap-1">
+                                                    {e.repair_suggestions?.map(r => {
+                                                        const m = REPAIR_META[r]
+                                                            || { ar: r, tone: "slate" };
+                                                        return (
+                                                            <span
+                                                                key={r}
+                                                                className={`px-1.5 py-0.5
+                                                                            rounded text-[9px]
+                                                                            font-bold border ${TONE[m.tone]}`}
+                                                                data-testid={`repair-pill-${r}-${e.entity_id}`}
+                                                            >
+                                                                {m.ar}
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
                                 })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {/* Per-txn_group breakdown */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-3
+                                flex-wrap gap-2">
+                    <h2 className="text-base font-extrabold text-slate-900">
+                        حسب txn_group_id ({perGroup.length})
+                    </h2>
+                    <div className="text-[11px] text-slate-500">
+                        غير متوازنة:{" "}
+                        <span className="font-bold text-rose-700">
+                            {summary.groups_unbalanced_count || 0}
+                        </span>{" "}
+                        / {summary.groups_count || 0}
+                    </div>
+                </div>
+                {perGroup.length === 0 ? (
+                    <div className="text-center text-slate-400 py-4 text-sm">
+                        لا توجد مجموعات قيود يتيمة.
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-[11px]">
+                            <thead>
+                                <tr className="text-slate-500 font-bold
+                                               border-b border-slate-200">
+                                    <th className="text-right py-2 px-2">
+                                        txn_group_id
+                                    </th>
+                                    <th className="text-center py-2 px-2">
+                                        # الأرجل
+                                    </th>
+                                    <th className="text-left py-2 px-2 num">
+                                        مدين الإجمالي
+                                    </th>
+                                    <th className="text-left py-2 px-2 num">
+                                        دائن الإجمالي
+                                    </th>
+                                    <th className="text-center py-2 px-2">
+                                        التوازن
+                                    </th>
+                                    <th className="text-right py-2 px-2">
+                                        أنواع القيود
+                                    </th>
+                                    <th className="text-right py-2 px-2">
+                                        الموظفون المتأثرون
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {perGroup.map((g) => (
+                                    <tr
+                                        key={g.txn_group_id}
+                                        className="border-b border-slate-100
+                                                   hover:bg-slate-50"
+                                        data-testid={`group-row-${g.txn_group_id}`}
+                                    >
+                                        <td className="py-2 px-2 font-mono
+                                                       text-[10px] text-slate-700">
+                                            {g.txn_group_id}
+                                        </td>
+                                        <td className="py-2 px-2 text-center
+                                                       font-bold num">
+                                            {g.count_entries}
+                                        </td>
+                                        <td className="py-2 px-2 num text-left
+                                                       text-emerald-700">
+                                            {fmt(g.total_debit)}
+                                        </td>
+                                        <td className="py-2 px-2 num text-left
+                                                       text-rose-700">
+                                            {fmt(g.total_credit)}
+                                        </td>
+                                        <td className="py-2 px-2 text-center">
+                                            {g.balanced ? (
+                                                <span className={`px-2 py-0.5
+                                                                  rounded text-[10px]
+                                                                  font-bold border
+                                                                  ${TONE.emerald}`}>
+                                                    ✓ متوازن
+                                                </span>
+                                            ) : (
+                                                <span className={`px-2 py-0.5
+                                                                  rounded text-[10px]
+                                                                  font-bold border
+                                                                  ${TONE.rose}`}>
+                                                    ⚠ غير متوازن
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="py-2 px-2 font-mono
+                                                       text-[10px] text-slate-600">
+                                            {(g.entry_types || []).join(", ")}
+                                        </td>
+                                        <td className="py-2 px-2 text-slate-700">
+                                            {(g.affected_employee_names || []).length > 0
+                                                ? g.affected_employee_names.join("، ")
+                                                : (g.affected_employees || [])
+                                                    .map((id) => id.slice(0, 8))
+                                                    .join(", ")}
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>
@@ -413,6 +669,9 @@ export default function EmployeeOrphanDiagnostic() {
                                     <th className="text-right py-2 px-2">
                                         التصنيف</th>
                                     <th className="text-right py-2 px-2">
+                                        المعالجة المقترحة
+                                    </th>
+                                    <th className="text-right py-2 px-2">
                                         السبب</th>
                                 </tr>
                             </thead>
@@ -455,9 +714,33 @@ export default function EmployeeOrphanDiagnostic() {
                                         <td className="py-2 px-2">
                                             <ClassPill k={e.classification} />
                                         </td>
+                                        <td className="py-2 px-2">
+                                            {(() => {
+                                                const m = REPAIR_META[e.repair_suggestion]
+                                                    || { ar: e.repair_suggestion, tone: "slate" };
+                                                return (
+                                                    <span
+                                                        className={`px-2 py-0.5 rounded
+                                                                    text-[10px] font-bold
+                                                                    border ${TONE[m.tone]}`}
+                                                        data-testid={`repair-${e.repair_suggestion}`}
+                                                        title={e.repair_reason}
+                                                    >
+                                                        {m.ar}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </td>
                                         <td className="py-2 px-2 text-slate-600
                                                        text-[11px] max-w-md">
-                                            {e.reason}
+                                            <div>{e.reason}</div>
+                                            {e.repair_reason && (
+                                                <div className="text-[10px]
+                                                                text-slate-400 mt-0.5
+                                                                italic">
+                                                    💡 {e.repair_reason}
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

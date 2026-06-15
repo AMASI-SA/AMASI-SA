@@ -3411,3 +3411,53 @@ CR payment_gateway.tabby/receivable  10000
 ### Future enhancement (not in this iter)
 - Real provider settlement APIs (Tabby `/settlements` endpoint, Tamara invoice file ingestion). Currently we rely on the existing computed values. If/when the user uploads a Tamara official file, the `data_source` will automatically flip to `provider_official_file` for that window.
 
+
+
+## Completed Work — Iter-224 (Feb 16 2026): Deep Employee Orphan Diagnostic (Read-Only Extension)
+
+**User request**: قبل أي إصلاح أريد تقريراً تشخيصياً أعمق. Read-Only. ممنوع أي عكس أو إنشاء قيود.
+
+### Backend extensions (same endpoint, richer payload)
+Endpoint: `GET /api/audit/employee-orphan-openings` — extended to include:
+
+1. **`per_employee[]`** — now has explicit fields per request:
+   - `employee_id`, `employee_name`, `orphan_count`, `net_effect`
+   - Per sub_account: `salary_payable_debit/credit`, `advance_debit/credit`, `custody_debit/credit`
+   - Per entry_type: `opening_balance_debit/credit`, `reversal_debit/credit`, `salary_accrual_debit/credit`, `salary_payment_debit/credit`
+   - `repair_suggestions[]`, `txn_group_ids[]`
+
+2. **`per_group[]`** — new aggregation by txn_group_id:
+   - `count_entries`, `total_debit`, `total_credit`, `balanced` (true/false)
+   - `affected_employees[]`, `affected_employee_names[]`, `entry_types[]`
+   - Sorted: unbalanced first, then by leg count
+
+3. **Per-entry `repair_suggestion`** ∈ `{KEEP, RECREATE_EMPLOYEE, REVERSE, MANUAL_REVIEW}`:
+   - **KEEP** — entry is part of a self-cancelling pair (per-(employee, sub_account, entry_type) net = 0). No impact.
+   - **RECREATE_EMPLOYEE** — `deleted_entity` / `orphan_opening` with a known name in metadata. Recreating the employee record will resolve the orphan with zero ledger writes.
+   - **REVERSE** — `missing_counter_entry` (broken group) OR orphan with no name to recreate.
+   - **MANUAL_REVIEW** — `employee_id_mismatch` (cross-tenant) OR `orphan_reversal` (target gone).
+   - Each entry also carries a `repair_reason` (Arabic).
+
+4. **`summary.by_repair_suggestion[]`** + `groups_count` + `groups_unbalanced_count` + `iteration: "iter223-deep"` + `generated_at` timestamp.
+
+### Frontend (`EmployeeOrphanDiagnostic.jsx` extended)
+- **📤 تصدير JSON** button (`btn-export-json`) — downloads the full diagnostic payload as `employee_orphans_{timestamp}.json`.
+- **Repair summary pills** (`repair-summary-{KEEP|RECREATE_EMPLOYEE|REVERSE|MANUAL_REVIEW}`) with counts and net amounts — surfaced ABOVE the classification pills.
+- **Per-employee table — rewritten**: 11 columns including a 2-level header that splits each sub_account into debit/credit columns + entry_type debit/credit + `net_effect` + repair suggestion pills.
+- **Per-txn_group section** (`group-row-{group_id}`): shows balance state (✓ متوازن / ⚠ غير متوازن), debit/credit totals, leg count, affected employee names, and entry types.
+- **Entries table — extended**: new `المعالجة المقترحة` column with color-coded pill + `repair_reason` shown as italic hint below the orphan reason.
+- Phase-2 buttons (`btn-preview-fix-disabled`, `btn-apply-fix-disabled`) remain **DISABLED** as requested.
+
+### Critical insight from preview verification
+For the preview merchant (5 orphans), all 4 affected `txn_groups` are **perfectly balanced** (✓). This answers the user's strategic questions:
+1. هل الموظفون حُذفوا فقط والقيود صحيحة؟ → **YES** (all groups balanced)
+2. هل توجد قيود افتتاحية يجب الإبقاء عليها؟ → None in preview
+3. هل توجد قيود رواتب يجب عكسها؟ → None (only `advance_grant` + `reversal`)
+4. هل توجد مجموعات غير متوازنة؟ → **NO** (0 unbalanced of 4)
+
+The same endpoint will give a definitive answer on the 40 production orphans without any writes.
+
+### Read-only guarantees (still upheld)
+- لا migrations · لا حذف بيانات · لا إنشاء قيود · لا تعديل أرصدة الموظفين تلقائياً
+- زرّا Preview Fix / Apply Fix معطّلَان بشكل صريح حتى قرار المستخدم
+

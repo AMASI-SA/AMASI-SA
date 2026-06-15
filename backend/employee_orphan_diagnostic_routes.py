@@ -303,7 +303,67 @@ def make_employee_orphan_router(db, current_user):
                 or name_by_key.get(eid) or ""
             ) or "—"
 
-            # Step 4: capture and aggregate.
+            # Step 4: repair suggestion (READ-ONLY HINT — not executed).
+            # Decision tree:
+            #   • employee_id_mismatch  → MANUAL_REVIEW (cross-tenant; risky)
+            #   • orphan_reversal       → MANUAL_REVIEW (target is gone)
+            #   • missing_counter_entry → REVERSE (group is mathematically broken)
+            #   • orphan_opening + metadata has a clear name and not a true zero → RECREATE_EMPLOYEE
+            #   • deleted_entity        → RECREATE_EMPLOYEE if name available else REVERSE
+            #   • other                 → MANUAL_REVIEW
+            # KEEP is reserved for entries whose net contribution is
+            # already zero on their sub_account (a self-cancelling pair).
+            #   We resolve KEEP later, once we know the per-(emp,sub,etype) net.
+            repair_suggestion = "MANUAL_REVIEW"
+            repair_reason = "غير محدد بعد — التصنيف غير متعامل معه."
+            if classification == "employee_id_mismatch":
+                repair_suggestion = "MANUAL_REVIEW"
+                repair_reason = (
+                    "الموظف يخصّ مستخدماً آخر — قد يكون تسرّباً "
+                    "بين الحسابات (cross-tenant). يجب مراجعة يدوية."
+                )
+            elif classification == "orphan_reversal":
+                repair_suggestion = "MANUAL_REVIEW"
+                repair_reason = (
+                    "قيد عكس بدون مرجع أصلي صالح — "
+                    "لا يمكن عكسه أو الإبقاء عليه بأمان دون مراجعة."
+                )
+            elif classification == "missing_counter_entry":
+                repair_suggestion = "REVERSE"
+                repair_reason = (
+                    "المجموعة غير متوازنة محاسبياً — "
+                    "الأسلم عكسها كاملةً ثم إعادة إنشائها بشكل صحيح."
+                )
+            elif classification == "orphan_opening":
+                if meta_name and meta_name != "—":
+                    repair_suggestion = "RECREATE_EMPLOYEE"
+                    repair_reason = (
+                        "قيد افتتاحي على موظف معروف بالاسم لكن سجلّه "
+                        "محذوف — إعادة إنشاء الموظف ستحلّ القيد دون "
+                        "أي عكس."
+                    )
+                else:
+                    repair_suggestion = "REVERSE"
+                    repair_reason = (
+                        "قيد افتتاحي بلا اسم/مرجع — "
+                        "أسلم خيار هو عكسه."
+                    )
+            elif classification == "deleted_entity":
+                if meta_name and meta_name != "—":
+                    repair_suggestion = "RECREATE_EMPLOYEE"
+                    repair_reason = (
+                        "الموظف محذوف لكن اسمه محفوظ في metadata. "
+                        "إعادة إنشاء سجلّ الموظف بنفس entity_id ستفعّل "
+                        "القيد تلقائياً."
+                    )
+                else:
+                    repair_suggestion = "REVERSE"
+                    repair_reason = (
+                        "الموظف محذوف ولا يوجد اسم/بيانات لإعادة "
+                        "إنشاء سجلّه — يفضّل العكس."
+                    )
+
+            # Step 5: capture and aggregate.
             entry = {
                 "ledger_id": row.get("id"),
                 "txn_group_id": row.get("txn_group_id"),
@@ -324,6 +384,9 @@ def make_employee_orphan_router(db, current_user):
                 ),
                 "classification": classification,
                 "reason": reason,
+                # Iter-223 deep diagnostic — read-only suggestion.
+                "repair_suggestion": repair_suggestion,
+                "repair_reason": repair_reason,
             }
             entries.append(entry)
 
@@ -352,15 +415,26 @@ def make_employee_orphan_router(db, current_user):
                 "orphan_impact": defaultdict(float),
                 "affected_count": 0,
                 "classifications": set(),
+                "repair_suggestions": set(),
+                # Iter-223 — explicit debit/credit split per
+                # (sub_account, entry_type) for the deep report.
+                "by_sub_side": defaultdict(float),
+                "by_etype_side": defaultdict(float),
+                "txn_group_ids": set(),
             })
             emp["affected_count"] += 1
             emp["classifications"].add(classification)
+            emp["repair_suggestions"].add(repair_suggestion)
+            if row.get("txn_group_id"):
+                emp["txn_group_ids"].add(row.get("txn_group_id"))
             if meta_name and emp["name"] == "—":
                 emp["name"] = meta_name
             # orphan_impact = signed impact on this sub_account.
             # debits to salary_payable REDUCE liability; credits INCREASE.
             sign = 1 if side == "debit" else -1
             emp["orphan_impact"][sub] += sign * amt
+            emp["by_sub_side"][f"{sub}_{side}"] += amt
+            emp["by_etype_side"][f"{etype}_{side}"] += amt
 
         # Pull the live ledger balance per (entity_id, sub_account) so
         # we can show "current" vs "expected after fix".
@@ -389,16 +463,117 @@ def make_employee_orphan_router(db, current_user):
                 k: _r(expected.get(k, 0) - current.get(k, 0))
                 for k in expected
             }
+            # Explicit fields requested by the deep diagnostic:
+            sub_side = emp["by_sub_side"]
+            etype_side = emp["by_etype_side"]
             per_employee_out.append({
                 "entity_id": emp["entity_id"],
+                "employee_id": emp["entity_id"],   # alias for clarity
+                "employee_name": emp["name"],
                 "name": emp["name"],
+                "orphan_count": emp["affected_count"],
+                "affected_count": emp["affected_count"],
+                # Per-sub debit/credit:
+                "salary_payable_debit": _r(sub_side.get("salary_payable_debit", 0)),
+                "salary_payable_credit": _r(sub_side.get("salary_payable_credit", 0)),
+                "advance_debit": _r(sub_side.get("advance_debit", 0)),
+                "advance_credit": _r(sub_side.get("advance_credit", 0)),
+                "custody_debit": _r(sub_side.get("custody_debit", 0)),
+                "custody_credit": _r(sub_side.get("custody_credit", 0)),
+                # Per-entry_type debit/credit:
+                "opening_balance_debit": _r(etype_side.get("opening_balance_debit", 0)),
+                "opening_balance_credit": _r(etype_side.get("opening_balance_credit", 0)),
+                "reversal_debit": _r(etype_side.get("reversal_debit", 0)),
+                "reversal_credit": _r(etype_side.get("reversal_credit", 0)),
+                "salary_accrual_debit": _r(etype_side.get("salary_accrual_debit", 0)),
+                "salary_accrual_credit": _r(etype_side.get("salary_accrual_credit", 0)),
+                "salary_payment_debit": _r(etype_side.get("salary_payment_debit", 0)),
+                "salary_payment_credit": _r(etype_side.get("salary_payment_credit", 0)),
+                # Aggregate net effect across all sub_accounts (signed).
+                "net_effect": _r(sum(impact.values())),
+                # Existing fields:
                 "current_balance": current,
                 "orphan_impact": impact,
                 "expected_after_fix": expected,
                 "difference": diff,
-                "affected_count": emp["affected_count"],
                 "classifications": sorted(emp["classifications"]),
+                "repair_suggestions": sorted(emp["repair_suggestions"]),
+                "txn_group_ids": sorted(emp["txn_group_ids"]),
             })
+
+        # ── Per-txn_group aggregation ────────────────────────────────
+        # For every txn_group_id touched by an orphan, recompute the
+        # GROUP's total debit/credit across ALL its legs (not just the
+        # employee orphan leg) so we can flag genuinely-unbalanced
+        # groups vs. groups that simply contain a now-orphan party.
+        per_group_out = []
+        all_groups = sorted({e["txn_group_id"] for e in entries
+                             if e.get("txn_group_id")})
+        for gid in all_groups:
+            gb = await _group_balance(uid, gid)
+            balanced = abs(gb["debit"] - gb["credit"]) < 0.01
+            # Affected employees in this group (from our orphan set).
+            affected = sorted({
+                e["entity_id"] for e in entries
+                if e.get("txn_group_id") == gid
+            })
+            affected_names = sorted({
+                e["metadata_name"] for e in entries
+                if e.get("txn_group_id") == gid and e["metadata_name"] != "—"
+            })
+            # entry_types in this group from our orphan set:
+            entry_types_in = sorted({
+                e["entry_type"] for e in entries
+                if e.get("txn_group_id") == gid
+            })
+            per_group_out.append({
+                "txn_group_id": gid,
+                "count_entries": gb["count"],
+                "total_debit": _r(gb["debit"]),
+                "total_credit": _r(gb["credit"]),
+                "balanced": balanced,
+                "affected_employees": affected,
+                "affected_employee_names": affected_names,
+                "entry_types": entry_types_in,
+            })
+
+        # KEEP detection — bump suggestion to KEEP when the per-employee
+        # per-(sub_account, entry_type) sum already nets to zero
+        # (self-cancelling orphan pair). We update the entries' repair
+        # suggestion in-place AFTER per_employee aggregation.
+        net_by_emp_sub_etype: dict = defaultdict(float)
+        for e in entries:
+            key = (e["entity_id"], e["sub_account"], e["entry_type"])
+            sign = 1 if e["side"] == "debit" else -1
+            net_by_emp_sub_etype[key] += sign * float(e["amount"])
+        for e in entries:
+            key = (e["entity_id"], e["sub_account"], e["entry_type"])
+            if abs(net_by_emp_sub_etype[key]) < 0.01:
+                # Self-cancelling pair — safe to leave alone.
+                e["repair_suggestion"] = "KEEP"
+                e["repair_reason"] = (
+                    "هذا القيد جزء من زوج متعاكس (مدين+دائن صافي=0) "
+                    "لنفس الموظف وlsub_account. لا أثر مالي — يمكن الإبقاء."
+                )
+
+        # Recount repair_suggestions per employee AFTER KEEP override.
+        repair_by_emp: dict = defaultdict(set)
+        for e in entries:
+            repair_by_emp[e["entity_id"]].add(e["repair_suggestion"])
+        for emp_out in per_employee_out:
+            emp_out["repair_suggestions"] = sorted(
+                repair_by_emp.get(emp_out["entity_id"], set()),
+            )
+
+        # By repair_suggestion summary:
+        by_repair: dict = defaultdict(
+            lambda: {"count": 0, "debit": 0.0, "credit": 0.0},
+        )
+        for e in entries:
+            r = e["repair_suggestion"]
+            by_repair[r]["count"] += 1
+            by_repair[r]["debit"] += float(e["debit"] or 0)
+            by_repair[r]["credit"] += float(e["credit"] or 0)
 
         # Aggregate orphan_impact by sub_account across all employees
         # for the summary totals.
@@ -444,16 +619,35 @@ def make_employee_orphan_router(db, current_user):
             "by_entry_type": sorted(
                 _fmt(by_etype), key=lambda x: -x["count"],
             ),
+            "by_repair_suggestion": sorted(
+                [{"repair_suggestion": k,
+                  "count": v["count"],
+                  "debit": _r(v["debit"]),
+                  "credit": _r(v["credit"]),
+                  "net": _r(v["debit"] - v["credit"])}
+                 for k, v in by_repair.items()],
+                key=lambda x: -x["count"],
+            ),
+            "groups_count": len(per_group_out),
+            "groups_unbalanced_count": sum(
+                1 for g in per_group_out if not g["balanced"]
+            ),
         }
 
         return {
             "success": True,
             "user_id": uid,
             "read_only": True,
+            "iteration": "iter223-deep",
+            "generated_at": _to_iso(__import__('datetime').datetime.utcnow()),
             "summary": summary,
             "per_employee": sorted(
                 per_employee_out,
                 key=lambda x: -x["affected_count"],
+            ),
+            "per_group": sorted(
+                per_group_out,
+                key=lambda x: (x["balanced"], -x["count_entries"]),
             ),
             "entries": entries,
         }
