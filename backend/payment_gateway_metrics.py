@@ -188,6 +188,19 @@ async def compute_metrics(
     if date_clause:
         match["order_date"] = date_clause
 
+    # Iter-207 — Honour the same `report_included_statuses` setting
+    # Profit Summary uses, so the two cards report the SAME order
+    # universe. Empty list ⇒ no filter (count everything).
+    settings_doc = await db.settings.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "report_included_statuses": 1},
+    ) or {}
+    included_statuses = [
+        (s or "").strip().lower()
+        for s in (settings_doc.get("report_included_statuses") or [])
+        if (s or "").strip()
+    ]
+
     pipeline = [
         {"$match": match},
         {"$project": {
@@ -232,26 +245,45 @@ async def compute_metrics(
     policy_overrides = await get_policy_map(db, user_id)
 
     async for row in db.unified_orders.aggregate(pipeline):
+        # Iter-207 — Pre-filter to mirror Profit Summary's
+        # `report_included_statuses` setting (case-insensitive partial
+        # match — same semantics as `_matches_any` in server.py).
+        if included_statuses:
+            os_lc = (row.get("order_status") or "").strip().lower()
+            if not os_lc:
+                continue
+            if not any(s in os_lc or os_lc in s
+                       for s in included_statuses):
+                continue
         raw_method = row.get("actual_payment_method") or row.get("payment_method")
         canon = resolve_canonical(raw_method) or "_other"
         bkt = buckets.setdefault(canon, _zero())
-        bkt["orders_count"] += 1
 
         order_status = (row.get("order_status") or "").strip()
         category = resolve_category(order_status, policy_overrides)
 
         if category == "cancelled":
             bkt["cancelled_orders_count"] += 1
-            # Cancelled orders contribute neither gross nor refunds.
+            # Iter-207 — cancelled orders DO NOT count in `orders_count`
+            # so the per-gateway tally lines up with the Profit Summary
+            # (which also excludes cancelled). gross/fees already skip
+            # them via the `continue` below.
             continue
 
         gross = float(row.get("total_amount") or 0)
 
         if category == "pending":
-            # Iter-83 — pending bucket: tracked separately, NOT part of net.
+            # Iter-207 — pending orders are tracked SEPARATELY (their
+            # own bucket field) and are NOT included in `orders_count`
+            # either — they have not generated revenue yet.
             bkt["pending_orders_count"] += 1
             bkt["pending_gross"] += gross
             continue
+
+        # Iter-207 — only confirmed / refunded orders increment
+        # `orders_count`, keeping the per-gateway count consistent with
+        # what actually flows into `gross` / `net`.
+        bkt["orders_count"] += 1
 
         is_actual = (row.get("payment_fee_status") == "actual")
 
@@ -302,11 +334,17 @@ async def compute_metrics(
         bkt["expected_in_assets"] += net
 
     # Materialize result rows in registry order (deterministic), drop
-    # all-zero buckets so the UI stays uncluttered.
+    # all-zero buckets so the UI stays uncluttered.  Iter-207 — a row
+    # is kept if it has ANY activity (confirmed/refunded/pending/
+    # cancelled) so a gateway that received only pending orders still
+    # surfaces, even though it doesn't contribute to gross yet.
     rows: list[dict] = []
     for key, meta in PAYMENT_METHOD_REGISTRY.items():
         b = buckets.get(key)
-        if not b or b["orders_count"] == 0:
+        if not b:
+            continue
+        if (b["orders_count"] + b["pending_orders_count"]
+                + b["cancelled_orders_count"]) == 0:
             continue
         rows.append({
             "key": key,

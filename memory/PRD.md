@@ -2566,3 +2566,52 @@ With Iter-205 seed data on Snap Test SSOT:
   by_ad_account=[{Snap Test SSOT:2300}], by_month=[{2026-02:2300}].
 - Screenshot confirms all four sections render correctly.
 
+
+## Iter-207 — Gateway orders_count consistency (Feb 15 2026)
+
+### Bug
+Profit Summary card reported **76** orders / 18,405.78 ر.س while
+the unified Payment Gateways card showed **79** orders / 18,405.78
+ر.س for the same period — same gross but mismatched count, plus a
+sub-mystery where the table-rows summed to **71** (missing 8 in
+"_other" hidden bucket).
+
+### Root cause
+`payment_gateway_metrics.compute_metrics` was incrementing
+`bkt["orders_count"]` BEFORE the cancelled/pending `continue`
+branches, so it tallied every order in the universe even when
+that order contributed nothing to `gross`. Profit Summary, in
+contrast, applies the user's `settings.report_included_statuses`
+filter upstream — leaving the two cards counting different
+universes.
+
+### Fix
+- `payment_gateway_metrics.py`:
+  1. Move `bkt["orders_count"] += 1` to AFTER pending/cancelled
+     filters → only confirmed + refunded orders count.
+  2. Load `settings.report_included_statuses` and pre-filter
+     orders with the same case-insensitive partial-match logic
+     Profit Summary uses (mirrors `_matches_any` in server.py).
+     Empty list ⇒ no filter (unchanged behaviour for users who
+     haven't configured it).
+  3. Loosen the row-visibility filter: include a bucket if it
+     has ANY activity (orders/pending/cancelled) — previously a
+     gateway with only pending orders disappeared silently.
+
+### Tests
+- `/app/backend/tests/test_payment_gateway_orders_count_iter207.py`
+  (1 test, 2 scenarios, all green):
+  • 3 confirmed + 1 refunded + 1 pending + 1 cancelled mada +
+    1 confirmed `_other`. Assert orders_count = 4 mada + 1 other
+    = 5 total; pending/cancelled tracked but not in
+    orders_count.
+  • With `report_included_statuses=["تم التوصيل"]`, assert
+    orders_count drops to exactly 2 (the two delivered orders).
+- Iter-81 regression (`test_payment_gateway_unification_iter81.py`)
+  still 9/9 passing.
+
+### Note on deployment
+- User runs Production on `mezansalla.com`. Fix applied in Preview
+  only — requires Deploy to take effect on Production.
+
+
