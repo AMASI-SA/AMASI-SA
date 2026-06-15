@@ -2721,3 +2721,32 @@ Employees list & financial-summary endpoints.
   net-due indicator now reflect reality.
 
 
+
+
+## Completed Work — Iter-213 (Feb 15 2026): Transaction Detail Modal in Unified Entry
+
+**User request**: "أريد عند الضغط على أي صف في «آخر الحركات المالية» أن أرى ملخّصاً مفصّلاً يوضّح كيف نُفّذت العملية محاسبياً (المدين والدائن)."
+
+**Implementation** (`/app/frontend/src/pages/UnifiedEntryScreen.jsx`)
+1. Added `selectedTxn` state inside `RecentTxnsPanel`.
+2. Every row in the recent-txns table is now clickable (cursor + hover state).
+3. New `TxnDetailModal` component renders for the clicked group:
+   - Header with txn_type (Arabic) + txn_group_id (mono).
+   - Plain-Arabic summary (`txn.notes`).
+   - Debit & Credit cards (color-coded emerald/rose) showing
+     entity label, sub-account label, and amount per leg.
+   - Balance check footer ("✅ القيد متوازن" vs "⚠️ القيد غير متوازن").
+4. Click outside / ✕ button closes the modal.
+
+**Iter-213b — Arabic label polish**
+- Added missing labels for: `employee_settle`, `expense`, `adjustment` (txn types) + `revenue`, `equity`, `asset`, `liability` (entity types) + `opening_balance`, `sales` (sub-accounts). Table & modal now render fully in Arabic.
+
+### Verification (Preview, real merchant data)
+- ✅ 7 distinct rows tested; modal opens cleanly with debit/credit breakdown for each.
+- 🔴 **DISCOVERY — SSOT data-integrity violations**: 2 single-leg
+  ledger rows exist in preview general_ledger (entry_no 4 & 6,
+  posted 2026-06-14):
+  - `391613e2-…` (مصروف · اشتراك): 3,000 debit, no credit leg.
+  - `55965448-…` (بيع · تسوية سلة): 50,000 credit, no debit leg.
+  Modal correctly flags both as "⚠️ القيد غير متوازن". Awaiting user
+  decision (reverse vs. patch).

@@ -1778,6 +1778,7 @@ const TXN_TYPE_LABELS = {
     salary_payment: "صرف راتب",
     salary_accrual: "استحقاق راتب",
     salary_settle: "تسوية راتب",
+    employee_settle: "تسوية موظف",
     advance_grant: "منح سلفة",
     advance_offset: "خصم سلفة",
     custody_grant: "صرف عهدة",
@@ -1787,6 +1788,8 @@ const TXN_TYPE_LABELS = {
     external_grant: "صرف لخارجي",
     external_collect: "تحصيل من خارجي",
     expense_record: "تسجيل مصروف",
+    expense: "مصروف",
+    adjustment: "تسوية",
     bank_transfer: "تحويل بين حسابات",
     courier_cod_settle: "تسوية شحن",
     ad_account_topup: "تعبئة حساب إعلاني",
@@ -1924,6 +1927,10 @@ const ENTITY_LABELS = {
     courier: "شركة شحن",
     customer: "عميل",
     payment_gateway: "بوابة دفع",
+    revenue: "إيرادات",
+    equity: "حقوق ملكية",
+    asset: "أصل",
+    liability: "التزام",
 };
 
 const SUB_ACCOUNT_LABELS = {
@@ -1936,6 +1943,8 @@ const SUB_ACCOUNT_LABELS = {
     payable: "ذمم دائنة",
     receivable: "ذمم مدينة",
     cod_receivable: "ذمم COD",
+    opening_balance: "رصيد افتتاحي",
+    sales: "مبيعات",
 };
 
 function entityLabel(t) { return ENTITY_LABELS[t] || t || "—"; }
