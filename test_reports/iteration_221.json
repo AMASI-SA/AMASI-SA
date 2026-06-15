@@ -1,0 +1,35 @@
+{
+  "summary": "Iter-221 BNPL Settlements Registration page — full E2E validated. 8/8 iter220 unit tests pass, 6/6 new HTTP integration tests (test_bnpl_register_iter221_e2e.py) pass, and Playwright UI run on the real preview URL confirms the entire flow: page loads at /bnpl-settlements/register, sidebar link nav-bnpl-register present, both provider cards (tabby+tamara) render with 4 metrics + match-status pill + add-settlement button each, modal opens with all 8 fields, save creates a balanced 5-leg ledger entry, ledger-entry-modal displays with debits=credits=500/600 SAR, recent-row testid appears, idempotent re-submit shows Arabic info toast 'تم تسجيل هذه التسوية مسبقاً — لم يُنشأ قيد جديد.', and over-settlement is rejected with Arabic 400 error.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/bnpl-settlements/register provider card", "issues": ["After seeding 600 receivable, compute_all_settlements returns expected_total = -6.90 SAR (slight negative from refund/commission rounding in the existing summary engine). This causes the match-status pill to flash 'يحتاج مراجعة' (red) before any settlement is registered. Pre-existing behaviour of compute_all_settlements, not a regression in iter-221, but worth investigating: a 0 receivable + small negative expected probably should clamp to 0/green rather than red."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bnpl_settlement_iter220.py",
+    "/app/backend/tests/test_bnpl_register_iter221_e2e.py",
+    "/app/test_reports/pytest/iter221_settlement.xml",
+    "/app/test_reports/pytest/iter221_e2e.xml"
+  ],
+  "action_items": [
+    "Optional: in compute_all_settlements or the overview endpoint, clamp expected_total ≥ 0 (or treat |expected|<0.5 as green) so a brand-new merchant with 0 settlements and a tiny refund-driven negative doesn't show 'يحتاج مراجعة' red."
+  ],
+  "critical_code_review_comments": [
+    "settlements_routes.py:198 — `_recompute_balance` is imported from accounts_routes lazily inside the request; OK but the silent except Exception:pass swallows balance-recompute errors. Consider logger.warning.",
+    "BnplSettlementsRegister.jsx — modal 'modal-cancel' click target is also bound to backdrop click via onClick={onClose} on the root; works but could accidentally close on inner drag-release. Minor UX.",
+    "settlement_bridge.py:143 — the 'total - receivable > 0.01' guard uses absolute tolerance only; could allow a 1-cent over-settlement to slip through but acceptable given Arabic UX rounding."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bnpl_register_iter221_e2e.py (new — 6 HTTP tests)"
+  ],
+  "success_rate": {"backend": "100% (14/14: 8 iter220 unit + 6 iter221 HTTP)", "frontend": "100% (all UI assertions met)"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 — login returns access_token + flat user id at body.id (not body.user.id)",
+  "seed_data_creation": "Inserted via post_bnpl_sale_to_ledger with provider_id PYTEST_SEED_1 / PYTEST_UI_S1 (idempotency_key bnpl_sale:tabby:PYTEST*). All seed + the 2 settlement ledger groups + 1 account_transactions row cleaned up at end (7+1 docs deleted). No real merchant data touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter-221 fully validated. Future tests can reuse /app/backend/tests/test_bnpl_register_iter221_e2e.py — it logs in as the real merchant, seeds receivable via post_bnpl_sale_to_ledger, exercises register/idempotency/over-settlement, then auto-cleans only PYTEST-tagged docs. Login user id is at top-level r.json()['id']. Bank account 'بنك الإنماء' id=83ae7aba-e86c-45b7-9f6c-9b27bbd345de existed for the merchant.",
+  "rca_of_the_issue": "n/a — no bugs found in iter-221. Only the cosmetic match-status going red when expected_total is a tiny pre-existing negative; recommend clamp."
+}

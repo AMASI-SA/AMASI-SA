@@ -51,6 +51,7 @@ import BnplIntegrations from "./pages/BnplIntegrations";
 import BnplDiagnostics from "./pages/BnplDiagnostics";
 import RefundAudit from "./pages/RefundAudit";
 import BnplSettlements from "./pages/BnplSettlements";
+import BnplSettlementsRegister from "./pages/BnplSettlementsRegister";
 import SallaSettlements from "./pages/SallaSettlements";
 import SettlementsOverview from "./pages/SettlementsOverview";
 import AlertsPage from "./pages/AlertsPage";
@@ -133,6 +134,7 @@ function AppRoutes() {
             <Route path="/integrations/bnpl/diagnostics" element={<ProtectedRoute><Layout><BnplDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/refund-audit" element={<ProtectedRoute><Layout><RefundAudit /></Layout></ProtectedRoute>} />
             <Route path="/bnpl-settlements" element={<ProtectedRoute><Layout><BnplSettlements /></Layout></ProtectedRoute>} />
+            <Route path="/bnpl-settlements/register" element={<ProtectedRoute><Layout><BnplSettlementsRegister /></Layout></ProtectedRoute>} />
             <Route path="/salla-settlements" element={<ProtectedRoute><Layout><SallaSettlements /></Layout></ProtectedRoute>} />
             <Route path="/settlements-overview" element={<ProtectedRoute><Layout><SettlementsOverview /></Layout></ProtectedRoute>} />
             <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />

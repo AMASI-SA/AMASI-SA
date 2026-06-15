@@ -196,6 +196,200 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
 
         return {"success": True, **res}
 
+    # ── Iter-221 — Registration page support endpoints ────────────────
+    @router.get("/registered")
+    async def list_registered_settlements(
+        user: dict = Depends(get_current_user),
+        provider: Optional[str] = Query(None),
+        limit: int = Query(50, ge=1, le=200),
+    ):
+        """List BNPL settlements recorded via `/register` (SSOT ledger
+        groups with `txn_type=bnpl_settlement`). Newest first."""
+        uid = user["id"]
+        match: dict = {
+            "user_id": uid,
+            "entry_type": "bnpl_settlement",
+            "status": "posted",
+            "side": "credit",                # the close-out leg only
+            "entity_type": "payment_gateway",
+        }
+        if provider and provider in PROVIDERS:
+            match["entity_id"] = provider
+        cursor = db.general_ledger.find(
+            match,
+            {"_id": 0},
+        ).sort("posted_at", -1).limit(int(limit))
+        out = []
+        async for e in cursor:
+            meta = e.get("metadata") or {}
+            out.append({
+                "txn_group_id": e.get("txn_group_id"),
+                "entry_no": e.get("entry_no"),
+                "provider": meta.get("provider") or e.get("entity_id"),
+                "settlement_reference": meta.get("settlement_reference"),
+                "settlement_date": meta.get("settlement_date"),
+                "posted_at": e.get("posted_at"),
+                "transferred_amount": meta.get("transferred_amount") or 0,
+                "commission": meta.get("commission") or 0,
+                "commission_vat": meta.get("commission_vat") or 0,
+                "settlement_fee": meta.get("settlement_fee") or 0,
+                "total_closed": e.get("amount"),
+                "bank_account_id": meta.get("bank_account_id"),
+                "bank_account_name": meta.get("bank_account_name"),
+                "notes": e.get("notes"),
+            })
+        return {"success": True, "items": out}
+
+    @router.get("/registered/{txn_group_id}")
+    async def get_registered_settlement(
+        txn_group_id: str,
+        user: dict = Depends(get_current_user),
+    ):
+        """Return all legs of a single registered settlement so the UI
+        can show the resulting double-entry after the user saves."""
+        uid = user["id"]
+        entries = await db.general_ledger.find(
+            {"user_id": uid, "txn_group_id": txn_group_id},
+            {"_id": 0},
+        ).sort("entry_no", 1).to_list(20)
+        if not entries:
+            raise HTTPException(404, "القيد غير موجود")
+        meta = (entries[0] or {}).get("metadata") or {}
+        debit_total = round(
+            sum(e["amount"] for e in entries if e["side"] == "debit"), 2,
+        )
+        credit_total = round(
+            sum(e["amount"] for e in entries if e["side"] == "credit"), 2,
+        )
+        return {
+            "success": True,
+            "txn_group_id": txn_group_id,
+            "meta": {
+                "provider": meta.get("provider"),
+                "settlement_reference": meta.get("settlement_reference"),
+                "settlement_date": meta.get("settlement_date"),
+                "bank_account_id": meta.get("bank_account_id"),
+                "bank_account_name": meta.get("bank_account_name"),
+                "transferred_amount": meta.get("transferred_amount") or 0,
+                "commission": meta.get("commission") or 0,
+                "commission_vat": meta.get("commission_vat") or 0,
+                "settlement_fee": meta.get("settlement_fee") or 0,
+            },
+            "entries": entries,
+            "debit_total": debit_total,
+            "credit_total": credit_total,
+            "balanced": abs(debit_total - credit_total) < 0.01,
+        }
+
+    @router.get("/registration-overview")
+    async def registration_overview(
+        user: dict = Depends(get_current_user),
+    ):
+        """Aggregate per-provider numbers needed by the registration page:
+
+          • current_receivable: live general_ledger receivable (sales − refunds − closed settlements)
+          • expected_total:    expected net_payable from compute_all_settlements
+          • received_total:    sum of bnpl_settlement total_closed legs
+          • difference:        expected − received
+          • last_settlement:   most recent registered settlement
+          • match_status:      green | yellow | red
+        """
+        uid = user["id"]
+        from ledger_core import compute_balance
+        # 1) Expected — reuse the existing summary engine.
+        try:
+            summary = await compute_all_settlements(db, uid, None, None)
+        except Exception:  # noqa: BLE001
+            summary = {"providers": []}
+        expected_by_provider: dict = {}
+        for p in (summary.get("providers") or []):
+            prov = (p.get("provider") or "").lower()
+            tots = p.get("totals") or {}
+            expected_by_provider[prov] = round(
+                float(tots.get("net_payable") or 0), 2,
+            )
+
+        out_providers = []
+        for provider in PROVIDERS:
+            recv = await compute_balance(
+                db, user_id=uid, entity_type="payment_gateway",
+                entity_id=provider, sub_account="receivable",
+            )
+            current_receivable = round(recv.get("net_balance") or 0, 2)
+
+            # received_total = sum of credit legs (close-outs) for this provider
+            recv_pipeline = [
+                {"$match": {
+                    "user_id": uid,
+                    "entry_type": "bnpl_settlement",
+                    "status": "posted",
+                    "side": "credit",
+                    "entity_type": "payment_gateway",
+                    "entity_id": provider,
+                }},
+                {"$group": {
+                    "_id": None,
+                    "total": {"$sum": "$amount"},
+                    "count": {"$sum": 1},
+                }},
+            ]
+            received_total = 0.0
+            received_count = 0
+            async for row in db.general_ledger.aggregate(recv_pipeline):
+                received_total = round(float(row.get("total") or 0), 2)
+                received_count = int(row.get("count") or 0)
+
+            # Last settlement (most recent close-out leg)
+            last = await db.general_ledger.find_one(
+                {"user_id": uid,
+                 "entry_type": "bnpl_settlement",
+                 "status": "posted",
+                 "side": "credit",
+                 "entity_type": "payment_gateway",
+                 "entity_id": provider},
+                {"_id": 0, "posted_at": 1, "amount": 1,
+                 "metadata": 1, "txn_group_id": 1},
+                sort=[("posted_at", -1)],
+            )
+            last_block = None
+            if last:
+                m = last.get("metadata") or {}
+                last_block = {
+                    "txn_group_id": last.get("txn_group_id"),
+                    "posted_at": last.get("posted_at"),
+                    "amount": last.get("amount"),
+                    "reference": m.get("settlement_reference"),
+                    "settlement_date": m.get("settlement_date"),
+                    "bank_account_name": m.get("bank_account_name"),
+                }
+
+            expected_total = expected_by_provider.get(provider, 0.0)
+            difference = round(expected_total - received_total, 2)
+
+            # Match status — tolerance: 0.5 SAR exact, then 5% bucket
+            abs_diff = abs(difference)
+            if abs_diff < 0.5:
+                match_status = "green"
+            elif expected_total > 0 and abs_diff / max(expected_total, 1) <= 0.05:
+                match_status = "yellow"
+            else:
+                match_status = "red"
+            if expected_total == 0 and received_total == 0 and current_receivable == 0:
+                match_status = "green"   # nothing to settle yet
+
+            out_providers.append({
+                "provider": provider,
+                "current_receivable": current_receivable,
+                "expected_total": expected_total,
+                "received_total": received_total,
+                "received_count": received_count,
+                "difference": difference,
+                "last_settlement": last_block,
+                "match_status": match_status,
+            })
+
+        return {"success": True, "providers": out_providers}
+
     @router.get("/{provider}")
     async def provider_settlement(
         provider: str,
