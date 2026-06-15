@@ -264,6 +264,55 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
         }
     };
 
+    // Iter-225 — Force re-sync the provider for the chosen period so a
+    // late/missing refund (or sale) is captured before re-running the
+    // import. Maps the period dropdown → a `since=YYYY-MM-DD` date.
+    const [resyncing, setResyncing] = useState(false);
+    const runResync = async () => {
+        if (provider !== "tabby" && provider !== "tamara") return;
+        setResyncing(true);
+        try {
+            // Derive the `since` date from the import period.
+            const today = new Date();
+            const ms = 86400000;
+            const fmt = (d) => d.toISOString().slice(0, 10);
+            let since;
+            if (importPeriod === "last_week") {
+                const wd = today.getDay() || 7;
+                since = fmt(new Date(today.getTime() - (wd + 6) * ms));
+            } else if (importPeriod === "this_week") {
+                const wd = today.getDay() || 7;
+                since = fmt(new Date(today.getTime() - (wd - 1) * ms));
+            } else if (importPeriod === "last_7d") {
+                since = fmt(new Date(today.getTime() - 6 * ms));
+            } else if (importPeriod === "last_14d") {
+                since = fmt(new Date(today.getTime() - 13 * ms));
+            } else if (importPeriod === "this_month") {
+                since = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+            } else if (importPeriod === "last_month") {
+                since = fmt(new Date(today.getFullYear(), today.getMonth() - 1, 1));
+            }
+
+            const endpoint = provider === "tabby"
+                ? "/bnpl/tabby/sync"
+                : "/bnpl/tamara/backfill";
+            const { data } = await api.post(endpoint, null, {
+                params: { since },
+            });
+            const upserts = (data?.transactions_upserted || 0) +
+                            (data?.refunds_upserted || 0) +
+                            (data?.orders_processed || 0);
+            toast.success(
+                `تمت إعادة المزامنة (since=${since}). ` +
+                `محدَّث: ${upserts} عملية. اضغط "جلب وملء" لإعادة الاحتساب.`,
+            );
+        } catch (e) {
+            toast.error(errMsg(e, "فشل إعادة المزامنة"));
+        } finally {
+            setResyncing(false);
+        }
+    };
+
     const save = async () => {
         if (!form.settlement_reference.trim()) {
             toast.error("رقم التسوية مطلوب");
@@ -355,19 +404,37 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                                 <option value="last_month">الشهر الماضي</option>
                             </select>
                         </div>
-                        <button
-                            type="button"
-                            onClick={runImport}
-                            disabled={importing}
-                            className="px-3 py-1.5 rounded-lg bg-violet-700
-                                       hover:bg-violet-800 text-white
-                                       text-[11px] font-bold disabled:opacity-60"
-                            data-testid="btn-auto-import"
-                        >
-                            {importing
-                                ? "جارٍ الجلب…"
-                                : "جلب وملء الحقول تلقائياً"}
-                        </button>
+                        <div className="flex gap-1.5">
+                            <button
+                                type="button"
+                                onClick={runResync}
+                                disabled={resyncing || importing}
+                                className="px-3 py-1.5 rounded-lg
+                                           border border-violet-300
+                                           bg-white hover:bg-violet-50
+                                           text-violet-700 text-[11px]
+                                           font-bold disabled:opacity-60"
+                                data-testid="btn-resync-provider"
+                                title={`إعادة مزامنة ${meta.name} للفترة المختارة قبل الجلب`}
+                            >
+                                {resyncing
+                                    ? "جارٍ المزامنة…"
+                                    : `🔄 إعادة مزامنة ${meta.name}`}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={runImport}
+                                disabled={importing || resyncing}
+                                className="px-3 py-1.5 rounded-lg bg-violet-700
+                                           hover:bg-violet-800 text-white
+                                           text-[11px] font-bold disabled:opacity-60"
+                                data-testid="btn-auto-import"
+                            >
+                                {importing
+                                    ? "جارٍ الجلب…"
+                                    : "جلب وملء الحقول تلقائياً"}
+                            </button>
+                        </div>
                     </div>
                     {importMeta && (
                         <div className="mt-2 grid grid-cols-2 sm:grid-cols-5
