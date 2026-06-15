@@ -885,15 +885,23 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             latest_received_at = None
             collection_used = None
             for src in sources:
+                # Iter-212b — Mirror the cross-account safety guard from
+                # `_fetch_daily_spend` (Iter-163): never query a scoped
+                # collection without a concrete external id, or we'd
+                # pull rows belonging to OTHER ad accounts and report
+                # bogus freshness.
+                if src.get("scope_field") and not scope_ids:
+                    continue
                 coll = db[src["collection"]]
                 q: dict = {"user_id": user["id"]}
                 if src.get("scope_field") and scope_ids:
                     q[src["scope_field"]] = {"$in": scope_ids}
+                # Production schema uses `date` (not `spend_date`).
                 doc = await coll.find_one(
-                    q, sort=[("spend_date", -1), ("received_at", -1)],
+                    q, sort=[("date", -1), ("received_at", -1)],
                 )
                 if doc:
-                    sd = doc.get("spend_date") or doc.get("date")
+                    sd = (doc.get("date") or doc.get("spend_date"))
                     rec = doc.get("received_at") or doc.get("created_at")
                     if not latest or (sd and sd > latest):
                         latest = sd
