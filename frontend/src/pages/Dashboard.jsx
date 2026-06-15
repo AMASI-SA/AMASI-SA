@@ -640,7 +640,11 @@ export default function Dashboard() {
                         );
                     })()}
                     {/* iter-49 — Executive profit summary (sales → deductions → net) */}
-                    <ProfitSummaryCard totals={totals} />
+                    <ProfitSummaryCard
+                        totals={totals}
+                        fromDate={filters.from_date}
+                        toDate={filters.to_date}
+                    />
                     {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                         {ALL_KPI_CARDS
@@ -702,6 +706,8 @@ export default function Dashboard() {
                     <UnifiedPaymentGatewaysCard
                         qs={filtersToQueryString(filters)}
                         testid="dashboard-unified-gateways"
+                        fromDate={filters.from_date}
+                        toDate={filters.to_date}
                     />
 
                     {/* Iter-83 — Pending orders callout (separate from net). */}

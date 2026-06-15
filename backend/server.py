@@ -2548,6 +2548,93 @@ async def dashboard(
     }
 
 
+# ── Iter-207d — Excluded Orders Drill-down ────────────────────────────────
+@api.get("/dashboard/excluded-orders")
+async def excluded_orders_list(
+    user: dict = Depends(current_user),
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+):
+    """Return the orders that the Dashboard's `total_orders` /
+    `total_sales` figures EXCLUDED (because their status didn't match
+    `report_included_statuses` OR they were classified pending /
+    cancelled).
+
+    Used by the transparency badge on `ProfitSummaryCard` and
+    `UnifiedPaymentGatewaysCard` to let the merchant inspect exactly
+    which 3 orders cause the 554.56 ر.س gap with the Salla platform.
+    """
+    settings = await ensure_user_settings(db, user["id"])
+    included_statuses = settings.get("report_included_statuses") or []
+    # Pull every order in the window; we'll classify in Python so we
+    # can mirror the EXACT semantics of the dashboard filter.
+    q: dict = {"user_id": user["id"]}
+    if from_date or to_date:
+        q["order_date"] = {}
+        if from_date:
+            q["order_date"]["$gte"] = from_date
+        if to_date:
+            q["order_date"]["$lte"] = to_date
+    all_orders = await db.unified_orders.find(
+        q, {"_id": 0, "raw_by_source": 0},
+    ).to_list(50000)
+
+    excluded: list = []
+    for o in all_orders:
+        status = (o.get("order_status") or "").strip()
+        # Same case-insensitive partial-match logic used by
+        # /api/dashboard (line ~1842-1846).
+        if included_statuses:
+            if not _matches_any(status, included_statuses):
+                excluded.append(o)
+                continue
+        # No-status orders are also excluded by the dashboard
+        # filter when included_statuses is non-empty.
+        # If included_statuses is empty we still bucket pending/
+        # cancelled separately to mirror the gateway endpoint's
+        # behaviour. Resolve via the existing order_status_policy.
+        from order_status_policy import (
+            get_policy_map as _gp,
+            resolve_category as _rc,
+        )
+        # Cache the policy map across the loop for perf.
+        if "_policy" not in locals():
+            _policy = await _gp(db, user["id"])
+        else:
+            _policy = locals()["_policy"]
+        cat = _rc(status, _policy)
+        if cat in ("pending", "cancelled"):
+            excluded.append(o)
+
+    # Slim payload — only fields the modal needs to render the table.
+    rows = []
+    total_value = 0.0
+    for o in excluded:
+        amt = float(o.get("total_amount") or 0)
+        total_value += amt
+        rows.append({
+            "order_number": str(o.get("order_number") or ""),
+            "order_date": o.get("order_date") or "",
+            "order_status": (o.get("order_status") or "").strip(),
+            "payment_method": (o.get("payment_method") or "غير محدد").strip()
+                              or "غير محدد",
+            "shipping_company": (o.get("shipping_company") or "—").strip()
+                                or "—",
+            "customer_name": (o.get("customer_name") or "").strip()
+                             or (o.get("customer") or {}).get("name") or "",
+            "total_amount": round(amt, 2),
+        })
+    rows.sort(key=lambda x: (x["order_date"], x["order_number"]))
+    return {
+        "from_date": from_date,
+        "to_date": to_date,
+        "included_statuses": included_statuses,
+        "orders_count": len(rows),
+        "total_amount": round(total_value, 2),
+        "orders": rows,
+    }
+
+
 # ── iter-45 — Electronic Net debug / verification endpoint ────────────────
 @api.get("/dashboard/electronic-net-debug")
 async def electronic_net_debug(

@@ -12,10 +12,12 @@ import { useEffect, useState } from "react";
 import { CreditCard, Info, Hourglass } from "@phosphor-icons/react";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
+import ExcludedOrdersModal from "./ExcludedOrdersModal";
 
-export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-gateways-card", periodLabel = null }) {
+export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-gateways-card", periodLabel = null, fromDate = null, toDate = null }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [excludedOpen, setExcludedOpen] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -156,8 +158,10 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                             <td className="py-2.5 num">
                                 {formatInt(t.orders_count)}
                                 {Number(t.excluded_orders_count || 0) > 0 && (
-                                    <span
-                                        className="ms-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-bold text-amber-800 cursor-help align-middle"
+                                    <button
+                                        type="button"
+                                        onClick={() => setExcludedOpen(true)}
+                                        className="ms-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-bold text-amber-800 cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors align-middle"
                                         data-testid={`${testid}-excluded-badge`}
                                         title={
                                             "منصة سلة تعرض جميع الطلبات المنشأة (" +
@@ -171,11 +175,12 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                                             "الفرق:\n" +
                                             formatInt(t.excluded_orders_count) +
                                             " طلب معلَّق أو ملغى بقيمة " +
-                                            formatMoney(t.excluded_gross) + " ر.س."
+                                            formatMoney(t.excluded_gross) + " ر.س.\n\n" +
+                                            "🔍 اضغط لعرض تفاصيل الطلبات المستثناة"
                                         }
                                     >
                                         +{formatInt(t.excluded_orders_count)} معلَّق/ملغى
-                                    </span>
+                                    </button>
                                 )}
                             </td>
                             <td className="py-2.5 num">{formatMoney(t.gross)}</td>
@@ -189,6 +194,13 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                     </tbody>
                 </table>
             </div>
+            <ExcludedOrdersModal
+                open={excludedOpen}
+                onClose={() => setExcludedOpen(false)}
+                fromDate={fromDate}
+                toDate={toDate}
+                periodLabel={periodLabel}
+            />
         </div>
     );
 }

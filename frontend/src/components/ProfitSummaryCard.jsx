@@ -14,6 +14,8 @@ import {
     Coins, Package, Megaphone, Truck, Receipt, TrendUp, Equals, Briefcase,
     ShoppingCart, ChartBar,
 } from "@phosphor-icons/react";
+import { useState } from "react";
+import ExcludedOrdersModal from "./ExcludedOrdersModal";
 
 const fmtSar = (v) => {
     if (v == null || Number.isNaN(Number(v))) return "—";
@@ -118,8 +120,9 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
     );
 }
 
-export default function ProfitSummaryCard({ totals }) {
+export default function ProfitSummaryCard({ totals, fromDate, toDate, periodLabel }) {
     const t = totals || {};
+    const [excludedOpen, setExcludedOpen] = useState(false);
     // Compose the deductions explicitly so each line is auditable and
     // matches the description on the KPI tooltips above.
     const sales            = Number(t.total_sales        || 0);
@@ -151,17 +154,20 @@ export default function ProfitSummaryCard({ totals }) {
     const sallaRefCount = Number(t.salla_reference_orders_count || 0);
     const sallaRefGross = Number(t.salla_reference_gross || 0);
     const ordersBadge = excludedCount > 0 ? (
-        <div
-            className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-800 cursor-help"
+        <button
+            type="button"
+            onClick={() => setExcludedOpen(true)}
+            className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-800 cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors"
             data-testid="profit-kpi-orders-excluded-badge"
             title={
                 `منصة سلة تعرض جميع الطلبات المنشأة (${fmtInt(sallaRefCount)} طلب بقيمة ${fmtSar(sallaRefGross)} ر.س).\n\n` +
                 `النظام المحاسبي يعتمد فقط الطلبات الداخلة في التقارير المالية (${fmtInt(totalOrders)} طلب بقيمة ${fmtSar(sales)} ر.س).\n\n` +
-                `الفرق:\n${fmtInt(excludedCount)} طلب معلَّق أو ملغى بقيمة ${fmtSar(excludedGross)} ر.س.`
+                `الفرق:\n${fmtInt(excludedCount)} طلب معلَّق أو ملغى بقيمة ${fmtSar(excludedGross)} ر.س.\n\n` +
+                `🔍 اضغط لعرض تفاصيل الطلبات المستثناة`
             }
         >
             +{fmtInt(excludedCount)} معلَّق/ملغى ({fmtSar(excludedGross)} ر.س)
-        </div>
+        </button>
     ) : null;
     // `avg_cost_per_order` is null when ads=0 or orders=0 (backend convention).
     const avgCostPerOrder = t.avg_cost_per_order != null
@@ -271,6 +277,13 @@ export default function ProfitSummaryCard({ totals }) {
                     </div>
                 </div>
             </div>
+            <ExcludedOrdersModal
+                open={excludedOpen}
+                onClose={() => setExcludedOpen(false)}
+                fromDate={fromDate}
+                toDate={toDate}
+                periodLabel={periodLabel}
+            />
         </div>
     );
 }
