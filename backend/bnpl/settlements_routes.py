@@ -364,6 +364,12 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 }
 
             expected_total = expected_by_provider.get(provider, 0.0)
+            # Clamp small negative pre-cutoff drift to 0 — these come
+            # from legacy refunds the engine still sees but which the
+            # bridge will never book. Avoids a misleading red status
+            # for merchants who have nothing yet to settle.
+            if -1.0 < expected_total < 0:
+                expected_total = 0.0
             difference = round(expected_total - received_total, 2)
 
             # Match status — tolerance: 0.5 SAR exact, then 5% bucket

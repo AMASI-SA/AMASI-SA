@@ -3261,3 +3261,49 @@ CR payment_gateway.tabby/receivable  10000
 - Regular bank transfers (`POST /api/accounts/{id}/transactions` and `POST /api/accounts/transfers`) — completely untouched. The new bridge is invoked ONLY via the dedicated `/api/bnpl/settlements/register` endpoint.
 - Historical settlements (Phase 3 backfill remains deferred).
 
+
+
+## Completed Work — Iter-221 (Feb 16 2026): BNPL Settlements Registration Page (Phase 2b UI)
+
+**User request**: شاشة مخصصة لتسجيل تسويات Tabby/Tamara مع المطابقة الفورية. تربط على `POST /api/bnpl/settlements/register` (المُضاف في Iter-220).
+
+### Backend (3 endpoints added in `bnpl/settlements_routes.py`)
+1. **`GET /api/bnpl/settlements/registration-overview`** — per-provider aggregates:
+   - `current_receivable` (from `general_ledger`)
+   - `expected_total` (from `compute_all_settlements`, clamped to 0 for tiny refund-driven negatives)
+   - `received_total` + `received_count` (sum of `bnpl_settlement` credit legs)
+   - `difference` + `last_settlement` (most recent registered settlement)
+   - `match_status` ∈ {green, yellow, red} (tolerance: <0.5 SAR exact, ≤5% bucket)
+2. **`GET /api/bnpl/settlements/registered`** — paginated list of recorded settlements (sorted newest-first).
+3. **`GET /api/bnpl/settlements/registered/{txn_group_id}`** — full leg detail (entries + debit/credit totals + balanced flag) for the post-save modal.
+
+### Frontend
+- **NEW** `/app/frontend/src/pages/BnplSettlementsRegister.jsx`:
+  - Header: "تسويات تمارا وتابي" + refresh.
+  - Two provider overview cards (Tabby + Tamara) — each shows 4 metric cells (current receivable, expected, received, difference) + status pill (green/yellow/red) + "إضافة تسوية {Tabby|Tamara}" button.
+  - **AddSettlementModal**: 8 fields (reference, date, bank/cash select, transferred, commission, VAT, settlement fee, notes). Live total tally at the bottom. Saves via `POST /register`.
+  - On save → idempotent toast OR success toast, then auto-opens **LedgerEntryModal** showing the 5-leg ledger with debit/credit columns and balanced indicator.
+  - "آخر التسويات المسجَّلة" table with provider, reference, date, bank, breakdown columns + "عرض القيد" button per row → opens the same ledger modal.
+- **Route**: `/bnpl-settlements/register` (App.js).
+- **Sidebar**: new entry "📝 تسجيل تسويات Tabby و Tamara" (`nav-bnpl-register`).
+
+### data-testids (all interactive elements)
+`bnpl-register-page`, `refresh-btn`, `provider-card-{tabby|tamara}`, `metric-current-receivable-{p}`, `metric-expected-{p}`, `metric-received-{p}`, `metric-diff-{p}`, `match-status-{green|yellow|red}`, `add-settlement-btn-{p}`, `add-settlement-modal`, `input-settlement-reference`, `input-settlement-date`, `input-bank-account`, `input-transferred-amount`, `input-commission`, `input-commission-vat`, `input-settlement-fee`, `input-notes`, `modal-total`, `modal-save`, `modal-cancel`, `ledger-entry-modal`, `ledger-leg-{i}`, `ledger-modal-close`, `recent-row-{ref}`, `view-entry-{ref}`.
+
+### Side-effects propagation
+- Bridge writes to `general_ledger` (5 balanced legs) → reflects in:
+  - **Financial Position** (SSOT since Iter-217)
+  - **Account Summaries** (SSOT since Iter-217)
+  - **Ledger Transactions feed** (Iter-216)
+- Bridge also inserts a `settlement` row in `account_transactions` on the destination bank, so the bank's own UI feed shows the inbound transfer.
+
+### Tests
+- `/app/backend/tests/test_bnpl_settlement_iter220.py` — 8/8 PASS (unit-level bridge logic)
+- `/app/backend/tests/test_bnpl_register_iter221_e2e.py` — 6/6 PASS (HTTP integration via real merchant login, seeds receivable, exercises full register/idempotent/over-settlement flow, cleans up)
+- Playwright E2E run by testing agent: ✅ page loads, both cards render, modal opens with all 8 fields, save creates balanced 5-leg entry, ledger modal displays debits=credits, idempotent re-submit shows Arabic info toast, over-settlement rejected with Arabic 400.
+
+### Critical code review notes (testing agent — non-blocking)
+- `_recompute_balance` import is lazy + silent on exception (intentional — bank balance recompute is best-effort).
+- Total>receivable tolerance is `>0.01` (absolute) — acceptable for SAR rounding.
+- Modal backdrop click closes modal (standard pattern).
+
