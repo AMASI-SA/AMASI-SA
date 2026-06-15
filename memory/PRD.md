@@ -3358,3 +3358,56 @@ CR payment_gateway.tabby/receivable  10000
 - لا تعديل أرصدة الموظفين تلقائياً.
 - المرحلة الثانية (Preview/Apply Fix) ستُبنى بعد قرار المستخدم لكل فئة.
 
+
+
+## Completed Work — Iter-223 (Feb 16 2026): Auto Settlement Import + Reconciliation (Phase 2c)
+
+**User request**: عدم الاعتماد على الإدخال اليدوي. الأولوية: API → Settlement Import → Auto Fill. ثم المستخدم يراجع ويعتمد. يبقى الإدخال اليدوي كخيار احتياطي. إضافة جدول مطابقة (متوقع/فعلي).
+
+### Backend (2 endpoints added in `bnpl/settlements_routes.py`)
+1. **`GET /api/bnpl/settlements/import-preview/{provider}`**
+   Params: `date_from`, `date_to`, `period` (this_week|last_week|last_7d|last_14d|this_month|last_month).
+   Returns: `{prefill, breakdown, bank_reconciliation, data_source}` ready to drop into the registration modal.
+   Reuses the existing `compute_settlement_for_provider` engine (which already supports Tamara's official-file reconciliation — surfaced via `data_source: provider_official_file`).
+   Negative values are clamped to 0 (refund-heavy periods don't register as settlements).
+
+2. **`GET /api/bnpl/settlements/reconciliation`**
+   Params: `date_from`, `date_to`.
+   Returns per provider: `{expected, actual, difference, count, match_status, data_source}`.
+   - Expected = `compute_settlement_for_provider().net_payable`
+   - Actual = sum of `bnpl_settlement` credit legs in window
+   - Status: green (<0.5 SAR diff), yellow (≤5%), red (>5% or expected==0 but actual≠0).
+
+### Frontend (`BnplSettlementsRegister.jsx` updated)
+**Provider cards** — each card now has TWO buttons:
+- **📥 جلب تلقائي** (`auto-import-btn-{p}`) — purple, primary action. Fetches `import-preview/{p}?period=last_week`, opens modal pre-filled with all 4 amounts + reference + bank + date + notes.
+- **＋ إضافة يدوياً** (`add-settlement-btn-{p}`) — black, fallback. Opens empty modal.
+
+**Inside modal** — new "📥 جلب من API" header bar:
+- Period selector (last_week / this_week / last_7d / last_14d / this_month / last_month)
+- "جلب وملء الحقول تلقائياً" button (`btn-auto-import`)
+- After fetch: shows `import-summary` panel with data_source + gross_sales + refunds + net_sales + period dates
+- User can re-fetch with a different period without closing the modal
+
+**Reconciliation table** (`reconciliation-section`):
+- Columns: المزوّد · المتوقع · الفعلي · الفرق · عدد التسويات · المصدر · حالة المطابقة
+- Period selector with refresh button
+- Color-coded status pills (green/yellow/red) matching the rest of the page
+- Source column shows "📄 ملف رسمي" or "🖥️ محسوب"
+
+### Auto-flow E2E (verified live in preview)
+1. Click "📥 جلب تلقائي" on Tabby card → toast: "تم جلب القيم. راجع وعدّل ما يلزم ثم اعتمد."
+2. Modal opens with `settlement_reference=TABBY-2026-06-08-AUTO`, transferred/commission/VAT/fee pre-filled.
+3. Reconciliation table shows Tabby row with status pill "يحتاج مراجعة" (preview has no real sales window).
+
+### data-testids
+`auto-import-btn-tabby`, `auto-import-btn-tamara`, `btn-auto-import`, `import-period`, `import-summary`, `reconciliation-section`, `reconcile-period`, `reconcile-refresh`, `reconcile-row-tabby`, `reconcile-row-tamara`.
+
+### NOT changed
+- The bridge logic (`POST /register`) — unchanged from Iter-220.
+- The manual entry flow — fully preserved as fallback.
+- All 16 pytests (Iter-219 + Iter-220) still pass.
+
+### Future enhancement (not in this iter)
+- Real provider settlement APIs (Tabby `/settlements` endpoint, Tamara invoice file ingestion). Currently we rely on the existing computed values. If/when the user uploads a Tamara official file, the `data_source` will automatically flip to `provider_official_file` for that window.
+

@@ -84,7 +84,7 @@ function MetricCell({ label, value, tone = "slate", testid }) {
 }
 
 
-function ProviderOverviewCard({ row, onOpenAdd }) {
+function ProviderOverviewCard({ row, onOpenAdd, onOpenAuto }) {
     const meta = PROVIDERS[row.provider] || { name: row.provider, badge: "💳" };
     const last = row.last_settlement;
     const diffTone =
@@ -108,17 +108,31 @@ function ProviderOverviewCard({ row, onOpenAdd }) {
                         <StatusPill status={row.match_status} />
                     </div>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => onOpenAdd(row.provider)}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800
-                               text-white text-xs font-bold rounded-lg
-                               flex items-center gap-1.5"
-                    data-testid={`add-settlement-btn-${row.provider}`}
-                >
-                    <span className="text-base">＋</span>
-                    إضافة تسوية {meta.name}
-                </button>
+                <div className="flex gap-1.5">
+                    <button
+                        type="button"
+                        onClick={() => onOpenAuto(row.provider)}
+                        className="px-3 py-1.5 bg-violet-700 hover:bg-violet-800
+                                   text-white text-xs font-bold rounded-lg
+                                   flex items-center gap-1.5"
+                        data-testid={`auto-import-btn-${row.provider}`}
+                        title="جلب من API ثم اعتماد"
+                    >
+                        <span className="text-base">📥</span>
+                        جلب تلقائي
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onOpenAdd(row.provider)}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800
+                                   text-white text-xs font-bold rounded-lg
+                                   flex items-center gap-1.5"
+                        data-testid={`add-settlement-btn-${row.provider}`}
+                    >
+                        <span className="text-base">＋</span>
+                        إضافة يدوياً
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
@@ -191,18 +205,21 @@ function ProviderOverviewCard({ row, onOpenAdd }) {
 }
 
 
-function AddSettlementModal({ provider, banks, onClose, onSaved }) {
+function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
     const meta = PROVIDERS[provider] || { name: provider, badge: "💳" };
     const [saving, setSaving] = useState(false);
+    const [importing, setImporting] = useState(false);
+    const [importMeta, setImportMeta] = useState(null);
+    const [importPeriod, setImportPeriod] = useState("last_week");
     const [form, setForm] = useState({
-        settlement_reference: "",
-        settlement_date: todayISO(),
-        bank_account_id: banks?.[0]?.id || "",
-        transferred_amount: "",
-        commission: "",
-        commission_vat: "",
-        settlement_fee: "",
-        notes: "",
+        settlement_reference: prefill?.settlement_reference || "",
+        settlement_date: prefill?.settlement_date || todayISO(),
+        bank_account_id: prefill?.bank_account_id || banks?.[0]?.id || "",
+        transferred_amount: prefill?.transferred_amount ?? "",
+        commission: prefill?.commission ?? "",
+        commission_vat: prefill?.commission_vat ?? "",
+        settlement_fee: prefill?.settlement_fee ?? "",
+        notes: prefill?.notes || "",
     });
 
     const total = useMemo(() => {
@@ -214,6 +231,38 @@ function AddSettlementModal({ provider, banks, onClose, onSaved }) {
 
     const set = (k) => (e) =>
         setForm((f) => ({ ...f, [k]: e.target.value }));
+
+    const runImport = async () => {
+        setImporting(true);
+        try {
+            const { data } = await api.get(
+                `/bnpl/settlements/import-preview/${provider}`,
+                { params: { period: importPeriod } },
+            );
+            const pf = data?.prefill || {};
+            setForm((f) => ({
+                ...f,
+                settlement_reference: pf.settlement_reference || f.settlement_reference,
+                settlement_date: pf.settlement_date || f.settlement_date,
+                bank_account_id: pf.bank_account_id || f.bank_account_id,
+                transferred_amount: pf.transferred_amount ?? 0,
+                commission: pf.commission ?? 0,
+                commission_vat: pf.commission_vat ?? 0,
+                settlement_fee: pf.settlement_fee ?? 0,
+                notes: pf.notes || f.notes,
+            }));
+            setImportMeta({
+                period: data?.period,
+                data_source: data?.data_source,
+                breakdown: data?.breakdown,
+            });
+            toast.success("تم جلب القيم. راجع ثم اعتمد للحفظ.");
+        } catch (e) {
+            toast.error(errMsg(e, "فشل جلب بيانات التسوية"));
+        } finally {
+            setImporting(false);
+        }
+    };
 
     const save = async () => {
         if (!form.settlement_reference.trim()) {
@@ -280,6 +329,84 @@ function AddSettlementModal({ provider, banks, onClose, onSaved }) {
                     <p className="text-xs text-slate-500 mt-1">
                         ستنشئ هذه العملية قيداً متوازناً في الدفتر العام.
                     </p>
+                </div>
+
+                {/* Iter-223 — Auto Import bar */}
+                <div className="px-5 pt-4 pb-3 bg-violet-50/40
+                                border-b border-violet-100">
+                    <div className="flex items-center justify-between
+                                    gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 text-xs
+                                        font-bold text-violet-900">
+                            <span>📥 جلب تلقائي من API</span>
+                            <select
+                                value={importPeriod}
+                                onChange={(e) => setImportPeriod(e.target.value)}
+                                className="px-2 py-1 rounded-md border
+                                           border-violet-200 bg-white
+                                           text-[11px] text-slate-700 font-bold"
+                                data-testid="import-period"
+                            >
+                                <option value="last_week">الأسبوع الماضي</option>
+                                <option value="this_week">هذا الأسبوع</option>
+                                <option value="last_7d">آخر 7 أيام</option>
+                                <option value="last_14d">آخر 14 يوماً</option>
+                                <option value="this_month">هذا الشهر</option>
+                                <option value="last_month">الشهر الماضي</option>
+                            </select>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={runImport}
+                            disabled={importing}
+                            className="px-3 py-1.5 rounded-lg bg-violet-700
+                                       hover:bg-violet-800 text-white
+                                       text-[11px] font-bold disabled:opacity-60"
+                            data-testid="btn-auto-import"
+                        >
+                            {importing
+                                ? "جارٍ الجلب…"
+                                : "جلب وملء الحقول تلقائياً"}
+                        </button>
+                    </div>
+                    {importMeta && (
+                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-5
+                                        gap-2 text-[10px] text-slate-700
+                                        bg-white rounded-lg p-2
+                                        border border-violet-100"
+                             data-testid="import-summary">
+                            <div>
+                                <span className="font-bold">المصدر:</span>{" "}
+                                <span className="font-mono">
+                                    {importMeta.data_source}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="font-bold">إجمالي المبيعات:</span>{" "}
+                                <span className="num">
+                                    {fmt(importMeta.breakdown?.gross_sales)}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="font-bold">المرتجعات:</span>{" "}
+                                <span className="num">
+                                    {fmt(importMeta.breakdown?.total_refunds)}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="font-bold">صافي المبيعات:</span>{" "}
+                                <span className="num">
+                                    {fmt(importMeta.breakdown?.net_sales)}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="font-bold">الفترة:</span>{" "}
+                                <span className="num">
+                                    {importMeta.period?.from} → {importMeta.period?.to}
+                                </span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="p-5 space-y-4">
@@ -646,7 +773,11 @@ export default function BnplSettlementsRegister() {
     const [banks, setBanks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [addFor, setAddFor] = useState(null);
+    const [addPrefill, setAddPrefill] = useState(null);
     const [showEntry, setShowEntry] = useState(null);
+    const [reconcile, setReconcile] = useState(null);
+    const [reconcileLoading, setReconcileLoading] = useState(false);
+    const [reconcilePeriod, setReconcilePeriod] = useState("last_week");
 
     const load = async () => {
         setLoading(true);
@@ -670,7 +801,69 @@ export default function BnplSettlementsRegister() {
         }
     };
 
-    useEffect(() => { load(); }, []);
+    const loadReconcile = async (period) => {
+        setReconcileLoading(true);
+        try {
+            // Compute date range from period shorthand client-side so
+            // the user sees the actual window the system used.
+            const today = new Date();
+            const fmt = (d) => d.toISOString().slice(0, 10);
+            let from, to;
+            const ms = 86400000;
+            if (period === "last_week") {
+                const wd = today.getDay() || 7;
+                const sun = new Date(today.getTime() - wd * ms);
+                from = fmt(new Date(sun.getTime() - 6 * ms));
+                to = fmt(sun);
+            } else if (period === "this_week") {
+                const wd = today.getDay() || 7;
+                from = fmt(new Date(today.getTime() - (wd - 1) * ms));
+                to = fmt(new Date(today.getTime() + (7 - wd) * ms));
+            } else if (period === "last_7d") {
+                from = fmt(new Date(today.getTime() - 6 * ms));
+                to = fmt(today);
+            } else if (period === "this_month") {
+                const f = new Date(today.getFullYear(), today.getMonth(), 1);
+                from = fmt(f);
+                to = fmt(today);
+            } else if (period === "last_month") {
+                const f = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                const t = new Date(today.getFullYear(), today.getMonth(), 0);
+                from = fmt(f);
+                to = fmt(t);
+            }
+            const { data } = await api.get(
+                "/bnpl/settlements/reconciliation",
+                { params: { date_from: from, date_to: to } },
+            );
+            setReconcile(data);
+        } catch (e) {
+            toast.error(errMsg(e, "فشل تحميل المطابقة"));
+        } finally {
+            setReconcileLoading(false);
+        }
+    };
+
+    useEffect(() => { load(); loadReconcile(reconcilePeriod); }, []);  // eslint-disable-line
+
+    const openAuto = async (provider) => {
+        try {
+            const { data } = await api.get(
+                `/bnpl/settlements/import-preview/${provider}`,
+                { params: { period: "last_week" } },
+            );
+            setAddPrefill(data?.prefill || null);
+            setAddFor(provider);
+            toast.success("تم جلب القيم. راجع وعدّل ما يلزم ثم اعتمد.");
+        } catch (e) {
+            // Open the empty modal so the user can still enter manually.
+            setAddPrefill(null);
+            setAddFor(provider);
+            toast.warning(
+                errMsg(e, "تعذّر الجلب التلقائي — يمكنك الإدخال يدوياً"),
+            );
+        }
+    };
 
     return (
         <div className="space-y-6" dir="rtl" data-testid="bnpl-register-page">
@@ -705,7 +898,8 @@ export default function BnplSettlementsRegister() {
                     <ProviderOverviewCard
                         key={row.provider}
                         row={row}
-                        onOpenAdd={setAddFor}
+                        onOpenAdd={(p) => { setAddPrefill(null); setAddFor(p); }}
+                        onOpenAuto={openAuto}
                     />
                 ))}
                 {loading && !overview.providers?.length && (
@@ -715,6 +909,141 @@ export default function BnplSettlementsRegister() {
                         جارٍ التحميل…
                     </div>
                 )}
+            </div>
+
+            {/* Iter-223 — Reconciliation table: Expected vs Actual */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5"
+                 data-testid="reconciliation-section">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+                    <div>
+                        <h2 className="text-base font-extrabold text-slate-900">
+                            مطابقة التسويات — المتوقع مقابل الفعلي
+                        </h2>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                            يُحتسب المتوقع من السجل بناءً على البيع/المرتجعات.
+                            الفعلي من التسويات المسجَّلة في الدفتر.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={reconcilePeriod}
+                            onChange={(e) => {
+                                setReconcilePeriod(e.target.value);
+                                loadReconcile(e.target.value);
+                            }}
+                            className="px-2 py-1.5 rounded-lg border
+                                       border-slate-300 text-xs font-bold
+                                       bg-white"
+                            data-testid="reconcile-period"
+                        >
+                            <option value="last_week">الأسبوع الماضي</option>
+                            <option value="this_week">هذا الأسبوع</option>
+                            <option value="last_7d">آخر 7 أيام</option>
+                            <option value="this_month">هذا الشهر</option>
+                            <option value="last_month">الشهر الماضي</option>
+                        </select>
+                        <button
+                            type="button"
+                            onClick={() => loadReconcile(reconcilePeriod)}
+                            disabled={reconcileLoading}
+                            className="px-3 py-1.5 rounded-lg border
+                                       border-slate-300 text-xs font-bold
+                                       text-slate-700 hover:bg-slate-50
+                                       disabled:opacity-60"
+                            data-testid="reconcile-refresh"
+                        >
+                            {reconcileLoading ? "..." : "تحديث"}
+                        </button>
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                        <thead>
+                            <tr className="text-slate-500 font-bold
+                                           border-b border-slate-200">
+                                <th className="text-right py-2 px-2">
+                                    المزوّد</th>
+                                <th className="text-left py-2 px-2 num">
+                                    المتوقع
+                                </th>
+                                <th className="text-left py-2 px-2 num">
+                                    الفعلي
+                                </th>
+                                <th className="text-left py-2 px-2 num">
+                                    الفرق
+                                </th>
+                                <th className="text-center py-2 px-2">
+                                    عدد التسويات
+                                </th>
+                                <th className="text-center py-2 px-2">
+                                    المصدر
+                                </th>
+                                <th className="text-right py-2 px-2">
+                                    حالة المطابقة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(reconcile?.rows || []).map((r) => {
+                                const meta = {
+                                    tabby: { name: "Tabby", badge: "🟣" },
+                                    tamara: { name: "Tamara", badge: "🩷" },
+                                }[r.provider] || {};
+                                return (
+                                    <tr
+                                        key={r.provider}
+                                        className="border-b border-slate-100"
+                                        data-testid={`reconcile-row-${r.provider}`}
+                                    >
+                                        <td className="py-2 px-2 font-bold
+                                                       text-slate-900">
+                                            {meta.badge} {meta.name || r.provider}
+                                        </td>
+                                        <td className="py-2 px-2 num text-left
+                                                       text-slate-700">
+                                            {fmt(r.expected)}
+                                        </td>
+                                        <td className="py-2 px-2 num text-left
+                                                       text-emerald-700 font-bold">
+                                            {fmt(r.actual)}
+                                        </td>
+                                        <td className={`py-2 px-2 num text-left
+                                                        font-bold ${Math.abs(r.difference) < 0.5
+                                            ? "text-emerald-700"
+                                            : r.match_status === "yellow"
+                                                ? "text-amber-700"
+                                                : "text-rose-700"}`}>
+                                            {r.difference >= 0 ? "+" : "−"}{fmt(Math.abs(r.difference))}
+                                        </td>
+                                        <td className="py-2 px-2 text-center num">
+                                            {r.count}
+                                        </td>
+                                        <td className="py-2 px-2 text-center
+                                                       text-[10px] font-mono
+                                                       text-slate-500">
+                                            {r.data_source === "provider_official_file"
+                                                ? "📄 ملف رسمي"
+                                                : "🖥️ محسوب"}
+                                        </td>
+                                        <td className="py-2 px-2">
+                                            <StatusPill status={r.match_status} />
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {!reconcile?.rows?.length && (
+                                <tr>
+                                    <td colSpan={7}
+                                        className="text-center text-slate-400
+                                                   py-6 text-sm">
+                                        {reconcileLoading
+                                            ? "جارٍ التحميل…"
+                                            : "لا توجد بيانات."}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* Recent settlements list */}
@@ -825,10 +1154,13 @@ export default function BnplSettlementsRegister() {
                 <AddSettlementModal
                     provider={addFor}
                     banks={banks}
-                    onClose={() => setAddFor(null)}
+                    prefill={addPrefill}
+                    onClose={() => { setAddFor(null); setAddPrefill(null); }}
                     onSaved={(txnGroupId) => {
                         setAddFor(null);
+                        setAddPrefill(null);
                         load();
+                        loadReconcile(reconcilePeriod);
                         if (txnGroupId) setShowEntry(txnGroupId);
                     }}
                 />

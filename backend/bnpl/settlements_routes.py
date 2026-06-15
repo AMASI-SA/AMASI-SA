@@ -396,6 +396,221 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
 
         return {"success": True, "providers": out_providers}
 
+    @router.get("/import-preview/{provider}")
+    async def import_preview(
+        provider: str,
+        user: dict = Depends(get_current_user),
+        date_from: Optional[str] = Query(
+            None, pattern=r"^\d{4}-\d{2}-\d{2}$",
+        ),
+        date_to: Optional[str] = Query(
+            None, pattern=r"^\d{4}-\d{2}-\d{2}$",
+        ),
+        period: Optional[str] = Query(
+            None, pattern=r"^(this_week|last_week|last_7d|last_14d|this_month|last_month)$",
+        ),
+    ):
+        """Iter-223 — Auto Settlement Import preview.
+
+        Returns the **pre-filled** values for the settlement
+        registration form, computed from `compute_settlement_for_provider`
+        (which already reconciles against an official Tamara file if
+        the merchant uploaded one — surfaced via `data_source`).
+
+        The frontend takes this payload and drops it straight into
+        the AddSettlementModal so the user only reviews and approves.
+        """
+        from datetime import date, timedelta
+        from datetime import datetime as _dt
+        uid = user["id"]
+        provider = (provider or "").lower()
+        if provider not in PROVIDERS:
+            raise HTTPException(400, f"unknown provider {provider}")
+
+        # Period shorthand → date_from/date_to. The user-provided
+        # explicit dates always win.
+        if not (date_from and date_to) and period:
+            today = date.today()
+            if period == "this_week":
+                wd = today.weekday()
+                start = today - timedelta(days=wd)
+                end = start + timedelta(days=6)
+            elif period == "last_week":
+                wd = today.weekday()
+                end = today - timedelta(days=wd + 1)
+                start = end - timedelta(days=6)
+            elif period == "last_7d":
+                end = today
+                start = today - timedelta(days=6)
+            elif period == "last_14d":
+                end = today
+                start = today - timedelta(days=13)
+            elif period == "this_month":
+                start = today.replace(day=1)
+                end = today
+            elif period == "last_month":
+                first_this = today.replace(day=1)
+                end = first_this - timedelta(days=1)
+                start = end.replace(day=1)
+            else:
+                start = today - timedelta(days=6)
+                end = today
+            date_from = start.isoformat()
+            date_to = end.isoformat()
+
+        s = await compute_settlement_for_provider(
+            db, uid, provider, date_from, date_to,
+        )
+        if "error" in s:
+            raise HTTPException(400, s["error"])
+
+        tots = s.get("totals") or {}
+        bank = s.get("bank") or {}
+
+        # Pre-filled form values — clamp negatives to 0 because the
+        # settlement bridge rejects negative amounts. A negative
+        # net_payable means refunds exceeded sales in the window — the
+        # user shouldn't be registering a "settlement" in that case.
+        def _clamp(v: float) -> float:
+            return round(max(float(v or 0), 0), 2)
+        transferred_amount = _clamp(tots.get("net_payable") or 0)
+        commission = _clamp(tots.get("commission") or 0)
+        commission_vat = _clamp(tots.get("commission_vat") or 0)
+        settlement_fee = _clamp(tots.get("settlement_fee") or 0)
+        settlement_fee_vat = _clamp(tots.get("settlement_fee_vat") or 0)
+        # Roll the settlement-fee VAT into the existing "settlement_fee"
+        # line because the registration bridge has only one fee bucket.
+        if settlement_fee_vat > 0:
+            settlement_fee = round(settlement_fee + settlement_fee_vat, 2)
+
+        # Auto-generated reference if none provided by the user.
+        ref_default = (
+            f"{provider.upper()}-{date_from or _dt.utcnow().date().isoformat()}-AUTO"
+            if date_from
+            else f"{provider.upper()}-AUTO-{_dt.utcnow().strftime('%Y%m%d')}"
+        )
+
+        return {
+            "success": True,
+            "provider": provider,
+            "period": s.get("period") or {
+                "from": date_from, "to": date_to,
+            },
+            "data_source": s.get("data_source") or "computed",
+            "prefill": {
+                "settlement_reference": ref_default,
+                "settlement_date": date_to,
+                "bank_account_id": bank.get("linked_account_id"),
+                "bank_account_name": bank.get("linked_account_name"),
+                "transferred_amount": transferred_amount,
+                "commission": commission,
+                "commission_vat": commission_vat,
+                "settlement_fee": settlement_fee,
+                "notes": (
+                    f"تسوية مستوردة تلقائياً ({s.get('data_source') or 'computed'}) "
+                    f"للفترة {date_from or '?'} → {date_to or '?'}"
+                ),
+            },
+            "breakdown": {
+                "gross_sales": tots.get("gross_sales") or 0,
+                "total_refunds": tots.get("total_refunds") or 0,
+                "net_sales": tots.get("net_sales") or 0,
+                "commission": commission,
+                "commission_vat": commission_vat,
+                "settlement_fee_raw": tots.get("settlement_fee") or 0,
+                "settlement_fee_vat": settlement_fee_vat,
+                "settlement_fee_total": settlement_fee,
+                "transactions_count": tots.get("transactions_count") or 0,
+                "refunds_count": tots.get("refunds_count") or 0,
+                "net_payable": transferred_amount,
+            },
+            "bank_reconciliation": bank,
+        }
+
+    @router.get("/reconciliation")
+    async def settlement_reconciliation(
+        user: dict = Depends(get_current_user),
+        date_from: Optional[str] = Query(
+            None, pattern=r"^\d{4}-\d{2}-\d{2}$",
+        ),
+        date_to: Optional[str] = Query(
+            None, pattern=r"^\d{4}-\d{2}-\d{2}$",
+        ),
+    ):
+        """Iter-223 — Expected vs Actual reconciliation per provider.
+
+        Expected = compute_settlement_for_provider().net_payable
+        Actual   = sum of bnpl_settlement total_closed legs in window
+        """
+        uid = user["id"]
+        rows = []
+        # Build a date window for the registered settlements query
+        # using `settlement_date` metadata.
+        for provider in PROVIDERS:
+            s = await compute_settlement_for_provider(
+                db, uid, provider, date_from, date_to,
+            )
+            expected = round(
+                float((s.get("totals") or {}).get("net_payable") or 0), 2,
+            )
+
+            match: dict = {
+                "user_id": uid,
+                "entry_type": "bnpl_settlement",
+                "status": "posted",
+                "side": "credit",
+                "entity_type": "payment_gateway",
+                "entity_id": provider,
+            }
+            if date_from or date_to:
+                cond: dict = {}
+                if date_from:
+                    cond["$gte"] = date_from
+                if date_to:
+                    cond["$lte"] = date_to
+                match["metadata.settlement_date"] = cond
+
+            agg = [
+                {"$match": match},
+                {"$group": {
+                    "_id": None,
+                    "total": {"$sum": "$amount"},
+                    "count": {"$sum": 1},
+                }},
+            ]
+            actual = 0.0
+            count = 0
+            async for row in db.general_ledger.aggregate(agg):
+                actual = round(float(row.get("total") or 0), 2)
+                count = int(row.get("count") or 0)
+
+            diff = round(expected - actual, 2)
+            abs_diff = abs(diff)
+            if abs_diff < 0.5:
+                status = "green"
+            elif expected > 0 and abs_diff / max(expected, 1) <= 0.05:
+                status = "yellow"
+            elif expected == 0 and actual == 0:
+                status = "green"
+            else:
+                status = "red"
+
+            rows.append({
+                "provider": provider,
+                "expected": expected,
+                "actual": actual,
+                "difference": diff,
+                "count": count,
+                "match_status": status,
+                "data_source": s.get("data_source") or "computed",
+            })
+
+        return {
+            "success": True,
+            "period": {"from": date_from, "to": date_to},
+            "rows": rows,
+        }
+
     @router.get("/{provider}")
     async def provider_settlement(
         provider: str,
