@@ -55,6 +55,7 @@ import SallaSettlements from "./pages/SallaSettlements";
 import SettlementsOverview from "./pages/SettlementsOverview";
 import AlertsPage from "./pages/AlertsPage";
 import UnifiedEntryScreen from "./pages/UnifiedEntryScreen";
+import LedgerTransactionsPage from "./pages/LedgerTransactionsPage";
 import MigrationWizard from "./pages/MigrationWizard";
 import EmployeesLedger from "./pages/EmployeesLedger";
 import EmployeeCorrections from "./pages/EmployeeCorrections";
@@ -136,6 +137,7 @@ function AppRoutes() {
             <Route path="/settlements-overview" element={<ProtectedRoute><Layout><SettlementsOverview /></Layout></ProtectedRoute>} />
             <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
             <Route path="/new-transaction" element={<ProtectedRoute><Layout><UnifiedEntryScreen /></Layout></ProtectedRoute>} />
+            <Route path="/transactions" element={<ProtectedRoute><Layout><LedgerTransactionsPage /></Layout></ProtectedRoute>} />
             <Route path="/accounting/migration" element={<ProtectedRoute><Layout><MigrationWizard /></Layout></ProtectedRoute>} />
             <Route path="/employees-ledger" element={<ProtectedRoute><Layout><EmployeesLedger /></Layout></ProtectedRoute>} />
             <Route path="/employee-corrections" element={<ProtectedRoute><Layout><EmployeeCorrections /></Layout></ProtectedRoute>} />

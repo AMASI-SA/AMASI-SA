@@ -2934,3 +2934,35 @@ matches because the originals are already `status="reversed"`.
    are reversed in a single atomic pass.
 3. From now on Iter-215 produces only today/yesterday entries inside
    the configured windows. Backfill is impossible by construction.
+
+
+## Completed Work — Iter-216 (Feb 15 2026): Dedicated Ledger Transactions Page
+
+**User request**: "صفحة تعرض اخر الحركات المالية ونوع الحركه — جدول يعرض 15 صف ثم سهم لتنقل بين الصفحات الجدول"
+
+### New page
+- Route: `/transactions` (`LedgerTransactionsPage.jsx`).
+- Sidebar entry: "📜 سجل الحركات المالية" (testid `nav-ledger-transactions`).
+- Layout:
+  - Header: title + إجمالي القيود في الدفتر + 🔄 تحديث button.
+  - 3 stat tiles: حركات هذه الصفحة / إجمالي المدين / إجمالي الدائن.
+  - Table (6 columns): الوقت · نوع العملية · الوصف · بواسطة · الحالة · المبلغ.
+  - Status column: ✓ معتمد (green) or ↩︎ معكوس · {اسم} (pink, with strike-through amount).
+  - Pagination footer: page X من Y · عرض A–B من C + ← → arrow buttons + current page chip.
+- Pagination: 15 rows per page, client-side after grouping legs by txn_group_id, sorted by posted_at desc.
+- Row click → opens shared `TxnDetailModal` (creator pill, reverser pill if any, debit/credit breakdown, reverse button when eligible).
+
+### Refactor
+- `UnifiedEntryScreen.jsx` now also exports `TxnDetailModal`, `txnLabel`, `entityLabel`, `subLabel`, `fmtNum`, `timeAgo`,
+  `TXN_TYPE_LABELS`, `ENTITY_LABELS`, `SUB_ACCOUNT_LABELS`, `REVERSAL_REASONS` so the new page reuses them with no
+  duplication.
+
+### Verification on Preview (real merchant data)
+- ✅ 7 rows render with creator "عرفات" and correct status badges.
+- ✅ Reversed row (advance_grant 20.00) shows ↩︎ معكوس · عرفات + strike-through.
+- ✅ Modal opens correctly on row click; shows "أضافها / عكسها" pills.
+- ✅ Pagination footer displays "صفحة 1 من 1 · عرض 1–7 من 7" (arrows disabled when only 1 page).
+- ✅ Stat tiles compute correct page totals.
+
+### Endpoint used
+- `GET /api/ledger/entries?limit=N` (already enriched with `posted_by_name` / `reversed_by_name` in Iter-214).

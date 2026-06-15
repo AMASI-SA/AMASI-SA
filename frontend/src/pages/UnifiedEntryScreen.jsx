@@ -2262,3 +2262,20 @@ function TxnDetailModal({ txn, onClose, onReversed }) {
         </div>
     );
 }
+
+// Iter-216 — Named exports so the dedicated transactions page
+// (LedgerTransactionsPage) can reuse the modal + label helpers
+// without duplicating ~250 lines of code.
+export {
+    TxnDetailModal,
+    txnLabel,
+    entityLabel,
+    subLabel,
+    fmtNum,
+    timeAgo,
+    TXN_TYPE_LABELS,
+    ENTITY_LABELS,
+    SUB_ACCOUNT_LABELS,
+    REVERSAL_REASONS,
+};
+

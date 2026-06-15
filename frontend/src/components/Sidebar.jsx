@@ -47,6 +47,7 @@ const SECTIONS = [
             { to: "/reconciliation", label: "المطابقة والتسويات", icon: Scales, testid: "nav-reconciliation" },
             { to: "/financial-position", label: "المركز المالي", icon: CurrencyDollar, testid: "nav-financial-position" },
             { to: "/new-transaction", label: "➕ حركة مالية جديدة (موحدة)", icon: PaperPlaneRight, testid: "nav-new-transaction" },
+            { to: "/transactions", label: "📜 سجل الحركات المالية", icon: PaperPlaneRight, testid: "nav-ledger-transactions" },
             { to: "/employees-ledger", label: "👥 الموظفون (Ledger)", icon: PaperPlaneRight, testid: "nav-employees-ledger" },
             { to: "/employee-corrections", label: "🔄 تصحيح عملية موظف", icon: ArrowsLeftRight, testid: "nav-employee-corrections" },
             { to: "/salary-reversals", label: "↩️ عكس صرف راتب", icon: ArrowsLeftRight, testid: "nav-salary-reversals" },
