@@ -175,6 +175,9 @@ export default function Dashboard() {
     const [metaSummary, setMetaSummary] = useState(null);
     const [tiktokSummary, setTiktokSummary] = useState(null);
     const [refreshingAll, setRefreshingAll] = useState(false);
+    // Iter-204 — bump this counter to force the per-account ad cards
+    // to refetch their data without a full page reload.
+    const [adCardsRefreshSignal, setAdCardsRefreshSignal] = useState(0);
     const fileInputRef = useRef(null);
     const pendingReprocessId = useRef(null);
 
@@ -287,10 +290,26 @@ export default function Dashboard() {
         };
 
         const results = await Promise.all([runSnap(), runMeta(), runTiktok()]);
+        // Iter-204 — Trigger backend half-hour ad-account sync NOW
+        // (force=true bypasses the per-day idempotency guard so today's
+        // freshly arrived spend rows are picked up). This updates
+        // ad_account balance + debt + cumulative spend used by the
+        // Dashboard per-account cards AND the AdAccounts page.
+        try {
+            const today = (snapSummary?.today?.date
+                || metaSummary?.today?.date
+                || tiktokSummary?.today?.date
+                || todaySA());
+            await api.post("/ad-accounts/sync-all", {
+                from_date: today, to_date: today, force: true,
+            });
+        } catch { /* non-blocking; per-platform pulls already done */ }
         // Re-read everything so totals + cards reflect new spend.
         await Promise.all([fetchSnapSummary(), fetchSnapAccountsBreakdown(),
                            fetchMetaSummary(),
                            fetchTiktokSummary(), refreshSilently()]);
+        // Iter-204 — kick the per-account cards to refetch.
+        setAdCardsRefreshSignal((n) => n + 1);
 
         const okCount = results.filter(r => r.ok).length;
         const summary = results.map(r =>
@@ -980,7 +999,7 @@ export default function Dashboard() {
                                 Only renders when the user has ≥2 Snapchat accounts.
                                 Shows month spend / orders / avg cost / sales /
                                 credit-limit per account. */}
-                            <SnapchatAccountsCards />
+                            <SnapchatAccountsCards refreshSignal={adCardsRefreshSignal} />
 
                             {/* Footer: link to detailed report */}
                             <div className="mt-4 flex justify-end">

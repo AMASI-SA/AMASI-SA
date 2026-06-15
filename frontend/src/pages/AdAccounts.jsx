@@ -1006,6 +1006,9 @@ export default function AdAccounts() {
     const [allowDelete, setAllowDelete] = useState(false);
     const [diagnose, setDiagnose] = useState(null);
     const [diagBusy, setDiagBusy] = useState(false);
+    // Iter-204 — surface the most-recent fetch time so merchants
+    // can confirm the silent half-hour auto-refresh is working.
+    const [lastLoaded, setLastLoaded] = useState(null);
 
     const runDiagnose = async () => {
         setDiagBusy(true);
@@ -1039,11 +1042,34 @@ export default function AdAccounts() {
                     && a.status !== "inactive",
             ));
             setAllowDelete(!!settingsRes.data?.ad_account_allow_delete);
+            setLastLoaded(Date.now());
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر التحميل");
         } finally { setLoading(false); }
     };
     useEffect(() => { load(); }, []);
+
+    // Iter-204 — Silent auto-poll every 30 minutes so the ad-account
+    // balances/debt reflect the half-hour backend cron without forcing
+    // the merchant to reload. Only fires while the tab is visible.
+    useEffect(() => {
+        const id = setInterval(() => {
+            if (document.visibilityState === "visible") load();
+        }, 30 * 60 * 1000);
+        return () => clearInterval(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Also refetch when the user returns to the tab (e.g. after
+    // switching apps), so stale numbers are flushed instantly.
+    useEffect(() => {
+        const onVis = () => {
+            if (document.visibilityState === "visible") load();
+        };
+        document.addEventListener("visibilitychange", onVis);
+        return () => document.removeEventListener("visibilitychange", onVis);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const deleteAccount = async (row) => {
         const balance = Number(row.balance || 0);
@@ -1229,8 +1255,13 @@ export default function AdAccounts() {
                     </button>
                 </div>
             </div>
-            <div className="text-[11px] text-slate-500 -mt-3 mb-1">
-                💡 المزامنة المجدولة تعمل تلقائياً كل يوم الساعة <b>11:55 مساءً</b> لكل الحسابات المدعومة (Snap / TikTok / Meta).
+            <div className="text-[11px] text-slate-500 -mt-3 mb-1 flex items-center gap-2 flex-wrap">
+                <span>💡 المزامنة التلقائية تعمل في الخلفية كل <b>30 دقيقة</b> لكل الحسابات المدعومة (Snap / TikTok / Meta) — بدون الحاجة لفتح هذه الصفحة. اضغط "مزامنة الكل الآن" لتحديث فوري.</span>
+                {lastLoaded && (
+                    <span className="text-emerald-700 font-bold" data-testid="adacc-last-loaded">
+                        · آخر تحديث: {new Date(lastLoaded).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

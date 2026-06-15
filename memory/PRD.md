@@ -2408,3 +2408,64 @@ Confirmed with bank "بنك الإنماء (Iter203)":
 
 
 
+
+## Iter-204 — Ad-account silent half-hour auto-refresh (Feb 15 2026)
+
+### Request
+Merchant wants ad-spend numbers to update without reloading the
+page — either manually or every 30 minutes — and the refresh must
+propagate to the Ad-Accounts page (balance + debt) AND the
+per-account ad cards on the Dashboard (cumulative).
+
+### What was already in place
+- Backend half-hour cron (`iter-139: _ad_account_halfhour_sync`)
+  runs `run_daily_cron` every 30 min — picks up new daily-spend
+  rows from `snapchat_account_daily` / `meta_ads_daily` /
+  `tiktok_ads_daily`, updates `ad_account_ledger`, recomputes
+  balance & liability. Logs every 30 min in backend.err.log.
+- `POST /api/ad-accounts/sync-all` already existed for manual
+  trigger.
+- Dashboard already polled `/api/dashboard` every 60 s.
+
+### What was missing (root cause of merchant complaint)
+- `AdAccounts.jsx` had NO polling — page numbers stale until
+  reload.
+- `SnapchatAccountsCards` component fetched ONCE on mount and
+  never refreshed.
+- Dashboard's "تحديث جميع الإعلانات" button updated daily_costs
+  but did NOT trigger `/ad-accounts/sync-all` nor refetch the
+  per-account cards.
+- UI label still said "كل يوم 11:55" — outdated since iter-139.
+
+### Fix
+- `AdAccounts.jsx`:
+  • Silent auto-poll (`setInterval`) every 30 minutes; only when
+    `document.visibilityState === 'visible'`.
+  • Visibility-change listener: refetch instantly when the
+    merchant comes back to the tab.
+  • Surface "آخر تحديث: hh:mm" pill (testid `adacc-last-loaded`).
+  • Updated label to "كل 30 دقيقة — بدون الحاجة لفتح هذه الصفحة".
+- `SnapchatAccountsCards.jsx`:
+  • Accepts a `refreshSignal` prop and re-fetches whenever the
+    parent bumps it.
+  • Internal 30-min `setInterval` for silent autonomous polling.
+  • Shows "آخر تحديث hh:mm" in card header.
+- `Dashboard.jsx`:
+  • New state `adCardsRefreshSignal`; bumped after the existing
+    `refreshAllAds` flow finishes.
+  • `refreshAllAds` now ALSO calls `POST /api/ad-accounts/sync-all
+    { force: true }` so the backend processes today's spend
+    immediately before the cards re-read.
+  • Passes the signal into `<SnapchatAccountsCards
+    refreshSignal={adCardsRefreshSignal} />`.
+
+### Verification
+- ✅ Manual API: `POST /api/ad-accounts/sync-all` returns
+  `{ok: true, results: [...] }` with per-account spend.
+- ✅ Visual: `/ad-accounts` shows the new pill
+  "آخر تحديث: 12:45 م" + corrected label. Snap Test SSOT card
+  still reads balance=1,500 ر.س from the Iter-203 topup.
+- ✅ Existing backend cron continues to fire every 30 min
+  (confirmed via `iter-139: ad-account half-hour sync done`
+  log lines).
+

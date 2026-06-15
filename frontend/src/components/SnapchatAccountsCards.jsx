@@ -26,20 +26,38 @@ function fmt(n) {
 }
 
 
-export default function SnapchatAccountsCards() {
+export default function SnapchatAccountsCards({ refreshSignal = 0 }) {
     const [data, setData] = useState(null);
     const [busy, setBusy] = useState(true);
+    const [lastFetched, setLastFetched] = useState(null);
 
+    const fetchData = async () => {
+        try {
+            const { data } = await api.get("/dashboard/snapchat-accounts-summary");
+            setData(data);
+            setLastFetched(Date.now());
+        } catch (_) { /* silent */ }
+        finally { setBusy(false); }
+    };
+
+    // Initial load + refetch whenever the parent bumps refreshSignal.
     useEffect(() => {
         let mounted = true;
         (async () => {
-            try {
-                const { data } = await api.get("/dashboard/snapchat-accounts-summary");
-                if (mounted) setData(data);
-            } catch (_) { /* silent */ }
-            finally { if (mounted) setBusy(false); }
+            await fetchData();
+            if (!mounted) return;
         })();
         return () => { mounted = false; };
+    }, [refreshSignal]);
+
+    // Iter-204 — Silent auto-poll every 30 minutes so card numbers
+    // refresh on their own without a page reload (mirrors the
+    // backend half-hour ad-account cron at iter-139).
+    useEffect(() => {
+        const id = setInterval(() => {
+            if (document.visibilityState === "visible") fetchData();
+        }, 30 * 60 * 1000);
+        return () => clearInterval(id);
     }, []);
 
     if (busy || !data) return null;
@@ -52,8 +70,11 @@ export default function SnapchatAccountsCards() {
                     <Ghost size={20} weight="fill" className="text-yellow-500" />
                     <h3 className="text-sm sm:text-base font-extrabold text-slate-900">حسابات سناب شات — تفصيلي</h3>
                 </div>
-                <div className="text-[10px] text-slate-500">
+                <div className="text-[10px] text-slate-500" data-testid="snap-accounts-meta">
                     الصرف خلال {data.month_start?.slice(0, 7)} • {data.accounts.length} حساب
+                    {lastFetched && (
+                        <span className="ml-2 text-emerald-700">· آخر تحديث {new Date(lastFetched).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}</span>
+                    )}
                 </div>
             </div>
 
