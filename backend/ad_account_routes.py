@@ -387,6 +387,113 @@ async def _ledger_write(
     return doc
 
 
+async def _post_spend_to_ledger(
+    db, *, user_id: str, actor_name: str, cp: dict,
+    amount: float, spend_date: str, source: str,
+    description: str = "", notes: str = "",
+    extra_metadata: Optional[dict] = None,
+) -> dict:
+    """Iter-205 — Post a daily ad-account spend as a balanced txn_group
+    into `general_ledger` (Universal Ledger SSOT).
+
+    Accounting model (per merchant spec):
+        Σ debits == Σ credits
+        DEBIT  expense.advertising  = spend                (مصروف إعلاني)
+        CREDIT ad_account.balance   = min(spend, prepaid)  (يستهلك الرصيد)
+        CREDIT ad_account.debt      = spend − prepaid      (مديونية ↑)
+
+    Idempotency:
+        key = "spend:{cp_id}:{ad_provider}:{spend_date}:{source}:{amount}"
+        Stored in metadata.idempotency_key. Same key found ⇒ skip
+        with `{ok: True, skipped: True, txn_group_id: <existing>}`.
+        Protects the half-hour cron, sync-from-platform, and accidental
+        double-clicks on the manual /spend button.
+    """
+    from ledger_core import post_txn_group as _ptg, compute_balance as _cb
+
+    amount = round(float(amount or 0), 2)
+    if amount <= 0:
+        return {"ok": True, "skipped": True, "reason": "non_positive"}
+
+    ad_provider = (cp.get("ad_provider") or "").strip() or "unknown"
+    idem_key = (
+        f"spend:{cp['id']}:{ad_provider}:{spend_date}:{source}"
+        f":{amount:.2f}"
+    )
+    existing = await db.general_ledger.find_one(
+        {"user_id": user_id,
+         "metadata.idempotency_key": idem_key,
+         "status": "posted"},
+        {"_id": 0, "txn_group_id": 1},
+    )
+    if existing:
+        return {"ok": True, "skipped": True,
+                "txn_group_id": existing.get("txn_group_id"),
+                "reason": "idempotent_duplicate"}
+
+    # Compute LIVE prepaid balance from the universal ledger (NOT the
+    # legacy `counterparties.balance` field which can drift).
+    bal = await _cb(
+        db, user_id=user_id, entity_type="ad_account",
+        entity_id=cp["id"], sub_account="balance",
+    )
+    prepaid_live = max(0.0, round(float(bal.get("net_balance") or 0), 2))
+
+    covered = round(min(amount, prepaid_live), 2)
+    uncovered = round(amount - covered, 2)
+
+    entries = [{
+        "entity_type": "expense", "entity_id": "advertising",
+        "side": "debit", "amount": amount,
+        "entry_type": "expense_record",
+        "notes": f"مصروف إعلانات — {cp.get('name')}",
+        "metadata": {"category": "advertising",
+                     "ad_account_id": cp["id"],
+                     "ad_account_name": cp.get("name")},
+    }]
+    if covered > 0:
+        entries.append({
+            "entity_type": "ad_account", "entity_id": cp["id"],
+            "sub_account": "balance", "side": "credit",
+            "amount": covered, "entry_type": "spend",
+            "notes": f"استهلاك رصيد مدفوع مسبقاً — {cp.get('name')}",
+        })
+    if uncovered > 0:
+        entries.append({
+            "entity_type": "ad_account", "entity_id": cp["id"],
+            "sub_account": "debt", "side": "credit",
+            "amount": uncovered, "entry_type": "spend",
+            "notes": f"مديونية إعلانية جديدة — {cp.get('name')}",
+        })
+
+    group = await _ptg(
+        db, user_id=user_id, actor_id=user_id, actor_name=actor_name,
+        txn_type="ad_account_spend",
+        notes=description or f"صرف يومي — {cp.get('name')}",
+        metadata={
+            "ad_account_id": cp["id"],
+            "ad_account_name": cp.get("name"),
+            "ad_provider": ad_provider,
+            "spend_date": spend_date,
+            "source": source,
+            "amount": amount,
+            "covered": covered,
+            "uncovered": uncovered,
+            "idempotency_key": idem_key,
+            "iter": "iter205",
+            **(extra_metadata or {}),
+        },
+        entries=entries,
+    )
+    return {
+        "ok": True, "skipped": False,
+        "txn_group_id": group.get("txn_group_id"),
+        "covered": covered, "uncovered": uncovered,
+        "amount": amount,
+    }
+
+
+
 async def _post_bank_tx(db, user_id: str, *,
                         account_id: str, amount: float, direction: str,
                         transaction_date: str, description: str) -> dict:
@@ -420,6 +527,18 @@ async def ensure_ad_account_indexes(db) -> None:
         await db.ad_account_ledger.create_index(
             [("user_id", 1), ("counterparty_id", 1), ("created_at", -1)],
             name="ledger_owner_cp_date",
+        )
+    except Exception:
+        pass
+    # Iter-205 — idempotency on spend SSOT entries. Partial index so
+    # only general_ledger rows that carry an idempotency_key are
+    # indexed (cheap & unique per user).
+    try:
+        await db.general_ledger.create_index(
+            [("user_id", 1), ("metadata.idempotency_key", 1)],
+            name="gl_user_idem",
+            partialFilterExpression={
+                "metadata.idempotency_key": {"$exists": True}},
         )
     except Exception:
         pass
@@ -1103,6 +1222,20 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             date=payload.spend_date,
         )
 
+        # 4) Iter-205 — Universal Ledger SSOT entry.
+        #    Triple/double-entry: debit expense.advertising, credit
+        #    ad_account.balance (prepaid consumed) + ad_account.debt
+        #    (uncovered portion). Idempotent by
+        #    (cp_id, provider, date, source, amount).
+        gl_result = await _post_spend_to_ledger(
+            db, user_id=user["id"],
+            actor_name=user.get("name") or user.get("email") or "",
+            cp=cp, amount=amount, spend_date=payload.spend_date,
+            source="manual",
+            description=payload.description or "",
+            notes=payload.notes or "",
+        )
+
         cp_fresh = await _get_account(db, user["id"], cp_id)
         return {
             "ok": True,
@@ -1112,6 +1245,8 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             "debt_created": uncovered if (uncovered > 0 and mode == "auto") else 0.0,
             "mode": mode,
             "ad_account": await _summarise(db, user["id"], cp_fresh),
+            "ledger_txn_group_id": gl_result.get("txn_group_id"),
+            "ledger_skipped": gl_result.get("skipped", False),
         }
 
     # ── POST /{id}/sync-from-platform (Iter-107) ──────────────────────
@@ -2679,6 +2814,22 @@ async def _run_sync_for_all(
                 "delta_applied": delta,
                 "prev_total_applied": prev_total_applied,
             })
+            # Iter-205 — also write the DELTA to the Universal Ledger
+            # (idempotent via the per-(cp,date,source,delta) key, so
+            # retried cron passes are safe).
+            await _post_spend_to_ledger(
+                db, user_id=user_id, actor_name="ad_account_cron",
+                cp=cp, amount=delta, spend_date=to_date,
+                source="ad_account_cron",
+                description=(
+                    f"مزامنة تراكمية من {cp.get('ad_provider')} — "
+                    f"{to_date} (دلتا {delta})"
+                ),
+                extra_metadata={"delta": delta,
+                                "platform_total": total,
+                                "prev_total_applied": prev_total_applied,
+                                "source_collection": source},
+            )
         else:
             # delta < 0 — platform reported LESS than what we already
             # logged today (rare correction). Refund the absolute delta

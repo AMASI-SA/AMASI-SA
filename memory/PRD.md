@@ -2469,3 +2469,78 @@ per-account ad cards on the Dashboard (cumulative).
   (confirmed via `iter-139: ad-account half-hour sync done`
   log lines).
 
+
+## Iter-205 — Ad-Account Spend SSOT (P0, Feb 15 2026)
+
+### Request
+Tie EVERY ad-spend movement (manual `/spend`, half-hour cron,
+sync-all, sync-from-platform) into `general_ledger` with the
+accounting model:
+
+    DEBIT  expense.advertising  = total
+    CREDIT ad_account.balance   = min(total, prepaid_live)
+    CREDIT ad_account.debt      = remainder (if any)
+
+Idempotency required to survive cron retries.
+
+### Fix
+- New module-level helper `_post_spend_to_ledger` in
+  `ad_account_routes.py`:
+  • Computes `prepaid_live` from the LEDGER (not the drifty
+    `counterparties.balance`).
+  • Builds a balanced txn_group with 2 or 3 legs.
+  • Stores `metadata.idempotency_key =
+      spend:{cp_id}:{provider}:{date}:{source}:{amount:.2f}`.
+  • Existing key found → returns
+    `{ok: True, skipped: True, txn_group_id: <existing>}` —
+    NO duplicate row.
+- Wired into:
+  • `POST /api/ad-accounts/{id}/spend` (manual) → source="manual".
+    Response now carries `ledger_txn_group_id` + `ledger_skipped`.
+  • `_run_sync_for_all` (used by `/sync-all`, `/sync-from-platform`,
+    and the iter-139 half-hour cron) → source="ad_account_cron",
+    amount = the DELTA being applied. Same delta retried within
+    the same day = idempotent.
+- New MongoDB partial index `gl_user_idem` on
+  `(user_id, metadata.idempotency_key)` for cheap dedupe checks.
+
+### Tests
+- `/app/backend/tests/test_ad_account_spend_ssot_iter205.py`
+  (4 scenarios, all green when run alone — chained-test failure is
+  the project-wide pytest-asyncio loop-close issue documented in
+  iter-196):
+  • spend < prepaid → only `ad_account.balance` credited, no debt.
+  • spend > prepaid → balance drained to 0, remainder lands in
+    `ad_account.debt`.
+  • retry same spend → idempotent skip, ledger row count unchanged,
+    `expense.advertising` net total unchanged.
+  • cron helper called twice with same (cp, date, source, delta) →
+    second call returns `skipped=True` with the same
+    `txn_group_id`.
+- Double-entry invariant verified: Σ debits == Σ credits across all
+  `txn_type="ad_account_spend"` groups.
+
+### Visual / API Verification on Preview
+Used the existing Snap Test SSOT account (balance=1,500 from
+Iter-203 topup):
+1. Spend 800 → covered=800, uncovered=0, `txn_group_id` returned.
+2. Spend 800 retry → `ledger_skipped: true`, same txn_group_id —
+   NO duplicate.
+3. Spend 1,500 over → SSOT correctly drained remaining 700 from
+   balance and created 800 debt (legacy diverged here because it
+   has no idempotency, but the user explicitly accepts SSOT as the
+   truth — legacy is being phased out).
+
+Final SSOT state visible via `/api/ledger/entries`:
+    expense.advertising debit  = 800 + 1,500 = 2,300
+    ad_account.balance  debit  = 1,500
+    ad_account.balance  credit = 800 + 700 = 1,500   (net = 0)
+    ad_account.debt     credit = 800                 (net = -800)
+Perfectly balanced.
+
+### Out of Scope (deferred)
+- `PUT /topup/{ledger_id}` (edit topup) — still legacy only.
+- `PUT /opening` (opening balance) — still legacy only.
+- Per user instructions, these stay untouched until Spend is
+  proven in production data.
+
