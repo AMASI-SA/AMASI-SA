@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import api from "../lib/api";
+import HelpToggle from "../components/HelpToggle";
 import { toast } from "sonner";
 import { todaySA, monthISO_SA } from "../lib/dates";
 
@@ -127,8 +128,6 @@ export default function UnifiedEntryScreen() {
     const [recentTxns, setRecentTxns] = useState([]);
     const [highlightGroupId, setHighlightGroupId] = useState(null);
     const [recentLoading, setRecentLoading] = useState(false);
-    // Iter-210 — Toggleable help panel next to "خصم السلف تلقائياً" checkbox.
-    const [showAdvancesHelp, setShowAdvancesHelp] = useState(false);
     const [employees, setEmployees] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
 
@@ -1120,8 +1119,15 @@ export default function UnifiedEntryScreen() {
                                     <div className="space-y-3">
                                         {/* Leg 1 — Bank/cash transfer */}
                                         <div className="border border-slate-200 rounded-xl p-3 bg-white">
-                                            <div className="text-xs font-extrabold text-slate-700 mb-2">
-                                                💰 المبلغ المحول
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="text-xs font-extrabold text-slate-700">
+                                                    💰 المبلغ المحول
+                                                </div>
+                                                <HelpToggle testid="cod-bank-help">
+                                                    <p className="font-bold text-slate-900">المبلغ الفعلي الذي وصل لحسابك من شركة الشحن.</p>
+                                                    <p>هذا هو صافي COD = إجمالي التحصيل − (رسوم الشحن + رسوم COD + رسوم أخرى).</p>
+                                                    <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2"><b>مثال:</b> شركة الشحن جمعت 10,000 ر.س، خصمت 1,200 شحن + 300 رسوم COD، حوّلت لك 8,500. أدخل هنا <b>8,500</b>.</p>
+                                                </HelpToggle>
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                                 <input type="number" step="0.01"
@@ -1154,8 +1160,15 @@ export default function UnifiedEntryScreen() {
 
                                         {/* Leg 2 — Withheld shipping cost */}
                                         <div className="border border-slate-200 rounded-xl p-3 bg-white">
-                                            <div className="text-xs font-extrabold text-slate-700 mb-2">
-                                                📦 تكلفة الشحن المخصومة
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="text-xs font-extrabold text-slate-700">
+                                                    📦 تكلفة الشحن المخصومة
+                                                </div>
+                                                <HelpToggle testid="cod-shipping-help">
+                                                    <p className="font-bold text-slate-900">رسوم الشحن التي خصمتها الشركة قبل التحويل.</p>
+                                                    <p>تُسجَّل كمصروف شحن (expense.shipping) في القيد الموحد، وتقلّل رصيد العهدة المفتوحة على شركة الشحن.</p>
+                                                    <p className="text-emerald-800 bg-emerald-50 border border-emerald-200 rounded p-2"><b>مثال:</b> شركة الشحن قالت "خصمت 1,200 ر.س مصاريف شحن"، أدخل <b>1,200</b>. هذا يدخل تقرير "تكاليف الشحن" في الملخص التنفيذي.</p>
+                                                </HelpToggle>
                                             </div>
                                             <input type="number" step="0.01"
                                                 placeholder="0.00"
@@ -1167,8 +1180,15 @@ export default function UnifiedEntryScreen() {
 
                                         {/* Leg 3 — Withheld COD fee */}
                                         <div className="border border-slate-200 rounded-xl p-3 bg-white">
-                                            <div className="text-xs font-extrabold text-slate-700 mb-2">
-                                                💳 رسوم COD المخصومة
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="text-xs font-extrabold text-slate-700">
+                                                    💳 رسوم COD المخصومة
+                                                </div>
+                                                <HelpToggle testid="cod-fee-help">
+                                                    <p className="font-bold text-slate-900">رسوم خدمة التحصيل (Cash-On-Delivery fees).</p>
+                                                    <p>عمولة شركة الشحن على عملية التحصيل النقدي من العميل (غير رسوم الشحن العادية).</p>
+                                                    <p className="text-sky-800 bg-sky-50 border border-sky-200 rounded p-2"><b>الفرق عن "تكلفة الشحن":</b> الشحن = نقل الطرد. رسوم COD = تحصيل النقد من العميل وتسليمه لك. شركات كثيرة تفصلهما في كشف الحساب.</p>
+                                                </HelpToggle>
                                             </div>
                                             <input type="number" step="0.01"
                                                 placeholder="0.00"
@@ -1180,8 +1200,15 @@ export default function UnifiedEntryScreen() {
 
                                         {/* Leg 4 — Other fees + category */}
                                         <div className="border border-slate-200 rounded-xl p-3 bg-white">
-                                            <div className="text-xs font-extrabold text-slate-700 mb-2">
-                                                🧾 رسوم أخرى (اختياري)
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="text-xs font-extrabold text-slate-700">
+                                                    🧾 رسوم أخرى (اختياري)
+                                                </div>
+                                                <HelpToggle testid="cod-other-help">
+                                                    <p className="font-bold text-slate-900">أي خصومات إضافية لا تنتمي للشحن أو رسوم COD.</p>
+                                                    <p>اختر فئة المصروف من القائمة (مثل: مرتجعات، تأمين، خصومات تجارية) ليُسجَّل في الفئة الصحيحة بالمركز المالي.</p>
+                                                    <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2"><b>أمثلة:</b> قيمة طرد مفقود، رسم تأمين، عمولة استرجاع، خصم تجاري متفق عليه.</p>
+                                                </HelpToggle>
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                                 <input type="number" step="0.01"
@@ -1505,32 +1532,22 @@ export default function UnifiedEntryScreen() {
 
                         {opType === "salary_settle" && (
                             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
                                     <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                                         <input type="checkbox" checked={applyAdvances}
                                             onChange={e => setApplyAdvances(e.target.checked)}
                                             data-testid="unified-apply-advances" />
                                         خصم السلف المفتوحة تلقائياً
                                     </label>
-                                    <button type="button"
-                                        onClick={() => setShowAdvancesHelp(v => !v)}
-                                        className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-sky-100 hover:bg-sky-200 text-sky-700 font-bold text-xs transition-colors"
-                                        title="ما عمل هذا الخيار؟"
-                                        data-testid="unified-apply-advances-help">
-                                        ؟
-                                    </button>
-                                </div>
-                                {showAdvancesHelp && (
-                                    <div className="mt-3 pt-3 border-t border-slate-200 text-xs text-slate-700 space-y-2"
-                                        data-testid="unified-apply-advances-help-panel">
+                                    <HelpToggle testid="unified-apply-advances-help">
                                         <p className="font-bold text-slate-900">
                                             ما الذي يفعله هذا الخيار؟
                                         </p>
-                                        <p className="leading-relaxed">
+                                        <p>
                                             يقفل تلقائياً أي سلفة مفتوحة على الموظف مقابل راتبه المستحق
                                             في نفس العملية — بدل تسجيل عمليتين منفصلتين.
                                         </p>
-                                        <div className="bg-white border border-slate-200 rounded p-2 leading-relaxed">
+                                        <div className="bg-white border border-slate-200 rounded p-2">
                                             <p className="font-bold text-slate-900 mb-1">مثال:</p>
                                             <p>راتب مستحق = 3,000 · سلفة مفتوحة = 500 · تدفع كاش = 2,000</p>
                                             <ul className="mt-1 space-y-0.5 pr-3 list-disc marker:text-emerald-500">
@@ -1538,7 +1555,7 @@ export default function UnifiedEntryScreen() {
                                                 <li><b className="text-rose-700">بدون الخيار:</b> البنك −2,000 · الراتب المستحق المتبقي = 1,000 · السلفة <b>تظل 500 مفتوحة</b></li>
                                             </ul>
                                         </div>
-                                        <div className="bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed">
+                                        <div className="bg-amber-50 border border-amber-200 rounded p-2">
                                             <p className="font-bold text-amber-900 mb-1">💡 متى تستخدمه؟</p>
                                             <ul className="space-y-0.5 pr-3 list-disc marker:text-amber-500">
                                                 <li>عند تصفية حسابات الموظف نهاية الشهر.</li>
@@ -1546,11 +1563,11 @@ export default function UnifiedEntryScreen() {
                                                 <li>أطفئه إذا الموظف لم يوافق على الخصم أو تريد إبقاء السلفة مفتوحة.</li>
                                             </ul>
                                         </div>
-                                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                                        <p className="text-[10px] text-slate-500">
                                             ملاحظة: لو دفعت <b>أكثر</b> من المستحق، يُسجَّل الفائض كسلفة جديدة على الموظف تلقائياً.
                                         </p>
-                                    </div>
-                                )}
+                                    </HelpToggle>
+                                </div>
                             </div>
                         )}
 
