@@ -34,10 +34,73 @@ from ledger_core import (
     write_audit,
     REASON_CODES,
 )
+from liabilities_routes import _compute_employee_accrual
+from tz_utils import riyadh_today
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ── Iter-203: Post-cutoff Dynamic Salary Accrual ─────────────────────
+#
+# After Phase-4 migration (Iter-161), salary_payable in `general_ledger`
+# is FROZEN at the cutoff snapshot. New days passing don't generate
+# ledger entries until someone manually posts /salary-accrual.
+#
+# This helper computes the "missing daily accrual" since the cutoff and
+# returns the un-posted delta that should be ADDED to the displayed
+# salary_payable so the Employees screen reflects today's reality.
+#
+# We do NOT write to the ledger here. The ledger remains the SSOT for
+# what has been EXPLICITLY posted; this is a transparent display layer.
+async def _post_cutoff_accrual_delta(
+    db, user_id: str, emp: dict, cutoff_date_str: Optional[str],
+) -> float:
+    """Return the un-posted daily accrual amount for `emp` since the
+    migration cutoff (or since their start_date if no cutoff exists).
+    Subtracts any salary_accrual ledger credits posted after cutoff so
+    we don't double-count when admins explicitly run salary-accrual.
+    Always ≥ 0.
+    """
+    import datetime as _dt
+    today = riyadh_today()
+    # Total accrued from start → today (live)
+    accrued_today = float(_compute_employee_accrual(
+        emp, today=today)["accrued"])
+    # Accrued at cutoff date (frozen snapshot)
+    accrued_at_cutoff = 0.0
+    if cutoff_date_str:
+        try:
+            cutoff_d = _dt.date.fromisoformat(cutoff_date_str)
+            accrued_at_cutoff = float(_compute_employee_accrual(
+                emp, today=cutoff_d)["accrued"])
+        except (ValueError, TypeError):
+            accrued_at_cutoff = 0.0
+    raw_delta = accrued_today - accrued_at_cutoff
+    if raw_delta <= 0:
+        return 0.0
+    # Subtract any salary_accrual credit entries posted in the ledger
+    # AFTER the cutoff to avoid double-counting.
+    match = {
+        "user_id": user_id,
+        "entity_type": "employee",
+        "entity_id": emp["id"],
+        "sub_account": "salary_payable",
+        "entry_type": "salary_accrual",
+        "side": "credit",
+        "status": "posted",
+    }
+    if cutoff_date_str:
+        # We use metadata.accrual_through_date if present, else created_at
+        match["created_at"] = {"$gt": cutoff_date_str}
+    agg = await db.general_ledger.aggregate([
+        {"$match": match},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+    ]).to_list(1)
+    already_posted = float(agg[0]["total"]) if agg else 0.0
+    delta = round(raw_delta - already_posted, 2)
+    return max(0.0, delta)
 
 
 # ── Default expense categories (seeded on first read per user) ──────
@@ -1860,6 +1923,19 @@ def make_universal_router(db) -> APIRouter:
         custody = await compute_balance(
             db, user_id=user["id"], entity_type="employee",
             entity_id=emp_id, sub_account="custody")
+        # Iter-203 — add un-posted daily accrual delta to the displayed
+        # outstanding debt (ledger is frozen at migration cutoff)
+        cutoff_doc = await db.migration_cutoffs.find_one(
+            {"user_id": user["id"]}, {"_id": 0, "cutoff_date": 1},
+        )
+        cutoff_date_str = (cutoff_doc or {}).get("cutoff_date")
+        pending_accrual = await _post_cutoff_accrual_delta(
+            db, user["id"], emp, cutoff_date_str)
+        ledger_outstanding = float(salary_payable.get("outstanding_debt") or 0)
+        salary_payable["outstanding_debt_ledger"] = round(ledger_outstanding, 2)
+        salary_payable["pending_accrual"] = round(pending_accrual, 2)
+        salary_payable["outstanding_debt"] = round(
+            ledger_outstanding + pending_accrual, 2)
         # Net position: we owe him (payable) minus what he owes us (advance+custody)
         owed_to_emp = salary_payable["outstanding_debt"]
         owed_by_emp = advance["net_balance"] + custody["net_balance"]
@@ -1882,12 +1958,21 @@ def make_universal_router(db) -> APIRouter:
     async def employees_with_balances(user: dict = Depends(current_user)):
         """All employees + their LIVE ledger balances (3 sub_accounts).
         This is the Phase-4 replacement for the legacy
-        `/api/liabilities/salary-accrual-summary` view."""
+        `/api/liabilities/salary-accrual-summary` view.
+
+        Iter-203 — Adds an on-the-fly "post-cutoff daily accrual"
+        delta to `salary_payable` so the screen reflects each new day
+        as it passes (the ledger snapshot is frozen at cutoff)."""
         uid = user["id"]
         emps = await db.operating_salaries.find(
             {"user_id": uid, "category": "employee"}, {"_id": 0},
         ).to_list(500)
         emp_ids = [e["id"] for e in emps]
+        # Iter-203: Migration cutoff (None for un-migrated users)
+        cutoff_doc = await db.migration_cutoffs.find_one(
+            {"user_id": uid}, {"_id": 0, "cutoff_date": 1},
+        )
+        cutoff_date_str = (cutoff_doc or {}).get("cutoff_date")
         # Bulk-aggregate the 3 sub-accounts in one pipeline
         agg = await db.general_ledger.aggregate([
             {"$match": {"user_id": uid, "entity_type": "employee",
@@ -1914,29 +1999,41 @@ def make_universal_router(db) -> APIRouter:
         total_payable = 0.0
         total_advance = 0.0
         total_custody = 0.0
+        total_pending_accrual = 0.0
         for e in emps:
-            payable = max(-_net(e["id"], "salary_payable"), 0.0)
+            ledger_payable = max(-_net(e["id"], "salary_payable"), 0.0)
             advance = max(_net(e["id"], "advance"), 0.0)
             custody = max(_net(e["id"], "custody"), 0.0)
+            # Iter-203 — un-posted daily accrual delta
+            pending_accrual = await _post_cutoff_accrual_delta(
+                db, uid, e, cutoff_date_str)
+            payable = round(ledger_payable + pending_accrual, 2)
             net_pos = round(payable - advance - custody, 2)
             rows.append({
                 "id": e["id"], "name": e.get("name"),
                 "monthly_amount": round(float(e.get("monthly_amount") or 0), 2),
                 "status": e.get("status") or "active",
                 "salary_payable": payable,
+                "salary_payable_ledger": round(ledger_payable, 2),
+                "pending_accrual": round(pending_accrual, 2),
                 "advance": advance,
                 "custody": custody,
                 "net_position": net_pos,
             })
-            total_payable += payable; total_advance += advance; total_custody += custody
+            total_payable += payable
+            total_advance += advance
+            total_custody += custody
+            total_pending_accrual += pending_accrual
         return {
             "employees": rows,
             "totals": {
                 "salary_payable": round(total_payable, 2),
+                "pending_accrual": round(total_pending_accrual, 2),
                 "advance": round(total_advance, 2),
                 "custody": round(total_custody, 2),
                 "net_position": round(total_payable - total_advance - total_custody, 2),
             },
+            "cutoff_date": cutoff_date_str,
         }
 
     @router.get("/suppliers/list")

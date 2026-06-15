@@ -2323,3 +2323,38 @@ shows three distinct operations (تصحيح موظف / عكس صرف راتب /
 عكس مصروف), and the audit-log card on the right is wired up.
 
 
+
+## Iter-203 — Dynamic Post-Cutoff Salary Accrual (Feb 15, 2026)
+
+### Bug Reported
+After the Phase-4 SSOT migration (Iter-161), the Employees screen
+(`/employees-ledger`) stopped showing "today's" newly accrued salary
+because `general_ledger.salary_payable` was frozen at the cutoff
+snapshot. New days no longer auto-incremented the payable.
+
+### Fix (Option A — Dynamic Display Layer)
+- `/api/accounting/employees/list` and
+  `/api/accounting/employees/{id}/financial-summary` now compute a
+  `pending_accrual` delta on the fly:
+    raw = _compute_employee_accrual(emp, today) -
+          _compute_employee_accrual(emp, cutoff_date)
+    delta = max(0, raw − Σ salary_accrual credits posted after cutoff)
+- Ledger is NOT mutated — this is a transparent display addition.
+- New API fields: `pending_accrual`, `salary_payable_ledger`,
+  `outstanding_debt_ledger`, response-level `cutoff_date`.
+- Frontend `EmployeesLedger.jsx` shows `+X.XX استحقاق اليوم` under
+  each employee row and in the summary card.
+
+### Tests
+- `/app/backend/tests/test_dynamic_salary_accrual_iter203.py`
+  (6 scenarios): un-migrated user, migrated user with 5-day cutoff,
+  posted-accrual no-double-count, financial-summary parity,
+  future-start = 0 accrual, stopped employee clamped at stop_date.
+- ✅ Passes. Iter-196/162/113 regression all green.
+
+### Visual Verification on Preview
+Confirmed via screenshot: admin employee أحمد (3,000 ر.س/month)
+shows 16,500 ر.س payable with "+16,500.00 استحقاق اليوم" sub-line —
+matching ~165 days × (3,000/30) daily rate since cutoff.
+
+

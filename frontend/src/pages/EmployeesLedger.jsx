@@ -59,7 +59,11 @@ export default function EmployeesLedger() {
                 {/* Totals summary */}
                 <div className="grid grid-cols-4 gap-3 mb-4">
                     <SummaryCard label="رواتب مستحقة (نحن مدينون)"
-                        value={fmt(totals.salary_payable)} color="rose" />
+                        value={fmt(totals.salary_payable)}
+                        sub={totals.pending_accrual > 0.01
+                            ? `منها ${fmt(totals.pending_accrual)} استحقاق اليوم`
+                            : null}
+                        color="rose" />
                     <SummaryCard label="سلف مفتوحة (هم مدينون لنا)"
                         value={fmt(totals.advance)} color="amber" />
                     <SummaryCard label="عهد مفتوحة"
@@ -107,7 +111,15 @@ export default function EmployeesLedger() {
                                         data-testid={`emp-row-${r.id}`}>
                                         <td className="py-2 px-2 font-bold text-slate-900">{r.name}</td>
                                         <td className="text-left py-2 px-2 num">{fmt(r.monthly_amount)}</td>
-                                        <td className="text-left py-2 px-2 num font-bold text-rose-700">{fmt(r.salary_payable)}</td>
+                                        <td className="text-left py-2 px-2 num font-bold text-rose-700">
+                                            {fmt(r.salary_payable)}
+                                            {r.pending_accrual > 0.01 && (
+                                                <div className="text-[10px] font-normal text-amber-700 mt-0.5"
+                                                    data-testid={`emp-pending-${r.id}`}>
+                                                    +{fmt(r.pending_accrual)} استحقاق اليوم
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="text-left py-2 px-2 num font-bold text-amber-700">{fmt(r.advance)}</td>
                                         <td className="text-left py-2 px-2 num font-bold text-sky-700">{fmt(r.custody)}</td>
                                         <td className={`text-left py-2 px-2 num font-extrabold ${r.net_position >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
@@ -132,11 +144,14 @@ export default function EmployeesLedger() {
     );
 }
 
-function SummaryCard({ label, value, color }) {
+function SummaryCard({ label, value, color, sub }) {
     return (
         <div className={`bg-${color}-50 border border-${color}-200 rounded-lg p-3`}>
             <div className="text-[10px] text-slate-600 font-bold mb-1">{label}</div>
             <div className={`text-lg font-extrabold text-${color}-700 num`}>{value} ر.س</div>
+            {sub && (
+                <div className="text-[10px] text-amber-700 font-bold mt-1">{sub}</div>
+            )}
         </div>
     );
 }
@@ -208,7 +223,10 @@ function EmployeeDrawer({ employee, onClose }) {
                         {/* Balances */}
                         {summary && (
                             <div className="grid grid-cols-3 gap-2 mb-4">
-                                <BalanceCard label="مستحق له" value={summary.salary_payable.outstanding_debt} color="rose" />
+                                <BalanceCard label="مستحق له" value={summary.salary_payable.outstanding_debt} color="rose"
+                                    sub={summary.salary_payable.pending_accrual > 0.01
+                                        ? `منها ${fmt(summary.salary_payable.pending_accrual)} اليوم`
+                                        : null} />
                                 <BalanceCard label="سلفة" value={summary.advance.net_balance} color="amber" />
                                 <BalanceCard label="عهدة" value={summary.custody.net_balance} color="sky" />
                             </div>
@@ -293,11 +311,14 @@ function EmployeeDrawer({ employee, onClose }) {
     );
 }
 
-function BalanceCard({ label, value, color }) {
+function BalanceCard({ label, value, color, sub }) {
     return (
         <div className={`bg-${color}-50 border border-${color}-200 rounded-lg p-2 text-center`}>
             <div className="text-[10px] text-slate-600 font-bold mb-0.5">{label}</div>
             <div className={`text-base font-extrabold text-${color}-700 num`}>{fmt(value)}</div>
+            {sub && (
+                <div className="text-[9px] text-amber-700 font-bold mt-0.5">{sub}</div>
+            )}
         </div>
     );
 }
