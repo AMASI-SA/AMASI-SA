@@ -2674,3 +2674,50 @@ The PROFIT, COST, ROAS, FINANCIAL POSITION numbers DO NOT change.
   only — requires Deploy to take effect on Production.
 
 
+
+## Iter-208 — Fix `/employees/{id}/summary-balance` (Salary Payment screen)
+
+### Bug
+On the Preview environment merchant reported that picking an
+employee in the "حركة مالية جديدة → صرف راتب موظف" flow displayed
+balance = 0 and no cumulative salary, even though the Employees
+list showed the correct accrued amount.
+
+### Root cause
+The `summary-balance` endpoint (used ONLY by the
+salary-payment form to show "what does the company owe this
+employee?") was reading only from `general_ledger`, missing the
+post-cutoff dynamic accrual delta introduced in Iter-203 for the
+Employees list & financial-summary endpoints.
+
+### Fix
+- `universal_accounting_routes.py::employee_summary_balance` now
+  applies the same `_post_cutoff_accrual_delta` helper used by
+  Iter-203 endpoints. Response gains two new fields:
+  • `salary_payable_ledger` — frozen ledger snapshot value
+  • `pending_accrual`       — un-posted daily accrual since cutoff
+  `salary_payable` (and therefore `net_due_to_employee`) now equal
+  `ledger_outstanding + pending_accrual` — matching the Employees
+  list screen exactly.
+- `UnifiedEntryScreen.jsx` adds a small amber sub-line under the
+  net amount:
+    "+X.XX ر.س استحقاق يومي تراكمي حتى اليوم"
+  rendered only when `pending_accrual > 0.005` (testid
+  `unified-employee-pending-accrual`).
+
+### Tests
+- `/app/backend/tests/test_summary_balance_pending_accrual_iter208.py`
+  (1 scenario, PASS): seeds an employee who started 10 days ago at
+  3,000 ر.س/month; expects `salary_payable ≈ 1,000 ر.س` with
+  `pending_accrual` matching it and `ledger` field at 0.
+- Iter-203 regression: passes when run alone (chained failure is
+  the known pytest-asyncio loop-close issue documented earlier).
+
+### Verification on Preview
+- ✅ `GET /accounting/employees/{id}/summary-balance` now returns
+  `salary_payable=16,500, pending_accrual=16,500,
+  salary_payable_ledger=0` for the seed employee (was 0 before).
+- ✅ Frontend pulls the new value and the golden-rule banner /
+  net-due indicator now reflect reality.
+
+

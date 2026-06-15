@@ -1058,7 +1058,7 @@ def make_universal_router(db) -> APIRouter:
     ):
         emp = await db.operating_salaries.find_one(
             {"id": emp_id, "user_id": user["id"]},
-            {"_id": 0, "id": 1, "name": 1},
+            {"_id": 0},
         )
         if not emp:
             raise HTTPException(404, "الموظف غير موجود")
@@ -1072,8 +1072,21 @@ def make_universal_router(db) -> APIRouter:
         custody = await compute_balance(
             db, user_id=uid, entity_type="employee",
             entity_id=emp_id, sub_account="custody")
+        # Iter-203 — apply the same un-posted daily accrual delta the
+        # Employees list & financial-summary endpoints add, so the
+        # "Add Transaction" screen shows TODAY's reality (not the
+        # frozen migration snapshot).
+        cutoff_doc = await db.migration_cutoffs.find_one(
+            {"user_id": uid}, {"_id": 0, "cutoff_date": 1},
+        )
+        cutoff_date_str = (cutoff_doc or {}).get("cutoff_date")
+        pending_accrual = await _post_cutoff_accrual_delta(
+            db, uid, emp, cutoff_date_str)
+        ledger_outstanding = float(payable["outstanding_debt"])
+        outstanding_with_pending = round(
+            ledger_outstanding + pending_accrual, 2)
         net_due = round(
-            payable["outstanding_debt"]
+            outstanding_with_pending
             - advance["net_balance"]
             - custody["net_balance"],
             2,
@@ -1082,7 +1095,9 @@ def make_universal_router(db) -> APIRouter:
             "employee_id": emp_id,
             "name": emp.get("name"),
             "net_due_to_employee": net_due,
-            "salary_payable": payable["outstanding_debt"],
+            "salary_payable": outstanding_with_pending,
+            "salary_payable_ledger": round(ledger_outstanding, 2),
+            "pending_accrual": round(pending_accrual, 2),
             "advance_open": advance["net_balance"],
             "custody_open": custody["net_balance"],
         }

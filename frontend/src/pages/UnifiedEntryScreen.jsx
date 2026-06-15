@@ -854,6 +854,13 @@ export default function UnifiedEntryScreen() {
                                             ? `${Math.abs(net).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`
                                             : "—"}
                                     </div>
+                                    {/* Iter-203 — show un-posted daily accrual breakdown */}
+                                    {employeeSummary?.pending_accrual > 0.005 && (
+                                        <div className="mt-1 text-[10px] text-amber-700 font-bold"
+                                            data-testid="unified-employee-pending-accrual">
+                                            +{Number(employeeSummary.pending_accrual).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س استحقاق يومي تراكمي حتى اليوم
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })()}
