@@ -1009,6 +1009,8 @@ export default function AdAccounts() {
     // Iter-204 — surface the most-recent fetch time so merchants
     // can confirm the silent half-hour auto-refresh is working.
     const [lastLoaded, setLastLoaded] = useState(null);
+    // Iter-211 — { ad_account_id: { status, days_stale, last_spend_date } }
+    const [syncHealth, setSyncHealth] = useState({});
 
     const runDiagnose = async () => {
         setDiagBusy(true);
@@ -1023,13 +1025,15 @@ export default function AdAccounts() {
     const load = async () => {
         setLoading(true);
         try {
-            const [adRes, accRes, settingsRes] = await Promise.all([
+            const [adRes, accRes, settingsRes, healthRes] = await Promise.all([
                 api.get("/ad-accounts"),
                 // Iter-110 fix — endpoint expects `account_type=` (not `type=`)
                 // and returns a plain list, not `{items: []}`. Filter to
                 // visible active bank accounts only.
                 api.get("/accounts?account_type=bank"),
                 api.get("/settings"),
+                // Iter-211 — sync staleness per account
+                api.get("/ad-accounts/diagnostics/sync-health").catch(() => ({ data: null })),
             ]);
             setItems(adRes.data?.items || []);
             setTotals(adRes.data?.totals || {});
@@ -1042,6 +1046,12 @@ export default function AdAccounts() {
                     && a.status !== "inactive",
             ));
             setAllowDelete(!!settingsRes.data?.ad_account_allow_delete);
+            // Iter-211 — index health by ad-account id for quick lookup
+            const healthMap = {};
+            for (const h of (healthRes?.data?.accounts || [])) {
+                healthMap[h.id] = h;
+            }
+            setSyncHealth(healthMap);
             setLastLoaded(Date.now());
         } catch (e) {
             toast.error(formatApiErrorDetail(e.response?.data?.detail) || "تعذّر التحميل");
@@ -1296,6 +1306,39 @@ export default function AdAccounts() {
                                         <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap shrink-0">
                                             {PROVIDER_LABEL[row.ad_provider] || row.ad_provider}
                                         </span>
+                                        {/* Iter-211 — sync staleness pill */}
+                                        {(() => {
+                                            const h = syncHealth[row.id];
+                                            if (!h) return null;
+                                            const cfg = {
+                                                healthy: { tone: "emerald", emoji: "🟢", label: "البيانات محدّثة" },
+                                                warning: { tone: "amber",   emoji: "🟡", label: `قديمة ${h.days_stale} يوم` },
+                                                stale:   { tone: "rose",    emoji: "🔴", label: `متوقفة منذ ${h.days_stale} يوم` },
+                                                no_data: { tone: "slate",   emoji: "⚫", label: "لا بيانات" },
+                                            }[h.status] || null;
+                                            if (!cfg) return null;
+                                            return (
+                                                <span
+                                                    className={`px-2 py-0.5 rounded text-[10px] font-bold bg-${cfg.tone}-50 text-${cfg.tone}-800 border border-${cfg.tone}-200 cursor-help`}
+                                                    data-testid={`adacc-sync-status-${row.id}`}
+                                                    title={
+                                                        `حالة المزامنة: ${cfg.label}\n` +
+                                                        `آخر بيانات: ${h.last_spend_date || "—"}\n` +
+                                                        `مصدر: ${h.source_collection || "—"}\n` +
+                                                        `آخر استلام: ${h.last_received_at || "—"}\n\n` +
+                                                        (h.status === "stale" || h.status === "no_data"
+                                                            ? "📡 لم تصل بيانات صرف جديدة من المنصة.\n" +
+                                                              "السبب الأرجح: Make.com توقف عن إرسال البيانات.\n" +
+                                                              "افحص: 1) سجلات Make.com 2) صلاحية Access Token للمنصة 3) Rate limits"
+                                                            : h.status === "warning"
+                                                                ? "⏳ البيانات متأخرة عن اليوم — لو استمر التأخر راجع Make.com."
+                                                                : "✅ البيانات تصل بانتظام.")
+                                                    }
+                                                >
+                                                    {cfg.emoji} {cfg.label}
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                     {row.notes && <div className="text-xs text-slate-500 mt-1 line-clamp-2">{row.notes}</div>}
                                     {row.external_account_id && (

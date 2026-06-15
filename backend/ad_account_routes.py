@@ -843,6 +843,97 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         return {"items": items}
 
 
+    # ── GET /diagnostics/sync-health (Iter-211) — staleness diagnosis ─
+    @router.get("/diagnostics/sync-health")
+    async def sync_health(user: dict = Depends(current_user)):
+        """For each ad-account, returns the most recent platform-data
+        row (from snapchat_account_daily / meta_ads_daily /
+        tiktok_ads_daily) AND the last successful cron application.
+        Used by the UI to flag accounts where Make.com (or whichever
+        upstream) stopped delivering data."""
+        from datetime import datetime, date as _date, timezone as _tz
+        accs = await db.counterparties.find(
+            {"user_id": user["id"], "kind": "ad_account"},
+            {"_id": 0, "id": 1, "name": 1, "ad_provider": 1,
+             "external_account_id": 1, "platform_account_ids": 1},
+        ).to_list(500)
+        today = _date.today()
+        results = []
+        for cp in accs:
+            provider = (cp.get("ad_provider") or "").lower()
+            sources = PROVIDER_SOURCES.get(provider, [])
+            scope_ids = list(
+                set(filter(None, [
+                    cp.get("external_account_id"),
+                    *(cp.get("platform_account_ids") or []),
+                ]))
+            )
+            latest = None
+            latest_received_at = None
+            collection_used = None
+            for src in sources:
+                coll = db[src["collection"]]
+                q: dict = {"user_id": user["id"]}
+                if src.get("scope_field") and scope_ids:
+                    q[src["scope_field"]] = {"$in": scope_ids}
+                doc = await coll.find_one(
+                    q, sort=[("spend_date", -1), ("received_at", -1)],
+                )
+                if doc:
+                    sd = doc.get("spend_date") or doc.get("date")
+                    rec = doc.get("received_at") or doc.get("created_at")
+                    if not latest or (sd and sd > latest):
+                        latest = sd
+                        latest_received_at = rec
+                        collection_used = src["collection"]
+            days_stale = None
+            if latest:
+                try:
+                    parsed = (
+                        _date.fromisoformat(latest)
+                        if isinstance(latest, str) else latest
+                    )
+                    days_stale = (today - parsed).days
+                except Exception:
+                    days_stale = None
+            if days_stale is None:
+                status = "no_data"
+            elif days_stale <= 1:
+                status = "healthy"
+            elif days_stale <= 3:
+                status = "warning"
+            else:
+                status = "stale"
+            results.append({
+                "id": cp["id"],
+                "name": cp.get("name"),
+                "ad_provider": provider,
+                "last_spend_date": latest,
+                "last_received_at": (
+                    latest_received_at.isoformat()
+                    if isinstance(latest_received_at, datetime)
+                    else latest_received_at
+                ),
+                "days_stale": days_stale,
+                "source_collection": collection_used,
+                "status": status,
+            })
+        results.sort(key=lambda x: (
+            {"stale": 0, "warning": 1, "no_data": 2, "healthy": 3}[x["status"]],
+            -(x["days_stale"] or 0),
+        ))
+        return {
+            "as_of": today.isoformat(),
+            "accounts": results,
+            "summary": {
+                "total": len(results),
+                "healthy": sum(1 for r in results if r["status"] == "healthy"),
+                "warning": sum(1 for r in results if r["status"] == "warning"),
+                "stale": sum(1 for r in results if r["status"] == "stale"),
+                "no_data": sum(1 for r in results if r["status"] == "no_data"),
+            },
+        }
+
     # ── POST /{id}/topup ──────────────────────────────────────────────
     @router.post("/{cp_id}/topup")
     async def topup(
