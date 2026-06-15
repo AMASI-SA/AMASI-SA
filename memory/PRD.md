@@ -3073,3 +3073,30 @@ Also fixed: `reverse_entry` was not propagating `sub_account` to the reversal en
 - ✅ No mutation, no migration, no posting.
 - ✅ Safe to call any number of times on production.
 - ✅ Each row exposes both the buggy and corrected balances + the reversal/original entry IDs so the merchant can drill down.
+
+
+## Completed Work — Iter-217b extended (Feb 15 2026): Reversal Impact Details Endpoint
+
+**User request**: production audit returned 5 entities, 11 reversals, total_delta=+1,330. Needs to drill into the specific reversals that drove +15,850.57 on `expense.advertising`, -10,371.89 on الرياض, -5,478.68 on Self Service.
+
+### Changes
+1. `GET /api/audit/reversal-impact-report?expand_entries=true` — rows[*].entries now include full per-leg info (amount, sides, group_ids, txn_type, reason, notes, posted_at, ad_account_name, spend_date, window_period, delta_contribution).
+2. **NEW** `GET /api/audit/reversal-impact-report/details` — flat list of every reversal joined with its original. Filterable by `entity_type`, `entity_id`, `txn_type`. Sort by `impact_desc` (default), `posted_at_desc`, or `amount_desc`. `limit` parameter.
+
+### Fields per detail row
+- `entity_name`, `entity_type`, `entity_id`, `sub_account`
+- `amount`, `reversal_side`, `original_side`
+- `original_ledger_id`, `reversal_ledger_id`
+- `original_txn_group_id`, `reversal_txn_group_id`
+- `original_entry_no`, `reversal_entry_no`
+- `original_txn_type`, `original_notes`, `reversal_notes`
+- `reason_code`, `original_posted_at`, `reversal_posted_at`
+- `ad_account_name`, `spend_date`, `window_period`, `ad_provider` (when present)
+- `delta` — what Iter-217 added/removed from this entity's balance because of THIS reversal
+
+### Verification (Preview)
+- `/details` returned 2 paired entries (employee +20 / bank -20 from the Iter-214 test reversal), confirming the flat shape.
+- `/details?entity_type=ad_account` correctly returned 0 (no ad_account reversals on Preview).
+
+### Still strictly READ-ONLY
+- ✅ Only `find` + `aggregate`. Zero mutations. No migration. No posting.

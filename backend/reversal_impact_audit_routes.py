@@ -63,7 +63,13 @@ def make_reversal_impact_router(db, current_user):
     async def reversal_impact_report(
         user: dict = Depends(current_user),
         include_ids: bool = True,
+        expand_entries: bool = False,
     ):
+        """Iter-217b — Read-only assessment of the compute_balance
+        fix impact. Set ``expand_entries=true`` to receive the rich
+        per-reversal record (amount, side, original/reversal IDs,
+        txn_group_ids, reason, posted_at) inline in `rows[*].entries`.
+        """
         uid = user["id"]
 
         # 1. Aggregate reversal entries per (entity_type, entity_id,
@@ -142,16 +148,84 @@ def make_reversal_impact_router(db, current_user):
                 ),
             }
             if include_ids:
-                # Pair each reversal with the original it reverses
-                # (parallel arrays from $push). Filter out empty
-                # original_ids defensively.
-                pairs = []
-                orig_ids = r.get("original_ids") or []
+                # Pair each reversal with the original it reverses.
+                # When `expand_entries=true`, hydrate each pair with
+                # the full per-leg metadata (amount, side, group ids,
+                # timestamps, reason) — the user can then drill into
+                # the exact entries that drove the delta.
                 rev_ids = r.get("reversal_ids") or []
-                for i, rid in enumerate(rev_ids):
-                    oid = orig_ids[i] if i < len(orig_ids) else None
-                    pairs.append({"reversal_id": rid,
-                                   "original_id": oid})
+                orig_ids = r.get("original_ids") or []
+                if not expand_entries:
+                    pairs = [{"reversal_id": rid,
+                               "original_id": orig_ids[i]
+                                              if i < len(orig_ids) else None}
+                             for i, rid in enumerate(rev_ids)]
+                else:
+                    rev_docs = {}
+                    async for d in db.general_ledger.find(
+                        {"id": {"$in": rev_ids}, "user_id": uid},
+                        {"_id": 0},
+                    ):
+                        rev_docs[d["id"]] = d
+                    orig_filter = [x for x in orig_ids if x]
+                    orig_docs = {}
+                    if orig_filter:
+                        async for d in db.general_ledger.find(
+                            {"id": {"$in": orig_filter},
+                             "user_id": uid},
+                            {"_id": 0},
+                        ):
+                            orig_docs[d["id"]] = d
+                    pairs = []
+                    for i, rid in enumerate(rev_ids):
+                        rev = rev_docs.get(rid, {})
+                        oid = orig_ids[i] if i < len(orig_ids) else None
+                        orig = orig_docs.get(oid or "", {})
+                        rev_side = rev.get("side")
+                        rev_amount = float(rev.get("amount") or 0)
+                        delta_one = round(
+                            (rev_amount if rev_side == "debit"
+                             else -rev_amount) * -1, 2,
+                        )
+                        # ↑ Per-leg delta (= what Iter-217 added to
+                        # the entity's balance for THIS reversal,
+                        # before considering its pair). Computed as
+                        # the negation of the reversal's contribution
+                        # to the buggy compute_balance.
+                        pairs.append({
+                            "reversal_id": rid,
+                            "original_id": oid,
+                            "entity_type": rev.get("entity_type"),
+                            "entity_id": rev.get("entity_id"),
+                            "entity_name": name,
+                            "sub_account": rev.get("sub_account"),
+                            "amount": rev_amount,
+                            "reversal_side": rev_side,
+                            "original_side": orig.get("side"),
+                            "original_entry_no": orig.get("entry_no"),
+                            "reversal_entry_no": rev.get("entry_no"),
+                            "original_txn_group_id":
+                                orig.get("txn_group_id"),
+                            "reversal_txn_group_id":
+                                rev.get("txn_group_id"),
+                            "original_txn_type": (
+                                orig.get("metadata") or {}
+                            ).get("txn_type") or orig.get("entry_type"),
+                            "reason_code": rev.get("reason_code"),
+                            "notes": rev.get("notes"),
+                            "original_posted_at": orig.get("posted_at"),
+                            "reversal_posted_at": rev.get("posted_at"),
+                            "delta_contribution": delta_one,
+                            "ad_account_name":
+                                (orig.get("metadata") or {})
+                                .get("ad_account_name"),
+                            "spend_date":
+                                (orig.get("metadata") or {})
+                                .get("spend_date"),
+                            "window_period":
+                                (orig.get("metadata") or {})
+                                .get("window_period"),
+                        })
                 row["entries"] = pairs
             report.append(row)
 
@@ -193,6 +267,136 @@ def make_reversal_impact_router(db, current_user):
                 "reversal_count": r["reversal_count"],
             } for r in top],
             "rows": report,
+        }
+
+    # ── /reversal-impact-report/details ─────────────────────────────
+    # Flat list of every reversal entry the merchant has, joined with
+    # its original counterpart. Useful when the merchant wants ONE
+    # screen with every reversal sorted by absolute impact (e.g., to
+    # answer "which 3 reversals caused the +15,850.57 swing on
+    # expense.advertising?"). Filterable by entity_type / entity_id /
+    # txn_type so the user can drill into a specific area.
+    @router.get("/reversal-impact-report/details")
+    async def reversal_impact_details(
+        user: dict = Depends(current_user),
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        txn_type: str | None = None,
+        sort_by: str = "impact_desc",
+        limit: int = 500,
+    ):
+        uid = user["id"]
+        q: dict = {"user_id": uid, "status": "posted",
+                    "entry_type": "reversal"}
+        if entity_type:
+            q["entity_type"] = entity_type
+        if entity_id:
+            q["entity_id"] = entity_id
+
+        rev_docs = []
+        async for d in db.general_ledger.find(q, {"_id": 0}):
+            rev_docs.append(d)
+        if not rev_docs:
+            return {"source": "general_ledger", "iter": "iter217b",
+                    "summary": {"total": 0}, "details": []}
+
+        # Bulk-fetch the originals.
+        orig_ids = [d.get("reverses_entry_id") for d in rev_docs
+                    if d.get("reverses_entry_id")]
+        orig_docs: dict = {}
+        if orig_ids:
+            async for d in db.general_ledger.find(
+                {"user_id": uid, "id": {"$in": orig_ids}},
+                {"_id": 0},
+            ):
+                orig_docs[d["id"]] = d
+
+        # Resolve names in batch.
+        wanted = {(d["entity_type"], d["entity_id"]) for d in rev_docs}
+        name_cache: dict = {}
+        for et, eid in wanted:
+            name_cache[(et, eid)] = await _resolve_name(uid, et, eid)
+
+        details = []
+        for rev in rev_docs:
+            oid = rev.get("reverses_entry_id")
+            orig = orig_docs.get(oid or "", {})
+            if txn_type:
+                this_type = (
+                    (orig.get("metadata") or {}).get("txn_type")
+                    or orig.get("entry_type") or ""
+                )
+                if this_type != txn_type:
+                    continue
+            rev_amount = float(rev.get("amount") or 0)
+            rev_side = rev.get("side")
+            # Per-leg delta — what Iter-217 added/removed from the
+            # entity's balance because of this single reversal.
+            delta_one = round(
+                (rev_amount if rev_side == "credit"
+                 else -rev_amount), 2,
+            )
+            details.append({
+                "entity_name": name_cache.get(
+                    (rev["entity_type"], rev["entity_id"]),
+                    rev["entity_id"],
+                ),
+                "entity_type": rev["entity_type"],
+                "entity_id": rev["entity_id"],
+                "sub_account": rev.get("sub_account"),
+                "amount": rev_amount,
+                "reversal_side": rev_side,
+                "original_side": orig.get("side"),
+                "original_ledger_id": oid,
+                "reversal_ledger_id": rev["id"],
+                "original_txn_group_id": orig.get("txn_group_id"),
+                "reversal_txn_group_id": rev.get("txn_group_id"),
+                "original_entry_no": orig.get("entry_no"),
+                "reversal_entry_no": rev.get("entry_no"),
+                "original_txn_type": (
+                    (orig.get("metadata") or {}).get("txn_type")
+                    or orig.get("entry_type")
+                ),
+                "original_notes": orig.get("notes"),
+                "reversal_notes": rev.get("notes"),
+                "reason_code": rev.get("reason_code"),
+                "original_posted_at": orig.get("posted_at"),
+                "reversal_posted_at": rev.get("posted_at"),
+                "ad_account_name":
+                    (orig.get("metadata") or {}).get("ad_account_name"),
+                "spend_date":
+                    (orig.get("metadata") or {}).get("spend_date"),
+                "window_period":
+                    (orig.get("metadata") or {}).get("window_period"),
+                "ad_provider":
+                    (orig.get("metadata") or {}).get("ad_provider"),
+                "delta": delta_one,
+            })
+
+        # Sort
+        if sort_by == "impact_desc":
+            details.sort(key=lambda d: abs(d["delta"]), reverse=True)
+        elif sort_by == "posted_at_desc":
+            details.sort(key=lambda d: d.get("reversal_posted_at") or "",
+                          reverse=True)
+        elif sort_by == "amount_desc":
+            details.sort(key=lambda d: d["amount"], reverse=True)
+
+        details = details[:limit]
+
+        total_delta = round(sum(d["delta"] for d in details), 2)
+        return {
+            "source": "general_ledger",
+            "iter": "iter217b",
+            "filters": {
+                "entity_type": entity_type, "entity_id": entity_id,
+                "txn_type": txn_type, "sort_by": sort_by, "limit": limit,
+            },
+            "summary": {
+                "total": len(details),
+                "total_delta": total_delta,
+            },
+            "details": details,
         }
 
     return router
