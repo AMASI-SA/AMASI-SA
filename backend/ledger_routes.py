@@ -155,6 +155,95 @@ def make_ledger_router(db) -> APIRouter:
         return {"ok": True, "reversed_count": len(reversals),
                 "group_id": group_id}
 
+    # ── POST /admin/iter215/cleanup-backfill ────────────────────────
+    # Iter-215c (Feb 15 2026) — one-shot reversal of any historical
+    # ad-spend entries that the old `catch_up_window_posts` helper
+    # backfilled within the first hour after Iter-215 was deployed.
+    #
+    # Targets ONLY entries that satisfy ALL of:
+    #   metadata.iter == "iter215"
+    #   metadata.spend_date  < today_riyadh
+    #   status == "posted" (not already reversed)
+    #
+    # Today's entries are deliberately preserved (those are the
+    # genuine AM postings that should remain). Each targeted group
+    # is reversed via the same atomic loop used by the manual
+    # `/groups/{id}/reverse` endpoint, so the SSOT stays balanced.
+    @router.post("/admin/iter215/cleanup-backfill")
+    async def cleanup_iter215_backfill(
+        user: dict = Depends(current_user),
+    ):
+        from tz_utils import riyadh_today_iso
+        today_iso = riyadh_today_iso()
+        # Find every distinct txn_group_id that matches the target.
+        pipeline = [
+            {"$match": {
+                "user_id": user["id"], "status": "posted",
+                "metadata.iter": "iter215",
+                "metadata.spend_date": {"$lt": today_iso},
+            }},
+            {"$group": {
+                "_id": "$txn_group_id",
+                "spend_date": {"$first": "$metadata.spend_date"},
+                "ad_account_name": {
+                    "$first": "$metadata.ad_account_name"},
+                "window_period": {
+                    "$first": "$metadata.window_period"},
+                "amount": {"$first": "$metadata.amount"},
+            }},
+            {"$sort": {"spend_date": 1}},
+        ]
+        groups = await db.general_ledger.aggregate(
+            pipeline,
+        ).to_list(length=2000)
+        if not groups:
+            return {"ok": True, "reversed_count": 0,
+                    "message": "no_backfilled_entries_found"}
+        reversed_groups: list = []
+        for g in groups:
+            gid = g["_id"]
+            # Reverse every leg atomically — same logic as
+            # /groups/{id}/reverse (kept inline to avoid recursion).
+            legs = await db.general_ledger.find(
+                {"txn_group_id": gid, "user_id": user["id"]},
+                {"_id": 0, "id": 1, "status": 1,
+                 "reversed_by_entry_id": 1},
+            ).to_list(length=20)
+            if not legs:
+                continue
+            # Skip if already reversed (idempotent re-run safe).
+            if any(leg.get("reversed_by_entry_id") for leg in legs):
+                continue
+            if any(leg.get("status") != "posted" for leg in legs):
+                continue
+            for leg in legs:
+                await reverse_entry(
+                    db, user_id=user["id"], actor_id=user["id"],
+                    actor_name=(user.get("name")
+                                or user.get("email") or ""),
+                    entry_id=leg["id"],
+                    reason_code="data_entry_error",
+                    notes=(
+                        "Iter-215 backfill cleanup — "
+                        f"date={g.get('spend_date')} "
+                        f"acc={g.get('ad_account_name')} "
+                        f"period={g.get('window_period')}"
+                    ),
+                )
+            reversed_groups.append({
+                "txn_group_id": gid,
+                "spend_date": g.get("spend_date"),
+                "ad_account_name": g.get("ad_account_name"),
+                "window_period": g.get("window_period"),
+                "amount": g.get("amount"),
+            })
+        return {
+            "ok": True,
+            "reversed_count": len(reversed_groups),
+            "groups_reversed": reversed_groups,
+            "preserved_today": today_iso,
+        }
+
     # ── POST /adjustments — settlement / writeoff / adjustment ───────
     @router.post("/adjustments")
     async def make_adjustment(

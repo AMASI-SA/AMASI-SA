@@ -49,7 +49,7 @@ from ad_account_routes import (
     _now,
 )
 from ledger_core import compute_balance, post_txn_group
-from tz_utils import riyadh_now_aware, riyadh_today
+from tz_utils import riyadh_now_aware
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +67,11 @@ PM_WINDOW_MINUTE_START = 30
 PM_WINDOW_HOUR_END = 1      # up to 01:30
 PM_WINDOW_MINUTE_END = 30
 
-# Catch-up looks at this many days back so an outage of a few days
-# can recover automatically once the server is back.
-CATCHUP_DAYS_BACK = 7
+# Iter-215b — historical backfill is forbidden by merchant directive.
+# The catch-up helper only fills CURRENT-DAY windows past their cutoff.
+# The constant below is kept as documentation only; the value is no
+# longer consulted.
+CATCHUP_DAYS_BACK = 0
 
 # Public period codes
 PERIOD_AM = "AM_00_12"
@@ -410,44 +412,70 @@ async def run_window_post(
 async def catch_up_window_posts(
     db, *, user_id: Optional[str] = None,
 ) -> dict:
-    """Scan the last `CATCHUP_DAYS_BACK` days for any Snap/Meta
-    account that is missing an AM or PM posting and fill it in. Also
-    runs the correction pass on yesterday.
+    """Iter-215b — Fill ONLY the windows whose posting time has
+    passed within the CURRENT Riyadh day, never further back.
 
-    Idempotent: each window already has a unique key; re-runs become
-    no-ops once everything is posted. ``user_id`` (optional) scopes
-    the scan to a single merchant — primarily useful for tests; the
-    scheduler invokes the global form.
+    Per merchant directive (Feb 15 2026): historical backfill is
+    forbidden. Iter-215 must produce entries strictly going forward
+    from the deploy moment. This helper therefore handles, at most:
+
+      • TODAY's AM_00_12 — if Riyadh time is past 12:30 and no row
+        exists yet.
+      • YESTERDAY's PM_12_24 — if Riyadh time is past 00:30 and no
+        row exists yet (covers the case where the server was down
+        during the PM window itself; PM is for yesterday's data so
+        it's allowed to lag a few hours into today).
+      • YESTERDAY's PM_12_24_CORRECTION — if late Meta data raised
+        the full-day total after PM was booked.
+
+    Anything earlier than the AM cutoff for today / PM cutoff for
+    yesterday is *intentionally* skipped — the merchant would rather
+    miss a posting than have the system invent historical entries.
+
+    ``user_id`` (optional) scopes the scan to a single merchant —
+    used by tests; the scheduler invokes the global form.
     """
-    today = riyadh_today()
-    all_posted = []
-    all_skipped = []
-    # AM (target_date = D) for each D in [today-N+1 .. today]
-    # PM (target_date = D) for each D in [today-N+1 .. today-1]
-    # (today's PM not yet eligible — only yesterday's onwards)
-    for n in range(CATCHUP_DAYS_BACK):
-        d = (today - timedelta(days=n)).isoformat()
-        res_am = await run_window_post(
-            db, PERIOD_AM, d, user_id=user_id,
+    now = riyadh_now_aware()
+    today = now.date()
+    yest = today - timedelta(days=1)
+    am_cutoff_minutes = AM_WINDOW_HOUR_START * 60 + AM_WINDOW_MINUTE_START
+    pm_cutoff_minutes = PM_WINDOW_HOUR_START * 60 + PM_WINDOW_MINUTE_START
+    current_minutes = now.hour * 60 + now.minute
+
+    all_posted: list = []
+    all_skipped: list = []
+
+    # Today's AM — only if we're past the AM cutoff.
+    if current_minutes >= am_cutoff_minutes:
+        res = await run_window_post(
+            db, PERIOD_AM, today.isoformat(), user_id=user_id,
         )
-        all_posted += res_am["posted"]
-        all_skipped += res_am["skipped"]
-        if n >= 1:
-            res_pm = await run_window_post(
-                db, PERIOD_PM, d, user_id=user_id,
-            )
-            all_posted += res_pm["posted"]
-            all_skipped += res_pm["skipped"]
-    # Yesterday's PM correction pass (catches Meta's overnight lag).
-    yest = (today - timedelta(days=1)).isoformat()
-    res_corr = await run_window_post(
-        db, "AM_FOLLOWING_CORRECTION", yest, user_id=user_id,
-    )
-    all_posted += res_corr["posted"]
-    all_skipped += res_corr["skipped"]
+        all_posted += res["posted"]
+        all_skipped += res["skipped"]
+
+    # Yesterday's PM — only if we're past the PM cutoff (which is
+    # always true any time we're past 00:30 of today). The window
+    # idempotency key prevents double-posting if PM already ran.
+    if current_minutes >= pm_cutoff_minutes:
+        res_pm = await run_window_post(
+            db, PERIOD_PM, yest.isoformat(), user_id=user_id,
+        )
+        all_posted += res_pm["posted"]
+        all_skipped += res_pm["skipped"]
+
+    # Yesterday's correction — only after the next AM cutoff (so we
+    # don't write CORRECTION before yesterday's PM is fully closed).
+    if current_minutes >= am_cutoff_minutes:
+        res_corr = await run_window_post(
+            db, "AM_FOLLOWING_CORRECTION", yest.isoformat(),
+            user_id=user_id,
+        )
+        all_posted += res_corr["posted"]
+        all_skipped += res_corr["skipped"]
+
     return {
         "ran_at": _now(),
-        "days_scanned": CATCHUP_DAYS_BACK,
+        "scope": "current_day_only",
         "posted": all_posted,
         "skipped": all_skipped,
         "summary": {

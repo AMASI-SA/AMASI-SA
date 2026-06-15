@@ -239,9 +239,10 @@ async def test_iter215_window_postings():
         assert meta_corr_total_2 == 30.0
 
         # ── (5) catch-up scan converges to consistent state ──────────
+        # Iter-215b — catch-up only handles current-day windows.
+        # Earlier dates that already have postings (from earlier in
+        # this test) remain untouched.
         res = await catch_up_window_posts(db, user_id=uid)
-        # everything already posted → all entries are skipped (or only
-        # very small new ones if dates align with today).
         assert res["summary"]["posted"] == 0 or res["summary"]["posted"] < 5
 
     finally:

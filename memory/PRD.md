@@ -2886,3 +2886,51 @@ Employees list & financial-summary endpoints.
 - Idempotency keys are NAMESPACE-DIFFERENT from Iter-205
   (`ad_spend:…:{period}` vs `spend:…:{amount}`), so the two cannot
   collide.
+
+
+## Hotfix — Iter-215b + Iter-215c (Feb 15 2026): No-backfill + cleanup
+
+**Production incident**: Immediately after the Iter-215 deploy, the
+user observed ~21 historical AM_00_12 entries appearing on the
+"آخر الحركات المالية" feed (per-day amounts of 309/286/2547/etc.
+across Meta, الرياض, Self Service for multiple past days).
+
+**Root cause**: `ad_spend_windows.catch_up_window_posts` was looping
+7 days back and posting AM/PM for every missing date. The scheduler's
+hourly catch-up coincided with the post-deploy moment → instant
+unwanted backfill of 7 historical days × 3 accounts. The merchant
+explicitly forbade backfill in the Iter-215 spec ("ابدأ Iter-215 من
+تاريخ النشر فقط، ولا تعمل Backfill الآن").
+
+### Iter-215b — Catch-up scoped to current day only
+- `catch_up_window_posts` now fills **at most**:
+  - today's AM (only if Riyadh time ≥ 12:30),
+  - yesterday's PM (only if Riyadh time ≥ 00:30),
+  - yesterday's CORRECTION (only after the next AM cutoff).
+- Anything older — including 2-days-ago — is intentionally skipped.
+- Constant `CATCHUP_DAYS_BACK` reduced from 7 → 0 (kept as
+  documentation marker only).
+
+### Iter-215c — Bulk cleanup endpoint
+New endpoint `POST /api/ledger/admin/iter215/cleanup-backfill` —
+reverses every Iter-215 entry whose `metadata.spend_date` is strictly
+older than today (Riyadh). Today's entries are preserved (those are
+the genuine AM postings). Each targeted group is reversed atomically
+via the same `reverse_entry` helper. Idempotent: re-runs find no
+matches because the originals are already `status="reversed"`.
+
+### Tests added (all PASS):
+- `test_catchup_no_backfill_iter215b.py` — seeds 8 days of Meta
+  spend, runs catch-up, asserts NO Iter-215 entries created for
+  spend_date older than yesterday.
+- `test_cleanup_iter215c.py` — plants 4 historical groups + 1 today
+  group, runs the cleanup logic, asserts only the 4 historical groups
+  are reversed and today's group survives.
+
+### Rollout plan
+1. Re-deploy to production (preview changes ready).
+2. User calls `POST /api/ledger/admin/iter215/cleanup-backfill` once
+   (or via a frontend button — TBD with user). All 21 wrong entries
+   are reversed in a single atomic pass.
+3. From now on Iter-215 produces only today/yesterday entries inside
+   the configured windows. Backfill is impossible by construction.
