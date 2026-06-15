@@ -733,7 +733,29 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         cp = await _get_account(db, user["id"], cp_id)
         amount = _round(payload.amount)
 
-        # 1) Deduct from bank
+        # ─── Iter-203 — P0 Fix: SSOT Asset Transfer ──────────────────
+        # Top-up is a transfer between TWO assets (bank → ad-account
+        # prepaid balance). It must NEVER be recorded as an expense.
+        #
+        # We enforce:
+        #   1) Source bank/cash must have enough live balance.
+        #   2) general_ledger receives a balanced 2-leg entry:
+        #         DEBIT  ad_account.balance  (asset ↑)
+        #         CREDIT bank.main           (asset ↓)
+        #      so the bank statement (Iter-198 SSOT) AND the financial
+        #      position page (Iter-192) reflect the deduction live.
+        from universal_accounting_routes import (
+            _enforce_sufficient_funds,
+            _ensure_opening_balance_seeded,
+        )
+        from ledger_core import post_txn_group as _ptg
+        await _enforce_sufficient_funds(
+            db, user_id=user["id"],
+            account_id=payload.paid_from_account_id, amount=amount,
+        )
+
+        # 1) Deduct from bank (legacy account_transactions row — kept
+        #    for non-migrated bank UI compatibility).
         tx = await _post_bank_tx(
             db, user["id"],
             account_id=payload.paid_from_account_id,
@@ -789,6 +811,46 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             date=payload.transaction_date,
         )
 
+        # 4) Iter-203 — SSOT double-entry into general_ledger.
+        #    Seed bank opening_balance lazily for non-migrated banks so
+        #    the ledger sum stays consistent with the displayed balance.
+        await _ensure_opening_balance_seeded(
+            db, user_id=user["id"],
+            account_id=payload.paid_from_account_id,
+        )
+        bank_acc = await db.accounts.find_one(
+            {"id": payload.paid_from_account_id, "user_id": user["id"]},
+            {"_id": 0, "name": 1, "account_type": 1},
+        ) or {}
+        gl_group = await _ptg(
+            db, user_id=user["id"], actor_id=user["id"],
+            actor_name=user.get("name") or user.get("email") or "",
+            txn_type="ad_account_topup",
+            notes=f"تعبئة رصيد إعلاني — {cp['name']}",
+            metadata={
+                "ad_account_id": cp_id,
+                "ad_account_name": cp.get("name"),
+                "ad_provider": cp.get("ad_provider"),
+                "bank_account_id": payload.paid_from_account_id,
+                "bank_account_name": bank_acc.get("name"),
+                "to_debt": _round(amount_to_debt),
+                "to_balance": _round(amount_to_balance),
+                "legacy_tx_id": tx["id"],
+                "iter": "iter203",
+            },
+            entries=[
+                {"entity_type": "ad_account", "entity_id": cp_id,
+                 "sub_account": "balance", "side": "debit",
+                 "amount": amount, "entry_type": "topup",
+                 "notes": f"تعبئة من {bank_acc.get('name') or 'البنك'}"},
+                {"entity_type": "bank",
+                 "entity_id": payload.paid_from_account_id,
+                 "sub_account": "main", "side": "credit",
+                 "amount": amount, "entry_type": "topup",
+                 "notes": f"تعبئة الحساب الإعلاني — {cp['name']}"},
+            ],
+        )
+
         cp_fresh = await _get_account(db, user["id"], cp_id)
         return {
             "ok": True,
@@ -796,6 +858,7 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             "applied_to_debt": _round(amount_to_debt),
             "applied_to_balance": _round(amount_to_balance),
             "ad_account": await _summarise(db, user["id"], cp_fresh),
+            "ledger_txn_group_id": gl_group.get("txn_group_id"),
         }
 
     # ── PUT /{cp_id}/topup/{ledger_id} — edit existing topup (Iter-112) ─

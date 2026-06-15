@@ -2357,4 +2357,54 @@ Confirmed via screenshot: admin employee أحمد (3,000 ر.س/month)
 shows 16,500 ر.س payable with "+16,500.00 استحقاق اليوم" sub-line —
 matching ~165 days × (3,000/30) daily rate since cutoff.
 
+## Iter-203 — Ad Account Top-up SSOT (P0 Bug Fix, Feb 15 2026)
+
+### Bug Reported
+"تعبئة الحساب الإعلاني لا تخصم من البنك في القيد الموحد" — top-up
+flowed through legacy `account_transactions` + `ad_account_ledger`
+only, never writing to `general_ledger`. After Iter-198 (Bank
+SSOT) the bank statement reads from the ledger only — so top-ups
+were invisible there, and the financial position did not reflect
+the cash leaving the bank.
+
+### Fix (P0)
+- `POST /api/ad-accounts/{cp_id}/topup`:
+  1. **NEW** Validates source bank/cash has sufficient live balance
+     via `_enforce_sufficient_funds`. Returns 400 with
+     `"لا يمكن تنفيذ العملية، رصيد الحساب المختار غير كافٍ."` BEFORE
+     any write happens.
+  2. **NEW** Auto-seeds bank `opening_balance` for non-migrated
+     banks (`_ensure_opening_balance_seeded`).
+  3. **NEW** Posts a balanced 2-leg `post_txn_group` to
+     `general_ledger`:
+     - DEBIT  `ad_account.balance` (asset ↑)
+     - CREDIT `bank.main`          (asset ↓)
+     `entry_type="topup"`, `txn_type="ad_account_topup"`.
+  4. Legacy writes preserved: `account_transactions`,
+     `counterparties.balance`, `ad_account_ledger` — keeps existing
+     ad-account summary, audit walks, and edit/reverse flows intact.
+- Response now includes `ledger_txn_group_id`.
+
+### Tests
+- `/app/backend/tests/test_ad_account_topup_ssot_iter203.py`
+  (3 scenarios, all green):
+  • insufficient bank → 400, no writes anywhere
+  • happy path → 2 balanced ledger legs, bank live drops, ad
+    balance rises, NO expense entry, statement row visible
+  • cumulative second top-up deducts again
+
+### Visual Verification on Preview
+Confirmed with bank "بنك الإنماء (Iter203)":
+- Opened with 10,000 ر.س.
+- Top-up 1,500 ر.س from bank → "Snap Test SSOT".
+- Bank detail screen: balance dropped to 8,500.00 ر.س; bank
+  statement shows new "تعبئة" row (out, 1,500) with
+  balance_after = 8,500.
+- Ad-account list shows Snap Test SSOT balance = 1,500.
+- Ledger entries (via /api/ledger/entries?txn_group_id=…):
+  entry_no=3 ad_account.balance debit 1500 ; entry_no=4
+  bank.main credit 1500 — perfect double-entry, both posted.
+
+
+
 
