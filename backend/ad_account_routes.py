@@ -2959,22 +2959,37 @@ async def _run_sync_for_all(
                 "delta_applied": delta,
                 "prev_total_applied": prev_total_applied,
             })
-            # Iter-205 — also write the DELTA to the Universal Ledger
-            # (idempotent via the per-(cp,date,source,delta) key, so
-            # retried cron passes are safe).
-            await _post_spend_to_ledger(
-                db, user_id=user_id, actor_name="ad_account_cron",
-                cp=cp, amount=delta, spend_date=to_date,
-                source="ad_account_cron",
-                description=(
-                    f"مزامنة تراكمية من {cp.get('ad_provider')} — "
-                    f"{to_date} (دلتا {delta})"
-                ),
-                extra_metadata={"delta": delta,
-                                "platform_total": total,
-                                "prev_total_applied": prev_total_applied,
-                                "source_collection": source},
-            )
+            # Iter-215 — For HALFHOUR_SYNC_PROVIDERS (Snap/Meta) the
+            # SSOT posting is now driven exclusively by the AM/PM
+            # window scheduler (see ad_spend_windows.py). The 30-minute
+            # cron is fetch-only here: it refreshes the upstream
+            # `*_account_daily` tables and the local `ad_account_ledger`
+            # for card-display purposes, but does NOT touch
+            # `general_ledger`. Legacy providers (TikTok / Make.com)
+            # retain the Iter-205 delta posting until they get their
+            # own dedicated window logic.
+            if (cp.get("ad_provider") in HALFHOUR_SYNC_PROVIDERS
+                    and cp.get("sync_via") != "make_com"):
+                pass  # AM/PM scheduler will book this account.
+            else:
+                # Iter-205 — also write the DELTA to the Universal
+                # Ledger (idempotent via the per-(cp,date,source,delta)
+                # key, so retried cron passes are safe).
+                await _post_spend_to_ledger(
+                    db, user_id=user_id, actor_name="ad_account_cron",
+                    cp=cp, amount=delta, spend_date=to_date,
+                    source="ad_account_cron",
+                    description=(
+                        f"مزامنة تراكمية من {cp.get('ad_provider')} — "
+                        f"{to_date} (دلتا {delta})"
+                    ),
+                    extra_metadata={
+                        "delta": delta,
+                        "platform_total": total,
+                        "prev_total_applied": prev_total_applied,
+                        "source_collection": source,
+                    },
+                )
         else:
             # delta < 0 — platform reported LESS than what we already
             # logged today (rare correction). Refund the absolute delta

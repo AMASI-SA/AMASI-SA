@@ -2808,3 +2808,81 @@ Employees list & financial-summary endpoints.
   warning instead.
 - ✅ Backend safety guards: re-reverse → 400 "هذه المجموعة معكوسة
   من قبل"; missing group → 404; missing `reason_code` → 422.
+
+
+## Completed Work — Iter-215 (Feb 15 2026): Ad-Spend AM/PM Window Posting (Snap/Meta)
+
+**User spec (verbatim)**: قيد واحد لكل حساب إعلاني عند 12:40 ظهراً يغطّي 00:00–12:00 من نفس
+اليوم، وقيد ثانٍ عند 12:40 صباحاً يغطّي 12:00–23:59 من اليوم
+السابق (لاستيعاب تأخّر Meta ~40د).
+
+**Scope (user-approved)**:
+- ✅ Snap + Meta only. TikTok / Make.com keep Iter-205 behaviour.
+- ✅ PM_12_24_CORRECTION supported (late Meta data captured next AM).
+- ✅ Flexible windows: 12:30–13:30 (AM) / 00:30–01:30 (PM). Ledger
+   date stays AM=today, PM=yesterday.
+- ✅ NO touch on legacy Iter-205 entries; start from publish date only.
+
+**New module**: `/app/backend/ad_spend_windows.py`
+- `current_window()` → returns `(period, target_date_iso)` if now is
+  in an AM or PM window, else `None`.
+- `_cumulative_spend(...)` → reads `*_account_daily` for one date,
+  respects external_account_id scoping (same guards as
+  `_fetch_daily_spend`).
+- `_already_posted(...)` → sums debits already booked for a given
+  account/date/period (supports regex-prefix for correction sweeps).
+- `_post_one_window(...)` → atomic balanced txn group:
+    DEBIT  expense.advertising = amount
+    CREDIT ad_account.balance  = min(amount, prepaid_live)
+    CREDIT ad_account.debt     = remainder
+- `run_window_post(db, period, target_date, user_id=None)` →
+  loops every Snap/Meta account, computes the right amount per period
+  (AM=full_today, PM=full_yest−AM_yest, CORRECTION=full−AM−PM−prior),
+  posts each, returns posted/skipped summary.
+- `catch_up_window_posts(db, user_id=None)` → 7-day historical scan
+  that auto-fills missing AM/PM postings (recovers from outages).
+
+**Idempotency key** stored on every leg:
+  `ad_spend:{provider}:{ad_account_id}:{spend_date}:{period_key}`
+  where period_key ∈ {AM_00_12, PM_12_24, PM_12_24_CORRECTION:N}.
+
+**Group metadata** on every leg:
+- `iter`: "iter215"
+- `ad_account_id`, `ad_account_name`, `ad_provider`, `spend_date`
+- `window_period`: e.g. "AM_00_12" or "PM_12_24_CORRECTION:1"
+- `posted_for_window`: `{period, target_date, full_day_total_at_posting, source_collection}`
+- `idempotency_key`, `covered`, `uncovered`, `amount`
+
+**Cron change** (`ad_account_routes.py:_run_sync_for_all`):
+- For Snap/Meta accounts: cron is now **fetch-only**. It refreshes the
+  upstream `*_account_daily` tables and the legacy `ad_account_ledger`
+  for card display, but **no longer touches `general_ledger`**.
+- For TikTok / Make.com accounts: Iter-205 delta posting unchanged.
+- Manual `POST /spend` endpoint unchanged (still uses Iter-205 keys).
+
+**Scheduler** (`server.py:_ad_spend_window_post_loop`):
+- 5-minute heartbeat.
+- Inside AM window (12:30–13:30 Riyadh) → posts today's AM, then runs
+  yesterday's CORRECTION sweep.
+- Inside PM window (00:30–01:30 Riyadh) → posts yesterday's PM.
+- 7-day catch-up scan runs once per hour for outage recovery.
+- Posting is rate-limited to once per hour-bucket inside a window so
+  the loop doesn't hammer Mongo (idempotency would block dups anyway).
+
+**Tests** — `/app/backend/tests/test_ad_spend_am_pm_iter215.py` (PASS):
+1. AM today → books each account's `spend_today` as `AM_00_12`.
+2. PM yesterday (no prior AM) → books full yesterday total.
+3. PM_CORRECTION when yesterday's total grows after PM was booked
+   (250 → 280) → correction of 30 is posted with `PM_12_24_CORRECTION:1`.
+4. Re-runs are no-ops (idempotency holds).
+5. Catch-up scan converges to a consistent state (no further posts).
+6. Double-entry invariant holds in all scenarios.
+7. Iter-205 regression test (`test_ad_account_spend_ssot_iter205.py`)
+   still passes.
+
+### Rollout safety
+- No data migration. Iter-205 entries remain untouched. Iter-215
+  starts producing entries from the moment the new build is deployed.
+- Idempotency keys are NAMESPACE-DIFFERENT from Iter-205
+  (`ad_spend:…:{period}` vs `spend:…:{amount}`), so the two cannot
+  collide.

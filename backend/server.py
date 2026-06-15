@@ -3769,6 +3769,84 @@ async def on_startup():
 
     _asyncio.create_task(_ad_account_halfhour_sync())
 
+    # ── Iter-215 — Ad-spend AM/PM window posting (Snap/Meta) ─────────
+    # The half-hour cron (above) is now FETCH-ONLY for Snap/Meta. The
+    # SSOT posting happens twice a day, aligned with Meta's ~40-min
+    # reporting lag:
+    #   • AM window (12:30–13:30 Riyadh)  → books today's 00–12 spend.
+    #   • PM window (00:30–01:30 Riyadh)  → books yesterday's 12–24
+    #                                       spend (lagging Meta data
+    #                                       arrives by then).
+    # Outside those windows the task wakes every 5 minutes and sleeps.
+    # Once per hour it also runs a 7-day catch-up scan to recover from
+    # any missed window (server downtime, lag, etc.).
+    async def _ad_spend_window_post_loop():
+        from ad_spend_windows import (
+            current_window, run_window_post, catch_up_window_posts,
+            PERIOD_AM,
+        )
+        from tz_utils import riyadh_now_aware as _r_now
+        from datetime import timedelta as _td2
+        await _asyncio.sleep(120)  # let the half-hour cron seed data
+        last_catchup_hour = -1
+        last_posted_key = None
+        while True:
+            try:
+                # 7-day catch-up scan once per hour.
+                hour_now = _r_now().hour
+                if hour_now != last_catchup_hour:
+                    last_catchup_hour = hour_now
+                    res = await catch_up_window_posts(db)
+                    posted = res.get("summary", {}).get("posted", 0)
+                    if posted:
+                        logger.info(
+                            "iter-215: catch-up posted=%d skipped=%d",
+                            posted,
+                            res.get("summary", {}).get("skipped", 0),
+                        )
+                # Current window post.
+                w = current_window()
+                if w is not None:
+                    period, target_date = w
+                    posted_key = f"{period}:{target_date}:{hour_now}"
+                    # Within a window, post once per hour bucket so we
+                    # don't loop hammering Mongo (idempotency would
+                    # block double-posts anyway, but this is cheaper).
+                    if posted_key != last_posted_key:
+                        last_posted_key = posted_key
+                        result = await run_window_post(
+                            db, period, target_date,
+                        )
+                        logger.info(
+                            "iter-215: window-post period=%s "
+                            "target=%s posted=%d skipped=%d",
+                            period, target_date,
+                            result["summary"]["posted"],
+                            result["summary"]["skipped"],
+                        )
+                        # In AM window we additionally apply yesterday's
+                        # PM_CORRECTION sweep (catches late Meta data).
+                        if period == PERIOD_AM:
+                            yest = (
+                                _r_now().date() - _td2(days=1)
+                            ).isoformat()
+                            corr = await run_window_post(
+                                db, "AM_FOLLOWING_CORRECTION", yest,
+                            )
+                            corr_posted = corr["summary"]["posted"]
+                            if corr_posted:
+                                logger.info(
+                                    "iter-215: yesterday-correction "
+                                    "posted=%d", corr_posted,
+                                )
+            except Exception as e:
+                logger.exception(
+                    "iter-215: window post loop failed: %s", e,
+                )
+            await _asyncio.sleep(300)  # 5-minute heartbeat
+
+    _asyncio.create_task(_ad_spend_window_post_loop())
+
     # ── Iter-117 — Hourly BNPL auto-sync (Tabby + Tamara) ────────
     # Runs every hour to fetch new/updated payments and refunds
     # incrementally from each merchant's BNPL providers, keeping
