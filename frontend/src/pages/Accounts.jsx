@@ -361,13 +361,20 @@ function AccountFormModal({ initial, catalogue, banks, onClose, onSaved }) {
                             <label className="block text-sm font-semibold mb-1.5">اسم الحساب</label>
                             <input value={form.name} onChange={(e) => set("name", e.target.value)} className={inputCls} placeholder="مثال: بنك الإنماء — حساب أساسي" maxLength={120} data-testid="account-name-input" />
                         </div>
-                        <div>
-                            <label className="block text-sm font-semibold mb-1.5">المزوّد / البنك / المنصة</label>
-                            <input value={form.provider_name} onChange={(e) => set("provider_name", e.target.value)} className={inputCls} list="provider-suggestions" placeholder="اختر أو اكتب…" data-testid="account-provider-input" />
-                            <datalist id="provider-suggestions">
-                                {suggested.map((p) => <option key={p} value={p} />)}
-                            </datalist>
-                        </div>
+                        {/* Iter-202 — Hide provider field for cash accounts.
+                           A cash drawer (الصندوق النقدي) is top-level and
+                           does NOT have a single provider — it can be
+                           funded from any bank/platform via internal
+                           transfers, just like a bank account. */}
+                        {form.account_type !== "cash" && (
+                            <div>
+                                <label className="block text-sm font-semibold mb-1.5">المزوّد / البنك / المنصة</label>
+                                <input value={form.provider_name} onChange={(e) => set("provider_name", e.target.value)} className={inputCls} list="provider-suggestions" placeholder="اختر أو اكتب…" data-testid="account-provider-input" />
+                                <datalist id="provider-suggestions">
+                                    {suggested.map((p) => <option key={p} value={p} />)}
+                                </datalist>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-sm font-semibold mb-1.5">العملة</label>
                             <select value={form.currency} onChange={(e) => set("currency", e.target.value)} className={inputCls} data-testid="account-currency-select">
