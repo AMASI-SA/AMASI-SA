@@ -127,15 +127,50 @@ code, pre {
        font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 td.num, th.num { display: table-cell; }
 
-/* Iter-161 Phase 4 — force Western (Latin) digits everywhere even when
-   the surrounding language is Arabic. Without this, browsers default to
-   the Arabic-Indic numeral substitution for ar-SA locale. */
+/* Iter-161 Phase 4 + Iter-226 — force Western (Latin) digits everywhere
+   even when the surrounding language is Arabic. Without this, browsers
+   default to the Arabic-Indic numeral substitution for ar-SA locale.
+
+   Strategy:
+   1. `lang="ar-u-nu-latn"` on <html> (BCP-47 Unicode extension) tells
+      the browser: Arabic UI, BUT use Latin digits in form controls
+      (type="number" / type="date") and Intl.NumberFormat.
+   2. Vendor CSS hints below ensure font shaping doesn't substitute
+      Arabic-Indic glyphs via OpenType `locl` feature.
+   3. Numeric inputs are locked LTR + Latin font-feature-settings.
+*/
 html, body, * {
     -webkit-locale: "en-US";
     -moz-locale: "en-US";
+    /* Disable OpenType localized number forms so Arabic-context fonts
+       (Noto Sans Arabic, IBM Plex Arabic, etc.) keep Latin digits. */
+    font-feature-settings: "tnum", "lnum";
+    font-variant-numeric: tabular-nums lining-nums;
 }
 .num, table, .num-cell {
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum", "lnum";
+}
+
+/* Type=number / type=date / type=datetime-local inputs MUST render
+   Latin digits regardless of the document direction. */
+input[type="number"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="month"],
+input[type="week"] {
+    direction: ltr;
+    unicode-bidi: plaintext;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum", "lnum";
+}
+/* Keep RTL text alignment for forms but allow the digit themselves to
+   flow left-to-right inside the input. */
+[dir="rtl"] input[type="number"],
+[dir="rtl"] input[type="date"],
+[dir="rtl"] input[type="datetime-local"] {
+    text-align: right;   /* visual placement stays RTL-friendly */
 }
 
 /* Reusable input style for forms (Operating Expenses modal etc.) */
