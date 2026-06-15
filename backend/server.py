@@ -1840,6 +1840,13 @@ async def dashboard(
     # if non-empty, only orders whose order_status matches any of the configured
     # statuses (case-insensitive partial match) are counted in dashboard KPIs.
     included_statuses = settings.get("report_included_statuses") or []
+    # Iter-207c — Snapshot the Salla-reference universe BEFORE the
+    # status filter so the UI can render a transparency badge:
+    #   "+X طلب معلَّق/ملغى بقيمة Y ر.س"
+    salla_ref_orders_count = len(all_orders)
+    salla_ref_gross = round(
+        sum(float(o.get("total_amount") or 0) for o in all_orders), 2,
+    )
     if included_statuses:
         all_orders = [
             o for o in all_orders
@@ -2466,6 +2473,18 @@ async def dashboard(
             "incomplete_profit_orders_count": int(incomplete_profit_orders_count),
             "no_products_orders_count": int(no_products_orders_count),
             "excel_no_products_count": int(excel_no_products_count),
+            # ── Iter-207c — Salla-reference transparency block ─────────────
+            # The platform (Salla) counts every order it creates regardless
+            # of status. We count only orders that pass
+            # `report_included_statuses`. Surface the gap so the UI can
+            # render a badge "+X معلَّق/ملغى بقيمة Y ر.س" next to the main
+            # orders count, and a tooltip explaining the methodology.
+            "salla_reference_orders_count": int(salla_ref_orders_count),
+            "salla_reference_gross": float(salla_ref_gross),
+            "excluded_orders_count": int(
+                max(0, salla_ref_orders_count - total_orders)),
+            "excluded_gross": round(
+                max(0.0, salla_ref_gross - float(total_sales)), 2),
             "daily_expenses_total": round(daily_products_total, 2),
             "net_profit": round(net_profit_adjusted, 2),
             "total_vat": round(total_vat, 2),

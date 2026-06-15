@@ -153,7 +153,31 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                         })}
                         <tr className="bg-accent/30 font-bold border-t-2 border-border">
                             <td className="py-2.5">الإجمالي</td>
-                            <td className="py-2.5 num">{formatInt(t.orders_count)}</td>
+                            <td className="py-2.5 num">
+                                {formatInt(t.orders_count)}
+                                {Number(t.excluded_orders_count || 0) > 0 && (
+                                    <span
+                                        className="ms-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-bold text-amber-800 cursor-help align-middle"
+                                        data-testid={`${testid}-excluded-badge`}
+                                        title={
+                                            "منصة سلة تعرض جميع الطلبات المنشأة (" +
+                                            formatInt(t.salla_reference_orders_count) +
+                                            " طلب بقيمة " +
+                                            formatMoney(t.salla_reference_gross) +
+                                            " ر.س).\n\n" +
+                                            "النظام المحاسبي يعتمد فقط الطلبات الداخلة في التقارير المالية (" +
+                                            formatInt(t.orders_count) + " طلب بقيمة " +
+                                            formatMoney(t.gross) + " ر.س).\n\n" +
+                                            "الفرق:\n" +
+                                            formatInt(t.excluded_orders_count) +
+                                            " طلب معلَّق أو ملغى بقيمة " +
+                                            formatMoney(t.excluded_gross) + " ر.س."
+                                        }
+                                    >
+                                        +{formatInt(t.excluded_orders_count)} معلَّق/ملغى
+                                    </span>
+                                )}
+                            </td>
                             <td className="py-2.5 num">{formatMoney(t.gross)}</td>
                             <td className="py-2.5 num text-rose-700">{formatMoney(t.fees)}</td>
                             <td className="py-2.5 num text-rose-700/70">{formatMoney(t.fees_vat)}</td>

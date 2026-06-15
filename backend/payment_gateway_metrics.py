@@ -221,6 +221,16 @@ async def compute_metrics(
     # Per-method buckets
     buckets: dict[str, dict] = {}
 
+    # Iter-207c — Top-level "excluded" counter for full transparency.
+    # Anything that Salla counts but we DON'T (because it was filtered
+    # by report_included_statuses OR classified as pending/cancelled)
+    # lands here. Surfaced in the response so the UI can show
+    # "+X معلَّق/ملغى بقيمة Y" next to the main count.
+    excluded_orders_count = 0
+    excluded_gross = 0.0
+    salla_reference_count = 0
+    salla_reference_gross = 0.0
+
     def _zero():
         return {
             "orders_count": 0,
@@ -245,15 +255,25 @@ async def compute_metrics(
     policy_overrides = await get_policy_map(db, user_id)
 
     async for row in db.unified_orders.aggregate(pipeline):
+        # Iter-207c — Always count the row in the Salla reference
+        # snapshot (before any filtering), so the UI can compare
+        # against the platform.
+        row_amount = float(row.get("total_amount") or 0)
+        salla_reference_count += 1
+        salla_reference_gross += row_amount
         # Iter-207 — Pre-filter to mirror Profit Summary's
         # `report_included_statuses` setting (case-insensitive partial
         # match — same semantics as `_matches_any` in server.py).
         if included_statuses:
             os_lc = (row.get("order_status") or "").strip().lower()
             if not os_lc:
+                excluded_orders_count += 1
+                excluded_gross += row_amount
                 continue
             if not any(s in os_lc or os_lc in s
                        for s in included_statuses):
+                excluded_orders_count += 1
+                excluded_gross += row_amount
                 continue
         raw_method = row.get("actual_payment_method") or row.get("payment_method")
         canon = resolve_canonical(raw_method) or "_other"
@@ -264,10 +284,9 @@ async def compute_metrics(
 
         if category == "cancelled":
             bkt["cancelled_orders_count"] += 1
-            # Iter-207 — cancelled orders DO NOT count in `orders_count`
-            # so the per-gateway tally lines up with the Profit Summary
-            # (which also excludes cancelled). gross/fees already skip
-            # them via the `continue` below.
+            # Iter-207c — cancelled rows count toward "excluded".
+            excluded_orders_count += 1
+            excluded_gross += row_amount
             continue
 
         gross = float(row.get("total_amount") or 0)
@@ -278,6 +297,9 @@ async def compute_metrics(
             # either — they have not generated revenue yet.
             bkt["pending_orders_count"] += 1
             bkt["pending_gross"] += gross
+            # Iter-207c — pending counts toward "excluded" too.
+            excluded_orders_count += 1
+            excluded_gross += row_amount
             continue
 
         # Iter-207 — only confirmed / refunded orders increment
@@ -408,6 +430,13 @@ async def compute_metrics(
         "refunded_orders_count": sum(r["refunded_orders_count"] for r in rows),
         "cancelled_orders_count": sum(r["cancelled_orders_count"] for r in rows),
         "pending_orders_count": sum(r["pending_orders_count"] for r in rows),
+        # Iter-207c — transparency block: lets the UI render the
+        # "+X معلَّق/ملغى بقيمة Y ر.س" badge next to the main count
+        # and a tooltip explaining the gap with the Salla platform.
+        "excluded_orders_count": int(excluded_orders_count),
+        "excluded_gross": round(excluded_gross, 2),
+        "salla_reference_orders_count": int(salla_reference_count),
+        "salla_reference_gross": round(salla_reference_gross, 2),
     }
 
     return {

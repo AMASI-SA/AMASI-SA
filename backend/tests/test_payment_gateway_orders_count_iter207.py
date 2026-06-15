@@ -124,6 +124,27 @@ async def test_gateway_orders_count_excludes_pending_and_cancelled():
         assert res2["totals"]["pending_orders_count"] == 0
         assert res2["totals"]["cancelled_orders_count"] == 0
 
+        # ─── Iter-207c — transparency block: Salla vs Accounting ──
+        t2 = res2["totals"]
+        # 7 orders seeded total → Salla reference always shows 7
+        # regardless of any filter.
+        assert t2["salla_reference_orders_count"] == 7, t2
+        # gross = 7 × 100 = 700 (every order has total=100)
+        assert abs(t2["salla_reference_gross"] - 700.0) < 0.01
+        # 7 − 2 (kept) = 5 excluded
+        assert t2["excluded_orders_count"] == 5
+        # 5 × 100 = 500 excluded gross
+        assert abs(t2["excluded_gross"] - 500.0) < 0.01
+
+        # And without the filter active (first call), the same
+        # transparency block must still be populated.
+        t1 = res["totals"]
+        assert t1["salla_reference_orders_count"] == 7
+        # Without `report_included_statuses`, only pending+cancelled
+        # are excluded → 2 excluded.
+        assert t1["excluded_orders_count"] == 2
+        assert abs(t1["excluded_gross"] - 200.0) < 0.01
+
     finally:
         await db.unified_orders.delete_many({"user_id": uid})
         await db.settings.delete_many({"user_id": uid})

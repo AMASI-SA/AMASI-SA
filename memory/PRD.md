@@ -2610,6 +2610,65 @@ universes.
 - Iter-81 regression (`test_payment_gateway_unification_iter81.py`)
   still 9/9 passing.
 
+## Iter-207c — Transparency Badge (Salla ↔ Accounting gap)
+
+### Context
+After Iter-207, both cards count only confirmed+refunded orders.
+Merchant reported the Salla platform itself shows 79 orders /
+18,960.34 ر.س (every order regardless of status). The 3-order /
+554.56 ر.س gap was invisible to merchants comparing to Salla.
+
+### Decision
+Keep the accounting-conservative number as the main (76 / 18,405.78)
+and surface the gap as a small transparency badge + tooltip.
+The PROFIT, COST, ROAS, FINANCIAL POSITION numbers DO NOT change.
+
+### Backend (extra fields, no math changes)
+- `compute_metrics` in `payment_gateway_metrics.py` tracks:
+  • `salla_reference_orders_count` — every row in the date window
+    (Salla-equivalent count).
+  • `salla_reference_gross` — total_amount of those rows.
+  • `excluded_orders_count` — anything filtered out by
+    `report_included_statuses` OR pending/cancelled.
+  • `excluded_gross` — sum of total_amount of excluded rows.
+- `/api/dashboard` snapshots the SAME 4 fields from `all_orders`
+  before applying `report_included_statuses`.
+
+### Frontend
+- `ProfitSummaryCard.jsx`: orders KPI tile carries a small
+  amber pill `+X معلَّق/ملغى (Y ر.س)` (testid
+  `profit-kpi-orders-excluded-badge`) with a hover tooltip that
+  reads exactly the wording the merchant approved:
+    "منصة سلة تعرض جميع الطلبات المنشأة (79 بقيمة 18,960.34).
+     النظام المحاسبي يعتمد فقط الطلبات الداخلة في التقارير المالية
+     (76 بقيمة 18,405.78). الفرق: 3 طلبات معلقة أو ملغاة بقيمة
+     554.56 ر.س."
+- `UnifiedPaymentGatewaysCard.jsx`: similar inline badge in the
+  totals row (testid `…-excluded-badge`) with the same tooltip
+  copy.
+- Badges only render when `excluded_orders_count > 0`, so clean
+  data shows no clutter.
+
+### Tests
+- `test_payment_gateway_orders_count_iter207.py` extended with
+  3 new asserts:
+  • Without `report_included_statuses` → excluded = 2
+    (1 pending + 1 cancelled), gross = 200.
+  • With `report_included_statuses=["تم التوصيل"]` → excluded = 5
+    (everything else), gross = 500.
+  • `salla_reference_orders_count` stays at 7 regardless of
+    filter (Salla universe).
+- All scenarios PASS.
+
+### Verification
+- ✅ API: `salla_reference_*`, `excluded_*` fields populate in both
+  endpoints (verified via curl on Preview).
+- 🚀 Visual verification on Production after Deploy:
+  Expected: badge "+3 معلَّق/ملغى (554.56 ر.س)" next to "76" in
+  both cards, with the agreed tooltip text on hover.
+
+
+
 ### Note on deployment
 - User runs Production on `mezansalla.com`. Fix applied in Preview
   only — requires Deploy to take effect on Production.

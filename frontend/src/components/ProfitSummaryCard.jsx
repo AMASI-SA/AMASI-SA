@@ -43,7 +43,7 @@ const fmtInt = (v) => {
 };
 
 /** Hero KPI tile used in the new header strip (3 tiles in one row). */
-function HeaderKpi({ icon: Icon, label, value, hint, tone = "emerald", testid }) {
+function HeaderKpi({ icon: Icon, label, value, hint, tone = "emerald", testid, badge = null }) {
     const tones = {
         sky:     { border: "border-sky-100",     iconBg: "bg-sky-100 text-sky-700",         num: "text-sky-700" },
         amber:   { border: "border-amber-100",   iconBg: "bg-amber-100 text-amber-700",     num: "text-amber-700" },
@@ -52,7 +52,7 @@ function HeaderKpi({ icon: Icon, label, value, hint, tone = "emerald", testid })
     const t = tones[tone] || tones.emerald;
     return (
         <div
-            className={`rounded-xl bg-white/80 border ${t.border} px-3 py-2.5 text-center`}
+            className={`rounded-xl bg-white/80 border ${t.border} px-3 py-2.5 text-center relative`}
             data-testid={testid}
         >
             <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-500 mb-1">
@@ -72,6 +72,7 @@ function HeaderKpi({ icon: Icon, label, value, hint, tone = "emerald", testid })
                     {hint}
                 </div>
             )}
+            {badge}
         </div>
     );
 }
@@ -144,6 +145,24 @@ export default function ProfitSummaryCard({ totals }) {
 
     // ── iter-55 header KPIs (3 tiles in one row above the breakdown) ──
     const totalOrders     = Number(t.total_orders || 0);
+    // Iter-207c — Salla-vs-Accounting transparency badge data.
+    const excludedCount = Number(t.excluded_orders_count || 0);
+    const excludedGross = Number(t.excluded_gross || 0);
+    const sallaRefCount = Number(t.salla_reference_orders_count || 0);
+    const sallaRefGross = Number(t.salla_reference_gross || 0);
+    const ordersBadge = excludedCount > 0 ? (
+        <div
+            className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-800 cursor-help"
+            data-testid="profit-kpi-orders-excluded-badge"
+            title={
+                `منصة سلة تعرض جميع الطلبات المنشأة (${fmtInt(sallaRefCount)} طلب بقيمة ${fmtSar(sallaRefGross)} ر.س).\n\n` +
+                `النظام المحاسبي يعتمد فقط الطلبات الداخلة في التقارير المالية (${fmtInt(totalOrders)} طلب بقيمة ${fmtSar(sales)} ر.س).\n\n` +
+                `الفرق:\n${fmtInt(excludedCount)} طلب معلَّق أو ملغى بقيمة ${fmtSar(excludedGross)} ر.س.`
+            }
+        >
+            +{fmtInt(excludedCount)} معلَّق/ملغى ({fmtSar(excludedGross)} ر.س)
+        </div>
+    ) : null;
     // `avg_cost_per_order` is null when ads=0 or orders=0 (backend convention).
     const avgCostPerOrder = t.avg_cost_per_order != null
         ? Number(t.avg_cost_per_order)
@@ -189,6 +208,7 @@ export default function ProfitSummaryCard({ totals }) {
                     hint="إجمالي طلبات الفترة"
                     tone="sky"
                     testid="profit-kpi-orders"
+                    badge={ordersBadge}
                 />
                 <HeaderKpi
                     icon={Coins}
