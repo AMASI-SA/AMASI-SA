@@ -121,6 +121,12 @@ const OP_TYPES = [
 export default function UnifiedEntryScreen() {
     const [opType, setOpType] = useState("");
     const [busy, setBusy] = useState(false);
+    // Iter-209 — Recent ledger transactions panel + green highlight on
+    // the just-submitted txn. Stays on the page (no navigation) so the
+    // merchant can record another transaction immediately.
+    const [recentTxns, setRecentTxns] = useState([]);
+    const [highlightGroupId, setHighlightGroupId] = useState(null);
+    const [recentLoading, setRecentLoading] = useState(false);
     const [employees, setEmployees] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
 
@@ -425,6 +431,64 @@ export default function UnifiedEntryScreen() {
 
     useEffect(() => { resetForm(); }, [opType]);
 
+    // Iter-209 — Fetch the last 10 ledger txn-groups and surface them
+    // in a compact table at the bottom. Optionally highlights the new
+    // one we just posted. The highlight fades after 4 seconds.
+    const loadRecentTxns = async (highlightId = null) => {
+        setRecentLoading(true);
+        try {
+            // Pull a generous slice and group on the client — backend
+            // doesn't currently expose a "group-by" endpoint.
+            const { data } = await api.get("/ledger/entries",
+                { params: { limit: 200 } });
+            const items = Array.isArray(data) ? data
+                : (data?.items || data?.entries || []);
+            const groups = new Map();
+            for (const e of items) {
+                const gid = e.txn_group_id;
+                if (!gid) continue;
+                if (!groups.has(gid)) {
+                    groups.set(gid, {
+                        txn_group_id: gid,
+                        posted_at: e.posted_at,
+                        txn_type: (e.metadata && e.metadata.txn_type)
+                            || e.entry_type,
+                        notes: e.notes || (e.metadata && e.metadata.notes) || "",
+                        legs: [],
+                    });
+                }
+                groups.get(gid).legs.push({
+                    side: e.side,
+                    amount: Number(e.amount || 0),
+                    entity_type: e.entity_type,
+                    entity_id: e.entity_id,
+                    sub_account: e.sub_account,
+                });
+                if (e.posted_at && (!groups.get(gid).posted_at
+                                     || e.posted_at > groups.get(gid).posted_at)) {
+                    groups.get(gid).posted_at = e.posted_at;
+                }
+            }
+            const list = Array.from(groups.values())
+                .sort((a, b) => (b.posted_at || "").localeCompare(a.posted_at || ""))
+                .slice(0, 10)
+                .map((g) => ({
+                    ...g,
+                    total_debit: g.legs
+                        .filter((l) => l.side === "debit")
+                        .reduce((s, l) => s + l.amount, 0),
+                }));
+            setRecentTxns(list);
+            if (highlightId) {
+                setHighlightGroupId(highlightId);
+                setTimeout(() => setHighlightGroupId(null), 4000);
+            }
+        } catch (_) { /* silent */ }
+        finally { setRecentLoading(false); }
+    };
+
+    useEffect(() => { loadRecentTxns(); /* eslint-disable-next-line */ }, []);
+
     // Preview computation — show the entries that will be created
     const previewEntries = useMemo(() => {
         const amt = Number(amount) || 0;
@@ -657,6 +721,23 @@ export default function UnifiedEntryScreen() {
             // Iter-191 — refresh couriers' open COD after every post
             // that touches them (settlement, deposit, payment, charge).
             reloadCouriers();
+            // Iter-209 — Clear the form fields so the merchant can post
+            // a follow-up transaction without manually resetting, then
+            // pull the last 10 transactions and highlight the new one
+            // we just posted (green flash row in the bottom table).
+            const newGroupId = data?.txn_group_id
+                || data?.ledger_txn_group_id
+                || (Array.isArray(data?.entries) && data.entries[0]?.txn_group_id)
+                || null;
+            // Reset form WITHOUT touching opType — user might want to
+            // record another op of the same type immediately.
+            setEntityId(""); setEntityToId(""); setAmount("");
+            setBankId(""); setBankToId("");
+            setNotes(""); setInvoiceNo("");
+            setCustodyItems([{ expense_category: "", amount: "", notes: "" }]);
+            setCodBankAmount(""); setCodShippingCost("");
+            setCodFee(""); setCodOtherFees(""); setCodOtherCategory("");
+            await loadRecentTxns(newGroupId);
         } catch (e) {
             const det = e.response?.data?.detail;
             // Iter-188 — Server-side Golden Rule (defense in depth): if
@@ -1537,6 +1618,14 @@ export default function UnifiedEntryScreen() {
                 )}
             </div>
 
+            {/* Iter-209 — Recent ledger transactions panel ─────────── */}
+            <RecentTxnsPanel
+                rows={recentTxns}
+                highlightGroupId={highlightGroupId}
+                loading={recentLoading}
+                onRefresh={() => loadRecentTxns()}
+            />
+
             {/* Iter-182 — Visibility management modal. */}
             {showVisibilityModal && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" data-testid="visibility-modal">
@@ -1612,6 +1701,141 @@ export default function UnifiedEntryScreen() {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+
+
+// ── Iter-209 — Recent ledger transactions panel ──────────────────────
+// Sits BELOW the entry form. After every successful submission the
+// form clears, the table refreshes, and the newly-posted row flashes
+// green for 4 seconds. The merchant stays on the same screen and can
+// chain transactions without navigation.
+
+const TXN_TYPE_LABELS = {
+    salary_payment: "صرف راتب",
+    salary_accrual: "استحقاق راتب",
+    salary_settle: "تسوية راتب",
+    advance_grant: "منح سلفة",
+    advance_offset: "خصم سلفة",
+    custody_grant: "صرف عهدة",
+    custody_return: "إرجاع عهدة",
+    custody_settle: "تسوية عهدة",
+    supplier_pay: "دفع لمورد",
+    external_grant: "صرف لخارجي",
+    external_collect: "تحصيل من خارجي",
+    expense_record: "تسجيل مصروف",
+    bank_transfer: "تحويل بين حسابات",
+    courier_cod_settle: "تسوية شحن",
+    ad_account_topup: "تعبئة حساب إعلاني",
+    ad_account_spend: "صرف إعلاني",
+    correction: "تصحيح قيد",
+    reversal: "عكس قيد",
+    opening_balance: "رصيد افتتاحي",
+    topup: "تعبئة",
+    spend: "صرف",
+    sale: "بيع",
+    refund: "مرتجع",
+    commission: "عمولة",
+    transfer: "تحويل",
+};
+
+function txnLabel(t) {
+    return TXN_TYPE_LABELS[t] || t || "—";
+}
+
+function fmtNum(n) {
+    return Number(n || 0).toLocaleString("en-US", {
+        minimumFractionDigits: 2, maximumFractionDigits: 2,
+    });
+}
+
+function timeAgo(iso) {
+    if (!iso) return "—";
+    try {
+        const d = new Date(iso);
+        const diff = (Date.now() - d.getTime()) / 1000;
+        if (diff < 60) return "قبل لحظات";
+        if (diff < 3600) return `قبل ${Math.floor(diff / 60)} د`;
+        if (diff < 86400) return `قبل ${Math.floor(diff / 3600)} س`;
+        return d.toLocaleDateString("en-CA");
+    } catch { return iso.slice(0, 10); }
+}
+
+function RecentTxnsPanel({ rows, highlightGroupId, loading, onRefresh }) {
+    if (!rows || rows.length === 0) {
+        return loading ? (
+            <div className="max-w-5xl mx-auto px-4 pb-6">
+                <div className="bg-white rounded-2xl shadow-sm p-5 text-center text-xs text-slate-400">
+                    جاري تحميل آخر الحركات…
+                </div>
+            </div>
+        ) : null;
+    }
+    return (
+        <div className="max-w-5xl mx-auto px-4 pb-6"
+            data-testid="unified-recent-txns">
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+                    <h3 className="text-sm font-extrabold text-slate-900">
+                        📋 آخر الحركات المالية
+                    </h3>
+                    <button onClick={onRefresh}
+                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900"
+                        data-testid="recent-txns-refresh">
+                        🔄 تحديث
+                    </button>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                        <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                            <tr>
+                                <th className="text-right py-2 px-3 font-bold">الوقت</th>
+                                <th className="text-right py-2 px-3 font-bold">نوع العملية</th>
+                                <th className="text-right py-2 px-3 font-bold">الوصف</th>
+                                <th className="text-right py-2 px-3 font-bold">عدد القيود</th>
+                                <th className="text-left py-2 px-3 font-bold">المبلغ (ر.س)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((g) => {
+                                const isNew = g.txn_group_id === highlightGroupId;
+                                return (
+                                    <tr key={g.txn_group_id}
+                                        className={`border-b border-slate-100 transition-colors duration-700 ${
+                                            isNew
+                                                ? "bg-emerald-50 ring-2 ring-emerald-300 ring-inset"
+                                                : "hover:bg-slate-50"
+                                        }`}
+                                        data-testid={`recent-row-${g.txn_group_id}`}>
+                                        <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
+                                            {isNew && (
+                                                <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full me-1.5 animate-pulse"></span>
+                                            )}
+                                            {timeAgo(g.posted_at)}
+                                        </td>
+                                        <td className="py-2 px-3 font-bold text-slate-800">
+                                            {txnLabel(g.txn_type)}
+                                        </td>
+                                        <td className="py-2 px-3 text-slate-600 truncate max-w-[260px]"
+                                            title={g.notes}>
+                                            {g.notes || "—"}
+                                        </td>
+                                        <td className="py-2 px-3 num">{g.legs.length}</td>
+                                        <td className="text-left py-2 px-3 num font-extrabold text-emerald-700">
+                                            {fmtNum(g.total_debit)}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="px-5 py-2 bg-slate-50 border-t border-slate-200 text-[10px] text-slate-500">
+                    آخر {rows.length} حركة من القيد الموحد. الصف الأخضر = الحركة التي اعتُمدت للتو.
+                </div>
+            </div>
         </div>
     );
 }
