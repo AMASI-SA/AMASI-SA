@@ -105,6 +105,56 @@ def make_ledger_router(db) -> APIRouter:
         rev.pop("_id", None)
         return {"ok": True, "reversal_entry": rev}
 
+    # ── POST /groups/{group_id}/reverse — Iter-214 group reversal ────
+    @router.post("/groups/{group_id}/reverse")
+    async def reverse_group(
+        group_id: str, payload: ReverseEntryIn,
+        user: dict = Depends(current_user),
+    ):
+        """Reverse every leg of a transaction group atomically.
+
+        Each leg is reversed via `reverse_entry`. If any leg has already
+        been reversed (or has invalid status) the call fails before any
+        change is committed — we pre-validate the whole group first.
+        """
+        if not payload.reason_code:
+            raise HTTPException(400, "reason_code إلزامي")
+        legs = await db.general_ledger.find(
+            {"txn_group_id": group_id, "user_id": user["id"]},
+            {"_id": 0, "id": 1, "status": 1,
+             "reversed_by_entry_id": 1, "entry_type": 1},
+        ).to_list(length=200)
+        if not legs:
+            raise HTTPException(404, "المجموعة غير موجودة")
+        for leg in legs:
+            if leg.get("status") != "posted":
+                raise HTTPException(
+                    400,
+                    "لا يمكن عكس المجموعة: أحد القيود ليس بحالة 'معتمد'",
+                )
+            if leg.get("reversed_by_entry_id"):
+                raise HTTPException(
+                    400, "هذه المجموعة معكوسة من قبل",
+                )
+            if leg.get("entry_type") == "reversal":
+                raise HTTPException(
+                    400, "لا يمكن عكس مجموعة عكسية",
+                )
+        # All clear — reverse every leg.
+        reversals = []
+        for leg in legs:
+            rev = await reverse_entry(
+                db, user_id=user["id"], actor_id=user["id"],
+                actor_name=user.get("name") or user.get("email") or "",
+                entry_id=leg["id"],
+                reason_code=payload.reason_code,
+                notes=payload.notes or "",
+            )
+            rev.pop("_id", None)
+            reversals.append(rev)
+        return {"ok": True, "reversed_count": len(reversals),
+                "group_id": group_id}
+
     # ── POST /adjustments — settlement / writeoff / adjustment ───────
     @router.post("/adjustments")
     async def make_adjustment(
@@ -149,6 +199,39 @@ def make_ledger_router(db) -> APIRouter:
             "entry_no", -1).skip(skip).limit(limit)
         items = await cur.to_list(limit)
         total = await db.general_ledger.count_documents(q)
+
+        # Iter-214 — Enrich each entry with `posted_by_name` (creator)
+        # and, for reversed entries, `reversed_by_name` + `reversed_at`.
+        # Names come from the `users` collection. Caches lookups within
+        # this request so we hit Mongo at most once per distinct user.
+        user_ids = {it.get("posted_by") for it in items if it.get("posted_by")}
+        reverser_ids: dict[str, str] = {}  # original_id → reversal_id
+        if any(it.get("reversed_by_entry_id") for it in items):
+            rev_ids = [it["reversed_by_entry_id"] for it in items
+                       if it.get("reversed_by_entry_id")]
+            async for r in db.general_ledger.find(
+                {"id": {"$in": rev_ids}, "user_id": user["id"]},
+                {"_id": 0, "id": 1, "posted_by": 1, "posted_at": 1},
+            ):
+                reverser_ids[r["id"]] = r
+                if r.get("posted_by"):
+                    user_ids.add(r["posted_by"])
+        name_cache: dict[str, str] = {}
+        if user_ids:
+            async for u in db.users.find(
+                {"id": {"$in": list(user_ids)}},
+                {"_id": 0, "id": 1, "name": 1, "email": 1},
+            ):
+                name_cache[u["id"]] = u.get("name") or u.get("email") or ""
+        for it in items:
+            it["posted_by_name"] = name_cache.get(
+                it.get("posted_by") or "", "")
+            rev_id = it.get("reversed_by_entry_id")
+            if rev_id and rev_id in reverser_ids:
+                rev_doc = reverser_ids[rev_id]
+                it["reversed_by_name"] = name_cache.get(
+                    rev_doc.get("posted_by") or "", "")
+                it["reversed_at"] = rev_doc.get("posted_at")
         return {"items": items, "total": total, "skip": skip, "limit": limit}
 
     # ── GET /balance ─────────────────────────────────────────────────

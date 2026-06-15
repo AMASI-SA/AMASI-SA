@@ -2750,3 +2750,61 @@ Employees list & financial-summary endpoints.
   - `55965448-…` (بيع · تسوية سلة): 50,000 credit, no debit leg.
   Modal correctly flags both as "⚠️ القيد غير متوازن". Awaiting user
   decision (reverse vs. patch).
+
+
+## Completed Work — Iter-214 (Feb 15 2026): Audit Trail + One-Click Group Reversal
+
+**User request**: "نعم مع عرض اسم الموظف الذي أضاف القيد بالجدول والذي عكس القيد"
+(Add the reverse-this-entry button + show creator and reverser names in the table.)
+
+**Backend changes**
+1. `GET /api/ledger/entries` (`ledger_routes.py`) — enriches each row with:
+   - `posted_by_name` (creator) resolved from `users` collection.
+   - `reversed_by_name` + `reversed_at` when the row has been reversed
+     (looks up the reversal entry to get its `posted_by`).
+   Single-batch lookup — at most one `users.find({id: {$in: …}})` per call.
+2. New endpoint `POST /api/ledger/groups/{group_id}/reverse` — atomically
+   reverses every leg of a txn group via `reverse_entry`. Pre-validates
+   that **all** legs are `posted` and not already reversed before
+   committing the first change. Requires `reason_code` (mirrors
+   REASON_CODES). Returns `{ok, reversed_count, group_id}`.
+
+**Frontend changes** (`UnifiedEntryScreen.jsx`)
+1. Recent-transactions table gained two new columns:
+   - **بواسطة** (`recent-row-${gid}-creator`) — shows the creator name.
+   - **الحالة** (`recent-row-${gid}-status`) — green "✓ معتمد" badge
+     for active txns, pink "↩︎ معكوس · {reverser}" badge for reversed
+     ones (row gets a faint pink background + strike-through amount).
+2. Inside `TxnDetailModal`:
+   - Audit-trail strip shows "أضافها: {creator}" and (if any)
+     "عكسها: {reverser} · {time ago}" pills.
+   - New reversal panel at the bottom:
+     - **Balanced + active** → red button **"↩︎ عكس هذه الحركة"**
+       expands an inline form with reason-code `<select>` (6 codes
+       from REASON_CODES) + optional notes textarea + confirm/cancel.
+     - **Already reversed** → pink notice "هذه الحركة معكوسة بالفعل
+       بواسطة {name}." (button hidden).
+     - **Imbalanced** → amber warning instructing manual accounting
+       review (button hidden — protects SSOT data).
+   - On confirm: hits `POST /api/ledger/groups/{id}/reverse`, toasts
+     success, refreshes the recent-txns panel, closes the modal.
+
+### Tests
+- `/app/backend/tests/test_group_reverse_iter214.py` (PASS): seeds a
+  2-leg advance_grant group, verifies enrichment maps `posted_by` →
+  name correctly, reverses every leg, confirms originals become
+  `reversed` with `reversed_by_entry_id` set and new reversal legs
+  remain balanced (debit==credit).
+
+### Verification on Preview (real merchant data — `amasi.jewelery@gmail.com`)
+- ✅ Table renders new columns; creator shown as "عرفات".
+- ✅ Modal audit strip shows creator pill.
+- ✅ Balanced row → reverse button → reason picker → confirm →
+  `POST /api/ledger/groups/{gid}/reverse` → `{reversed_count:2}` →
+  row immediately turns pink with strike-through amount, modal of
+  that row now shows "عكسها: عرفات · قبل لحظات" and "هذه الحركة
+  معكوسة بالفعل" notice.
+- ✅ Imbalanced rows hide the reverse button and show the amber
+  warning instead.
+- ✅ Backend safety guards: re-reverse → 400 "هذه المجموعة معكوسة
+  من قبل"; missing group → 404; missing `reason_code` → 422.

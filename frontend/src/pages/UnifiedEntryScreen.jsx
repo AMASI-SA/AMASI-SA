@@ -455,19 +455,36 @@ export default function UnifiedEntryScreen() {
                         txn_type: (e.metadata && e.metadata.txn_type)
                             || e.entry_type,
                         notes: e.notes || (e.metadata && e.metadata.notes) || "",
+                        // Iter-214 — creator + reverser names. Every leg
+                        // in a group shares the same posted_by, so we
+                        // capture the first non-empty name we see.
+                        posted_by_name: e.posted_by_name || "",
+                        reversed_by_name: e.reversed_by_name || "",
+                        reversed_at: e.reversed_at || null,
                         legs: [],
                     });
                 }
-                groups.get(gid).legs.push({
+                const g = groups.get(gid);
+                if (!g.posted_by_name && e.posted_by_name) {
+                    g.posted_by_name = e.posted_by_name;
+                }
+                if (!g.reversed_by_name && e.reversed_by_name) {
+                    g.reversed_by_name = e.reversed_by_name;
+                    g.reversed_at = e.reversed_at || g.reversed_at;
+                }
+                g.legs.push({
+                    entry_id: e.id,
                     side: e.side,
                     amount: Number(e.amount || 0),
                     entity_type: e.entity_type,
                     entity_id: e.entity_id,
                     sub_account: e.sub_account,
+                    status: e.status,
+                    reversed_by_entry_id: e.reversed_by_entry_id || null,
                 });
-                if (e.posted_at && (!groups.get(gid).posted_at
-                                     || e.posted_at > groups.get(gid).posted_at)) {
-                    groups.get(gid).posted_at = e.posted_at;
+                if (e.posted_at && (!g.posted_at
+                                     || e.posted_at > g.posted_at)) {
+                    g.posted_at = e.posted_at;
                 }
             }
             const list = Array.from(groups.values())
@@ -1859,19 +1876,23 @@ function RecentTxnsPanel({ rows, highlightGroupId, loading, onRefresh }) {
                                 <th className="text-right py-2 px-3 font-bold">الوقت</th>
                                 <th className="text-right py-2 px-3 font-bold">نوع العملية</th>
                                 <th className="text-right py-2 px-3 font-bold">الوصف</th>
-                                <th className="text-right py-2 px-3 font-bold">عدد القيود</th>
+                                <th className="text-right py-2 px-3 font-bold">بواسطة</th>
+                                <th className="text-right py-2 px-3 font-bold">الحالة</th>
                                 <th className="text-left py-2 px-3 font-bold">المبلغ (ر.س)</th>
                             </tr>
                         </thead>
                         <tbody>
                             {rows.map((g) => {
                                 const isNew = g.txn_group_id === highlightGroupId;
+                                const isReversed = !!g.reversed_by_name;
                                 return (
                                     <tr key={g.txn_group_id}
                                         onClick={() => setSelectedTxn(g)}
                                         className={`border-b border-slate-100 transition-colors duration-700 cursor-pointer ${
                                             isNew
                                                 ? "bg-emerald-50 ring-2 ring-emerald-300 ring-inset"
+                                                : isReversed
+                                                ? "bg-rose-50/40 hover:bg-rose-50"
                                                 : "hover:bg-slate-50"
                                         }`}
                                         data-testid={`recent-row-${g.txn_group_id}`}>
@@ -1884,12 +1905,32 @@ function RecentTxnsPanel({ rows, highlightGroupId, loading, onRefresh }) {
                                         <td className="py-2 px-3 font-bold text-slate-800">
                                             {txnLabel(g.txn_type)}
                                         </td>
-                                        <td className="py-2 px-3 text-slate-600 truncate max-w-[260px]"
+                                        <td className="py-2 px-3 text-slate-600 truncate max-w-[220px]"
                                             title={g.notes}>
                                             {g.notes || "—"}
                                         </td>
-                                        <td className="py-2 px-3 num">{g.legs.length}</td>
-                                        <td className="text-left py-2 px-3 num font-extrabold text-emerald-700">
+                                        <td className="py-2 px-3 text-slate-700 whitespace-nowrap"
+                                            data-testid={`recent-row-${g.txn_group_id}-creator`}>
+                                            {g.posted_by_name || "—"}
+                                        </td>
+                                        <td className="py-2 px-3 whitespace-nowrap"
+                                            data-testid={`recent-row-${g.txn_group_id}-status`}>
+                                            {isReversed ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 text-[10px] font-bold"
+                                                    title={`عكسها: ${g.reversed_by_name}`}>
+                                                    ↩︎ معكوس · {g.reversed_by_name}
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                                    ✓ معتمد
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className={`text-left py-2 px-3 num font-extrabold ${
+                                            isReversed
+                                                ? "text-rose-700 line-through decoration-rose-400"
+                                                : "text-emerald-700"
+                                        }`}>
                                             {fmtNum(g.total_debit)}
                                         </td>
                                     </tr>
@@ -1903,8 +1944,13 @@ function RecentTxnsPanel({ rows, highlightGroupId, loading, onRefresh }) {
                 </div>
             </div>
             <TxnDetailModal
+                key={selectedTxn?.txn_group_id || "none"}
                 txn={selectedTxn}
                 onClose={() => setSelectedTxn(null)}
+                onReversed={() => {
+                    setSelectedTxn(null);
+                    onRefresh && onRefresh();
+                }}
             />
         </div>
     );
@@ -1914,7 +1960,18 @@ function RecentTxnsPanel({ rows, highlightGroupId, loading, onRefresh }) {
 // Renders the double-entry breakdown of a clicked txn-group: every
 // debit/credit leg, what entity it touches, and a plain-Arabic
 // "كم له / كم عليه" summary so the merchant understands the impact at
-// a glance.
+// a glance. Iter-214 adds creator/reverser names + a one-click
+// reversal button gated by reason-code selection.
+
+// Iter-214 — Reason codes mirror REASON_CODES in backend ledger_core.
+const REVERSAL_REASONS = [
+    { code: "data_entry_error", label: "خطأ إدخال" },
+    { code: "duplicate_entry", label: "قيد مكرر" },
+    { code: "platform_correction", label: "تصحيح من المنصة" },
+    { code: "accounting_settle", label: "تسوية محاسبية" },
+    { code: "approved_writeoff", label: "شطب معتمد" },
+    { code: "other", label: "أخرى" },
+];
 
 const ENTITY_LABELS = {
     employee: "موظف",
@@ -1950,18 +2007,49 @@ const SUB_ACCOUNT_LABELS = {
 function entityLabel(t) { return ENTITY_LABELS[t] || t || "—"; }
 function subLabel(s) { return SUB_ACCOUNT_LABELS[s] || s || "—"; }
 
-function TxnDetailModal({ txn, onClose }) {
+function TxnDetailModal({ txn, onClose, onReversed }) {
+    const [reason, setReason] = useState("");
+    const [reversalNotes, setReversalNotes] = useState("");
+    const [confirming, setConfirming] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     if (!txn) return null;
     const debits = txn.legs.filter((l) => l.side === "debit");
     const credits = txn.legs.filter((l) => l.side === "credit");
     const totalDebit = debits.reduce((s, l) => s + l.amount, 0);
     const totalCredit = credits.reduce((s, l) => s + l.amount, 0);
     const balanced = Math.abs(totalDebit - totalCredit) < 0.01;
+    const isReversed = !!txn.reversed_by_name;
+    const canReverse = !isReversed && balanced;
+
+    const handleReverse = async () => {
+        if (!reason) {
+            toast.error("اختر سبب العكس أولاً");
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const { data } = await api.post(
+                `/ledger/groups/${txn.txn_group_id}/reverse`,
+                { reason_code: reason, notes: reversalNotes || "" },
+            );
+            toast.success(
+                `تم عكس الحركة بنجاح (${data.reversed_count} قيد)`,
+            );
+            onReversed && onReversed();
+        } catch (err) {
+            const msg = err?.response?.data?.detail
+                || "فشل عكس الحركة";
+            toast.error(msg);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
             onClick={onClose}
             data-testid="txn-detail-modal">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+            <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
                 onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
                 <div className="px-5 py-3 bg-gradient-to-l from-sky-50 to-emerald-50 border-b border-sky-200 flex items-center justify-between">
@@ -1976,6 +2064,27 @@ function TxnDetailModal({ txn, onClose }) {
                     <button onClick={onClose}
                         className="w-8 h-8 rounded-lg hover:bg-sky-100 flex items-center justify-center text-slate-600 font-bold"
                         data-testid="txn-detail-modal-close">✕</button>
+                </div>
+
+                {/* Iter-214 — Audit trail (creator + reverser) */}
+                <div className="px-5 py-2.5 bg-white border-b border-slate-100 flex flex-wrap items-center gap-2 text-[11px]"
+                    data-testid="txn-detail-audit">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-sky-50 text-sky-800 font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                        أضافها: <span className="num">{txn.posted_by_name || "—"}</span>
+                    </span>
+                    {isReversed && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-50 text-rose-800 font-bold"
+                            data-testid="txn-detail-reverser">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                            عكسها: {txn.reversed_by_name}
+                            {txn.reversed_at && (
+                                <span className="text-[10px] text-rose-600 font-normal">
+                                    · {timeAgo(txn.reversed_at)}
+                                </span>
+                            )}
+                        </span>
+                    )}
                 </div>
 
                 {/* Plain-Arabic summary */}
@@ -2065,6 +2174,84 @@ function TxnDetailModal({ txn, onClose }) {
                             </div>
                         </div>
                     </div>
+
+                    {/* Iter-214 — Reversal panel */}
+                    {isReversed && (
+                        <div className="mt-3 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800 font-bold flex items-center gap-2"
+                            data-testid="txn-already-reversed">
+                            ↩︎ هذه الحركة معكوسة بالفعل بواسطة {txn.reversed_by_name}.
+                        </div>
+                    )}
+                    {!isReversed && !balanced && (
+                        <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800"
+                            data-testid="txn-imbalanced-warning">
+                            ⚠️ هذا القيد غير متوازن — لا يمكن عكسه آلياً. تواصل مع المسؤول المحاسبي لتعديل البيانات يدوياً.
+                        </div>
+                    )}
+                    {canReverse && !confirming && (
+                        <button
+                            onClick={() => setConfirming(true)}
+                            className="mt-3 w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-extrabold transition"
+                            data-testid="txn-detail-reverse-btn">
+                            ↩︎ عكس هذه الحركة
+                        </button>
+                    )}
+                    {canReverse && confirming && (
+                        <div className="mt-3 p-3 rounded-lg bg-rose-50 border-2 border-rose-200 space-y-2.5"
+                            data-testid="txn-detail-reverse-form">
+                            <h5 className="text-xs font-extrabold text-rose-900">
+                                تأكيد عكس الحركة
+                            </h5>
+                            <p className="text-[11px] text-rose-700 leading-relaxed">
+                                سيُنشأ قيد عكسي يلغي أثر هذه الحركة على جميع الحسابات. القيد الأصلي يبقى محفوظاً للمراجعة.
+                            </p>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                                    سبب العكس <span className="text-rose-600">*</span>
+                                </label>
+                                <select
+                                    value={reason}
+                                    onChange={(e) => setReason(e.target.value)}
+                                    className="w-full text-xs border border-slate-300 rounded-md px-2 py-1.5 bg-white"
+                                    data-testid="txn-reverse-reason-select">
+                                    <option value="">— اختر السبب —</option>
+                                    {REVERSAL_REASONS.map((r) => (
+                                        <option key={r.code} value={r.code}>
+                                            {r.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                                    ملاحظات (اختياري)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={reversalNotes}
+                                    onChange={(e) => setReversalNotes(e.target.value)}
+                                    placeholder="اشرح سبب العكس بإيجاز…"
+                                    className="w-full text-xs border border-slate-300 rounded-md px-2 py-1.5"
+                                    data-testid="txn-reverse-notes-input"/>
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                                <button
+                                    onClick={handleReverse}
+                                    disabled={submitting || !reason}
+                                    className="flex-1 py-2 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                    data-testid="txn-reverse-confirm-btn">
+                                    {submitting ? "جاري العكس…" : "تأكيد العكس"}
+                                </button>
+                                <button
+                                    onClick={() => { setConfirming(false); setReason(""); setReversalNotes(""); }}
+                                    disabled={submitting}
+                                    className="px-4 py-2 rounded-md bg-white border border-slate-300 hover:bg-slate-50 text-xs font-bold text-slate-700"
+                                    data-testid="txn-reverse-cancel-btn">
+                                    إلغاء
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer */}
