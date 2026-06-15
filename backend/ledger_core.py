@@ -244,6 +244,39 @@ async def post_ledger_entry(
                 400, f"reason_code غير معتمد: {reason_code}",
             )
 
+    # Iter-226 — orphan-prevention guard. Any NEW ledger entry on an
+    # employee MUST reference a real employee record belonging to the
+    # current user. Without this, future writes (sync hooks, salary
+    # accruals, manual entries) could re-create the very orphans we
+    # just archived. Reversals are exempt because they may target an
+    # already-archived employee for symmetry.
+    if (
+        entity_type == "employee"
+        and entry_type != "reversal"
+        and entity_id
+    ):
+        eid_str = str(entity_id)
+        # Quick existence check across common ID fields.
+        emp = await db.employees.find_one(
+            {"user_id": user_id, "$or": [
+                {"id": eid_str},
+                {"employee_id": eid_str},
+                {"external_id": eid_str},
+                {"legacy_id": eid_str},
+            ]},
+            {"_id": 1, "id": 1},
+        )
+        if not emp:
+            raise HTTPException(
+                400,
+                (
+                    f"لا يمكن إنشاء قيد على موظف غير موجود "
+                    f"(entity_id={eid_str}). "
+                    f"تأكد أن الموظف مُسجَّل في النظام قبل إنشاء "
+                    f"أيّ قيد محاسبي عليه."
+                ),
+            )
+
     entry_no = await _next_entry_no(db, user_id)
     eid = str(uuid.uuid4())
     now = _now()
@@ -454,6 +487,9 @@ async def compute_balance(
         # `status=posted` AND NOT of `entry_type=reversal`.
         "status": "posted",
         "entry_type": {"$ne": "reversal"},
+        # Iter-226 — Legacy orphan entries (archived for audit only)
+        # MUST NOT participate in any live balance computation.
+        "metadata.legacy_orphan": {"$ne": True},
     }
     if sub_account is not None:
         match["sub_account"] = sub_account
@@ -502,6 +538,8 @@ async def compute_balances_bulk(
             "status": "posted",
             # Iter-217 — exclude reversal entries so pairs cancel.
             "entry_type": {"$ne": "reversal"},
+            # Iter-226 — exclude archived legacy orphans.
+            "metadata.legacy_orphan": {"$ne": True},
         }},
         {"$group": {
             "_id": {"entity_id": "$entity_id", "side": "$side"},

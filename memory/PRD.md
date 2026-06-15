@@ -3461,3 +3461,61 @@ The same endpoint will give a definitive answer on the 40 production orphans wit
 - لا migrations · لا حذف بيانات · لا إنشاء قيود · لا تعديل أرصدة الموظفين تلقائياً
 - زرّا Preview Fix / Apply Fix معطّلَان بشكل صريح حتى قرار المستخدم
 
+
+
+## Completed Work — Iter-226 (Feb 16 2026): Legacy Orphan Archive + Future-Orphan Prevention
+
+**User decision**: لا تنفيذ Phase 2 إصلاح. اعتبر القيود الـ 40 اليتيمة Legacy Historical Data. أرشفها فقط (Flag) لتُستثنى من الأرصدة والمركز المالي، وامنع إنشاء يتامى جدد.
+
+### What's covered now
+1. ✅ القيود لا تدخل في أرصدة الموظفين الحالية (مفلترة في `compute_balance` و `compute_balances_bulk`).
+2. ✅ القيود لا تؤثر على المركز المالي (مفلترة في `financial_position_ssot._group_by_*` و `by_ad_provider_ssot`).
+3. ✅ القيود لا تظهر في المستحقات (مفلترة في كل aggregation عبر `metadata.legacy_orphan: {$ne: True}`).
+4. ✅ Flag مضاف: `metadata.legacy_orphan = True` + `metadata.archived_at` + `metadata.archive_reason` + `metadata.archived_by_user_id` (للتدقيق فقط، لا يتأثر side/amount/sub_account/txn_group_id/status).
+5. ✅ منع إنشاء قيود يتيمة جديدة عبر guard في `post_ledger_entry`.
+
+### Backend changes
+- **`ledger_core.compute_balance`** + **`compute_balances_bulk`**: أضيف `"metadata.legacy_orphan": {"$ne": True}` للـ match.
+- **`financial_position_ssot._group_by_entity_type`** + **`_group_by_entity`** + **`by_ad_provider_ssot`** + helper aggregates: نفس الفلتر.
+- **`ledger_core.post_ledger_entry`** — orphan-prevention guard جديد:
+  ```python
+  if entity_type == "employee" and entry_type != "reversal" and entity_id:
+      emp = db.employees.find_one({user_id, $or:[id/employee_id/external_id/legacy_id == entity_id]})
+      if not emp:
+          raise HTTPException(400, "لا يمكن إنشاء قيد على موظف غير موجود ...")
+  ```
+  يضمن أن **أي إنشاء قيد جديد بعد Iter-226** يستحيل أن ينتج عنه يتيم (سواء من sync، أو salary accrual، أو UI، أو Make.com webhook).
+- **`POST /api/audit/employee-orphan-openings/archive`** — يأخذ `{reason, unarchive, ledger_ids[]}` ويُحدِّث الـ metadata فقط. Idempotent. يُسجِّل audit log بـ `iter226`.
+- **`GET /api/audit/employee-orphan-openings/archive/status`** — يعيد `{archived_count, archived_net_amount}`.
+
+### Frontend changes
+- صفحة `EmployeeOrphanDiagnostic.jsx` تحتوي الآن على:
+  - زر **🗄️ أرشفة N قيد كـ legacy** (`btn-archive-orphans`) — برتقالي مع تأكيد window.confirm.
+  - زر **↩️ إلغاء الأرشفة (N)** (`btn-unarchive-orphans`) — للأمان والتراجع.
+  - **شريط حالة الأرشفة** (`archive-status-banner`) — أخضر، يظهر العدد المؤرشف والصافي إذا > 0.
+  - أزرار Preview/Apply Fix بقيت معطّلة (مذكرة في الـ placeholder).
+- يستخدم الـ endpoint الجديد لجلب حالة الأرشيف بالتوازي مع التقرير عند كل refresh.
+
+### Verification (in preview)
+- ضغط "أرشفة 5 قيد" → ظهر toast "تم الأرشفة: 5 قيد" + banner "✅ تم أرشفة 5 قيد كـ legacy_orphan — مستثناة من المركز المالي والأرصدة. الصافي المؤرشف: 4,008.00 ر.س".
+- بعد الأرشفة: زر "إلغاء الأرشفة (5)" أصبح فعّالاً وأزرار Preview/Apply معطّلة كما هي.
+- تنظيف Preview: تم إلغاء الأرشفة للحفاظ على الـ preview نظيفاً للاختبارات اللاحقة.
+
+### Net effect on accounting
+- **القيد ما زال في الدفتر** — لم نلمس أيّ side/amount/sub_account/txn_group/status.
+- **لا يدخل في أي حساب** — Filter في كل aggregation حرج (`compute_balance`, financial position).
+- **يظهر في audit دائماً** — التقرير التشخيصي ما زال يعرضه كاملاً.
+- **يمكن استعراضه عبر metadata**: `db.general_ledger.find({"metadata.legacy_orphan": True})`.
+
+### Future invariant
+بعد Iter-226 لا يمكن خلق orphan employee entry جديد. لو ظهرت orphans جديدة لاحقاً → يعني هناك سيناريو لم يمرّ عبر `post_ledger_entry` (writes مباشرة لـ MongoDB) → نفتح ملف معالجة منفصل وقتها.
+
+### Production deployment notes
+- بعد redeploy لـ mezansalla.com:
+  1. اذهب إلى `/audit/employee-orphans`
+  2. اضغط "🗄️ أرشفة 40 قيد كـ legacy"
+  3. أكّد في الـ dialog
+  4. الـ 40 قيداً ستُؤرشف بـ `metadata.legacy_orphan = True`
+  5. صفحات المركز المالي والأرصدة سيُحدَّثان فوراً (بدون cache)
+  6. القيود ما زالت في الدفتر للتدقيق
+

@@ -73,18 +73,66 @@ export default function EmployeeOrphanDiagnostic() {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState("");
     const [classFilter, setClassFilter] = useState("");
+    const [archiveStatus, setArchiveStatus] = useState(null);
+    const [archiveBusy, setArchiveBusy] = useState(false);
 
     const load = async () => {
         setLoading(true);
         try {
-            const { data } = await api.get(
-                "/audit/employee-orphan-openings",
-            );
-            setData(data);
+            const [d, st] = await Promise.all([
+                api.get("/audit/employee-orphan-openings"),
+                api.get("/audit/employee-orphan-openings/archive/status"),
+            ]);
+            setData(d.data);
+            setArchiveStatus(st.data);
         } catch (e) {
             toast.error(errMsg(e, "فشل تحميل التقرير"));
         } finally {
             setLoading(false);
+        }
+    };
+
+    const archiveOrphans = async () => {
+        if (!window.confirm(
+            "سيتم تعليم القيود الحالية كـ legacy_orphan في metadata فقط " +
+            "— لن تُغيَّر أرقامها أو تُحذف، لكنها ستُستثنى من المركز " +
+            "المالي والأرصدة. هل تريد المتابعة؟",
+        )) return;
+        setArchiveBusy(true);
+        try {
+            const { data: res } = await api.post(
+                "/audit/employee-orphan-openings/archive",
+                { reason: "legacy historical orphan (archived from UI)" },
+            );
+            toast.success(
+                `تمت الأرشفة: ${res.modified || 0} قيد. صفحات الأرصدة ` +
+                `والمركز المالي ستُحدَّث تلقائياً.`,
+            );
+            await load();
+        } catch (e) {
+            toast.error(errMsg(e, "فشل أرشفة القيود"));
+        } finally {
+            setArchiveBusy(false);
+        }
+    };
+
+    const unarchiveOrphans = async () => {
+        if (!window.confirm(
+            "سيتم إلغاء أرشفة جميع القيود المُعلَّمة كـ legacy_orphan. " +
+            "ستعود للظهور في المركز المالي والأرصدة. هل تريد المتابعة؟",
+        )) return;
+        setArchiveBusy(true);
+        try {
+            const { data: res } = await api.post(
+                "/audit/employee-orphan-openings/archive",
+                { unarchive: true },
+            );
+            toast.success(`تم إلغاء أرشفة ${res.modified || 0} قيد.`);
+            await load();
+        } catch (e) {
+            toast.error(errMsg(e, "فشل إلغاء الأرشفة"));
+        } finally {
+            setArchiveBusy(false);
         }
     };
 
@@ -189,12 +237,41 @@ export default function EmployeeOrphanDiagnostic() {
                 data-testid="phase2-placeholder"
             >
                 <div className="text-xs text-slate-600">
-                    <span className="font-bold">المرحلة الثانية:</span>{" "}
-                    معاينة الإصلاح / تطبيق الإصلاح — معطّلة الآن. بعد
-                    مراجعة هذا التقرير سنحدّد طريقة المعالجة المناسبة
-                    لكل فئة بشكل منفصل، ثم نفعّل الأزرار.
+                    <span className="font-bold">إدارة القيود اليتيمة:</span>{" "}
+                    اعتبر القيود التاريخية أرشيفاً ولا تستهلك وقتاً في
+                    إعادة بنائها. زرّ <strong>«أرشفة كقيود قديمة»</strong>{" "}
+                    يُحدِّث الـ metadata فقط ويُخرجها من المركز المالي
+                    والأرصدة، مع الإبقاء عليها للتدقيق.
                 </div>
                 <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={archiveOrphans}
+                        disabled={archiveBusy || loading
+                                  || !(summary.total_orphans > 0)}
+                        className="px-3 py-1.5 rounded-lg bg-amber-600
+                                   hover:bg-amber-700 text-white text-xs
+                                   font-bold disabled:opacity-60"
+                        data-testid="btn-archive-orphans"
+                    >
+                        {archiveBusy
+                            ? "جارٍ الأرشفة…"
+                            : `🗄️ أرشفة ${summary.total_orphans || 0} قيد كـ legacy`}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={unarchiveOrphans}
+                        disabled={archiveBusy || loading
+                                  || !(archiveStatus?.archived_count > 0)}
+                        className="px-3 py-1.5 rounded-lg border
+                                   border-slate-300 bg-white
+                                   hover:bg-slate-50 text-slate-700 text-xs
+                                   font-bold disabled:opacity-60"
+                        data-testid="btn-unarchive-orphans"
+                        title="إلغاء الأرشفة (للتدقيق فقط)"
+                    >
+                        ↩️ إلغاء الأرشفة ({archiveStatus?.archived_count || 0})
+                    </button>
                     <button
                         type="button"
                         disabled
@@ -219,6 +296,30 @@ export default function EmployeeOrphanDiagnostic() {
                     </button>
                 </div>
             </div>
+
+            {/* Archive status banner */}
+            {archiveStatus?.archived_count > 0 && (
+                <div
+                    className="rounded-xl border border-emerald-300
+                               bg-emerald-50 p-4 text-sm text-emerald-900
+                               flex items-center justify-between gap-3
+                               flex-wrap"
+                    data-testid="archive-status-banner"
+                >
+                    <div>
+                        ✅ تم أرشفة{" "}
+                        <strong className="num">{archiveStatus.archived_count}</strong>{" "}
+                        قيد كـ <code className="bg-emerald-100 px-1 py-0.5
+                                                rounded font-mono text-[11px]">
+                            legacy_orphan
+                        </code>{" "}
+                        — مستثناة من المركز المالي والأرصدة. الصافي المؤرشف:{" "}
+                        <strong className="num">
+                            {fmt(archiveStatus.archived_net_amount)} ر.س
+                        </strong>
+                    </div>
+                </div>
+            )}
 
             {/* Summary tiles */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

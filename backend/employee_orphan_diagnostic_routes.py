@@ -37,9 +37,10 @@ The endpoint is mounted at:
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 
 def _to_iso(v) -> Optional[str]:
@@ -639,7 +640,7 @@ def make_employee_orphan_router(db, current_user):
             "user_id": uid,
             "read_only": True,
             "iteration": "iter223-deep",
-            "generated_at": _to_iso(__import__('datetime').datetime.utcnow()),
+            "generated_at": _to_iso(datetime.utcnow()),
             "summary": summary,
             "per_employee": sorted(
                 per_employee_out,
@@ -650,6 +651,162 @@ def make_employee_orphan_router(db, current_user):
                 key=lambda x: (x["balanced"], -x["count_entries"]),
             ),
             "entries": entries,
+        }
+
+    # ── Iter-226 — Archive legacy orphans (metadata-only flag) ──
+    @router.post("/employee-orphan-openings/archive")
+    async def archive_legacy_orphans(
+        payload: dict = Body(default_factory=dict),
+        user: dict = Depends(current_user),
+    ):
+        """Mark every currently-orphan employee ledger entry with:
+              metadata.legacy_orphan       = True
+              metadata.archived_at         = <utc iso>
+              metadata.archive_reason      = "<provided or default>"
+              metadata.archived_by_user_id = <uid>
+
+        This is a METADATA-ONLY write — neither side, amount, sub_account,
+        txn_group_id, nor status are touched. The balance computation
+        helpers (`compute_balance`, `compute_balances_bulk`,
+        `financial_position_ssot`) now filter out
+        `metadata.legacy_orphan = True` so the archived entries no
+        longer affect any live number.
+
+        Idempotent: running again is a no-op once everything is
+        archived. Includes an `unarchive=True` parameter that **only**
+        removes the flag without touching the entry otherwise.
+        """
+        uid = user["id"]
+        unarchive: bool = bool(payload.get("unarchive") or False)
+        reason: str = (
+            payload.get("reason") or "legacy historical orphan (pre Iter-214)"
+        ).strip()[:300]
+        only_ids: list[str] = list(payload.get("ledger_ids") or [])
+
+        # Build the eligible set: same logic as the diagnostic but
+        # READ ONLY here; we recompute to ensure we never archive a
+        # non-orphan entry by mistake.
+        index_all, valid_keys, _names = await _build_employee_index(uid)
+
+        candidates: list[str] = []
+        async for row in db.general_ledger.find(
+            {"user_id": uid,
+             "entity_type": "employee",
+             "status": {"$ne": "voided"}},
+            {"_id": 0, "id": 1, "entity_id": 1, "metadata": 1},
+        ):
+            eid = str(row.get("entity_id") or "")
+            md = row.get("metadata") or {}
+            already_archived = bool(md.get("legacy_orphan"))
+
+            if unarchive:
+                if not already_archived:
+                    continue
+                if only_ids and row.get("id") not in only_ids:
+                    continue
+                candidates.append(row["id"])
+                continue
+
+            # Archive flow — only the entries that are CURRENTLY orphan.
+            if eid in valid_keys:
+                continue   # not orphan
+            if already_archived:
+                continue   # already done
+            if only_ids and row.get("id") not in only_ids:
+                continue
+            candidates.append(row["id"])
+
+        if not candidates:
+            return {
+                "success": True,
+                "action": "unarchive" if unarchive else "archive",
+                "matched": 0,
+                "message": (
+                    "لا توجد قيود يتيمة جديدة لأرشفتها"
+                    if not unarchive else
+                    "لا توجد قيود مؤرشفة لإلغاء أرشفتها"
+                ),
+            }
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if unarchive:
+            res = await db.general_ledger.update_many(
+                {"user_id": uid, "id": {"$in": candidates}},
+                {"$unset": {
+                    "metadata.legacy_orphan": "",
+                    "metadata.archived_at": "",
+                    "metadata.archive_reason": "",
+                    "metadata.archived_by_user_id": "",
+                }},
+            )
+            action = "unarchive"
+        else:
+            res = await db.general_ledger.update_many(
+                {"user_id": uid, "id": {"$in": candidates}},
+                {"$set": {
+                    "metadata.legacy_orphan": True,
+                    "metadata.archived_at": now_iso,
+                    "metadata.archive_reason": reason,
+                    "metadata.archived_by_user_id": uid,
+                }},
+            )
+            action = "archive"
+
+        # Audit-trail entry (no balance touched).
+        await db.accounting_audit_log.insert_one({
+            "user_id": uid,
+            "actor_id": uid,
+            "timestamp": now_iso,
+            "action": f"orphan_{action}",
+            "summary": (
+                f"{action.title()} of {res.modified_count} legacy "
+                f"orphan ledger entries — reason: {reason}"
+            ),
+            "affected_ledger_ids": candidates,
+            "iter": "iter226",
+        })
+
+        return {
+            "success": True,
+            "action": action,
+            "matched": len(candidates),
+            "modified": res.modified_count,
+            "reason": reason,
+            "archived_at": now_iso if not unarchive else None,
+        }
+
+    @router.get("/employee-orphan-openings/archive/status")
+    async def archive_status(
+        user: dict = Depends(current_user),
+    ):
+        """Quick read-only count: how many ledger entries are currently
+        flagged `metadata.legacy_orphan=True` for this user."""
+        uid = user["id"]
+        archived_count = await db.general_ledger.count_documents({
+            "user_id": uid,
+            "entity_type": "employee",
+            "metadata.legacy_orphan": True,
+        })
+        archived_total = 0.0
+        async for row in db.general_ledger.aggregate([
+            {"$match": {
+                "user_id": uid,
+                "entity_type": "employee",
+                "metadata.legacy_orphan": True,
+            }},
+            {"$group": {
+                "_id": "$side",
+                "total": {"$sum": "$amount"},
+            }},
+        ]):
+            if row["_id"] == "debit":
+                archived_total += float(row.get("total") or 0)
+            else:
+                archived_total -= float(row.get("total") or 0)
+        return {
+            "success": True,
+            "archived_count": archived_count,
+            "archived_net_amount": round(archived_total, 2),
         }
 
     return router

@@ -30,7 +30,8 @@ async def _group_by_subaccount(db, user_id: str) -> dict:
     """
     pipeline = [
         {"$match": {"user_id": user_id, "status": "posted",
-                     "entry_type": {"$ne": "reversal"}}},
+                     "entry_type": {"$ne": "reversal"},
+                     "metadata.legacy_orphan": {"$ne": True}}},
         {"$group": {
             "_id": {"entity_type": "$entity_type",
                      "sub_account": "$sub_account"},
@@ -55,7 +56,8 @@ async def _group_by_entity(
     pipeline = [
         {"$match": {"user_id": user_id, "status": "posted",
                      "entity_type": entity_type,
-                     "entry_type": {"$ne": "reversal"}}},
+                     "entry_type": {"$ne": "reversal"},
+                     "metadata.legacy_orphan": {"$ne": True}}},
         {"$group": {
             "_id": {"entity_id": "$entity_id",
                      "sub_account": "$sub_account"},
@@ -222,6 +224,7 @@ async def _sum_side(
         {"$match": {
             "user_id": user_id, "status": "posted",
             "entry_type": {"$ne": "reversal"},
+            "metadata.legacy_orphan": {"$ne": True},
             "entity_type": entity_type, "entity_id": entity_id,
             "sub_account": sub_account, "side": side,
         }},
@@ -240,6 +243,7 @@ async def by_ad_provider_ssot(db, user_id: str) -> dict:
     pipeline = [
         {"$match": {"user_id": user_id, "status": "posted",
                      "entry_type": {"$ne": "reversal"},
+                     "metadata.legacy_orphan": {"$ne": True},
                      "entity_type": "ad_account",
                      "sub_account": "debt"}},
         {"$group": {
