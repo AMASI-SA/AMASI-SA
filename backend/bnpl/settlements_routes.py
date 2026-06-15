@@ -490,6 +490,19 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             else f"{provider.upper()}-AUTO-{_dt.utcnow().strftime('%Y%m%d')}"
         )
 
+        # Iter-226 — BNPL providers issue/transfer the settlement
+        # invoice on the DAY AFTER the period ends (e.g. Tabby closes
+        # Sun-Sat at 23:59 Riyadh, then issues the invoice Sun 00:00).
+        # So the settlement_date shown to the user must be (date_to + 1).
+        settlement_date_value = date_to
+        if date_to:
+            try:
+                _dt_to = _dt.strptime(date_to, "%Y-%m-%d").date()
+                from datetime import timedelta as _td
+                settlement_date_value = (_dt_to + _td(days=1)).isoformat()
+            except Exception:  # noqa: BLE001
+                pass
+
         return {
             "success": True,
             "provider": provider,
@@ -499,7 +512,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             "data_source": s.get("data_source") or "computed",
             "prefill": {
                 "settlement_reference": ref_default,
-                "settlement_date": date_to,
+                "settlement_date": settlement_date_value,
                 "bank_account_id": bank.get("linked_account_id"),
                 "bank_account_name": bank.get("linked_account_name"),
                 "transferred_amount": transferred_amount,
@@ -508,7 +521,8 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 "settlement_fee": settlement_fee,
                 "notes": (
                     f"تسوية مستوردة تلقائياً ({s.get('data_source') or 'computed'}) "
-                    f"للفترة {date_from or '?'} → {date_to or '?'}"
+                    f"للفترة {date_from or '?'} → {date_to or '?'} "
+                    f"(تاريخ إصدار الفاتورة: {settlement_date_value or '?'})"
                 ),
             },
             "breakdown": {
