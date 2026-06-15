@@ -3018,3 +3018,58 @@ Also fixed: `reverse_entry` was not propagating `sub_account` to the reversal en
 - ✅ `/liabilities/summary` and other legacy endpoints NOT modified.
 - ✅ NO data migration; no production records touched.
 - ✅ `/financial-position-ledger` page kept intact (still works, redirect not needed since both pages now show the same data).
+
+
+## Completed Work — Iter-217b (Feb 15 2026): Reversal-Impact Audit Endpoint
+
+**User request**: read-only endpoint to quantify the effect of the Iter-217 `compute_balance` fix on production data.
+
+### New endpoint
+`GET /api/audit/reversal-impact-report?include_ids=true`
+
+### Module
+`/app/backend/reversal_impact_audit_routes.py` (registered after `make_tabby_phase2_router` in `server.py`).
+
+### Response shape
+```json
+{
+  "source": "general_ledger",
+  "iter": "iter217b",
+  "summary": {
+    "affected_entities": N,
+    "total_reversal_count": N,
+    "total_delta": <sum of all per-entity deltas>,
+    "net_obligation_change_on_liability_entities": <sum of deltas where net_after_fix < 0>,
+    "net_balance_change_on_asset_entities":       <sum of deltas where net_after_fix > 0>
+  },
+  "top_impact": [<top 10 by |delta|>],
+  "rows": [
+    {
+      "entity_type": "employee|bank|supplier|ad_account|...",
+      "entity_id": "...",
+      "sub_account": "salary_payable|advance|main|...",
+      "name": "<resolved human-readable name>",
+      "reversal_count": N,
+      "net_before_fix": <old buggy compute_balance result>,
+      "net_after_fix":  <new corrected compute_balance result>,
+      "delta": <net_after_fix − net_before_fix>,
+      "delta_direction": "balance_grew|balance_shrank|no_change",
+      "entries": [
+        {"reversal_id": "...", "original_id": "..."}
+      ]
+    }
+  ]
+}
+```
+
+### Verification (Preview)
+- 2 entities affected (test reversal seeded by Iter-214 test).
+- Total delta = 0.0 (as expected — each reversal balanced).
+- Employee "عرفات": delta=+20 (advance balance grew from -20 wrong to 0 correct).
+- Bank "بنك الإنماء": delta=-20 (balance shrank from +20 wrong to 0 correct).
+
+### Properties enforced
+- ✅ Read-only — uses `find` / `aggregate` only.
+- ✅ No mutation, no migration, no posting.
+- ✅ Safe to call any number of times on production.
+- ✅ Each row exposes both the buggy and corrected balances + the reversal/original entry IDs so the merchant can drill down.
