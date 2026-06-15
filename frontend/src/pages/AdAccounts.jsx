@@ -1323,15 +1323,17 @@ export default function AdAccounts() {
                                                     data-testid={`adacc-sync-status-${row.id}`}
                                                     title={
                                                         `حالة المزامنة: ${cfg.label}\n` +
+                                                        `الجدولة: ${h.expected_interval || "—"}\n` +
                                                         `آخر بيانات: ${h.last_spend_date || "—"}\n` +
                                                         `مصدر: ${h.source_collection || "—"}\n` +
                                                         `آخر استلام: ${h.last_received_at || "—"}\n\n` +
                                                         (h.status === "stale" || h.status === "no_data"
-                                                            ? "📡 لم تصل بيانات صرف جديدة من المنصة.\n" +
-                                                              "السبب الأرجح: Make.com توقف عن إرسال البيانات.\n" +
-                                                              "افحص: 1) سجلات Make.com 2) صلاحية Access Token للمنصة 3) Rate limits"
+                                                            ? "📡 لم تصل بيانات صرف جديدة.\n" +
+                                                              (h.sync_via === "make_com"
+                                                                  ? "هذا الحساب مربوط بـ Make.com (دورة 5 ساعات).\nافحص سجلات Make.com والـ Access Token للمنصة."
+                                                                  : "هذا الحساب مربوط بـ API مباشر (دورة 30 دقيقة).\nافحص صلاحية المفاتيح ومراقبة لوحة التحكم للأخطاء.")
                                                             : h.status === "warning"
-                                                                ? "⏳ البيانات متأخرة عن اليوم — لو استمر التأخر راجع Make.com."
+                                                                ? "⏳ البيانات متأخرة قليلاً — لو استمر التأخر راجع المصدر."
                                                                 : "✅ البيانات تصل بانتظام.")
                                                     }
                                                 >

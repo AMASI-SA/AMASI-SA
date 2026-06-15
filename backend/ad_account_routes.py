@@ -177,6 +177,18 @@ PROVIDER_SOURCES = {
 }
 
 
+# Iter-212 — Whitelist of providers that are pulled via DIRECT platform
+# APIs (and therefore safe to run on the 30-minute cron). Anything else
+# (currently TikTok and any future provider) is delivered via Make.com
+# on its own schedule (~5h) — the cron must NOT process those accounts
+# or we'd double-count once Make.com re-delivers.
+#
+# Per-account override: setting `counterparties.sync_via = "make_com"`
+# explicitly opts an individual account OUT of the half-hour cron
+# regardless of its provider.
+HALFHOUR_SYNC_PROVIDERS = {"snapchat", "meta"}
+
+
 async def _fetch_daily_spend(
     db, user_id: str, provider: str, external_id: Optional[str],
     from_date: str, to_date: str,
@@ -855,7 +867,8 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         accs = await db.counterparties.find(
             {"user_id": user["id"], "kind": "ad_account"},
             {"_id": 0, "id": 1, "name": 1, "ad_provider": 1,
-             "external_account_id": 1, "platform_account_ids": 1},
+             "external_account_id": 1, "platform_account_ids": 1,
+             "sync_via": 1},
         ).to_list(500)
         today = _date.today()
         results = []
@@ -896,18 +909,43 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
                     days_stale = (today - parsed).days
                 except Exception:
                     days_stale = None
+            # Iter-212 — Staleness thresholds depend on the schedule:
+            #   • Direct-API (Snap/Meta) → expect daily freshness.
+            #   • Make.com (TikTok/...)  → 5h cycle, allow 2-day grace.
+            sync_via = (
+                "make_com"
+                if (cp.get("sync_via") == "make_com"
+                    or provider not in HALFHOUR_SYNC_PROVIDERS)
+                else "direct_api"
+            )
             if days_stale is None:
                 status = "no_data"
-            elif days_stale <= 1:
-                status = "healthy"
-            elif days_stale <= 3:
-                status = "warning"
-            else:
-                status = "stale"
+            elif sync_via == "make_com":
+                if days_stale <= 1:
+                    status = "healthy"
+                elif days_stale <= 2:
+                    status = "warning"
+                else:
+                    status = "stale"
+            else:  # direct_api
+                if days_stale <= 1:
+                    status = "healthy"
+                elif days_stale <= 3:
+                    status = "warning"
+                else:
+                    status = "stale"
             results.append({
                 "id": cp["id"],
                 "name": cp.get("name"),
                 "ad_provider": provider,
+                # Iter-212 — show which schedule owns each account so
+                # the UI tooltip mentions the right expected freshness.
+                "sync_via": sync_via,
+                "expected_interval": (
+                    "كل 30 دقيقة (API مباشر)"
+                    if sync_via == "direct_api"
+                    else "كل 5 ساعات (Make.com)"
+                ),
                 "last_spend_date": latest,
                 "last_received_at": (
                     latest_received_at.isoformat()
@@ -2705,11 +2743,19 @@ async def _run_sync_for_all(
     Iter-110 fix: uses PROVIDER_SOURCES so Snapchat reads
     snapchat_account_daily by ad_account_id, Meta reads
     meta_ads_daily by account_id, etc.
+
+    Iter-212: ONLY accounts whose data is delivered via direct
+    platform API are processed by this half-hour cron. Anything
+    delivered via Make.com (e.g. TikTok) is on Make.com's own 5-hour
+    schedule and must NOT be touched here. Direct-API providers are
+    declared in `HALFHOUR_SYNC_PROVIDERS`; an explicit
+    `cp.sync_via == "make_com"` always opts out.
     """
     out = []
     async for cp in db.counterparties.find(
         {"user_id": user_id, "kind": "ad_account",
-         "ad_provider": {"$in": list(PROVIDER_SOURCES)}},
+         "ad_provider": {"$in": list(HALFHOUR_SYNC_PROVIDERS)},
+         "sync_via": {"$ne": "make_com"}},
         {"_id": 0},
     ):
         # Skip if already synced for this `to_date` (idempotency),
