@@ -1052,7 +1052,7 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             {"$set": {"balance": new_balance, "updated_at": _now()}},
         )
 
-        await _ledger_write(
+        ledger_doc = await _ledger_write(
             db, user["id"], cp_id, "topup",
             amount, new_balance, liab_after_remaining,
             account_id=payload.paid_from_account_id,
@@ -1066,6 +1066,7 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             },
             date=payload.transaction_date,
         )
+        ledger_id = ledger_doc.get("id")
 
         # 4) Iter-203 — SSOT double-entry into general_ledger.
         #    Seed bank opening_balance lazily for non-migrated banks so
@@ -1092,6 +1093,7 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
                 "to_debt": _round(amount_to_debt),
                 "to_balance": _round(amount_to_balance),
                 "legacy_tx_id": tx["id"],
+                "legacy_ledger_id": ledger_id,  # iter-218 lookup key
                 "iter": "iter203",
             },
             entries=[
@@ -1151,6 +1153,43 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         # endpoint robust to future renames.
         old_tx_id = old.get("related_transaction_id") or old.get("related_tx_id")
         old_liab_id = old.get("related_liability_id")
+
+        # Iter-218 — SSOT: locate and reverse the original general_ledger
+        # group for this topup so the universal ledger stays in sync.
+        # Lookup priority: new (legacy_ledger_id) → legacy (legacy_tx_id).
+        # Skipped silently for legacy edits where no SSOT group was ever
+        # posted (topups created before Iter-203). Reversal uses the same
+        # atomic loop as /api/ledger/groups/{id}/reverse.
+        from ledger_core import reverse_entry as _rev_entry
+        ssot_lookup = (
+            {"user_id": user["id"], "metadata.legacy_ledger_id": ledger_id}
+            if ledger_id else None
+        )
+        ssot_doc = (
+            await db.general_ledger.find_one(ssot_lookup, {"_id": 0,
+                "txn_group_id": 1}) if ssot_lookup else None
+        )
+        if not ssot_doc and old_tx_id:
+            ssot_doc = await db.general_ledger.find_one(
+                {"user_id": user["id"], "metadata.legacy_tx_id": old_tx_id},
+                {"_id": 0, "txn_group_id": 1},
+            )
+        old_ssot_group_id = ssot_doc and ssot_doc.get("txn_group_id")
+        if old_ssot_group_id:
+            ssot_legs = await db.general_ledger.find(
+                {"user_id": user["id"], "txn_group_id": old_ssot_group_id,
+                 "status": "posted"},
+                {"_id": 0, "id": 1},
+            ).to_list(length=20)
+            for _leg in ssot_legs:
+                await _rev_entry(
+                    db, user_id=user["id"], actor_id=user["id"],
+                    actor_name=(user.get("name")
+                                or user.get("email") or ""),
+                    entry_id=_leg["id"],
+                    reason_code="data_entry_error",
+                    notes=f"تعديل تعبئة — iter-218 (مجموعة سابقة {old_ssot_group_id})",
+                )
 
         # 1) Reverse the cp.balance change
         await db.counterparties.update_one(
@@ -1255,6 +1294,52 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             }},
         )
 
+        # 6) Iter-218 — Post a fresh SSOT group reflecting the edit so
+        # general_ledger mirrors counterparties.balance and bank net.
+        from ledger_core import post_txn_group as _ptg
+        new_ssot_group_id = None
+        if bank_id:
+            bank_acc = await db.accounts.find_one(
+                {"id": bank_id, "user_id": user["id"]},
+                {"_id": 0, "name": 1},
+            ) or {}
+            gl_group = await _ptg(
+                db, user_id=user["id"], actor_id=user["id"],
+                actor_name=(user.get("name")
+                            or user.get("email") or ""),
+                txn_type="ad_account_topup",
+                notes=(
+                    f"تعبئة رصيد إعلاني — {cp['name']} "
+                    f"(معدّلة من {_round(old_amount)} إلى "
+                    f"{_round(new_amount)})"
+                ),
+                metadata={
+                    "ad_account_id": cp_id,
+                    "ad_account_name": cp.get("name"),
+                    "ad_provider": cp.get("ad_provider"),
+                    "bank_account_id": bank_id,
+                    "bank_account_name": bank_acc.get("name"),
+                    "to_debt": _round(amount_to_debt),
+                    "to_balance": _round(amount_to_balance),
+                    "legacy_tx_id": new_tx_id,
+                    "legacy_ledger_id": ledger_id,
+                    "edited_from_amount": _round(old_amount),
+                    "previous_ssot_group_id": old_ssot_group_id,
+                    "iter": "iter218",
+                },
+                entries=[
+                    {"entity_type": "ad_account", "entity_id": cp_id,
+                     "sub_account": "balance", "side": "debit",
+                     "amount": new_amount, "entry_type": "topup",
+                     "notes": f"تعبئة من {bank_acc.get('name') or 'البنك'}"},
+                    {"entity_type": "bank", "entity_id": bank_id,
+                     "sub_account": "main", "side": "credit",
+                     "amount": new_amount, "entry_type": "topup",
+                     "notes": f"تعبئة الحساب الإعلاني — {cp['name']}"},
+                ],
+            )
+            new_ssot_group_id = gl_group.get("txn_group_id")
+
         cp_fresh = await _get_account(db, user["id"], cp_id)
         return {
             "ok": True,
@@ -1263,6 +1348,8 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             "applied_to_debt": _round(amount_to_debt),
             "applied_to_balance": _round(amount_to_balance),
             "ad_account": await _summarise(db, user["id"], cp_fresh),
+            "ssot_previous_group_id": old_ssot_group_id,
+            "ssot_new_group_id": new_ssot_group_id,
         }
     @router.post("/{cp_id}/spend")
     async def record_spend(
@@ -2455,6 +2542,7 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             )
 
         if ledger_changes:
+            from ledger_core import post_txn_group as _ptg
             await db.ad_account_ledger.insert_one({
                 "id": str(uuid.uuid4()), "user_id": user["id"],
                 "counterparty_id": cp_id, "type": "opening",
@@ -2467,6 +2555,80 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
                 "date": payload.start_date or _now()[:10],
                 "created_at": _now(),
             })
+
+            # Iter-218 — Post a balanced SSOT entry for the opening
+            # delta(s). The opening is intentionally booked against
+            # equity.opening_balance so the universal ledger's net
+            # position absorbs the change without inventing a fake
+            # counter-party. Each PUT /opening posts an INCREMENTAL
+            # delta (new_cp_balance − old_cp_balance) — successive
+            # edits stack correctly without needing to reverse the
+            # previous opening entry. Skipped when only metadata
+            # (notes/start_date/method) changed and there is no
+            # numeric delta.
+            delta_balance = _round(
+                float(ledger_changes.get("balance_to") or 0)
+                - float(ledger_changes.get("balance_from") or 0),
+            ) if "balance_to" in ledger_changes else 0.0
+            delta_debt = float(
+                ledger_changes.get("opening_debt") or 0,
+            ) if "opening_debt" in ledger_changes else 0.0
+
+            entries: list = []
+            if abs(delta_balance) > 0.005:
+                if delta_balance > 0:
+                    entries.append({"entity_type": "ad_account",
+                                     "entity_id": cp_id,
+                                     "sub_account": "balance",
+                                     "side": "debit",
+                                     "amount": delta_balance,
+                                     "entry_type": "opening_balance"})
+                    entries.append({"entity_type": "equity",
+                                     "entity_id": "opening_balance",
+                                     "side": "credit",
+                                     "amount": delta_balance,
+                                     "entry_type": "opening_balance"})
+                else:
+                    entries.append({"entity_type": "ad_account",
+                                     "entity_id": cp_id,
+                                     "sub_account": "balance",
+                                     "side": "credit",
+                                     "amount": -delta_balance,
+                                     "entry_type": "opening_balance"})
+                    entries.append({"entity_type": "equity",
+                                     "entity_id": "opening_balance",
+                                     "side": "debit",
+                                     "amount": -delta_balance,
+                                     "entry_type": "opening_balance"})
+            if delta_debt > 0.005:
+                entries.append({"entity_type": "ad_account",
+                                 "entity_id": cp_id,
+                                 "sub_account": "debt",
+                                 "side": "credit",
+                                 "amount": delta_debt,
+                                 "entry_type": "opening_balance"})
+                entries.append({"entity_type": "equity",
+                                 "entity_id": "opening_balance",
+                                 "side": "debit",
+                                 "amount": delta_debt,
+                                 "entry_type": "opening_balance"})
+            if entries:
+                await _ptg(
+                    db, user_id=user["id"], actor_id=user["id"],
+                    actor_name=(user.get("name")
+                                or user.get("email") or ""),
+                    txn_type="ad_account_opening",
+                    notes=f"رصيد افتتاحي يدوي — {cp['name']}",
+                    metadata={
+                        "ad_account_id": cp_id,
+                        "ad_account_name": cp.get("name"),
+                        "ad_provider": cp.get("ad_provider"),
+                        "delta_balance": delta_balance,
+                        "delta_debt": delta_debt,
+                        "iter": "iter218_opening",
+                    },
+                    entries=entries,
+                )
 
         cp_fresh = await _get_account(db, user["id"], cp_id)
         return await _summarise(db, user["id"], cp_fresh)

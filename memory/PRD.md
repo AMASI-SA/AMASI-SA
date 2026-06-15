@@ -3100,3 +3100,62 @@ Also fixed: `reverse_entry` was not propagating `sub_account` to the reversal en
 
 ### Still strictly READ-ONLY
 - ✅ Only `find` + `aggregate`. Zero mutations. No migration. No posting.
+
+
+## Iter-217b (Feb 15 2026) — `/audit/find-entry` Diagnostic Search
+
+**User request**: pre-closure verification — locate the 105,153.97 SAR Self Service entry on production to confirm it was reversed (or still needs to be).
+
+### Endpoint
+`GET /api/audit/find-entry`
+
+Read-only. Filterable by:
+- `amount` + `amount_tolerance` (default 0.01)
+- `entity_type` / `entity_id` / `side` / `status`
+- `ad_account_name_contains` (regex on `metadata.ad_account_name`)
+- `notes_contains` (regex on `notes`)
+- `date_from` / `date_to` (ISO strings, on `posted_at`)
+- `limit` (default 50)
+
+### Returns per match
+- All ledger fields (id, entry_no, txn_group_id, side, amount, entity, sub_account, status, posted_at, notes, metadata)
+- `is_reversal_itself` — true if this entry is the reversal of another
+- `has_been_reversed` — true if some other entry points at this one via `reverses_entry_id`
+- `reversed_by` — full reversal record (id, group, posted_at, reason_code, notes, status)
+
+### Verification (Preview)
+- Searching `amount=20` returned 4 entries (the 2 original advance_grant + 2 reversal entries from the Iter-214 test). Status detection works correctly (`has_been_reversed: true` for the originals).
+
+### Strictly Read-Only
+- ✅ Uses only `find` / `find_one`. No mutations. No migrations. Safe on production.
+
+
+## Completed Work — Iter-218 (Feb 15 2026): Ad-Account `PUT /topup` + `PUT /opening` → SSOT
+
+**User request**: tie `PUT /api/ad-accounts/{cp_id}/topup/{ledger_id}` and `PUT /api/ad-accounts/{cp_id}/opening` to general_ledger — close the last legacy gaps after Iter-203/205 fixed POST.
+
+### Backend changes (`ad_account_routes.py`)
+1. **POST /topup** — adds `legacy_ledger_id` to the SSOT group's metadata so PUT /topup can look up the corresponding group directly (was previously only via `legacy_tx_id` indirection).
+2. **PUT /topup/{ledger_id}** — wraps the existing legacy mutation with:
+   - **Pre-step**: locate the original SSOT group (by `legacy_ledger_id`, fallback to `legacy_tx_id`). Reverse every leg atomically via `reverse_entry`. Silent no-op for legacy edits where no SSOT group was ever posted (pre-Iter-203 topups).
+   - **Post-step**: after the legacy machinery completes, post a NEW balanced SSOT group with the new amount: DEBIT ad_account.balance / CREDIT bank.main. Returns `ssot_previous_group_id` + `ssot_new_group_id` for transparency.
+3. **PUT /opening** — when `ledger_changes` includes a balance/debt delta, posts an INCREMENTAL balanced SSOT group: ad_account.balance vs equity.opening_balance (and ad_account.debt vs equity.opening_balance when applicable). Successive /opening edits stack correctly via the delta arithmetic (no need to reverse the prior opening — cp.balance delta drives everything).
+
+### Test
+`/app/backend/tests/test_topup_opening_ssot_iter218.py` (PASS):
+- POST /topup → ad_account.balance ledger = 1000.
+- PUT /topup edit 1000→1500 → ledger reflects 1500 (old group reversed + new posted).
+- PUT /opening set to 200 → ledger = 200 (delta -1300 booked).
+- PUT /opening set to 500 → ledger = 500 (delta +300 booked).
+- All while counterparties.balance matches general_ledger to-the-cent.
+
+### Regression
+- ✅ Iter-205 (POST spend SSOT)
+- ✅ Iter-214 (group reverse)
+- ✅ Iter-215 (AM/PM windows)
+- ✅ Iter-215b (no backfill)
+- ✅ Iter-215c (cleanup)
+- ✅ Iter-217 (financial position SSOT + compute_balance reversal fix)
+- ✅ Iter-218 (this iteration)
+
+All pass individually. The known multi-file `Event loop is closed` test-isolation issue persists and is unrelated to any of these iterations.

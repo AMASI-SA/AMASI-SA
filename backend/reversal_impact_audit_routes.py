@@ -399,4 +399,97 @@ def make_reversal_impact_router(db, current_user):
             "details": details,
         }
 
+    # ── /find-entry — diagnostic search by amount/account ───────────
+    # Tiny read-only helper to locate a specific ledger entry the
+    # merchant remembers by amount (e.g. "the 105,153.97 entry
+    # supposedly created by the 30-day sync bug"). Returns up to
+    # `limit` matches, each enriched with reversal-status info so the
+    # merchant can decide whether to reverse manually or not.
+    @router.get("/find-entry")
+    async def find_entry(
+        user: dict = Depends(current_user),
+        amount: float | None = None,
+        amount_tolerance: float = 0.01,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        ad_account_name_contains: str | None = None,
+        notes_contains: str | None = None,
+        side: str | None = None,
+        status: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        limit: int = 50,
+    ):
+        uid = user["id"]
+        q: dict = {"user_id": uid}
+        if amount is not None:
+            q["amount"] = {"$gte": amount - amount_tolerance,
+                            "$lte": amount + amount_tolerance}
+        if entity_type:
+            q["entity_type"] = entity_type
+        if entity_id:
+            q["entity_id"] = entity_id
+        if side:
+            q["side"] = side
+        if status:
+            q["status"] = status
+        if date_from or date_to:
+            rng: dict = {}
+            if date_from:
+                rng["$gte"] = date_from
+            if date_to:
+                rng["$lte"] = date_to + "T23:59:59Z"
+            q["posted_at"] = rng
+        if ad_account_name_contains:
+            q["metadata.ad_account_name"] = {
+                "$regex": ad_account_name_contains,
+                "$options": "i",
+            }
+        if notes_contains:
+            q["notes"] = {"$regex": notes_contains, "$options": "i"}
+
+        matches = []
+        async for d in db.general_ledger.find(
+            q, {"_id": 0}, sort=[("posted_at", -1)],
+        ).limit(limit):
+            matches.append(d)
+
+        # For each match, check if it has a reversal (it points at
+        # one, or one points at it).
+        enriched = []
+        for m in matches:
+            reversal_pointing_at_me = await db.general_ledger.find_one(
+                {"user_id": uid, "reverses_entry_id": m["id"]},
+                {"_id": 0, "id": 1, "txn_group_id": 1,
+                 "posted_at": 1, "reason_code": 1, "notes": 1,
+                 "status": 1},
+            )
+            is_reversal_itself = bool(m.get("reverses_entry_id"))
+            enriched.append({
+                "id": m.get("id"),
+                "entry_no": m.get("entry_no"),
+                "txn_group_id": m.get("txn_group_id"),
+                "entity_type": m.get("entity_type"),
+                "entity_id": m.get("entity_id"),
+                "sub_account": m.get("sub_account"),
+                "side": m.get("side"),
+                "amount": m.get("amount"),
+                "entry_type": m.get("entry_type"),
+                "status": m.get("status"),
+                "posted_at": m.get("posted_at"),
+                "notes": m.get("notes"),
+                "metadata": m.get("metadata"),
+                "is_reversal_itself": is_reversal_itself,
+                "reverses_entry_id": m.get("reverses_entry_id"),
+                "has_been_reversed": reversal_pointing_at_me is not None,
+                "reversed_by": reversal_pointing_at_me,
+            })
+        return {
+            "source": "general_ledger",
+            "iter": "iter217b",
+            "query": {k: v for k, v in q.items() if k != "user_id"},
+            "match_count": len(enriched),
+            "matches": enriched,
+        }
+
     return router
