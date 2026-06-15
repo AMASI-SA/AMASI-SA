@@ -114,6 +114,8 @@ ENTRY_TYPES = (
     # ── Iter-219 — BNPL bridge (Tabby/Tamara) ──
     "bnpl_sale",            # بيع Tabby/Tamara: مدين receivable + دائن bnpl_sales
     "bnpl_refund",          # استرجاع Tabby/Tamara: مدين bnpl_sales + دائن receivable
+    # ── Iter-220 — BNPL Phase 2b settlement bridge ──
+    "bnpl_settlement",      # تسوية Tabby/Tamara: مدين bank + عمولات/ضرائب/رسوم، دائن receivable
     # Reversal kinds for the above are unified under "reversal"
 )
 SIDES = ("debit", "credit")

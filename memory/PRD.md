@@ -3203,3 +3203,61 @@ All pass individually. The known multi-file `Event loop is closed` test-isolatio
 ### NOT included (Phase 2b — next iteration)
 - Settlement breakdown (bank + commission + VAT + fees) in `accounts_routes.py POST /transactions` for category=bank_transfer.
 - Historical backfill of 800+ Tabby ops (deferred to Phase 3 by user).
+
+
+## Completed Work — Iter-220 (Feb 16 2026): BNPL Settlement Bridge (Phase 2b)
+
+**User request**: عند تسجيل تحويل من Tabby/Tamara إلى البنك، إغلاق الذمة في general_ledger وتسجيل العمولات + VAT + رسوم التسوية كمصاريف منفصلة. لا backfill تاريخي، فقط معاملات جديدة بعد النشر.
+
+### Architecture
+- **NEW** `/app/backend/bnpl/settlement_bridge.py` — `post_bnpl_settlement_to_ledger`.
+- **NEW** endpoint `POST /api/bnpl/settlements/register` in `bnpl/settlements_routes.py`.
+- Added `bnpl_settlement` to `ENTRY_TYPES` in `ledger_core.py`.
+
+### Ledger group structure (5 legs max)
+- DEBIT `bank.{bank_account_id}/balance` = transferred_amount (if > 0)
+- DEBIT `expense.bnpl_commission` = commission (skipped if 0)
+- DEBIT `expense.bnpl_commission_vat` = commission_vat (skipped if 0)
+- DEBIT `expense.bnpl_settlement_fee` = settlement_fee (skipped if 0)
+- CREDIT `payment_gateway.{provider}/receivable` = total
+
+Example (transferred 9000, commission 800, VAT 120, fee 80 → closes 10,000 receivable):
+```
+DR bank.X/balance              9000
+DR expense.bnpl_commission      800
+DR expense.bnpl_commission_vat  120
+DR expense.bnpl_settlement_fee   80
+CR payment_gateway.tabby/receivable  10000
+```
+
+### Guards
+1. **Idempotency** — `bnpl_settlement:{provider}:{settlement_reference}` (stored in every leg's `metadata.idempotency_key`). Re-posting the same reference returns the existing `txn_group_id` with `skipped=true`. No duplicate `account_transactions` row either.
+2. **Receivable ceiling** — settlement total cannot exceed the current ledger receivable for that provider. Partial settlements are allowed; over-settlements raise 400 with Arabic message.
+3. **Zero-receivable rejection** — settling against a provider whose receivable balance is 0 raises 400 (prevents creating a negative receivable, preserves "no historical backfill" since pre-cutoff sales never made it into the ledger).
+4. **Bank account validated** — must exist for the user with `account_type ∈ {bank, cash}`.
+5. **Non-negative legs** — all four amounts ≥ 0, total > 0.
+
+### Side-effects
+- Inserts a balanced `txn_group` in `general_ledger`.
+- Inserts a `settlement` row in `account_transactions` on the destination bank (linked via `metadata.bnpl_settlement_group_id` + `idempotency_key`) so the bank-account detail UI shows the inbound transfer.
+- Calls `_recompute_balance` so `accounts.current_balance` matches.
+
+### Metadata (every leg + the response)
+- `provider`, `transferred_amount`, `commission`, `commission_vat`, `settlement_fee`
+- `settlement_reference`, `settlement_date`, `bank_account_id`, `bank_account_name`
+- `idempotency_key`, `iter = "iter220"`
+
+### Test — `/app/backend/tests/test_bnpl_settlement_iter220.py` (8/8 PASS)
+1. ✅ Full settlement (10k) → 5 legs, balanced, receivable=0, bank=+9000, all 3 expenses recorded.
+2. ✅ Partial settlement (4k of 10k) → remaining_receivable=6000.
+3. ✅ Idempotent re-register → same `txn_group_id`, no duplicate.
+4. ✅ Over-settlement (1500 vs 1000 receivable) → 400 with Arabic error.
+5. ✅ Zero-receivable settlement → 400 with Arabic error.
+6. ✅ Tamara same contract; no cross-provider bleed.
+7. ✅ All 5 legs carry full metadata (provider, breakdown, ref, bank, date).
+8. ✅ Zero-amount expense legs are skipped (no `amount=0` legs).
+
+### NOT touched
+- Regular bank transfers (`POST /api/accounts/{id}/transactions` and `POST /api/accounts/transfers`) — completely untouched. The new bridge is invoked ONLY via the dedicated `/api/bnpl/settlements/register` endpoint.
+- Historical settlements (Phase 3 backfill remains deferred).
+

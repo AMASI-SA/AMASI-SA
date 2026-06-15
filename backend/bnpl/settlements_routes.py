@@ -1,10 +1,14 @@
 """HTTP routes for BNPL Automatic Settlements — Phase 4."""
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
+from .settlement_bridge import post_bnpl_settlement_to_ledger
 from .settlements_service import (
     compute_all_settlements,
     compute_settlement_for_provider,
@@ -12,6 +16,22 @@ from .settlements_service import (
     _compute_period_items,
     PROVIDERS,
 )
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class BNPLSettlementRegisterIn(BaseModel):
+    provider: str               # "tabby" | "tamara"
+    bank_account_id: str
+    transferred_amount: float = Field(..., ge=0)
+    commission: float = Field(0.0, ge=0)
+    commission_vat: float = Field(0.0, ge=0)
+    settlement_fee: float = Field(0.0, ge=0)
+    settlement_reference: str = Field(..., min_length=1, max_length=200)
+    settlement_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    notes: Optional[str] = ""
 
 
 def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
@@ -81,6 +101,100 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             }
         except Exception as e:  # noqa: BLE001
             return {"success": False, "error": f"{type(e).__name__}: {e}"}
+
+    @router.post("/register")
+    async def register_settlement(
+        payload: BNPLSettlementRegisterIn,
+        user: dict = Depends(get_current_user),
+    ):
+        """Iter-220 — register a BNPL settlement (bank transfer + fees)
+        and post the balanced SSOT entry that closes the receivable.
+
+        Side-effects:
+          • general_ledger: 1 balanced txn_group (`bnpl_settlement`).
+          • account_transactions: 1 `settlement` row on the destination
+            bank account (so the existing bank UI sees the inbound
+            transfer).
+
+        Idempotency: same (provider, settlement_reference) → no
+        duplicate ledger group, no duplicate account_transactions row.
+        """
+        uid = user["id"]
+        if payload.provider.lower() not in PROVIDERS:
+            raise HTTPException(400, f"unknown provider {payload.provider}")
+
+        try:
+            res = await post_bnpl_settlement_to_ledger(
+                db, user_id=uid,
+                actor_id=uid, actor_name=user.get("name") or "user",
+                provider=payload.provider,
+                bank_account_id=payload.bank_account_id,
+                transferred_amount=payload.transferred_amount,
+                commission=payload.commission,
+                commission_vat=payload.commission_vat,
+                settlement_fee=payload.settlement_fee,
+                settlement_reference=payload.settlement_reference,
+                settlement_date=payload.settlement_date,
+                notes=payload.notes or "",
+            )
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(
+                500, f"settlement bridge failed: {type(e).__name__}: {e}",
+            )
+
+        # If the bridge skipped (idempotent), DO NOT touch
+        # account_transactions either — the previous call already wrote it.
+        if res.get("skipped"):
+            return {"success": True, **res}
+
+        # Mirror the transferred_amount as a `settlement` row on the
+        # bank account so the existing UI feed (bank account detail)
+        # shows the inbound BNPL transfer. Uses the same idempotency
+        # key in metadata to support reconciliation.
+        if payload.transferred_amount > 0:
+            now = _now_iso()
+            await db.account_transactions.insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": uid,
+                "account_id": payload.bank_account_id,
+                "transaction_type": "settlement",
+                "amount": round(float(payload.transferred_amount), 2),
+                "direction": "in",
+                "description": (
+                    payload.notes
+                    or f"تسوية {payload.provider} — مرجع "
+                       f"{payload.settlement_reference}"
+                ),
+                "transaction_date": (
+                    payload.settlement_date or now[:10]
+                ),
+                "balance_after": 0.0,    # recomputed below
+                "status": "posted",
+                "attachment_url": None,
+                "created_at": now,
+                "updated_at": now,
+                "metadata": {
+                    "bnpl_settlement_group_id": res.get("txn_group_id"),
+                    "provider": payload.provider,
+                    "settlement_reference": payload.settlement_reference,
+                    "idempotency_key": (
+                        f"bnpl_settlement:{payload.provider}:"
+                        f"{payload.settlement_reference}"
+                    ),
+                },
+            })
+            # Recompute bank balance.
+            try:
+                from accounts_routes import _recompute_balance
+                await _recompute_balance(
+                    db, uid, payload.bank_account_id,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        return {"success": True, **res}
 
     @router.get("/{provider}")
     async def provider_settlement(
