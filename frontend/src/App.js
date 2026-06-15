@@ -19,6 +19,7 @@ import MakeWebhook from "./pages/MakeWebhook";
 import OperatingExpenses from "./pages/OperatingExpenses";
 import OperationalReports from "./pages/OperationalReports";
 import AdsReport from "./pages/AdsReport";
+import AdvertisingExpensesReport from "./pages/AdvertisingExpensesReport";
 import SnapchatAccounts from "./pages/SnapchatAccounts";
 import ProductCosts from "./pages/ProductCosts";
 import ProductPreparation from "./pages/ProductPreparation";
@@ -96,6 +97,7 @@ function AppRoutes() {
             <Route path="/operational-reports" element={<ProtectedRoute><Layout><OperationalReports /></Layout></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Layout><Reports /></Layout></ProtectedRoute>} />
             <Route path="/reports/ads" element={<ProtectedRoute><Layout><AdsReport /></Layout></ProtectedRoute>} />
+            <Route path="/reports/advertising-expenses" element={<ProtectedRoute><Layout><AdvertisingExpensesReport /></Layout></ProtectedRoute>} />
             <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatAccounts /></Layout></ProtectedRoute>} />
             <Route path="/product-costs" element={<ProtectedRoute><Layout><ProductCosts /></Layout></ProtectedRoute>} />
             <Route path="/product-preparation" element={<ProtectedRoute><Layout><ProductPreparation /></Layout></ProtectedRoute>} />

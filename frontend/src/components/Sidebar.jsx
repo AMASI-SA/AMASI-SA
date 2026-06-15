@@ -84,6 +84,7 @@ const SECTIONS = [
             { to: "/advances", label: "عهد الموظفين والمندوبين", icon: HandCoins, testid: "nav-advances" },
             { to: "/receivables", label: "الذمم والتحصيلات", icon: Coin, testid: "nav-receivables" },
             { to: "/ad-accounts", label: "الحسابات الإعلانية والمديونية", icon: ChartLineUp, testid: "nav-ad-accounts" },
+            { to: "/reports/advertising-expenses", label: "📊 تقرير المصروفات الإعلانية", icon: ChartLineUp, testid: "nav-advertising-expenses" },
         ],
     },
     {

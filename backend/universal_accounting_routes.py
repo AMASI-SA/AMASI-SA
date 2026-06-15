@@ -2277,4 +2277,111 @@ def make_universal_router(db) -> APIRouter:
             "is_balanced": abs(total_debits - total_credits) < 0.01,
         }
 
+    # ═══════════════════════════════════════════════════════════════
+    # Iter-206 — Advertising Expenses Report (SSOT-backed)
+    # ═══════════════════════════════════════════════════════════════
+    @router.get("/reports/advertising-expenses")
+    async def advertising_expenses_report(
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        user: dict = Depends(current_user),
+    ):
+        """Read `expense.advertising` entries from `general_ledger`
+        (written by Iter-205) and return three grouped views:
+
+          • by_platform  — Snapchat / Meta / TikTok / other
+          • by_ad_account — per counterparty card
+          • by_month     — chronological monthly series
+          • daily        — full daily series for charting
+
+        Optional date filter on `metadata.spend_date` (YYYY-MM-DD).
+        """
+        uid = user["id"]
+        match: dict = {
+            "user_id": uid,
+            "entity_type": "expense",
+            "entity_id": "advertising",
+            "side": "debit",
+            "status": "posted",
+        }
+        if from_date or to_date:
+            sd: dict = {}
+            if from_date:
+                sd["$gte"] = from_date
+            if to_date:
+                sd["$lte"] = to_date
+            match["metadata.spend_date"] = sd
+
+        rows = await db.general_ledger.find(
+            match,
+            {"_id": 0, "amount": 1, "metadata": 1, "posted_at": 1},
+        ).sort("posted_at", 1).to_list(50000)
+
+        total = 0.0
+        by_platform: dict = {}
+        by_account: dict = {}
+        by_month: dict = {}
+        by_day: dict = {}
+        for r in rows:
+            md = r.get("metadata") or {}
+            amt = float(r.get("amount") or 0)
+            total += amt
+            prov = (md.get("ad_provider") or "unknown")
+            acc_id = md.get("ad_account_id") or "—"
+            acc_name = md.get("ad_account_name") or "—"
+            sd = (md.get("spend_date")
+                  or (r.get("posted_at") or "")[:10])
+            month = sd[:7] if sd else "—"
+
+            pg = by_platform.setdefault(prov, {
+                "key": prov, "total": 0.0, "count": 0,
+            })
+            pg["total"] += amt
+            pg["count"] += 1
+
+            ag = by_account.setdefault(acc_id, {
+                "ad_account_id": acc_id, "name": acc_name,
+                "ad_provider": prov, "total": 0.0, "count": 0,
+            })
+            ag["total"] += amt
+            ag["count"] += 1
+
+            mg = by_month.setdefault(month, {
+                "month": month, "total": 0.0, "count": 0,
+            })
+            mg["total"] += amt
+            mg["count"] += 1
+
+            dg = by_day.setdefault(sd, {
+                "date": sd, "total": 0.0, "count": 0,
+            })
+            dg["total"] += amt
+            dg["count"] += 1
+
+        def _round_group(d):
+            d["total"] = round(d["total"], 2)
+            return d
+
+        return {
+            "from_date": from_date,
+            "to_date": to_date,
+            "total": round(total, 2),
+            "by_platform": sorted(
+                (_round_group(p) for p in by_platform.values()),
+                key=lambda x: -x["total"],
+            ),
+            "by_ad_account": sorted(
+                (_round_group(a) for a in by_account.values()),
+                key=lambda x: -x["total"],
+            ),
+            "by_month": sorted(
+                (_round_group(m) for m in by_month.values()),
+                key=lambda x: x["month"],
+            ),
+            "daily": sorted(
+                (_round_group(d) for d in by_day.values()),
+                key=lambda x: x["date"],
+            ),
+        }
+
     return router

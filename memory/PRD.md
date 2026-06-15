@@ -2544,3 +2544,25 @@ Perfectly balanced.
 - Per user instructions, these stay untouched until Spend is
   proven in production data.
 
+
+
+## Iter-206 — Advertising Expenses Report (SSOT, Feb 15 2026)
+
+### Backend
+- `GET /api/accounting/reports/advertising-expenses?from_date=…&to_date=…`
+  Reads ONLY `expense.advertising` debit rows from `general_ledger`.
+  Returns: `total`, `by_platform`, `by_ad_account`, `by_month`,
+  `daily`.
+
+### Frontend
+- New page `/reports/advertising-expenses`
+  (`AdvertisingExpensesReport.jsx`): date range picker, total card,
+  platform grid, ad-account table with % share, monthly bar chart.
+- New sidebar link (`nav-advertising-expenses`).
+
+### Verification (Preview)
+With Iter-205 seed data on Snap Test SSOT:
+- total = 2,300 ر.س, by_platform=[{snapchat:2300,count:2}],
+  by_ad_account=[{Snap Test SSOT:2300}], by_month=[{2026-02:2300}].
+- Screenshot confirms all four sections render correctly.
+
