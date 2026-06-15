@@ -127,6 +127,8 @@ export default function UnifiedEntryScreen() {
     const [recentTxns, setRecentTxns] = useState([]);
     const [highlightGroupId, setHighlightGroupId] = useState(null);
     const [recentLoading, setRecentLoading] = useState(false);
+    // Iter-210 — Toggleable help panel next to "خصم السلف تلقائياً" checkbox.
+    const [showAdvancesHelp, setShowAdvancesHelp] = useState(false);
     const [employees, setEmployees] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
 
@@ -1502,12 +1504,54 @@ export default function UnifiedEntryScreen() {
                         )}
 
                         {opType === "salary_settle" && (
-                            <label className="flex items-center gap-2 text-sm text-slate-700">
-                                <input type="checkbox" checked={applyAdvances}
-                                    onChange={e => setApplyAdvances(e.target.checked)}
-                                    data-testid="unified-apply-advances" />
-                                خصم السلف المفتوحة تلقائياً
-                            </label>
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                <div className="flex items-center justify-between gap-2">
+                                    <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                                        <input type="checkbox" checked={applyAdvances}
+                                            onChange={e => setApplyAdvances(e.target.checked)}
+                                            data-testid="unified-apply-advances" />
+                                        خصم السلف المفتوحة تلقائياً
+                                    </label>
+                                    <button type="button"
+                                        onClick={() => setShowAdvancesHelp(v => !v)}
+                                        className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-sky-100 hover:bg-sky-200 text-sky-700 font-bold text-xs transition-colors"
+                                        title="ما عمل هذا الخيار؟"
+                                        data-testid="unified-apply-advances-help">
+                                        ؟
+                                    </button>
+                                </div>
+                                {showAdvancesHelp && (
+                                    <div className="mt-3 pt-3 border-t border-slate-200 text-xs text-slate-700 space-y-2"
+                                        data-testid="unified-apply-advances-help-panel">
+                                        <p className="font-bold text-slate-900">
+                                            ما الذي يفعله هذا الخيار؟
+                                        </p>
+                                        <p className="leading-relaxed">
+                                            يقفل تلقائياً أي سلفة مفتوحة على الموظف مقابل راتبه المستحق
+                                            في نفس العملية — بدل تسجيل عمليتين منفصلتين.
+                                        </p>
+                                        <div className="bg-white border border-slate-200 rounded p-2 leading-relaxed">
+                                            <p className="font-bold text-slate-900 mb-1">مثال:</p>
+                                            <p>راتب مستحق = 3,000 · سلفة مفتوحة = 500 · تدفع كاش = 2,000</p>
+                                            <ul className="mt-1 space-y-0.5 pr-3 list-disc marker:text-emerald-500">
+                                                <li><b className="text-emerald-700">مع الخيار:</b> البنك −2,000 · الراتب المستحق المتبقي = 500 · السلفة = <b>صفر (أُقفلت)</b></li>
+                                                <li><b className="text-rose-700">بدون الخيار:</b> البنك −2,000 · الراتب المستحق المتبقي = 1,000 · السلفة <b>تظل 500 مفتوحة</b></li>
+                                            </ul>
+                                        </div>
+                                        <div className="bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed">
+                                            <p className="font-bold text-amber-900 mb-1">💡 متى تستخدمه؟</p>
+                                            <ul className="space-y-0.5 pr-3 list-disc marker:text-amber-500">
+                                                <li>عند تصفية حسابات الموظف نهاية الشهر.</li>
+                                                <li>عندما تريد استرداد السلفة من راتب هذا الشهر.</li>
+                                                <li>أطفئه إذا الموظف لم يوافق على الخصم أو تريد إبقاء السلفة مفتوحة.</li>
+                                            </ul>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                                            ملاحظة: لو دفعت <b>أكثر</b> من المستحق، يُسجَّل الفائض كسلفة جديدة على الموظف تلقائياً.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
                         )}
 
                         <div className="grid grid-cols-2 gap-3">
