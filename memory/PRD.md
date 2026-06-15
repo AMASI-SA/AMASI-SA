@@ -3307,3 +3307,54 @@ CR payment_gateway.tabby/receivable  10000
 - Total>receivable tolerance is `>0.01` (absolute) — acceptable for SAR rounding.
 - Modal backdrop click closes modal (standard pattern).
 
+
+
+## Completed Work — Iter-222 (Feb 16 2026): Employee Orphan Openings Diagnostic (Phase 1 — Read Only)
+
+**User request**: تقرير تشخيصي شامل قبل أي إصلاح للقيود اليتيمة على الموظفين (15 قيداً في Production). Read-only صرف. Phase 2 (Preview/Apply Fix) مؤجَّلة حتى مراجعة هذا التقرير.
+
+### Backend
+- **NEW** `/app/backend/employee_orphan_diagnostic_routes.py` — module dédié.
+- **NEW** endpoint **`GET /api/audit/employee-orphan-openings`** — read-only, لا writes إطلاقاً.
+
+### Classification taxonomy (مطلوبة من المستخدم حرفياً)
+| التصنيف | متى يُستخدم |
+|---|---|
+| `deleted_entity` | الموظف غير موجود في `employees` لأي مستخدم — محذوف نهائياً |
+| `employee_id_mismatch` | الموظف موجود لكنه يخصّ مستخدماً آخر (cross-tenant) |
+| `missing_counter_entry` | `txn_group_id` غير متوازن (debit ≠ credit داخل المجموعة) |
+| `orphan_opening` | `entry_type=opening_balance` لموظف غير موجود |
+| `orphan_reversal` | `entry_type=reversal` لكن المعاملة الأصلية حُذفت |
+| `other` | لا ينطبق أيٌّ مما سبق |
+
+### Response payload (المهم)
+- `summary`: total_orphans, total_debit, total_credit, net_impact + الأثر الصافي على salary_payable / advance / custody + by_classification + by_sub_account + by_entry_type
+- `per_employee[]`: entity_id, name, current_balance, orphan_impact, expected_after_fix, difference, affected_count, classifications
+- `entries[]`: ledger_id, txn_group_id, entry_type, sub_account, side, debit/credit, posted_at, metadata_name, classification, **reason** (شرح عربي مفصَّل لكل قيد)
+
+### Frontend
+- **NEW** `/app/frontend/src/pages/EmployeeOrphanDiagnostic.jsx`
+- **Route**: `/audit/employee-orphans`
+- **Sidebar**: "🩺 تشخيص قيود الموظفين اليتيمة" (`nav-employee-orphans`)
+- يعرض:
+  1. شريط Phase-2 placeholder مع زرّي "معاينة الإصلاح" + "تطبيق الإصلاح" — **معطّلان** (`btn-preview-fix-disabled`, `btn-apply-fix-disabled`) إلى أن نقرّر طريقة المعالجة لكل فئة.
+  2. 4 stat tiles: إجمالي القيود اليتيمة / المدين / الدائن / صافي الأثر.
+  3. 3 stat tiles: أثر على salary_payable / advance / custody.
+  4. Pills فلترة تفاعلية حسب التصنيف (مع counts و net).
+  5. جدول "حسب الموظف" — current vs expected after fix + الفرق.
+  6. جدول تفصيلي للقيود اليتيمة مع شرح السبب لكل قيد + بحث.
+
+### Verification (Preview environment)
+- Endpoint returns 5 orphans للمستخدم الحالي في preview (production likely shows 15 as flagged).
+- 2 employees affected (عرفات: 4 entries, خالد: 1).
+- Net impact: +4,008 ر.س — كله على `advance` sub-account.
+- Classifications: 4 × `deleted_entity` (4,028 debit) + 1 × `orphan_reversal` (-20 credit on unknown).
+- Phase-2 buttons تظهر معطّلة كما هو مطلوب.
+
+### Read-only invariants (assert)
+- لا migrations.
+- لا حذف بيانات.
+- لا إنشاء قيود أثناء التشخيص.
+- لا تعديل أرصدة الموظفين تلقائياً.
+- المرحلة الثانية (Preview/Apply Fix) ستُبنى بعد قرار المستخدم لكل فئة.
+

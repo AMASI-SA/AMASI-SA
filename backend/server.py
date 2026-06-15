@@ -3667,6 +3667,9 @@ api.include_router(make_reconciliation_forensic_router(db, current_user))
 # Iter-199 — Salary Payment Full Reversal (bank/cash IS impacted)
 from reversals_routes import make_reversals_router
 api.include_router(make_reversals_router(db, current_user))
+# Iter-222 — Employee Opening Orphans Diagnostic (READ-ONLY)
+from employee_orphan_diagnostic_routes import make_employee_orphan_router
+api.include_router(make_employee_orphan_router(db, current_user))
 app.include_router(api)
 
 # CORS
