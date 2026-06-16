@@ -430,27 +430,28 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
         # Period shorthand → date_from/date_to. The user-provided
         # explicit dates always win.
         # Iter-229 — provider-aware weekly cycles:
-        #   • Tabby:  Sun→Sat (Tabby invoices issued Sunday).
-        #   • Tamara: Fri→Thu (Tamara invoices issued Friday).
+        #   • Tabby:  Sun→Sat, invoice issued the following Sunday.
+        #   • Tamara: Sat→Fri (7 days). Money lands in merchant bank
+        #            the following TUESDAY (3 banking days later).
         if not (date_from and date_to) and period:
             today = date.today()
-            wd = today.weekday()  # Mon=0 ... Sun=6
+            wd = today.weekday()  # Mon=0 ... Sun=6 ; Sat=5, Fri=4
             is_tamara = (provider == "tamara")
             if period == "this_week":
                 if is_tamara:
-                    # Days since last Friday (Fri=4). 0 if today is Fri.
-                    days_since_fri = (wd - 4) % 7
-                    start = today - timedelta(days=days_since_fri)
-                    end = start + timedelta(days=6)   # Thursday
+                    # Days since last Saturday (Sat=5).
+                    days_since_sat = (wd - 5) % 7
+                    start = today - timedelta(days=days_since_sat)
+                    end = start + timedelta(days=6)   # following Friday
                 else:
                     days_since_sun = (wd + 1) % 7
                     start = today - timedelta(days=days_since_sun)
                     end = start + timedelta(days=6)
             elif period == "last_week":
                 if is_tamara:
-                    days_since_fri = (wd - 4) % 7
-                    end = today - timedelta(days=days_since_fri + 1)  # last Thursday
-                    start = end - timedelta(days=6)                   # last Friday-1wk
+                    days_since_sat = (wd - 5) % 7
+                    end = today - timedelta(days=days_since_sat + 1)  # last Friday
+                    start = end - timedelta(days=6)                    # last Saturday
                 else:
                     days_since_sun = (wd + 1) % 7
                     end = today - timedelta(days=days_since_sun + 1)
@@ -506,16 +507,24 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             else f"{provider.upper()}-AUTO-{_dt.utcnow().strftime('%Y%m%d')}"
         )
 
-        # Iter-226 — BNPL providers issue/transfer the settlement
-        # invoice on the DAY AFTER the period ends (e.g. Tabby closes
-        # Sun-Sat at 23:59 Riyadh, then issues the invoice Sun 00:00).
-        # So the settlement_date shown to the user must be (date_to + 1).
+        # Iter-226+229 — settlement_date semantics differ by provider:
+        #   • Tabby:  invoice issued day AFTER period (Sat ends → Sun).
+        #   • Tamara: money LANDS in merchant bank the TUESDAY after
+        #            the period ends (period ends Fri → Tue +4 days).
         settlement_date_value = date_to
         if date_to:
             try:
                 _dt_to = _dt.strptime(date_to, "%Y-%m-%d").date()
                 from datetime import timedelta as _td
-                settlement_date_value = (_dt_to + _td(days=1)).isoformat()
+                if provider == "tamara":
+                    # Period ends Friday → +4 days = Tuesday.
+                    settlement_date_value = (
+                        _dt_to + _td(days=4)
+                    ).isoformat()
+                else:
+                    settlement_date_value = (
+                        _dt_to + _td(days=1)
+                    ).isoformat()
             except Exception:  # noqa: BLE001
                 pass
 
