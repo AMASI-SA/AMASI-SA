@@ -249,3 +249,147 @@ def make_accounts_balance_diagnostic_router(db, current_user):
         }
 
     return router
+
+
+def make_accounts_balance_repair_preview_router(db, current_user):
+    """Iter-239 — Read-only preview of the proposed ledger-side fix.
+
+    For every account whose `account_transactions` aggregate doesn't
+    match its `general_ledger` aggregate, this endpoint proposes a
+    SINGLE adjustment entry that would post the delta into the ledger
+    so the SSOT balance matches the user's manual transactions.
+
+    NET-BASED reconciliation (NOT per-transaction).  Rationale:
+      • Avoids double-counting transactions that DO have a matching
+        ledger entry (e.g. BNPL settlements that already double-write).
+      • Keeps audit history clean — ONE clearly-labeled adjustment per
+        account, never per row.
+      • Original `account_transactions` stay untouched; the adjustment
+        carries `metadata.original_transaction_ids[]` so the auditor
+        can trace which rows it covers.
+    """
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    @router.get("/accounts-balance-repair-preview")
+    async def accounts_balance_repair_preview(
+        account_id: Optional[str] = Query(None),
+        account_name_contains: Optional[str] = Query(None),
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        from financial_position_ssot import (
+            account_balance_ssot, compute_balance,
+        )
+
+        acc_filter: dict = {"user_id": uid}
+        if account_id:
+            acc_filter["id"] = account_id
+        if account_name_contains:
+            acc_filter["name"] = {
+                "$regex": account_name_contains, "$options": "i",
+            }
+
+        proposals: list[dict] = []
+        async for acc in db.accounts.find(acc_filter, {"_id": 0}):
+            acc_id = acc["id"]
+            # txn aggregate.
+            sum_in = 0.0
+            sum_out = 0.0
+            txn_ids: list[str] = []
+            async for t in db.account_transactions.find(
+                {"user_id": uid, "account_id": acc_id},
+                {"_id": 0, "id": 1, "amount": 1, "direction": 1},
+            ):
+                amt = float(t.get("amount") or 0)
+                if t.get("direction") == "in":
+                    sum_in += amt
+                else:
+                    sum_out += amt
+                if t.get("id"):
+                    txn_ids.append(t["id"])
+            txn_net = _r(sum_in - sum_out)
+
+            # ledger aggregate.
+            try:
+                bal = await compute_balance(
+                    db, user_id=uid, entity_type="bank",
+                    entity_id=acc_id, sub_account="main",
+                )
+                ledger_net = _r(bal.get("net_balance"))
+            except Exception:
+                ledger_net = 0.0
+            ledger_entries_count = await db.general_ledger.count_documents({
+                "user_id": uid, "entity_type": "bank",
+                "entity_id": acc_id, "status": "posted",
+            })
+
+            # SSOT shown in UI today.
+            ssot_now = _r(await account_balance_ssot(
+                db, user_id=uid, account=acc,
+            ))
+
+            # Already-applied repair (don't double-up).
+            existing_repair = await db.general_ledger.find_one({
+                "user_id": uid, "entity_type": "bank",
+                "entity_id": acc_id,
+                "entry_type": "balance_repair",
+                "status": "posted",
+            }, {"_id": 1, "amount": 1, "side": 1})
+
+            adjustment_needed = _r(txn_net - ledger_net)
+            if abs(adjustment_needed) < 0.01:
+                continue   # nothing to repair
+            # Expected SSOT after repair = current SSOT + adjustment.
+            expected_after = _r(ssot_now + adjustment_needed)
+
+            proposals.append({
+                "account_id": acc_id,
+                "account_name": acc.get("name"),
+                "account_type": acc.get("account_type"),
+                "current_ssot_balance": ssot_now,
+                "txn_net": txn_net,
+                "ledger_net": ledger_net,
+                "adjustment_needed": adjustment_needed,
+                "side_to_post": (
+                    "debit" if adjustment_needed > 0 else "credit"
+                ),
+                "expected_ssot_after_repair": expected_after,
+                "transactions_to_link_count": len(txn_ids),
+                "ledger_entries_already_present": ledger_entries_count,
+                "already_repaired": existing_repair is not None,
+                "original_transaction_ids_sample": txn_ids[:20],
+                "original_transaction_ids_total": len(txn_ids),
+            })
+
+        proposals.sort(key=lambda p: -abs(p["adjustment_needed"]))
+        return {
+            "success": True,
+            "read_only": True,
+            "iteration": "iter239-preview",
+            "summary": {
+                "accounts_with_drift": len(proposals),
+                "total_positive_adjustments": _r(sum(
+                    p["adjustment_needed"] for p in proposals
+                    if p["adjustment_needed"] > 0
+                )),
+                "total_negative_adjustments": _r(sum(
+                    p["adjustment_needed"] for p in proposals
+                    if p["adjustment_needed"] < 0
+                )),
+                "already_repaired_count": sum(
+                    1 for p in proposals if p["already_repaired"]
+                ),
+            },
+            "proposals": proposals,
+            "notes": [
+                "READ-ONLY: no data is modified.",
+                "Net-based reconciliation prevents double-counting "
+                "transactions that already have matching ledger entries.",
+                "One adjustment entry per account will be created on apply.",
+                "Adjustment side: debit (asset+) if txn_net > ledger_net.",
+                "Counterpart: 'balance_repair' adjustment account "
+                "(auto-created on apply).",
+            ],
+        }
+
+    return router

@@ -3679,8 +3679,12 @@ attach_ads_currency_routes(api, db)
 
 from accounts_balance_diagnostic_routes import (
     make_accounts_balance_diagnostic_router,
+    make_accounts_balance_repair_preview_router,
 )
 api.include_router(make_accounts_balance_diagnostic_router(db, current_user))
+api.include_router(
+    make_accounts_balance_repair_preview_router(db, current_user)
+)
 
 app.include_router(api)
 
