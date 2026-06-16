@@ -558,6 +558,64 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             "engine_gross_in_window": engine_gross,
             "engine_count_in_window": engine_count,
             "engine_full_settlement_totals": engine_summary,
+            "official_file_overrides": (
+                engine_summary.get("data_source") == "provider_official_file"
+            ),
+        }
+
+    # ── Iter-234d — Clear official Tamara/Tabby file entries ─────────
+    @router.delete("/clear-official-entries/{provider}")
+    async def clear_official_entries(
+        provider: str,
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+        dry_run: bool = Query(False),
+        user: dict = Depends(get_current_user),
+    ):
+        """Iter-234d — Delete imported provider-settlement-file entries
+        for a period, so the engine falls back to its dynamic
+        computation (the new Iter-234 logic).
+
+        Use this when an old, partial, or stale settlement file was
+        uploaded and now overrides the engine's computed totals with
+        wrong numbers.
+
+        Read-only safe via `?dry_run=true`.
+        """
+        if provider not in PROVIDERS:
+            raise HTTPException(400, f"unknown provider {provider}")
+        uid = user["id"]
+        q: dict = {
+            "user_id": uid,
+            "provider": provider,
+            "settlement_date": {"$gte": date_from, "$lte": date_to},
+        }
+        n = await db.settlement_entries.count_documents(q)
+        # Show a tiny sample for verification.
+        sample = []
+        async for e in db.settlement_entries.find(
+            q, {"_id": 0, "order_number": 1, "event_type": 1,
+                "settlement_date": 1, "actual_gross_amount": 1,
+                "actual_net_amount": 1, "actual_payment_fee": 1,
+                "source_file": 1, "file_hash": 1, "created_at": 1},
+        ).sort("created_at", -1).limit(5):
+            sample.append(e)
+        deleted = 0
+        if not dry_run and n > 0:
+            res = await db.settlement_entries.delete_many(q)
+            deleted = res.deleted_count
+        return {
+            "success": True,
+            "dry_run": dry_run,
+            "provider": provider,
+            "period": {"from": date_from, "to": date_to},
+            "matched_entries": n,
+            "deleted_entries": deleted,
+            "sample_first_5": sample,
+            "next_step": (
+                "Re-fetch the settlement preview; engine should now show "
+                "data_source='computed' with the Iter-234 numbers."
+            ),
         }
 
     # ── Iter-221 — Registration page support endpoints ────────────────

@@ -3805,3 +3805,45 @@ After redeploy:
 
 ### Deployment note
 Still PREVIEW only. **Redeploy required** to fix production net_payable to 16,066.90.
+
+---
+
+## Iter-234c/d — Root Cause: Stale Tamara Official File Override (Feb 2026)
+
+### Production diagnostic (from merchant)
+The diagnostic revealed the real root cause:
+```
+"engine_full_settlement_totals": {
+  "data_source": "provider_official_file",   ← Engine using OLD uploaded file
+  "transactions_count": 101,                  (not the computed 116)
+  "gross_sales": 20714.57,                    (not Tamara's true 20,848.30)
+  "commission": 1599.54,                      (not 1,610.30)
+  "net_payable": 15945.65                     (vs Tamara file 16,066.90)
+},
+"engine_matches_this_txn": true,             ← Iter-234 IS active
+"engine_gross_in_window": 23911.26           ← Pre-engine raw gross
+```
+
+Order 264553438 ENTERS the computed totals correctly (Iter-234 is alive and working — `engine_matches_this_txn: true`). But the Iter-147 "official file override" branch hijacks the response and substitutes numbers from an old uploaded Tamara settlement file stored in `settlement_entries`.
+
+### Fix (Iter-234d)
+1. **Surface `official_file_overrides: bool`** in the diagnostic so it's immediately obvious whether the engine output came from the file or from compute.
+2. **NEW endpoint** `DELETE /api/bnpl/settlements/clear-official-entries/{provider}?date_from=...&date_to=...&dry_run=false`:
+   - Removes the stale `settlement_entries` rows for the period.
+   - Engine then falls back to dynamic `data_source = "computed"` (which now includes the Iter-234 orphan-refund recovery).
+   - Read-only via `?dry_run=true` (returns count + sample first 5 rows for verification).
+
+### Verified
+- Endpoint imports cleanly.
+- Preview dry-run returns `matched_entries: 0` (no Tamara files imported in preview DB).
+- 19/19 regression pytest still passing.
+
+### How the merchant fixes production
+After redeploy:
+1. (Dry-run preview) `DELETE /api/bnpl/settlements/clear-official-entries/tamara?date_from=2026-06-06&date_to=2026-06-12&dry_run=true`
+   → Returns `matched_entries: N` + sample. Verify these are the stale entries you want to remove.
+2. Execute: same URL with `dry_run=false`.
+3. Refresh Tamara settlement page → numbers should now match Tamara file (~16,067 vs 16,066.90).
+
+### Deployment note
+Iter-234c + Iter-234d are in PREVIEW only. Redeploy required.
