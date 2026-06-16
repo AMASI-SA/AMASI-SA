@@ -77,10 +77,13 @@ DEFAULTS = {
         "mdr_percent": 0.0699,
         "fixed_fee_per_order": 1.50,
         "vat_on_fees_percent": 0.15,
-        # Iter-145 — Tamara invoice confirms 6.99% MDR + 1.50 SAR
-        # fixed/order, not 7% with no fixed fee.  Refundable rate
-        # equals full MDR (no separate refundable slice).
-        "refundable_commission_percent": 0.0699,
+        # Iter-232 — Tamara does NOT refund commission on refunded
+        # orders.  Their Statement file charges the full MDR + fixed_fee
+        # on every Captured order; refunds only deduct the net amount,
+        # never the commission.  Setting refundable to 0 makes the
+        # engine match Tamara's totals to the cent (vs. the previous
+        # 6.99% which over-rebated and produced a ~+200 SAR drift).
+        "refundable_commission_percent": 0.0,
         "settlement_period_days": 7,
         "transfer_days": 2,
         # Iter-121 — Tamara closes invoices Sunday, pays Tuesday.

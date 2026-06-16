@@ -3656,3 +3656,37 @@ This ignored the merchant's saved configuration at `/integrations/bnpl` (`bnpl_s
 ### Tests
 - `/app/backend/tests/test_bnpl_iter231_dynamic_settlement_date.py` — 4/4 PASSED
 - Regression: `test_bnpl_settlement_iter220.py` (8/8), `test_settlement_rounding_iter228.py` (2/2), `test_bnpl_iter121_weekday_cycle.py` (5/6 — 1 pre-existing failure unrelated to this change, due to `settlement_fee_per_invoice` Tabby default = 6 SAR now, not 5).
+
+---
+
+## Iter-232 — Tamara Commission Rebate Fix (Feb 2026)
+
+### Problem (root cause discovered from official Statement)
+The merchant uploaded the official Tamara Statement (P0420741SA260613, 06–12 June 2026) showing:
+- Tamara Fees: **1,610.39** SAR  (= 6.99% × Captured + 1.50 × order_count, with NO refund rebate)
+- VAT: **241.64** SAR
+- Net Payable: **16,066.90** SAR
+
+The system was producing **15,945.65** SAR (≈ 121 SAR drift) because of a wrong assumption baked into the engine: **`refundable_commission_pct = 6.99%` for Tamara**, meaning the engine rebated the full MDR on every refunded amount.
+
+**Reality (per Statement)**: Tamara does **NOT** refund commission on refunded orders. Every Captured order is charged the full MDR + fixed_fee regardless of whether it is refunded later in the same Statement.
+
+### Fix
+- `/app/backend/bnpl/settlements_service.py::DEFAULT_FEE_RATES["tamara"]["refundable_commission_pct"]`: `6.99` → **`0.0`**
+- `/app/backend/bnpl/config_store.py::DEFAULTS["tamara"]["refundable_commission_percent"]`: `0.0699` → **`0.0`**
+- Tabby unchanged (`refundable_commission_pct = 4.99` — Tabby DOES refund the refundable slice).
+
+### Verified
+- For the merchant's 06–12/06 cycle the engine now computes:
+  - commission ≈ 1,610.30 (vs. Tamara 1,610.39 — drift 0.09 SAR / per-row rounding)
+  - VAT ≈ 241.55 (vs. 241.64 — drift 0.09)
+  - net_payable ≈ 16,067.08 (vs. 16,066.90 — drift 0.18)
+- Drift is now well below 1 SAR (was ~121 SAR before).
+- No file upload required — fully automatic.
+
+### Tests
+- `/app/backend/tests/test_bnpl_iter232_tamara_no_rebate.py` — 3/3 PASSED
+- Regression: 17/17 across iter220, iter228, iter231, iter232.
+
+### Important deployment note
+This fix lives in PREVIEW. The user must **redeploy** for the change to take effect on https://mezansalla.com.

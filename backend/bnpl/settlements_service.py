@@ -103,7 +103,13 @@ DEFAULT_FEE_RATES: Dict[str, Dict[str, float]] = {
                "settlement_period_days": 7},
     "tamara": {"commission_pct": 6.99, "vat_pct": 15.0,
                "fixed_fee_per_order": 1.50,
-               "refundable_commission_pct": 6.99,
+               # Iter-232 — Tamara DOES NOT refund commission on
+               # refunded orders.  Their weekly Statement charges the
+               # full MDR + fixed_fee on every Captured order, and
+               # lists Refunds as a separate net-amount deduction with
+               # ZERO commission rebate.  Setting this to 0 makes the
+               # engine match Tamara's official totals to the cent.
+               "refundable_commission_pct": 0.0,
                "settlement_fee_per_invoice": 0.0,
                "settlement_fee_vat_applicable": True,
                "settlement_period_days": 7},
