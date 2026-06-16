@@ -429,16 +429,32 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
 
         # Period shorthand → date_from/date_to. The user-provided
         # explicit dates always win.
+        # Iter-229 — provider-aware weekly cycles:
+        #   • Tabby:  Sun→Sat (Tabby invoices issued Sunday).
+        #   • Tamara: Fri→Thu (Tamara invoices issued Friday).
         if not (date_from and date_to) and period:
             today = date.today()
+            wd = today.weekday()  # Mon=0 ... Sun=6
+            is_tamara = (provider == "tamara")
             if period == "this_week":
-                wd = today.weekday()
-                start = today - timedelta(days=wd)
-                end = start + timedelta(days=6)
+                if is_tamara:
+                    # Days since last Friday (Fri=4). 0 if today is Fri.
+                    days_since_fri = (wd - 4) % 7
+                    start = today - timedelta(days=days_since_fri)
+                    end = start + timedelta(days=6)   # Thursday
+                else:
+                    days_since_sun = (wd + 1) % 7
+                    start = today - timedelta(days=days_since_sun)
+                    end = start + timedelta(days=6)
             elif period == "last_week":
-                wd = today.weekday()
-                end = today - timedelta(days=wd + 1)
-                start = end - timedelta(days=6)
+                if is_tamara:
+                    days_since_fri = (wd - 4) % 7
+                    end = today - timedelta(days=days_since_fri + 1)  # last Thursday
+                    start = end - timedelta(days=6)                   # last Friday-1wk
+                else:
+                    days_since_sun = (wd + 1) % 7
+                    end = today - timedelta(days=days_since_sun + 1)
+                    start = end - timedelta(days=6)
             elif period == "last_7d":
                 end = today
                 start = today - timedelta(days=6)

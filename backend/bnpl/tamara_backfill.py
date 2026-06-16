@@ -204,10 +204,28 @@ async def backfill_tamara(
     """Scan up to `limit` unified_orders rows for the user (newest
     first), optionally filtered to `order_date >= since`, look each up
     against Tamara, and update local data accordingly.
+
+    Iter-229 — Refund detection fix mirrored from Iter-227 (Tabby):
+    Even when the operator passes a tight `since=last_week`, we widen
+    the window to a minimum of 90 days. This captures refunds applied
+    THIS week on Tamara orders created months ago — which would
+    otherwise be silently missed.
     """
     secrets = await get_raw_secrets(db, user_id, "tamara")
     if not secrets.get("api_token"):
         return {"ok": False, "error": "Tamara api_token not set"}
+
+    # Iter-229 — enforce 90-day minimum lookback for refund completeness.
+    REFUND_LOOKBACK_DAYS = 90
+    from datetime import datetime, timedelta, timezone
+    min_iso = (
+        datetime.now(timezone.utc) - timedelta(days=REFUND_LOOKBACK_DAYS)
+    ).date().isoformat()
+    requested_since = since
+    if since and since > min_iso:
+        since = min_iso  # widen
+    elif not since:
+        since = min_iso
 
     client = TamaraClient(
         api_token=secrets["api_token"],
@@ -281,6 +299,10 @@ async def backfill_tamara(
 
     # How many candidates remain for a follow-up batch?
     stats["remaining_after_run"] = await db.unified_orders.count_documents(query)
+    # Iter-229 — surface the widened window for operator visibility.
+    stats["requested_since"] = requested_since
+    stats["effective_since"] = since
+    stats["refund_lookback_days"] = REFUND_LOOKBACK_DAYS
 
     await record_sync(db, user_id, "tamara")
     return {"ok": True, "stats": stats}
