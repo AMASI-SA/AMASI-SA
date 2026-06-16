@@ -378,6 +378,210 @@ def make_account_drift_detail_router(db, current_user):
 def make_repair_audit_router(db, current_user):
     """Iter-239f — READ-ONLY safety audit.
 
+    Confirms no apply ever ran (zero repair entries exist).
+    """
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    @router.get("/balance-repair-audit")
+    async def balance_repair_audit(user: dict = Depends(current_user)):
+        uid = user["id"]
+        match = {
+            "user_id": uid,
+            "$or": [
+                {"entry_type": "balance_repair"},
+                {"metadata.source": "account_transactions_repair"},
+                {"metadata.repair_iteration": {"$regex": "Iter-239"}},
+                {"metadata.created_by": "system_repair"},
+            ],
+        }
+        total_count = await db.general_ledger.count_documents(match)
+        entries: list[dict] = []
+        async for e in db.general_ledger.find(match, {
+            "_id": 0, "id": 1, "entity_type": 1, "entity_id": 1,
+            "entry_type": 1, "side": 1, "amount": 1, "posted_at": 1,
+            "notes": 1, "metadata": 1,
+        }).sort([("posted_at", -1)]).limit(100):
+            entries.append(e)
+        return {
+            "success": True, "read_only": True,
+            "iteration": "iter239f-audit",
+            "apply_was_run": total_count > 0,
+            "repair_entries_count": total_count,
+            "repair_entries_first_100": entries,
+            "rollback_needed": total_count > 0,
+        }
+
+    return router
+
+
+def make_endpoint_ledger_coverage_router(db, current_user):
+    """Iter-239h — READ-ONLY endpoint → general_ledger coverage map.
+
+    Combines:
+      1. A STATIC map of every code-site that writes account_transactions
+         (derived from grep against the repo on 2026-06-16) + whether
+         that site ALSO writes a matching general_ledger entry.
+      2. DYNAMIC counts from the live DB grouped by transaction_type +
+         whether each row is mirrored in the ledger (by matching the
+         row's id OR idempotency_key in general_ledger.metadata).
+
+    Output is sorted by `affected_transactions_count` so the worst
+    offenders are at the top.
+    """
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    # Iter-239h — STATIC map.  Update this if new code paths land.
+    STATIC_MAP = [
+        {"endpoint": "POST /api/accounts/{id}/transactions",
+         "file": "accounts_routes.py:589",
+         "txn_types": ["deposit", "withdrawal", "internal_transfer",
+                       "manual_adjustment"],
+         "writes_account_transactions": True,
+         "writes_general_ledger": False},
+        {"endpoint": "POST /api/accounts/{id}/transactions (legacy path)",
+         "file": "accounts_routes.py:913",
+         "txn_types": ["any"],
+         "writes_account_transactions": True,
+         "writes_general_ledger": False},
+        {"endpoint": "POST /api/transfers",
+         "file": "transfers_routes.py:308",
+         "txn_types": ["internal_transfer"],
+         "writes_account_transactions": True,
+         "writes_general_ledger": False},
+        {"endpoint": "POST /api/liabilities/{id}/pay (ad_account/salary)",
+         "file": "liabilities_routes.py:274",
+         "txn_types": ["ad_account_topup", "salary_advance",
+                       "debt_payment"],
+         "writes_account_transactions": True,
+         "writes_general_ledger": False},
+        {"endpoint": "POST /api/shipping/companies/{id}/payments",
+         "file": "shipping_accounts.py:93,767",
+         "txn_types": ["shipping_debt_payment", "courier_transfer"],
+         "writes_account_transactions": True,
+         "writes_general_ledger": False},
+        {"endpoint": "POST /api/expenses",
+         "file": "expenses_routes.py:265",
+         "txn_types": ["expense"],
+         "writes_account_transactions": True,
+         "writes_general_ledger": False},
+        {"endpoint": "POST /api/ad-accounts/{id}/charges or topups",
+         "file": "ad_account_routes.py:519,1235",
+         "txn_types": ["ad_account_charge", "ad_account_topup"],
+         "writes_account_transactions": True,
+         "writes_general_ledger": False},
+        {"endpoint": "POST /api/bnpl/settlements/register",
+         "file": "bnpl/settlements_routes.py:170",
+         "txn_types": ["settlement"],
+         "writes_account_transactions": True,
+         "writes_general_ledger": True},   # ✓ Iter-219+
+        {"endpoint": "POST /api/bnpl/settlements/backfill-bank-transactions",
+         "file": "bnpl/settlements_routes.py:273",
+         "txn_types": ["settlement"],
+         "writes_account_transactions": True,
+         "writes_general_ledger": True},   # backfill of ledger entries
+    ]
+
+    @router.get("/endpoint-ledger-coverage")
+    async def endpoint_ledger_coverage(
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        # Build idem/id sets mirrored in ledger (ALL banks).
+        mirrored_idem: set[str] = set()
+        mirrored_txn_ids: set[str] = set()
+        async for e in db.general_ledger.find(
+            {"user_id": uid},
+            {"_id": 0, "metadata": 1},
+        ):
+            m = e.get("metadata") or {}
+            if m.get("idempotency_key"):
+                mirrored_idem.add(m["idempotency_key"])
+            if m.get("account_transaction_id"):
+                mirrored_txn_ids.add(m["account_transaction_id"])
+
+        # Dynamic per-type counts.
+        type_stats: dict = {}
+        async for t in db.account_transactions.find(
+            {"user_id": uid},
+            {"_id": 0, "id": 1, "transaction_type": 1, "amount": 1,
+             "direction": 1, "metadata": 1},
+        ):
+            ttype = t.get("transaction_type") or "unknown"
+            t_id = t.get("id")
+            t_idem = (t.get("metadata") or {}).get("idempotency_key")
+            mirrored = (
+                (t_id and t_id in mirrored_txn_ids)
+                or (t_idem and t_idem in mirrored_idem)
+            )
+            s = type_stats.setdefault(ttype, {
+                "transaction_type": ttype,
+                "total_count": 0, "mirrored_count": 0,
+                "unmirrored_count": 0,
+                "mirrored_amount": 0.0, "unmirrored_amount": 0.0,
+            })
+            amt = float(t.get("amount") or 0)
+            s["total_count"] += 1
+            if mirrored:
+                s["mirrored_count"] += 1
+                s["mirrored_amount"] += amt
+            else:
+                s["unmirrored_count"] += 1
+                s["unmirrored_amount"] += amt
+        for s in type_stats.values():
+            s["mirrored_amount"] = _r(s["mirrored_amount"])
+            s["unmirrored_amount"] = _r(s["unmirrored_amount"])
+
+        # Stitch dynamic counts into static map.
+        report = []
+        for site in STATIC_MAP:
+            affected_total = 0
+            affected_unmirrored = 0
+            unmirrored_amount = 0.0
+            for ttype in site["txn_types"]:
+                if ttype == "any":
+                    for s in type_stats.values():
+                        affected_total += s["total_count"]
+                        affected_unmirrored += s["unmirrored_count"]
+                        unmirrored_amount += s["unmirrored_amount"]
+                    continue
+                s = type_stats.get(ttype)
+                if s:
+                    affected_total += s["total_count"]
+                    affected_unmirrored += s["unmirrored_count"]
+                    unmirrored_amount += s["unmirrored_amount"]
+            report.append({
+                **site,
+                "affected_transactions_count": affected_total,
+                "affected_unmirrored_count": affected_unmirrored,
+                "unmirrored_amount_total": _r(unmirrored_amount),
+            })
+
+        # Sort: most unmirrored first (worst offenders top).
+        report.sort(
+            key=lambda r: -r["affected_unmirrored_count"],
+        )
+
+        return {
+            "success": True,
+            "read_only": True,
+            "iteration": "iter239h-coverage-map",
+            "report_endpoints": report,
+            "per_transaction_type_stats": sorted(
+                type_stats.values(),
+                key=lambda s: -s["unmirrored_count"],
+            ),
+            "notes": [
+                "STATIC map manually derived from code on 2026-06-16.",
+                "DYNAMIC counts are live from your DB.",
+                "An endpoint is a 'leak' if writes_general_ledger == false AND affected_unmirrored_count > 0.",
+                "Fix the leaks at their SOURCE (double-write) rather than backfilling adjustments.",
+                "READ-ONLY: no data is modified.",
+            ],
+        }
+
+    return router
+    """Iter-239f — READ-ONLY safety audit.
+
     Confirms no apply ever ran (zero repair entries exist) AND provides
     a future-ready rollback PREVIEW (still read-only, just lists what
     WOULD be reversed if you ever ask for an apply).
