@@ -3733,3 +3733,43 @@ Validated via:
 
 ### Deployment note
 This fix lives in PREVIEW. **Redeploy** required to push to https://mezansalla.com before the merchant can run the backfill endpoint.
+
+---
+
+## Iter-234 — Tamara Same-Week Capture+Refund Recovery (Feb 2026)
+
+### Problem (live production confirmation)
+Merchant's Tamara Statement (06–12 June 2026) showed:
+- Captured: 20,848.30 (includes order 264553438 at 133.73)
+- Refunds:  2,929.37 (includes order 264553438 at 133.73)
+- Net:      17,918.93
+
+System returned:
+- gross_sales: **20,714.57**  ← short by exactly 133.73
+- refunds:    2,929.37  ✓
+- net_sales:  17,785.20  ← short by 133.73
+
+### Root cause
+Order `264553438` was captured AND refunded inside the same week. Tamara's Statement counts it in BOTH columns. Our engine groups Tamara sales by `effective_settlement_date`, which for this order fell back to `created_at_provider = 2026-06-04` (estimated) — OUTSIDE the 06–12 window. The refund (refunded_at = 09/06) was correctly INSIDE the window. Result: gross missed 133.73 while refunds counted it.
+
+### Fix
+In `_compute_provider_totals` for Tamara (only): after aggregating refunds, scan each refund inside the window. If its original `payment_transactions` row (matched by `provider_payment_id`, fallback `order_reference_id`) is NOT in the window's gross aggregation, add the original amount back into `gross_sales` and bump `transactions_count`. This mirrors Tamara's "capture+refund-in-same-week shows on both sides" rule.
+
+Tabby is unaffected (recovery gated on `provider == "tamara"`).
+
+### Tests
+- `/app/backend/tests/test_bnpl_iter234_orphan_refund_recovery.py` — 2/2 PASSED
+  - Tamara orphan refund recovers into gross (gross 100 + 133.73 = 233.73).
+  - Tabby orphan refund does NOT recover (regression guard).
+- Regression: 17/17 across iter220, iter228, iter231, iter232.
+
+### Expected outcome after redeploy
+For the merchant's 06–12/06 cycle:
+- gross_sales: 20,714.57 → **20,848.30** (+133.73)
+- total_refunds: 2,929.37 (unchanged)
+- net_sales: 17,785.20 → **17,918.93** (+133.73)
+- commission: 1,599.54 → ~1,610.30 (Tamara MDR on full Captured + fixed_fee × N)
+- net_payable: ~16,066.90 → matches Tamara Statement to within ~0.20 SAR
+
+### Deployment note
+PREVIEW only. **Redeploy** to push to https://mezansalla.com.

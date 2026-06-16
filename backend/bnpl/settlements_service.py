@@ -446,6 +446,81 @@ async def _compute_provider_totals(
         refunds_count = int(r.get("n") or 0)
         refunds = float(r.get("refunds") or 0)
 
+    # Iter-234 — Tamara-only "orphan refund recovery".
+    #
+    # Problem: when an order is BOTH captured AND refunded inside the
+    # SAME weekly Statement, Tamara counts it in BOTH Captured and
+    # Refunds.  Our engine groups Tamara sales by
+    # `effective_settlement_date` (priority: provider_captured →
+    # billing_eligible → created_at_provider).  If the only attribution
+    # we have is `created_at_provider` and it falls outside the window,
+    # the order shows up ONLY on the refunds side and we miss its
+    # +amount in Captured → net_sales is short by exactly that amount.
+    #
+    # Fix: for Tamara, scan refunds inside the window and "re-credit"
+    # the gross side with the matching `payment_transactions.amount`
+    # for any refund whose original order is missing from the window's
+    # sales aggregation.  Match by `provider_payment_id` (Tamara
+    # order_id) or by `order_reference_id`.
+    if provider == "tamara" and refunds_count > 0:
+        # Build the set of provider_ids already counted in `gross`.
+        in_window_ids: set[str] = set()
+        async for t in db.payment_transactions.find(
+            sales_match,
+            {"_id": 0, "provider_id": 1},
+        ):
+            pid = t.get("provider_id")
+            if pid:
+                in_window_ids.add(pid)
+
+        # For every refund in the window, look up its original txn and
+        # add it to gross if not already counted.
+        recovered_amount = 0.0
+        recovered_count = 0
+        async for rf in db.payment_refunds.find(
+            refund_match,
+            {"_id": 0, "provider_payment_id": 1, "order_reference_id": 1,
+             "amount": 1},
+        ):
+            pp_id = rf.get("provider_payment_id")
+            ref_id = rf.get("order_reference_id")
+            if pp_id and pp_id in in_window_ids:
+                continue  # original already in gross — nothing to recover
+            # Find the original Tamara payment.  Match by provider_id
+            # first (strongest), fall back to order_reference_id.
+            orig = None
+            if pp_id:
+                orig = await db.payment_transactions.find_one(
+                    {"user_id": user_id, "provider": "tamara",
+                     "provider_id": pp_id},
+                    {"_id": 0, "amount": 1, "provider_id": 1,
+                     "is_pre_accounting": 1},
+                )
+            if not orig and ref_id:
+                orig = await db.payment_transactions.find_one(
+                    {"user_id": user_id, "provider": "tamara",
+                     "order_reference_id": ref_id},
+                    {"_id": 0, "amount": 1, "provider_id": 1,
+                     "is_pre_accounting": 1},
+                )
+            if not orig:
+                continue
+            if orig.get("is_pre_accounting"):
+                continue
+            orig_pid = orig.get("provider_id")
+            if orig_pid and orig_pid in in_window_ids:
+                continue
+            amt = float(orig.get("amount") or 0)
+            if amt <= 0:
+                continue
+            recovered_amount += amt
+            recovered_count += 1
+            if orig_pid:
+                in_window_ids.add(orig_pid)
+        if recovered_amount > 0:
+            gross += recovered_amount
+            count += recovered_count
+
     return {
         "transactions_count": count,
         "refunds_count": refunds_count,
