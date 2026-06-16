@@ -392,4 +392,141 @@ def make_accounts_balance_repair_preview_router(db, current_user):
             ],
         }
 
+    # ── Iter-239b — BNPL Tabby/Tamara two-source comparator ───────────
+    @router.get("/bnpl-balance-source-comparison/{provider}")
+    async def bnpl_balance_source_comparison(
+        provider: str,
+        user: dict = Depends(current_user),
+    ):
+        """Iter-239b — Explain why /accounts and /bnpl-settlements/register
+        can show DIFFERENT balances for the same BNPL provider.
+
+        Source A: `/accounts` (account_balance_ssot)
+          → `get_bnpl_provider_balance` → `compute_settlement_for_provider`
+          → balance = expected_net_payable − transferred_amount
+          → ENGINE-driven (re-computed every call from
+            payment_transactions / payment_refunds).
+
+        Source B: `/bnpl-settlements/register/registration-overview`
+          → reads `current_receivable` directly from `general_ledger`
+            (entity_type=payment_gateway, entity_id=<provider>,
+             sub_account=receivable).
+          → LEDGER-driven (sum of posted credit − debit legs).
+
+        Difference root causes:
+          • Adjustments/migrations posted in ledger but NOT in
+            payment_transactions/refunds.
+          • Bridge entries (sales/refunds/settlements) that did not
+            round to the same SAR as the engine's pre-rounding sum.
+          • Orphan legacy ledger entries from past data migrations.
+        """
+        uid = user["id"]
+        if provider not in {"tabby", "tamara"}:
+            from fastapi import HTTPException
+            raise HTTPException(400, "provider must be tabby or tamara")
+
+        # Source A: engine.
+        from bnpl.balance_service import get_bnpl_provider_balance
+        a = await get_bnpl_provider_balance(db, uid, provider)
+        engine_balance = _r(a.get("balance"))
+
+        # Source B: ledger receivable sub-account.
+        from ledger_core import compute_balance as _cb
+        recv = await _cb(
+            db, user_id=uid, entity_type="payment_gateway",
+            entity_id=provider, sub_account="receivable",
+        )
+        ledger_receivable = _r(recv.get("net_balance"))
+
+        diff = _r(ledger_receivable - engine_balance)
+
+        # Breakdown by entry_type within payment_gateway/<provider>/receivable.
+        from collections import defaultdict
+        by_entry_type: dict = defaultdict(
+            lambda: {"credit": 0.0, "debit": 0.0, "count": 0,
+                     "samples": []},
+        )
+        suspect_entries: list[dict] = []
+        async for e in db.general_ledger.find(
+            {"user_id": uid, "entity_type": "payment_gateway",
+             "entity_id": provider, "sub_account": "receivable",
+             "status": "posted"},
+            {"_id": 0, "id": 1, "entry_type": 1, "side": 1,
+             "amount": 1, "posted_at": 1, "notes": 1,
+             "txn_group_id": 1, "metadata": 1},
+        ):
+            etype = e.get("entry_type") or "unknown"
+            side = e.get("side")
+            amt = float(e.get("amount") or 0)
+            b = by_entry_type[etype]
+            if side == "credit":
+                b["credit"] += amt
+            elif side == "debit":
+                b["debit"] += amt
+            b["count"] += 1
+            if len(b["samples"]) < 3:
+                b["samples"].append({
+                    "ledger_id": e.get("id"),
+                    "side": side,
+                    "amount": _r(amt),
+                    "posted_at": str(e.get("posted_at") or ""),
+                    "notes": (e.get("notes") or "")[:120],
+                    "txn_group_id": e.get("txn_group_id"),
+                    "metadata_source": (e.get("metadata") or {})
+                                       .get("source"),
+                })
+            # Mark unusual entry types as suspect (not the normal
+            # sales/refund/settlement triplet).
+            if etype not in (
+                "bnpl_sale", "bnpl_refund", "bnpl_settlement",
+            ):
+                suspect_entries.append({
+                    "ledger_id": e.get("id"),
+                    "entry_type": etype,
+                    "side": side,
+                    "amount": _r(amt),
+                    "posted_at": str(e.get("posted_at") or ""),
+                    "notes": (e.get("notes") or "")[:160],
+                    "metadata": e.get("metadata"),
+                })
+
+        return {
+            "success": True,
+            "read_only": True,
+            "iteration": "iter239b-bnpl-comparator",
+            "provider": provider,
+            "source_a_accounts_page": {
+                "name": "/accounts (engine: compute_settlement_for_provider)",
+                "balance": engine_balance,
+                "components": a.get("components"),
+                "transactions_count": a.get("transactions_count"),
+                "fee_rates_engine_version": (
+                    (a.get("fee_rates") or {}).get("fee_source")
+                ),
+            },
+            "source_b_settlements_page": {
+                "name": "/bnpl-settlements/register (ledger: payment_gateway/receivable)",
+                "balance": ledger_receivable,
+                "total_credit": _r(recv.get("total_credit")),
+                "total_debit": _r(recv.get("total_debit")),
+            },
+            "difference": diff,
+            "by_entry_type": {
+                k: {"credit": _r(v["credit"]),
+                    "debit": _r(v["debit"]),
+                    "net": _r(v["credit"] - v["debit"]),
+                    "count": v["count"],
+                    "samples": v["samples"]}
+                for k, v in by_entry_type.items()
+            },
+            "suspect_entries": suspect_entries[:25],
+            "notes": [
+                "If difference > 0: the ledger has MORE receivable than the engine computes.",
+                "Common causes: legacy migration entries, manual adjustments, or rounding drift.",
+                "Look in suspect_entries[] for non-standard entry_types.",
+                "Look in by_entry_type[].samples for unusual notes.",
+                "READ-ONLY: no data is modified.",
+            ],
+        }
+
     return router
