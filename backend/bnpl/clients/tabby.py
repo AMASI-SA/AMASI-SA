@@ -132,14 +132,21 @@ class TabbyClient:
 
         Instead of sending the broken server-side filter, we now:
           1. Page through ALL payments (newest first — Tabby's default).
-          2. Apply the date filter **client-side** on `created_at`.
-          3. Short-circuit when we reach an item OLDER than `since_iso`
-             (Tabby sorts newest-first, so the remaining pages would
-             all be older too).
+          2. Apply the date filter **client-side**.
+          3. Short-circuit when we reach an item whose latest activity
+             is OLDER than `since_iso`.
 
-        This costs more HTTP calls than the server filter would, but
-        it's the only way to guarantee correctness across every
-        merchant account configuration.
+        🆕 Iter-227 — refund detection fix:
+        Previously this used `created_at` for the client-side filter.
+        That caused refunds on OLD payments (e.g. payment from 3
+        months ago + refund this week) to be SILENTLY MISSED — because
+        the old payment fell outside the `since_iso` window and its
+        embedded `refunds[]` array was never read.
+
+        Now we look at `max(updated_at, created_at)` so any payment
+        whose state changed inside the window is included, regardless
+        of when it was originally created. This catches recent
+        refunds on historical payments cleanly.
         """
         out: List[Dict[str, Any]] = []
         offset = 0
@@ -148,7 +155,7 @@ class TabbyClient:
 
         for _ in range(max_pages):
             # NOTE: NO date filter passed to Tabby — only pagination.
-            # We filter on `created_at` ourselves below.
+            # We filter on `updated_at` ourselves below.
             page = await self.list_payments(
                 limit=page_size,
                 offset=offset,
@@ -161,14 +168,35 @@ class TabbyClient:
 
             crossed_cutoff = False
             for it in items:
+                # Iter-227 — use the latest activity timestamp on the
+                # payment (refund / capture / state change) so we
+                # don't drop refunds on old payments.
+                updated = (it.get("updated_at") or "")[:10]
                 created = (it.get("created_at") or "")[:10]
-                if cutoff and created and created < cutoff:
-                    # Tabby returned an item OLDER than our cutoff;
-                    # everything beyond this point is older too.
-                    crossed_cutoff = True
-                    break
-                if not cutoff or not created or created >= cutoff:
+                latest = max(updated, created) if (updated or created) else ""
+                if cutoff and latest and latest < cutoff:
+                    # Tabby sorts newest-first BY CREATED_AT — but a
+                    # payment with a stale created_at AND a recent
+                    # refund may appear later in pagination. We DO
+                    # NOT short-circuit on individual stale items
+                    # any more; instead we break only when an ENTIRE
+                    # page is stale (a safer heuristic).
+                    continue
+                if not cutoff or not latest or latest >= cutoff:
                     out.append(it)
+
+            # Stop only when the whole page contributed nothing.
+            if not any(
+                (
+                    max(
+                        (it.get("updated_at") or "")[:10],
+                        (it.get("created_at") or "")[:10],
+                    )
+                    >= cutoff
+                )
+                for it in items
+            ) and cutoff:
+                crossed_cutoff = True
 
             if crossed_cutoff:
                 break

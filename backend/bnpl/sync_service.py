@@ -27,7 +27,7 @@ Source priority (lower wins):
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from .clients.tabby import TabbyClient, TabbyError
@@ -287,6 +287,25 @@ async def sync_tabby_payments(
         act = secrets.get("activation_date") or datetime.now(timezone.utc).date().isoformat()
         since_iso = f"{act}T00:00:00Z"
 
+    # Iter-227 — Refund detection fix. A refund issued THIS week on
+    # a payment created 3 months ago would never reach our DB because
+    # the old payment fell outside the `since_iso` window. To capture
+    # such refunds reliably, we widen the lookback to a minimum of
+    # 90 days — Tabby's refund policy typically caps at ~180 days,
+    # and 90d is a good balance between completeness and HTTP cost.
+    REFUND_LOOKBACK_DAYS = 90
+    min_iso = (
+        datetime.now(timezone.utc)
+        - timedelta(days=REFUND_LOOKBACK_DAYS)
+    ).date().isoformat() + "T00:00:00Z"
+    if since_iso > min_iso:
+        # User asked for a tighter window — widen it to ensure we
+        # don't miss refunds on historical payments.
+        original_since = since_iso
+        since_iso = min_iso
+    else:
+        original_since = since_iso
+
     client = TabbyClient(
         secret_key=secrets["secret_key"],
         merchant_code=secrets.get("merchant_code") or "",
@@ -313,6 +332,11 @@ async def sync_tabby_payments(
         "skipped_no_id": 0,
         "first_payment_created_at": created_dates[0] if created_dates else None,
         "last_payment_created_at": created_dates[-1] if created_dates else None,
+        # Iter-227 — surface the actual window used so the UI/operator
+        # can see that we widened to 90d for refund detection.
+        "requested_since": original_since,
+        "effective_since": since_iso,
+        "refund_lookback_days": REFUND_LOOKBACK_DAYS,
         "filter_used": {
             "endpoint": f"{client.base_url}/api/v2/payments",
             "client_side_filter": True,

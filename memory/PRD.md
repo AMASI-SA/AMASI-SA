@@ -3519,3 +3519,32 @@ The same endpoint will give a definitive answer on the 40 production orphans wit
   5. صفحات المركز المالي والأرصدة سيُحدَّثان فوراً (بدون cache)
   6. القيود ما زالت في الدفتر للتدقيق
 
+
+
+## Completed Work — Iter-227 (Feb 16 2026): Tabby Refund Sync Fix (Layers 1+2)
+
+**User issue**: 132.92 ر.س refund on Tabby didn't sync to the system; auto-fill expected 13,361.86 but Tabby's invoice was 13,236.78 (Δ 125.08).
+
+### Root cause
+`list_payments_since` filtered by **`created_at`** of the PAYMENT — not when it was last updated. A payment created months ago and refunded this week was excluded from the window, and its embedded `refunds[]` array was never read.
+
+### Fix — 2 layers shipped
+
+**Layer 1 — `clients/tabby.py::list_payments_since`**: switched the client-side cutoff from `created_at` to `max(updated_at, created_at)`. Any payment whose state changed inside the window is now included, regardless of original creation date. Removed the early short-circuit on single stale items (replaced with a page-level heuristic — only stop when an entire page contributes nothing).
+
+**Layer 2 — `sync_service.sync_tabby_payments`**: enforced a 90-day minimum lookback. When the operator requests `since=last_week`, the sync silently widens to `today-90d` to ensure refunds on historical payments cannot fall through the cracks. The stats response now exposes `requested_since`, `effective_since`, and `refund_lookback_days` for operator visibility.
+
+### Verified by `test_tabby_refund_sync_iter227.py` — 3/3 PASS
+1. ✅ Payment created 100 days ago + refunded yesterday → **INCLUDED** (was previously missed).
+2. ✅ No-cutoff call returns all pages.
+3. ✅ Sync stats expose `requested_since`, `effective_since`, `refund_lookback_days`. Effective window is wider than requested.
+
+### Regression
+- 19/19 BNPL pytests pass (Iter-219 + Iter-220 + Iter-227).
+
+### Network cost note
+The 90-day widening means each Tabby sync now reads ~90 days of payments instead of 7 days. For an active merchant with ~30 payments/day, that's ~2700 payments fetched (paginated 20/page) — typically <30 seconds wall-clock. Acceptable cost for refund completeness.
+
+### Not yet done
+- **Layer 3** (refunds-refresh endpoint that re-queries individual old payments via `GET /payments/{id}` for >90-day refunds) — deferred. If user reports a refund from >90 days ago that didn't sync, we add it then.
+
