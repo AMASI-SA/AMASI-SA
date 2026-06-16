@@ -81,18 +81,21 @@ export default function ShippingLedger() {
     };
 
     const SummaryCard = ({ label, value, suffix = "ر.س", color = "slate" }) => (
-        <div className={`rounded-xl border-2 p-3 bg-${color}-50 border-${color}-200`}>
-            <div className="text-[11px] text-slate-600 font-bold leading-tight">{label}</div>
-            <div className={`text-lg font-extrabold num text-${color}-800 mt-0.5`}>
-                {typeof value === "number" && suffix === "ر.س" ? fmt(value) : intf(value)}
-                {suffix ? <span className="text-[10px] mr-1">{suffix}</span> : null}
+        <div className={`rounded-xl border-2 px-2.5 py-2 sm:p-3 bg-${color}-50 border-${color}-200 min-w-0`}>
+            <div className="text-[10px] sm:text-[11px] text-slate-600 font-bold leading-tight truncate">{label}</div>
+            <div className={`flex items-baseline gap-1 mt-0.5 text-${color}-800`}>
+                <span className="text-sm sm:text-base lg:text-lg font-extrabold num truncate min-w-0 leading-tight"
+                      title={typeof value === "number" && suffix === "ر.س" ? fmt(value) : String(value)}>
+                    {typeof value === "number" && suffix === "ر.س" ? fmt(value) : intf(value)}
+                </span>
+                {suffix ? <span className="text-[9px] sm:text-[10px] font-bold shrink-0">{suffix}</span> : null}
             </div>
         </div>
     );
 
     return (
-        <div className="p-6 max-w-[1500px] mx-auto" data-testid="shipping-ledger-page">
-            <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="p-2 sm:p-4 lg:p-6 max-w-[1500px] mx-auto" data-testid="shipping-ledger-page">
+            <div className="bg-white rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                     <div>
                         <h1 className="text-2xl font-extrabold text-slate-900">
@@ -113,7 +116,7 @@ export default function ShippingLedger() {
                 </div>
 
                 {/* Summary cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 sm:gap-2 mb-4">
                     <SummaryCard label="عدد الطلبات الموصلة" value={totals.delivered_count || 0} suffix="" color="emerald" />
                     <SummaryCard label="إجمالي تكلفة الشحن" value={totals.total_shipping_cost} color="slate" />
                     <SummaryCard label="إجمالي COD" value={totals.total_cod} color="amber" />
