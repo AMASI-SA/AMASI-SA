@@ -3690,3 +3690,46 @@ The system was producing **15,945.65** SAR (≈ 121 SAR drift) because of a wron
 
 ### Important deployment note
 This fix lives in PREVIEW. The user must **redeploy** for the change to take effect on https://mezansalla.com.
+
+---
+
+## Iter-233 — BNPL Settlements: True Idempotency + Backfill (Feb 2026)
+
+### Problem (live production report)
+Merchant registered settlement `TABBY-2026-06-08-AUTO` (16/06/2026, بنك الإنماء) successfully, but the transferred amount **never appeared** on the Inma bank account in either:
+- `/banks/{id}` detail page (reads from `account_transactions`)
+- `/bnpl-settlements/register` (the BNPL register page)
+
+### Root cause
+The `/register` route had a one-way fail-mode:
+1. `general_ledger` entries get posted FIRST via the bridge.
+2. THEN `account_transactions.insert_one` runs to mirror the transfer on the bank.
+
+If any failure happened between step 1 and step 2 (network drop / retry / partial timeout), the second call returns `skipped=True` (because ledger already exists) and we **early-returned without checking** if the bank row was actually created. Result: settlement permanently invisible on the bank page.
+
+### Fix (two-part)
+1. **True idempotency in `/register`**: removed the early-return on `skipped=True`. The route now ALWAYS checks `account_transactions` for the same `idempotency_key` and creates the missing row if absent, regardless of whether the bridge was a fresh insert or an idempotent skip.
+
+2. **NEW endpoint** `POST /api/bnpl/settlements/backfill-bank-transactions?dry_run=false`:
+   - Scans every `bnpl_settlement` debit-leg on `entity_type=bank` in `general_ledger`.
+   - For each one, ensures a matching `account_transactions` row exists (lookup by `metadata.idempotency_key`).
+   - Creates the missing row and recomputes the bank balance ONCE per affected account.
+   - Supports `?dry_run=true` for safe preview.
+   - Idempotent — safe to re-run anytime.
+
+### How the merchant fixes the existing missing entry
+After redeploying to production:
+1. Open https://mezansalla.com (logged-in).
+2. (Optional preview) Call `POST /api/bnpl/settlements/backfill-bank-transactions?dry_run=true` from devtools → returns the list of missing entries.
+3. Run the same endpoint with `dry_run=false` to repair.
+4. Refresh `/banks` → بنك الإنماء — `TABBY-2026-06-08-AUTO` for 16/06/2026 now appears as an inbound `settlement` row.
+
+### Tests
+Validated via:
+- Module import (no syntax errors).
+- Preview dry-run hit successfully (`checked=0` because no BNPL settlements exist in preview DB).
+- 15/15 regression tests in `iter220`, `iter221`, `iter231`, `iter232` still pass.
+- The pre-existing 6 async-event-loop errors in `test_bnpl_register_iter221_e2e.py` are unrelated test-harness rot, not caused by this change.
+
+### Deployment note
+This fix lives in PREVIEW. **Redeploy** required to push to https://mezansalla.com before the merchant can run the backfill endpoint.

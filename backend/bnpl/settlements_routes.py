@@ -144,57 +144,182 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 500, f"settlement bridge failed: {type(e).__name__}: {e}",
             )
 
-        # If the bridge skipped (idempotent), DO NOT touch
-        # account_transactions either — the previous call already wrote it.
-        if res.get("skipped"):
-            return {"success": True, **res}
-
-        # Mirror the transferred_amount as a `settlement` row on the
-        # bank account so the existing UI feed (bank account detail)
-        # shows the inbound BNPL transfer. Uses the same idempotency
-        # key in metadata to support reconciliation.
+        # Iter-233 — TRUE idempotency across BOTH `general_ledger`
+        # AND `account_transactions`.  Previously when the bridge said
+        # `skipped=True` we returned immediately, assuming the first
+        # call had already written the bank row.  That assumption broke
+        # whenever the first call partially failed (network drop, retry,
+        # crash between ledger insert and account_transactions insert),
+        # leaving the settlement invisible on the bank page forever.
+        #
+        # New behaviour: regardless of `skipped`, ensure the
+        # `account_transactions` row exists for this idempotency key.
+        # If it's missing, create it now.  Safe to re-run.
+        idem_key = (
+            f"bnpl_settlement:{payload.provider}:"
+            f"{payload.settlement_reference}"
+        )
         if payload.transferred_amount > 0:
+            existing_at = await db.account_transactions.find_one(
+                {"user_id": uid,
+                 "metadata.idempotency_key": idem_key},
+                {"_id": 0, "id": 1},
+            )
+            if not existing_at:
+                now = _now_iso()
+                await db.account_transactions.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "user_id": uid,
+                    "account_id": payload.bank_account_id,
+                    "transaction_type": "settlement",
+                    "amount": round(float(payload.transferred_amount), 2),
+                    "direction": "in",
+                    "description": (
+                        payload.notes
+                        or f"تسوية {payload.provider} — مرجع "
+                           f"{payload.settlement_reference}"
+                    ),
+                    "transaction_date": (
+                        payload.settlement_date or now[:10]
+                    ),
+                    "balance_after": 0.0,    # recomputed below
+                    "status": "posted",
+                    "attachment_url": None,
+                    "created_at": now,
+                    "updated_at": now,
+                    "metadata": {
+                        "bnpl_settlement_group_id": res.get("txn_group_id"),
+                        "provider": payload.provider,
+                        "settlement_reference": payload.settlement_reference,
+                        "idempotency_key": idem_key,
+                    },
+                })
+                # Recompute bank balance.
+                try:
+                    from accounts_routes import _recompute_balance
+                    await _recompute_balance(
+                        db, uid, payload.bank_account_id,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+
+        return {"success": True, **res}
+
+    # ── Iter-233 — Backfill missing bank account_transactions ─────
+    @router.post("/backfill-bank-transactions")
+    async def backfill_bank_transactions(
+        user: dict = Depends(get_current_user),
+        dry_run: bool = Query(False),
+    ):
+        """Iter-233 — Find BNPL settlements that exist in the SSOT
+        `general_ledger` but are MISSING the corresponding row in
+        `account_transactions` (which is what the bank-detail page and
+        the BNPL register page read from).
+
+        For every missing settlement we re-create the row using the
+        same idempotency_key the original register-call would have
+        used, then recompute the bank account balance.
+
+        Safe to re-run — idempotent.  Set `?dry_run=true` to preview
+        without writing.
+        """
+        uid = user["id"]
+        # Find every DEBIT leg on a bank entity inside a bnpl_settlement
+        # group. That's the leg that should mirror to account_transactions.
+        cursor = db.general_ledger.find(
+            {"user_id": uid, "entry_type": "bnpl_settlement",
+             "status": "posted", "side": "debit",
+             "entity_type": "bank"},
+            {"_id": 0, "txn_group_id": 1, "amount": 1, "entity_id": 1,
+             "metadata": 1, "posted_at": 1, "notes": 1},
+        ).sort("posted_at", -1)
+
+        checked = 0
+        already_ok = 0
+        created = 0
+        missing: list[dict] = []
+        recomputed_accounts: set[str] = set()
+        async for e in cursor:
+            checked += 1
+            meta = e.get("metadata") or {}
+            ref = meta.get("settlement_reference")
+            provider = (meta.get("provider") or "").lower()
+            if not ref or provider not in PROVIDERS:
+                continue
+            idem_key = f"bnpl_settlement:{provider}:{ref}"
+            existing = await db.account_transactions.find_one(
+                {"user_id": uid,
+                 "metadata.idempotency_key": idem_key},
+                {"_id": 0, "id": 1},
+            )
+            if existing:
+                already_ok += 1
+                continue
+            entry_record = {
+                "settlement_reference": ref,
+                "provider": provider,
+                "bank_account_id": e.get("entity_id"),
+                "amount": round(float(e.get("amount") or 0), 2),
+                "settlement_date": (
+                    meta.get("settlement_date")
+                    or (e.get("posted_at") or "")[:10]
+                ),
+                "txn_group_id": e.get("txn_group_id"),
+            }
+            missing.append(entry_record)
+            if dry_run:
+                continue
             now = _now_iso()
             await db.account_transactions.insert_one({
                 "id": str(uuid.uuid4()),
                 "user_id": uid,
-                "account_id": payload.bank_account_id,
+                "account_id": e.get("entity_id"),
                 "transaction_type": "settlement",
-                "amount": round(float(payload.transferred_amount), 2),
+                "amount": entry_record["amount"],
                 "direction": "in",
                 "description": (
-                    payload.notes
-                    or f"تسوية {payload.provider} — مرجع "
-                       f"{payload.settlement_reference}"
+                    e.get("notes")
+                    or f"تسوية {provider} — مرجع {ref}"
                 ),
-                "transaction_date": (
-                    payload.settlement_date or now[:10]
-                ),
-                "balance_after": 0.0,    # recomputed below
+                "transaction_date": entry_record["settlement_date"],
+                "balance_after": 0.0,    # recomputed at the end
                 "status": "posted",
                 "attachment_url": None,
                 "created_at": now,
                 "updated_at": now,
                 "metadata": {
-                    "bnpl_settlement_group_id": res.get("txn_group_id"),
-                    "provider": payload.provider,
-                    "settlement_reference": payload.settlement_reference,
-                    "idempotency_key": (
-                        f"bnpl_settlement:{payload.provider}:"
-                        f"{payload.settlement_reference}"
-                    ),
+                    "bnpl_settlement_group_id": e.get("txn_group_id"),
+                    "provider": provider,
+                    "settlement_reference": ref,
+                    "idempotency_key": idem_key,
+                    "backfilled_at": now,
+                    "iter": "iter233",
                 },
             })
-            # Recompute bank balance.
+            created += 1
+            recomputed_accounts.add(e.get("entity_id"))
+
+        # Recompute affected bank balances ONCE per account.
+        if not dry_run and recomputed_accounts:
             try:
                 from accounts_routes import _recompute_balance
-                await _recompute_balance(
-                    db, uid, payload.bank_account_id,
-                )
+                for acc_id in recomputed_accounts:
+                    try:
+                        await _recompute_balance(db, uid, acc_id)
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception:  # noqa: BLE001
                 pass
 
-        return {"success": True, **res}
+        return {
+            "success": True,
+            "dry_run": dry_run,
+            "checked": checked,
+            "already_ok": already_ok,
+            "created": created,
+            "missing_details": missing[:50],   # cap response size
+        }
+
 
     # ── Iter-221 — Registration page support endpoints ────────────────
     @router.get("/registered")
