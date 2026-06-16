@@ -3676,6 +3676,12 @@ api.include_router(make_ad_debt_diagnostic_router(db, current_user))
 
 from ads_currency_routes import attach_ads_currency_routes
 attach_ads_currency_routes(api, db)
+
+from accounts_balance_diagnostic_routes import (
+    make_accounts_balance_diagnostic_router,
+)
+api.include_router(make_accounts_balance_diagnostic_router(db, current_user))
+
 app.include_router(api)
 
 # CORS
