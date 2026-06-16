@@ -21,6 +21,7 @@ export default function ShippingLedger() {
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState([]);
     const [totals, setTotals] = useState({});
+    const [perCompany, setPerCompany] = useState([]);
     const [filters, setFilters] = useState({
         date_from: "", date_to: "", courier: "",
         payment_mode: "", payment_method: "",
@@ -37,6 +38,7 @@ export default function ShippingLedger() {
             const r = await api.get("/shipping-ledger", { params });
             setRows(r.data?.rows || []);
             setTotals(r.data?.totals || {});
+            setPerCompany(r.data?.per_company || []);
         } catch (e) {
             toast.error("فشل تحميل دفتر الشحن");
         } finally {
@@ -122,6 +124,51 @@ export default function ShippingLedger() {
                     <SummaryCard label="شحن Deferred (آجل)" value={totals.total_deferred_shipping} color="amber" />
                 </div>
 
+                {/* Iter-235 — Per-company effective shipping cost summary */}
+                {perCompany.length > 0 && (
+                    <div className="mb-4 bg-white border border-slate-200 rounded-xl p-3"
+                         data-testid="per-company-cost-summary">
+                        <h3 className="text-sm font-extrabold text-slate-800 mb-2">
+                            تكلفة الشحن المعتمدة لكل شركة (للطلبات المعروضة)
+                        </h3>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                                <thead className="bg-slate-100 text-slate-700">
+                                    <tr>
+                                        <th className="text-right p-2 font-extrabold">شركة الشحن</th>
+                                        <th className="text-center p-2 font-extrabold">عدد الطلبات</th>
+                                        <th className="text-left p-2 font-extrabold">تكلفة الشركة المُعدّة</th>
+                                        <th className="text-left p-2 font-extrabold">متوسط التكلفة الفعلية / طلب</th>
+                                        <th className="text-left p-2 font-extrabold">إجمالي التكلفة</th>
+                                        <th className="text-center p-2 font-extrabold">من سلة</th>
+                                        <th className="text-center p-2 font-extrabold">من إعدادات الشركة</th>
+                                        <th className="text-center p-2 font-extrabold">بدون قيمة</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {perCompany.map((c) => (
+                                        <tr key={c.shipping_company} className="border-t border-slate-100"
+                                            data-testid={`pc-${c.shipping_company}`}>
+                                            <td className="p-2 font-bold">{c.shipping_company}</td>
+                                            <td className="p-2 text-center">{intf(c.orders_count)}</td>
+                                            <td className="p-2 text-left num text-violet-700">
+                                                {c.configured_cost > 0 ? fmt(c.configured_cost) : "—"}
+                                            </td>
+                                            <td className="p-2 text-left num font-extrabold">
+                                                {fmt(c.effective_cost_per_order)}
+                                            </td>
+                                            <td className="p-2 text-left num">{fmt(c.total_shipping_cost)}</td>
+                                            <td className="p-2 text-center text-sky-700">{intf(c.from_salla_count)}</td>
+                                            <td className="p-2 text-center text-violet-700">{intf(c.from_company_settings_count)}</td>
+                                            <td className="p-2 text-center text-rose-700">{intf(c.none_count)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
                 {/* Filters */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                     <input type="date" value={filters.date_from}
@@ -186,6 +233,7 @@ export default function ShippingLedger() {
                                 <th className="text-right p-2 font-extrabold">طريقة الدفع</th>
                                 <th className="text-right p-2 font-extrabold">حالة الطلب</th>
                                 <th className="text-left p-2 font-extrabold">تكلفة الشحن</th>
+                                <th className="text-center p-2 font-extrabold">مصدر التكلفة</th>
                                 <th className="text-left p-2 font-extrabold">COD</th>
                                 <th className="text-left p-2 font-extrabold">رسوم COD</th>
                                 <th className="text-left p-2 font-extrabold">صافي مستحق</th>
@@ -194,10 +242,10 @@ export default function ShippingLedger() {
                         </thead>
                         <tbody>
                             {loading && (
-                                <tr><td colSpan={11} className="text-center p-6 text-slate-500">جاري التحميل…</td></tr>
+                                <tr><td colSpan={12} className="text-center p-6 text-slate-500">جاري التحميل…</td></tr>
                             )}
                             {!loading && rows.length === 0 && (
-                                <tr><td colSpan={11} className="text-center p-6 text-slate-500"
+                                <tr><td colSpan={12} className="text-center p-6 text-slate-500"
                                        data-testid="ledger-empty">لا توجد طلبات موصلة مطابقة للفلاتر.</td></tr>
                             )}
                             {!loading && rows.map((r) => (
@@ -215,6 +263,24 @@ export default function ShippingLedger() {
                                         {fmt(r.shipping_cost)}
                                         {r.prepaid_shipping && (
                                             <div className="text-[9px] text-emerald-700 font-bold">مدفوع مسبقاً</div>
+                                        )}
+                                    </td>
+                                    <td className="p-2 text-center"
+                                        data-testid={`ledger-cost-source-${r.order_id}`}>
+                                        {r.shipping_cost_source === "salla" && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                                                سلة
+                                            </span>
+                                        )}
+                                        {r.shipping_cost_source === "company_settings" && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800">
+                                                إعدادات الشركة
+                                            </span>
+                                        )}
+                                        {(!r.shipping_cost_source || r.shipping_cost_source === "none") && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                                                غير متوفر
+                                            </span>
                                         )}
                                     </td>
                                     <td className="p-2 text-left num">{fmt(r.cod_amount)}</td>

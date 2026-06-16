@@ -59,6 +59,32 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             )
         return out
 
+    async def _cost_map(uid: str) -> dict[str, float]:
+        """Iter-235 — fallback cost per shipping company.
+
+        Reads `settings.shipping_companies[].cost` and exposes it
+        keyed by both the canonical key AND the raw configured name
+        (case-insensitive) so any spelling that arrives on the
+        order's `shipping_company` field resolves correctly.
+        """
+        s = await db.settings.find_one({"user_id": uid},
+                                       {"_id": 0, "shipping_companies": 1})
+        out: dict[str, float] = {}
+        for c in (s or {}).get("shipping_companies", []) or []:
+            name = (c.get("name") or "").strip()
+            if not name:
+                continue
+            try:
+                cost = float(c.get("cost") or 0)
+            except (TypeError, ValueError):
+                cost = 0.0
+            if cost <= 0:
+                continue
+            key, _ = normalize_shipping_company(name)
+            out[key] = cost
+            out[name.lower()] = cost
+        return out
+
     @router.get("")
     async def shipping_ledger(
         user: dict = Depends(current_user),
@@ -76,6 +102,7 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
         policy = await get_policy_map(db, uid)
         pm_map = await _payment_mode_map(uid)
         fee_map = await _cod_fee_map(uid)
+        cost_map = await _cost_map(uid)
 
         q: dict = {"user_id": uid, "is_pre_accounting": {"$ne": True}}
         if date_from or date_to:
@@ -118,7 +145,25 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                       or "الاستلام" in method
                       or "الدفع عند" in method)
 
-            ship_cost = float(o.get("shipping_cost") or 0)
+            ship_cost_from_order = float(o.get("shipping_cost") or 0)
+            # Iter-235 — fallback to per-company configured cost when
+            # Salla didn't disclose shipping_cost on the order (common
+            # for COD / BNPL flows). Mirrors the logic already used by
+            # `/api/shipping-accounts` so both pages stay consistent.
+            if ship_cost_from_order > 0:
+                ship_cost = ship_cost_from_order
+                cost_source = "salla"
+            else:
+                fallback = (
+                    cost_map.get(comp_key)
+                    or cost_map.get(comp_display.lower())
+                    or cost_map.get(comp_raw.lower())
+                    or 0.0
+                )
+                ship_cost = float(fallback)
+                cost_source = (
+                    "company_settings" if ship_cost > 0 else "none"
+                )
             cod_amt = float(o.get("cod_amount") or
                             (o.get("total_amount") or 0) if is_cod else 0)
             if not is_cod:
@@ -164,6 +209,8 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                 "payment_method": method,
                 "order_status": raw_status,
                 "shipping_cost": round(ship_cost, 2),
+                # Iter-235 — provenance flag for the new UI column.
+                "shipping_cost_source": cost_source,
                 "prepaid_shipping": mode == "prepaid",
                 "cod_amount": round(cod_amt, 2),
                 "cod_fee": round(cod_fee, 2),
@@ -185,8 +232,46 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             if isinstance(totals[k], float):
                 totals[k] = round(totals[k], 2)
 
+        # Iter-235 — Per-company breakdown so the UI can show the
+        # effective cost being used for each shipping carrier.
+        by_company: dict[str, dict] = {}
+        for r in rows:
+            name = r["shipping_company"]
+            entry = by_company.setdefault(name, {
+                "shipping_company": name,
+                "orders_count": 0,
+                "total_shipping_cost": 0.0,
+                "from_salla_count": 0,
+                "from_company_settings_count": 0,
+                "none_count": 0,
+                "configured_cost": cost_map.get(
+                    r["shipping_company_key"]) or cost_map.get(
+                    name.lower()) or 0.0,
+                "payment_mode": r["payment_mode"],
+            })
+            entry["orders_count"] += 1
+            entry["total_shipping_cost"] += r["shipping_cost"]
+            src = r.get("shipping_cost_source") or "none"
+            if src == "salla":
+                entry["from_salla_count"] += 1
+            elif src == "company_settings":
+                entry["from_company_settings_count"] += 1
+            else:
+                entry["none_count"] += 1
+        # Round + add an effective_cost_per_order quick stat.
+        per_company = []
+        for v in by_company.values():
+            v["total_shipping_cost"] = round(v["total_shipping_cost"], 2)
+            v["effective_cost_per_order"] = round(
+                v["total_shipping_cost"] / v["orders_count"], 2,
+            ) if v["orders_count"] > 0 else 0.0
+            per_company.append(v)
+        per_company.sort(key=lambda x: x["total_shipping_cost"],
+                         reverse=True)
+
         rows.sort(key=lambda r: r["order_date"] or "", reverse=True)
         return {"rows": rows, "totals": totals,
+                "per_company": per_company,
                 "delivered_only": True, "limit": limit}
 
     parent_router.include_router(router)
