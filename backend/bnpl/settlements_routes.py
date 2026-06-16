@@ -429,33 +429,55 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
 
         # Period shorthand → date_from/date_to. The user-provided
         # explicit dates always win.
-        # Iter-229 — provider-aware weekly cycles:
-        #   • Tabby:  Sun→Sat, invoice issued the following Sunday.
-        #   • Tamara: Sat→Fri (7 days). Money lands in merchant bank
-        #            the following TUESDAY (3 banking days later).
+        # Iter-231 — provider-aware weekly cycles driven by the
+        # MERCHANT's `bnpl_settings.invoice_weekdays` (set on
+        # /integrations/bnpl). Falls back to provider defaults if
+        # not customised.
+        WEEKDAY_MAP = {"monday": 0, "tuesday": 1, "wednesday": 2,
+                       "thursday": 3, "friday": 4, "saturday": 5,
+                       "sunday": 6}
+        _PROVIDER_DEFAULTS = {
+            "tabby":  {"invoice": "monday", "transfer": "tuesday"},
+            "tamara": {"invoice": "sunday", "transfer": "tuesday"},
+        }
+        settings_doc = await db.bnpl_settings.find_one(
+            {"user_id": uid, "provider": provider},
+            {"_id": 0, "invoice_weekdays": 1, "transfer_weekdays": 1},
+        ) or {}
+        defaults_for_p = _PROVIDER_DEFAULTS.get(provider) or {}
+        inv_wds = (settings_doc.get("invoice_weekdays")
+                   or [defaults_for_p.get("invoice", "monday")])
+        tr_wds  = (settings_doc.get("transfer_weekdays")
+                   or [defaults_for_p.get("transfer", "tuesday")])
+        invoice_wd = WEEKDAY_MAP.get(
+            (inv_wds[0] or "").lower(),
+            WEEKDAY_MAP[defaults_for_p.get("invoice", "monday")],
+        )
+        transfer_wd = WEEKDAY_MAP.get(
+            (tr_wds[0] or "").lower(),
+            WEEKDAY_MAP[defaults_for_p.get("transfer", "tuesday")],
+        )
+        # period_end = day BEFORE invoice_weekday
+        # period_start = period_end − 6 days (7-day cycle)
+        period_end_wd = (invoice_wd - 1) % 7
+        period_start_wd = (period_end_wd - 6) % 7  # equivalent to invoice_wd
+
         if not (date_from and date_to) and period:
             today = date.today()
-            wd = today.weekday()  # Mon=0 ... Sun=6 ; Sat=5, Fri=4
-            is_tamara = (provider == "tamara")
+            wd = today.weekday()
             if period == "this_week":
-                if is_tamara:
-                    # Days since last Saturday (Sat=5).
-                    days_since_sat = (wd - 5) % 7
-                    start = today - timedelta(days=days_since_sat)
-                    end = start + timedelta(days=6)   # following Friday
-                else:
-                    days_since_sun = (wd + 1) % 7
-                    start = today - timedelta(days=days_since_sun)
-                    end = start + timedelta(days=6)
+                days_since_start = (wd - period_start_wd) % 7
+                start = today - timedelta(days=days_since_start)
+                end = start + timedelta(days=6)
             elif period == "last_week":
-                if is_tamara:
-                    days_since_sat = (wd - 5) % 7
-                    end = today - timedelta(days=days_since_sat + 1)  # last Friday
-                    start = end - timedelta(days=6)                    # last Saturday
+                days_since_end = (wd - period_end_wd) % 7
+                # If today IS period_end (e.g. Sunday for Tabby),
+                # "last_week" means the FULL previous cycle.
+                if days_since_end == 0:
+                    end = today - timedelta(days=7)
                 else:
-                    days_since_sun = (wd + 1) % 7
-                    end = today - timedelta(days=days_since_sun + 1)
-                    start = end - timedelta(days=6)
+                    end = today - timedelta(days=days_since_end)
+                start = end - timedelta(days=6)
             elif period == "last_7d":
                 end = today
                 start = today - timedelta(days=6)
@@ -507,24 +529,42 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             else f"{provider.upper()}-AUTO-{_dt.utcnow().strftime('%Y%m%d')}"
         )
 
-        # Iter-226+229 — settlement_date semantics differ by provider:
-        #   • Tabby:  invoice issued day AFTER period (Sat ends → Sun).
-        #   • Tamara: money LANDS in merchant bank the TUESDAY after
-        #            the period ends (period ends Fri → Tue +4 days).
+        # Iter-231 — settlement_date_value is now driven by the
+        # merchant's `transfer_weekdays` config (saved at
+        # /integrations/bnpl). We pick the FIRST date strictly AFTER
+        # `date_to` whose weekday matches one of the configured
+        # `transfer_weekdays`. Fallback: provider-default behaviour
+        # (Tabby: +1 day, Tamara: +4 days) if config is empty/unusable.
         settlement_date_value = date_to
         if date_to:
             try:
                 _dt_to = _dt.strptime(date_to, "%Y-%m-%d").date()
                 from datetime import timedelta as _td
-                if provider == "tamara":
-                    # Period ends Friday → +4 days = Tuesday.
-                    settlement_date_value = (
-                        _dt_to + _td(days=4)
-                    ).isoformat()
+                target_weekdays = {
+                    WEEKDAY_MAP[(w or "").lower()]
+                    for w in (tr_wds or [])
+                    if (w or "").lower() in WEEKDAY_MAP
+                }
+                picked = None
+                if target_weekdays:
+                    # Search up to 14 days forward (covers any weekly cycle).
+                    for delta in range(1, 15):
+                        day = _dt_to + _td(days=delta)
+                        if day.weekday() in target_weekdays:
+                            picked = day
+                            break
+                if picked is not None:
+                    settlement_date_value = picked.isoformat()
                 else:
-                    settlement_date_value = (
-                        _dt_to + _td(days=1)
-                    ).isoformat()
+                    # Legacy fallback (only if no transfer_weekdays config).
+                    if provider == "tamara":
+                        settlement_date_value = (
+                            _dt_to + _td(days=4)
+                        ).isoformat()
+                    else:
+                        settlement_date_value = (
+                            _dt_to + _td(days=1)
+                        ).isoformat()
             except Exception:  # noqa: BLE001
                 pass
 

@@ -3629,3 +3629,30 @@ By visiting `/audit/ad-debt` in Production and expanding each mismatched account
   3. Archive specific legacy entries with `metadata.legacy_orphan` (only if user explicitly approves the list)
   4. Switch `/ad-accounts` to consume SSOT (if SSOT proves more accurate after deeper inspection)
 
+
+---
+
+## Iter-231 — Dynamic BNPL Settlement Date from `transfer_weekdays` Config (Feb 2026)
+
+### Problem
+The `/api/bnpl/settlements/import-preview/{provider}` endpoint hard-coded the prefilled `settlement_date`:
+- Tabby: `date_to + 1`
+- Tamara: `date_to + 4` (assumes period ends Friday → Tuesday)
+
+This ignored the merchant's saved configuration at `/integrations/bnpl` (`bnpl_settings.transfer_weekdays`). If the merchant updated their payout day(s), the prefilled date stayed wrong.
+
+### Fix
+- `/app/backend/bnpl/settlements_routes.py::import_preview`:
+  - Reads `bnpl_settings.transfer_weekdays` (per-user × provider) which is already loaded earlier in the function for period-cycle math.
+  - Searches forward up to 14 days from `date_to + 1` for the FIRST day whose weekday matches any entry in `transfer_weekdays`.
+  - Falls back to the legacy hard-coded offsets only when the config is empty/unusable.
+
+### Verified end-to-end (preview)
+- Tabby `transfer_weekdays=["tuesday","wednesday"]`, `date_to=Mon 2025-09-01` → `settlement_date=2025-09-02` (Tue) ✅
+- Tamara `transfer_weekdays=["tuesday"]`, `date_to=Fri 2025-09-05` → `settlement_date=2025-09-09` (Tue) ✅
+- Override Tamara to `["thursday"]` → `settlement_date=2025-09-11` (Thu) ✅
+- Period end already on a transfer-day: picker correctly jumps to NEXT matching day (not same-day).
+
+### Tests
+- `/app/backend/tests/test_bnpl_iter231_dynamic_settlement_date.py` — 4/4 PASSED
+- Regression: `test_bnpl_settlement_iter220.py` (8/8), `test_settlement_rounding_iter228.py` (2/2), `test_bnpl_iter121_weekday_cycle.py` (5/6 — 1 pre-existing failure unrelated to this change, due to `settlement_fee_per_invoice` Tabby default = 6 SAR now, not 5).
