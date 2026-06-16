@@ -3581,3 +3581,51 @@ This matches Tabby's (and most processors') invoice math exactly.
 ### Effect on Production
 After redeploy, the auto-fill values should now match the Tabby invoice within < 0.02 SAR (tiny residual from floating-point representation, which `_r()` handles correctly).
 
+
+
+## Completed Work — Iter-230 (Feb 16 2026): Ad Debt SSOT Reconciliation (Read-Only Diagnostic)
+
+**User issue**: `/ad-accounts` shows 105,798.10 (correct) but Financial Position / Ledger show 150,554.42 → 44,756.32 SAR drift.
+
+**User decision**: Read-only diagnostic ONLY. NO archive, NO legacy_orphan, NO writes whatsoever. Just identify the source of the 44,756 SAR drift entry-by-entry.
+
+### Backend (read-only)
+- **NEW** `/app/backend/ad_debt_diagnostic_routes.py` — module dedicated.
+- **NEW** `GET /api/audit/ad-debt-diagnostic` returns per-account:
+  - `account_name`, `platform`, `status`
+  - `walk_balance` (mirrors `_summarise` from `ad_account_routes`)
+  - `ssot_balance` (sums `general_ledger.ad_account.debt` honoring live SSOT filters: `entry_type != reversal`, `metadata.legacy_orphan != True`)
+  - `difference`, `abs_difference`, `match`
+  - `ssot_total_credit`, `ssot_total_debit`, `ssot_archived_count`, `ssot_archived_net`
+  - `ssot_by_entry_type`: `{entry_type: {credit, debit, count}}`
+  - **`entries[]`**: every raw ledger entry — `ledger_id`, `txn_group_id`, `entry_type`, `side`, `amount`, `posted_at`, `metadata_source`, `is_reversal`, `is_archived`, `contributes_to_ssot`.
+- Plus `summary`: totals + `global_attribution_by_entry_type[]` (net contribution per entry_type across all accounts).
+
+### Frontend
+- **NEW** `/app/frontend/src/pages/AdDebtDiagnostic.jsx` at `/audit/ad-debt`:
+  - 4 stat tiles (walk total / ssot total / diff / mismatch count)
+  - Global attribution panel by `entry_type`
+  - Per-account table sorted by largest abs_difference
+  - **Expandable per-account row** → table of EVERY ledger entry contributing (or not) to SSOT, with `contributes_to_ssot` flag (✓ / ↩ reversal / 🗄 archived / —)
+- **📤 تصدير JSON** button — downloads full diagnostic payload for offline analysis.
+- Sidebar nav: "📊 تشخيص فرق المديونيات الإعلانية" (`nav-ad-debt-diagnostic`).
+
+### Strict invariants (per user)
+- ✅ NO archive button.
+- ✅ NO legacy_orphan flag set.
+- ✅ NO entries excluded.
+- ✅ Reads `general_ledger` and `ad_account_ledger` only — zero writes.
+- ✅ The diagnostic includes archived entries in its raw `entries[]` listing (transparency) but flags them so the user sees what's IN SSOT vs what isn't.
+
+### What this answers (per user request)
+> "ما هي القيود بالتحديد التي جعلت SSOT = 150,554.42 بينما صفحة الحسابات الإعلانية = 105,798.10 ؟"
+
+By visiting `/audit/ad-debt` in Production and expanding each mismatched account, the user sees every contributing entry: ledger_id, txn_group_id, entry_type, side, amount, posted_at, source. Sum across all → 44,756 SAR attribution by entry_type.
+
+### Next iteration (after user reviews Production data)
+- Iter-231: based on the diagnostic findings, decide ONE of:
+  1. Fix the Iter-218 migration logic that wrote bad entries
+  2. Reverse specific txn_groups that double-counted
+  3. Archive specific legacy entries with `metadata.legacy_orphan` (only if user explicitly approves the list)
+  4. Switch `/ad-accounts` to consume SSOT (if SSOT proves more accurate after deeper inspection)
+
