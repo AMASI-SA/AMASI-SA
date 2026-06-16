@@ -3773,3 +3773,35 @@ For the merchant's 06–12/06 cycle:
 
 ### Deployment note
 PREVIEW only. **Redeploy** to push to https://mezansalla.com.
+
+---
+
+## Iter-234b — Tamara Commission Loop Recovery + Engine Version Marker
+
+### Problem (live production)
+After redeploying Iter-234, merchant still saw net_payable = **15,945.65** (vs Tamara file 16,066.90). Root cause discovered: `compute_settlement_for_provider` has a SECOND per-order loop (Iter-228) that re-iterates `payment_transactions` to compute commission row-by-row. That loop honoured the original `sales_match` filter and **did NOT inherit the Iter-234 orphan-refund recovery**. Result: gross_sales was 20,848.30 (correct) but commission stayed at the pre-fix value (~1,599 vs 1,610), so net_payable was still off by ~121 SAR.
+
+### Fix (Iter-234b)
+1. **Mirrored the Iter-234 recovery into the commission loop**: after iterating all in-window transactions, also iterate refunds whose original capture is NOT yet counted, and add `amt * commission_rate + fixed_fee_per_order` (+ VAT) for each.  Tamara-only; Tabby unaffected.
+
+2. **Added `engine_version: "iter234"` marker** to the settlement response so the merchant can confirm in devtools (Network tab) whether the deployed code includes the fix.
+
+3. **NEW diagnostic endpoint** `GET /api/bnpl/settlements/order-diagnostic/{provider}?order_id=<id>&date_from=...&date_to=...`:
+   - Returns the txn's full attribution state, refunds in window, and `in_window_after_iter234_recovery: bool`.
+   - Read-only.  Perfect for "why isn't order 264553438 in the gross?" investigations.
+
+### How to verify on production
+After redeploy:
+1. Open `/bnpl/settlements/tamara` in browser → DevTools → Network → click the `/api/bnpl/settlements/tamara` request → response should include `"engine_version": "iter234"`.  If missing, the deploy didn't pick up the new code.
+2. Or call directly:
+   ```
+   GET /api/bnpl/settlements/order-diagnostic/tamara?order_id=264553438&date_from=2026-06-06&date_to=2026-06-12
+   ```
+   → Look for `"in_window_after_iter234_recovery": true` on the orphan order.
+
+### Tests
+- 11/11 regression across iter220/228/231/232/234 ✅
+- engine_version + diagnostic endpoint verified on preview ✅
+
+### Deployment note
+Still PREVIEW only. **Redeploy required** to fix production net_payable to 16,066.90.

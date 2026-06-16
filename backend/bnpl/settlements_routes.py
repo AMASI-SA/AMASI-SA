@@ -320,6 +320,115 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             "missing_details": missing[:50],   # cap response size
         }
 
+    # ── Iter-234 — Per-order diagnostic for Tamara/Tabby ──────────────
+    @router.get("/order-diagnostic/{provider}")
+    async def order_diagnostic(
+        provider: str,
+        order_id: str = Query(..., description="Tamara/Tabby provider order_id or order_reference_id"),
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+        user: dict = Depends(get_current_user),
+    ):
+        """Iter-234 — Diagnose why a specific order is/isn't counted in
+        a settlement window.  READ-ONLY.  Useful for verifying that the
+        Iter-234 orphan-refund recovery is active in production.
+
+        Returns:
+          - txn: the matching payment_transactions row (if any)
+          - refunds: matching payment_refunds rows in the window
+          - in_window_by_attribution: bool (gross would include it?)
+          - in_window_after_recovery: bool (after Iter-234 rescue?)
+          - engine_version: marker confirming deployed code includes Iter-234
+        """
+        from .settlements_service import (
+            _local_date_window_utc, _r,
+        )
+        if provider not in PROVIDERS:
+            raise HTTPException(400, f"unknown provider {provider}")
+        uid = user["id"]
+        utc_gte, utc_lte = _local_date_window_utc(date_from, date_to)
+
+        # Locate the payment transaction by provider_id OR order_reference_id
+        # OR order_number (so the merchant can paste any identifier).
+        txn = await db.payment_transactions.find_one(
+            {"user_id": uid, "provider": provider,
+             "$or": [{"provider_id": order_id},
+                     {"order_reference_id": order_id},
+                     {"order_number": order_id}]},
+            {"_id": 0},
+        )
+
+        in_window_attr = False
+        attribution_field_value = None
+        if txn:
+            sales_date_field = (
+                "effective_settlement_date" if provider == "tamara"
+                else "created_at_provider"
+            )
+            attribution_field_value = txn.get(sales_date_field)
+            if attribution_field_value:
+                in_window_attr = (
+                    (not utc_gte or str(attribution_field_value) >= utc_gte)
+                    and (not utc_lte or str(attribution_field_value) <= utc_lte)
+                )
+
+        # Find refunds for this order inside the window.
+        refund_match: dict = {"user_id": uid, "provider": provider}
+        if utc_gte or utc_lte:
+            refund_match["refunded_at"] = {}
+            if utc_gte:
+                refund_match["refunded_at"]["$gte"] = utc_gte
+            if utc_lte:
+                refund_match["refunded_at"]["$lte"] = utc_lte
+        refund_match["$or"] = [
+            {"provider_payment_id": (txn or {}).get("provider_id") or order_id},
+            {"order_reference_id": (txn or {}).get("order_reference_id") or order_id},
+        ]
+        refunds = []
+        async for r in db.payment_refunds.find(refund_match, {"_id": 0}):
+            refunds.append({
+                "provider_refund_id": r.get("provider_refund_id"),
+                "amount": _r(float(r.get("amount") or 0)),
+                "refunded_at": r.get("refunded_at"),
+                "provider_payment_id": r.get("provider_payment_id"),
+                "order_reference_id": r.get("order_reference_id"),
+            })
+
+        # Would Iter-234 recovery include it?
+        in_window_after_recovery = in_window_attr
+        if (
+            provider == "tamara" and not in_window_attr
+            and txn and len(refunds) > 0
+        ):
+            in_window_after_recovery = True
+
+        return {
+            "success": True,
+            "engine_version": "iter234",
+            "provider": provider,
+            "order_id_input": order_id,
+            "period": {"from": date_from, "to": date_to,
+                       "utc_gte": utc_gte, "utc_lte": utc_lte},
+            "txn": {
+                "found": txn is not None,
+                "provider_id": (txn or {}).get("provider_id"),
+                "order_reference_id": (txn or {}).get("order_reference_id"),
+                "order_number": (txn or {}).get("order_number"),
+                "amount": _r(float((txn or {}).get("amount") or 0)),
+                "status": (txn or {}).get("status"),
+                "created_at_provider": (txn or {}).get("created_at_provider"),
+                "captured_at_provider": (txn or {}).get("captured_at_provider"),
+                "billing_eligible_at": (txn or {}).get("billing_eligible_at"),
+                "effective_settlement_date": (txn or {}).get("effective_settlement_date"),
+                "settlement_source": (txn or {}).get("settlement_source"),
+                "is_pre_accounting": bool((txn or {}).get("is_pre_accounting")),
+            },
+            "attribution_field_value": attribution_field_value,
+            "in_window_by_attribution": in_window_attr,
+            "in_window_after_iter234_recovery": in_window_after_recovery,
+            "refunds_in_window": refunds,
+            "refunds_count_in_window": len(refunds),
+        }
 
     # ── Iter-221 — Registration page support endpoints ────────────────
     @router.get("/registered")

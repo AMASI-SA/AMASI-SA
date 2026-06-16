@@ -849,11 +849,64 @@ async def compute_settlement_for_provider(
     # ONLY the final totals — matching the processor's math exactly.
     sales_commission = 0.0
     sales_vat = 0.0
-    async for t in db.payment_transactions.find(sales_match, {"_id": 0, "amount": 1}):
+    counted_pids: set[str] = set()
+    async for t in db.payment_transactions.find(
+        sales_match,
+        {"_id": 0, "amount": 1, "provider_id": 1},
+    ):
         amt = float(t.get("amount") or 0)
         fee_unrounded = amt * commission_rate + fixed_fee_per_order
         sales_commission += fee_unrounded
         sales_vat += fee_unrounded * vat_rate
+        pid = t.get("provider_id")
+        if pid:
+            counted_pids.add(pid)
+
+    # Iter-234 — Tamara orphan-refund recovery for the commission
+    # loop.  Same logic as `_compute_provider_totals`: if a refund
+    # lives in this window but its original capture isn't in the
+    # window's sales filter (because attribution fell back to
+    # `created_at_provider` outside the period), we still owe Tamara
+    # the MDR + fixed_fee on that capture.  Add it here so the
+    # per-order commission matches Tamara's Statement Total Fees.
+    if provider == "tamara":
+        async for rf in db.payment_refunds.find(
+            refund_match,
+            {"_id": 0, "provider_payment_id": 1,
+             "order_reference_id": 1, "amount": 1},
+        ):
+            pp_id = rf.get("provider_payment_id")
+            ref_id = rf.get("order_reference_id")
+            if pp_id and pp_id in counted_pids:
+                continue
+            orig = None
+            if pp_id:
+                orig = await db.payment_transactions.find_one(
+                    {"user_id": user_id, "provider": "tamara",
+                     "provider_id": pp_id},
+                    {"_id": 0, "amount": 1, "provider_id": 1,
+                     "is_pre_accounting": 1},
+                )
+            if not orig and ref_id:
+                orig = await db.payment_transactions.find_one(
+                    {"user_id": user_id, "provider": "tamara",
+                     "order_reference_id": ref_id},
+                    {"_id": 0, "amount": 1, "provider_id": 1,
+                     "is_pre_accounting": 1},
+                )
+            if not orig or orig.get("is_pre_accounting"):
+                continue
+            orig_pid = orig.get("provider_id")
+            if orig_pid and orig_pid in counted_pids:
+                continue
+            amt = float(orig.get("amount") or 0)
+            if amt <= 0:
+                continue
+            fee_unrounded = amt * commission_rate + fixed_fee_per_order
+            sales_commission += fee_unrounded
+            sales_vat += fee_unrounded * vat_rate
+            if orig_pid:
+                counted_pids.add(orig_pid)
 
     refund_rebate = 0.0
     refund_vat_rebate = 0.0
@@ -971,6 +1024,11 @@ async def compute_settlement_for_provider(
         # badge: "أرقام رسمية من تمارا" when an official file is used.
         "data_source": data_source,
         "system_totals": system_totals,
+        # Iter-234 — version marker so the UI / debug tools can verify
+        # the deployed engine includes the Tamara orphan-refund
+        # recovery fix (gross + commission both honour
+        # same-week-capture+refund orders).
+        "engine_version": "iter234",
     }
 
 
