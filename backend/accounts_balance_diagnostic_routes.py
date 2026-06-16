@@ -251,6 +251,130 @@ def make_accounts_balance_diagnostic_router(db, current_user):
     return router
 
 
+def make_account_drift_detail_router(db, current_user):
+    """Iter-239g — Per-account drift detail (READ-ONLY).
+
+    For a specific account, classifies EVERY account_transactions row as
+    either (a) already mirrored in general_ledger, or (b) un-posted.
+    Returns the totals and the first N un-posted transaction IDs.
+    """
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    @router.get("/account-drift-detail/{account_id}")
+    async def account_drift_detail(
+        account_id: str,
+        limit_sample: int = Query(20, ge=1, le=100),
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        acc = await db.accounts.find_one(
+            {"id": account_id, "user_id": uid}, {"_id": 0},
+        )
+        if not acc:
+            from fastapi import HTTPException
+            raise HTTPException(404, "account not found")
+
+        # Build the set of (idempotency_keys + ids) already mirrored
+        # in general_ledger for this entity.  Two link strategies:
+        #   • metadata.idempotency_key  (BNPL settlements use this)
+        #   • metadata.account_transaction_id  (future double-write)
+        mirrored_idem_keys: set[str] = set()
+        mirrored_txn_ids: set[str] = set()
+        async for e in db.general_ledger.find(
+            {"user_id": uid, "entity_type": "bank",
+             "entity_id": account_id, "status": "posted"},
+            {"_id": 0, "metadata": 1},
+        ):
+            m = e.get("metadata") or {}
+            k = m.get("idempotency_key")
+            t = m.get("account_transaction_id")
+            if k:
+                mirrored_idem_keys.add(k)
+            if t:
+                mirrored_txn_ids.add(t)
+
+        total_count = 0
+        mirrored_count = 0
+        unmirrored_count = 0
+        mirrored_amount = 0.0
+        unmirrored_amount_in = 0.0
+        unmirrored_amount_out = 0.0
+        unmirrored_sample: list[dict] = []
+        last_n_all: list[dict] = []
+        async for t in db.account_transactions.find(
+            {"user_id": uid, "account_id": account_id},
+            {"_id": 0, "id": 1, "amount": 1, "direction": 1,
+             "transaction_type": 1, "description": 1,
+             "transaction_date": 1, "created_at": 1, "metadata": 1},
+        ).sort([("created_at", -1)]):
+            total_count += 1
+            t_id = t.get("id") or ""
+            t_idem = (t.get("metadata") or {}).get("idempotency_key")
+            is_mirrored = (
+                (t_id and t_id in mirrored_txn_ids)
+                or (t_idem and t_idem in mirrored_idem_keys)
+            )
+            amt = float(t.get("amount") or 0)
+            row = {
+                "id": t_id,
+                "amount": _r(amt),
+                "direction": t.get("direction"),
+                "type": t.get("transaction_type"),
+                "description": (t.get("description") or "")[:80],
+                "transaction_date": t.get("transaction_date"),
+                "created_at": t.get("created_at"),
+                "is_mirrored_in_ledger": bool(is_mirrored),
+                "idempotency_key": t_idem,
+            }
+            if len(last_n_all) < limit_sample:
+                last_n_all.append(row)
+            if is_mirrored:
+                mirrored_count += 1
+                mirrored_amount += amt
+            else:
+                unmirrored_count += 1
+                if t.get("direction") == "in":
+                    unmirrored_amount_in += amt
+                else:
+                    unmirrored_amount_out += amt
+                if len(unmirrored_sample) < limit_sample:
+                    unmirrored_sample.append(row)
+
+        unmirrored_net = _r(unmirrored_amount_in - unmirrored_amount_out)
+        return {
+            "success": True,
+            "read_only": True,
+            "iteration": "iter239g-account-drift-detail",
+            "account_id": account_id,
+            "account_name": acc.get("name"),
+            "account_type": acc.get("account_type"),
+            "totals": {
+                "total_transactions": total_count,
+                "mirrored_in_ledger_count": mirrored_count,
+                "unmirrored_count": unmirrored_count,
+                "mirrored_amount_total": _r(mirrored_amount),
+                "unmirrored_amount_in": _r(unmirrored_amount_in),
+                "unmirrored_amount_out": _r(unmirrored_amount_out),
+                "unmirrored_net": unmirrored_net,
+            },
+            "first_n_unmirrored_transactions": unmirrored_sample,
+            "first_n_all_transactions_with_status": last_n_all,
+            "link_strategies_checked": [
+                "metadata.idempotency_key",
+                "metadata.account_transaction_id",
+            ],
+            "notes": [
+                "READ-ONLY: no data is modified.",
+                "A txn is 'mirrored' if its id OR idempotency_key appears "
+                "in general_ledger.metadata for this entity.",
+                "Legacy BNPL settlements mirror via idempotency_key.",
+                "Future double-write will mirror via account_transaction_id.",
+            ],
+        }
+
+    return router
+
+
 def make_repair_audit_router(db, current_user):
     """Iter-239f — READ-ONLY safety audit.
 
@@ -423,6 +547,42 @@ def make_accounts_balance_repair_preview_router(db, current_user):
             # Expected SSOT after repair = current SSOT + adjustment.
             expected_after = _r(ssot_now + adjustment_needed)
 
+            # Iter-239e — Safety classification.
+            exclusion_reasons: list[str] = []
+            if len(txn_ids) == 0:
+                exclusion_reasons.append(
+                    "transactions_to_link_count == 0 — drift is ledger-only, "
+                    "no manual transactions to back the repair"
+                )
+            if ssot_now > 1000 and abs(expected_after) < 1:
+                exclusion_reasons.append(
+                    "expected_ssot_after_repair would zero-out a non-trivial "
+                    "positive balance — refusing"
+                )
+            if ssot_now > 0 and expected_after < -1000:
+                exclusion_reasons.append(
+                    "expected_ssot_after_repair would flip a positive balance "
+                    "to a large negative (>1000) — refusing"
+                )
+            if abs(adjustment_needed) > 200_000:
+                exclusion_reasons.append(
+                    f"adjustment magnitude {abs(adjustment_needed):.2f} > "
+                    f"200,000 SAR — requires explicit approval"
+                )
+            # Confidence score: 100 = safe; lower = riskier.
+            confidence_score = 100
+            confidence_score -= len(exclusion_reasons) * 30
+            if len(txn_ids) == 0:
+                confidence_score -= 40
+            if existing_repair is not None:
+                confidence_score -= 50  # already repaired once
+            confidence_score = max(0, confidence_score)
+            eligible_for_apply = (
+                len(exclusion_reasons) == 0
+                and existing_repair is None
+                and confidence_score >= 70
+            )
+
             proposals.append({
                 "account_id": acc_id,
                 "account_name": acc.get("name"),
@@ -440,13 +600,21 @@ def make_accounts_balance_repair_preview_router(db, current_user):
                 "already_repaired": existing_repair is not None,
                 "original_transaction_ids_sample": txn_ids[:20],
                 "original_transaction_ids_total": len(txn_ids),
+                # Iter-239e — safe-guard fields.
+                "eligible_for_apply": eligible_for_apply,
+                "exclusion_reasons": exclusion_reasons,
+                "confidence_score": confidence_score,
+                "inclusion_reason": (
+                    "txn_net differs from ledger_net by "
+                    f"{abs(adjustment_needed):.2f} SAR"
+                ),
             })
 
         proposals.sort(key=lambda p: -abs(p["adjustment_needed"]))
         return {
             "success": True,
             "read_only": True,
-            "iteration": "iter239d-preview",
+            "iteration": "iter239e-preview",
             "summary": {
                 "accounts_with_drift": len(proposals),
                 "total_positive_adjustments": _r(sum(
