@@ -60,12 +60,12 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
         return out
 
     async def _cost_map(uid: str) -> dict[str, float]:
-        """Iter-235 — fallback cost per shipping company.
+        """Iter-235/236b — fallback cost per shipping company.
 
-        Reads `settings.shipping_companies[].cost` and exposes it
-        keyed by both the canonical key AND the raw configured name
-        (case-insensitive) so any spelling that arrives on the
-        order's `shipping_company` field resolves correctly.
+        Reads `settings.shipping_companies[]` and accepts BOTH
+        `cost` AND `cost_per_order` (the page persists both, but
+        legacy rows may only have one). Keyed by the canonical key
+        AND the raw configured name (case-insensitive).
         """
         s = await db.settings.find_one({"user_id": uid},
                                        {"_id": 0, "shipping_companies": 1})
@@ -74,8 +74,14 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             name = (c.get("name") or "").strip()
             if not name:
                 continue
+            # Prefer cost_per_order (the field the page actually edits),
+            # fall back to cost for legacy rows.
             try:
-                cost = float(c.get("cost") or 0)
+                cost = float(
+                    c.get("cost_per_order")
+                    if c.get("cost_per_order") is not None
+                    else (c.get("cost") or 0)
+                )
             except (TypeError, ValueError):
                 cost = 0.0
             if cost <= 0:

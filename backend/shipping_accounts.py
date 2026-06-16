@@ -209,7 +209,13 @@ async def compute_owed_per_company(db, user_id: str) -> dict[str, dict]:
         if not cfg or not cfg.get("is_deferred"):
             continue
         order_cost = float(o.get("shipping_cost") or 0)
-        cfg_cost = float(cfg.get("cost") or 0)
+        # Iter-236b — prefer `cost_per_order` (the field actually edited
+        # in /shipping/settings), fall back to legacy `cost`.
+        cfg_cost = float(
+            cfg.get("cost_per_order")
+            if cfg.get("cost_per_order") is not None
+            else (cfg.get("cost") or 0)
+        )
         vat = float(cfg.get("vat_rate") or 0)
         cost = order_cost if order_cost > 0 else cfg_cost
         entry = out.setdefault(canonical, {
@@ -567,7 +573,11 @@ def _build_router(db) -> APIRouter:
             delivered = status_is_delivered(o.get("order_status", ""))
             is_cod = _is_cod_method(o.get("payment_method") or "")
             total = float(o.get("total_amount") or 0)
-            cost_each = float(o.get("shipping_cost") or 0) or float(cfg.get("cost") or 0)
+            cost_each = float(o.get("shipping_cost") or 0) or float(
+                cfg.get("cost_per_order")
+                if cfg.get("cost_per_order") is not None
+                else (cfg.get("cost") or 0)
+            )
             if delivered:
                 row["delivered_orders_count"] += 1
                 row["shipping_cost"] += cost_each * (1 + row["vat_rate"])
