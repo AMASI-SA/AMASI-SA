@@ -290,8 +290,26 @@ def make_accounts_balance_repair_preview_router(db, current_user):
             }
 
         proposals: list[dict] = []
+        excluded_bnpl: list[dict] = []
         async for acc in db.accounts.find(acc_filter, {"_id": 0}):
             acc_id = acc["id"]
+            # Iter-239d — Exclude BNPL canonical accounts (tabby/tamara).
+            # Their balance is engine-driven via compute_settlement_for_provider
+            # and does NOT track account_transactions, so net-based
+            # reconciliation against account_transactions doesn't apply.
+            try:
+                from bnpl.balance_service import is_bnpl_account
+                bnpl_p = is_bnpl_account(acc)
+            except Exception:
+                bnpl_p = None
+            if bnpl_p:
+                excluded_bnpl.append({
+                    "account_id": acc_id,
+                    "account_name": acc.get("name"),
+                    "bnpl_provider": bnpl_p,
+                    "reason": "BNPL canonical engine — handled by /api/audit/bnpl-balance-source-comparison instead",
+                })
+                continue
             # txn aggregate.
             sum_in = 0.0
             sum_out = 0.0
@@ -365,7 +383,7 @@ def make_accounts_balance_repair_preview_router(db, current_user):
         return {
             "success": True,
             "read_only": True,
-            "iteration": "iter239-preview",
+            "iteration": "iter239d-preview",
             "summary": {
                 "accounts_with_drift": len(proposals),
                 "total_positive_adjustments": _r(sum(
@@ -379,16 +397,16 @@ def make_accounts_balance_repair_preview_router(db, current_user):
                 "already_repaired_count": sum(
                     1 for p in proposals if p["already_repaired"]
                 ),
+                "bnpl_excluded_count": len(excluded_bnpl),
             },
             "proposals": proposals,
+            "excluded_bnpl_accounts": excluded_bnpl,
             "notes": [
                 "READ-ONLY: no data is modified.",
-                "Net-based reconciliation prevents double-counting "
-                "transactions that already have matching ledger entries.",
-                "One adjustment entry per account will be created on apply.",
+                "Net-based reconciliation prevents double-counting.",
+                "BNPL canonical accounts (tabby/tamara) excluded — handled separately.",
                 "Adjustment side: debit (asset+) if txn_net > ledger_net.",
-                "Counterpart: 'balance_repair' adjustment account "
-                "(auto-created on apply).",
+                "Counterpart on apply: «تسوية أرصدة حسابات (Audit)».",
             ],
         }
 
