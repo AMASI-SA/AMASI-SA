@@ -402,6 +402,131 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
         ):
             in_window_after_recovery = True
 
+        # Iter-234c — Replicate the EXACT sales_match used by the
+        # settlement engine (`_compute_provider_totals`) so we can see
+        # WHY a txn that looks in-window by attribution isn't included
+        # in `gross_sales`.  This catches:
+        #   - accounting_cutoff filter (Iter-149) excluding it
+        #   - is_pre_accounting flag
+        #   - any future filter additions
+        sales_date_field = (
+            "effective_settlement_date" if provider == "tamara"
+            else "created_at_provider"
+        )
+        engine_sales_match: dict = {
+            "user_id": uid, "provider": provider,
+        }
+        if utc_gte or utc_lte:
+            rng: dict = {}
+            if utc_gte:
+                rng["$gte"] = utc_gte
+            if utc_lte:
+                rng["$lte"] = utc_lte
+            engine_sales_match[sales_date_field] = rng
+        accounting_cutoff = None
+        try:
+            from accounting_cutoffs import get_cutoff
+            accounting_cutoff = await get_cutoff(db, uid, provider)
+        except Exception:
+            pass
+        if accounting_cutoff:
+            rng = engine_sales_match.setdefault(sales_date_field, {})
+            if isinstance(rng, dict):
+                prev = rng.get("$gte")
+                if not prev or str(prev) < accounting_cutoff:
+                    rng["$gte"] = accounting_cutoff
+            engine_sales_match["is_pre_accounting"] = {"$ne": True}
+
+        # Does THIS exact txn match the engine filter?
+        engine_matches = False
+        # Iter-234c — progressive filter breakdown so we can pinpoint
+        # which filter (if any) is excluding this txn.
+        filter_breakdown = {}
+        if txn and txn.get("provider_id"):
+            tx_pid = txn["provider_id"]
+            stages = [
+                ("base_user_provider_pid", {
+                    "user_id": uid, "provider": provider,
+                    "provider_id": tx_pid,
+                }),
+                ("+_sales_date_field_range", {
+                    "user_id": uid, "provider": provider,
+                    "provider_id": tx_pid,
+                    sales_date_field: (
+                        engine_sales_match.get(sales_date_field) or {}
+                    ),
+                }),
+                ("+_is_pre_accounting", {
+                    "user_id": uid, "provider": provider,
+                    "provider_id": tx_pid,
+                    sales_date_field: (
+                        engine_sales_match.get(sales_date_field) or {}
+                    ),
+                    "is_pre_accounting": (
+                        engine_sales_match.get(
+                            "is_pre_accounting",
+                            {"$ne": True},
+                        )
+                    ),
+                }),
+            ]
+            for name, q in stages:
+                # Drop empty range to avoid mongo error.
+                if (sales_date_field in q
+                        and not q.get(sales_date_field)):
+                    q.pop(sales_date_field, None)
+                cnt = await db.payment_transactions.count_documents(q)
+                filter_breakdown[name] = cnt
+            engine_matches = filter_breakdown.get(
+                "+_is_pre_accounting", 0,
+            ) > 0
+        engine_filters = {
+            "sales_date_field": sales_date_field,
+            "accounting_cutoff": accounting_cutoff,
+            "filter_used": {
+                k: (v if not isinstance(v, dict) else dict(v))
+                for k, v in engine_sales_match.items()
+            },
+            "filter_breakdown": filter_breakdown,
+        }
+        # Aggregate gross/count using the engine's exact filter to show
+        # what the engine ACTUALLY computes for this window.
+        engine_gross = 0.0
+        engine_count = 0
+        async for r in db.payment_transactions.aggregate([
+            {"$match": engine_sales_match},
+            {"$group": {"_id": None, "n": {"$sum": 1},
+                        "gross": {"$sum": {"$ifNull": ["$amount", 0]}}}},
+        ]):
+            engine_count = int(r.get("n") or 0)
+            engine_gross = _r(float(r.get("gross") or 0))
+
+        # Iter-234c — Also surface the FULL settlement engine output
+        # for this window so the merchant can see exactly what numbers
+        # the deployed engine produces (no guessing from the UI).
+        from .settlements_service import compute_settlement_for_provider
+        engine_full = None
+        try:
+            engine_full = await compute_settlement_for_provider(
+                db, uid, provider, date_from, date_to,
+            )
+        except Exception as exc:  # noqa: BLE001
+            engine_full = {"error": str(exc)}
+        engine_totals = (engine_full or {}).get("totals") or {}
+        engine_summary = {
+            "engine_version": (engine_full or {}).get("engine_version"),
+            "data_source": (engine_full or {}).get("data_source"),
+            "transactions_count": engine_totals.get("transactions_count"),
+            "refunds_count": engine_totals.get("refunds_count"),
+            "gross_sales": engine_totals.get("gross_sales"),
+            "total_refunds": engine_totals.get("total_refunds"),
+            "net_sales": engine_totals.get("net_sales"),
+            "commission": engine_totals.get("commission"),
+            "commission_vat": engine_totals.get("commission_vat"),
+            "settlement_fee": engine_totals.get("settlement_fee"),
+            "settlement_fee_vat": engine_totals.get("settlement_fee_vat"),
+            "net_payable": engine_totals.get("net_payable"),
+        }
         return {
             "success": True,
             "engine_version": "iter234",
@@ -428,6 +553,11 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             "in_window_after_iter234_recovery": in_window_after_recovery,
             "refunds_in_window": refunds,
             "refunds_count_in_window": len(refunds),
+            "engine_filters": engine_filters,
+            "engine_matches_this_txn": engine_matches,
+            "engine_gross_in_window": engine_gross,
+            "engine_count_in_window": engine_count,
+            "engine_full_settlement_totals": engine_summary,
         }
 
     # ── Iter-221 — Registration page support endpoints ────────────────
