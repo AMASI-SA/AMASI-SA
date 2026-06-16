@@ -759,21 +759,28 @@ async def compute_settlement_for_provider(
             **({"$lte": utc_lte} if utc_lte else {}),
         }
 
+    # Iter-228 — Rounding accuracy fix. Previously we rounded
+    # `amt * commission_rate` PER transaction (and again for VAT),
+    # which caused a ±0.005 SAR drift per transaction. Over 30-50
+    # transactions, this accumulated into a ~0.22 SAR delta vs.
+    # Tabby's official invoice (which sums first, then rounds once).
+    # We now accumulate raw products in full precision and round
+    # ONLY the final totals — matching the processor's math exactly.
     sales_commission = 0.0
     sales_vat = 0.0
     async for t in db.payment_transactions.find(sales_match, {"_id": 0, "amount": 1}):
         amt = float(t.get("amount") or 0)
-        fee = round(amt * commission_rate, 2) + fixed_fee_per_order
-        sales_commission += fee
-        sales_vat += round(fee * vat_rate, 2)
+        fee_unrounded = amt * commission_rate + fixed_fee_per_order
+        sales_commission += fee_unrounded
+        sales_vat += fee_unrounded * vat_rate
 
     refund_rebate = 0.0
     refund_vat_rebate = 0.0
     async for r in db.payment_refunds.find(refund_match, {"_id": 0, "amount": 1}):
         amt = float(r.get("amount") or 0)
-        rebate = round(amt * refundable_rate, 2)
-        refund_rebate += rebate
-        refund_vat_rebate += round(rebate * vat_rate, 2)
+        rebate_unrounded = amt * refundable_rate
+        refund_rebate += rebate_unrounded
+        refund_vat_rebate += rebate_unrounded * vat_rate
 
     commission     = _r(sales_commission - refund_rebate)
     commission_vat = _r(sales_vat        - refund_vat_rebate)

@@ -3548,3 +3548,36 @@ The 90-day widening means each Tabby sync now reads ~90 days of payments instead
 ### Not yet done
 - **Layer 3** (refunds-refresh endpoint that re-queries individual old payments via `GET /payments/{id}` for >90-day refunds) — deferred. If user reports a refund from >90 days ago that didn't sync, we add it then.
 
+
+
+## Completed Work — Iter-228 (Feb 16 2026): Settlement Rounding Accuracy Fix
+
+**User issue**: After Iter-227 closed the refund gap, Tabby system showed 13,236.56 vs. Tabby invoice 13,236.78 → 0.22 SAR drift (~22 halalas).
+
+### Root cause
+`_compute_provider_totals` was rounding fee + VAT **per transaction**:
+```python
+fee = round(amt * commission_rate, 2) + fixed_fee_per_order
+sales_commission += fee
+sales_vat += round(fee * vat_rate, 2)
+```
+With ~50 transactions and ±0.005 SAR rounding bias per txn, the total drift accumulates to ~0.22 SAR — exactly matching the user's observation.
+
+### Fix — sum-first, round-last
+```python
+fee_unrounded = amt * commission_rate + fixed_fee_per_order
+sales_commission += fee_unrounded
+sales_vat += fee_unrounded * vat_rate
+# ... rounding happens ONCE at the end via _r()
+commission     = _r(sales_commission - refund_rebate)
+commission_vat = _r(sales_vat        - refund_vat_rebate)
+```
+This matches Tabby's (and most processors') invoice math exactly.
+
+### Tests — `test_settlement_rounding_iter228.py` (2/2 PASS, 21/21 total)
+1. ✅ 50 transactions × 33.33 → commission matches sum-first formula exactly (166.49 ≠ 166.50 with per-row rounding).
+2. ✅ Sale 1000 + refund 100 → commission = (1000×0.0699 + 1.0) − (100×0.0499) = 65.91 cleanly.
+
+### Effect on Production
+After redeploy, the auto-fill values should now match the Tabby invoice within < 0.02 SAR (tiny residual from floating-point representation, which `_r()` handles correctly).
+
