@@ -251,6 +251,53 @@ def make_accounts_balance_diagnostic_router(db, current_user):
     return router
 
 
+def make_repair_audit_router(db, current_user):
+    """Iter-239f — READ-ONLY safety audit.
+
+    Confirms no apply ever ran (zero repair entries exist) AND provides
+    a future-ready rollback PREVIEW (still read-only, just lists what
+    WOULD be reversed if you ever ask for an apply).
+    """
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    @router.get("/balance-repair-audit")
+    async def balance_repair_audit(user: dict = Depends(current_user)):
+        uid = user["id"]
+        # Detect any repair entries by ANY of the documented markers.
+        match = {
+            "user_id": uid,
+            "$or": [
+                {"entry_type": "balance_repair"},
+                {"metadata.source": "account_transactions_repair"},
+                {"metadata.repair_iteration": {"$regex": "Iter-239"}},
+                {"metadata.created_by": "system_repair"},
+            ],
+        }
+        total_count = await db.general_ledger.count_documents(match)
+        entries: list[dict] = []
+        async for e in db.general_ledger.find(match, {
+            "_id": 0, "id": 1, "entity_type": 1, "entity_id": 1,
+            "entry_type": 1, "side": 1, "amount": 1, "posted_at": 1,
+            "notes": 1, "metadata": 1,
+        }).sort([("posted_at", -1)]).limit(100):
+            entries.append(e)
+        return {
+            "success": True,
+            "read_only": True,
+            "iteration": "iter239f-audit",
+            "apply_was_run": total_count > 0,
+            "repair_entries_count": total_count,
+            "repair_entries_first_100": entries,
+            "rollback_needed": total_count > 0,
+            "notes": [
+                "If repair_entries_count == 0 → NO apply ever ran. No rollback needed.",
+                "This endpoint is read-only and only scans the ledger.",
+                "If you ever DO run apply, this endpoint will list exactly what to reverse.",
+            ],
+        }
+
+    return router
+
 def make_accounts_balance_repair_preview_router(db, current_user):
     """Iter-239 — Read-only preview of the proposed ledger-side fix.
 
@@ -291,23 +338,39 @@ def make_accounts_balance_repair_preview_router(db, current_user):
 
         proposals: list[dict] = []
         excluded_bnpl: list[dict] = []
+        excluded_unsafe: list[dict] = []
         async for acc in db.accounts.find(acc_filter, {"_id": 0}):
             acc_id = acc["id"]
-            # Iter-239d — Exclude BNPL canonical accounts (tabby/tamara).
-            # Their balance is engine-driven via compute_settlement_for_provider
-            # and does NOT track account_transactions, so net-based
-            # reconciliation against account_transactions doesn't apply.
+            acc_name = (acc.get("name") or "").strip()
+            acc_type = acc.get("account_type")
+            # Iter-239e — STRICTER BNPL exclusion.
+            # is_bnpl_account() may miss accounts depending on shape.
+            # We ALSO match by name regex to be safe.
             try:
                 from bnpl.balance_service import is_bnpl_account
                 bnpl_p = is_bnpl_account(acc)
             except Exception:
                 bnpl_p = None
-            if bnpl_p:
+            name_lower = acc_name.lower()
+            bnpl_name_match = None
+            for prov, needles in (
+                ("tabby",  ["tabby", "تابي"]),
+                ("tamara", ["tamara", "تمارا"]),
+            ):
+                if any(n in name_lower or n in acc_name for n in needles):
+                    bnpl_name_match = prov
+                    break
+            effective_bnpl = bnpl_p or bnpl_name_match
+            if effective_bnpl:
                 excluded_bnpl.append({
                     "account_id": acc_id,
-                    "account_name": acc.get("name"),
-                    "bnpl_provider": bnpl_p,
-                    "reason": "BNPL canonical engine — handled by /api/audit/bnpl-balance-source-comparison instead",
+                    "account_name": acc_name,
+                    "account_type": acc_type,
+                    "bnpl_provider": effective_bnpl,
+                    "detected_via": (
+                        "is_bnpl_account" if bnpl_p else "name_match"
+                    ),
+                    "reason": "BNPL canonical engine — handled separately",
                 })
                 continue
             # txn aggregate.
