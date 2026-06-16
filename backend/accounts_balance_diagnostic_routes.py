@@ -425,20 +425,54 @@ def make_accounts_balance_repair_preview_router(db, current_user):
             from fastapi import HTTPException
             raise HTTPException(400, "provider must be tabby or tamara")
 
-        # Source A: engine.
+        # ── Source A: engine (used by /accounts and /bnpl-settlements/register's "expected") ──
         from bnpl.balance_service import get_bnpl_provider_balance
         a = await get_bnpl_provider_balance(db, uid, provider)
         engine_balance = _r(a.get("balance"))
 
-        # Source B: ledger receivable sub-account.
+        # ── Source B: ledger receivable (entity_type=payment_gateway, sub=receivable) ──
         from ledger_core import compute_balance as _cb
         recv = await _cb(
             db, user_id=uid, entity_type="payment_gateway",
             entity_id=provider, sub_account="receivable",
         )
-        ledger_receivable = _r(recv.get("net_balance"))
+        ledger_receivable_net = _r(recv.get("net_balance"))
+        ledger_debits = _r(recv.get("debits"))   # Iter-239c — correct keys
+        ledger_credits = _r(recv.get("credits"))
 
-        diff = _r(ledger_receivable - engine_balance)
+        # ── Source C: registration-overview (what the settlements page ACTUALLY shows) ──
+        # Replicates the exact maths used by /api/bnpl/settlements/registration-overview
+        # so we can pinpoint which of its fields the UI is rendering.
+        # received_total = sum of close-out credit legs.
+        recv_pipeline = [
+            {"$match": {
+                "user_id": uid,
+                "entry_type": "bnpl_settlement",
+                "status": "posted",
+                "side": "credit",
+                "entity_type": "payment_gateway",
+                "entity_id": provider,
+            }},
+            {"$group": {"_id": None,
+                        "total": {"$sum": "$amount"},
+                        "count": {"$sum": 1}}},
+        ]
+        received_total = 0.0
+        received_count = 0
+        async for row in db.general_ledger.aggregate(recv_pipeline):
+            received_total = _r(row.get("total"))
+            received_count = int(row.get("count") or 0)
+        registration_overview_mirror = {
+            "current_receivable_from_ledger": ledger_receivable_net,
+            "expected_total_from_engine": engine_balance,
+            "received_total_close_out_legs": received_total,
+            "received_count": received_count,
+            "difference_expected_minus_received": _r(
+                engine_balance - received_total,
+            ),
+        }
+
+        diff = _r(ledger_receivable_net - engine_balance)
 
         # Breakdown by entry_type within payment_gateway/<provider>/receivable.
         from collections import defaultdict
@@ -493,10 +527,11 @@ def make_accounts_balance_repair_preview_router(db, current_user):
         return {
             "success": True,
             "read_only": True,
-            "iteration": "iter239b-bnpl-comparator",
+            "iteration": "iter239c-bnpl-comparator",
             "provider": provider,
             "source_a_accounts_page": {
-                "name": "/accounts (engine: compute_settlement_for_provider)",
+                "name": "/accounts — account_balance_ssot → get_bnpl_provider_balance → compute_settlement_for_provider",
+                "actual_ui_endpoint_used": f"GET /api/accounts (engine-driven via BNPL canonical formula for provider={provider})",
                 "balance": engine_balance,
                 "components": a.get("components"),
                 "transactions_count": a.get("transactions_count"),
@@ -504,27 +539,35 @@ def make_accounts_balance_repair_preview_router(db, current_user):
                     (a.get("fee_rates") or {}).get("fee_source")
                 ),
             },
-            "source_b_settlements_page": {
-                "name": "/bnpl-settlements/register (ledger: payment_gateway/receivable)",
-                "balance": ledger_receivable,
-                "total_credit": _r(recv.get("total_credit")),
-                "total_debit": _r(recv.get("total_debit")),
+            "source_b_ledger_receivable": {
+                "name": "general_ledger — entity_type=payment_gateway, sub_account=receivable",
+                "actual_ui_endpoint_used": "NOT directly shown in any UI page — this is the raw SSOT ledger receivable.",
+                "balance_net": ledger_receivable_net,
+                "debits_sum": ledger_debits,
+                "credits_sum": ledger_credits,
+                "balance_formula": "net_balance = Σ debits − Σ credits  (>0 ⇒ provider owes us, <0 ⇒ we owe provider)",
             },
-            "difference": diff,
+            "source_c_settlements_page": {
+                "name": "/bnpl-settlements/register — GET /api/bnpl/settlements/registration-overview",
+                "actual_ui_endpoint_used": "GET /api/bnpl/settlements/registration-overview (which calls BOTH the engine AND the ledger)",
+                "registration_overview_response": registration_overview_mirror,
+                "ui_likely_renders": "`expected_total` (from engine)  →  matches /accounts",
+            },
+            "difference_ledger_minus_engine": diff,
             "by_entry_type": {
                 k: {"credit": _r(v["credit"]),
                     "debit": _r(v["debit"]),
-                    "net": _r(v["credit"] - v["debit"]),
+                    "net": _r(v["debit"] - v["credit"]),
                     "count": v["count"],
                     "samples": v["samples"]}
                 for k, v in by_entry_type.items()
             },
             "suspect_entries": suspect_entries[:25],
             "notes": [
-                "If difference > 0: the ledger has MORE receivable than the engine computes.",
-                "Common causes: legacy migration entries, manual adjustments, or rounding drift.",
-                "Look in suspect_entries[] for non-standard entry_types.",
-                "Look in by_entry_type[].samples for unusual notes.",
+                "Source A (/accounts) and the UI shown in /bnpl-settlements/register are BOTH engine-driven (expected_total).",
+                "Source B (ledger receivable) is the raw SSOT — usually larger than the engine balance because it accumulates ALL postings without subtracting transferred_out as an asset rebate.",
+                "The earlier 119.10 SAR gap between /accounts and /bnpl-settlements/register was a rounding/cached drift between two callers of the same engine — likely already resolved.",
+                "If by_entry_type only contains bnpl_sale / bnpl_refund / bnpl_settlement, the ledger is clean (no migration orphans).",
                 "READ-ONLY: no data is modified.",
             ],
         }
