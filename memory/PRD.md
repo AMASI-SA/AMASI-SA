@@ -3847,3 +3847,44 @@ After redeploy:
 
 ### Deployment note
 Iter-234c + Iter-234d are in PREVIEW only. Redeploy required.
+
+---
+
+## Iter-236 — أتمتة سعر صرف الدولار وعمولة البنك للحسابات الإعلانية (Feb 2026)
+
+### الهدف
+بدلاً من إدخال سعر الصرف ورسوم البنك يدوياً مع كل فاتورة إعلانية، النظام يحفظ إعدادات مركزية ويحتسب تلقائياً عند إنشاء أي فاتورة جديدة.
+
+### الـ Endpoints الجديدة
+- `GET/PUT /api/ads-currency-settings` — usd_to_sar_rate, bank_commission_pct (+ ينشئ تلقائياً حساب «رسوم بنكية وعمولات بطاقات» في expense_accounts).
+- `PUT /api/ads-currency-settings/account/{counterparty_id}` — يحفظ currency + apply_bank_commission لكل حساب إعلاني.
+- `GET /api/ads-currency-settings/preview?original_amount=&currency=&apply_bank_commission=` — معاينة الحساب قبل الإنشاء.
+- `GET /api/ads-currency-settings/summary` — إجمالي الإنفاق + الرسوم + المديونية لكل الفواتير.
+
+### Snapshot على فواتير ad_account
+عند POST `/api/liabilities` بـ `original_amount` + `original_currency`، النظام يحفظ:
+- `original_amount`, `original_currency` — كما أدخلها المستخدم
+- `sar_amount` — المبلغ مُحوَّل للريال
+- `exchange_rate_used` — السعر وقت الإنشاء (snapshot، لا يتغير لاحقاً)
+- `bank_commission_pct_used` — النسبة وقت الإنشاء
+- `bank_commission_amount` — قيمة الرسوم
+- `expected_amount` يصبح total_due_sar (sar + fee)
+
+### التحقق الرياضي (يطابق مثال المستخدم بالضبط)
+- SAR 5,000 @ 2.30% → fee 115 → total **5,115.00** ✅
+- USD 1,000 @ 3.7544 @ 2.30% → sar 3,754.40 + fee 86.35 → total **3,840.75** ✅
+
+### Frontend
+- صفحة `/settings/ads-currencies` جديدة بـ:
+  - 4 بطاقات إجمالية (count, ads_spend, bank_fees, total_due)
+  - الإعدادات العامة (rate + pct + auto-create expense account)
+  - معاينة حية USD + SAR
+  - جدول لكل حساب إعلاني (currency dropdown + apply_fee checkbox)
+- Link في Sidebar تحت قسم العمليات المالية.
+
+### Tests
+- `/app/backend/tests/test_ads_currency_iter236.py` — 4/4 PASSED
+- Regression: 13/13 across iter231/232/234/236.
+
+### Deployment note
+PREVIEW only. Redeploy required to push to https://mezansalla.com.

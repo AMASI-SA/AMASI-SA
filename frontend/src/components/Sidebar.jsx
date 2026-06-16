@@ -66,6 +66,7 @@ const SECTIONS = [
             { to: "/bnpl-settlements/register", label: "📝 تسجيل تسويات Tabby و Tamara", icon: Receipt, testid: "nav-bnpl-register" },
             { to: "/audit/employee-orphans", label: "🩺 تشخيص قيود الموظفين اليتيمة", icon: Receipt, testid: "nav-employee-orphans" },
             { to: "/audit/ad-debt", label: "📊 تشخيص فرق المديونيات الإعلانية", icon: Receipt, testid: "nav-ad-debt-diagnostic" },
+            { to: "/settings/ads-currencies", label: "💱 عملات وعمولة بنكية للحسابات الإعلانية", icon: Gear, testid: "nav-ads-currencies" },
             { to: "/salla-settlements", label: "تسويات سلة 🟧", icon: Receipt, testid: "nav-salla-settlements" },
             { to: "/settlements-overview", label: "📑 جميع التسويات", icon: Receipt, testid: "nav-settlements-overview" },
             { to: "/bnpl-balances", label: "أرصدة BNPL (المصدر الموحَّد)", icon: Receipt, testid: "nav-bnpl-balances" },

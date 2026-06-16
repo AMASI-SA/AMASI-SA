@@ -137,6 +137,14 @@ class LiabilityCreate(BaseModel):
     # ad_account
     ad_provider: Optional[str] = None
     ad_account_label: Optional[str] = Field(None, max_length=160)
+    # Iter-236 — original amount + currency (USD/SAR).  When provided,
+    # the engine computes SAR amount + bank commission automatically
+    # using the user's saved ads_currency_settings and persists a
+    # snapshot of the rate + commission used at creation time.
+    # When omitted, `expected_amount` is used as-is (legacy behaviour).
+    original_amount: Optional[float] = Field(None, gt=0)
+    original_currency: Optional[Literal["USD", "SAR"]] = None
+    apply_bank_commission_override: Optional[bool] = None
     # salary_advance
     employee_salary_id: Optional[str] = None
     paid_from_account_id: Optional[str] = None  # required for advances
@@ -1047,6 +1055,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             # the registered ad account (supports "Snapchat Account 1/2/3").
             ad_label = payload.ad_account_label or ""
             ad_provider = payload.ad_provider
+            cp_currency = "SAR"
+            cp_apply_fee = True
             if payload.counterparty_id:
                 cp = await db.counterparties.find_one(
                     {"id": payload.counterparty_id, "user_id": user["id"],
@@ -1056,6 +1066,41 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                     raise HTTPException(404, "الحساب الإعلاني غير موجود في قائمة الأطراف")
                 ad_label = cp["name"]
                 ad_provider = cp.get("ad_provider") or ad_provider
+                cp_currency = cp.get("currency") or "SAR"
+                cp_apply_fee = bool(cp.get("apply_bank_commission", True))
+
+            # Iter-236 — Auto-compute SAR amount + bank commission from
+            # the user's ads_currency_settings.
+            from ads_currency_routes import compute_ads_amounts
+            settings_doc = await db.ads_currency_settings.find_one(
+                {"user_id": user["id"]}, {"_id": 0},
+            ) or {}
+            usd_rate = float(settings_doc.get("usd_to_sar_rate")
+                             or 3.7544)
+            bank_pct = float(settings_doc.get("bank_commission_pct")
+                             or 2.30)
+            orig_amount = (payload.original_amount
+                           if payload.original_amount is not None
+                           else payload.expected_amount)
+            orig_currency = (payload.original_currency
+                             or cp_currency or "SAR")
+            apply_fee = (payload.apply_bank_commission_override
+                         if payload.apply_bank_commission_override is not None
+                         else cp_apply_fee)
+            calc = compute_ads_amounts(
+                original_amount=orig_amount,
+                currency=orig_currency,
+                usd_to_sar_rate=usd_rate,
+                bank_commission_pct=bank_pct,
+                apply_bank_commission=apply_fee,
+            )
+            # The persisted `expected_amount` is the FULL SAR due
+            # (sar_amount + bank commission) so existing payment + ageing
+            # flows keep working unchanged.
+            final_expected = (calc["total_due_sar"]
+                              if (payload.original_amount is not None)
+                              else _round(payload.expected_amount))
+
             row = {
                 "id": liab_id,
                 "user_id": user["id"],
@@ -1065,7 +1110,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 "ad_account_label": ad_label,
                 "counterparty_id": payload.counterparty_id,
                 "period_key": None,
-                "expected_amount": _round(payload.expected_amount),
+                "expected_amount": final_expected,
                 "paid_amount": 0.0,
                 "advance_deducted": 0.0,
                 "due_date": payload.due_date,
@@ -1075,6 +1120,14 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 "auto_generated": False,
                 "created_at": now,
                 "updated_at": now,
+                # Iter-236 — snapshot fields (read-only history).
+                "original_amount": calc["original_amount"],
+                "original_currency": calc["original_currency"],
+                "sar_amount": calc["sar_amount"],
+                "exchange_rate_used": calc["exchange_rate_used"],
+                "bank_commission_pct_used": calc["bank_commission_pct_used"],
+                "bank_commission_amount": calc["bank_commission_amount"],
+                "iter": "iter236",
             }
             await db.liabilities.insert_one(row)
             return _enrich(row)

@@ -54,6 +54,7 @@ import BnplSettlements from "./pages/BnplSettlements";
 import BnplSettlementsRegister from "./pages/BnplSettlementsRegister";
 import EmployeeOrphanDiagnostic from "./pages/EmployeeOrphanDiagnostic";
 import AdDebtDiagnostic from "./pages/AdDebtDiagnostic";
+import AdsCurrencySettings from "./pages/AdsCurrencySettings";
 import SallaSettlements from "./pages/SallaSettlements";
 import SettlementsOverview from "./pages/SettlementsOverview";
 import AlertsPage from "./pages/AlertsPage";
@@ -139,6 +140,7 @@ function AppRoutes() {
             <Route path="/bnpl-settlements/register" element={<ProtectedRoute><Layout><BnplSettlementsRegister /></Layout></ProtectedRoute>} />
             <Route path="/audit/employee-orphans" element={<ProtectedRoute><Layout><EmployeeOrphanDiagnostic /></Layout></ProtectedRoute>} />
             <Route path="/audit/ad-debt" element={<ProtectedRoute><Layout><AdDebtDiagnostic /></Layout></ProtectedRoute>} />
+            <Route path="/settings/ads-currencies" element={<ProtectedRoute><Layout><AdsCurrencySettings /></Layout></ProtectedRoute>} />
             <Route path="/salla-settlements" element={<ProtectedRoute><Layout><SallaSettlements /></Layout></ProtectedRoute>} />
             <Route path="/settlements-overview" element={<ProtectedRoute><Layout><SettlementsOverview /></Layout></ProtectedRoute>} />
             <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />

@@ -3673,6 +3673,9 @@ api.include_router(make_employee_orphan_router(db, current_user))
 # Iter-230 — Ad Debt Diagnostic (READ-ONLY, compares walk vs SSOT)
 from ad_debt_diagnostic_routes import make_ad_debt_diagnostic_router
 api.include_router(make_ad_debt_diagnostic_router(db, current_user))
+
+from ads_currency_routes import attach_ads_currency_routes
+attach_ads_currency_routes(api, db)
 app.include_router(api)
 
 # CORS
