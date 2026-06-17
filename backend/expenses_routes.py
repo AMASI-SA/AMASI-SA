@@ -278,6 +278,30 @@ async def _post_daily_expense_tx(
         "updated_at": now,
     })
     await _recompute_account_balance_for_expense(db, user_id, account_id)
+
+    # Iter-240 — mirror this expense payment into general_ledger (SSOT).
+    try:
+        from ledger_double_write import mirror_account_txn_to_ledger
+        await mirror_account_txn_to_ledger(
+            db,
+            user_id=user_id,
+            account_id=account_id,
+            account_transaction_id=tx_id,
+            amount=round(float(amount), 2),
+            direction="out",
+            transaction_type="expense",
+            transaction_date=transaction_date,
+            description=desc[:280],
+            counter_entity_type="expense",
+            counter_entity_id=expense_id or "expense_unknown",
+            created_by_endpoint="expenses_routes._post_daily_expense_tx",
+            idempotency_key=f"daily_expense:{expense_id}",
+        )
+    except Exception as _e:  # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning(
+            "iter240 mirror failed for expense tx %s: %s", tx_id, _e
+        )
     return tx_id
 
 
@@ -288,6 +312,15 @@ async def _delete_daily_expense_tx(
     await db.account_transactions.delete_one(
         {"id": transaction_id, "user_id": user_id}
     )
+    # Iter-240 — also purge the mirrored ledger pair.
+    try:
+        await db.general_ledger.delete_many({
+            "user_id": user_id,
+            "metadata.account_transaction_id": transaction_id,
+            "metadata.source": "account_transaction_double_write",
+        })
+    except Exception:  # noqa: BLE001
+        pass
     if account_id:
         await _recompute_account_balance_for_expense(db, user_id, account_id)
 

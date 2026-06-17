@@ -509,7 +509,14 @@ async def _post_spend_to_ledger(
 async def _post_bank_tx(db, user_id: str, *,
                         account_id: str, amount: float, direction: str,
                         transaction_date: str, description: str) -> dict:
-    """Use the existing accounts ledger for any cash movement."""
+    """Use the existing accounts ledger for any cash movement.
+
+    NOTE: ad-account topups are NOT an Iter-240 leak site. The
+    `/topup` route already posts a balanced general_ledger pair
+    (bank credit + ad_account debit, `entry_type="topup"`) directly,
+    so mirroring here would double-count. Do not add a double-write
+    helper call to this function.
+    """
     acc = await db.accounts.find_one(
         {"id": account_id, "user_id": user_id}, {"_id": 0, "id": 1, "name": 1},
     )

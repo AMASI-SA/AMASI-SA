@@ -29,6 +29,30 @@
 - **Reconciliation + Accounts + Transfers + المركز المالي**: bound to BNPL SSOT.
 
 
+## Completed Work — Iter-240 (Feb 16 2026): Double-Write Helper (Ledger Leak Fix — Forward-Only)
+
+**User directive**: STRICT — NO backfill, NO adjustment entries, NO modification of historical data. Fix the ledger leak going forward by mirroring NEW manual `account_transactions` into the SSOT `general_ledger` at the point of write.
+
+**Files**
+- `backend/ledger_double_write.py` — idempotent `mirror_account_txn_to_ledger()`. Posts balanced 2-leg pair (bank + counter entity), allocates `entry_no`, refuses duplicates via `metadata.account_transaction_id` OR `paired_account_transaction_id`. Every leg carries the 5 mandatory metadata keys: `source="account_transaction_double_write"`, `transaction_type`, `idempotency_key`, `created_by_endpoint`, `account_transaction_id`, plus optional `paired_account_transaction_id` (for transfers).
+- `backend/transfers_routes.py` — `POST /api/transfers` mirrors as ONE balanced pair (OUT-row id + paired IN-row id); delete-transfer also purges the mirror by `idempotency_key=transfer:{id}`.
+- `backend/expenses_routes.py` — `_post_daily_expense_tx` mirrors; `_delete_daily_expense_tx` purges.
+- `backend/liabilities_routes.py` — `_post_bank_tx` mirrors with full metadata; call sites in `/pay` and `/collect` pass idempotency keys.
+- `backend/shipping_accounts.py` — `_post_shipping_payment_tx` mirrors; `_delete_shipping_payment_tx` purges.
+- `backend/financial_position_ssot.py` — `account_balance_ssot()` updated to subtract double-write bank legs when computing the implicit pre-ledger opening (otherwise the mirror would double-count on top of `accounts.current_balance`).
+- `backend/audit_routes.py` — new `make_double_write_health_router()` (`GET /api/audit/double-write-health`). Read-only. Returns today's coverage %, last N txns with `mirrored` flag, by-endpoint counts, and an `unmirrored_sample_today` list.
+- `backend/server.py` — registered the new router.
+- `backend/tests/test_iter240_double_write.py` — 6 unit tests (balanced pair, idempotency, transfer pairing, missing-id skip, mandatory metadata, no historical touch).
+
+**Decision: ad-account topup NOT mirrored**. The `/topup` route already posts a balanced ledger pair directly via `universal_accounting` (`entry_type="topup"`). Mirroring would double-count. Documented in `_post_bank_tx` docstring.
+
+**Verification**
+- 6/6 `test_iter240_double_write.py` PASS.
+- Regression suites for daily-expense/shipping-payment/liability-pay/ad-account-topup/bank-routing/pay-liability-search PASS (all pre-existing failures unrelated).
+- Live API smoke: transfers, daily expense, liability pay, shipping payment all show `mirrored=True` in `/api/audit/double-write-health`. `opening_balance` and other pre-iter240 rows correctly stay `mirrored=False` (forward-only honored).
+
+
+
 ## Completed Work — Iter-161 Phase 4 Polish (Feb 13 2026): English Digits Everywhere
 
 **User directive**: "أريد توحيد عرض الأرقام بالأرقام الإنجليزية فقط (0-9) وليس العربية (٠-٩). النص يبقى عربي وRTL، لكن الأرقام إنجليزية دائماً."

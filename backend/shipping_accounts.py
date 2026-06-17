@@ -107,6 +107,30 @@ async def _post_shipping_payment_tx(
         "updated_at": now,
     })
     await _recompute_shipping_account_balance(db, user_id, account_id)
+
+    # Iter-240 — mirror this shipping payment into general_ledger (SSOT).
+    try:
+        from ledger_double_write import mirror_account_txn_to_ledger
+        await mirror_account_txn_to_ledger(
+            db,
+            user_id=user_id,
+            account_id=account_id,
+            account_transaction_id=tx_id,
+            amount=round(float(amount), 2),
+            direction="out",
+            transaction_type="shipping_debt_payment",
+            transaction_date=payment_date,
+            description=desc[:280],
+            counter_entity_type="shipping_company",
+            counter_entity_id=company_name or "shipping_unknown",
+            created_by_endpoint="shipping_accounts._post_shipping_payment_tx",
+            idempotency_key=f"shipping_payment:{payment_id}",
+        )
+    except Exception as _e:  # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning(
+            "iter240 mirror failed for shipping payment %s: %s", tx_id, _e
+        )
     return tx_id
 
 
@@ -116,6 +140,15 @@ async def _delete_shipping_payment_tx(
     await db.account_transactions.delete_one(
         {"id": transaction_id, "user_id": user_id}
     )
+    # Iter-240 — also purge the mirrored ledger pair.
+    try:
+        await db.general_ledger.delete_many({
+            "user_id": user_id,
+            "metadata.account_transaction_id": transaction_id,
+            "metadata.source": "account_transaction_double_write",
+        })
+    except Exception:  # noqa: BLE001
+        pass
     await _recompute_shipping_account_balance(db, user_id, account_id)
 
 

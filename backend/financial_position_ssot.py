@@ -128,7 +128,27 @@ async def account_balance_ssot(
             {"_id": 1},
         )
         if not opening:
-            net += round(float(account.get("current_balance") or 0), 2)
+            # Iter-240 — `accounts.current_balance` already reflects every
+            # manual account_transaction (transfers, expenses, liability
+            # payments, shipping payments, ad topups) because
+            # `_recompute_balance` re-derives it from account_transactions.
+            # The Iter-240 double-write helper also posts those same
+            # movements into general_ledger as a bank leg, so if we
+            # blindly add `current_balance` we double-count them. Net
+            # them out so the SSOT view matches current_balance until a
+            # real opening_balance entry is seeded.
+            dw_net = 0.0
+            async for leg in db.general_ledger.find(
+                {"user_id": user_id, "entity_type": "bank",
+                 "entity_id": account["id"], "status": "posted",
+                 "metadata.source": "account_transaction_double_write"},
+                {"_id": 0, "amount": 1, "side": 1},
+            ):
+                amt = float(leg.get("amount") or 0)
+                dw_net += amt if leg.get("side") == "debit" else -amt
+            net += round(
+                float(account.get("current_balance") or 0) - dw_net, 2
+            )
         return round(net, 2)
 
     # No ledger activity at all → legacy fallback.

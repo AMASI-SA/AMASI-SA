@@ -1337,3 +1337,295 @@ def make_tabby_phase2_router(db, current_user):
 
     return router
 
+
+def make_double_write_health_router(db, current_user):
+    """Iter-240 — Double-Write Health (Read-Only).
+
+    Reports how well the new `mirror_account_txn_to_ledger` helper is
+    covering NEW account_transactions rows.
+
+    GET /api/audit/double-write-health
+      - last_n_account_txns: the last 20 account_transactions, each
+        marked `mirrored=True/False`.
+      - today_summary: how many account_transactions rows were
+        created today, how many of those are mirrored, and the
+        coverage ratio.
+      - by_endpoint_today: which `created_by_endpoint` produced the
+        mirrored rows today.
+      - unmirrored_breakdown_today: counts of unmirrored rows grouped
+        by `transaction_type` and inferred endpoint, so a leak can be
+        traced to its source endpoint immediately.
+
+    GET /api/audit/unmirrored-transactions
+      - All currently-unmirrored account_transactions enriched with
+        account_name + inferred endpoint. Supports `since=YYYY-MM-DD`
+        to filter by `created_at` (default: 2026-06-17 onward — i.e.,
+        the moment Iter-240 went live).
+
+    Strictly READ-ONLY. No backfill, no adjustments.
+    """
+    from datetime import datetime, timezone, timedelta
+    from fastapi import APIRouter, Depends, Query
+
+    # ── Transaction-type → likely source endpoint (best-effort). ─────
+    # This is purely informational so the merchant can jump straight
+    # to the route that needs fixing if a new leak appears.
+    _TXN_TYPE_ENDPOINT_MAP = {
+        "internal_transfer":        "POST /api/transfers",
+        "expense":                  "POST /api/operating-expenses/daily",
+        "debt_payment":             "POST /api/liabilities/{id}/pay",
+        "receivable_collection":    "POST /api/liabilities/{id}/collect",
+        "shipping_debt_payment":    "POST /api/shipping-accounts/{c}/payments",
+        "salary_advance":           "POST /api/liabilities (salary advance)",
+        "ad_account_topup":         "POST /api/ad-accounts/{id}/topup (writes to ledger directly — NOT a leak)",
+        "opening_balance":          "legacy — created at account setup, not subject to Iter-240",
+        "courier_transfer":         "(needs investigation — not yet covered by Iter-240)",
+        "settlement":               "automated settlement import — not subject to Iter-240",
+    }
+
+    def _infer_endpoint(txn_type: str) -> str:
+        return _TXN_TYPE_ENDPOINT_MAP.get(
+            txn_type or "", "(unknown — needs investigation)"
+        )
+
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    async def _collect_mirrored_ids(db, uid: str, txn_ids: list[str]) -> set:
+        """Return the set of account_transaction ids that have a mirror
+        (matched via either account_transaction_id OR
+        paired_account_transaction_id)."""
+        if not txn_ids:
+            return set()
+        covered: set = set()
+        async for m in db.general_ledger.find(
+            {"user_id": uid,
+             "metadata.source": "account_transaction_double_write",
+             "$or": [
+                 {"metadata.account_transaction_id": {"$in": txn_ids}},
+                 {"metadata.paired_account_transaction_id":
+                  {"$in": txn_ids}},
+             ]},
+            {"_id": 0,
+             "metadata.account_transaction_id": 1,
+             "metadata.paired_account_transaction_id": 1},
+        ):
+            md = m.get("metadata") or {}
+            if md.get("account_transaction_id"):
+                covered.add(md["account_transaction_id"])
+            if md.get("paired_account_transaction_id"):
+                covered.add(md["paired_account_transaction_id"])
+        return covered
+
+    async def _account_name_map(
+        db, uid: str, account_ids: list[str],
+    ) -> dict:
+        if not account_ids:
+            return {}
+        out: dict = {}
+        async for a in db.accounts.find(
+            {"user_id": uid, "id": {"$in": list(set(account_ids))}},
+            {"_id": 0, "id": 1, "name": 1},
+        ):
+            out[a["id"]] = a.get("name") or "—"
+        return out
+
+    @router.get("/double-write-health")
+    async def double_write_health(
+        user: dict = Depends(current_user),
+        last_n: int = Query(20, ge=1, le=200),
+    ):
+        uid = user["id"]
+        # ── 1) Last N account_transactions ───────────────────────────
+        recent = await db.account_transactions.find(
+            {"user_id": uid},
+            {"_id": 0, "id": 1, "account_id": 1, "transaction_type": 1,
+             "amount": 1, "direction": 1, "transaction_date": 1,
+             "description": 1, "created_at": 1, "transfer_id": 1},
+        ).sort([("created_at", -1)]).to_list(last_n)
+
+        recent_ids = [r["id"] for r in recent if r.get("id")]
+        covered = await _collect_mirrored_ids(db, uid, recent_ids)
+        for r in recent:
+            r["mirrored"] = r["id"] in covered
+
+        # ── 2) Today summary (UTC day) ───────────────────────────────
+        now = datetime.now(timezone.utc)
+        start_iso = now.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+        end_iso = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+
+        today_txns = await db.account_transactions.find(
+            {"user_id": uid,
+             "created_at": {"$gte": start_iso, "$lt": end_iso}},
+            {"_id": 0, "id": 1, "account_id": 1, "transaction_type": 1,
+             "amount": 1, "direction": 1, "description": 1,
+             "created_at": 1},
+        ).to_list(50000)
+
+        today_ids = [t["id"] for t in today_txns if t.get("id")]
+        today_covered = await _collect_mirrored_ids(db, uid, today_ids)
+
+        by_endpoint: dict = {}
+        async for m in db.general_ledger.find(
+            {"user_id": uid,
+             "metadata.source": "account_transaction_double_write",
+             "metadata.account_transaction_id": {"$in": today_ids}},
+            {"_id": 0, "metadata.created_by_endpoint": 1},
+        ):
+            md = m.get("metadata") or {}
+            ep = md.get("created_by_endpoint") or "unknown"
+            by_endpoint[ep] = by_endpoint.get(ep, 0) + 1
+
+        total_today = len(today_ids)
+        mirrored_today = len(
+            [t for t in today_ids if t in today_covered]
+        )
+        unmirrored_today = total_today - mirrored_today
+        coverage_pct = (
+            round((mirrored_today / total_today) * 100, 2)
+            if total_today > 0
+            else None
+        )
+
+        # Sample of unmirrored today + breakdown by transaction_type
+        # and inferred endpoint (so a new leak is traced at a glance).
+        unmirrored_today_rows = [
+            t for t in today_txns
+            if t.get("id") and t["id"] not in today_covered
+        ]
+        acc_names = await _account_name_map(
+            db, uid, [t["account_id"] for t in unmirrored_today_rows
+                      if t.get("account_id")],
+        )
+        for t in unmirrored_today_rows:
+            t["account_name"] = acc_names.get(
+                t.get("account_id"), "—",
+            )
+            t["inferred_endpoint"] = _infer_endpoint(
+                t.get("transaction_type") or "",
+            )
+
+        by_txn_type: dict = {}
+        by_inferred_ep: dict = {}
+        for t in unmirrored_today_rows:
+            tt = t.get("transaction_type") or "unknown"
+            by_txn_type[tt] = by_txn_type.get(tt, 0) + 1
+            ep = t.get("inferred_endpoint") or "unknown"
+            by_inferred_ep[ep] = by_inferred_ep.get(ep, 0) + 1
+
+        return {
+            "ok": True,
+            "iter": "iter240",
+            "generated_at": now.isoformat(),
+            "today_summary": {
+                "window_utc": {"from": start_iso, "to": end_iso},
+                "total_account_txns": total_today,
+                "mirrored": mirrored_today,
+                "unmirrored": unmirrored_today,
+                "coverage_pct": coverage_pct,
+                "is_healthy": (coverage_pct is None
+                               or coverage_pct >= 100.0),
+            },
+            "by_endpoint_today": by_endpoint,
+            "unmirrored_breakdown_today": {
+                "by_transaction_type": by_txn_type,
+                "by_inferred_endpoint": by_inferred_ep,
+            },
+            "unmirrored_sample_today": unmirrored_today_rows[:10],
+            "last_n_account_txns": recent,
+            "guidance": (
+                "تقرير قراءة فقط. لا يقوم بأي إصلاحات. النسبة "
+                "المثالية هي 100% لمعاملات اليوم بعد تفعيل Iter-240. "
+                "أي معاملة لا تظهر في general_ledger هنا تعتبر تسرّباً "
+                "في المسار الذي أنشأها (created_by_endpoint)."
+            ),
+        }
+
+    @router.get("/unmirrored-transactions")
+    async def unmirrored_transactions(
+        user: dict = Depends(current_user),
+        since: str = Query(
+            "2026-06-17",
+            description=(
+                "ISO date (YYYY-MM-DD). Only `account_transactions` "
+                "created on or after this UTC day are inspected. "
+                "Default = the day Iter-240 went live, so historical "
+                "rows are NEVER flagged (forward-only by design)."
+            ),
+        ),
+        limit: int = Query(500, ge=1, le=5000),
+    ):
+        """READ-ONLY. Lists account_transactions created on/after `since`
+        that are NOT mirrored to general_ledger. No fix, no backfill —
+        diagnostics only.
+
+        Returns one row per unmirrored txn:
+            transaction_id, transaction_type, account_id, account_name,
+            amount, direction, description, transaction_date,
+            created_at, created_by_endpoint, mirror_status.
+        """
+        uid = user["id"]
+        try:
+            since_dt = datetime.strptime(since, "%Y-%m-%d").replace(
+                tzinfo=timezone.utc,
+            )
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(400, "since must be YYYY-MM-DD")
+        since_iso = since_dt.isoformat()
+
+        rows = await db.account_transactions.find(
+            {"user_id": uid, "created_at": {"$gte": since_iso}},
+            {"_id": 0, "id": 1, "account_id": 1, "transaction_type": 1,
+             "amount": 1, "direction": 1, "transaction_date": 1,
+             "description": 1, "created_at": 1},
+        ).sort([("created_at", -1)]).to_list(limit)
+
+        ids = [r["id"] for r in rows if r.get("id")]
+        covered = await _collect_mirrored_ids(db, uid, ids)
+        unmirrored = [r for r in rows if r["id"] not in covered]
+
+        acc_names = await _account_name_map(
+            db, uid, [r.get("account_id") for r in unmirrored
+                      if r.get("account_id")],
+        )
+
+        items = []
+        for r in unmirrored:
+            items.append({
+                "transaction_id": r.get("id"),
+                "transaction_type": r.get("transaction_type"),
+                "account_id": r.get("account_id"),
+                "account_name": acc_names.get(
+                    r.get("account_id"), "—",
+                ),
+                "amount": round(float(r.get("amount") or 0), 2),
+                "direction": r.get("direction"),
+                "description": r.get("description") or "",
+                "transaction_date": r.get("transaction_date"),
+                "created_at": r.get("created_at"),
+                "created_by_endpoint": _infer_endpoint(
+                    r.get("transaction_type") or "",
+                ),
+                "mirror_status": "unmirrored",
+            })
+
+        return {
+            "ok": True,
+            "iter": "iter240",
+            "since": since,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "total_scanned": len(rows),
+            "total_unmirrored": len(items),
+            "items": items,
+            "guidance": (
+                "READ-ONLY. لا أي إصلاح تلقائي. لا backfill. "
+                "أي معاملة هنا تعني تسرّباً جديداً في المسار المذكور "
+                "في created_by_endpoint."
+            ),
+        }
+
+    return router

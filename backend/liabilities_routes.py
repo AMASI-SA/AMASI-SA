@@ -254,6 +254,8 @@ async def _post_bank_tx(
     transaction_date: str, description: str,
     peer_liability_id: Optional[str] = None,
     transaction_type: str = "debt_payment",
+    idempotency_key: Optional[str] = None,
+    created_by_endpoint: str = "liabilities_routes._post_bank_tx",
 ) -> dict:
     """Insert an account_transactions row for a liability payment / advance."""
     tx = {
@@ -273,6 +275,30 @@ async def _post_bank_tx(
     }
     await db.account_transactions.insert_one(tx)
     await _recompute_account_balance(db, user_id, account_id)
+
+    # Iter-240 — mirror this liability payment into general_ledger (SSOT).
+    try:
+        from ledger_double_write import mirror_account_txn_to_ledger
+        await mirror_account_txn_to_ledger(
+            db,
+            user_id=user_id,
+            account_id=account_id,
+            account_transaction_id=tx["id"],
+            amount=_round(amount),
+            direction=direction,
+            transaction_type=transaction_type,
+            transaction_date=transaction_date,
+            description=description,
+            counter_entity_type="liability",
+            counter_entity_id=peer_liability_id or "liability_unknown",
+            created_by_endpoint=created_by_endpoint,
+            idempotency_key=idempotency_key,
+        )
+    except Exception as _e:  # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning(
+            "iter240 mirror failed for liability tx %s: %s", tx["id"], _e
+        )
     tx.pop("_id", None)
     return tx
 
@@ -1820,6 +1846,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             ),
             peer_liability_id=liab_id,
             transaction_type="debt_payment",
+            idempotency_key=f"liability_pay:{liab_id}:{payload.payment_date}:{amount}",
+            created_by_endpoint="POST /api/liabilities/{liab_id}/pay",
         )
 
         # 2) Update liability
@@ -1887,6 +1915,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             description=f"تحصيل من — {liab.get('counterparty_name') or liab.get('description', '')}",
             peer_liability_id=liab_id,
             transaction_type="receivable_collection",
+            idempotency_key=f"liability_collect:{liab_id}:{payload.payment_date}:{amount}",
+            created_by_endpoint="POST /api/liabilities/{liab_id}/collect",
         )
 
         # 2) Reduce receivable

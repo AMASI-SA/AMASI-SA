@@ -307,6 +307,35 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
         }
         await db.account_transactions.insert_many([tx_out, tx_in])
 
+        # Iter-240 — mirror this transfer into general_ledger (SSOT).
+        # ONE balanced pair posted via the OUT row; the IN row's id is
+        # stored as `paired_account_transaction_id` so the health check
+        # treats both rows as covered without double-posting.
+        try:
+            from ledger_double_write import mirror_account_txn_to_ledger
+            await mirror_account_txn_to_ledger(
+                db,
+                user_id=uid,
+                account_id=payload.from_account_id,
+                account_transaction_id=tx_out["id"],
+                paired_account_transaction_id=tx_in["id"],
+                amount=amount,
+                direction="out",
+                transaction_type="internal_transfer",
+                transaction_date=payload.transfer_date,
+                description=description,
+                counter_entity_type="bank",
+                counter_entity_id=payload.to_account_id,
+                created_by_endpoint="POST /api/transfers",
+                idempotency_key=f"transfer:{transfer_id}",
+                currency=from_acc.get("currency") or "SAR",
+            )
+        except Exception as _e:  # noqa: BLE001 — never block transfer on mirror
+            import logging
+            logging.getLogger(__name__).warning(
+                "iter240 mirror failed for transfer %s: %s", transfer_id, _e
+            )
+
         # 3. Recompute both account balances.
         await _recompute_balance(db, uid, payload.from_account_id)
         await _recompute_balance(db, uid, payload.to_account_id)
@@ -337,6 +366,16 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
         await db.account_transactions.delete_many(
             {"user_id": uid, "transfer_id": transfer_id}
         )
+        # Iter-240 — also purge the mirrored general_ledger pair (if any)
+        # so deleted transfers don't leave orphan ledger entries.
+        try:
+            await db.general_ledger.delete_many({
+                "user_id": uid,
+                "metadata.idempotency_key": f"transfer:{transfer_id}",
+                "metadata.source": "account_transaction_double_write",
+            })
+        except Exception:  # noqa: BLE001
+            pass
         await db.transfers.delete_one({"id": transfer_id, "user_id": uid})
         # Recompute both sides.
         await _recompute_balance(db, uid, existing["from_account_id"])
