@@ -1656,3 +1656,339 @@ def make_double_write_health_router(db, current_user):
         }
 
     return router
+
+
+
+def make_ad_account_cron_forensic_router(db, current_user):
+    """Iter-241 — `ad_account_cron` Forensic Report (READ-ONLY).
+
+    Investigates the large `general_ledger` rows whose
+    `metadata.source = "ad_account_cron"` to determine whether they
+    are:
+      • legitimate cron-driven daily deltas (Iter-205 design), or
+      • disguised migrations / snapshots / opening-debt entries
+        (which would explain unexpectedly-large `spend` figures).
+
+    For each cron entry the report shows:
+      • the row itself (entry_type, amount, side, entity, dates)
+      • the full `txn_group` (every paired leg of the double-entry
+        bookkeeping — debit + matching credits)
+      • the *upstream* breakdown stored in `metadata`
+        (`covered`, `uncovered`, `delta`, `platform_total`,
+        `prev_total_applied`, `source_collection`)
+      • a `forensic_verdict` heuristic:
+            - `"full_cumulative_first_post"` ⇒ first cron post for
+              this account; the delta = full historical total
+              (migration-disguised-as-delta).
+            - `"normal_delta"` ⇒ subsequent normal increment.
+            - `"manual_or_other"` ⇒ does not match either pattern.
+
+    Plus a "what-if" SSOT comparison: per ad-account balance and debt
+    computed BOTH with AND without `ad_account_cron` entries — so the
+    merchant can quantify the impact of these rows on the live SSOT
+    figures without touching any data.
+
+    Strictly READ-ONLY. No insert, no update, no delete.
+    """
+    from datetime import datetime, timezone
+    from fastapi import APIRouter, Depends, Query
+
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    @router.get("/ad-account-cron-forensic")
+    async def ad_account_cron_forensic(
+        user: dict = Depends(current_user),
+        ad_account_id: str | None = Query(
+            None,
+            description=(
+                "Optional counterparty id. If omitted the report "
+                "covers every ad account that has at least one "
+                "`ad_account_cron` row."
+            ),
+        ),
+        min_amount: float = Query(
+            0.0,
+            description="Only include legs with `amount >= min_amount`.",
+        ),
+        limit: int = Query(200, ge=1, le=2000),
+    ):
+        uid = user["id"]
+
+        # ── 1) Collect every ledger row tagged ad_account_cron ────────
+        q: dict = {
+            "user_id": uid,
+            "metadata.source": "ad_account_cron",
+            "status": "posted",
+            "amount": {"$gte": float(min_amount)},
+        }
+        if ad_account_id:
+            q["entity_id"] = ad_account_id
+
+        cron_rows = await db.general_ledger.find(
+            q, {"_id": 0}
+        ).sort([("posted_at", -1)]).to_list(limit)
+
+        # ── 2) For each cron row, fetch ALL legs of its txn_group ────
+        group_ids = list({r["txn_group_id"] for r in cron_rows
+                          if r.get("txn_group_id")})
+        groups: dict = {}
+        if group_ids:
+            async for leg in db.general_ledger.find(
+                {"user_id": uid, "txn_group_id": {"$in": group_ids}},
+                {"_id": 0},
+            ):
+                groups.setdefault(leg["txn_group_id"], []).append(leg)
+
+        # ── 3) Identify "first cron post" per (cp, ad_provider) ──────
+        # If a cron row's metadata.prev_total_applied == 0 (or absent)
+        # AND it is the EARLIEST cron post for that ad account, it is
+        # strongly suspect as a migration-disguised-as-delta.
+        first_post_per_account: dict = {}
+        async for r in db.general_ledger.find(
+            {"user_id": uid, "metadata.source": "ad_account_cron",
+             "entity_type": "ad_account"},
+            {"_id": 0, "entity_id": 1, "posted_at": 1, "txn_group_id": 1,
+             "metadata.prev_total_applied": 1},
+        ).sort([("posted_at", 1)]):
+            cp_id = r.get("entity_id")
+            if cp_id and cp_id not in first_post_per_account:
+                first_post_per_account[cp_id] = {
+                    "txn_group_id": r.get("txn_group_id"),
+                    "posted_at": r.get("posted_at"),
+                    "prev_total_applied": (
+                        r.get("metadata", {})
+                         .get("prev_total_applied")
+                    ),
+                }
+
+        # ── 4) Build per-row dossiers ─────────────────────────────────
+        # Counterparty name map.
+        cp_ids = list({r.get("entity_id") for r in cron_rows
+                       if r.get("entity_type") == "ad_account"
+                       and r.get("entity_id")})
+        cp_names: dict = {}
+        if cp_ids:
+            async for cp in db.counterparties.find(
+                {"user_id": uid, "id": {"$in": cp_ids}},
+                {"_id": 0, "id": 1, "name": 1, "ad_provider": 1},
+            ):
+                cp_names[cp["id"]] = {
+                    "name": cp.get("name"),
+                    "ad_provider": cp.get("ad_provider"),
+                }
+
+        dossiers = []
+        for r in cron_rows:
+            md = r.get("metadata") or {}
+            gid = r.get("txn_group_id")
+            siblings = groups.get(gid, [])
+            # Verdict
+            prev_total = md.get("prev_total_applied")
+            delta = md.get("delta")
+            cp_id = (r.get("entity_id")
+                     if r.get("entity_type") == "ad_account" else None)
+            is_first_cron = (
+                cp_id and first_post_per_account.get(cp_id, {})
+                              .get("txn_group_id") == gid
+            )
+            verdict = "manual_or_other"
+            verdict_reason = (
+                "No prev_total_applied/delta metadata — likely a manual "
+                "spend post or non-cron path tagged with this source."
+            )
+            if prev_total is not None and delta is not None:
+                if (float(prev_total) == 0.0
+                        and is_first_cron
+                        and float(delta or 0) > 0):
+                    verdict = "full_cumulative_first_post"
+                    verdict_reason = (
+                        "أول قيد cron لهذا الحساب و prev_total_applied=0. "
+                        "بناء على منطق Iter-205: delta = الإجمالي التراكمي "
+                        "بالكامل. عملياً هذا قيد migration/snapshot "
+                        "مُسجَّل كـ spend عادي وليس opening_debt — لأن "
+                        "السكوب أن الـ cron لا يفرّق بين أول مزامنة "
+                        "وأي مزامنة لاحقة."
+                    )
+                else:
+                    verdict = "normal_delta"
+                    verdict_reason = (
+                        f"Normal Iter-205 incremental delta. "
+                        f"delta={delta}, platform_total={md.get('platform_total')}, "
+                        f"prev_total_applied={prev_total}."
+                    )
+
+            dossier = {
+                "txn_group_id": gid,
+                "ledger_row": {
+                    "entry_no": r.get("entry_no"),
+                    "entry_type": r.get("entry_type"),
+                    "entity_type": r.get("entity_type"),
+                    "entity_id": r.get("entity_id"),
+                    "sub_account": r.get("sub_account"),
+                    "side": r.get("side"),
+                    "amount": round(float(r.get("amount") or 0), 2),
+                    "currency": r.get("currency"),
+                    "posted_at": r.get("posted_at"),
+                    "notes": r.get("notes"),
+                },
+                "ad_account": (
+                    cp_names.get(cp_id) if cp_id else None
+                ),
+                "txn_group_pair": [
+                    {
+                        "entry_no": s.get("entry_no"),
+                        "entity_type": s.get("entity_type"),
+                        "entity_id": s.get("entity_id"),
+                        "sub_account": s.get("sub_account"),
+                        "side": s.get("side"),
+                        "amount": round(float(s.get("amount") or 0), 2),
+                        "entry_type": s.get("entry_type"),
+                        "notes": s.get("notes"),
+                    }
+                    for s in sorted(
+                        siblings, key=lambda x: x.get("entry_no") or 0)
+                ],
+                "metadata": {
+                    "source": md.get("source"),
+                    "spend_date": md.get("spend_date"),
+                    "ad_provider": md.get("ad_provider"),
+                    "idempotency_key": md.get("idempotency_key"),
+                    "covered": md.get("covered"),
+                    "uncovered": md.get("uncovered"),
+                    "delta": md.get("delta"),
+                    "platform_total": md.get("platform_total"),
+                    "prev_total_applied": md.get("prev_total_applied"),
+                    "source_collection": md.get("source_collection"),
+                    "iter": md.get("iter"),
+                },
+                "forensic_verdict": verdict,
+                "verdict_reason": verdict_reason,
+                "why_spend_not_opening_debt": (
+                    "الكود في `ad_account_routes._post_spend_to_ledger` "
+                    "يسجّل دائماً `entry_type='spend'` على ساق "
+                    "`ad_account.balance` (credit, لاستهلاك الرصيد "
+                    "المدفوع مسبقاً) و/أو `ad_account.debt` (credit، "
+                    "لزيادة المديونية). لا توجد فرع كود يميّز \"أول "
+                    "مزامنة\" ويعيد التصنيف كـ `opening_debt` أو "
+                    "`opening_balance` — لذا أي migration/snapshot "
+                    "يدخل عبر هذا المسار يحمل تسمية `spend` مهما كان "
+                    "حجمه."
+                ),
+            }
+            dossiers.append(dossier)
+
+        # ── 5) What-if SSOT comparison per ad account ────────────────
+        # Compute the live SSOT balance and debt for each ad account
+        # both INCLUDING and EXCLUDING the `ad_account_cron` rows.
+        # Read-only — no writes anywhere.
+        comparisons = []
+        cps = await db.counterparties.find(
+            {"user_id": uid,
+             "id": {"$in": cp_ids}} if cp_ids
+            else {"user_id": uid, "kind": "ad_account"},
+            {"_id": 0, "id": 1, "name": 1, "ad_provider": 1},
+        ).to_list(500)
+
+        for cp in cps:
+            cp_id = cp["id"]
+            sums = {
+                "balance": {"with_cron": 0.0, "without_cron": 0.0},
+                "debt":    {"with_cron": 0.0, "without_cron": 0.0},
+            }
+            async for leg in db.general_ledger.find(
+                {"user_id": uid, "entity_type": "ad_account",
+                 "entity_id": cp_id, "status": "posted",
+                 "sub_account": {"$in": ["balance", "debt"]}},
+                {"_id": 0, "sub_account": 1, "side": 1,
+                 "amount": 1, "metadata.source": 1},
+            ):
+                sub = leg.get("sub_account") or "balance"
+                signed = float(leg.get("amount") or 0)
+                if leg.get("side") == "credit":
+                    signed = -signed
+                sums[sub]["with_cron"] += signed
+                if (leg.get("metadata") or {}).get("source") \
+                        != "ad_account_cron":
+                    sums[sub]["without_cron"] += signed
+            comparisons.append({
+                "ad_account_id": cp_id,
+                "name": cp.get("name"),
+                "ad_provider": cp.get("ad_provider"),
+                "balance_ssot": {
+                    "with_cron": round(sums["balance"]["with_cron"], 2),
+                    "without_cron": round(
+                        sums["balance"]["without_cron"], 2),
+                    "diff_from_cron": round(
+                        sums["balance"]["with_cron"]
+                        - sums["balance"]["without_cron"], 2),
+                },
+                # debt SSOT is a CREDIT-positive sub_account; flip sign
+                # so the reader sees positive numbers for outstanding
+                # debt (more intuitive in the report).
+                "debt_ssot": {
+                    "with_cron": round(-sums["debt"]["with_cron"], 2),
+                    "without_cron": round(
+                        -sums["debt"]["without_cron"], 2),
+                    "diff_from_cron": round(
+                        -sums["debt"]["with_cron"]
+                        - (-sums["debt"]["without_cron"]), 2),
+                },
+            })
+
+        return {
+            "ok": True,
+            "iter": "iter241",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "scope": {
+                "ad_account_id": ad_account_id,
+                "min_amount": min_amount,
+                "limit": limit,
+            },
+            "totals": {
+                "cron_rows_inspected": len(cron_rows),
+                "txn_groups": len(group_ids),
+                "ad_accounts_covered": len(comparisons),
+                "first_post_full_cumulative": sum(
+                    1 for d in dossiers
+                    if d["forensic_verdict"]
+                    == "full_cumulative_first_post"
+                ),
+                "normal_delta": sum(
+                    1 for d in dossiers
+                    if d["forensic_verdict"] == "normal_delta"
+                ),
+                "manual_or_other": sum(
+                    1 for d in dossiers
+                    if d["forensic_verdict"] == "manual_or_other"
+                ),
+            },
+            "dossiers": dossiers,
+            "ssot_comparison_per_account": comparisons,
+            "code_path_reference": {
+                "file": "backend/ad_account_routes.py",
+                "writer": "_post_spend_to_ledger()",
+                "called_from": [
+                    "ad_account_routes._sync_one_counterparty (cron, "
+                    "line ~3147)",
+                    "ad_account_routes /spend/manual handler "
+                    "(line ~1461)",
+                ],
+                "design": (
+                    "Iter-205: every spend post (cron or manual) is "
+                    "balanced as DEBIT expense.advertising = amount, "
+                    "CREDIT ad_account.balance = min(amount, prepaid), "
+                    "CREDIT ad_account.debt = amount − prepaid. "
+                    "There is no separate branch for first-time "
+                    "migration; the first delta == full cumulative."
+                ),
+            },
+            "guidance": (
+                "تقرير قراءة فقط. لم يتم أي حذف أو تعديل أو أرشفة. "
+                "إذا أردت لاحقاً إعادة تصنيف قيود الـ first_post_"
+                "full_cumulative كـ opening_debt، يجب اتخاذ قرار "
+                "صريح ومستقل لأن ذلك يُعدّ تعديلاً تاريخياً ولا يقع "
+                "ضمن سكوب هذا التقرير."
+            ),
+        }
+
+    return router
