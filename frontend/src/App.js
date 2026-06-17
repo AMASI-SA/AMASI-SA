@@ -57,6 +57,7 @@ import AdDebtDiagnostic from "./pages/AdDebtDiagnostic";
 import LedgerHealthDiagnostic from "./pages/LedgerHealthDiagnostic";
 import ExpenseCategoryTreePage from "./pages/ExpenseCategoryTreePage";
 import SuppliersPage from "./pages/SuppliersPage";
+import FinancialMovementNewPage from "./pages/FinancialMovementNewPage";
 import AdsCurrencySettings from "./pages/AdsCurrencySettings";
 import SallaSettlements from "./pages/SallaSettlements";
 import SettlementsOverview from "./pages/SettlementsOverview";
@@ -146,6 +147,7 @@ function AppRoutes() {
             <Route path="/audit/ledger-health" element={<ProtectedRoute><Layout><LedgerHealthDiagnostic /></Layout></ProtectedRoute>} />
             <Route path="/expense-categories-tree" element={<ProtectedRoute><Layout><ExpenseCategoryTreePage /></Layout></ProtectedRoute>} />
             <Route path="/suppliers-new" element={<ProtectedRoute><Layout><SuppliersPage /></Layout></ProtectedRoute>} />
+            <Route path="/financial-movement/new" element={<ProtectedRoute><Layout><FinancialMovementNewPage /></Layout></ProtectedRoute>} />
             <Route path="/settings/ads-currencies" element={<ProtectedRoute><Layout><AdsCurrencySettings /></Layout></ProtectedRoute>} />
             <Route path="/salla-settlements" element={<ProtectedRoute><Layout><SallaSettlements /></Layout></ProtectedRoute>} />
             <Route path="/settlements-overview" element={<ProtectedRoute><Layout><SettlementsOverview /></Layout></ProtectedRoute>} />

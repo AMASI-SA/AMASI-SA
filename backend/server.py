@@ -3753,6 +3753,7 @@ from cod_diagnostic_routes import make_cod_diagnostic_router
 api.include_router(make_cod_diagnostic_router(db, current_user))
 from audit_routes import make_audit_router, make_employee_lookup_debug_router, make_forensic_report_router, make_tabby_phase2_router, make_double_write_health_router, make_ad_account_cron_forensic_router, make_ad_account_sync_diagnostic_router
 from expense_categories_routes import make_expense_categories_router, make_suppliers_router
+from financial_movements_routes import make_financial_movements_router
 api.include_router(make_audit_router(db, current_user))
 api.include_router(make_employee_lookup_debug_router(db, current_user))
 api.include_router(make_forensic_report_router(db, current_user))
@@ -3762,6 +3763,7 @@ api.include_router(make_ad_account_cron_forensic_router(db, current_user))
 api.include_router(make_ad_account_sync_diagnostic_router(db, current_user))
 api.include_router(make_expense_categories_router(db, current_user))
 api.include_router(make_suppliers_router(db, current_user))
+api.include_router(make_financial_movements_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
