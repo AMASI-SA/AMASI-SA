@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import api from "../lib/api";
 import HelpToggle from "../components/HelpToggle";
+import Iter245MovementForm from "../components/Iter245MovementForm";
 import { toast } from "sonner";
 import { todaySA, monthISO_SA } from "../lib/dates";
 
@@ -115,9 +116,18 @@ const OP_TYPES = [
     { value: "external_grant",       label: "🤝 سلفة لشخص خارجي",    section: "externals" },
     { value: "external_collect",     label: "💵 تحصيل من شخص خارجي",  section: "externals" },
     { value: "expense_record",       label: "🛒 مصروف عام",             section: "general" },
+    { value: "fixed_asset_purchase", label: "🏛️ شراء أصل ثابت",       section: "general" },
     { value: "bank_transfer",        label: "🔄 تحويل بين الحسابات",   section: "general" },
     { value: "courier_cod_settle",   label: "🚚 تسوية COD مع شركة شحن", section: "shipping" },
 ];
+
+// Iter-246 — Op-types that switch the UI to the embedded Iter-245
+// movement form (no legacy form, no duplicate route).
+const ITER245_OPS = {
+    supplier_invoice: "supplier_invoice",
+    expense_record: "general_expense",
+    fixed_asset_purchase: "fixed_asset",
+};
 
 export default function UnifiedEntryScreen() {
     const [opType, setOpType] = useState("");
@@ -841,7 +851,17 @@ export default function UnifiedEntryScreen() {
                     </select>
                 </div>
 
-                {opType && (
+                {opType && ITER245_OPS[opType] && (
+                    <div className="border-t border-slate-200 pt-4">
+                        <Iter245MovementForm
+                            movementType={ITER245_OPS[opType]}
+                            title={OP_TYPES.find(o => o.value === opType)?.label || ""}
+                            onSaved={() => loadRecentTxns()}
+                        />
+                    </div>
+                )}
+
+                {opType && !ITER245_OPS[opType] && (
                     <div className="space-y-4 border-t border-slate-200 pt-4">
                         {/* Iter-186 — Searchable employee picker with
                             custody-aware decorations. Used for every

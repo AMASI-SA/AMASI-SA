@@ -32,9 +32,29 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
+# ── Movement-type ↔ root mapping (Iter-246) ─────────────────────────
+# Each ROOT category may be applicable to one or more movement-types
+# (supplier_invoice / general_expense / fixed_asset).  Children inherit
+# the root's `movement_types` array (computed at read time).
+ALLOWED_MOVEMENT_TYPES = {
+    "supplier_invoice", "general_expense", "fixed_asset",
+}
+
+# Defaults applied when seeding OR when back-filling existing root
+# categories whose name matches one of the known seed roots.
+DEFAULT_ROOT_MOVEMENT_TYPES: dict[str, list[str]] = {
+    "تكاليف المنتجات":     ["supplier_invoice"],
+    "المصروفات التشغيلية": ["general_expense"],
+    "المصروفات التسويقية": ["general_expense"],
+    "الأصول":              ["fixed_asset"],
+}
+
+
 # ── Seed template (the tree the merchant proposed in the spec) ──────
 SEED_TEMPLATE: list[dict] = [
-    {"name": "تكاليف المنتجات", "children": [
+    {"name": "تكاليف المنتجات",
+     "movement_types": ["supplier_invoice"],
+     "children": [
         {"name": "منتجات", "children": [
             {"name": "ملابس"}, {"name": "مطليات"}, {"name": "ساعات"},
             {"name": "عطور"}, {"name": "إكسسوارات"},
@@ -48,16 +68,22 @@ SEED_TEMPLATE: list[dict] = [
             {"name": "أدوات تغليف"},
         ]},
     ]},
-    {"name": "المصروفات التشغيلية", "children": [
+    {"name": "المصروفات التشغيلية",
+     "movement_types": ["general_expense"],
+     "children": [
         {"name": "إيجارات"}, {"name": "إنترنت"}, {"name": "كهرباء"},
         {"name": "ماء"}, {"name": "اتصالات"}, {"name": "صيانة"},
         {"name": "مصروفات يومية"},
     ]},
-    {"name": "المصروفات التسويقية", "children": [
+    {"name": "المصروفات التسويقية",
+     "movement_types": ["general_expense"],
+     "children": [
         {"name": "سناب شات"}, {"name": "تيك توك"},
         {"name": "ميتا"}, {"name": "جوجل"},
     ]},
-    {"name": "الأصول", "children": [
+    {"name": "الأصول",
+     "movement_types": ["fixed_asset"],
+     "children": [
         {"name": "أجهزة"}, {"name": "أثاث"},
         {"name": "سيارات"}, {"name": "معدات"},
     ]},
@@ -83,6 +109,7 @@ def _norm_lower(s: str | None) -> str:
 class CategoryCreate(BaseModel):
     name: str
     parent_id: Optional[str] = None
+    movement_types: Optional[list[str]] = None
 
     @field_validator("name")
     @classmethod
@@ -94,11 +121,31 @@ class CategoryCreate(BaseModel):
             raise ValueError("اسم التصنيف أطول من 80 حرفاً")
         return v
 
+    @field_validator("movement_types")
+    @classmethod
+    def _mt_ok(cls, v):
+        if v is None:
+            return None
+        bad = [x for x in v if x not in ALLOWED_MOVEMENT_TYPES]
+        if bad:
+            raise ValueError(
+                f"movement_types غير مسموح بها: {bad}. المسموح: "
+                f"{sorted(ALLOWED_MOVEMENT_TYPES)}")
+        # de-dup, preserve order
+        seen: set = set()
+        out: list[str] = []
+        for x in v:
+            if x not in seen:
+                seen.add(x)
+                out.append(x)
+        return out
+
 
 class CategoryPatch(BaseModel):
     name: Optional[str] = None
     parent_id: Optional[str] = None
     status: Optional[str] = None  # "active" | "inactive"
+    movement_types: Optional[list[str]] = None
 
     @field_validator("status")
     @classmethod
@@ -106,6 +153,23 @@ class CategoryPatch(BaseModel):
         if v not in (None, "active", "inactive"):
             raise ValueError("status must be 'active' or 'inactive'")
         return v
+
+    @field_validator("movement_types")
+    @classmethod
+    def _mt_ok(cls, v):
+        if v is None:
+            return None
+        bad = [x for x in v if x not in ALLOWED_MOVEMENT_TYPES]
+        if bad:
+            raise ValueError(
+                f"movement_types غير مسموح بها: {bad}")
+        seen: set = set()
+        out: list[str] = []
+        for x in v:
+            if x not in seen:
+                seen.add(x)
+                out.append(x)
+        return out
 
 
 async def _compute_path(db, user_id: str, parent_id: Optional[str],
@@ -186,6 +250,29 @@ async def _refresh_descendants_paths(db, user_id: str,
     return n
 
 
+async def _backfill_root_movement_types(db, user_id: str,
+                                        rows: list[dict]) -> None:
+    """Iter-246 — Auto-fill `movement_types` on legacy root rows whose
+    name matches one of the seed defaults.  Idempotent and read-only
+    for non-root rows."""
+    pending: list[tuple[str, list[str]]] = []
+    for r in rows:
+        if r.get("parent_id"):
+            continue
+        if r.get("movement_types"):
+            continue
+        defaults = DEFAULT_ROOT_MOVEMENT_TYPES.get(r.get("name") or "")
+        if defaults:
+            pending.append((r["id"], defaults))
+            r["movement_types"] = defaults
+    for rid, mts in pending:
+        await db.expense_category_tree.update_one(
+            {"id": rid, "user_id": user_id},
+            {"$set": {"movement_types": mts,
+                      "updated_at": _now()}},
+        )
+
+
 def make_expense_categories_router(db, current_user):
     router = APIRouter(prefix="/expense-category-tree",
                        tags=["expense-categories"])
@@ -194,13 +281,46 @@ def make_expense_categories_router(db, current_user):
     async def list_categories(
         user: dict = Depends(current_user),
         include_inactive: bool = Query(True),
+        movement_type: Optional[str] = Query(None),
     ):
-        q: dict = {"user_id": user["id"]}
+        uid = user["id"]
+        q: dict = {"user_id": uid}
         if not include_inactive:
             q["status"] = "active"
         rows = await db.expense_category_tree.find(
             q, {"_id": 0},
         ).sort([("depth", 1), ("name", 1)]).to_list(5000)
+
+        # Iter-246 — backfill legacy root rows that pre-date the
+        # `movement_types` field, then inherit from root → descendants
+        # so the UI can filter by op-type with a single field.
+        await _backfill_root_movement_types(db, uid, rows)
+        by_id = {r["id"]: r for r in rows}
+        for r in rows:
+            if not r.get("parent_id"):
+                # Root row keeps its own movement_types.
+                r["movement_types"] = r.get("movement_types") or []
+                continue
+            node = r
+            guard = 0
+            while node.get("parent_id") and guard < 64:
+                p = by_id.get(node["parent_id"])
+                if not p:
+                    break
+                node = p
+                guard += 1
+            r["movement_types"] = node.get("movement_types") or []
+
+        if movement_type:
+            if movement_type not in ALLOWED_MOVEMENT_TYPES:
+                raise HTTPException(
+                    400,
+                    f"movement_type غير مسموح. المسموح: "
+                    f"{sorted(ALLOWED_MOVEMENT_TYPES)}")
+            rows = [
+                r for r in rows
+                if movement_type in (r.get("movement_types") or [])
+            ]
         return {"ok": True, "items": rows, "count": len(rows)}
 
     @router.post("")
@@ -224,6 +344,11 @@ def make_expense_categories_router(db, current_user):
 
         path, path_ids, depth = await _compute_path(
             db, uid, parent, payload.name)
+        # Iter-246 — only ROOT rows store movement_types; descendants
+        # inherit from their root at read-time.
+        mts: list[str] = []
+        if not parent and payload.movement_types:
+            mts = payload.movement_types
         doc = {
             "id": str(uuid.uuid4()),
             "user_id": uid,
@@ -233,6 +358,7 @@ def make_expense_categories_router(db, current_user):
             "path": path,
             "path_ids": path_ids,
             "depth": depth,
+            "movement_types": mts,
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -293,6 +419,15 @@ def make_expense_categories_router(db, current_user):
         if payload.status is not None:
             updates["status"] = payload.status
 
+        # Iter-246 — movement_types only valid on ROOT rows.
+        if payload.movement_types is not None:
+            if cat.get("parent_id"):
+                raise HTTPException(
+                    400,
+                    "movement_types يُحدَّد على التصنيف الجذر فقط؛ "
+                    "الأبناء يرثونها تلقائياً.")
+            updates["movement_types"] = payload.movement_types
+
         await db.expense_category_tree.update_one(
             {"id": cat_id, "user_id": uid}, {"$set": updates},
         )
@@ -328,9 +463,24 @@ def make_expense_categories_router(db, current_user):
                 if existing:
                     skipped += 1
                     node_id = existing["id"]
+                    # Iter-246 — backfill movement_types on the root if
+                    # it pre-dates this field.  Idempotent.
+                    if (parent_id is None
+                            and n.get("movement_types")):
+                        await db.expense_category_tree.update_one(
+                            {"id": node_id, "user_id": uid,
+                             "$or": [
+                                 {"movement_types": {"$exists": False}},
+                                 {"movement_types": []},
+                             ]},
+                            {"$set": {
+                                "movement_types": n["movement_types"],
+                                "updated_at": _now(),
+                            }},
+                        )
                 else:
                     node_id = str(uuid.uuid4())
-                    await db.expense_category_tree.insert_one({
+                    doc = {
                         "id": node_id,
                         "user_id": uid,
                         "name": name,
@@ -339,9 +489,14 @@ def make_expense_categories_router(db, current_user):
                         "path": full_path,
                         "path_ids": parent_path_ids,
                         "depth": len(parent_path_ids),
+                        "movement_types": (
+                            n.get("movement_types") or []
+                            if parent_id is None else []
+                        ),
                         "created_at": _now(),
                         "updated_at": _now(),
-                    })
+                    }
+                    await db.expense_category_tree.insert_one(doc)
                     inserted += 1
                 if n.get("children"):
                     await _walk(

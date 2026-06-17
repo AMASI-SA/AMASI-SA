@@ -94,13 +94,32 @@ async def _resolve_category_path(db, uid: str, cat_id: str) -> dict:
     cat = await db.expense_category_tree.find_one(
         {"id": cat_id, "user_id": uid},
         {"_id": 0, "id": 1, "name": 1, "path": 1,
-         "path_ids": 1, "status": 1},
+         "path_ids": 1, "status": 1, "parent_id": 1,
+         "movement_types": 1},
     )
     if not cat:
         raise HTTPException(404, "التصنيف غير موجود")
     if cat.get("status") == "inactive":
         raise HTTPException(400, "التصنيف موقوف")
     return cat
+
+
+async def _resolve_root_movement_types(db, uid: str,
+                                       cat: dict) -> list[str]:
+    """Walk up to the root and return its `movement_types`."""
+    node = cat
+    guard = 0
+    while node.get("parent_id") and guard < 64:
+        parent = await db.expense_category_tree.find_one(
+            {"id": node["parent_id"], "user_id": uid},
+            {"_id": 0, "id": 1, "parent_id": 1,
+             "movement_types": 1},
+        )
+        if not parent:
+            break
+        node = parent
+        guard += 1
+    return node.get("movement_types") or []
 
 
 async def _resolve_account(db, uid: str, acc_id: str) -> dict:
@@ -184,6 +203,16 @@ def make_financial_movements_router(db, current_user):
         uid = user["id"]
         # ── 1) Category (full path persisted — Requirement #2) ──────
         cat = await _resolve_category_path(db, uid, payload.category_id)
+
+        # Iter-246 — enforce movement_type ↔ category mapping.
+        applicable = await _resolve_root_movement_types(db, uid, cat)
+        if applicable and payload.movement_type not in applicable:
+            raise HTTPException(
+                400,
+                f"التصنيف المختار غير متاح لعملية "
+                f"«{payload.movement_type}». التصنيف متاح فقط لـ: "
+                f"{applicable}",
+            )
 
         # ── 2) Supplier (required only for supplier_invoice) ────────
         sup_snap = None

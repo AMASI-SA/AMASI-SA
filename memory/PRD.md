@@ -3912,3 +3912,52 @@ Iter-234c + Iter-234d are in PREVIEW only. Redeploy required.
 
 ### Deployment note
 PREVIEW only. Redeploy required to push to https://mezansalla.com.
+
+---
+
+## Iter-246 — Merge Iter-245 Logic into Unified Entry Screen (Feb 2026)
+
+### Goal
+Eliminate duplicate financial-movement entry screens.  Inject Iter-245 (new) logic directly into the existing `/new-transaction` screen so the merchant has **one** entry point for every financial movement.
+
+### What changed
+1. **Backend — `expense_categories_routes.py`**
+   - New field `movement_types` on ROOT categories.  Children inherit at read-time.
+   - `GET /api/expense-category-tree?movement_type=<x>` filters tree by op type.
+   - Defaults assigned to seed roots and auto-backfilled for legacy data:
+     - `تكاليف المنتجات` → `supplier_invoice`
+     - `المصروفات التشغيلية`, `المصروفات التسويقية` → `general_expense`
+     - `الأصول` → `fixed_asset`
+   - `PATCH /api/expense-category-tree/{id}` accepts `movement_types` (root-only).
+2. **Backend — `financial_movements_routes.py`**
+   - Posting a movement whose category root doesn't list the movement_type returns HTTP 400.
+3. **Frontend — `components/Iter245MovementForm.jsx` (NEW)**
+   - Reusable form: takes `movementType` and renders supplier picker, category picker (filtered + supplier-scoped), line-items table for purchase invoices, payment terms, bank withdrawal method, attachment.
+   - Date input forced to `dir="ltr"` + YYYY-MM-DD caption so the OS picker renders cleanly under RTL.
+   - When a supplier is picked, categories shown as flat leaf names (full path stored on server).
+   - Total auto-syncs to line-items sum on purchase invoices.
+4. **Frontend — `pages/UnifiedEntryScreen.jsx`**
+   - Added op type: `fixed_asset_purchase` → 🏛️ شراء أصل ثابت.
+   - When opType ∈ {supplier_invoice, expense_record, fixed_asset_purchase}, short-circuits the legacy form and embeds `<Iter245MovementForm />`.
+   - All other op types unchanged.
+5. **Frontend — `pages/FinancialMovementNewPage.jsx`**
+   - Stub-replaced with a redirect banner.  Route kept alive per «no-break» rule.
+6. **Sidebar — `components/Sidebar.jsx`**
+   - Removed `/financial-movement/new` entry (route kept in App.js).
+
+### Tests
+- `/app/backend/tests/test_iter246_movement_types.py` — 5/5 PASSED
+  - seed assigns defaults
+  - inheritance to children
+  - filter by movement_type
+  - reject mismatched category
+  - patch movement_types root-only
+- Regression: `test_iter244_categories_suppliers.py` — 7/7 PASSED.
+
+### What's left from the user-requested batch
+- Re-organise sidebar into «المشتريات والمصاريف» group + «الأنظمة القديمة 🕰️» group (was P0 before this merge request landed; deferred per user message focused only on the form merge).
+- Usage report on legacy screens (purchase_invoices, daily_expenses, operating_expenses).
+- Reports: categories, suppliers, expense analysis.
+
+### Deployment note
+PREVIEW only.  Merchant must «Save to Github → Deploy» to push to mezansalla.com.

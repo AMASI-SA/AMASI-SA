@@ -69,7 +69,9 @@ const SECTIONS = [
             { to: "/audit/ledger-health", label: "🩺 صحة الـ Ledger (Iter-240)", icon: Receipt, testid: "nav-ledger-health" },
             { to: "/expense-categories-tree", label: "🗂️ شجرة التصنيفات", icon: Receipt, testid: "nav-expense-categories-tree" },
             { to: "/suppliers-new", label: "🏷️ الموردون (Iter-244)", icon: Receipt, testid: "nav-suppliers-new" },
-            { to: "/financial-movement/new", label: "✨ حركة مالية موحَّدة (Iter-245)", icon: Receipt, testid: "nav-financial-movement-new" },
+            // Iter-246 — /financial-movement/new is hidden because its logic
+            // was merged INTO /new-transaction (UnifiedEntryScreen).  Route
+            // kept alive so any old bookmark still works.
             { to: "/financial-movements", label: "📑 قائمة الحركات المالية", icon: Receipt, testid: "nav-financial-movements-list" },
             { to: "/settings/ads-currencies", label: "💱 عملات وعمولة بنكية للحسابات الإعلانية", icon: Gear, testid: "nav-ads-currencies" },
             { to: "/salla-settlements", label: "تسويات سلة 🟧", icon: Receipt, testid: "nav-salla-settlements" },
