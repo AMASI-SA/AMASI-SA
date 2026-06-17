@@ -70,6 +70,7 @@ const SECTIONS = [
             { to: "/expense-categories-tree", label: "🗂️ شجرة التصنيفات", icon: Receipt, testid: "nav-expense-categories-tree" },
             { to: "/suppliers-new", label: "🏷️ الموردون (Iter-244)", icon: Receipt, testid: "nav-suppliers-new" },
             { to: "/financial-movement/new", label: "✨ حركة مالية موحَّدة (Iter-245)", icon: Receipt, testid: "nav-financial-movement-new" },
+            { to: "/financial-movements", label: "📑 قائمة الحركات المالية", icon: Receipt, testid: "nav-financial-movements-list" },
             { to: "/settings/ads-currencies", label: "💱 عملات وعمولة بنكية للحسابات الإعلانية", icon: Gear, testid: "nav-ads-currencies" },
             { to: "/salla-settlements", label: "تسويات سلة 🟧", icon: Receipt, testid: "nav-salla-settlements" },
             { to: "/settlements-overview", label: "📑 جميع التسويات", icon: Receipt, testid: "nav-settlements-overview" },
