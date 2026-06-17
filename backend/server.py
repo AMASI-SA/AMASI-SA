@@ -3044,9 +3044,13 @@ async def snapchat_summary(user: dict = Depends(current_user)):
     spend_30d = round(sum(by_date_spend.values()), 2)
 
     # Display Snapchat spend in BOTH currencies. Stored values are SAR
-    # (already converted at ingest), USD is derived using the user-visible
-    # exchange rate of 3.752 SAR/USD.
-    USD_RATE = 3.752
+    # (already converted at ingest), USD is derived using the user's
+    # preferred USD→SAR rate from `ads_currency_settings` (Iter-243).
+    # Falls back to 3.752 when no setting exists.
+    _ads_cfg = await db.ads_currency_settings.find_one(
+        {"user_id": uid}, {"_id": 0, "usd_to_sar_rate": 1},
+    ) or {}
+    USD_RATE = float(_ads_cfg.get("usd_to_sar_rate") or 3.752)
 
     def _to_usd(sar: float) -> float:
         return round(sar / USD_RATE, 2) if sar else 0.0

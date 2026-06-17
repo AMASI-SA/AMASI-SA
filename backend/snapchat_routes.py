@@ -428,18 +428,41 @@ def _build_router(db) -> APIRouter:
             cur = "SAR"
         return cur or "SAR"
 
-    def _to_sar(amount: float, source_currency: str) -> tuple[float, float]:
+    async def _user_usd_to_sar(user_id: str) -> float:
+        """Iter-243 — Read the merchant's preferred USD→SAR rate from
+        `ads_currency_settings` (Iter-236 store). Falls back to the SAMA
+        peg (3.75) when no setting exists. Affects FORWARD-only spend
+        rows; never touches anything previously written."""
+        try:
+            doc = await db.ads_currency_settings.find_one(
+                {"user_id": user_id}, {"_id": 0, "usd_to_sar_rate": 1},
+            )
+            if doc and doc.get("usd_to_sar_rate"):
+                return float(doc["usd_to_sar_rate"])
+        except Exception:  # noqa: BLE001 — fall through to default
+            pass
+        return float(USD_TO_SAR)
+
+    async def _to_sar(
+        amount: float, source_currency: str,
+        *, user_id: str | None = None,
+    ) -> tuple[float, float]:
         """Convert an amount in the ad account's currency to SAR.
         Returns (sar_amount, exchange_rate_applied).
-        For SAR → 1:1. For USD → multiply by 3.75 (SAMA peg). For other
-        currencies we don't recognise, return as-is (rate=1) so the user sees
-        the raw number and can intervene.
+
+        Iter-243: when `user_id` is supplied AND the merchant has saved
+        a custom `usd_to_sar_rate` in `ads_currency_settings`, that rate
+        is used for USD → SAR conversion. Otherwise the SAMA-peg
+        constant (3.75) is the fallback. SAR → 1:1. Unknown currencies
+        pass through unchanged so the user can intervene.
         """
         cur = (source_currency or "").upper().strip()
         if cur in ("SAR", "ر.س", ""):
             return round(amount, 2), 1.0
         if cur == "USD":
-            return round(amount * USD_TO_SAR, 2), USD_TO_SAR
+            rate = (await _user_usd_to_sar(user_id)
+                    if user_id else float(USD_TO_SAR))
+            return round(amount * rate, 2), rate
         # Unknown currency: pass through with rate=1, but log so we notice.
         logger.warning("Unknown Snapchat ad account currency %r; leaving amount unchanged.", cur)
         return round(amount, 2), 1.0
@@ -627,7 +650,9 @@ def _build_router(db) -> APIRouter:
         spend_native = round(total_micro / 1_000_000, 2)
         async with httpx.AsyncClient(timeout=10.0) as http2:
             currency = await _resolve_ad_account_currency(http2, access_token, ad_id, conn)
-        spend_sar, fx_rate = _to_sar(spend_native, currency)
+        spend_sar, fx_rate = await _to_sar(
+            spend_native, currency, user_id=user["id"],
+        )
 
         # Iter-172 — persist the fetched spend so the rest of the app
         # (ad-account cards, financial summary, executive profit panel)
@@ -845,8 +870,12 @@ def _build_router(db) -> APIRouter:
 
                 spend_native = round(total_micro / 1_000_000, 2)
                 revenue_native = round(total_purchases_value_micro / 1_000_000, 2)
-                spend, fx_rate = _to_sar(spend_native, ad_currency)
-                revenue, _ = _to_sar(revenue_native, ad_currency)
+                spend, fx_rate = await _to_sar(
+                    spend_native, ad_currency, user_id=user["id"],
+                )
+                revenue, _ = await _to_sar(
+                    revenue_native, ad_currency, user_id=user["id"],
+                )
                 date_str = d.isoformat()
 
                 # ── Per-account row (iteration 17 fix) ─────────────────
@@ -1109,8 +1138,12 @@ def _build_router(db) -> APIRouter:
 
             spend_native = round(total_micro / 1_000_000, 2)
             revenue_native = round(total_purchases_value_micro / 1_000_000, 2)
-            spend_sar, fx_rate = _to_sar(spend_native, ad_currency)
-            revenue_sar, _ = _to_sar(revenue_native, ad_currency)
+            spend_sar, fx_rate = await _to_sar(
+                spend_native, ad_currency, user_id=uid,
+            )
+            revenue_sar, _ = await _to_sar(
+                revenue_native, ad_currency, user_id=uid,
+            )
             date_str = d.isoformat()
 
             await db.snapchat_account_daily.update_one(
