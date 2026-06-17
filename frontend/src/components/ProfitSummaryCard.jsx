@@ -16,6 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import ExcludedOrdersModal from "./ExcludedOrdersModal";
+import AdsCostBreakdownModal from "./AdsCostBreakdownModal";
 
 const fmtSar = (v) => {
     if (v == null || Number.isNaN(Number(v))) return "—";
@@ -79,7 +80,7 @@ function HeaderKpi({ icon: Icon, label, value, hint, tone = "emerald", testid, b
     );
 }
 
-function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false }) {
+function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false, onClick = null, testid = null }) {
     // Color palette for each row — tuned for clarity on a soft gradient bg.
     const palettes = {
         green:   { tile: "bg-emerald-600",      icon: "text-white",      amount: "text-emerald-700",   bar: "bg-emerald-200/60" },
@@ -90,19 +91,33 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
         emerald: { tile: "bg-emerald-600",      icon: "text-white",      amount: "text-emerald-700",   bar: "bg-emerald-300/40" },
     };
     const p = palettes[color] || palettes.amber;
+    const interactive = typeof onClick === "function";
+    const Comp = interactive ? "button" : "div";
     return (
-        <div
+        <Comp
+            type={interactive ? "button" : undefined}
+            onClick={interactive ? onClick : undefined}
             className={[
-                "flex items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-white/40",
+                "w-full text-right flex items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-white/40",
+                interactive ? "cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-300 rounded-lg" : "",
                 isLast ? "rounded-b-xl" : "",
                 isFirst ? "rounded-t-xl" : "border-t border-white/60",
             ].join(" ")}
+            data-testid={testid || undefined}
+            title={interactive ? "اضغط لعرض القيود التفصيلية للفترة" : undefined}
         >
             <div className="flex items-center gap-2.5 min-w-0">
                 <div className={`w-8 h-8 rounded-lg ${p.tile} ${p.icon} flex items-center justify-center flex-shrink-0`}>
                     <Icon size={16} weight="bold" />
                 </div>
-                <span className="text-sm font-bold text-slate-700 truncate">{label}</span>
+                <span className="text-sm font-bold text-slate-700 truncate">
+                    {label}
+                    {interactive && (
+                        <span className="ms-1 text-[10px] text-rose-600 font-bold">
+                            🔍
+                        </span>
+                    )}
+                </span>
             </div>
             <div className={`flex items-center gap-2 num text-base font-extrabold ${p.amount}`} style={{ fontFamily: "Tajawal" }}>
                 {share != null && (
@@ -116,13 +131,14 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
                 )}
                 <span>{value}</span>
             </div>
-        </div>
+        </Comp>
     );
 }
 
 export default function ProfitSummaryCard({ totals, fromDate, toDate, periodLabel }) {
     const t = totals || {};
     const [excludedOpen, setExcludedOpen] = useState(false);
+    const [adsBreakdownOpen, setAdsBreakdownOpen] = useState(false);
     // Compose the deductions explicitly so each line is auditable and
     // matches the description on the KPI tooltips above.
     const sales            = Number(t.total_sales        || 0);
@@ -241,7 +257,7 @@ export default function ProfitSummaryCard({ totals, fromDate, toDate, periodLabe
             <div className="p-3 space-y-0">
                 <Line icon={Coins}      label="المبيعات"                      value={fmtSar(sales)}          color="green"  isFirst />
                 <Line icon={Package}    label="− تكاليف المنتجات"             value={fmtSar(productCost)}    share={sharePct(productCost, sales)}     color="amber"  />
-                <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        share={sharePct(adsCost, sales)}         color="rose"   />
+                <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        share={sharePct(adsCost, sales)}         color="rose"   onClick={() => setAdsBreakdownOpen(true)} testid="profit-line-ads-cost" />
                 <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  share={sharePct(shippingTotal, sales)}   color="sky"    />
                 <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} share={sharePct(allPaymentFees, sales)}  color="violet" />
                 {operatingExpenses > 0 && (
@@ -283,6 +299,12 @@ export default function ProfitSummaryCard({ totals, fromDate, toDate, periodLabe
                 fromDate={fromDate}
                 toDate={toDate}
                 periodLabel={periodLabel}
+            />
+            <AdsCostBreakdownModal
+                open={adsBreakdownOpen}
+                onClose={() => setAdsBreakdownOpen(false)}
+                fromDate={fromDate}
+                toDate={toDate}
             />
         </div>
     );

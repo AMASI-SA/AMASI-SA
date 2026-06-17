@@ -2635,6 +2635,103 @@ async def excluded_orders_list(
     }
 
 
+# ── Ads-cost breakdown — drill-down for ProfitSummaryCard ───────────────────
+@api.get("/dashboard/ads-cost-breakdown")
+async def ads_cost_breakdown(
+    user: dict = Depends(current_user),
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+):
+    """READ-ONLY drill-down for the "إجمالي تكاليف الإعلانات" tile on
+    the dashboard. Returns every `ad_account_ledger.type=spend` row in
+    the inclusive date window [from_date, to_date], joined with the
+    counterparty (so the UI can show ad-account name + provider).
+
+    Same accounting source the Dashboard total uses (Iter-160 SSOT —
+    `ad_account_ledger`), so the totals always reconcile with the
+    aggregated KPI value.
+    """
+    uid = user["id"]
+    q: dict = {"user_id": uid, "type": "spend"}
+    if from_date or to_date:
+        q["date"] = {}
+        if from_date:
+            q["date"]["$gte"] = from_date
+        if to_date:
+            q["date"]["$lte"] = to_date
+
+    rows = await db.ad_account_ledger.find(
+        q,
+        {"_id": 0, "id": 1, "counterparty_id": 1, "amount": 1,
+         "date": 1, "description": 1, "breakdown": 1, "created_at": 1,
+         "balance_after": 1, "debt_after": 1},
+    ).sort([("date", -1), ("created_at", -1)]).to_list(5000)
+
+    cp_ids = list({r.get("counterparty_id") for r in rows
+                   if r.get("counterparty_id")})
+    cp_map: dict = {}
+    if cp_ids:
+        async for cp in db.counterparties.find(
+            {"user_id": uid, "id": {"$in": cp_ids}},
+            {"_id": 0, "id": 1, "name": 1, "ad_provider": 1},
+        ):
+            cp_map[cp["id"]] = {
+                "name": cp.get("name") or "—",
+                "ad_provider": cp.get("ad_provider") or "—",
+            }
+
+    items = []
+    grand = 0.0
+    by_provider: dict = {}
+    by_account: dict = {}
+    for r in rows:
+        cp_id = r.get("counterparty_id")
+        cp_info = cp_map.get(cp_id, {"name": "—", "ad_provider": "—"})
+        amount = round(float(r.get("amount") or 0), 2)
+        bd = r.get("breakdown") or {}
+        source_tag = (
+            "cron (مزامنة تلقائية)"
+            if bd.get("auto_cron") else "manual"
+        )
+        items.append({
+            "id": r.get("id"),
+            "date": r.get("date"),
+            "ad_account_id": cp_id,
+            "ad_account_name": cp_info["name"],
+            "ad_provider": cp_info["ad_provider"],
+            "amount": amount,
+            "description": r.get("description") or "",
+            "source": source_tag,
+            "covered_from_balance": round(
+                float(bd.get("from_balance") or 0), 2),
+            "created_debt": round(
+                float(bd.get("created_debt")
+                      or bd.get("uncovered") or 0), 2),
+            "platform_total": round(
+                float(bd.get("platform_total") or 0), 2),
+            "balance_after": round(
+                float(r.get("balance_after") or 0), 2),
+            "debt_after": round(float(r.get("debt_after") or 0), 2),
+            "created_at": r.get("created_at"),
+        })
+        grand += amount
+        by_provider[cp_info["ad_provider"]] = (
+            by_provider.get(cp_info["ad_provider"], 0.0) + amount)
+        by_account[cp_info["name"]] = (
+            by_account.get(cp_info["name"], 0.0) + amount)
+
+    return {
+        "ok": True,
+        "from_date": from_date,
+        "to_date": to_date,
+        "total_amount": round(grand, 2),
+        "total_entries": len(items),
+        "by_provider": {k: round(v, 2) for k, v in by_provider.items()},
+        "by_account": {k: round(v, 2) for k, v in by_account.items()},
+        "items": items,
+    }
+
+
 # ── iter-45 — Electronic Net debug / verification endpoint ────────────────
 @api.get("/dashboard/electronic-net-debug")
 async def electronic_net_debug(
