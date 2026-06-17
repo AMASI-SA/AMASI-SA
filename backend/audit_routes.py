@@ -1992,3 +1992,362 @@ def make_ad_account_cron_forensic_router(db, current_user):
         }
 
     return router
+
+
+
+def make_ad_account_sync_diagnostic_router(db, current_user):
+    """Iter-242 — Per-account "why didn't my sync update?" forensic
+    diagnostic (READ-ONLY).
+
+    Given an `ad_account_id` (or a `name_query` like "الرياض"),
+    walks the EXACT chain the half-hour cron follows and reports at
+    which step the account is being skipped / no-op'd:
+
+      1. Counterparty visibility   — does it exist and is it picked
+                                     up by `_run_sync_for_all`'s
+                                     filter (provider whitelist +
+                                     `sync_via != "make_com"`)?
+      2. Idempotency guard         — `last_auto_sync_date == today`?
+      3. External-id requirement   — Snap/Meta need
+                                     `external_account_id` set
+                                     (Iter-163 guard).
+      4. Upstream data source      — what `snapchat_account_daily`
+                                     (or peer collection) returns for
+                                     this `external_account_id` for
+                                     the date range.
+      5. Delta computation         — what `prev_total_applied` is
+                                     today vs the platform total →
+                                     would the cron emit a delta, a
+                                     no-op, or skip?
+      6. Refresh status            — last successful sync time +
+                                     last cron ledger row for the
+                                     account today.
+
+    Returns a `final_diagnosis` field that names the exact step
+    blocking the update so the merchant can act.
+
+    No writes anywhere.
+    """
+    from datetime import datetime, timezone
+    from fastapi import APIRouter, Depends, Query, HTTPException
+
+    router = APIRouter(prefix="/audit", tags=["audit"])
+
+    HALFHOUR_PROVIDERS = {"snapchat", "meta"}
+    NEEDS_EXTERNAL_ID = {"snapchat", "meta"}
+
+    PROVIDER_SOURCES = {
+        "snapchat": [
+            {"col": "snapchat_account_daily", "scope": "ad_account_id"},
+            {"col": "snapchat_ads_daily",     "scope": None},
+        ],
+        "meta": [
+            {"col": "meta_ads_daily", "scope": "account_id"},
+        ],
+        "tiktok": [
+            {"col": "tiktok_ads_daily", "scope": None},
+        ],
+    }
+
+    @router.get("/ad-account-sync-diagnostic")
+    async def ad_account_sync_diagnostic(
+        user: dict = Depends(current_user),
+        ad_account_id: str | None = Query(
+            None, description="Counterparty id (exact)."),
+        name_query: str | None = Query(
+            None,
+            description=(
+                "Substring match on counterparty `name` "
+                "(e.g. \"الرياض\"). Used when id is unknown."
+            ),
+        ),
+        on_date: str | None = Query(
+            None,
+            description=(
+                "YYYY-MM-DD for the day to inspect. Default = today "
+                "in Riyadh."
+            ),
+        ),
+    ):
+        uid = user["id"]
+
+        # ── Resolve target counterparty ──────────────────────────────
+        q: dict = {"user_id": uid, "kind": "ad_account"}
+        if ad_account_id:
+            q["id"] = ad_account_id
+        elif name_query:
+            q["name"] = {"$regex": name_query, "$options": "i"}
+        else:
+            raise HTTPException(
+                400, "ad_account_id or name_query is required"
+            )
+        cp = await db.counterparties.find_one(q, {"_id": 0})
+        if not cp:
+            raise HTTPException(
+                404, "ad_account counterparty not found",
+            )
+
+        # Date (Riyadh local day if not supplied — matches the cron).
+        if not on_date:
+            try:
+                # Match server's riyadh_today_iso pattern.
+                from datetime import timedelta
+                now_utc = datetime.now(timezone.utc)
+                riyadh = now_utc + timedelta(hours=3)
+                on_date = riyadh.date().isoformat()
+            except Exception:
+                on_date = datetime.now(timezone.utc).date().isoformat()
+
+        provider = (cp.get("ad_provider") or "").strip().lower()
+        ext_id = (cp.get("external_account_id") or "").strip() or None
+        sync_via = cp.get("sync_via") or "platform"
+        last_auto_sync_date = cp.get("last_auto_sync_date")
+        last_auto_sync_at = cp.get("last_auto_sync_at")
+        legacy_balance = float(cp.get("balance") or 0)
+
+        steps: list[dict] = []
+        final_diagnosis = None
+
+        # ── Step 1: visibility in _run_sync_for_all ──────────────────
+        step1_ok = (
+            provider in HALFHOUR_PROVIDERS and sync_via != "make_com"
+        )
+        steps.append({
+            "step": 1,
+            "name": "visibility_in_cron_filter",
+            "ok": step1_ok,
+            "ad_provider": provider,
+            "sync_via": sync_via,
+            "halfhour_providers_whitelist": list(HALFHOUR_PROVIDERS),
+            "reason": (
+                None if step1_ok else
+                (f"provider `{provider}` ليس في قائمة "
+                 f"HALFHOUR_SYNC_PROVIDERS (snapchat, meta)"
+                 if provider not in HALFHOUR_PROVIDERS
+                 else "sync_via == 'make_com' — الـ cron يتخطّاه عمداً")
+            ),
+        })
+        if not step1_ok and final_diagnosis is None:
+            final_diagnosis = (
+                "step_1_filter_excluded: الحساب مستبعَد من الـ "
+                "cron filter قبل أي محاولة مزامنة."
+            )
+
+        # ── Step 2: idempotency guard (last_auto_sync_date) ──────────
+        step2_ok = (last_auto_sync_date != on_date)
+        steps.append({
+            "step": 2,
+            "name": "idempotency_guard",
+            "ok": step2_ok,
+            "last_auto_sync_date": last_auto_sync_date,
+            "on_date": on_date,
+            "note": (
+                "إذا last_auto_sync_date == on_date والكود لم يستخدم "
+                "force=True، الـ cron يتخطّى الحساب فوراً بـ "
+                "skipped=already_synced."
+                if not step2_ok else
+                "guard مفتوح — سيكمل التنفيذ."
+            ),
+            "dashboard_button_uses_force": True,
+        })
+
+        # ── Step 3: external_account_id requirement ──────────────────
+        step3_ok = not (
+            provider in NEEDS_EXTERNAL_ID and not ext_id
+        )
+        steps.append({
+            "step": 3,
+            "name": "external_account_id_required",
+            "ok": step3_ok,
+            "external_account_id": ext_id,
+            "reason": (
+                None if step3_ok else
+                "Iter-163: حسابات Snap/Meta بدون external_account_id "
+                "تُتخطّى تجنّباً لخلط مصاريف الحسابات. الحل: عدّل الحساب "
+                "وأضف Ad Account ID الخاص بـ الرياض من Snapchat Ads "
+                "Manager."
+            ),
+        })
+        if not step3_ok and final_diagnosis is None:
+            final_diagnosis = (
+                "step_3_missing_external_id: الحساب يفتقد "
+                "`external_account_id`؛ الـ cron يخرج بـ "
+                "skipped=missing_external_account_id ويختم الـ "
+                "last_auto_sync_at — لذا يبدو وكأن المزامنة نجحت لكن "
+                "لا تُحدَّث القيم فعلياً."
+            )
+
+        # ── Step 4: upstream platform data ───────────────────────────
+        upstream = []
+        upstream_total = 0.0
+        upstream_source = None
+        for src in PROVIDER_SOURCES.get(provider, []):
+            scope = src["scope"]
+            if scope and not ext_id:
+                continue  # would aggregate across all accounts; Iter-163 skip
+            qq: dict = {"user_id": uid, "date": on_date}
+            if scope and ext_id:
+                qq[scope] = ext_id
+            agg = await db[src["col"]].aggregate([
+                {"$match": qq},
+                {"$group": {"_id": "$date",
+                            "spend": {"$sum": "$spend"},
+                            "rows": {"$sum": 1}}},
+            ]).to_list(10)
+            row_count = sum(r.get("rows", 0) for r in agg)
+            spend_total = sum(float(r.get("spend") or 0) for r in agg)
+            upstream.append({
+                "collection": src["col"],
+                "scope_field": scope,
+                "filter_value": ext_id if scope else None,
+                "rows_found": row_count,
+                "spend_total": round(spend_total, 2),
+            })
+            if row_count > 0 and upstream_source is None:
+                upstream_source = src["col"]
+                upstream_total = round(spend_total, 2)
+                break
+        step4_ok = upstream_total > 0
+        steps.append({
+            "step": 4,
+            "name": "upstream_platform_data",
+            "ok": step4_ok,
+            "on_date": on_date,
+            "queried_sources": upstream,
+            "first_hit_source": upstream_source,
+            "platform_total_today": round(upstream_total, 2),
+            "note": (
+                "لا توجد صفوف upstream لهذا الحساب بهذا الـ "
+                "external_account_id في هذا التاريخ — قد يكون الـ "
+                "API الذي يكتب في `snapchat_account_daily` لم يجلب "
+                "بيانات الرياض، أو الـ `external_account_id` غير "
+                "متطابق مع ما تعيده Snapchat للحساب."
+                if not step4_ok else
+                "صفوف upstream موجودة — السحب الـ raw سليم."
+            ),
+        })
+        if not step4_ok and final_diagnosis is None:
+            final_diagnosis = (
+                "step_4_no_upstream_data: لا توجد بيانات في "
+                f"snapchat_account_daily مفلترة بـ "
+                f"`ad_account_id={ext_id}` ليوم {on_date}. هذا يعني "
+                "إما أن external_account_id غير صحيح، أو أن جلب "
+                "Snapchat API لم يصل لهذا الحساب. صفحة "
+                "/snapchat-accounts تنجح لأنها تطلب fresh fetch "
+                "مباشر من Snapchat API ويكتب بـ ad_account_id الذي "
+                "تعيده Snapchat (قد يختلف عن المُخزَّن في الـ "
+                "counterparty)."
+            )
+
+        # ── Step 5: delta vs prev_total_applied today ────────────────
+        prev_rows = await db.ad_account_ledger.find(
+            {"user_id": uid, "counterparty_id": cp["id"],
+             "type": "spend",
+             "breakdown.auto_cron": True,
+             "date": on_date},
+            {"_id": 0, "amount": 1, "id": 1, "created_at": 1,
+             "breakdown.platform_total": 1, "balance_after": 1,
+             "debt_after": 1},
+        ).sort("created_at", 1).to_list(50)
+        prev_total_applied = round(sum(
+            float(r.get("amount") or 0) for r in prev_rows
+        ), 2)
+        delta_if_force = round(upstream_total - prev_total_applied, 2)
+        steps.append({
+            "step": 5,
+            "name": "delta_computation",
+            "ok": True,
+            "prev_total_applied_today": prev_total_applied,
+            "platform_total_today": round(upstream_total, 2),
+            "delta_that_would_apply_on_force_sync": delta_if_force,
+            "verdict": (
+                "no_op (delta == 0) — الـ cron يطبع نجاحاً ويُحدّث "
+                "last_auto_sync_at لكنه لا يضيف أي صف ledger ولا "
+                "يُغيّر المديونية."
+                if delta_if_force == 0 and upstream_total > 0
+                else (
+                    "would_post_delta — لو ضغطت Dashboard sync الآن، "
+                    f"سيُسجَّل قيد بمقدار {delta_if_force} ر.س."
+                    if delta_if_force > 0
+                    else (
+                        "negative_delta — Snapchat تُبلّغ مبلغاً أقل "
+                        "مما طُبّق سابقاً (تصحيح نزولي). المسار: "
+                        "refund إلى balance + تخفيض المديونية."
+                        if delta_if_force < 0 and upstream_total > 0
+                        else "no_data — لا upstream data لاتخاذ قرار."
+                    )
+                )
+            ),
+        })
+        if (final_diagnosis is None and step4_ok
+                and delta_if_force == 0):
+            final_diagnosis = (
+                "step_5_no_op: السحب من Snapchat يطابق ما تم تطبيقه "
+                "سابقاً (delta=0). الـ cron يعتبر هذا نجاحاً "
+                "بدون تغيير. لو الرقم في صفحة /snapchat-accounts أكبر "
+                "بعد المزامنة اليدوية، فالمشكلة في وقت الـ caching: "
+                "Dashboard sync قرأ نفس القيمة المطبَّقة بالفعل."
+            )
+
+        # ── Step 6: refresh status ───────────────────────────────────
+        last_cron_row = (prev_rows[-1] if prev_rows else None)
+        steps.append({
+            "step": 6,
+            "name": "refresh_status",
+            "ok": True,
+            "last_auto_sync_at": last_auto_sync_at,
+            "last_cron_ledger_today": (
+                {
+                    "id": last_cron_row.get("id"),
+                    "amount": round(
+                        float(last_cron_row.get("amount") or 0), 2),
+                    "balance_after": round(
+                        float(last_cron_row.get("balance_after") or 0),
+                        2),
+                    "debt_after": round(
+                        float(last_cron_row.get("debt_after") or 0), 2),
+                    "platform_total_in_breakdown": (
+                        last_cron_row.get("breakdown", {})
+                                     .get("platform_total")
+                    ),
+                    "created_at": last_cron_row.get("created_at"),
+                }
+                if last_cron_row else None
+            ),
+            "legacy_counterparty_balance": legacy_balance,
+        })
+
+        if final_diagnosis is None:
+            final_diagnosis = (
+                "no_blocker_detected: لا يوجد سبب واضح للتخطّي. "
+                "تحقّق من أن Dashboard sync بالفعل وصلت لـ "
+                "/ad-accounts/sync-all (افتح Network tab في "
+                "المتصفّح) وأنها أعادت 200."
+            )
+
+        return {
+            "ok": True,
+            "iter": "iter242",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "ad_account": {
+                "id": cp["id"],
+                "name": cp.get("name"),
+                "ad_provider": provider,
+                "external_account_id": ext_id,
+                "sync_via": sync_via,
+                "debt_mode": cp.get("debt_mode"),
+                "balance": legacy_balance,
+                "last_auto_sync_date": last_auto_sync_date,
+                "last_auto_sync_at": last_auto_sync_at,
+            },
+            "on_date": on_date,
+            "steps": steps,
+            "final_diagnosis": final_diagnosis,
+            "guidance": (
+                "تقرير قراءة فقط. لا تعديل ولا حذف. اقرأ "
+                "`final_diagnosis` لمعرفة الخطوة التي عطّلت تحديث "
+                "الرياض، ثم نفّذ الحل المقترح فيها."
+            ),
+        }
+
+    return router
