@@ -33,6 +33,30 @@ const fmtDate = (iso) => {
     } catch { return iso; }
 };
 
+const fmtTime = (iso) => {
+    if (!iso) return "—";
+    try {
+        return new Date(iso).toLocaleTimeString("en-GB", {
+            hour: "2-digit", minute: "2-digit",
+        });
+    } catch { return iso; }
+};
+
+// Arabic-friendly labels for transaction_type (UX-only, not authoritative).
+const TXN_TYPE_LABELS = {
+    internal_transfer:     "تحويل داخلي",
+    debt_payment:          "سداد التزام",
+    receivable_collection: "تحصيل ذمم",
+    salary_advance:        "سلفة موظف",
+    expense:               "مصروف",
+    courier_transfer:      "تحويل شركة شحن",
+    shipping_debt_payment: "سداد شركة شحن",
+    settlement:            "تسوية",
+    ad_account_topup:      "تعبئة حساب إعلاني",
+    opening_balance:       "رصيد افتتاحي",
+};
+const labelOf = (tt) => TXN_TYPE_LABELS[tt] || tt || "—";
+
 export default function LedgerHealthDiagnostic() {
     const [health, setHealth] = useState(null);
     const [feed, setFeed] = useState(null);
@@ -134,15 +158,45 @@ export default function LedgerHealthDiagnostic() {
                 </div>
             </div>
 
+            {/* ── Daily stats card (Phase 3) ─────────────────────── */}
+            <div className="rounded-lg bg-white border-2 border-blue-200 p-6"
+                 data-testid="ledger-health-stats-card">
+                <h2 className="text-lg font-semibold mb-4">
+                    📊 إحصاءات اليوم — Double-Write
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <Stat label="حركات مُرحّلة اليوم"
+                          value={today.mirrored ?? 0}
+                          tone="ok"
+                          testid="stat-mirrored-count" />
+                    <Stat label="إجمالي المبالغ المُرحّلة"
+                          value={`${fmt(today.mirrored_amount_total ?? 0)} ر.س`}
+                          testid="stat-mirrored-amount" />
+                    <Stat label="قيود Ledger المُنشأة"
+                          value={today.ledger_entries_created ?? 0}
+                          testid="stat-ledger-entries" />
+                    <Stat label="آخر مزامنة"
+                          value={fmtTime(today.last_mirror_at)}
+                          small
+                          testid="stat-last-sync" />
+                </div>
+            </div>
+
             {/* ── RED ALERT when coverage < 100% ─────────────────── */}
             {!isHealthy && (
                 <div
-                    className="rounded-lg bg-red-100 border-2 border-red-500 p-5"
+                    className="rounded-lg bg-red-100 border-4 border-red-600 p-5 shadow-lg animate-pulse"
                     data-testid="ledger-health-leak-alert"
                 >
-                    <h3 className="text-lg font-bold text-red-800 mb-3">
-                        🚨 تنبيه: اكتشف تسرّب في الـ Ledger اليوم
-                    </h3>
+                    <div className="flex items-center gap-3 mb-3">
+                        <span className="inline-block bg-red-600 text-white px-3 py-1 rounded text-sm font-extrabold tracking-wider"
+                              data-testid="leak-detected-badge">
+                            🚨 LEAK DETECTED
+                        </span>
+                        <h3 className="text-lg font-bold text-red-800">
+                            اكتشف تسرّب في الـ Ledger اليوم
+                        </h3>
+                    </div>
                     <p className="text-sm text-red-700 mb-4">
                         Coverage أقل من 100%. الجداول التالية توضّح المسار
                         المسبب لكل حركة لم تُرحَّل. هذا التقرير قراءة فقط —
@@ -151,8 +205,9 @@ export default function LedgerHealthDiagnostic() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <BreakdownTable
-                            title="حسب transaction_type"
+                            title="حسب نوع العملية"
                             data={byTxnType}
+                            translateKey
                             testid="leak-by-txn-type"
                         />
                         <BreakdownTable
@@ -162,11 +217,12 @@ export default function LedgerHealthDiagnostic() {
                         />
                     </div>
 
-                    <h4 className="font-semibold mb-2">
-                        أول 10 معاملات غير مُرحّلة اليوم
+                    <h4 className="font-semibold mb-2 text-red-900">
+                        تفاصيل أول 10 معاملات غير مُرحّلة اليوم
                     </h4>
                     <UnmirroredTable
                         rows={unmirroredSample}
+                        fullColumns
                         testid="leak-sample-table"
                     />
                 </div>
@@ -205,10 +261,12 @@ export default function LedgerHealthDiagnostic() {
                 <h3 className="text-lg font-semibold mb-3">
                     آخر 20 حركة في النظام
                 </h3>
+                <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                     <thead>
                         <tr className="bg-gray-100 text-right">
-                            <th className="px-3 py-2">النوع</th>
+                            <th className="px-3 py-2">نوع العملية</th>
+                            <th className="px-3 py-2">الحساب</th>
                             <th className="px-3 py-2">المبلغ</th>
                             <th className="px-3 py-2">الاتجاه</th>
                             <th className="px-3 py-2">التاريخ</th>
@@ -220,10 +278,16 @@ export default function LedgerHealthDiagnostic() {
                         {recent.map((r) => (
                             <tr key={r.id} className="border-t"
                                 data-testid={`recent-row-${r.id}`}>
-                                <td className="px-3 py-2 font-mono text-xs">
-                                    {r.transaction_type}
+                                <td className="px-3 py-2">
+                                    <div>{labelOf(r.transaction_type)}</div>
+                                    <div className="text-xs text-gray-400 font-mono">
+                                        {r.transaction_type}
+                                    </div>
                                 </td>
                                 <td className="px-3 py-2">
+                                    {r.account_name || "—"}
+                                </td>
+                                <td className="px-3 py-2 font-mono">
                                     {fmt(r.amount)}
                                 </td>
                                 <td className="px-3 py-2">
@@ -237,20 +301,21 @@ export default function LedgerHealthDiagnostic() {
                                 </td>
                                 <td className="px-3 py-2">
                                     {r.mirrored
-                                        ? <span className="text-green-700">✓ مُرحَّل</span>
-                                        : <span className="text-gray-500">— لم يُرحَّل</span>
+                                        ? <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">✓ مُرحَّل</span>
+                                        : <span className="inline-block bg-gray-100 text-gray-500 px-2 py-0.5 rounded text-xs">— لم يُرحَّل</span>
                                     }
                                 </td>
                             </tr>
                         ))}
                         {recent.length === 0 && (
-                            <tr><td colSpan={6}
+                            <tr><td colSpan={7}
                                     className="text-center py-4 text-gray-500">
                                 لا توجد حركات.
                             </td></tr>
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     );
@@ -270,7 +335,7 @@ function Stat({ label, value, tone, small, testid }) {
     );
 }
 
-function BreakdownTable({ title, data, testid }) {
+function BreakdownTable({ title, data, translateKey, testid }) {
     const rows = Object.entries(data || {});
     return (
         <div data-testid={testid}>
@@ -281,7 +346,9 @@ function BreakdownTable({ title, data, testid }) {
                         <tr><td className="p-2 text-gray-500">—</td></tr>
                     ) : rows.map(([k, v]) => (
                         <tr key={k} className="border-t">
-                            <td className="p-2 font-mono">{k}</td>
+                            <td className="p-2 font-mono">
+                                {translateKey ? labelOf(k) : k}
+                            </td>
                             <td className="p-2 text-right font-bold">{v}</td>
                         </tr>
                     ))}
@@ -305,7 +372,7 @@ function UnmirroredTable({ rows, fullColumns, testid }) {
             <table className="min-w-full text-xs border">
                 <thead className="bg-gray-100">
                     <tr className="text-right">
-                        <th className="p-2">النوع</th>
+                        <th className="p-2">نوع العملية</th>
                         <th className="p-2">الحساب</th>
                         <th className="p-2">المبلغ</th>
                         <th className="p-2">التاريخ</th>
@@ -317,20 +384,23 @@ function UnmirroredTable({ rows, fullColumns, testid }) {
                     {rows.map((r, i) => (
                         <tr key={r.transaction_id || r.id || i}
                             className="border-t">
-                            <td className="p-2 font-mono">
-                                {r.transaction_type}
-                            </td>
                             <td className="p-2">
+                                <div>{labelOf(r.transaction_type)}</div>
+                                <div className="text-xs text-gray-400 font-mono">
+                                    {r.transaction_type}
+                                </div>
+                            </td>
+                            <td className="p-2 font-semibold">
                                 {r.account_name || r.account_id?.slice(0, 8) || "—"}
                             </td>
-                            <td className="p-2 font-bold">
+                            <td className="p-2 font-bold font-mono">
                                 {fmt(r.amount)}
                             </td>
                             <td className="p-2">
                                 {r.transaction_date || "—"}
                             </td>
                             {fullColumns && (
-                                <td className="p-2 text-gray-600">
+                                <td className="p-2 text-gray-600 text-[11px]">
                                     {r.created_by_endpoint
                                         || r.inferred_endpoint || "—"}
                                 </td>

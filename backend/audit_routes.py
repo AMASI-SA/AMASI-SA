@@ -1445,8 +1445,16 @@ def make_double_write_health_router(db, current_user):
 
         recent_ids = [r["id"] for r in recent if r.get("id")]
         covered = await _collect_mirrored_ids(db, uid, recent_ids)
+        # Account-name enrichment for the recent table.
+        recent_acc_names = await _account_name_map(
+            db, uid, [r.get("account_id") for r in recent
+                      if r.get("account_id")],
+        )
         for r in recent:
             r["mirrored"] = r["id"] in covered
+            r["account_name"] = recent_acc_names.get(
+                r.get("account_id"), "—",
+            )
 
         # ── 2) Today summary (UTC day) ───────────────────────────────
         now = datetime.now(timezone.utc)
@@ -1468,16 +1476,32 @@ def make_double_write_health_router(db, current_user):
         today_ids = [t["id"] for t in today_txns if t.get("id")]
         today_covered = await _collect_mirrored_ids(db, uid, today_ids)
 
+        # Sum mirrored amounts today + count ledger entries written
+        # by Iter-240 today + capture last-mirror timestamp.
+        mirrored_amount_total = 0.0
+        ledger_entries_created = 0
+        last_mirror_at: str | None = None
         by_endpoint: dict = {}
         async for m in db.general_ledger.find(
             {"user_id": uid,
              "metadata.source": "account_transaction_double_write",
-             "metadata.account_transaction_id": {"$in": today_ids}},
-            {"_id": 0, "metadata.created_by_endpoint": 1},
+             "created_at": {"$gte": start_iso, "$lt": end_iso}},
+            {"_id": 0, "amount": 1, "side": 1, "created_at": 1,
+             "metadata.created_by_endpoint": 1,
+             "metadata.account_transaction_id": 1,
+             "entity_type": 1},
         ):
             md = m.get("metadata") or {}
+            ledger_entries_created += 1
             ep = md.get("created_by_endpoint") or "unknown"
             by_endpoint[ep] = by_endpoint.get(ep, 0) + 1
+            # Sum the BANK-side legs only to avoid double-counting
+            # (every mirror posts 1 bank leg + 1 counter leg).
+            if m.get("entity_type") == "bank":
+                mirrored_amount_total += float(m.get("amount") or 0)
+            ca = m.get("created_at")
+            if ca and (last_mirror_at is None or ca > last_mirror_at):
+                last_mirror_at = ca
 
         total_today = len(today_ids)
         mirrored_today = len(
@@ -1528,6 +1552,9 @@ def make_double_write_health_router(db, current_user):
                 "coverage_pct": coverage_pct,
                 "is_healthy": (coverage_pct is None
                                or coverage_pct >= 100.0),
+                "mirrored_amount_total": round(mirrored_amount_total, 2),
+                "ledger_entries_created": ledger_entries_created,
+                "last_mirror_at": last_mirror_at,
             },
             "by_endpoint_today": by_endpoint,
             "unmirrored_breakdown_today": {
