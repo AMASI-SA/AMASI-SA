@@ -4198,3 +4198,38 @@ Full regression: **33/33 PASSED**.
 
 ### Deployment note
 PREVIEW only. Merchant must «Save to Github → Deploy».
+
+---
+
+## Iter-246h — Over-payment guard + sub_account consistency (Feb 2026)
+
+### Two bugs reported
+1. Backend allowed paying MORE than supplier's outstanding_debt (merchant paid 550 to a supplier whose debt was only 458).
+2. After successful payment the supplier list didn't refresh — the merchant could re-click pay and double-debit.
+
+### Root cause analysis
+While building the over-payment guard I discovered a deeper schema bug:
+- `/api/financial-movements` posted the supplier-credit leg WITHOUT `sub_account`.
+- `/api/accounting/suppliers/{id}/pay` reads/writes with `sub_account="payable"`.
+- Result: credits accumulated in one bucket, debits in another → they never netted out, and `compute_balance(sub_account="payable")` always returned 0.
+
+### Fix
+1. **`financial_movements_routes.py`** — Supplier liability legs now ALWAYS carry `sub_account="payable"`.  This unifies the books with the legacy supplier_pay endpoint.
+2. **`universal_accounting_routes.py::supplier_pay`** — Added two backend guards:
+   - `outstanding_debt <= 0` → 400 «لا يوجد رصيد مستحق… تم تسوية الدين بالكامل بالفعل».
+   - `payment_amount > outstanding_debt + 0.01` → 400 «مبلغ السداد X أكبر من الرصيد المستحق للمورد Y».
+3. **`UnifiedEntryScreen.jsx`** — Added `reloadSuppliers()` helper.  Invoked after every successful `supplier_pay` / `supplier_invoice` post, and the supplier picker is reset (entityId = "") so the merchant can't accidentally double-click pay on stale state.
+
+### Tests
+`tests/test_iter246h_supplier_pay_guards.py` — **4/4 PASSED**
+- Baseline debt = 458 ✅
+- Pay 550 → 400 «أكبر من الرصيد» ✅
+- Pay 458 → debt = 0 ✅
+- Pay again (any amount) → 400 «تم تسوية الدين» ✅
+
+Full regression: **37/37 PASSED**.
+
+### Deployment note
+PREVIEW only.  Merchant must «Save to Github → Deploy».
+
+**⚠️ Forward-only data note**: Pre-existing supplier_invoice movements posted BEFORE this iteration credited without `sub_account`.  Those balances still appear in the merchant-facing `outstanding_debt` (because `/ledger/balance` sums across sub_accounts when none is specified), so no historical data is lost — but supplier_pay debits will now correctly net them off.

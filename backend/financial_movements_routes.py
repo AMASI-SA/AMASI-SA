@@ -451,12 +451,19 @@ def make_financial_movements_router(db, current_user):
         if remaining > 0:
             if payload.supplier_id:
                 payable_type, payable_id = "supplier", payload.supplier_id
+                payable_sub = "payable"
             else:
                 payable_type, payable_id = (
                     "other_payable", "uncategorised_payable")
+                payable_sub = None
             entries.append({
                 "entity_type": payable_type,
                 "entity_id":   payable_id,
+                # Iter-246h — sub_account=payable so the credit lands
+                # on the same «bucket» that supplier_pay's debit reads
+                # and writes.  Without this the books are split into
+                # two parallel pools and never net out.
+                "sub_account": payable_sub,
                 "side":        "credit",
                 "amount":      remaining,
                 "entry_type":  gl_entry_type,

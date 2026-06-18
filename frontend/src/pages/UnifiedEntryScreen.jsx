@@ -390,6 +390,21 @@ export default function UnifiedEntryScreen() {
         }
     };
 
+    // Iter-246h — Reloadable supplier list so the dropdown reflects
+    // the latest outstanding_debt the moment a payment posts (or any
+    // other ledger touch that affects supplier balances).
+    const reloadSuppliers = async () => {
+        try {
+            const { data } = await api.get(
+                "/accounting/suppliers/list");
+            setSuppliers((data?.suppliers || []).map((s) => ({
+                id: s.id,
+                name: s.name,
+                outstanding_debt: s.outstanding_debt || 0,
+            })));
+        } catch { /* silent — non-blocking refresh */ }
+    };
+
     useEffect(() => { (async () => {
         try {
             const [emp, sup, ext, bnk, cat] = await Promise.all([
@@ -763,6 +778,15 @@ export default function UnifiedEntryScreen() {
             // Iter-191 — refresh couriers' open COD after every post
             // that touches them (settlement, deposit, payment, charge).
             reloadCouriers();
+            // Iter-246h — Refresh supplier list with fresh outstanding_debt
+            // so the merchant can't accidentally re-pay a settled debt
+            // by clicking the same supplier twice.
+            if (opType === "supplier_pay" || opType === "supplier_invoice") {
+                reloadSuppliers();
+                if (opType === "supplier_pay") {
+                    setEntityId("");   // reset the picker
+                }
+            }
             // Iter-209 — Clear the form fields so the merchant can post
             // a follow-up transaction without manually resetting, then
             // pull the last 10 transactions and highlight the new one

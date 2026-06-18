@@ -1422,6 +1422,26 @@ def make_universal_router(db) -> APIRouter:
                 cp = {"name": name}
         if not cp:
             raise HTTPException(404, "المورد غير موجود")
+        # Iter-246h — Refuse over-payment.  Mirrors the merchant's
+        # rule «لا يسمح بسداد أكبر من رصيد المورد المستحق».  Also
+        # rejects a second payment after the debt is already settled
+        # (frontend stale-state guard).
+        sup_bal = await compute_balance(
+            db, user_id=uid, entity_type="supplier",
+            entity_id=supplier_id, sub_account="payable")
+        outstanding = float(sup_bal.get("outstanding_debt") or 0.0)
+        if outstanding <= 0.01:
+            raise HTTPException(
+                400,
+                "لا يوجد رصيد مستحق على هذا المورد. تم تسوية الدين "
+                "بالكامل بالفعل.",
+            )
+        if round(payload.amount, 2) > round(outstanding, 2) + 0.01:
+            raise HTTPException(
+                400,
+                f"مبلغ السداد ({payload.amount:.2f}) أكبر من الرصيد "
+                f"المستحق للمورد ({outstanding:.2f} ر.س).",
+            )
         acc = await db.accounts.find_one(
             {"id": payload.paid_from_account_id, "user_id": user["id"]},
             {"_id": 0, "name": 1},
