@@ -4173,3 +4173,28 @@ Full regression: **32/32 PASSED**.
 
 ### Deployment note
 PREVIEW only. Merchant must «Save to Github → Deploy» to push to mezansalla.com.
+
+---
+
+## Iter-246g — Supplier_pay accepts Iter-244 suppliers without manual bridge (Feb 2026)
+
+### Merchant bug
+«المورد غير موجود» when trying to pay a supplier that was created in `/suppliers-new` BEFORE the Iter-246e bridge code was deployed (i.e., no matching counterparties row).
+
+### Root cause
+`/api/accounting/suppliers/{id}/pay` searched only `db.counterparties`; suppliers in `db.suppliers` that pre-dated the bridge were invisible to it.
+
+### Fix
+`backend/universal_accounting_routes.py::supplier_pay` — On 404 in `counterparties`, fall back to `db.suppliers`.  If found, lazily upsert the counterparties row (with `name_lower` to satisfy the unique index) and continue normally.  Same idempotent semantics as the create-time bridge.
+
+### Tests
+`tests/test_iter246g_supplier_pay_lazy_bridge.py` — **1/1 PASSED**
+- Inserts a raw `db.suppliers` row (bypassing the API to mimic pre-bridge state).
+- Posts a credit invoice (200 ر.س) → supplier debt = 200.
+- Calls `/suppliers/{id}/pay` with amount 80 → succeeds; debt = 120.
+- Verifies `counterparties` row was lazily created with `kind=supplier`.
+
+Full regression: **33/33 PASSED**.
+
+### Deployment note
+PREVIEW only. Merchant must «Save to Github → Deploy».

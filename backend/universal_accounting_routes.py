@@ -1385,10 +1385,41 @@ def make_universal_router(db) -> APIRouter:
         supplier_id: str, payload: SupplierPaymentIn,
         user: dict = Depends(current_user),
     ):
+        uid = user["id"]
         cp = await db.counterparties.find_one(
-            {"id": supplier_id, "user_id": user["id"], "kind": "supplier"},
+            {"id": supplier_id, "user_id": uid, "kind": "supplier"},
             {"_id": 0, "name": 1},
         )
+        # Iter-246g — Fallback to Iter-244 db.suppliers for entries
+        # that pre-date the counterparties-bridge.  We also lazily
+        # bridge them so subsequent reads find them directly.
+        if not cp:
+            s244 = await db.suppliers.find_one(
+                {"id": supplier_id, "user_id": uid},
+                {"_id": 0, "company_name": 1, "contact_person": 1,
+                 "phone": 1, "email": 1, "status": 1},
+            )
+            if s244:
+                name = s244.get("company_name")
+                await db.counterparties.update_one(
+                    {"id": supplier_id, "user_id": uid},
+                    {"$setOnInsert": {
+                        "id": supplier_id, "user_id": uid,
+                        "kind": "supplier",
+                        "created_at": _now(),
+                    },
+                     "$set": {
+                        "name": name,
+                        "name_lower": (name or "").strip().lower(),
+                        "contact_person": s244.get("contact_person"),
+                        "phone": s244.get("phone"),
+                        "email": s244.get("email"),
+                        "status": s244.get("status", "active"),
+                        "updated_at": _now(),
+                    }},
+                    upsert=True,
+                )
+                cp = {"name": name}
         if not cp:
             raise HTTPException(404, "المورد غير موجود")
         acc = await db.accounts.find_one(
