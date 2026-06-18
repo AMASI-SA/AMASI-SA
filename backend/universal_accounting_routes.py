@@ -23,7 +23,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_from_db
@@ -2096,11 +2096,45 @@ def make_universal_router(db) -> APIRouter:
         }
 
     @router.get("/suppliers/list")
-    async def suppliers_with_balances(user: dict = Depends(current_user)):
+    async def suppliers_with_balances(
+        user: dict = Depends(current_user),
+        with_debt_only: bool = Query(False),
+    ):
+        """Iter-246f — Unified supplier list for «سداد مورد».
+
+        Sources merged:
+          * `db.counterparties` (kind=supplier) — legacy + bridged rows
+          * `db.suppliers`       (Iter-244)    — new entries that may
+            pre-date the counterparties-bridge
+
+        When `with_debt_only=true` we hide entries whose
+        `outstanding_debt <= 0` so the supplier-pay dropdown only lists
+        suppliers that actually owe money.  Profile/user counterparties
+        without a debt entry never show up under this filter.
+        """
         uid = user["id"]
+
+        # 1) Legacy counterparties marked as supplier
         cps = await db.counterparties.find(
             {"user_id": uid, "kind": "supplier"}, {"_id": 0},
-        ).to_list(500)
+        ).to_list(1000)
+        seen = {c["id"] for c in cps}
+
+        # 2) Iter-244 suppliers that aren't yet bridged
+        async for s in db.suppliers.find(
+            {"user_id": uid}, {"_id": 0, "id": 1, "company_name": 1,
+                               "status": 1},
+        ):
+            if s["id"] in seen:
+                continue
+            cps.append({
+                "id": s["id"],
+                "name": s.get("company_name"),
+                "kind": "supplier",
+                "status": s.get("status", "active"),
+            })
+            seen.add(s["id"])
+
         ids = [c["id"] for c in cps]
         balances = await __import__("ledger_core").compute_balances_bulk(
             db, user_id=uid, entity_type="supplier", entity_ids=ids,
@@ -2110,6 +2144,8 @@ def make_universal_router(db) -> APIRouter:
         for c in cps:
             b = balances.get(c["id"], {})
             owed = b.get("outstanding_debt", 0.0)
+            if with_debt_only and owed <= 0:
+                continue
             total_owed += owed
             rows.append({
                 "id": c["id"], "name": c.get("name"),
@@ -2117,6 +2153,9 @@ def make_universal_router(db) -> APIRouter:
                 "debits": b.get("debits", 0.0),
                 "credits": b.get("credits", 0.0),
             })
+        # Sort by debt desc so the «top owed» supplier surfaces first
+        # in the merchant's pay flow.
+        rows.sort(key=lambda r: r["outstanding_debt"], reverse=True)
         return {"suppliers": rows,
                  "totals": {"outstanding_debt": round(total_owed, 2)}}
 

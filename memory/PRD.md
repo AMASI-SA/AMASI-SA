@@ -4140,3 +4140,36 @@ This honours the «no historical mutation» rule.
 
 ### Deployment note
 PREVIEW only. Merchant must «Save to Github → Deploy» to push to mezansalla.com.
+
+---
+
+## Iter-246f — Unified Supplier Source for «سداد مورد» (Feb 2026)
+
+### Merchant bug report
+- «عرفات» (a profile/user incorrectly tagged as counterparty kind=supplier) was showing up in the supplier_pay dropdown.
+- NEW Iter-244 suppliers with real outstanding debt did NOT appear.
+
+### Root cause
+`UnifiedEntryScreen` was fetching `/counterparties?kind=supplier&limit=500` which returns every counterparty row tagged supplier (including legacy mis-tags), regardless of whether the entity has any debt — and ignored `db.suppliers`.
+
+### Fix
+1. **`backend/universal_accounting_routes.py::suppliers_with_balances`** — Now merges:
+   - `db.counterparties` (kind=supplier)
+   - `db.suppliers`       (Iter-244) — auto-includes orphans not yet bridged
+   - Deduped by `id`.  Added `?with_debt_only=true` query parameter that filters out `outstanding_debt <= 0`.
+   - Sorted by debt desc.
+2. **`frontend/src/pages/UnifiedEntryScreen.jsx`** — Replaced the supplier fetch with `/accounting/suppliers/list`.  The dropdown:
+   - For `supplier_pay`: filters to debt > 0 (phantom 0-debt rows are hidden).
+   - For all flows: shows `الاسم — مستحق X.XX ر.س` next to each entry.
+   - Shows an amber empty-state when no supplier has debt: «لا يوجد أي مورد عليه رصيد مستحق…».
+
+### Tests
+`tests/test_iter246f_supplier_pay_source.py` — **3/3 PASSED**
+- Unified list includes Iter-244 suppliers.
+- `with_debt_only=true` hides zero-debt rows (the «عرفات» case).
+- After a partial invoice, the supplier surfaces at the top of the list with the correct outstanding_debt.
+
+Full regression: **32/32 PASSED**.
+
+### Deployment note
+PREVIEW only. Merchant must «Save to Github → Deploy» to push to mezansalla.com.

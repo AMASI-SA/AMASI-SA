@@ -394,14 +394,28 @@ export default function UnifiedEntryScreen() {
         try {
             const [emp, sup, ext, bnk, cat] = await Promise.all([
                 api.get("/operating-expenses/salaries"),
-                api.get("/counterparties?kind=supplier&limit=500"),
+                // Iter-246f — Unified supplier list (counterparties +
+                // db.suppliers) ranked by outstanding_debt.  This is
+                // the SSOT now used for both supplier_invoice picking
+                // and supplier_pay; legacy /counterparties remains
+                // available for other consumers.
+                api.get("/accounting/suppliers/list"),
                 api.get("/counterparties?limit=500"),
                 api.get("/accounts?account_type=bank&limit=200"),
                 api.get("/accounting/expense-categories"),
             ]);
             setEmployees((emp.data?.items || emp.data || []).filter(
                 e => (e.category || "employee") === "employee"));
-            setSuppliers(sup.data?.items || sup.data || []);
+            // Map the «suppliers/list» response shape into the existing
+            // {id,name} contract while preserving `outstanding_debt` so
+            // the supplier_pay branch can render «الاسم — مستحق X ر.س».
+            setSuppliers(
+                (sup.data?.suppliers || []).map((s) => ({
+                    id: s.id,
+                    name: s.name,
+                    outstanding_debt: s.outstanding_debt || 0,
+                })),
+            );
             setExternals((ext.data?.items || ext.data || []).filter(
                 x => !["ad_account", "supplier", "courier"].includes(x.kind)));
             // Iter-170 — Fix duplicate accounts in dropdown:
@@ -1047,8 +1061,37 @@ export default function UnifiedEntryScreen() {
                                     className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
                                     data-testid="unified-entity-supplier">
                                     <option value="">— اختر —</option>
-                                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    {/* Iter-246f — For «سداد مورد» we
+                                        only show suppliers with an
+                                        outstanding debt > 0 so phantom
+                                        names like «عرفات» (0-debt
+                                        legacy counterparties) never
+                                        appear.  For «فاتورة مورد» we
+                                        show the full list.  Debt
+                                        figure is shown next to every
+                                        eligible supplier so the
+                                        merchant picks confidently. */}
+                                    {suppliers
+                                      .filter((s) => opType !== "supplier_pay"
+                                          || Number(s.outstanding_debt || 0) > 0)
+                                      .map((s) => {
+                                        const debt = Number(s.outstanding_debt || 0);
+                                        const label = debt > 0
+                                          ? `${s.name} — مستحق ${debt.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})} ر.س`
+                                          : s.name;
+                                        return (
+                                          <option key={s.id} value={s.id}>{label}</option>
+                                        );
+                                      })}
                                 </select>
+                                {opType === "supplier_pay"
+                                  && suppliers.filter(s => Number(s.outstanding_debt || 0) > 0).length === 0 && (
+                                    <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-1"
+                                       data-testid="unified-supplier-pay-empty">
+                                        لا يوجد أي مورد عليه رصيد مستحق.
+                                        أنشئ أولاً فاتورة آجل أو سداد جزئي ثم عد لهذه الشاشة.
+                                    </p>
+                                )}
                             </div>
                         )}
                         {needsExternal && (
