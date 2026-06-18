@@ -3220,7 +3220,8 @@ async def snapchat_accounts_summary(user: dict = Depends(current_user)):
     accts = await db.counterparties.find(
         {"user_id": uid, "kind": "ad_account", "ad_provider": "snapchat"},
         {"_id": 0, "id": 1, "name": 1, "external_account_id": 1,
-         "credit_limit": 1, "alert_threshold_pct": 1},
+         "credit_limit": 1, "alert_threshold_pct": 1,
+         "currency": 1, "apply_bank_commission": 1},
     ).sort("name", 1).to_list(50)
 
     if not accts:
@@ -3251,7 +3252,9 @@ async def snapchat_accounts_summary(user: dict = Depends(current_user)):
             db, uid, ("snapchat", "snap"), month_start_str, today_str,
         )
 
-    total_spend = round(sum(spend_by_acct.values()), 2)
+    # NOTE: `total_spend` (in raw account currency) was misleading
+    # and removed in Iter-246l.  See `total_spend_sar` below, computed
+    # AFTER per-account conversion.
 
     # Per-account open debt (for the "near limit" indicator).
     debt_pipeline = await db.liabilities.aggregate([
@@ -3265,22 +3268,73 @@ async def snapchat_accounts_summary(user: dict = Depends(current_user)):
     debt_by_acct = {r["_id"]: round(float(r["open"] or 0), 2)
                     for r in debt_pipeline}
 
+    # Iter-246l — FX + bank-commission normalisation per account.
+    # The ledger stores raw `amount` in the account's billing currency
+    # (USD for most Snapchat accounts).  Without this normalisation
+    # the per-account card showed «0.00 ر.س ≈ 420.65 USD» while the
+    # aggregated card converted properly, hence the merchant's report.
+    fx_doc = await db.ads_currency_settings.find_one(
+        {"user_id": uid}, {"_id": 0})
+    usd_to_sar = float(
+        (fx_doc or {}).get("usd_to_sar_rate") or 3.7544)
+    default_bank_pct = float(
+        (fx_doc or {}).get("bank_commission_pct") or 0.0)
+
+    def _to_sar(spend_raw: float, currency: str,
+                apply_bank: bool) -> tuple[float, float, float]:
+        """Returns (sar_no_fees, bank_fee, total_sar)."""
+        if not spend_raw:
+            return 0.0, 0.0, 0.0
+        if (currency or "USD").upper() == "USD":
+            sar = spend_raw * usd_to_sar
+        else:
+            sar = spend_raw
+        fee = sar * (default_bank_pct / 100.0) if apply_bank else 0.0
+        return round(sar, 2), round(fee, 2), round(sar + fee, 2)
+
     rows = []
+    # First pass: convert each row to SAR so we can build a real total.
+    converted: list[dict] = []
     for a in accts:
-        spend = round(spend_by_acct.get(a["id"], 0.0), 2)
-        share = (spend / total_spend) if total_spend > 0 else 0
-        # Prorate orders + revenue by spend share. When the merchant has
-        # only one account, this is 100 %; if total_spend is 0 we
-        # don't pretend the account drove anything.
+        spend_raw = round(spend_by_acct.get(a["id"], 0.0), 2)
+        cur = (a.get("currency") or "USD").upper()
+        apply_bank = bool(a.get("apply_bank_commission", True))
+        sar_amount, bank_fee, spend_sar = _to_sar(
+            spend_raw, cur, apply_bank)
+        converted.append({
+            "acct": a, "spend_raw": spend_raw, "currency": cur,
+            "apply_bank": apply_bank, "sar_amount": sar_amount,
+            "bank_fee": bank_fee, "spend_sar": spend_sar,
+        })
+    total_spend_sar = round(
+        sum(c["spend_sar"] for c in converted), 2)
+
+    for c in converted:
+        a = c["acct"]
+        spend_sar = c["spend_sar"]
+        share = (spend_sar / total_spend_sar) if total_spend_sar > 0 else 0
+        # Prorate orders + revenue by SAR-spend share so the cards
+        # never split a percentage of zero or mix USD vs SAR.
         acc_orders = int(round(total_orders * share)) if share else 0
         acc_revenue = round(total_revenue * share, 2) if share else 0.0
-        cpo = round(spend / acc_orders, 2) if acc_orders > 0 and spend > 0 else None
-        roas = round(acc_revenue / spend, 2) if spend > 0 else 0.0
+        cpo = (round(spend_sar / acc_orders, 2)
+               if acc_orders > 0 and spend_sar > 0 else None)
+        roas = (round(acc_revenue / spend_sar, 2)
+                if spend_sar > 0 else 0.0)
         rows.append({
             "id": a["id"],
             "name": a.get("name"),
             "external_account_id": a.get("external_account_id"),
-            "spend": spend,
+            # `spend` keeps backward-compat — now the SAR total.
+            "spend": spend_sar,
+            "spend_raw": c["spend_raw"],
+            "spend_currency": c["currency"],
+            "spend_sar": c["sar_amount"],
+            "bank_fee_sar": c["bank_fee"],
+            "spend_total_sar": spend_sar,
+            "fx_rate_used": usd_to_sar if c["currency"] == "USD" else 1.0,
+            "bank_commission_pct_used": (
+                default_bank_pct if c["apply_bank"] else 0.0),
             "spend_share_pct": round(share * 100, 1),
             "orders": acc_orders,
             "revenue": acc_revenue,
@@ -3296,9 +3350,15 @@ async def snapchat_accounts_summary(user: dict = Depends(current_user)):
         "month_start": month_start_str,
         "today": today_str,
         "totals": {
-            "spend": total_spend,
+            "spend": total_spend_sar,
+            "spend_sar": total_spend_sar,
+            "spend_raw_usd": round(
+                sum(c["spend_raw"] for c in converted
+                    if c["currency"] == "USD"), 2),
             "orders": total_orders,
             "revenue": total_revenue,
+            "fx_rate_used": usd_to_sar,
+            "bank_commission_pct_used": default_bank_pct,
         },
     }
 

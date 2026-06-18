@@ -4379,3 +4379,29 @@ Full regression: **49/49 PASSED**.
 
 ### Deployment note
 PREVIEW only.  «Save to Github → Deploy».
+
+---
+
+## Iter-246l — Per-account Snapchat card FX + bank fees (Feb 2026)
+
+### Merchant report
+Aggregated card converted USD→SAR; per-account card showed «0.00 ر.س ≈ 420.65 USD» for the second account (متجر أماسي سعودي).  FX rate + bank commission entered in settings weren't applied to individual cards.
+
+### Fix
+`server.py::dashboard_snapchat_accounts_summary` now:
+1. Reads `ads_currency_settings` for `usd_to_sar_rate` + `bank_commission_pct`.
+2. Reads each counterparty's `currency` + `apply_bank_commission`.
+3. Converts per-row: `sar = raw × fx`, `fee = sar × pct/100`, `total = sar + fee`.
+4. Returns `spend` (= total SAR after fees) + debug fields (`spend_raw`, `spend_currency`, `spend_sar`, `bank_fee_sar`, `fx_rate_used`, `bank_commission_pct_used`).
+5. Totals roll-up uses converted SAR.
+
+### Tests
+`tests/test_iter246l_snap_card_fx.py` — **1/1 PASSED**
+- USD account: 100 × 3.75 × 1.02 = 382.5 ر.س
+- SAR account: 100 (no conversion, no fee)
+- Totals: 482.5 ر.س
+
+Full regression: **36/36 PASSED** (across Iter-246 c→l).
+
+### Deployment note
+PREVIEW only.  **Save to Github → Deploy** to push to mezansalla.com.
