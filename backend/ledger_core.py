@@ -101,6 +101,8 @@ ENTRY_TYPES = (
     # Suppliers
     "supplier_invoice",     # فاتورة مورد: مصروف/مخزون + زيادة supplier.payable
     "supplier_payment",     # سداد مورد: نقص payable + نقص bank
+    # Iter-246d — Fixed-asset purchase via the unified-movement form.
+    "fixed_asset_purchase", # شراء أصل ثابت: زيادة fixed_asset + نقص bank/زيادة payable
     # External persons
     "receivable_grant",     # قرض خارجي: زيادة receivable + نقص bank
     "receivable_collection",# تحصيل: نقص receivable + زيادة bank

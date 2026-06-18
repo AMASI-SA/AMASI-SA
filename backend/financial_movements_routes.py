@@ -375,16 +375,103 @@ def make_financial_movements_router(db, current_user):
         }
         await db.financial_movements.insert_one(mv)
 
-        # ── 7) Post Double-Entry to general_ledger via Iter-240 ─────
-        # We post the CASH leg (if any) using the existing
-        # mirror helper which guarantees idempotency & metadata.
+        # ── 7) Post a proper multi-leg Double-Entry journal (Iter-246d)
+        # The old single-leg «mirror cash» logic only recognised the
+        # paid portion, which under-stated both the expense and the
+        # supplier liability on partial / credit invoices.  We now
+        # always post the FULL invoice value:
+        #
+        #   Dr expense_category   = total
+        #     Cr bank             = paid          (only if paid > 0)
+        #     Cr supplier         = remaining     (only if remaining > 0)
+        #
+        # For invoices with both legs (partial) all three rows share
+        # the same `txn_group_id`, and `post_txn_group` enforces the
+        # `Σ debit == Σ credit` invariant atomically.
+        #
+        # An `account_transactions` row is still created for the cash
+        # leg so the existing balance-recompute / SSOT view stays
+        # consistent.
+        actor_name = (
+            user.get("name") or user.get("email") or "user")
+        entries: list[dict] = []
+        meta_common = {
+            "iter": "iter246d",
+            "movement_id": mv_id,
+            "movement_type": payload.movement_type,
+            "category_id": cat["id"],
+            "category_path": cat_path,
+            "doc_number": payload.doc_number,
+            "supplier_id": payload.supplier_id,
+        }
+        # 7a) Expense / inventory recognition leg — Debit
+        # entity_type=expense_category, entity_id=leaf category_id.
+        # entry_type maps cleanly to the merchant-facing semantics:
+        #   • supplier_invoice → "supplier_invoice"
+        #   • general_expense  → "expense_record"
+        #   • fixed_asset      → "fixed_asset_purchase"
+        gl_entry_type = {
+            "supplier_invoice": "supplier_invoice",
+            "general_expense":  "expense_record",
+            "fixed_asset":      "fixed_asset_purchase",
+        }[payload.movement_type]
+        entries.append({
+            "entity_type": "expense_category",
+            "entity_id":   cat["id"],
+            "side":        "debit",
+            "amount":      total,
+            "entry_type":  gl_entry_type,
+            "notes":       " > ".join(cat_path)[:280],
+            "metadata":    {**meta_common, "leg": "expense"},
+        })
+        # 7b) Bank / cash leg — Credit (only when something was paid)
+        remaining = _r(total - paid)
+        if paid > 0:
+            entries.append({
+                "entity_type": "bank",
+                "entity_id":   payload.paid_from_account_id,
+                "side":        "credit",
+                "amount":      paid,
+                "entry_type":  gl_entry_type,
+                "notes": (
+                    f"دفعة من حساب {paid_acc_snap.get('name')}"
+                    if paid_acc_snap else "دفعة نقدية"
+                )[:280],
+                "metadata": {**meta_common, "leg": "cash",
+                             "withdrawal_method":
+                                 payload.withdrawal_method},
+            })
+        # 7c) Supplier / payable leg — Credit (only when something
+        # remains unpaid).  Supplier_id is REQUIRED here; the route
+        # already validates it for `supplier_invoice`, and for the
+        # other two ops we fall back to a generic «other_payable»
+        # entity so the books still balance — this keeps the merchant
+        # free to record «I paid 50, owe 94» on a general_expense even
+        # without binding a supplier.
+        if remaining > 0:
+            if payload.supplier_id:
+                payable_type, payable_id = "supplier", payload.supplier_id
+            else:
+                payable_type, payable_id = (
+                    "other_payable", "uncategorised_payable")
+            entries.append({
+                "entity_type": payable_type,
+                "entity_id":   payable_id,
+                "side":        "credit",
+                "amount":      remaining,
+                "entry_type":  gl_entry_type,
+                "notes": (
+                    f"رصيد مستحق على المورد — فاتورة "
+                    f"{payload.doc_number or mv_id[:8]}"
+                )[:280],
+                "metadata": {**meta_common, "leg": "payable"},
+            })
+
+        # Write the cash leg into account_transactions FIRST so the
+        # existing balance-recompute pipeline reflects the deduction.
         if paid > 0 and payload.paid_from_account_id:
-            from ledger_double_write import mirror_account_txn_to_ledger
-            # Bridge: write to account_transactions so the mirror is
-            # picked up by the same SSOT path Iter-240 already proved.
-            txn_id = str(uuid.uuid4())
             await db.account_transactions.insert_one({
-                "id": txn_id,
+                "id": str(uuid.uuid4()),
                 "user_id": uid,
                 "account_id": payload.paid_from_account_id,
                 "amount": paid,
@@ -399,42 +486,49 @@ def make_financial_movements_router(db, current_user):
                 "created_at": _now(),
                 "updated_at": _now(),
             })
-            # Recompute the account balance using legacy helper.
             try:
                 from accounts_routes import _recompute_balance
                 await _recompute_balance(
                     db, uid, payload.paid_from_account_id)
             except Exception:  # noqa: BLE001
                 pass
-            try:
-                res = await mirror_account_txn_to_ledger(
-                    db,
-                    user_id=uid,
-                    account_id=payload.paid_from_account_id,
-                    account_transaction_id=txn_id,
-                    amount=paid,
-                    direction="out",
-                    transaction_type=payload.movement_type,
-                    transaction_date=payload.doc_date,
-                    description=" > ".join(cat_path),
-                    counter_entity_type="expense_category",
-                    counter_entity_id=cat["id"],
-                    created_by_endpoint=(
-                        "POST /api/financial-movements"),
-                    idempotency_key=f"iter245:{mv_id}",
-                )
-                await db.financial_movements.update_one(
-                    {"id": mv_id, "user_id": uid},
-                    {"$set": {
-                        "ledger_txn_group_id":
-                            res.get("txn_group_id"),
-                        "updated_at": _now(),
-                    }},
-                )
-            except Exception:  # noqa: BLE001 — never block doc post
-                import logging
-                logging.getLogger(__name__).warning(
-                    "iter245 mirror failed for mv %s", mv_id)
+
+        # Now post the balanced journal atomically.
+        try:
+            from ledger_core import post_txn_group
+            group = await post_txn_group(
+                db,
+                user_id=uid,
+                actor_id=uid,
+                actor_name=actor_name,
+                entries=entries,
+                txn_type=payload.movement_type,
+                notes=" > ".join(cat_path),
+                metadata={**meta_common,
+                          "idempotency_key": f"iter245:{mv_id}"},
+            )
+            await db.financial_movements.update_one(
+                {"id": mv_id, "user_id": uid},
+                {"$set": {
+                    "ledger_txn_group_id": group["txn_group_id"],
+                    "updated_at": _now(),
+                }},
+            )
+        except Exception as e:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception(
+                "iter246d journal failed for mv %s: %s", mv_id, e)
+            # Roll the movement back to a failed status so the
+            # merchant doesn't see ghost docs without a ledger.
+            await db.financial_movements.update_one(
+                {"id": mv_id, "user_id": uid},
+                {"$set": {"status": "ledger_failed",
+                          "updated_at": _now()}},
+            )
+            raise HTTPException(
+                500,
+                f"فشل ترحيل القيد المحاسبي: {e}",
+            )
 
         out = await db.financial_movements.find_one(
             {"id": mv_id, "user_id": uid}, {"_id": 0})

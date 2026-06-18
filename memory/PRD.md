@@ -4048,3 +4048,52 @@ Full Iter-244/246 suite: **23/23 PASS**.
 
 ### Deployment note
 PREVIEW only. Merchant must «Save to Github → Deploy» to push to mezansalla.com.
+
+---
+
+## Iter-246d — CRITICAL FIX: Correct Double-Entry Journal for Invoices (Feb 2026)
+
+### Bug reported by merchant
+For a partial supplier-invoice (total=144, paid=50, remaining=94), the ledger only recorded:
+```
+Dr 50
+Cr 50
+```
+losing both the full expense recognition AND the supplier liability.
+
+### Root cause
+The previous logic in `financial_movements_routes.py:create_movement` used `mirror_account_txn_to_ledger` from the Iter-240 helper, which is fundamentally a TWO-leg cash-mirroring tool.  It only mirrored the **paid** portion, so credit / partial invoices were systemically under-recorded.
+
+### Fix — Full multi-leg journal via `post_txn_group`
+A purchase / expense / fixed-asset invoice now ALWAYS posts the **full invoice amount** as a balanced multi-leg journal:
+
+| Mode    | Dr expense | Cr bank   | Cr supplier |
+|---------|-----------:|----------:|------------:|
+| Cash    |     total  |    total  |       —     |
+| Credit  |     total  |     —     |     total   |
+| Partial |     total  |    paid   |   remaining |
+
+`ledger_core.post_txn_group` enforces `Σ debit == Σ credit` atomically.
+
+### Implementation
+- `backend/financial_movements_routes.py` rewrote the posting block: builds `entries` list with up to 3 legs (expense / bank / payable), then calls `post_txn_group` with `txn_type=movement_type`.
+- `backend/ledger_core.py` added `fixed_asset_purchase` to `ENTRY_TYPES`.
+- Account-transactions row still created (so balance recompute works) BUT no longer the SSOT for the ledger entry; the journal is authoritative.
+- On posting failure the movement is marked `status="ledger_failed"` and `HTTPException(500)` is raised — never a silent ghost doc.
+
+### Tests
+`tests/test_iter246d_journal_correctness.py` — 4/4 PASSED
+- Cash → 2-leg Dr expense / Cr bank (each 144) ✅
+- Credit → 2-leg Dr expense / Cr supplier (each 144) ✅
+- Partial → 3-leg Dr expense 144 / Cr bank 50 / Cr supplier 94 ✅
+- Supplier balance after credit+partial = 238 outstanding debt ✅
+
+Full regression: **27/27 PASSED**.
+
+### Confirmed answers to merchant questions
+1. ✅ Yes — a 94 ر.س payable is created on the supplier ledger.
+2. ✅ Yes — appears in `/api/ledger/balance?entity_type=supplier&entity_id=<id>` (outstanding_debt + net_balance).
+3. ✅ A future supplier_payment (`/api/financial-movements` with type `supplier_pay` or via the dedicated legacy endpoint) Dr supplier / Cr bank → reduces outstanding_debt by the paid amount.
+
+### Deployment note
+PREVIEW only. Merchant must «Save to Github → Deploy» to push to mezansalla.com.
