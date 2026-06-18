@@ -4233,3 +4233,57 @@ Full regression: **37/37 PASSED**.
 PREVIEW only.  Merchant must «Save to Github → Deploy».
 
 **⚠️ Forward-only data note**: Pre-existing supplier_invoice movements posted BEFORE this iteration credited without `sub_account`.  Those balances still appear in the merchant-facing `outstanding_debt` (because `/ledger/balance` sums across sub_accounts when none is specified), so no historical data is lost — but supplier_pay debits will now correctly net them off.
+
+---
+
+## Iter-246i — SSOT for account balance across all surfaces (Feb 2026)
+
+### Merchant bug
+Same bank ("بنك الإنماء") displayed two different balances on two screens viewed minutes apart:
+- فاتورة مورد: 73,525.86 ر.س
+- سداد مورد:   50,986.91 ر.س
+- Δ = 22,538.95 ر.س
+
+### Root cause
+`/api/financial-movements/accounts-with-availability` (used by فاتورة مورد) was reading the raw `accounts.current_balance` document field — i.e. whatever the legacy `_recompute_balance` last wrote, which could be hours-to-days stale on accounts whose recompute had failed silently.
+
+Meanwhile every other surface (`/accounts`, `/accounts/summary`, `/accounting/financial-position`, `/suppliers-ledger`) consumed `account_balance_ssot()`.
+
+### Fix
+1. **`financial_movements_routes.py::accounts_with_availability`** rewritten to call `account_balance_ssot()` per row.  Response shape now also carries `stored_balance` and `balance_source` for transparency.
+2. **NEW endpoint** `/api/diagnostics/account-balances` — read-only audit returning per-account `stored_balance`, `ssot_balance`, `ledger_balance`, `difference`, and `status` (ok / drift).  Merchant can hit this anytime to spot stale `current_balance` rows.
+
+### How to read the diagnostic
+```
+GET /api/diagnostics/account-balances
+{
+  "ok": true,
+  "iter": "iter246i",
+  "summary": { "total_accounts": N, "drifted": K, "drift_total": X },
+  "accounts": [
+    {
+      "account_id":   "...",
+      "account_name": "بنك الإنماء",
+      "stored_balance": 73525.86,   ← raw `current_balance` doc field
+      "ssot_balance":   50986.91,   ← canonical (used by every screen now)
+      "ledger_balance": 50986.91,   ← Σ(debits) − Σ(credits) in general_ledger
+      "difference":     -22538.95,  ← ssot − stored
+      "status":         "drift"
+    }
+  ]
+}
+```
+
+### Tests
+`tests/test_iter246i_balance_ssot.py` — **3/3 PASSED**
+- Baseline: every surface returns the same balance for a freshly opened bank/cash account.
+- No drift on clean account.
+- Endpoint shape & summary fields.
+
+Full regression: **40/40 PASSED**.
+
+### What the merchant should now do
+After Save→Deploy, fetch `GET /api/diagnostics/account-balances` (or hit it from a browser tab with the auth cookie) to see which accounts had drift.  No data is fixed automatically — the goal of this iteration is to make every screen show the SAME number; legacy stored values that disagree are surfaced explicitly so the merchant can audit them.
+
+### Deployment note
+PREVIEW only.  «Save to Github → Deploy» pushes to mezansalla.com.

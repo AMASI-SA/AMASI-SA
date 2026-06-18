@@ -182,20 +182,55 @@ def make_financial_movements_router(db, current_user):
         amount: float = Query(0.0, ge=0.0),
     ):
         """Return all accounts annotated with `available_balance` and
-        `is_sufficient` (= balance ≥ amount). For the UI to grey-out
-        insufficient accounts visually (Requirement #5)."""
+        `is_sufficient` (= balance ≥ amount).  Iter-246i — Balance is
+        now computed via the shared `account_balance_ssot` so it
+        MATCHES every other screen (`/accounts`, `/accounts/summary`,
+        `/accounting/financial-position`).  Previously this endpoint
+        read the legacy `current_balance` field directly, which could
+        be hours-to-days stale on accounts whose `_recompute_balance`
+        had failed silently."""
         uid = user["id"]
         rows = await db.accounts.find(
             {"user_id": uid},
             {"_id": 0, "id": 1, "name": 1,
              "account_type": 1, "current_balance": 1,
-             "currency": 1},
+             "currency": 1, "opening_balance": 1,
+             "expected_orders_balance": 1,
+             "normalized_payment_method": 1},
         ).sort([("name", 1)]).to_list(500)
+
+        # Pull SSOT balance per row.  Falls back to the stored value
+        # only if SSOT raises (never silently — we surface the source).
+        try:
+            from financial_position_ssot import account_balance_ssot
+        except Exception:  # noqa: BLE001
+            account_balance_ssot = None
+
+        out = []
         for r in rows:
-            bal = _r(r.get("current_balance"))
-            r["available_balance"] = bal
-            r["is_sufficient"] = bal >= _r(amount)
-        return {"ok": True, "items": rows,
+            stored = _r(r.get("current_balance"))
+            ssot_bal = stored
+            source = "stored"
+            if (account_balance_ssot
+                    and r.get("account_type") in (
+                        "bank", "cash", "payment_platform")):
+                try:
+                    ssot_bal = _r(await account_balance_ssot(
+                        db, user_id=uid, account=r))
+                    source = "ssot"
+                except Exception:  # noqa: BLE001
+                    source = "stored_fallback"
+            out.append({
+                "id": r["id"],
+                "name": r.get("name"),
+                "account_type": r.get("account_type"),
+                "currency": r.get("currency"),
+                "available_balance": ssot_bal,
+                "is_sufficient": ssot_bal >= _r(amount),
+                "balance_source": source,
+                "stored_balance": stored,
+            })
+        return {"ok": True, "items": out,
                 "requested_amount": _r(amount)}
 
     @router.post("")
