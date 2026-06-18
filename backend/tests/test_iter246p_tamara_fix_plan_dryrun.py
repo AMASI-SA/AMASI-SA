@@ -274,6 +274,30 @@ async def test_endpoint_is_read_only(ctx, db_cli):
 
 
 @pytest.mark.asyncio
+async def test_raw_payload_dump_section_present(ctx):
+    """When dump_raw_for_order_numbers is provided, the response must
+    include a `raw_tamara_payloads_dump` block with a row per queried
+    order (even if the live probe failed in tests)."""
+    r = requests.get(
+        f"{BASE_URL}/api/audit/tamara-fix-plan-dryrun",
+        params={"date_from": "2026-06-06", "date_to": "2026-06-12",
+                "probe_tamara_api": "true",
+                "dump_raw_for_order_numbers":
+                    "OLD-1,STALE-1,SYNTH-1,DOES-NOT-EXIST"},
+        headers=_h(ctx["token"]),
+    )
+    data = r.json()
+    dump = data["raw_tamara_payloads_dump"]
+    assert dump["queried_order_numbers"] == [
+        "OLD-1", "STALE-1", "SYNTH-1", "DOES-NOT-EXIST"]
+    assert len(dump["rows"]) == 4
+    by_q = {row["order_number_query"]: row for row in dump["rows"]}
+    # Missing order surfaces an explicit error.
+    assert by_q["DOES-NOT-EXIST"]["error"] == \
+        "not_found_in_payment_transactions"
+
+
+@pytest.mark.asyncio
 async def test_simulated_forensic_compute_excludes_pinned_txn(ctx):
     """The simulated post-fix compute should exclude OLD-1 from gross
     because Fix #3 moves it out of the window."""

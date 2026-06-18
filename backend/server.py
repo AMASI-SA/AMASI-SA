@@ -3862,6 +3862,9 @@ api.include_router(make_tamara_refund_audit_router(db, current_user))
 # Iter-246p — Read-only Tamara 4-fix dry-run preview.
 from tamara_fix_plan_dryrun_routes import make_tamara_fix_plan_dryrun_router
 api.include_router(make_tamara_fix_plan_dryrun_router(db, current_user))
+# Iter-246q — Tamara Apply (Final Dry-Run + Gated Execute).
+from tamara_apply_routes import make_tamara_apply_router
+api.include_router(make_tamara_apply_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))

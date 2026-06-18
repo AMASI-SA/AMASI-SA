@@ -4599,3 +4599,99 @@ GET https://mezansalla.com/api/audit/tamara-fix-plan-dryrun
 ### Next step
 Merchant runs this on production with `probe_tamara_api=true` → reviews the JSON → approves the actual write-enabled fix plan. The write-enabled implementation is NOT yet built.
 
+
+---
+
+## Iter-246p2 — Dry-Run raw payload dump (READ-ONLY) (2026-06-18)
+**Files:**
+- `backend/tamara_fix_plan_dryrun_routes.py` (extended with raw dump).
+- `backend/tests/test_iter246p_tamara_fix_plan_dryrun.py` (1 additional test, 6 passing).
+
+### New query param
+`dump_raw_for_order_numbers` — comma-separated order_numbers whose FULL raw Tamara API payload (transactions/refunds/settlement metadata) is included in the response.
+
+### New response block
+`raw_tamara_payloads_dump`:
+- `queried_order_numbers`: csv echo
+- `rows[]` per queried order:
+  - `provider_id`, `local_status`, `local_amount`
+  - `live_status`, `live_refunded_amount`, `live_captured_amount`
+  - `live_settlement_date`, `live_settlement_status`
+  - `top_level_date_fields`: any of {created_at, updated_at, captured_at, refunded_at, processed_at, settled_at, transaction_date, event_date, completed_at, authorized_at, cancelled_at, expired_at, delivered_at} present in raw response
+  - `top_level_keys_present`: sorted list of every top-level key in Tamara's response (forensic reveal)
+  - `raw_transactions`, `raw_refunds`, `raw_refund_orders`, `raw_processing`: full arrays as Tamara returned them
+  - `live_error` if API failed
+
+### Strict scope
+- READ-ONLY. Only fetches Tamara API; never writes.
+- Limited to explicitly-requested order_numbers (max scope = 6 per call typically).
+- Tabby untouched.
+
+### Use case
+Merchant runs:
+```
+GET /api/audit/tamara-fix-plan-dryrun
+    ?date_from=2026-06-06&date_to=2026-06-12
+    &probe_tamara_api=true
+    &dump_raw_for_order_numbers=265239451,263800910,262885232,261434840,261524720,263817759
+```
+Goal: locate the actual refund timestamp inside Tamara's response (under a non-standard field name) so we can finalize the `refunded_at` policy for Fix #1/#2 before any write apply.
+
+### Tests
+`test_raw_payload_dump_section_present` — verifies the dump block structure, queried-order echo, and the explicit `not_found_in_payment_transactions` error for unknown orders.
+
+
+---
+
+## Iter-246q — Tamara Apply (Final Dry-Run + Gated Execute) (2026-06-18)
+**Files:**
+- `backend/tamara_apply_routes.py` (new endpoints).
+- `backend/server.py` (router mounted next to iter246p).
+- `backend/tests/test_iter246q_tamara_apply.py` (4 tests passing).
+
+### Two endpoints
+
+#### 1) `GET /api/audit/tamara-apply-dryrun` — READ-ONLY
+Bakes ALL four merchant decisions into a single dry-run:
+- `refunded_at_override` (required, e.g. `2026-06-12T20:59:59Z`)
+- `exclude_order_numbers` (csv, e.g. `265239451`)
+- `enable_same_week_netzero_exclusion` (default true)
+- Builds the deterministic plan: Fix #1 / Fix #2 / Fix #3 / Same-Week Net-Zero rows
+- Returns simulated forensic compute (gross / refunds / commission / VAT / net) for comparison with Tamara invoice
+- Returns `confirm_token_to_pass_to_execute` — a deterministic SHA-256 of `(uid, date_from, date_to, refunded_at_override)`
+
+#### 2) `POST /api/admin/tamara-apply-execute` — GATED WRITES
+- Requires `confirm_token` exactly matching the dry-run output (403 otherwise).
+- Applies in order: Fix #3 (repin) → Fix #1 (status + insert refund) → Fix #2 (correct refunded_at) → Same-Week Net-Zero (flag).
+- Idempotent — re-running with same params produces 0 new inserts/updates.
+- Stamps every modified doc with `iter246q_audit_id` + per-fix timestamp.
+- Writes ONLY to `payment_transactions` and `payment_refunds`.
+
+### Strict guards (test-enforced)
+- ❌ `general_ledger` — never written.
+- ❌ `bank_accounts` / `account_balance_ssot` — never written.
+- ❌ Tabby — fully isolated; provider=tabby docs untouched even in same DB.
+- ✅ Idempotent on re-run.
+- ✅ Same-Week Net-Zero correctly flags orders captured + refunded in the same window.
+
+### How to use on production (after Deploy)
+1) Run the dry-run:
+```
+GET https://mezansalla.com/api/audit/tamara-apply-dryrun
+    ?date_from=2026-06-06&date_to=2026-06-12
+    &refunded_at_override=2026-06-12T20:59:59Z
+    &exclude_order_numbers=265239451
+```
+2) Verify simulated compute matches Tamara invoice (gross 20,848.30, refunds 2,929.37, net 16,066.90).
+3) Copy `confirm_token_to_pass_to_execute` from the response.
+4) Submit to execute endpoint with the same params + `confirm_token`.
+
+### Tests (4 passing, 20 total in iter246 suite)
+- `test_dryrun_is_read_only_and_returns_full_plan` — Mongo counts unchanged; all 4 fix rows correct.
+- `test_execute_rejects_without_valid_confirm_token` — 403 + zero writes.
+- `test_execute_applies_all_fixes_idempotently` — full write path + re-run yields 0 new inserts; general_ledger & bank_accounts untouched.
+- `test_tabby_untouched_by_apply` — Tabby txn byte-identical before/after.
+
+### Deployment
+Preview only. **Save to GitHub → Deploy** to enable on https://mezansalla.com. NO writes happen until the merchant calls the execute endpoint with a valid `confirm_token` from a fresh dry-run.
+
