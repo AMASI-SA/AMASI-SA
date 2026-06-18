@@ -3961,3 +3961,44 @@ Eliminate duplicate financial-movement entry screens.  Inject Iter-245 (new) log
 
 ### Deployment note
 PREVIEW only.  Merchant must «Save to Github → Deploy» to push to mezansalla.com.
+
+---
+
+## Iter-246b — Categories Editor + Sidebar + Legacy Usage Report (Feb 2026)
+
+### Goal
+Continuation of Iter-246. Three independently testable deliverables: a UI editor for `movement_types` on category roots, a Sidebar reorganisation, and a read-only Legacy Usage Report so the merchant can decide *when* to retire each old screen.
+
+### Deliverables
+1. **`pages/ExpenseCategoryTreePage.jsx`**
+   - Each row now shows colour-coded chips for the inherited `movement_types` (فاتورة مورد / مصروف عام / أصل ثابت).
+   - Root rows get an «أنواع العمليات» button that opens a modal with checkboxes to multi-select.
+   - PATCH goes through the existing `/api/expense-category-tree/{id}` endpoint with the `movement_types` payload.
+   - Empty-binding roots show a 🟥 «بدون ربط بأنواع العمليات» badge so the merchant can spot misconfig.
+
+2. **`components/Sidebar.jsx`**
+   - New section: **🛒 المشتريات والمصاريف** containing the Iter-244/245 entry points.
+   - New section: **🕰️ الأنظمة القديمة** containing the legacy screens with a `🕰️ Legacy` suffix on each label.
+   - Cleaned up the bloated «العمليات المالية» section (removed dupes that now live in their dedicated section).
+
+3. **Backend — `legacy_usage_report_routes.py` (NEW)**
+   - `GET /api/legacy-usage-report` → per-screen counts + last activity + 30d/7d freshness.
+   - Audits 4 screens / 6 collections: `purchase_invoices`, `daily_costs`, `operating_salaries`/`_rentals`/`_prepaid_expenses`, `liabilities`.
+   - Read-only.  Forward-only.  Never writes.
+
+4. **Frontend — `pages/LegacyUsageReportPage.jsx` (NEW)** + route `/legacy-usage-report` + nav link inside «الأنظمة القديمة».
+   - 3 summary cards (total / active / dead).
+   - 4 per-screen cards with status badge: ⚪ فارغة / 🟢 نشطة / 🔴 خامدة.
+   - Replacement path shown for each.
+
+### Tests
+- `test_iter246_legacy_report.py` — 2/2 PASSED (empty user + fresh-record activation).
+- Regression: 14/14 across Iter-244/246.
+
+### Next deliverables (deferred to a follow-up iteration to keep this PR reviewable)
+- 📊 Suppliers report (purchases / due / activity).
+- 📊 Categories report (main → sub → leaf with totals).
+- 📊 Expense analysis dashboard (period comparisons, top spenders).
+
+### Deployment note
+PREVIEW only.  Merchant must «Save to Github → Deploy» to push to mezansalla.com.

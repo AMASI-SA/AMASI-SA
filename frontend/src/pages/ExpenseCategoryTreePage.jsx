@@ -1,10 +1,24 @@
-// Iter-244 — Expense Categories Tree page (flat rendering).
+// Iter-244 + Iter-246 — Expense Categories Tree page (flat rendering)
+// with `movement_types` badges + inline editor for ROOT categories.
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import api from "../lib/api";
 
 const errMsg = (e, fb) =>
   e?.response?.data?.detail || e?.message || fb;
+
+// Iter-246 — Allowed op types + Arabic labels for badges / chips.
+const MOVEMENT_TYPE_OPTIONS = [
+  { value: "supplier_invoice", label: "فاتورة مورد",
+    color: "bg-emerald-100 text-emerald-800 border-emerald-300" },
+  { value: "general_expense", label: "مصروف عام",
+    color: "bg-sky-100 text-sky-800 border-sky-300" },
+  { value: "fixed_asset", label: "أصل ثابت",
+    color: "bg-violet-100 text-violet-800 border-violet-300" },
+];
+function mtMeta(v) {
+  return MOVEMENT_TYPE_OPTIONS.find((x) => x.value === v);
+}
 
 function flattenTree(items, expandedMap) {
   const byParent = {};
@@ -36,6 +50,8 @@ export default function ExpenseCategoryTreePage() {
   const [editing, setEditing] = useState(null);
   const [addingUnder, setAddingUnder] = useState(null);
   const [newName, setNewName] = useState("");
+  // Iter-246 — movement_types editor (root only).
+  const [mtEditing, setMtEditing] = useState(null);  // { id, name, selected: Set }
 
   async function load() {
     setLoading(true);
@@ -131,6 +147,37 @@ export default function ExpenseCategoryTreePage() {
     }
   }
 
+  // Iter-246 — open the movement_types picker for a root.
+  function startMtEdit(node) {
+    setMtEditing({
+      id: node.id,
+      name: node.name,
+      selected: new Set(node.movement_types || []),
+    });
+  }
+  function toggleMt(value) {
+    setMtEditing((prev) => {
+      if (!prev) return prev;
+      const next = new Set(prev.selected);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return { ...prev, selected: next };
+    });
+  }
+  async function commitMt() {
+    if (!mtEditing) return;
+    try {
+      await api.patch(`/expense-category-tree/${mtEditing.id}`, {
+        movement_types: Array.from(mtEditing.selected),
+      });
+      toast.success("تم تحديث أنواع العمليات");
+      setMtEditing(null);
+      await load();
+    } catch (e) {
+      toast.error(errMsg(e, "فشل التحديث"));
+    }
+  }
+
   return (
     <div className="space-y-5" dir="rtl" data-testid="expense-category-tree-page">
       <header className="flex items-center justify-between flex-wrap gap-3">
@@ -219,11 +266,22 @@ export default function ExpenseCategoryTreePage() {
                 cancelAdd={cancelAdd}
                 commitRename={commitRename}
                 toggleStatus={toggleStatus}
+                startMtEdit={startMtEdit}
               />
             ))}
           </ul>
         )}
       </div>
+
+      {/* Iter-246 — movement_types editor modal (root only). */}
+      {mtEditing && (
+        <MovementTypesDialog
+          editing={mtEditing}
+          onToggle={toggleMt}
+          onSave={commitMt}
+          onCancel={() => setMtEditing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -246,6 +304,7 @@ function CategoryRow(props) {
     cancelAdd,
     commitRename,
     toggleStatus,
+    startMtEdit,
   } = props;
   const inactive = node.status === "inactive";
   const padStart = depth * 22;
@@ -282,6 +341,7 @@ function CategoryRow(props) {
             startAddChild={startAddChild}
             setEditing={setEditing}
             toggleStatus={toggleStatus}
+            startMtEdit={startMtEdit}
           />
         )}
       </div>
@@ -304,20 +364,67 @@ function CategoryRow(props) {
   );
 }
 
-function DisplayRow({ node, inactive, startAddChild, setEditing, toggleStatus }) {
+function DisplayRow({ node, inactive, startAddChild, setEditing,
+                     toggleStatus, startMtEdit }) {
+  const isRoot = !node.parent_id;
+  const mts = node.movement_types || [];
   return (
     <>
       <span
-        className="text-sm font-semibold flex-1"
+        className="text-sm font-semibold flex-1 flex items-center gap-2 flex-wrap"
         data-testid={"cat-name-" + node.id}
       >
-        {node.name}
+        <span>{node.name}</span>
+        {/* Iter-246 — movement_types chips. Shown on EVERY row
+            (descendants inherit from root, so this stays useful even
+            for leaves), but only EDITABLE on root rows. */}
+        {mts.length > 0 && (
+          <span
+            className="flex items-center gap-1 flex-wrap"
+            data-testid={"cat-mt-chips-" + node.id}
+          >
+            {mts.map((v) => {
+              const m = mtMeta(v);
+              if (!m) return null;
+              return (
+                <span
+                  key={v}
+                  className={
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded border " + m.color
+                  }
+                  data-testid={"cat-mt-chip-" + node.id + "-" + v}
+                >
+                  {m.label}
+                </span>
+              );
+            })}
+          </span>
+        )}
+        {isRoot && mts.length === 0 && (
+          <span
+            className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-rose-50 text-rose-700 border-rose-300"
+            data-testid={"cat-mt-empty-" + node.id}
+          >
+            بدون ربط بأنواع العمليات
+          </span>
+        )}
         {inactive && (
           <span className="ms-2 text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">
             متوقف
           </span>
         )}
       </span>
+      {isRoot && (
+        <button
+          type="button"
+          onClick={() => startMtEdit(node)}
+          className="text-xs text-violet-700 hover:underline"
+          data-testid={"cat-edit-mt-" + node.id}
+          title="تعديل أنواع العمليات المرتبطة بهذا الجذر"
+        >
+          أنواع العمليات
+        </button>
+      )}
       <button
         type="button"
         onClick={() => startAddChild(node.id)}
@@ -343,6 +450,83 @@ function DisplayRow({ node, inactive, startAddChild, setEditing, toggleStatus })
         {inactive ? "تفعيل" : "إيقاف"}
       </button>
     </>
+  );
+}
+
+// Iter-246 — modal dialog for picking movement_types on a root.
+function MovementTypesDialog({ editing, onToggle, onSave, onCancel }) {
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={onCancel}
+      data-testid="cat-mt-dialog-backdrop"
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl max-w-md w-full p-5"
+        onClick={(e) => e.stopPropagation()}
+        dir="rtl"
+        data-testid="cat-mt-dialog"
+      >
+        <h3 className="text-lg font-bold mb-1">
+          أنواع العمليات لجذر «{editing.name}»
+        </h3>
+        <p className="text-xs text-gray-500 mb-4 leading-6">
+          اختر الأنواع التي تظهر فيها هذا الجذر وأبناؤه عند تسجيل
+          حركة مالية جديدة. القيود القديمة لا تتأثر — التغيير يسري
+          على العمليات الجديدة فقط.
+        </p>
+        <div className="space-y-2">
+          {MOVEMENT_TYPE_OPTIONS.map((opt) => {
+            const checked = editing.selected.has(opt.value);
+            return (
+              <label
+                key={opt.value}
+                className={
+                  "flex items-center gap-2 border rounded p-2 cursor-pointer hover:bg-gray-50 " +
+                  (checked ? "border-emerald-400 bg-emerald-50" : "")
+                }
+                data-testid={"cat-mt-opt-" + opt.value}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(opt.value)}
+                  data-testid={"cat-mt-cb-" + opt.value}
+                />
+                <span
+                  className={
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded border " + opt.color
+                  }
+                >
+                  {opt.label}
+                </span>
+                <span className="text-xs text-gray-600">
+                  ({opt.value})
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="bg-gray-200 px-3 py-1.5 text-sm rounded"
+            data-testid="cat-mt-cancel"
+          >
+            إلغاء
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-sm rounded font-bold"
+            data-testid="cat-mt-save"
+          >
+            حفظ
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

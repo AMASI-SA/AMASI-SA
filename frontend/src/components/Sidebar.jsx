@@ -58,7 +58,6 @@ const SECTIONS = [
             { to: "/couriers-ledger", label: "📦 شركات شحن (Ledger)", icon: PaperPlaneRight, testid: "nav-couriers-ledger" },
             { to: "/financial-position-ledger", label: "💰 المركز المالي (Ledger)", icon: PaperPlaneRight, testid: "nav-financial-position-ledger" },
             { to: "/accounting/reconciliation", label: "🔍 تقرير المطابقة", icon: ArrowsLeftRight, testid: "nav-reconciliation" },
-            { to: "/financial-input-hub", label: "مركز الإدخال المالي", icon: PaperPlaneRight, testid: "nav-financial-input-hub" },
             { to: "/counterparties", label: "قائمة الأطراف الموحَّدة", icon: UsersThree, testid: "nav-counterparties" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
             { to: "/settlements", label: "تسويات المدفوعات", icon: Receipt, testid: "nav-settlements" },
@@ -67,12 +66,6 @@ const SECTIONS = [
             { to: "/audit/employee-orphans", label: "🩺 تشخيص قيود الموظفين اليتيمة", icon: Receipt, testid: "nav-employee-orphans" },
             { to: "/audit/ad-debt", label: "📊 تشخيص فرق المديونيات الإعلانية", icon: Receipt, testid: "nav-ad-debt-diagnostic" },
             { to: "/audit/ledger-health", label: "🩺 صحة الـ Ledger (Iter-240)", icon: Receipt, testid: "nav-ledger-health" },
-            { to: "/expense-categories-tree", label: "🗂️ شجرة التصنيفات", icon: Receipt, testid: "nav-expense-categories-tree" },
-            { to: "/suppliers-new", label: "🏷️ الموردون (Iter-244)", icon: Receipt, testid: "nav-suppliers-new" },
-            // Iter-246 — /financial-movement/new is hidden because its logic
-            // was merged INTO /new-transaction (UnifiedEntryScreen).  Route
-            // kept alive so any old bookmark still works.
-            { to: "/financial-movements", label: "📑 قائمة الحركات المالية", icon: Receipt, testid: "nav-financial-movements-list" },
             { to: "/settings/ads-currencies", label: "💱 عملات وعمولة بنكية للحسابات الإعلانية", icon: Gear, testid: "nav-ads-currencies" },
             { to: "/salla-settlements", label: "تسويات سلة 🟧", icon: Receipt, testid: "nav-salla-settlements" },
             { to: "/settlements-overview", label: "📑 جميع التسويات", icon: Receipt, testid: "nav-settlements-overview" },
@@ -86,13 +79,26 @@ const SECTIONS = [
             { to: "/diagnostics/api-permissions", label: "🩺 فحص صلاحيات API", icon: Plug, testid: "nav-api-diagnostics" },
         ],
     },
+    // Iter-246 — Dedicated section for the unified procurement /
+    // expense system (Iter-244 → Iter-246).  Keeps the new entry
+    // points discoverable without duplicating items in «العمليات
+    // المالية».
+    {
+        id: "purchases_expenses",
+        label: "🛒 المشتريات والمصاريف",
+        icon: Briefcase,
+        items: [
+            { to: "/financial-movements", label: "📑 قائمة الحركات المالية", icon: Receipt, testid: "nav-financial-movements-list" },
+            { to: "/suppliers-new", label: "🏷️ الموردون", icon: UsersThree, testid: "nav-suppliers-new" },
+            { to: "/expense-categories-tree", label: "🗂️ شجرة التصنيفات", icon: Receipt, testid: "nav-expense-categories-tree" },
+        ],
+    },
     {
         id: "procurement",
-        label: "إدارة المشتريات والعهد والتحصيلات",
+        label: "إدارة العهد والتحصيلات",
         icon: Briefcase,
         items: [
             { to: "/operations-dashboard", label: "لوحة العمليات", icon: Briefcase, testid: "nav-operations-dashboard" },
-            { to: "/purchase-invoices", label: "فواتير المشتريات", icon: Receipt, testid: "nav-purchase-invoices" },
             { to: "/advances", label: "عهد الموظفين والمندوبين", icon: HandCoins, testid: "nav-advances" },
             { to: "/receivables", label: "الذمم والتحصيلات", icon: Coin, testid: "nav-receivables" },
             { to: "/ad-accounts", label: "الحسابات الإعلانية والمديونية", icon: ChartLineUp, testid: "nav-ad-accounts" },
@@ -135,20 +141,34 @@ const SECTIONS = [
         label: "إدارة التشغيل",
         icon: GearSix,
         items: [
-            { to: "/daily-costs", label: "التكاليف اليومية", icon: Receipt, testid: "nav-daily-costs" },
-            { to: "/operating-expenses", label: "المصروفات التشغيلية", icon: Wallet, testid: "nav-operating-expenses" },
             { to: "/operational-reports", label: "التقارير التشغيلية", icon: Wallet, testid: "nav-operational-reports" },
             { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
             { to: "/snapchat-accounts", label: "حسابات Snapchat", icon: Ghost, testid: "nav-snapchat-accounts" },
             { to: "/product-costs", label: "تكاليف المنتجات", icon: Package, testid: "nav-product-costs" },
             { to: "/product-preparation", label: "تجهيز المنتجات", icon: Package, testid: "nav-product-preparation" },
             { to: "/image-catalog", label: "إدارة صور المنتجات", icon: Image, testid: "nav-image-catalog" },
-            { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
             { to: "/profile", label: "حسابي", icon: UserCircle, testid: "nav-profile" },
             { to: "/settings/accounting-cutoffs", label: "تواريخ بدء المحاسبة", icon: Gear, testid: "nav-accounting-cutoffs" },
             { to: "/settings/operation-account-bindings", label: "🔗 ربط العمليات بالحسابات", icon: Gear, testid: "nav-op-account-bindings" },
             // Owner-only: pushed in at render time.
             { to: "/settings", label: "الإعدادات", icon: Gear, testid: "nav-settings" },
+        ],
+    },
+    // Iter-246 — Legacy section.  The merchant explicitly asked us to
+    // KEEP these screens working (for read access + historical data)
+    // even after their replacements landed in «المشتريات والمصاريف».
+    // They are grouped here with a 🕰️ badge so the new system is the
+    // obvious default.
+    {
+        id: "legacy",
+        label: "🕰️ الأنظمة القديمة",
+        icon: ClockCounterClockwise,
+        items: [
+            { to: "/legacy-usage-report", label: "📊 تقرير الاستخدام", icon: ChartPieSlice, testid: "nav-legacy-usage-report" },
+            { to: "/purchase-invoices", label: "فواتير المشتريات 🕰️ Legacy", icon: Receipt, testid: "nav-purchase-invoices" },
+            { to: "/operating-expenses", label: "المصروفات التشغيلية 🕰️ Legacy", icon: Wallet, testid: "nav-operating-expenses" },
+            { to: "/daily-costs", label: "التكاليف اليومية 🕰️ Legacy", icon: Receipt, testid: "nav-daily-costs" },
+            { to: "/financial-input-hub", label: "مركز الإدخال المالي 🕰️ Legacy", icon: PaperPlaneRight, testid: "nav-financial-input-hub" },
         ],
     },
 ];
