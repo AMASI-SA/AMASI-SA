@@ -688,6 +688,30 @@ def make_suppliers_router(db, current_user):
             "updated_at": _now(),
         }
         await db.suppliers.insert_one(doc)
+        # Iter-246e — Bridge to counterparties so the supplier appears
+        # in /suppliers-ledger + /api/ledger/balance + suppliers report
+        # without forcing a manual data migration.  Upsert keyed by the
+        # supplier_id so re-runs are idempotent.  `name_lower` is
+        # required by the legacy `cp_unique_name` index.
+        await db.counterparties.update_one(
+            {"id": doc["id"], "user_id": uid},
+            {"$setOnInsert": {
+                "id": doc["id"],
+                "user_id": uid,
+                "kind": "supplier",
+                "created_at": _now(),
+            },
+             "$set": {
+                "name": doc["company_name"],
+                "name_lower": _norm_lower(doc["company_name"]),
+                "contact_person": doc.get("contact_person"),
+                "phone": doc.get("phone"),
+                "email": doc.get("email"),
+                "status": doc["status"],
+                "updated_at": _now(),
+            }},
+            upsert=True,
+        )
         for k in ("_id", "_lc_company_name",
                   "_lc_contact_person", "_lc_phone"):
             doc.pop(k, None)
@@ -759,6 +783,30 @@ def make_suppliers_router(db, current_user):
 
         await db.suppliers.update_one(
             {"id": supplier_id, "user_id": uid}, {"$set": updates},
+        )
+        # Iter-246e — keep the counterparties bridge in sync.
+        bridge_updates: dict[str, Any] = {"updated_at": _now()}
+        if "company_name" in updates:
+            bridge_updates["name"] = updates["company_name"]
+            bridge_updates["name_lower"] = _norm_lower(
+                updates["company_name"])
+        if "contact_person" in updates:
+            bridge_updates["contact_person"] = updates["contact_person"]
+        if "phone" in updates:
+            bridge_updates["phone"] = updates["phone"]
+        if "email" in updates:
+            bridge_updates["email"] = updates["email"]
+        if "status" in updates:
+            bridge_updates["status"] = updates["status"]
+        await db.counterparties.update_one(
+            {"id": supplier_id, "user_id": uid},
+            {"$set": bridge_updates,
+             "$setOnInsert": {
+                 "id": supplier_id, "user_id": uid,
+                 "kind": "supplier",
+                 "created_at": _now(),
+             }},
+            upsert=True,
         )
         out = await db.suppliers.find_one(
             {"id": supplier_id, "user_id": uid},

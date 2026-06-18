@@ -4097,3 +4097,46 @@ Full regression: **27/27 PASSED**.
 
 ### Deployment note
 PREVIEW only. Merchant must «Save to Github → Deploy» to push to mezansalla.com.
+
+---
+
+## Iter-246e — Real Account Names + Supplier Ledger Bridge (Feb 2026)
+
+### Merchant feedback
+After Iter-246d the 3-leg journal was numerically correct, but:
+1. The ledger displayed the schema-level string `expense_category` instead of the merchant-facing name «تكاليف المنتجات › منتجات › ملابس».
+2. Iter-244 suppliers (stored in `db.suppliers`) didn't appear in `/suppliers-ledger` (which reads `db.counterparties` only), nor in `/api/ledger/balance` reports, so the 20 ر.س outstanding debt was invisible to the merchant.
+
+### Fix
+1. **`backend/ledger_routes.py::list_entries`** — Enriches every entry with `entity_name` (resolved from the appropriate source: `expense_category_tree.path` joined by `›`, `suppliers.company_name` with fallback to `counterparties.name`, `accounts.name` for bank legs) and `entity_label_ar` (Arabic display label).  Zero data writes — pure projection.
+2. **`backend/expense_categories_routes.py::create_supplier` + `patch_supplier`** — Forward-only bridge: every new Iter-244 supplier is upserted into `db.counterparties` with `kind="supplier"` + `name_lower` (to satisfy the legacy `cp_unique_name` unique index).  Same on patch when name changes.
+
+### Live proof (merchant's exact scenario, total=50, paid=30, remaining=20)
+```
+📒 القيد المحاسبي:
+  حساب مصروف: تكاليف المنتجات › مستلزمات...   50.00     0.00
+  حساب بنكي/صندوق: بنك الراجحي - الرئيسي       0.00    30.00
+  مورد: مورد العبايات الراقية                  0.00    20.00
+  الإجمالي                                    50.00    50.00 ✅
+
+📋 /accounting/suppliers/list:
+  outstanding_debt = 20.0 ر.س ✅
+
+🏷️ /api/ledger/balance?entity_type=supplier&entity_id=…:
+  outstanding_debt = 20.0 ر.س
+  net_balance      = -20.0 ر.س ✅
+```
+
+### Tests
+`tests/test_iter246e_supplier_bridge.py` — **2/2 PASSED**
+Full regression: **29/29 PASSED**.
+
+### Forward-only note
+Suppliers created BEFORE this iteration are not auto-bridged.  Merchant can either:
+- Open the supplier in `/suppliers-new` and click Save (the PATCH triggers the bridge upsert), or
+- Create a new supplier — the bridge runs automatically.
+
+This honours the «no historical mutation» rule.
+
+### Deployment note
+PREVIEW only. Merchant must «Save to Github → Deploy» to push to mezansalla.com.

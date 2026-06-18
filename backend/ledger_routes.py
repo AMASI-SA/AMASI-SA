@@ -321,6 +321,68 @@ def make_ledger_router(db) -> APIRouter:
                 it["reversed_by_name"] = name_cache.get(
                     rev_doc.get("posted_by") or "", "")
                 it["reversed_at"] = rev_doc.get("posted_at")
+
+        # Iter-246e — Enrich each entry with `entity_name` and
+        # `entity_label_ar` so the merchant sees the real account name
+        # (e.g. «تكاليف المنتجات › منتجات › ملابس») in every ledger
+        # screen instead of the raw schema-level «expense_category».
+        wanted: dict[str, set] = {}
+        for it in items:
+            t = it.get("entity_type")
+            i = it.get("entity_id")
+            if t and i:
+                wanted.setdefault(t, set()).add(i)
+
+        name_cache_by_type: dict[tuple, str] = {}
+        if "expense_category" in wanted:
+            async for c in db.expense_category_tree.find(
+                {"id": {"$in": list(wanted["expense_category"])},
+                 "user_id": user["id"]},
+                {"_id": 0, "id": 1, "name": 1, "path": 1},
+            ):
+                pth = c.get("path") or [c.get("name") or ""]
+                name_cache_by_type[("expense_category", c["id"])] = (
+                    " › ".join(pth))
+        if "supplier" in wanted:
+            ids = list(wanted["supplier"])
+            async for s in db.suppliers.find(
+                {"id": {"$in": ids}, "user_id": user["id"]},
+                {"_id": 0, "id": 1, "company_name": 1},
+            ):
+                name_cache_by_type[("supplier", s["id"])] = (
+                    s.get("company_name") or "")
+            missing = [i for i in ids if (
+                ("supplier", i) not in name_cache_by_type)]
+            if missing:
+                async for c in db.counterparties.find(
+                    {"id": {"$in": missing}, "user_id": user["id"]},
+                    {"_id": 0, "id": 1, "name": 1},
+                ):
+                    name_cache_by_type[("supplier", c["id"])] = (
+                        c.get("name") or "")
+        if "bank" in wanted:
+            async for a in db.accounts.find(
+                {"id": {"$in": list(wanted["bank"])},
+                 "user_id": user["id"]},
+                {"_id": 0, "id": 1, "name": 1, "account_type": 1},
+            ):
+                name_cache_by_type[("bank", a["id"])] = (
+                    a.get("name") or "")
+        _ENTITY_LABEL_AR = {
+            "expense_category": "حساب مصروف",
+            "supplier": "مورد",
+            "bank": "حساب بنكي/صندوق",
+            "employee": "موظف",
+            "courier": "شركة شحن",
+            "ad_account": "حساب إعلاني",
+            "external_person": "طرف خارجي",
+            "other_payable": "حسابات دائنة أخرى",
+        }
+        for it in items:
+            t, i = it.get("entity_type"), it.get("entity_id")
+            it["entity_name"] = name_cache_by_type.get(
+                (t, i)) or i or ""
+            it["entity_label_ar"] = _ENTITY_LABEL_AR.get(t, t or "")
         return {"items": items, "total": total, "skip": skip, "limit": limit}
 
     # ── GET /balance ─────────────────────────────────────────────────
