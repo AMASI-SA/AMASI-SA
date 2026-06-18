@@ -220,6 +220,21 @@ def make_financial_movements_router(db, current_user):
                     source = "ssot"
                 except Exception:  # noqa: BLE001
                     source = "stored_fallback"
+
+            # Iter-246j — ledger_net for the debug field the merchant
+            # requested.  Cheap because Mongo will use the
+            # (user_id, entity_type, entity_id) index already in place
+            # for `general_ledger`.
+            ledger_bal = None
+            try:
+                from ledger_core import compute_balance
+                lb = await compute_balance(
+                    db, user_id=uid, entity_type="bank",
+                    entity_id=r["id"], sub_account="main")
+                ledger_bal = _r(lb.get("net_balance") or 0)
+            except Exception:  # noqa: BLE001
+                pass
+
             out.append({
                 "id": r["id"],
                 "name": r.get("name"),
@@ -229,6 +244,9 @@ def make_financial_movements_router(db, current_user):
                 "is_sufficient": ssot_bal >= _r(amount),
                 "balance_source": source,
                 "stored_balance": stored,
+                "ledger_balance": ledger_bal,
+                "ssot_balance": ssot_bal,
+                "last_calculated_at": _now(),
             })
         return {"ok": True, "items": out,
                 "requested_amount": _r(amount)}
@@ -465,6 +483,14 @@ def make_financial_movements_router(db, current_user):
             entries.append({
                 "entity_type": "bank",
                 "entity_id":   payload.paid_from_account_id,
+                # Iter-246j — bank legs go to sub_account="main" to
+                # match the SSOT's `compute_balance(sub_account="main")`
+                # query, AND carry the `account_transaction_double_write`
+                # source tag so SSOT correctly nets out the double-
+                # counting with `accounts.current_balance` (which
+                # already reflects the cash deduction via
+                # `_recompute_balance`).
+                "sub_account": "main",
                 "side":        "credit",
                 "amount":      paid,
                 "entry_type":  gl_entry_type,
@@ -473,6 +499,7 @@ def make_financial_movements_router(db, current_user):
                     if paid_acc_snap else "دفعة نقدية"
                 )[:280],
                 "metadata": {**meta_common, "leg": "cash",
+                             "source": "account_transaction_double_write",
                              "withdrawal_method":
                                  payload.withdrawal_method},
             })

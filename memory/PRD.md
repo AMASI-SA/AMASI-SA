@@ -4287,3 +4287,55 @@ After Save→Deploy, fetch `GET /api/diagnostics/account-balances` (or hit it fr
 
 ### Deployment note
 PREVIEW only.  «Save to Github → Deploy» pushes to mezansalla.com.
+
+---
+
+## Iter-246j — TRUE balance parity (Δ=536 fix) (Feb 2026)
+
+### Merchant feedback
+After Iter-246i the gap shrank from 22,538.95 → 536.00 but didn't disappear.
+
+### Real root cause
+The Iter-246d journal posted the bank-credit leg WITHOUT `metadata.source="account_transaction_double_write"`.  Consequence inside `account_balance_ssot`:
+
+```
+final = ledger_net + (current_balance − dw_net)
+        ↑              ↑                   ↑
+        −X (my leg)    −X (recompute)      0  (NOT tagged)
+       = −2X    ← double-counted!
+```
+
+Meanwhile `/cash-accounts-with-balances` only counted the leg once → 536 difference per non-bridged movement.
+
+### Fix
+1. **`financial_movements_routes.py`** — Bank-credit legs now carry:
+   ```
+   sub_account = "main"
+   metadata.source = "account_transaction_double_write"
+   ```
+   so `account_balance_ssot` nets them out correctly.
+2. **`financial_movements_routes.py::accounts_with_availability`** — Response now includes the debug fields the merchant requested:
+   - `balance_source`, `stored_balance`, `ssot_balance`,
+     `ledger_balance`, `last_calculated_at`.
+3. **`UnifiedEntryScreen.jsx`** — Added a `useEffect` on `opType` that re-fetches `/cash-accounts-with-balances` whenever the merchant switches operation (no stale cache between فاتورة مورد ↔ سداد مورد).
+
+### Tests
+`tests/test_iter246j_balance_parity.py` — **4/4 PASSED**
+- Baseline → all 5 surfaces return 1000.00 ✅
+- After cash invoice (250) → all 5 surfaces return 750.00 ✅
+- After partial invoice (paid 100) → all 5 surfaces return 650.00 ✅
+- Debug fields present ✅
+
+The 5 surfaces verified:
+1. `/api/accounts`                                  (الأصول والحسابات)
+2. `/api/accounts/{id}`                             (صفحة الحساب)
+3. `/api/financial-movements/accounts-with-availability` (فاتورة مورد)
+4. `/api/accounting/cash-accounts-with-balances`    (سداد مورد)
+5. `/api/diagnostics/account-balances`              (التشخيص)
+
+Full regression: **44/44 PASSED**.
+
+### Deployment note
+PREVIEW only.  «Save to Github → Deploy».
+
+**⚠️ Forward-only note**: Cash legs posted BEFORE Iter-246j are still double-counted in SSOT.  The merchant can reconcile by either reposting (the diagnostic endpoint shows the drift) or accepting the historical balance and tracking forward.  No automated backfill per the SSOT discipline.

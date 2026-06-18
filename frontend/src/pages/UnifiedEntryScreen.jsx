@@ -316,6 +316,15 @@ export default function UnifiedEntryScreen() {
     useEffect(() => { reloadLiveBalances(); }, []);
     useEffect(() => { reloadCustodyBalances(); }, []);
     useEffect(() => { reloadCouriers(); }, []);
+    // Iter-246j — Refresh live bank balances whenever the merchant
+    // switches op type so سداد مورد and فاتورة مورد always read the
+    // SAME, latest SSOT value.  Without this, a stale `banks` /
+    // `accountLiveBalances` cache from page-mount time could lag
+    // behind a freshly posted invoice's cash leg.
+    useEffect(() => {
+        if (!opType) return;
+        reloadLiveBalances();
+    }, [opType]);
 
     // Iter-185 — Cash-out ops where the source account must have
     // enough funds. Mirrors backend `_enforce_sufficient_funds` calls.
