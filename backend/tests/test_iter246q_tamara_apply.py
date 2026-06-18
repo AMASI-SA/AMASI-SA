@@ -341,6 +341,37 @@ async def test_execute_applies_all_fixes_idempotently(ctx, db_cli):
 
 
 @pytest.mark.asyncio
+async def test_netzero_excludes_gross_only_keeps_refund(ctx):
+    """Pin the merchant-approved Net-Zero policy:
+       - Same-week capture+refund order is REMOVED from gross.
+       - Its refund STAYS in the Refunds total (mirrors Tamara
+         invoice convention).
+    Validates SAMEWEEK-1 (50.0) is netzero-flagged but its 50.0
+    refund is included in `simulated_forensic_compute.refunds`."""
+    r = requests.get(
+        f"{BASE_URL}/api/audit/tamara-apply-dryrun",
+        params={"date_from": "2026-06-06", "date_to": "2026-06-12",
+                "refunded_at_override": OVERRIDE,
+                "exclude_order_numbers": "SKIP-1"},
+        headers=_h(ctx["token"]),
+    )
+    data = r.json()
+    nz = data["same_week_netzero_exclusion"]
+    assert {row["order_number"] for row in nz["rows"]} == {"SAMEWEEK-1"}
+    # SAMEWEEK-1 (50.0) should NOT be in gross orders.
+    # Remaining gross txns: none — OLD-1 + SYNTH-1 pinned out via
+    # Fix #3, SKIP-1 excluded.
+    sim = data["simulated_forensic_compute"]
+    # Refunds include: Fix #1 OLD-1 (100) + Fix #2 SYNTH-1 (200)
+    # + SAMEWEEK-1 existing refund (50) = 350.0
+    assert sim["refunds"] == 350.0
+    # Gross excludes SAMEWEEK-1 (Net-Zero) and pinned orders, but
+    # SKIP-1 (70) stays as it's excluded from all fixes.
+    assert sim["gross_sales"] == 70.0
+    assert sim["orders_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_tabby_untouched_by_apply(ctx, db_cli):
     uid = ctx["uid"]
     # Seed a Tabby txn to prove it isn't touched.

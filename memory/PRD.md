@@ -4695,3 +4695,32 @@ GET https://mezansalla.com/api/audit/tamara-apply-dryrun
 ### Deployment
 Preview only. **Save to GitHub → Deploy** to enable on https://mezansalla.com. NO writes happen until the merchant calls the execute endpoint with a valid `confirm_token` from a fresh dry-run.
 
+
+---
+
+## Iter-246q2 — Net-Zero policy refinement (READ-ONLY) (2026-06-18)
+**Files:**
+- `backend/tamara_apply_routes.py` (Net-Zero now excludes from Gross only).
+- `backend/tests/test_iter246q_tamara_apply.py` (1 new test, 5 passing).
+
+### Change
+`_gather_fix_plan` no longer removes Net-Zero-flagged pids from the refunds total — only from gross. Mirrors Tamara invoice convention where same-week capture+refund orders disappear from the gross line but the refund still appears in the refunds line for transparency.
+
+### Validated math (matches Tamara invoice within ±0.19 SAR)
+```
+Gross   = 20,848.30  ← 264553438 excluded (Net-Zero)
+Refunds = 928.44 (Fix #1) + 1,867.20 (Fix #2) + 133.73 (264553438) = 2,929.37
+Net sales    = 20,848.30 - 2,929.37 = 17,918.93
+Commission   = 1,610.30 (rates × 102 orders)
+VAT          = 241.54
+Net payable  = 16,067.09  ≈ Tamara 16,066.90  (off 0.19 = rounding)
+```
+
+### New test
+`test_netzero_excludes_gross_only_keeps_refund` — pins the policy and verifies the refund of a Net-Zero-flagged txn stays counted in `simulated_forensic_compute.refunds`.
+
+### Strict scope
+- READ-ONLY change to the dry-run/execute compute path.
+- Same writes performed by `tamara-apply-execute` (no new write surfaces).
+- Tabby untouched.
+

@@ -14,7 +14,8 @@ Decisions baked in (per the merchant's instructions):
   • Fix #3: 13 orders pinned to their historical settlement_date.
   • Same-Week Net-Zero Exclusion: orders captured AND refunded inside
             the SAME invoice window are flagged so the compute engines
-            net them to zero (excluded from BOTH gross and refunds).
+            EXCLUDE THEM FROM GROSS ONLY (the refund stays in the
+            Refunds column — mirrors Tamara invoice convention).
   • refunded_at policy: caller-supplied `refunded_at_override` is used
             for every refund row created/updated by this apply.
 
@@ -295,25 +296,21 @@ async def _gather_fix_plan(
     )
     post_vat = post_commission * vat_rate
 
-    # Refunds in window AFTER all fixes (excluding net-zero pids).
+    # Refunds in window AFTER all fixes.  Net-Zero pids are NOT
+    # excluded here — Tamara invoice convention keeps same-week
+    # refunds in the Refunds column for transparency.
     post_refunds = 0.0
     # Fix #1 new refunds (using override timestamp).
     if _in_window(refunded_at_override):
         for r in fix1_rows:
-            pid = r.get("provider_id")
-            if pid in netzero_pids:
-                continue
             post_refunds += float(
                 r["payment_refund_row_to_create"]["amount"] or 0)
     # Fix #2 corrected rows.
     if _in_window(refunded_at_override):
         for r in fix2_rows:
-            pid = r.get("provider_payment_id")
-            if pid in netzero_pids:
-                continue
             post_refunds += float(r.get("amount") or 0)
     # Existing payment_refunds with refunded_at already in window
-    # (e.g. 264553438) — exclude if net-zero pid.
+    # (e.g. 264553438).
     async for rf in db.payment_refunds.find(
         {"user_id": uid, "provider": "tamara",
          "is_pre_accounting": {"$ne": True}},
@@ -325,8 +322,6 @@ async def _gather_fix_plan(
         pid = rf.get("provider_payment_id")
         # Skip if already counted in Fix #2.
         if any(r.get("provider_payment_id") == pid for r in fix2_rows):
-            continue
-        if pid in netzero_pids:
             continue
         post_refunds += float(rf.get("amount") or 0)
 
