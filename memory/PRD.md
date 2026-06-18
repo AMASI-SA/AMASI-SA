@@ -4547,3 +4547,55 @@ Track A will list the 8 refunded payment_transactions missing a payment_refunds 
 ### Deployment
 Preview only. **Save to GitHub → Deploy** to enable on https://mezansalla.com.
 
+
+---
+
+## Iter-246p — Tamara Fix Plan Dry-Run (READ-ONLY) (2026-06-18)
+**Files:**
+- `backend/tamara_fix_plan_dryrun_routes.py` (new endpoint).
+- `backend/server.py` (router mounted next to iter246o).
+- `backend/tests/test_iter246p_tamara_fix_plan_dryrun.py` (5 tests passing).
+
+### Endpoint
+`GET /api/audit/tamara-fix-plan-dryrun` — READ-ONLY.
+
+Query params:
+- `date_from`, `date_to` (required, YYYY-MM-DD)
+- `explicit_resync_candidates` (optional, csv order_numbers to force-include)
+- `probe_tamara_api` (bool, default true — required for accuracy of Fix #1/#2)
+
+### Returns
+A structured preview of all 4 proposed fixes:
+
+1. **`fix_1_resync_status_and_refunded_amount`** — for each in-window txn, the endpoint hits Tamara API and compares `status` / `refunded_amount`. Each row has `before` / `after_proposed` blocks + the synthesised payment_refund that would be created with `proposed_refunded_at` extracted from Tamara's `transactions[]` / `refunds[]` / `updated_at`.
+2. **`fix_2_correct_refunded_at`** — for each payment_refunds row whose `refunded_at` equals the capture timestamp (synthesised fallback), proposes the true refund timestamp.
+3. **`fix_3_lock_effective_settlement_date`** — for each in-window txn whose history has an EARLIER `settlement_entries.settlement_date`, proposes pinning attribution back to that historical date. Rule documented in the response.
+4. **`fix_4_hardening`** — lists the planned guardrails (cron, attribution-lock rule, pytest coverage).
+5. **`post_fix_simulated_forensic_compute`** — recomputes gross / refunds / commission / VAT / net AFTER all fixes mentally applied, so the merchant can verify against the official Tamara invoice.
+
+### Strict scope
+- READ-ONLY. Zero writes to any collection.
+- No `general_ledger` mutations.
+- No balance adjustments.
+- Tabby untouched.
+
+### How to use on production (after Deploy)
+```
+GET https://mezansalla.com/api/audit/tamara-fix-plan-dryrun
+    ?date_from=2026-06-06
+    &date_to=2026-06-12
+    &explicit_resync_candidates=261434840,261524720,262885232,263800910,263817759
+    &probe_tamara_api=true
+```
+
+### Tests (all green)
+`tests/test_iter246p_tamara_fix_plan_dryrun.py`:
+- `test_fix3_detects_old_settlement_entry_drift` — verifies historical settlement_date pinning.
+- `test_fix1_detects_stale_status_via_tamara_live` — schema/summary contract.
+- `test_fix2_proposes_real_refunded_at_for_synth_rows` — schema/summary contract.
+- `test_endpoint_is_read_only` — verifies zero writes.
+- `test_simulated_forensic_compute_excludes_pinned_txn` — gross excludes Fix #3 pinned txns.
+
+### Next step
+Merchant runs this on production with `probe_tamara_api=true` → reviews the JSON → approves the actual write-enabled fix plan. The write-enabled implementation is NOT yet built.
+
