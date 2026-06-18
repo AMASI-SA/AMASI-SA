@@ -32,7 +32,12 @@ const WITHDRAWALS = [
     { value: "pos", label: "دفع شبكة (POS)" },
 ];
 
-const PURCHASE_ROOTS = new Set(["تكاليف المنتجات"]);
+// Iter-246c — Supplier invoices ALWAYS require a line-items table.
+// We no longer gate by category root; the merchant requested the table
+// to appear the moment the user picks "فاتورة مورد".
+function _isSupplierInvoice(movementType) {
+    return movementType === "supplier_invoice";
+}
 
 const fmt = (n) =>
     Number(n || 0).toLocaleString("en-US", {
@@ -96,6 +101,10 @@ export default function Iter245MovementForm({
     const [reference, setReference] = useState("");
     const [attachment, setAttachment] = useState(null);
 
+    // Iter-246c — Merchant's op→account / op→withdrawal allow-lists.
+    const [allowedAccountIds, setAllowedAccountIds] = useState(null);
+    const [allowedMethods, setAllowedMethods] = useState(null);
+
     const [lineItems, setLineItems] = useState([
         { description: "", quantity: "", unit_price: "" },
     ]);
@@ -122,15 +131,30 @@ export default function Iter245MovementForm({
                             movement_type: movementType,
                         },
                     }),
+                    api.get("/settings"),
                 ];
                 if (needsSupplier) {
                     requests.push(api.get("/suppliers", {
                         params: { status: "active" },
                     }));
                 }
-                const [catRes, supRes] = await Promise.all(requests);
+                const [catRes, setRes, supRes] = await Promise.all(requests);
                 if (!alive) return;
                 setCategories(catRes.data.items || []);
+                // Iter-246c — Apply allow-lists.
+                const bindings =
+                    setRes?.data?.operation_account_bindings || {};
+                const wms =
+                    setRes?.data?.operation_withdrawal_methods || {};
+                const accBind = bindings[movementType];
+                setAllowedAccountIds(
+                    Array.isArray(accBind) && accBind.length
+                        ? new Set(accBind.filter((x) => x !== "__none__"))
+                        : null);
+                const wmBind = wms[movementType];
+                setAllowedMethods(
+                    Array.isArray(wmBind) && wmBind.length
+                        ? new Set(wmBind) : null);
                 if (needsSupplier) {
                     setSuppliers(supRes?.data?.items || []);
                 }
@@ -158,13 +182,21 @@ export default function Iter245MovementForm({
                 const { data } = await api.get(
                     "/financial-movements/accounts-with-availability",
                     { params: { amount: numericPaid } });
-                if (alive) setAccounts(data.items || []);
+                if (!alive) return;
+                let items = data.items || [];
+                // Iter-246c — Honour the merchant's per-op account
+                // allow-list at the UI layer too (backend enforces).
+                if (allowedAccountIds) {
+                    items = items.filter((a) =>
+                        allowedAccountIds.has(a.id));
+                }
+                setAccounts(items);
             } catch (e) {
                 toast.error(errMsg(e, "فشل تحميل الحسابات"));
             }
         })();
         return () => { alive = false; };
-    }, [numericPaid]);
+    }, [numericPaid, allowedAccountIds]);
 
     const selectedSupplier = suppliers.find((s) => s.id === supplierId);
     const supplierCatIds = useMemo(
@@ -187,10 +219,11 @@ export default function Iter245MovementForm({
 
     const selectedCat = categories.find((c) => c.id === categoryId);
 
-    const isPurchaseInvoice = useMemo(() => {
-        if (movementType !== "supplier_invoice" || !selectedCat) return false;
-        return PURCHASE_ROOTS.has((selectedCat.path || [])[0]);
-    }, [movementType, selectedCat]);
+    // Iter-246c — Supplier invoices ALWAYS show the line-items table,
+    // independent of which category root was picked.  The merchant
+    // explicitly requested this to avoid header-only totals on
+    // purchases.
+    const isPurchaseInvoice = _isSupplierInvoice(movementType);
 
     const selectedAcc = accounts.find((a) => a.id === accountId);
     const isBank = (selectedAcc?.account_type || "").toLowerCase() === "bank";
@@ -245,10 +278,43 @@ export default function Iter245MovementForm({
 
     async function save() {
         if (!categoryId) return toast.error("اختر التصنيف");
-        const total = Number(totalAmount || 0);
-        if (total <= 0) return toast.error("الإجمالي مطلوب");
         if (needsSupplier && !supplierId)
             return toast.error("اختر المورد");
+
+        // Iter-246c — Supplier-invoice strict validation BEFORE
+        // computing the total so we surface row-level errors clearly.
+        let total = Number(totalAmount || 0);
+        if (movementType === "supplier_invoice") {
+            const filled = lineItems.filter(
+                (r) => (r.description || "").trim()
+                    || Number(r.quantity) > 0
+                    || Number(r.unit_price) > 0);
+            if (filled.length === 0) {
+                return toast.error(
+                    "أضف صفاً واحداً على الأقل في جدول الأصناف");
+            }
+            for (let i = 0; i < filled.length; i++) {
+                const r = filled[i];
+                if (!(r.description || "").trim()) {
+                    return toast.error(
+                        `الصف #${i + 1}: اسم الصنف مطلوب`);
+                }
+                if (!(Number(r.quantity) > 0)) {
+                    return toast.error(
+                        `الصف #${i + 1}: الكمية يجب أن تكون > 0`);
+                }
+                if (!(Number(r.unit_price) > 0)) {
+                    return toast.error(
+                        `الصف #${i + 1}: سعر الوحدة يجب أن يكون > 0`);
+                }
+            }
+            // Recompute server-side total from filled rows.
+            total = filled.reduce(
+                (s, r) =>
+                    s + Number(r.quantity || 0) * Number(r.unit_price || 0),
+                0);
+        }
+        if (total <= 0) return toast.error("الإجمالي مطلوب");
 
         const payload = {
             movement_type: movementType,
@@ -266,11 +332,13 @@ export default function Iter245MovementForm({
             withdrawal_method: isBank ? withdrawal || null : null,
             reference_number: reference || null,
             attachment: (withdrawal === "transfer" && attachment) || null,
-            line_items: isPurchaseInvoice
+            line_items: movementType === "supplier_invoice"
                 ? lineItems
-                    .filter((r) => r.description && Number(r.quantity) > 0)
+                    .filter((r) => (r.description || "").trim()
+                        && Number(r.quantity) > 0
+                        && Number(r.unit_price) > 0)
                     .map((r) => ({
-                        description: r.description,
+                        description: r.description.trim(),
                         quantity: Number(r.quantity),
                         unit_price: Number(r.unit_price),
                     }))
@@ -589,12 +657,21 @@ export default function Iter245MovementForm({
                             className="w-full border rounded px-3 py-2 text-sm"
                             data-testid="iter245-mv-withdrawal">
                             <option value="">— اختر —</option>
-                            {WITHDRAWALS.map((w) => (
+                            {WITHDRAWALS
+                              .filter((w) =>
+                                  !allowedMethods || allowedMethods.has(w.value))
+                              .map((w) => (
                                 <option key={w.value} value={w.value}>
                                     {w.label}
                                 </option>
                             ))}
                         </select>
+                        {allowedMethods && (
+                            <p className="text-[10px] text-violet-700 mt-1">
+                                طرق الدفع المسموحة (من الإعدادات):{" "}
+                                {Array.from(allowedMethods).join("، ")}
+                            </p>
+                        )}
                     </Field>
                     {(withdrawal === "transfer" || withdrawal === "pos") && (
                         <Field label="رقم المرجع (اختياري)">

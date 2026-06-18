@@ -28,8 +28,21 @@ const OPS = [
     { value: "supplier_pay",     label: "💸 سداد مورد",              section: "موردون" },
     { value: "external_grant",   label: "🤝 سلفة لشخص خارجي",      section: "خارجيون" },
     { value: "external_collect", label: "💵 تحصيل من شخص خارجي",    section: "خارجيون" },
-    { value: "expense_record",   label: "🛒 مصروف عام",               section: "عام" },
+    { value: "expense_record",   label: "🛒 مصروف عام (Legacy)",      section: "عام" },
     { value: "bank_transfer",    label: "🔄 تحويل بين الحسابات",     section: "عام" },
+    // Iter-246c — Iter-245 unified-movement ops join the same allow-list.
+    { value: "supplier_invoice", label: "📄 فاتورة مورد (موحَّد)",   section: "المشتريات والمصاريف" },
+    { value: "general_expense",  label: "🛒 مصروف عام (موحَّد)",      section: "المشتريات والمصاريف" },
+    { value: "fixed_asset",      label: "🏛️ شراء أصل ثابت",          section: "المشتريات والمصاريف" },
+];
+
+// Iter-246c — Withdrawal methods that can be allow-listed per op.
+// Cash boxes only ever do "cash" (handled automatically by the form),
+// so the bank-side options are: نقدي / تحويل / شبكة.
+const WITHDRAWAL_METHODS = [
+    { value: "cash",     label: "💵 سحب نقدي" },
+    { value: "transfer", label: "🏦 تحويل بنكي" },
+    { value: "pos",      label: "💳 شبكة (POS)" },
 ];
 
 const accountTypeLabel = (t) => ({
@@ -45,6 +58,8 @@ export default function OperationAccountBindings() {
     const [accounts, setAccounts] = useState([]);
     const [settings, setSettings] = useState(null);
     const [bindings, setBindings] = useState({});
+    // Iter-246c — withdrawal-method allow-lists per op.
+    const [methods, setMethods] = useState({});
 
     const load = async () => {
         setLoading(true);
@@ -73,6 +88,7 @@ export default function OperationAccountBindings() {
             setAccounts(list);
             setSettings(setRes.data);
             setBindings(setRes.data?.operation_account_bindings || {});
+            setMethods(setRes.data?.operation_withdrawal_methods || {});
         } catch (e) {
             toast.error("فشل تحميل الإعدادات");
             console.error(e);
@@ -116,6 +132,27 @@ export default function OperationAccountBindings() {
         });
     };
 
+    // Iter-246c — withdrawal-method allow-list toggles.
+    const isAllMethods = (op) =>
+        !Array.isArray(methods[op]) || methods[op].length === 0;
+    const toggleMethod = (op, m) => {
+        setMethods((prev) => {
+            const cur = Array.isArray(prev[op]) ? prev[op] : [];
+            const next = { ...prev };
+            if (cur.includes(m)) {
+                const remaining = cur.filter((x) => x !== m);
+                if (remaining.length === 0) {
+                    delete next[op];
+                } else {
+                    next[op] = remaining;
+                }
+            } else {
+                next[op] = [...cur, m];
+            }
+            return next;
+        });
+    };
+
     const save = async () => {
         if (!settings) return;
         setSaving(true);
@@ -144,10 +181,15 @@ export default function OperationAccountBindings() {
             await api.put("/settings", {
                 ...settings,
                 operation_account_bindings: cleaned,
+                operation_withdrawal_methods: methods,
             });
             toast.success("تم حفظ إعدادات ربط العمليات بالحسابات");
             setBindings(cleaned);
-            setSettings({ ...settings, operation_account_bindings: cleaned });
+            setSettings({
+                ...settings,
+                operation_account_bindings: cleaned,
+                operation_withdrawal_methods: methods,
+            });
         } catch (e) {
             console.error(e);
             toast.error("فشل الحفظ");
@@ -295,6 +337,55 @@ export default function OperationAccountBindings() {
                                                     </div>
                                                 </>
                                             )}
+
+                                            {/* Iter-246c — Withdrawal-method allow-list */}
+                                            <div className="mt-4 pt-3 border-t border-dashed border-slate-200">
+                                                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                                    <div className="text-[11px] font-bold text-slate-600">
+                                                        🏦 طرق الدفع المسموحة (للحسابات البنكية)
+                                                    </div>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                                        isAllMethods(op.value)
+                                                            ? "bg-emerald-100 text-emerald-700"
+                                                            : "bg-violet-100 text-violet-700"
+                                                    }`}>
+                                                        {isAllMethods(op.value)
+                                                            ? "✅ السماح للكل"
+                                                            : `🔒 ${(methods[op.value] || []).length} مقيَّدة`}
+                                                    </span>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                    {WITHDRAWAL_METHODS.map((wm) => {
+                                                        const cur = methods[op.value] || [];
+                                                        const checked = !isAllMethods(op.value)
+                                                            ? cur.includes(wm.value) : true;
+                                                        const allMode = isAllMethods(op.value);
+                                                        return (
+                                                            <label key={wm.value}
+                                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 cursor-pointer transition-colors ${
+                                                                    !allMode && checked
+                                                                        ? "bg-violet-50 border-violet-300"
+                                                                        : "bg-white border-slate-200 hover:border-slate-400"
+                                                                }`}
+                                                                data-testid={`op-method-${op.value}-${wm.value}`}
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={checked && !allMode ? true : (allMode ? false : checked)}
+                                                                    onChange={() => toggleMethod(op.value, wm.value)}
+                                                                    className="w-4 h-4 accent-violet-600"
+                                                                />
+                                                                <span className="text-xs font-bold text-slate-800">
+                                                                    {wm.label}
+                                                                </span>
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <p className="text-[10px] text-slate-500 mt-1">
+                                                    اترك الكل غير مُحدَّد لتُسمح كل الطرق.
+                                                </p>
+                                            </div>
                                         </div>
                                     );
                                 })}

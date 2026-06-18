@@ -417,6 +417,9 @@ class SettingsIn(BaseModel):
     # default). The Backend enforces the binding in every
     # cash-touching endpoint, not just the UI.
     operation_account_bindings: Optional[Dict[str, List[str]]] = None
+    # Iter-246c — Per-op allow-list of withdrawal methods
+    # ("cash" / "transfer" / "pos").  Empty / missing = allow-all.
+    operation_withdrawal_methods: Optional[Dict[str, List[str]]] = None
     # NEW (Phase 3): toggles for what gets deducted from "net sales" KPI.
     net_sales_config: Optional[NetSalesConfig] = None
     # NEW: hide Make.com orders with inferred (approximate) date from dashboard/reports.
@@ -803,6 +806,8 @@ async def get_settings(user: dict = Depends(current_user)):
         "hidden_transaction_types": s.get("hidden_transaction_types", []),
         # Iter-184 — operation→accounts binding (per-op allow-list).
         "operation_account_bindings": s.get("operation_account_bindings", {}),
+        # Iter-246c — operation→withdrawal-methods binding.
+        "operation_withdrawal_methods": s.get("operation_withdrawal_methods", {}),
     }
 
 
@@ -862,6 +867,21 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
                 if isinstance(a, str) and a.strip() and not (a in seen or seen.add(a))
             ]
         update_doc["operation_account_bindings"] = cleaned
+    # Iter-246c — operation→withdrawal-methods binding.  Empty list per
+    # op means "السماح للكل".  Sanitize to {"cash","transfer","pos"}.
+    if payload.operation_withdrawal_methods is not None:
+        _ALLOWED_WM = {"cash", "transfer", "pos"}
+        cleaned_wm: Dict[str, List[str]] = {}
+        for op, methods in payload.operation_withdrawal_methods.items():
+            if not isinstance(op, str) or not op.strip():
+                continue
+            seen_wm: set = set()
+            cleaned_wm[op.strip()] = [
+                m for m in (methods or [])
+                if isinstance(m, str) and m in _ALLOWED_WM
+                and not (m in seen_wm or seen_wm.add(m))
+            ]
+        update_doc["operation_withdrawal_methods"] = cleaned_wm
     await db.settings.update_one(
         {"user_id": user["id"]},
         {"$set": update_doc},

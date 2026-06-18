@@ -293,6 +293,8 @@ async def _resolve_actor(user: dict) -> tuple[str, str]:
 # MUST mirror the OP_TYPES values used by the frontend
 # UnifiedEntryScreen so the same string powers both UX filtering and
 # backend validation.
+# Iter-246c — Added the three Iter-245 ops so they obey the same
+# allow-list mechanism as legacy ops.
 ACCOUNT_BOUND_OPS = (
     "advance_grant",
     "salary_settle",
@@ -303,7 +305,49 @@ ACCOUNT_BOUND_OPS = (
     "external_collect",
     "expense_record",
     "bank_transfer",
+    "supplier_invoice",
+    "general_expense",
+    "fixed_asset",
 )
+
+# Iter-246c — Allowed withdrawal methods per op (per merchant
+# settings doc).  Empty / missing list = «السماح للكل».
+ALLOWED_WITHDRAWAL_METHODS = ("cash", "transfer", "pos")
+WITHDRAWAL_BOUND_OPS = (
+    "advance_grant",
+    "salary_settle",
+    "custody_grant",
+    "supplier_pay",
+    "external_grant",
+    "expense_record",
+    "supplier_invoice",
+    "general_expense",
+    "fixed_asset",
+)
+
+
+async def _enforce_withdrawal_method(
+    db, *, user_id: str, op_type: str, method: str,
+) -> None:
+    """Raise 400 if `method` is not in the merchant's allow-list for
+    `op_type`.  Mirrors `_enforce_account_binding` semantics."""
+    if not op_type or not method:
+        return
+    s = await db.settings.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "operation_withdrawal_methods": 1},
+    )
+    bindings = (s or {}).get("operation_withdrawal_methods") or {}
+    allowed = bindings.get(op_type)
+    if not allowed:           # empty / missing → allow all
+        return
+    if method not in allowed:
+        raise HTTPException(
+            400,
+            "طريقة الدفع هذه غير مسموحة لهذه العملية وفقاً لإعدادات "
+            "«ربط العمليات بالحسابات». فعّلها من «الإعدادات → "
+            "إعدادات ربط العمليات بالحسابات المالية» ثم أعد المحاولة.",
+        )
 
 
 async def _enforce_account_binding(

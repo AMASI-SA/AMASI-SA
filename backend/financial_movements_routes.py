@@ -19,9 +19,12 @@ from pydantic import BaseModel, Field, field_validator
 
 
 SUPPORTED_TYPES = {"supplier_invoice", "general_expense", "fixed_asset"}
-PURCHASE_ROOTS = {  # roots that REQUIRE line_items
-    "تكاليف المنتجات",
-}
+# Iter-246c — Supplier invoices ALWAYS require line items, regardless
+# of the chosen root.  This rule used to be gated by `PURCHASE_ROOTS`
+# (a single hard-coded root) but the merchant ran into edge cases where
+# new purchase roots wouldn't trigger the table.  Keeping
+# `PURCHASE_ROOTS` only for documentation / legacy references.
+PURCHASE_ROOTS = {"تكاليف المنتجات"}
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
@@ -227,26 +230,41 @@ def make_financial_movements_router(db, current_user):
                 "phone": sup["phone"],
             }
 
-        # ── 3) Line-items rule (Requirement #6) ─────────────────────
+        # ── 3) Line-items rule (Iter-246c) ──────────────────────────
+        # Supplier invoices ALWAYS require detailed line_items so the
+        # merchant can never type a header-only total.  Each line must
+        # carry a non-empty description and strictly-positive quantity
+        # AND unit_price.
         cat_path = cat.get("path") or [cat["name"]]
-        if (payload.movement_type == "supplier_invoice"
-                and _requires_line_items(cat_path)):
+        if payload.movement_type == "supplier_invoice":
             if not payload.line_items:
                 raise HTTPException(
                     400,
-                    "فواتير المشتريات تتطلب تفاصيل أصناف (الصنف، "
-                    "الكمية، سعر الوحدة)",
+                    "فواتير المورد تتطلب جدول أصناف. أضف صفاً "
+                    "واحداً على الأقل (الصنف، الكمية، سعر الوحدة).",
                 )
-            li_total = sum(
+            for idx, li in enumerate(payload.line_items, start=1):
+                if not (li.description or "").strip():
+                    raise HTTPException(
+                        400,
+                        f"الصف #{idx}: اسم الصنف مطلوب")
+                if _r(li.quantity) <= 0:
+                    raise HTTPException(
+                        400,
+                        f"الصف #{idx}: الكمية يجب أن تكون > 0")
+                if _r(li.unit_price) <= 0:
+                    raise HTTPException(
+                        400,
+                        f"الصف #{idx}: سعر الوحدة يجب أن يكون > 0")
+            li_total = _r(sum(
                 _r(li.quantity) * _r(li.unit_price)
                 for li in payload.line_items
-            )
-            if abs(li_total - _r(payload.total_amount)) > 0.01:
-                raise HTTPException(
-                    400,
-                    f"مجموع الأصناف ({li_total}) لا يطابق إجمالي "
-                    f"الفاتورة ({_r(payload.total_amount)})",
-                )
+            ))
+            # The frontend computes `total_amount` from line_items, but
+            # we re-compute server-side and overwrite to keep the SSOT
+            # in the line table even if a client tampered with the
+            # header total.
+            payload.total_amount = li_total
 
         # ── 4) Payment terms + balance check (Requirement #5) ───────
         total = _r(payload.total_amount)
@@ -269,6 +287,15 @@ def make_financial_movements_router(db, current_user):
             if not payload.paid_from_account_id:
                 raise HTTPException(
                     400, "الحساب الدافع مطلوب")
+            # Iter-246c — Apply merchant's Operation↔Accounts allow-list.
+            from universal_accounting_routes import (
+                _enforce_account_binding,
+                _enforce_withdrawal_method,
+            )
+            await _enforce_account_binding(
+                db, user_id=uid, op_type=payload.movement_type,
+                account_id=payload.paid_from_account_id,
+            )
             acc = await _resolve_account(
                 db, uid, payload.paid_from_account_id)
             avail = _r(acc.get("current_balance"))
@@ -284,6 +311,11 @@ def make_financial_movements_router(db, current_user):
                     raise HTTPException(
                         400,
                         "طريقة السحب مطلوبة عند الدفع من حساب بنكي")
+                # Iter-246c — Apply withdrawal-method allow-list.
+                await _enforce_withdrawal_method(
+                    db, user_id=uid, op_type=payload.movement_type,
+                    method=payload.withdrawal_method,
+                )
             paid_acc_snap = {
                 "name": acc.get("name"),
                 "type": acc.get("account_type"),

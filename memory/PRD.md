@@ -4002,3 +4002,49 @@ Continuation of Iter-246. Three independently testable deliverables: a UI editor
 
 ### Deployment note
 PREVIEW only.  Merchant must «Save to Github → Deploy» to push to mezansalla.com.
+
+---
+
+## Iter-246c — Supplier Invoice Fix + Op/Account/Method Bindings (Feb 2026)
+
+### Issues fixed
+1. **فاتورة مورد** لا تُظهر جدول الأصناف إلا إذا كان الجذر `"تكاليف المنتجات"` — هذا قيد هندسي خاطئ.
+2. حقل الإجمالي كان قابلاً للتعديل اليدوي على فواتير المشتريات.
+3. العمليات الثلاث (`supplier_invoice`, `general_expense`, `fixed_asset`) لم تكن مربوطة بمنظومة «ربط العمليات بالحسابات».
+4. لا توجد آلية لتقييد طرق الدفع (تحويل / شبكة / سحب نقدي) لكل عملية.
+
+### Changes
+- **`backend/financial_movements_routes.py`**
+  - Supplier invoices now **always** require non-empty, fully-validated line_items (description, qty>0, price>0).
+  - Server **re-computes** `total_amount` from line items as the SSOT (header total is ignored).
+  - Wired `_enforce_account_binding` + new `_enforce_withdrawal_method` into create_movement.
+- **`backend/universal_accounting_routes.py`**
+  - Added `supplier_invoice`, `general_expense`, `fixed_asset` to `ACCOUNT_BOUND_OPS`.
+  - Added `_enforce_withdrawal_method()` + `WITHDRAWAL_BOUND_OPS` reading `settings.operation_withdrawal_methods`.
+- **`backend/server.py`**
+  - `SettingsIn` now accepts `operation_withdrawal_methods: Dict[str, List[str]]`.
+  - GET/PUT `/api/settings` persists & echoes the field with sanitization.
+- **`frontend/src/pages/OperationAccountBindings.jsx`**
+  - Added 3 new ops in section «المشتريات والمصاريف».
+  - New per-op checkboxes for withdrawal methods (`cash / transfer / pos`).
+  - Save now ships `operation_withdrawal_methods` to backend.
+- **`frontend/src/components/Iter245MovementForm.jsx`**
+  - Line items table **always** shows for `supplier_invoice` (no longer gated by category).
+  - Strict row-level validation before save (description + qty>0 + price>0).
+  - Fetches `/settings` to filter accounts via `operation_account_bindings[op]`.
+  - Filters withdrawal-method dropdown via `operation_withdrawal_methods[op]`.
+  - Hint chip shows which methods are allowed when the merchant restricted them.
+
+### Tests
+`tests/test_iter246c_invoice_e2e.py` — **9/9 PASS**
+- multi-line cash / partial / credit invoice → correct totals & remaining
+- empty / zero-qty / zero-price line items rejected (400)
+- `operation_withdrawal_methods` round-trip via `/api/settings`
+- restricted withdrawal method rejected at create time
+- allow-listed withdrawal method passes
+- account binding allow-list enforced
+
+Full Iter-244/246 suite: **23/23 PASS**.
+
+### Deployment note
+PREVIEW only. Merchant must «Save to Github → Deploy» to push to mezansalla.com.
