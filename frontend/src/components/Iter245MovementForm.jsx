@@ -173,15 +173,31 @@ export default function Iter245MovementForm({
         return Number(paidAmount || 0);
     }, [paymentTerms, totalAmount, paidAmount]);
 
+    // Iter-246d — Amount used to query the «accounts-with-availability»
+    // endpoint.  We want accounts to appear the moment the merchant
+    // picks «جزئي» — even before they've typed the partial figure —
+    // so we fall back to the full total as a hint amount.  The actual
+    // sufficiency check still uses `numericPaid` at save time.
+    const accountsQueryAmount = useMemo(() => {
+        if (paymentTerms === "credit") return 0;
+        const t = Number(totalAmount || 0);
+        if (paymentTerms === "partial") {
+            const p = Number(paidAmount || 0);
+            return p > 0 ? p : t;       // hint with total until user types
+        }
+        return t;                        // cash → full total
+    }, [paymentTerms, totalAmount, paidAmount]);
+
     // ── Fetch accounts only when cash actually leaves an account ─
     useEffect(() => {
-        if (numericPaid <= 0) { setAccounts([]); return; }
+        if (paymentTerms === "credit") { setAccounts([]); return; }
+        if (accountsQueryAmount <= 0) { setAccounts([]); return; }
         let alive = true;
         (async () => {
             try {
                 const { data } = await api.get(
                     "/financial-movements/accounts-with-availability",
-                    { params: { amount: numericPaid } });
+                    { params: { amount: accountsQueryAmount } });
                 if (!alive) return;
                 let items = data.items || [];
                 // Iter-246c — Honour the merchant's per-op account
@@ -196,7 +212,7 @@ export default function Iter245MovementForm({
             }
         })();
         return () => { alive = false; };
-    }, [numericPaid, allowedAccountIds]);
+    }, [accountsQueryAmount, paymentTerms, allowedAccountIds]);
 
     const selectedSupplier = suppliers.find((s) => s.id === supplierId);
     const supplierCatIds = useMemo(
@@ -639,9 +655,15 @@ export default function Iter245MovementForm({
                             </option>
                         ))}
                     </select>
-                    {accounts.length === 0 && numericPaid > 0 && (
+                    {accounts.length === 0 && accountsQueryAmount > 0 && (
                         <p className="text-[11px] text-slate-500 mt-1">
-                            لا توجد حسابات بالكفاية المطلوبة.
+                            لا توجد حسابات متاحة لهذا النوع من العمليات.
+                            تأكد من «إعدادات ربط العمليات بالحسابات».
+                        </p>
+                    )}
+                    {accountsQueryAmount === 0 && (
+                        <p className="text-[11px] text-amber-700 mt-1">
+                            ⏳ أضف صنفاً أولاً (الإجمالي = 0) لتظهر الحسابات.
                         </p>
                     )}
                 </Field>
