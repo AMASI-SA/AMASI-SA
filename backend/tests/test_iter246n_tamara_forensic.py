@@ -256,6 +256,58 @@ async def test_official_file_cross_reference(ctx):
 
 
 @pytest.mark.asyncio
+async def test_status_and_attribution_breakdowns(ctx):
+    r = requests.get(
+        f"{BASE_URL}/api/audit/tamara-settlement-forensic",
+        params={"date_from": "2026-06-06", "date_to": "2026-06-12"},
+        headers=_h(ctx["token"]),
+    )
+    data = r.json()
+    sb = data["order_status_breakdown"]
+    ab = data["attribution_source_breakdown"]
+    assert isinstance(sb, dict)
+    assert isinstance(ab, dict)
+    # All 3 seeded captures are "captured" → 1 status bucket, count == 3.
+    assert sb["captured"]["count"] == 3
+    assert sb["captured"]["sum"] == 500.0
+    # attribution_source wasn't seeded in the test docs → falls back to
+    # "unknown" bucket (acceptable — production rows will have real
+    # settlement_source values like provider_captured / billing_eligible).
+    total_attr_count = sum(v["count"] for v in ab.values())
+    assert total_attr_count == 3
+
+
+@pytest.mark.asyncio
+async def test_missing_refunds_cross_reference(ctx, db_cli):
+    """Seed an extra refund row in settlement_entries for an order
+    that has NO matching payment_refunds entry, and verify the
+    forensic endpoint flags it under
+    `refund_order_numbers_in_official_not_in_db`."""
+    uid = ctx["uid"]
+    await db_cli.settlement_entries.insert_one({
+        "user_id": uid, "provider": "tamara",
+        "order_number": "ORD-MISSING-RFD",
+        "event_type": "refund",
+        "settlement_date": "2026-06-11",
+        "actual_refund_amount": 77.5,
+        "actual_net_amount": -77.5, "currency": "SAR",
+        "created_at": datetime.now(timezone.utc),
+        "is_pre_accounting": False,
+    })
+    r = requests.get(
+        f"{BASE_URL}/api/audit/tamara-settlement-forensic",
+        params={"date_from": "2026-06-06", "date_to": "2026-06-12"},
+        headers=_h(ctx["token"]),
+    )
+    data = r.json()
+    missing = data["cross_reference"][
+        "refund_order_numbers_in_official_not_in_db"]
+    assert "ORD-MISSING-RFD" in missing
+    assert data["cross_reference"][
+        "missing_refunds_sum_from_official"] >= 77.5
+
+
+@pytest.mark.asyncio
 async def test_endpoint_is_read_only(ctx, db_cli):
     """Calling the forensic endpoint must NOT touch general_ledger
     or alter payment_transactions/refunds."""

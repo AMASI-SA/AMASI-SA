@@ -91,6 +91,8 @@ def make_tamara_forensic_router(db, current_user):
         sum_per_order_commission = 0.0
         sum_per_order_vat = 0.0
         provider_ids_in_window: set[str] = set()
+        status_breakdown: Dict[str, Dict[str, float]] = {}
+        attribution_breakdown: Dict[str, Dict[str, float]] = {}
 
         async for t in db.payment_transactions.find(
             sales_match,
@@ -98,7 +100,7 @@ def make_tamara_forensic_router(db, current_user):
              "provider_id": 1, "order_reference_id": 1, "order_number": 1,
              "created_at_provider": 1, "billing_eligible_at": 1,
              "effective_settlement_date": 1, "status": 1,
-             "is_pre_accounting": 1},
+             "settlement_source": 1, "is_pre_accounting": 1},
         ).sort([("effective_settlement_date", 1)]):
             amt = float(t.get("amount") or 0)
             fee = amt * commission_rate + fixed_fee_per_order
@@ -109,13 +111,22 @@ def make_tamara_forensic_router(db, current_user):
             pid = t.get("provider_id")
             if pid:
                 provider_ids_in_window.add(pid)
+            st = t.get("status") or "unknown"
+            src = t.get("settlement_source") or "unknown"
+            sb = status_breakdown.setdefault(st, {"count": 0, "sum": 0.0})
+            sb["count"] += 1
+            sb["sum"] += amt
+            ab = attribution_breakdown.setdefault(src, {"count": 0, "sum": 0.0})
+            ab["count"] += 1
+            ab["sum"] += amt
             orders.append({
                 "order_number": _safe_str(t.get("order_number")),
                 "order_reference_id": _safe_str(t.get("order_reference_id")),
                 "provider_id": _safe_str(pid),
                 "amount": _r(amt),
                 "currency": t.get("currency") or "SAR",
-                "status": t.get("status"),
+                "status": st,
+                "settlement_source": src,
                 "created_at_provider": _safe_str(t.get("created_at_provider")),
                 "billing_eligible_at": _safe_str(t.get("billing_eligible_at")),
                 "effective_settlement_date":
@@ -125,6 +136,11 @@ def make_tamara_forensic_router(db, current_user):
                 "in_window": True,
                 "source_date_field": "effective_settlement_date",
             })
+
+        # Round status/attribution sums for clean JSON output.
+        for d in (status_breakdown, attribution_breakdown):
+            for k in d:
+                d[k]["sum"] = _r(d[k]["sum"])
 
         # 3) Per-refund breakdown — payment_refunds in window.
         refund_match: Dict[str, Any] = {"user_id": uid, "provider": "tamara"}
@@ -323,6 +339,29 @@ def make_tamara_forensic_router(db, current_user):
             official_order_numbers - db_order_numbers
         ) if has_official else []
 
+        # Refund cross-reference: order numbers from official refund
+        # rows that we DON'T have a matching row for in payment_refunds
+        # (matched by order_number → order_reference_id → original
+        # capture's provider_id).
+        db_refund_order_numbers: set[str] = set()
+        for rf in refunds_list:
+            on = rf.get("order_number") or rf.get("order_reference_id")
+            if on:
+                db_refund_order_numbers.add(on)
+        official_refund_order_numbers = {
+            e["order_number"] for e in official_entries
+            if e.get("event_type") == "refund" and e.get("order_number")
+        }
+        missing_refunds_in_db = sorted(
+            official_refund_order_numbers - db_refund_order_numbers
+        ) if has_official else []
+        # Sum the missing refund amounts from the official file.
+        missing_refunds_sum = _r(sum(
+            e.get("refund", 0.0) for e in official_entries
+            if e.get("event_type") == "refund"
+            and e.get("order_number") in set(missing_refunds_in_db)
+        )) if missing_refunds_in_db else 0.0
+
         # 6) Build totals comparison block.
         cmp_totals = computed.get("totals", {})
         system_view = {
@@ -490,6 +529,41 @@ def make_tamara_forensic_router(db, current_user):
                 f"{_r(orphan_refunds_sum)} ر.س — مسترجَعات داخل الفترة "
                 f"ولم يُعثر على البيع الأصلي في قاعدة البيانات."
             )
+        if missing_refunds_in_db:
+            causes.append(
+                f"{len(missing_refunds_in_db)} مسترجَع موجود في فاتورة "
+                f"تمارا الرسمية بمجموع {missing_refunds_sum} ر.س "
+                f"ولم يصل إلى `payment_refunds` (webhook/sync ضائع). "
+                f"أرقام الطلبات: "
+                + ", ".join(missing_refunds_in_db[:15])
+                + (" …" if len(missing_refunds_in_db) > 15 else "")
+            )
+        non_billable_statuses = {"authorised", "authorized", "pending",
+                                 "new", "checkout", "created"}
+        non_billable_count = sum(
+            v.get("count", 0) for k, v in status_breakdown.items()
+            if (k or "").lower() in non_billable_statuses
+        )
+        non_billable_sum = _r(sum(
+            v.get("sum", 0) for k, v in status_breakdown.items()
+            if (k or "").lower() in non_billable_statuses
+        ))
+        if non_billable_count > 0:
+            causes.append(
+                f"{non_billable_count} طلب بحالة غير billable "
+                f"(authorised/pending/…) بمجموع {non_billable_sum} ر.س — "
+                f"غالباً تمارا لا تُدرجها في فاتورة هذه الفترة."
+            )
+        estimated_count = (
+            attribution_breakdown.get("estimated", {}).get("count", 0)
+        )
+        if estimated_count > 0:
+            causes.append(
+                f"{estimated_count} طلب يعتمد على `settlement_source=estimated` "
+                f"(fallback إلى created_at_provider) — قد يدخل في فترة "
+                f"خاطئة. الأفضل تشغيل recompute_attribution لرفعها إلى "
+                f"`provider_captured` أو `billing_eligible`."
+            )
         if es_outside_count > 0:
             causes.append(
                 f"{es_outside_count} مسترجَع مرتبط ببيع أصلي خارج "
@@ -541,8 +615,14 @@ def make_tamara_forensic_router(db, current_user):
             "cross_reference": {
                 "orders_in_db_not_in_official": in_db_not_official,
                 "orders_in_official_not_in_db": in_official_not_db,
+                "refund_order_numbers_in_official_not_in_db":
+                    missing_refunds_in_db,
+                "missing_refunds_sum_from_official":
+                    missing_refunds_sum,
                 "official_file_present": has_official,
             },
+            "order_status_breakdown": status_breakdown,
+            "attribution_source_breakdown": attribution_breakdown,
             "possible_causes_of_gap": causes,
             "raw_compute_dump": computed,
         }
