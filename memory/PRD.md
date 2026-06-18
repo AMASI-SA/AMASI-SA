@@ -4405,3 +4405,86 @@ Full regression: **36/36 PASSED** (across Iter-246 c→l).
 
 ### Deployment note
 PREVIEW only.  **Save to Github → Deploy** to push to mezansalla.com.
+
+---
+
+## Iter-246m — Tamara Settlement Forensic (read-only) (Feb 2026)
+
+### Goal
+Diagnose the recurring Tamara auto-fetch gap on production without writing/migrating any historical data.  Only Tamara is in scope; Tabby is untouched and remains stable.
+
+### Deliverable
+`GET /api/audit/tamara-settlement-forensic?date_from=...&date_to=...&invoice_date=...`
+
+Returns:
+- `rates_in_use` — commission_pct, vat_pct, fixed_fee_per_order, settlement_fee_per_invoice, refundable_commission_pct, etc.
+- `computed_by_system.{transactions_count, gross_sales, refunds_count, refunds_total, commission, commission_vat, settlement_fee_total, net_payable, receivables_to_close, ledger_closing_minus_net_diff}`
+- `computed_by_system.{orphan_refunds_count, orphan_refunds_sum, sales_with_es_date_outside}` — orphans = refund in window but capture outside it.
+- `provider_side_invoice` — cached Tamara invoice doc if any.
+- `possible_causes_of_gap[]` — diagnostic narrative in Arabic.
+- `raw_compute_dump` — full settlement_service output for debug.
+
+### How to use on production
+After deploy, the merchant calls (with a valid bearer token):
+```
+GET https://mezansalla.com/api/audit/tamara-settlement-forensic
+    ?date_from=2026-06-06&date_to=2026-06-12&invoice_date=2026-06-16
+```
+
+The response numerically explains every line of the auto-fetch form (المبلغ المحول 21,655.32 / العمولة 1,845.40 / VAT 276.81 / إجمالي الإغلاق 23,777.53) AND lists candidate causes (rate mismatch, orphan refunds, settlement_fee missing, etc.).
+
+### Strict scope
+- Read-only — no writes, no migrations, no adjustments.
+- Tabby left untouched.
+- Forward-only data discipline maintained.
+
+### Deployment note
+PREVIEW only.  **Save to Github → Deploy** to make this available on mezansalla.com.
+
+---
+
+## Iter-246n — Tamara Forensic v2: Per-Order Breakdown + Baseline Delta (2026-06-18)
+**Files:** `backend/tamara_forensic_routes.py` (rewrite), `backend/tests/test_iter246n_tamara_forensic.py` (new, 5 tests passing).
+
+### What changed
+The forensic endpoint `/api/audit/tamara-settlement-forensic` now returns ALL of:
+
+1. **`orders[]`** — every captured payment_transaction inside the Saudi-local window.
+   Fields per row: `order_number`, `order_reference_id`, `provider_id`, `amount`, `currency`, `status`, `created_at_provider`, `billing_eligible_at`, `effective_settlement_date`, `commission_calc`, `vat_calc`, `in_window`.
+2. **`refunds[]`** — every payment_refund inside the window with `link_status` ∈ {`linked`, `orphan_no_original_found`, `linked_capture_outside_window`, `linked_but_pre_accounting`} + original capture metadata.
+3. **`recovered_orders_iter234[]`** — captures lying OUTSIDE the window whose refund landed INSIDE (Iter-234 attribution recovery).
+4. **`official_settlement_entries[]`** — per-row entries from any uploaded Tamara settlement file (settlement_date in [from..to]).
+5. **`cross_reference`** — `orders_in_db_not_in_official`, `orders_in_official_not_in_db`.
+6. **`baseline_from_user`** + **`delta_vs_baseline`** — when the merchant passes `baseline_gross`, `baseline_refunds`, `baseline_commission`, `baseline_vat`, `baseline_settlement_fee`, `baseline_net` query params, the response surfaces `{baseline, system, delta_system_minus_baseline}` per metric.
+7. **`delta_vs_official_file`** — same comparison structure between system computed totals and the official settlement_entries file when present.
+8. **`possible_causes_of_gap[]`** — Arabic narrative that points specifically at rate mismatches, missing orders (lists order numbers), refund attribution issues, fixed-fee drift.
+
+### How to use on production
+```
+GET https://mezansalla.com/api/audit/tamara-settlement-forensic
+    ?date_from=2026-06-06
+    &date_to=2026-06-12
+    &invoice_date=2026-06-16
+    &baseline_gross=20848.30
+    &baseline_refunds=2929.37
+    &baseline_commission=1610.39
+    &baseline_vat=241.64
+    &baseline_net=16066.90
+```
+Authentication: `Authorization: Bearer <token>`.
+
+### Strict scope
+- READ-ONLY. The endpoint does not write to `general_ledger`, `payment_transactions`, `payment_refunds`, or any accounting collection.
+- Tabby untouched. Tamara orphan-refund recovery (Iter-234) mirrored faithfully for diagnosis, not modification.
+
+### Tests (all green)
+`tests/test_iter246n_tamara_forensic.py`:
+- `test_endpoint_returns_per_order_breakdown` — 3 in-window orders with per-order commission/VAT calc.
+- `test_orphan_and_recovered_refunds_classified` — 1 truly orphan, 1 Iter-234 recovered, 1 linked.
+- `test_baseline_delta_block` — query params propagate, delta computed.
+- `test_official_file_cross_reference` — settlement_entries cross-ref.
+- `test_endpoint_is_read_only` — verifies `general_ledger` / `payment_transactions` / `payment_refunds` counts unchanged after invocation.
+
+### Deployment
+Preview only. Merchant must **Save to GitHub → Deploy** to run on https://mezansalla.com against their live data.
+
