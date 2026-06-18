@@ -91,6 +91,7 @@ const SECTIONS = [
             { to: "/financial-movements", label: "📑 قائمة الحركات المالية", icon: Receipt, testid: "nav-financial-movements-list" },
             { to: "/suppliers-new", label: "🏷️ الموردون", icon: UsersThree, testid: "nav-suppliers-new" },
             { to: "/expense-categories-tree", label: "🗂️ شجرة التصنيفات", icon: Receipt, testid: "nav-expense-categories-tree" },
+            { to: "/reports/suppliers", label: "📊 تقرير الموردين", icon: ChartPieSlice, testid: "nav-suppliers-report" },
         ],
     },
     {

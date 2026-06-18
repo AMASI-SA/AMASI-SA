@@ -4339,3 +4339,43 @@ Full regression: **44/44 PASSED**.
 PREVIEW only.  «Save to Github → Deploy».
 
 **⚠️ Forward-only note**: Cash legs posted BEFORE Iter-246j are still double-counted in SSOT.  The merchant can reconcile by either reposting (the diagnostic endpoint shows the drift) or accepting the historical balance and tracking forward.  No automated backfill per the SSOT discipline.
+
+---
+
+## Iter-246k — Suppliers Analytical Report (Feb 2026)
+
+### Goal
+Per-supplier ground-truth view aggregating data from `suppliers`, `counterparties`, `financial_movements`, and `general_ledger`.
+
+### Deliverables
+1. **Backend — `suppliers_report_routes.py` (NEW)**
+   - `GET /api/reports/suppliers` returns per-supplier:
+     - id, name, contact, phone, status, categories (resolved with full path)
+     - invoices_count, invoices_total, paid_total, remaining_total
+     - **outstanding_debt** (from `compute_balances_bulk` on the supplier ledger — same SSOT used by `/api/ledger/balance` and supplier_pay)
+     - last_invoice_date, last_invoice_doc_number, last_activity (any ledger event)
+     - ledger_url
+   - Filters: `q`, `status`, `category_id` (expands to descendants), `with_debt_only`, `date_from`, `date_to`.
+   - Totals roll-up: suppliers_count, invoices_total, paid_total, outstanding_debt.
+   - Suppliers merged from BOTH `db.suppliers` AND `db.counterparties` (kind=supplier), deduped by id, so legacy AND new entries surface.
+
+2. **Frontend — `pages/SuppliersReportPage.jsx` (NEW)**
+   - 4 summary cards (count / invoices / paid / outstanding)
+   - Filter bar (search + status + category + dates + debt-only + apply)
+   - Sortable table with every column the merchant requested + a deep link to `/entity-ledger/supplier/{id}`.
+   - Empty state, refresh button, loading state.
+3. **Sidebar** — Added «📊 تقرير الموردين» under «المشتريات والمصاريف».
+4. **Route** — `/reports/suppliers` added to App.js.
+
+### Tests — `tests/test_iter246k_suppliers_report.py` — **5/5 PASSED**
+Validates the merchant's three exact scenarios:
+- ✅ فاتورة آجل 400 → outstanding_debt = 400
+- ✅ فاتورة نقدية 480 → outstanding_debt = 0
+- ✅ فاتورة جزئية 50/30 → outstanding_debt = 20
+Plus filter tests: `with_debt_only`, `q` substring, `category_id` cascade.
+Plus totals roll-up correctness.
+
+Full regression: **49/49 PASSED**.
+
+### Deployment note
+PREVIEW only.  «Save to Github → Deploy».

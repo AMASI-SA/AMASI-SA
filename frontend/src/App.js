@@ -60,6 +60,7 @@ import SuppliersPage from "./pages/SuppliersPage";
 import FinancialMovementNewPage from "./pages/FinancialMovementNewPage";
 import FinancialMovementsListPage from "./pages/FinancialMovementsListPage";
 import LegacyUsageReportPage from "./pages/LegacyUsageReportPage";
+import SuppliersReportPage from "./pages/SuppliersReportPage";
 import AdsCurrencySettings from "./pages/AdsCurrencySettings";
 import SallaSettlements from "./pages/SallaSettlements";
 import SettlementsOverview from "./pages/SettlementsOverview";
@@ -152,6 +153,7 @@ function AppRoutes() {
             <Route path="/financial-movement/new" element={<ProtectedRoute><Layout><FinancialMovementNewPage /></Layout></ProtectedRoute>} />
             <Route path="/financial-movements" element={<ProtectedRoute><Layout><FinancialMovementsListPage /></Layout></ProtectedRoute>} />
             <Route path="/legacy-usage-report" element={<ProtectedRoute><Layout><LegacyUsageReportPage /></Layout></ProtectedRoute>} />
+            <Route path="/reports/suppliers" element={<ProtectedRoute><Layout><SuppliersReportPage /></Layout></ProtectedRoute>} />
             <Route path="/settings/ads-currencies" element={<ProtectedRoute><Layout><AdsCurrencySettings /></Layout></ProtectedRoute>} />
             <Route path="/salla-settlements" element={<ProtectedRoute><Layout><SallaSettlements /></Layout></ProtectedRoute>} />
             <Route path="/settlements-overview" element={<ProtectedRoute><Layout><SettlementsOverview /></Layout></ProtectedRoute>} />

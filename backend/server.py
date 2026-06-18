@@ -3790,6 +3790,9 @@ api.include_router(make_legacy_usage_report_router(db, current_user))
 # Iter-246i — Per-account balance diagnostic.
 from account_balance_diagnostic_iter246i import make_balance_diagnostic_router
 api.include_router(make_balance_diagnostic_router(db, current_user))
+# Iter-246k — Suppliers analytical report.
+from suppliers_report_routes import make_suppliers_report_router
+api.include_router(make_suppliers_report_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
