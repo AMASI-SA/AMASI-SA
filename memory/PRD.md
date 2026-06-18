@@ -4488,3 +4488,62 @@ Authentication: `Authorization: Bearer <token>`.
 ### Deployment
 Preview only. Merchant must **Save to GitHub → Deploy** to run on https://mezansalla.com against their live data.
 
+
+---
+
+## Iter-246o — Tamara Refund-Sync & Old-Capture Forensic (2026-06-18)
+**Files:**
+- `backend/tamara_refund_audit_routes.py` (new endpoint).
+- `backend/server.py` (router mounted next to iter246m).
+- `backend/tests/test_iter246o_tamara_refund_audit.py` (3 tests passing).
+
+### Endpoint
+`GET /api/audit/tamara-refund-and-old-capture-forensic` — READ-ONLY.
+
+Query params:
+- `date_from`, `date_to` (required, YYYY-MM-DD)
+- `order_numbers` (optional, comma-separated — Track B targets)
+- `probe_tamara_api` (bool, default false — if true, hits Tamara Merchant API per order for live status/refunds/settlement_id)
+
+### Track A — Missing refund-row diagnosis
+For every `payment_transactions` doc in the window with
+`status in {fully_refunded, partially_refunded, refunded}`, the endpoint
+reports per order:
+- `order_number`, `provider_id`, `amount`, `captured_amount`
+- `refunded_amount_local_field` (from payment_transactions doc)
+- `tamara_total_refunded_amount` + `tamara_refunds_array_len` + `tamara_refunded_at` (extracted from cached raw_payload)
+- `has_payment_refund` boolean + the existing row if found (matched by `provider_payment_id` OR `synthetic:<pid>`)
+- Roll-ups: `with_existing_payment_refund`, `without_payment_refund`, `sum_refunded_amount_present`, `sum_refunded_amount_missing`.
+
+### Track B — Targeted old-capture deep inspection
+For each `order_numbers` query value:
+- Full `payment_transactions` doc (minus raw_payload)
+- All local `payment_refunds` rows
+- **All `settlement_entries` rows for that order across EVERY period** (so the merchant can see if Tamara already invoiced this order previously)
+- Distinct `settlement_dates_observed[]`
+- Optional Tamara live probe: status, total_refunded_amount, settlement_id, captures_settlement_hints[], refunds_array_len.
+
+### Strict scope
+- READ-ONLY. No writes to general_ledger / payment_transactions / payment_refunds / unified_orders.
+- Tabby untouched.
+- Forward-only data discipline maintained.
+
+### How to use on production (after Deploy)
+```
+GET https://mezansalla.com/api/audit/tamara-refund-and-old-capture-forensic
+    ?date_from=2026-06-06
+    &date_to=2026-06-12
+    &order_numbers=261434840,261524720,262885232,263800910,263817759
+    &probe_tamara_api=true
+```
+Track A will list the 8 refunded payment_transactions missing a payment_refunds row; Track B will show whether the 5 old captured-only orders appear in any prior settlement_entries file and what Tamara API currently reports.
+
+### Tests (all green)
+`tests/test_iter246o_tamara_refund_audit.py`:
+- `test_track_a_flags_missing_refund_rows` — 3 refunded txns, only 1 has a payment_refunds row; sums computed correctly.
+- `test_track_b_dumps_all_periods_settlement_entries` — Track B surfaces a previous-period settlement_entry for the targeted order.
+- `test_endpoint_is_read_only` — verifies counts unchanged.
+
+### Deployment
+Preview only. **Save to GitHub → Deploy** to enable on https://mezansalla.com.
+

@@ -3856,6 +3856,9 @@ api.include_router(make_suppliers_report_router(db, current_user))
 # Iter-246m — Read-only Tamara settlement forensic.
 from tamara_forensic_routes import make_tamara_forensic_router
 api.include_router(make_tamara_forensic_router(db, current_user))
+# Iter-246o — Read-only Tamara refund-sync & old-capture audit.
+from tamara_refund_audit_routes import make_tamara_refund_audit_router
+api.include_router(make_tamara_refund_audit_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
