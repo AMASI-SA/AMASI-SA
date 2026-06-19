@@ -211,6 +211,34 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
     const [importing, setImporting] = useState(false);
     const [importMeta, setImportMeta] = useState(null);
     const [importPeriod, setImportPeriod] = useState("last_week");
+
+    // Iter-246x — provider invoice-issuance weekday (Asia/Riyadh).
+    // 0=Mon … 5=Sat. Modal forbids "حفظ" before this weekday for the
+    // selected period, matching the backend guard.
+    const INVOICE_WD = { tamara: 5, tabby: 0 };
+    const WD_AR = ["الإثنين","الثلاثاء","الأربعاء","الخميس",
+                   "الجمعة","السبت","الأحد"];
+    const earliestSaveISO = (() => {
+        const pt = importMeta?.period?.to;
+        if (!pt) return null;
+        const [y, m, d] = pt.split("-").map(Number);
+        const first = new Date(Date.UTC(y, m - 1, d));
+        first.setUTCDate(first.getUTCDate() + 1);
+        const wd = INVOICE_WD[provider] ?? 5;
+        // JS getUTCDay: 0=Sun … 6=Sat. Convert to Mon=0…Sun=6.
+        const jsToMon0 = (j) => (j + 6) % 7;
+        let delta = (wd - jsToMon0(first.getUTCDay()) + 7) % 7;
+        first.setUTCDate(first.getUTCDate() + delta);
+        return first.toISOString().slice(0, 10);
+    })();
+    const todayRiyadh = (() => {
+        const now = new Date();
+        const r = new Date(now.getTime() + 3 * 3600 * 1000);
+        return r.toISOString().slice(0, 10);
+    })();
+    const beforeInvoiceDay = !!(earliestSaveISO
+                                && todayRiyadh < earliestSaveISO);
+
     const [form, setForm] = useState({
         settlement_reference: prefill?.settlement_reference || "",
         settlement_date: prefill?.settlement_date || todayISO(),
@@ -338,6 +366,10 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                 settlement_reference: form.settlement_reference.trim(),
                 settlement_date: form.settlement_date || null,
                 notes: form.notes || "",
+                // Iter-246x — forward the period so the backend's
+                // duplicate guard + invoice-day guard can fire.
+                period_from: importMeta?.period?.from || null,
+                period_to: importMeta?.period?.to || null,
             };
             const { data } = await api.post(
                 "/bnpl/settlements/register", payload,
@@ -513,6 +545,29 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                             يرجى التأكد من نشر آخر إصدار من الـ backend.
                         </div>
                     )}
+                    {/* Iter-246x — invoice-day guard (Tamara=Sat, Tabby=Mon). */}
+                    {importMeta && beforeInvoiceDay && (
+                        <div className="mt-2 p-2 rounded-lg bg-amber-50
+                                        border border-amber-300 text-[11px]
+                                        text-amber-900 font-bold"
+                             data-testid="invoice-day-warning">
+                            ⏳ لا يمكن إنشاء تسوية هذا الأسبوع قبل صدور
+                            فاتورة المزود الرسمية. تمارا تصدر يوم السبت،
+                            وتابي تصدر يوم الاثنين.
+                            <div className="mt-1 font-mono text-[10px]">
+                                {meta.name} → التاريخ المتاح للتسجيل:{" "}
+                                <span className="font-bold">
+                                    {earliestSaveISO}
+                                </span>{" "}
+                                ({WD_AR[INVOICE_WD[provider] ?? 5]})
+                            </div>
+                            <div className="text-[10px] mt-1">
+                                المعاينة مسموحة الآن. زر &quot;حفظ وإنشاء
+                                القيد&quot; سيتفعّل تلقائياً بعد التاريخ
+                                المذكور.
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="p-5 space-y-4">
@@ -639,18 +694,21 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                         onClick={save}
                         disabled={
                             saving
+                            || beforeInvoiceDay
                             || (provider === "tamara"
                                 && importMeta
                                 && importMeta.breakdown?.engine_version
                                    !== "iter246r")
                         }
                         title={
-                            (provider === "tamara"
-                             && importMeta
-                             && importMeta.breakdown?.engine_version
-                                !== "iter246r")
-                                ? "محرّك الحساب ليس iter246r — الحفظ معطّل لمنع ترحيل أرقام مُضخّمة"
-                                : ""
+                            beforeInvoiceDay
+                                ? `الحفظ متاح ابتداءً من ${earliestSaveISO}`
+                                : (provider === "tamara"
+                                   && importMeta
+                                   && importMeta.breakdown?.engine_version
+                                      !== "iter246r")
+                                    ? "محرّك الحساب ليس iter246r — الحفظ معطّل لمنع ترحيل أرقام مُضخّمة"
+                                    : ""
                         }
                         className="px-4 py-2 rounded-lg bg-slate-900
                                    hover:bg-slate-800 text-white text-sm

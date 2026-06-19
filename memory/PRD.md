@@ -4932,3 +4932,55 @@ GET /api/audit/tamara-settlement-history?provider=tamara
 **اختبارات إجمالية ناجحة: 17/17** (iter246r + s + t + u + v + w).
 
 **STRICT READ-ONLY** — لا تعديل / لا حذف / لا إعادة ترحيل. تقرير محض.
+
+
+---
+
+## Iter-246x — حزمة SSOT الكاملة لـ BNPL (2026-06-19)
+
+**الخمسة حُرّاس + Health + اختبارات شاملة:**
+
+### الملفات المُعدَّلة / الجديدة
+- `backend/transfers_routes.py` — حارس BNPL يرفض أي transfer من/إلى حساب tamara/tabby (يفحص account_type=payment_platform/payment_gateway + provider_name + normalized_payment_method).
+- `backend/bnpl/settlement_bridge.py`:
+  - `_ensure_bridge_caught_up()` — Fresh-sync تلقائي قبل التحقق من الرصيد (يستدعي `safe_post_sale` و `safe_post_refund` لكل المعاملات غير المُرحَّلة).
+  - `_find_existing_period_settlement()` — حارس تسوية مكررة على (provider, period_from, period_to).
+  - `_earliest_save_date_for_period()` — حساب يوم إصدار الفاتورة (Tamara=السبت=5، Tabby=الإثنين=0) بتوقيت الرياض.
+  - `post_bnpl_settlement_to_ledger()` — استقبال `period_from` / `period_to` وتطبيق الحُرّاس بالترتيب: dedup → invoice-day → fresh-sync → receivable check.
+  - `metadata` للقيد الآن يحفظ `period_from` و `period_to` لاكتشاف التكرارات لاحقاً.
+- `backend/bnpl/settlements_routes.py` — `BNPLSettlementRegisterIn` يضيف `period_from` و `period_to` كحقول اختيارية.
+- `backend/bnpl_settlement_health_routes.py` — جديد. `GET /api/audit/bnpl-settlement-health?provider=tamara|tabby|all`.
+- `backend/server.py` — توصيل الـ Health router.
+- `frontend/src/pages/BnplSettlementsRegister.jsx`:
+  - حساب `earliestSaveISO` + `beforeInvoiceDay` على الواجهة (Tamara=5، Tabby=0).
+  - شارة تحذير ⏳ صفراء تشرح: يوم الإصدار + التاريخ المتاح.
+  - زر "حفظ" يصبح disabled مع title توضيحي.
+  - الـ payload يُرسل `period_from` / `period_to`.
+
+### الاختبارات (7/7 ✅)
+- `test_transfer_from_tamara_account_is_blocked` ✅
+- `test_transfer_to_tamara_account_is_blocked` ✅
+- `test_invoice_day_guard_blocks_future_period` ✅
+- `test_duplicate_period_settlement_is_rejected` (HTTP 409 + رسالة عربية + المرجع السابق) ✅
+- `test_health_endpoint_returns_both_providers` ✅
+- `test_health_endpoint_lists_recent_settlements` ✅
+- `test_health_endpoint_is_read_only` ✅
+
+**الانحدار الكامل**: 88/88 اختبار iter246* ناجح.
+
+### Health endpoint يُرجع لكل مزوّد
+- `current_receivable_balance` — مباشر من general_ledger.
+- `last_settlement` — أحدث تسوية مع رقم القيد.
+- `recent_settlements[5]` — مع period_from/period_to.
+- `duplicate_period_settlements` — أي فترة مكررة (يجب أن تكون فارغة بعد iter246x).
+- `rollup_by_source_endpoint` — توزيع المصادر.
+- `alerts` — رصيد سالب / لا توجد تسويات / تكرار.
+
+### السلوك النهائي
+- ❌ تحويل على حساب Tamara/Tabby من شاشة "تحويلات بين الحسابات" → رفض فوري.
+- ❌ تسوية لنفس (provider, period_from, period_to) → HTTP 409 مع تفاصيل التسوية الأصلية.
+- ❌ تسوية قبل يوم إصدار الفاتورة → HTTP 400 مع التاريخ المتاح.
+- ✅ Fresh-sync تلقائي قبل أي تحقق رصيد → لن تتكرر مشكلة "الرصيد غير كافٍ" بسبب تأخر المزامنة.
+- ✅ Health endpoint للرقابة المستمرة.
+
+**لا تعديل على Tabby logic** — فقط الحُرّاس المشتركة.

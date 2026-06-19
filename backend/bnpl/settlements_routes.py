@@ -32,6 +32,9 @@ class BNPLSettlementRegisterIn(BaseModel):
     settlement_reference: str = Field(..., min_length=1, max_length=200)
     settlement_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     notes: Optional[str] = ""
+    # Iter-246x — explicit settlement period for SSOT duplicate detection.
+    period_from: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    period_to: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
@@ -136,6 +139,9 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 settlement_reference=payload.settlement_reference,
                 settlement_date=payload.settlement_date,
                 notes=payload.notes or "",
+                # Iter-246x — period dedup + fresh-sync metadata.
+                period_from=payload.period_from,
+                period_to=payload.period_to,
             )
         except HTTPException:
             raise

@@ -186,6 +186,33 @@ def attach_transfers_routes(parent_router: APIRouter, db) -> None:
             if a.get("status") == "inactive":
                 raise HTTPException(400, f"حساب {label} موقوف ولا يمكن استخدامه.")
 
+        # Iter-246x — BNPL SSOT lock-down.  Tamara/Tabby receivables MUST
+        # be settled exclusively through the official BNPL settlements
+        # page (`POST /api/bnpl/settlements/register`).  Any other path —
+        # internal transfer, manual journal — would silently bypass the
+        # iter246r forensic engine and corrupt the receivable balance.
+        # We block transfers where EITHER leg is a BNPL provider wallet.
+        def _is_bnpl_wallet(acc: dict) -> bool:
+            if not acc:
+                return False
+            t = (acc.get("account_type") or "").lower()
+            if t in ("payment_platform", "payment_gateway"):
+                pn = (acc.get("provider_name")
+                      or acc.get("name") or "").lower()
+                if "tamara" in pn or "tabby" in pn or "تمارا" in pn or "تابي" in pn:
+                    return True
+            npm = (acc.get("normalized_payment_method") or "").lower()
+            if npm in ("buy_now_pay_later", "bnpl", "tamara", "tabby"):
+                return True
+            return False
+
+        if _is_bnpl_wallet(from_acc) or _is_bnpl_wallet(to_acc):
+            raise HTTPException(
+                400,
+                "لا يمكن تسجيل تحويل مباشر على حسابات Tamara/Tabby. "
+                "استخدم شاشة تسويات BNPL الرسمية فقط.",
+            )
+
         # Guard: refuse to overdraw the source account. Compare against the
         # current_balance (which already accounts for prior transfers).
         amount = round(float(payload.amount), 2)

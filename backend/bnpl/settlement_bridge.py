@@ -62,6 +62,122 @@ async def _current_receivable(
     return _round(bal.get("net_balance", 0))
 
 
+async def _ensure_bridge_caught_up(
+    db, *, user_id: str, provider: str,
+) -> dict[str, int]:
+    """Iter-246x — Before validating the receivable, force-mirror any
+    payment_transactions / payment_refunds that the BNPL bridge has
+    not yet posted to general_ledger. This eliminates the timing
+    error where the merchant sees "settlement exceeds receivable"
+    purely because the bridge hadn't caught up to the latest sync.
+
+    Idempotent: every `safe_post_*` call short-circuits on its own
+    idempotency key, so calling this twice in a row is a no-op the
+    second time.
+    """
+    from .ledger_bridge import safe_post_sale, safe_post_refund
+
+    posted_sales = 0
+    posted_refunds = 0
+
+    async for txn in db.payment_transactions.find(
+        {"user_id": user_id, "provider": provider,
+         "is_pre_accounting": {"$ne": True}},
+        {"_id": 0},
+    ):
+        try:
+            await safe_post_sale(db, user_id=user_id, txn=txn)
+            posted_sales += 1
+        except Exception:  # noqa: BLE001
+            pass
+
+    async for rfd in db.payment_refunds.find(
+        {"user_id": user_id, "provider": provider,
+         "is_pre_accounting": {"$ne": True}},
+        {"_id": 0},
+    ):
+        try:
+            await safe_post_refund(db, user_id=user_id, refund=rfd)
+            posted_refunds += 1
+        except Exception:  # noqa: BLE001
+            pass
+
+    return {"sales_scanned": posted_sales,
+            "refunds_scanned": posted_refunds}
+
+
+async def _find_existing_period_settlement(
+    db, *, user_id: str, provider: str,
+    period_from: Optional[str], period_to: Optional[str],
+) -> Optional[dict]:
+    """Iter-246x — Detect a previously-saved settlement covering the
+    EXACT same (provider, period_from, period_to).  Returns the
+    existing settlement summary or None.
+
+    Match is performed on general_ledger metadata of any posted
+    `bnpl_settlement` txn_group.
+    """
+    if not (period_from and period_to):
+        return None
+
+    async for e in db.general_ledger.find(
+        {"user_id": user_id,
+         "entry_type": "bnpl_settlement",
+         "status": "posted",
+         "metadata.provider": provider,
+         "metadata.period_from": period_from,
+         "metadata.period_to": period_to},
+        {"_id": 0, "txn_group_id": 1, "metadata": 1,
+         "transaction_date": 1, "created_at": 1},
+    ):
+        md = e.get("metadata") or {}
+        return {
+            "txn_group_id": e.get("txn_group_id"),
+            "settlement_reference": md.get("settlement_reference"),
+            "settlement_date": md.get("settlement_date"),
+            "transferred_amount": md.get("transferred_amount"),
+            "transaction_date": e.get("transaction_date"),
+            "created_at": e.get("created_at"),
+        }
+    return None
+
+
+# Iter-246x — Official invoice-issuance weekday per provider.
+# (Asia/Riyadh, 0=Monday … 6=Sunday).  A settlement covering a period
+# CANNOT be saved before the provider has actually issued its invoice,
+# otherwise the merchant would post provisional numbers to the books.
+_INVOICE_WEEKDAY: dict[str, int] = {
+    "tamara": 5,   # Saturday
+    "tabby":  0,   # Monday
+}
+_WEEKDAY_AR: dict[int, str] = {
+    0: "الإثنين", 1: "الثلاثاء", 2: "الأربعاء",
+    3: "الخميس", 4: "الجمعة", 5: "السبت", 6: "الأحد",
+}
+
+
+def _earliest_save_date_for_period(
+    provider: str, period_to: str,
+) -> str:
+    """Return the first Asia/Riyadh date (YYYY-MM-DD) on which a
+    settlement covering `period_to` may be saved.  Equals the next
+    occurrence of the provider's invoice-weekday on or after
+    `period_to + 1 day`."""
+    from datetime import date, timedelta
+
+    wd = _INVOICE_WEEKDAY.get(provider, 5)
+    y, m, d = map(int, period_to.split("-"))
+    first_eligible = date(y, m, d) + timedelta(days=1)
+    delta = (wd - first_eligible.weekday()) % 7
+    return (first_eligible + timedelta(days=delta)).isoformat()
+
+
+def _today_riyadh_iso() -> str:
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc)
+            + timedelta(hours=3)).date().isoformat()
+
+
 async def post_bnpl_settlement_to_ledger(
     db, *, user_id: str, actor_id: str, actor_name: str,
     provider: str,
@@ -74,6 +190,9 @@ async def post_bnpl_settlement_to_ledger(
     settlement_date: Optional[str] = None,
     notes: str = "",
     extra_metadata: Optional[dict] = None,
+    # Iter-246x — explicit period for SSOT duplicate guard.
+    period_from: Optional[str] = None,
+    period_to: Optional[str] = None,
 ) -> dict[str, Any]:
     """Post a balanced settlement group to general_ledger.
 
@@ -127,6 +246,50 @@ async def post_bnpl_settlement_to_ledger(
             400,
             "يجب أن يكون الحساب الوجهة من نوع bank أو cash",
         )
+
+    # Iter-246x — Period duplicate guard.  Refuse to re-post a
+    # settlement for the SAME (provider, period_from, period_to).
+    if period_from and period_to:
+        dup = await _find_existing_period_settlement(
+            db, user_id=user_id, provider=provider,
+            period_from=period_from, period_to=period_to,
+        )
+        if dup:
+            raise HTTPException(
+                409,
+                "توجد تسوية مسجلة مسبقاً لهذا المزود وهذه الفترة. "
+                f"المرجع السابق: {dup.get('settlement_reference')} — "
+                f"بتاريخ {dup.get('settlement_date') or dup.get('transaction_date')} — "
+                f"رقم القيد: {dup.get('txn_group_id')}.",
+            )
+
+    # Iter-246x — Invoice-issuance weekday guard.  Refuse to save a
+    # settlement BEFORE the provider has officially issued its invoice
+    # for the period (Tamara=Saturday, Tabby=Monday, Asia/Riyadh).
+    # Saving earlier would post provisional numbers to the books.
+    if period_to:
+        eligible_iso = _earliest_save_date_for_period(provider, period_to)
+        today_iso = _today_riyadh_iso()
+        if today_iso < eligible_iso:
+            wd = _INVOICE_WEEKDAY.get(provider, 5)
+            day_ar = _WEEKDAY_AR.get(wd, "")
+            raise HTTPException(
+                400,
+                "لا يمكن إنشاء تسوية هذا الأسبوع قبل صدور فاتورة المزود "
+                "الرسمية. تمارا تصدر يوم السبت، وتابي تصدر يوم الاثنين. "
+                f"({provider.capitalize()} → التاريخ المتاح للتسجيل: "
+                f"{eligible_iso} — {day_ar})",
+            )
+
+    # Iter-246x — Force the BNPL ledger bridge to catch up before we
+    # validate the receivable.  Eliminates the timing race where the
+    # merchant sees "settlement exceeds receivable" purely because the
+    # bridge hasn't yet posted today's newer sales.  Idempotent.
+    try:
+        await _ensure_bridge_caught_up(
+            db, user_id=user_id, provider=provider)
+    except Exception:  # noqa: BLE001 — never block on the catch-up itself
+        pass
 
     # Don't close more than what the receivable holds — guards
     # against a refund-only ledger producing a negative receivable.
@@ -210,7 +373,11 @@ async def post_bnpl_settlement_to_ledger(
         "bank_account_id": bank_account_id,
         "bank_account_name": bank.get("name") or "",
         "idempotency_key": idem,
-        "iter": "iter220",
+        "iter": "iter246x",
+        # Iter-246x — persist the period so future duplicate guards
+        # can read it back directly from the ledger.
+        "period_from": period_from or "",
+        "period_to": period_to or "",
         **(extra_metadata or {}),
     }
     grp = await post_txn_group(
