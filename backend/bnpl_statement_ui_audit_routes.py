@@ -436,7 +436,49 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
         gl_bnpl_count = gl_by_type.get("bnpl_settlement", 0)
         atx_bnpl_count = atx_by_type.get("bnpl_settlement", 0)
 
-        if is_migrated and gl_bnpl_count == 0 and atx_bnpl_count > 0:
+        # ── sub_account mismatch detector (Iter-249b) ───────────────
+        # Even if gl_bnpl_count==0 for sub_account="main", the bank
+        # leg may have been written under a different sub_account
+        # (e.g. "balance"). Scan `gl_targets[*].all_bank_legs_in_group`
+        # to detect this BEFORE falling back to `different_data_source`
+        # or `data_missing`.
+        sub_mismatch_legs: List[Dict[str, Any]] = []
+        for ref, info in gl_targets.items():
+            if not isinstance(info, dict) or \
+                    not info.get("_present_in_ledger"):
+                continue
+            for leg in info.get("all_bank_legs_in_group") or []:
+                if (leg.get("entity_id") == account_id
+                        and leg.get("status") == "posted"
+                        and leg.get("sub_account") != "main"):
+                    sub_mismatch_legs.append({
+                        "settlement_reference": ref,
+                        **leg,
+                    })
+
+        if sub_mismatch_legs:
+            distinct_subs = sorted({
+                leg["sub_account"] for leg in sub_mismatch_legs
+            })
+            cause["category"] = "backend_query_sub_account_mismatch"
+            cause["summary"] = (
+                "السبب الجذري: قيد bnpl_settlement موجود فعلاً في "
+                "general_ledger لنفس البنك ولكنه مكتوب تحت "
+                f"sub_account ∈ {distinct_subs} بينما فلتر "
+                "_ledger_based_tx_feed يقصر القراءة على "
+                "sub_account='main'. لذلك UI يستبعد هذه السجلات "
+                "رغم وجودها."
+            )
+            cause["proposed_fix"] = (
+                "يجب أولاً تشغيل bank-balance-subaccount-diagnostic "
+                "لمعرفة ما إذا كان current_balance يعتمد على main "
+                "فقط أو main+balance. ثم نقرر بين: (A) توحيد الـ "
+                "settlement_bridge ليكتب sub_account='main' + "
+                "backfill القديم من balance→main، أو (B) توسيع "
+                "فلتر UI ليشمل main + balance."
+            )
+            cause["sub_account_mismatch_legs"] = sub_mismatch_legs
+        elif is_migrated and gl_bnpl_count == 0 and atx_bnpl_count > 0:
             cause["category"] = "different_data_source"
             cause["summary"] = (
                 "السبب الجذري: واجهة كشف الحساب البنكي تقرأ من "
