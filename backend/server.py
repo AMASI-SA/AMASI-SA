@@ -3907,6 +3907,12 @@ from bnpl_settlement_banktx_routes import (
 )
 api.include_router(
     make_bnpl_settlement_banktx_router(db, current_user))
+# Iter-249 — Bank statement UI audit (READ-ONLY).
+from bnpl_statement_ui_audit_routes import (
+    make_bnpl_statement_ui_audit_router,
+)
+api.include_router(
+    make_bnpl_statement_ui_audit_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
