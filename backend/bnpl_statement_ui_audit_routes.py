@@ -1,66 +1,21 @@
 """Iter-249 — Bank Statement UI Audit (READ-ONLY).
 
-The user reports two BNPL settlements (TAMARA-2026-06-06-AUTO and
-TABBY-2026-06-08-AUTO) that:
-  • Exist in `account_transactions` (verified by Iter-248 backfill).
-  • Do NOT show up in the bank-account statement UI
-    (`/accounts/{bank_id}` page).
+Two invocation modes:
 
-This endpoint traces, end-to-end, why the UI filters them out — without
-mutating anything.
+  1. By bank account id (original):
+       GET /api/audit/account-statement-trace?account_id=<BANK_ID>
 
-  GET /api/audit/account-statement-trace?account_id=<bank_id>
+  2. By settlement reference (shortcut — auto-resolves the bank):
+       GET /api/audit/account-statement-trace
+            ?settlement_reference=TAMARA-2026-06-06-AUTO
+       GET /api/audit/account-statement-trace
+            ?settlement_reference=TABBY-2026-06-08-AUTO
 
-Output shape:
-{
-  "ok": true,
-  "iter": "iter249",
-  "read_only": true,
-  "account_id": "<bank_id>",
-  "account": {...summary...},
-  "ui_path_decision": {
-      "is_migrated": bool,
-      "branch_taken": "ledger_based" | "legacy_account_transactions",
-      "branch_source_collection": "general_ledger" | "account_transactions",
-      "reason": "..."
-  },
-  "ui_query_simulation": {
-      "filter": {...exact mongo filter the UI uses...},
-      "total_rows": int,
-      "by_transaction_type": {"...": count},
-      "bnpl_settlement_rows_returned": int
-  },
-  "account_transactions_collection": {
-      "all_rows_for_account_count": int,
-      "by_transaction_type": {"...": count},
-      "bnpl_settlement_rows": [...],
-      "two_target_references": {
-          "TAMARA-2026-06-06-AUTO": {...},
-          "TABBY-2026-06-08-AUTO": {...}
-      }
-  },
-  "general_ledger_collection": {
-      "bank_entity_rows_for_account_count": int,
-      "by_entry_type": {"...": count},
-      "bnpl_settlement_rows": [...],
-      "two_target_references_in_ledger": {
-          "TAMARA-2026-06-06-AUTO": {...},
-          "TABBY-2026-06-08-AUTO": {...}
-      }
-  },
-  "appears_in_last_50_ui_rows": {
-      "TAMARA-2026-06-06-AUTO": bool,
-      "TABBY-2026-06-08-AUTO": bool
-  },
-  "root_cause": {
-      "category": "backend_query" | "frontend_mapping" | "pagination"
-                 | "sorting" | "cache" | "different_data_source"
-                 | "data_missing",
-      "summary": "...",
-      "evidence": [...],
-      "proposed_fix": "..."
-  }
-}
+If both params are provided, `settlement_reference` takes priority and
+the response includes a `warning` field.
+
+This endpoint mutates NOTHING — it only reads `accounts`,
+`account_transactions`, and `general_ledger`.
 """
 from __future__ import annotations
 
@@ -72,11 +27,116 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 TARGET_REFS = ["TAMARA-2026-06-06-AUTO", "TABBY-2026-06-08-AUTO"]
 
 
-def _strip_id(d: Optional[dict]) -> Optional[dict]:
-    if not d:
-        return d
-    d.pop("_id", None)
-    return d
+async def _resolve_bank_from_reference(
+    db, uid: str, ref: str,
+) -> Optional[Dict[str, Any]]:
+    """Find the bank_account_id linked to a bnpl_settlement reference.
+
+    Search order:
+      1. general_ledger row with entry_type='bnpl_settlement' whose
+         metadata.settlement_reference == ref AND entity_type='bank'
+         (this is the bank leg — direct hit).
+      2. Same as (1) but with notes containing ref (looser match).
+      3. account_transactions row with reference == ref (Iter-248
+         backfill artefact) — fall back to its account_id.
+    Returns a dict with bank_account_id / provider / txn_group_id /
+    transferred_amount / source, or None.
+    """
+    # 1) Bank-leg row in ledger (direct).
+    row = await db.general_ledger.find_one(
+        {"user_id": uid,
+         "entry_type": "bnpl_settlement",
+         "entity_type": "bank",
+         "metadata.settlement_reference": ref,
+         "status": "posted"},
+        {"_id": 0, "entity_id": 1, "amount": 1,
+         "txn_group_id": 1, "metadata": 1, "side": 1,
+         "posted_at": 1},
+    )
+    if row:
+        md = row.get("metadata") or {}
+        return {
+            "source": "general_ledger.bnpl_settlement.bank_leg",
+            "bank_account_id": (
+                md.get("bank_account_id") or row.get("entity_id")
+            ),
+            "bank_account_name": md.get("bank_account_name") or "",
+            "provider": md.get("provider"),
+            "txn_group_id": row.get("txn_group_id"),
+            "transferred_amount": float(
+                md.get("transferred_amount")
+                or row.get("amount") or 0
+            ),
+            "settlement_date": md.get("settlement_date") or "",
+        }
+
+    # 2) Any bnpl_settlement row in the ledger that mentions the ref
+    #    in notes — use it to get txn_group_id, then derive bank leg.
+    any_row = await db.general_ledger.find_one(
+        {"user_id": uid,
+         "entry_type": "bnpl_settlement",
+         "$or": [
+             {"metadata.settlement_reference": ref},
+             {"metadata.reference": ref},
+             {"notes": {"$regex": ref}},
+         ]},
+        {"_id": 0, "txn_group_id": 1, "metadata": 1},
+    )
+    if any_row and any_row.get("txn_group_id"):
+        md = any_row.get("metadata") or {}
+        grp = any_row["txn_group_id"]
+        bank_leg = await db.general_ledger.find_one(
+            {"user_id": uid,
+             "txn_group_id": grp,
+             "entity_type": "bank",
+             "status": "posted"},
+            {"_id": 0, "entity_id": 1, "amount": 1,
+             "metadata": 1, "side": 1},
+        )
+        if bank_leg:
+            bmd = bank_leg.get("metadata") or {}
+            return {
+                "source": "general_ledger.via_txn_group_id",
+                "bank_account_id": (
+                    bmd.get("bank_account_id")
+                    or bank_leg.get("entity_id")
+                ),
+                "bank_account_name": (
+                    bmd.get("bank_account_name")
+                    or md.get("bank_account_name") or ""
+                ),
+                "provider": md.get("provider"),
+                "txn_group_id": grp,
+                "transferred_amount": float(
+                    md.get("transferred_amount")
+                    or bank_leg.get("amount") or 0
+                ),
+                "settlement_date": md.get("settlement_date") or "",
+            }
+
+    # 3) Iter-248 backfill artefact in account_transactions.
+    atx = await db.account_transactions.find_one(
+        {"user_id": uid,
+         "transaction_type": "bnpl_settlement",
+         "$or": [
+             {"reference": ref},
+             {"settlement_reference": ref},
+             {"description": {"$regex": ref}},
+         ]},
+        {"_id": 0},
+    )
+    if atx:
+        return {
+            "source": "account_transactions.iter248_backfill",
+            "bank_account_id": atx.get("account_id"),
+            "bank_account_name": atx.get("account_name") or "",
+            "provider": atx.get("provider"),
+            "txn_group_id": atx.get("txn_group_id"),
+            "transferred_amount": float(atx.get("amount") or 0),
+            "settlement_date": atx.get("transaction_date") or "",
+        }
+
+    return None
 
 
 def make_bnpl_statement_ui_audit_router(db, current_user):
@@ -84,19 +144,76 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
 
     @router.get("/audit/account-statement-trace")
     async def trace_account_statement(
-        account_id: str = Query(..., description="Bank account id"),
+        account_id: Optional[str] = Query(
+            None, description="Bank account id"),
+        settlement_reference: Optional[str] = Query(
+            None,
+            description="BNPL settlement reference (auto-resolves "
+                        "the bank account)"),
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
+
+        if not account_id and not settlement_reference:
+            raise HTTPException(
+                400,
+                "Provide either `account_id` or "
+                "`settlement_reference`.",
+            )
+
+        # ── 0. Resolve bank_account_id from settlement_reference ──
+        resolved_section: Optional[Dict[str, Any]] = None
+        warning: Optional[str] = None
+        if settlement_reference:
+            resolved = await _resolve_bank_from_reference(
+                db, uid, settlement_reference,
+            )
+            if not resolved or not resolved.get("bank_account_id"):
+                return {
+                    "ok": False,
+                    "iter": "iter249",
+                    "read_only": True,
+                    "input": {
+                        "account_id": account_id,
+                        "settlement_reference": settlement_reference,
+                    },
+                    "resolved_from_settlement_reference": None,
+                    "error": (
+                        "لم يتم العثور على أي قيد "
+                        "bnpl_settlement بهذا المرجع في "
+                        "general_ledger ولا في "
+                        "account_transactions."
+                    ),
+                }
+            if account_id and account_id != resolved["bank_account_id"]:
+                warning = (
+                    f"تم تجاهل account_id={account_id} لأن "
+                    "settlement_reference له الأولوية وأشار إلى "
+                    f"bank_account_id={resolved['bank_account_id']}."
+                )
+            account_id = resolved["bank_account_id"]
+            resolved_section = {
+                "settlement_reference": settlement_reference,
+                "provider": resolved.get("provider"),
+                "txn_group_id": resolved.get("txn_group_id"),
+                "bank_account_id": resolved.get("bank_account_id"),
+                "bank_account_name": resolved.get("bank_account_name"),
+                "transferred_amount": resolved.get("transferred_amount"),
+                "settlement_date": resolved.get("settlement_date"),
+                "resolution_source": resolved.get("source"),
+            }
 
         # ── 1. Account summary ─────────────────────────────────────
         acc = await db.accounts.find_one(
             {"id": account_id, "user_id": uid}, {"_id": 0},
         )
         if not acc:
-            raise HTTPException(404, "Account not found for this user.")
+            raise HTTPException(
+                404,
+                f"Account not found for this user (id={account_id}).",
+            )
 
-        # ── 2. UI path decision (mirrors accounts_routes.list_transactions)
+        # ── 2. UI path decision (mirrors accounts_routes._ledger_..)
         is_migrated = False
         anchor = None
         if acc.get("account_type") in ("bank", "cash"):
@@ -110,23 +227,26 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
             )
             is_migrated = bool(anchor)
 
-        branch = "ledger_based" if is_migrated else "legacy_account_transactions"
+        branch = "ledger_based" if is_migrated \
+            else "legacy_account_transactions"
         source_col = (
             "general_ledger" if is_migrated else "account_transactions"
         )
         decision_reason = (
-            "Account has a posted `opening_balance` row in `general_ledger` "
-            "(entity_type=bank). Per accounts_routes._ledger_based_tx_feed, "
-            "the UI reads the statement EXCLUSIVELY from `general_ledger` "
-            "and IGNORES `account_transactions`."
+            "Account has a posted `opening_balance` row in "
+            "`general_ledger` (entity_type=bank). Per "
+            "accounts_routes._ledger_based_tx_feed, the UI reads the "
+            "statement EXCLUSIVELY from `general_ledger` and IGNORES "
+            "`account_transactions`."
             if is_migrated
             else "No ledger opening anchor — UI reads from "
             "`account_transactions` directly."
         )
 
-        # ── 3. account_transactions snapshot (raw) ────────────────
+        # ── 3. account_transactions snapshot ──────────────────────
         atx_filter = {"user_id": uid, "account_id": account_id}
-        atx_total = await db.account_transactions.count_documents(atx_filter)
+        atx_total = await db.account_transactions.count_documents(
+            atx_filter)
         atx_by_type: Dict[str, int] = {}
         async for t in db.account_transactions.aggregate([
             {"$match": atx_filter},
@@ -141,8 +261,16 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
         ).sort("transaction_date", -1):
             atx_bnpl_rows.append(r)
 
+        # ── 4. Target references probe ────────────────────────────
+        # When the user passed settlement_reference, focus on that
+        # exact ref; otherwise probe the two known target refs.
+        probe_refs = (
+            [settlement_reference] if settlement_reference
+            else TARGET_REFS
+        )
+
         atx_targets: Dict[str, Any] = {}
-        for ref in TARGET_REFS:
+        for ref in probe_refs:
             row = await db.account_transactions.find_one(
                 {"user_id": uid,
                  "$or": [{"reference": ref},
@@ -152,7 +280,7 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
             )
             atx_targets[ref] = row or {"_present": False}
 
-        # ── 4. general_ledger snapshot ────────────────────────────
+        # ── 5. general_ledger snapshot ────────────────────────────
         gl_filter = {
             "user_id": uid,
             "entity_type": "bank",
@@ -179,10 +307,7 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
             gl_bnpl_rows.append(r)
 
         gl_targets: Dict[str, Any] = {}
-        for ref in TARGET_REFS:
-            # Look anywhere in the ledger for this reference (even
-            # outside the bank entity, in case the bank leg was
-            # never written).
+        for ref in probe_refs:
             anywhere = await db.general_ledger.find_one(
                 {"user_id": uid,
                  "$or": [
@@ -196,10 +321,9 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
             if not anywhere:
                 gl_targets[ref] = {"_present_in_ledger": False}
                 continue
-            # Does the SAME txn_group_id include a bank-leg row for
-            # THIS account_id?
             grp = anywhere.get("txn_group_id")
             bank_leg_for_this_account = None
+            other_bank_legs: List[Dict[str, Any]] = []
             if grp:
                 bank_leg_for_this_account = await db.general_ledger.find_one(
                     {"user_id": uid,
@@ -212,10 +336,6 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
                      "amount": 1, "sub_account": 1, "status": 1,
                      "posted_at": 1},
                 )
-            # Also count how many bank legs exist anywhere in this
-            # group (might be pointing to a DIFFERENT account_id).
-            other_bank_legs: List[Dict[str, Any]] = []
-            if grp:
                 async for r in db.general_ledger.find(
                     {"user_id": uid,
                      "txn_group_id": grp,
@@ -232,7 +352,7 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
                 "all_bank_legs_in_group": other_bank_legs,
             }
 
-        # ── 5. Simulate the EXACT UI query (_ledger_based_tx_feed)
+        # ── 6. Simulate the EXACT UI query ────────────────────────
         ui_rows_all: List[Dict[str, Any]] = []
         if is_migrated:
             async for r in db.general_ledger.find(
@@ -256,22 +376,20 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
             ui_by_type[k] = ui_by_type.get(k, 0) + 1
         bnpl_in_ui = ui_by_type.get("bnpl_settlement", 0)
 
-        # Last-50 visibility (UI shows newest-first, but ledger feed
-        # iterates oldest-first then JS receives them sorted by
-        # posted_at; the UI renders all of them — no client-side
-        # truncation. We still simulate "last 50 newest" so we can
-        # answer the user's specific question).
+        # last-50 visibility (newest first)
         if is_migrated:
-            # Re-sort newest-first because UI displays newest first.
             ui_rows_sorted = sorted(
                 ui_rows_all,
-                key=lambda r: (r.get("posted_at") or r.get("created_at") or ""),
+                key=lambda r: (
+                    r.get("posted_at")
+                    or r.get("created_at") or ""
+                ),
                 reverse=True,
             )
         else:
             ui_rows_sorted = ui_rows_all
         last_50 = ui_rows_sorted[:50]
-        last_50_refs = []
+        last_50_refs: List[str] = []
         for r in last_50:
             md = r.get("metadata") or {}
             last_50_refs.append(
@@ -280,47 +398,45 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
                 or (r.get("notes") or "")
             )
         in_last_50 = {}
-        for ref in TARGET_REFS:
-            in_last_50[ref] = any(ref in (s or "") for s in last_50_refs)
+        for ref in probe_refs:
+            in_last_50[ref] = any(
+                ref in (s or "") for s in last_50_refs
+            )
 
-        # ── 6. Root cause inference ───────────────────────────────
+        # ── 7. Root cause inference ───────────────────────────────
         evidence: List[str] = []
         if is_migrated:
             evidence.append(
                 "UI took the LEDGER-BASED branch because "
-                f"general_ledger has an opening_balance row for "
+                "general_ledger has an opening_balance row for "
                 f"entity_id={account_id} (entity_type=bank)."
             )
         else:
             evidence.append(
                 "UI took the LEGACY account_transactions branch."
             )
-
         evidence.append(
-            f"account_transactions has {atx_total} rows for this account, "
-            f"of which {atx_by_type.get('bnpl_settlement', 0)} are "
+            f"account_transactions has {atx_total} rows for this "
+            f"account, of which "
+            f"{atx_by_type.get('bnpl_settlement', 0)} are "
             "bnpl_settlement (Iter-248 backfill artefacts)."
         )
         evidence.append(
-            f"general_ledger (bank/main/posted) has {gl_total} rows, of "
-            f"which {gl_by_type.get('bnpl_settlement', 0)} are "
+            f"general_ledger (bank/main/posted) has {gl_total} rows, "
+            f"of which {gl_by_type.get('bnpl_settlement', 0)} are "
             "bnpl_settlement bank legs for THIS account."
         )
 
-        cause = {
+        cause: Dict[str, Any] = {
             "category": "unknown",
             "summary": "",
             "evidence": evidence,
             "proposed_fix": "",
         }
-
-        ledger_bnpl_count_for_this_acc = gl_by_type.get("bnpl_settlement", 0)
+        gl_bnpl_count = gl_by_type.get("bnpl_settlement", 0)
         atx_bnpl_count = atx_by_type.get("bnpl_settlement", 0)
 
-        if is_migrated and ledger_bnpl_count_for_this_acc == 0 \
-                and atx_bnpl_count > 0:
-            # Smoking gun: data exists in account_transactions but UI
-            # reads from ledger.
+        if is_migrated and gl_bnpl_count == 0 and atx_bnpl_count > 0:
             cause["category"] = "different_data_source"
             cause["summary"] = (
                 "السبب الجذري: واجهة كشف الحساب البنكي تقرأ من "
@@ -333,15 +449,11 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
                 "إضافة كتابة موازية إلى general_ledger عند تنفيذ "
                 "تسوية BNPL (debit leg على entity_type=bank, "
                 "entity_id=<bank_id>, sub_account=main) — أو "
-                "backfill خاص يُنشئ نفس الأسطر داخل general_ledger "
-                "للتسويات الموجودة في account_transactions. "
-                "البديل القراءي (دمج الجدولين داخل "
-                "_ledger_based_tx_feed) يكسر الـ SSOT للرصيد، "
-                "لذا الأنسب هو ضمان أن كل bnpl_settlement له bank "
-                "leg مسجَّل في general_ledger."
+                "backfill خاص يُنشئ نفس الأسطر داخل "
+                "general_ledger للتسويات الموجودة في "
+                "account_transactions."
             )
-        elif is_migrated and ledger_bnpl_count_for_this_acc > 0 \
-                and bnpl_in_ui == 0:
+        elif is_migrated and gl_bnpl_count > 0 and bnpl_in_ui == 0:
             cause["category"] = "backend_query"
             cause["summary"] = (
                 "السجلات موجودة في general_ledger لكن استعلام "
@@ -352,8 +464,7 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
                 "افحص _ledger_based_tx_feed: تأكد أن sub_account "
                 "للـ bank leg = 'main' و status='posted'."
             )
-        elif is_migrated and ledger_bnpl_count_for_this_acc > 0 \
-                and bnpl_in_ui > 0 \
+        elif is_migrated and gl_bnpl_count > 0 and bnpl_in_ui > 0 \
                 and not all(in_last_50.values()):
             cause["category"] = "pagination"
             cause["summary"] = (
@@ -367,14 +478,14 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
             cause["category"] = "frontend_mapping"
             cause["summary"] = (
                 "الحساب غير مُرحَّل، السجلات موجودة في "
-                "account_transactions ويجب أن تظهر — تحقق من الـ "
+                "account_transactions ويجب أن تظهر — تحقق من "
                 "frontend mapping للنوع bnpl_settlement."
             )
             cause["proposed_fix"] = (
                 "أضف bnpl_settlement إلى TRANSACTION_TYPE_LABELS "
                 "وتأكد من عرضه."
             )
-        elif atx_bnpl_count == 0 and ledger_bnpl_count_for_this_acc == 0:
+        elif atx_bnpl_count == 0 and gl_bnpl_count == 0:
             cause["category"] = "data_missing"
             cause["summary"] = (
                 "لا توجد سجلات bnpl_settlement لهذا الحساب في "
@@ -389,6 +500,12 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
             "ok": True,
             "iter": "iter249",
             "read_only": True,
+            "input": {
+                "account_id": account_id,
+                "settlement_reference": settlement_reference,
+            },
+            "warning": warning,
+            "resolved_from_settlement_reference": resolved_section,
             "account_id": account_id,
             "account": {
                 "id": acc.get("id"),
@@ -407,9 +524,7 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
                 "ledger_opening_anchor": anchor,
             },
             "ui_query_simulation": {
-                "filter": (
-                    gl_filter if is_migrated else atx_filter
-                ),
+                "filter": gl_filter if is_migrated else atx_filter,
                 "total_rows": ui_total_rows,
                 "by_type": ui_by_type,
                 "bnpl_settlement_rows_returned": bnpl_in_ui,
@@ -418,13 +533,13 @@ def make_bnpl_statement_ui_audit_router(db, current_user):
                 "all_rows_for_account_count": atx_total,
                 "by_transaction_type": atx_by_type,
                 "bnpl_settlement_rows": atx_bnpl_rows,
-                "two_target_references": atx_targets,
+                "probed_references": atx_targets,
             },
             "general_ledger_collection": {
                 "bank_entity_rows_for_account_count": gl_total,
                 "by_entry_type": gl_by_type,
                 "bnpl_settlement_rows_for_this_account": gl_bnpl_rows,
-                "two_target_references_in_ledger": gl_targets,
+                "probed_references_in_ledger": gl_targets,
             },
             "appears_in_last_50_ui_rows": in_last_50,
             "root_cause": cause,
