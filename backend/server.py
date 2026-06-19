@@ -3895,6 +3895,12 @@ api.include_router(
 # Iter-246z — BNPL Timezone SSOT health.
 from bnpl_timezone_health_routes import make_timezone_health_router
 api.include_router(make_timezone_health_router(current_user))
+# Iter-247 — BNPL settlement trace (READ-ONLY diagnostic).
+from bnpl_settlement_trace_routes import (
+    make_bnpl_settlement_trace_router,
+)
+api.include_router(
+    make_bnpl_settlement_trace_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
