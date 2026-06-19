@@ -68,6 +68,7 @@ import AlertsPage from "./pages/AlertsPage";
 import UnifiedEntryScreen from "./pages/UnifiedEntryScreen";
 import LedgerTransactionsPage from "./pages/LedgerTransactionsPage";
 import MigrationWizard from "./pages/MigrationWizard";
+import LegacyRedirect from "./components/LegacyRedirect";
 import EmployeesLedger from "./pages/EmployeesLedger";
 import EmployeeCorrections from "./pages/EmployeeCorrections";
 import SalaryReversals from "./pages/SalaryReversals";
@@ -117,25 +118,25 @@ function AppRoutes() {
             <Route path="/settings/salla" element={<ProtectedRoute><Layout><SallaIntegration /></Layout></ProtectedRoute>} />
             <Route path="/salla-sources" element={<ProtectedRoute><Layout><SallaSourceComparison /></Layout></ProtectedRoute>} />
             <Route path="/payment-settlements" element={<ProtectedRoute><Layout><PaymentSettlements /></Layout></ProtectedRoute>} />
-            <Route path="/shipping-accounts" element={<ProtectedRoute><Layout><ShippingAccounts /></Layout></ProtectedRoute>} />
+            <Route path="/shipping-accounts" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="حسابات الشحن الآجلة" replacement="/shipping/orders-ledger" replacementLabel="دفتر الشحن التفصيلي" reason="تم استبدالها بالنسخة المبنية على Ledger مباشرة." /></Layout></ProtectedRoute>} />
             {/* Iter-144 stubs — sidebar shows these in the new 'شركات الشحن' section. */}
-            <Route path="/shipping/ledger" element={<ProtectedRoute><Layout><ShippingLedgerStub /></Layout></ProtectedRoute>} />
+            <Route path="/shipping/ledger" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="أرصدة شركات الشحن (موحَّد)" replacement="/shipping/orders-ledger" replacementLabel="دفتر الشحن التفصيلي" reason="كانت Stub فارغة." /></Layout></ProtectedRoute>} />
             <Route path="/shipping/transfers" element={<ProtectedRoute><Layout><ShippingTransfers /></Layout></ProtectedRoute>} />
-            <Route path="/shipping/cod-settlements" element={<ProtectedRoute><Layout><ShippingLedgerStub /></Layout></ProtectedRoute>} />
+            <Route path="/shipping/cod-settlements" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="تسويات COD" replacement="/shipping/orders-ledger" replacementLabel="دفتر الشحن التفصيلي" reason="نفس الـ Stub المكرّر." /></Layout></ProtectedRoute>} />
             <Route path="/shipping/settings" element={<ProtectedRoute><Layout><ShippingCompanySettings /></Layout></ProtectedRoute>} />
             <Route path="/make-webhook" element={<ProtectedRoute><Layout><MakeWebhook /></Layout></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><Layout><TeamManagement /></Layout></ProtectedRoute>} />
-            <Route path="/settlements" element={<ProtectedRoute><Layout><Settlements /></Layout></ProtectedRoute>} />
+            <Route path="/settlements" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="تسويات المدفوعات" replacement="/settlements-overview" replacementLabel="جميع التسويات" reason="تم توحيد التسويات في صفحة واحدة مبنية على Ledger." /></Layout></ProtectedRoute>} />
             <Route path="/accounts" element={<ProtectedRoute><Layout><Accounts /></Layout></ProtectedRoute>} />
             <Route path="/accounts/:id" element={<ProtectedRoute><Layout><AccountDetails /></Layout></ProtectedRoute>} />
-            <Route path="/transfers" element={<ProtectedRoute><Layout><Transfers /></Layout></ProtectedRoute>} />
-            <Route path="/reconciliation" element={<ProtectedRoute><Layout><Reconciliation /></Layout></ProtectedRoute>} />
-            <Route path="/financial-position" element={<ProtectedRoute><Layout><FinancialPosition /></Layout></ProtectedRoute>} />
-            <Route path="/financial-input-hub" element={<ProtectedRoute><Layout><FinancialInputHub /></Layout></ProtectedRoute>} />
-            <Route path="/counterparties" element={<ProtectedRoute><Layout><Counterparties /></Layout></ProtectedRoute>} />
+            <Route path="/transfers" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="التحويلات بين الحسابات" replacement="/new-transaction" replacementLabel="حركة مالية جديدة (موحّدة)" reason="تم توحيد التحويلات داخل شاشة الإدخال المالي." /></Layout></ProtectedRoute>} />
+            <Route path="/reconciliation" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="المطابقة والتسويات" replacement="/accounting/reconciliation" replacementLabel="تقرير المطابقة (Ledger)" reason="النسخة الجديدة تعتمد Ledger SSOT." /></Layout></ProtectedRoute>} />
+            <Route path="/financial-position" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="المركز المالي" replacement="/financial-position-ledger" replacementLabel="المركز المالي (Ledger)" reason="النسخة الجديدة مبنية على Ledger مباشرة." /></Layout></ProtectedRoute>} />
+            <Route path="/financial-input-hub" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="مركز الإدخال المالي" replacement="/new-transaction" replacementLabel="حركة مالية جديدة (موحّدة)" reason="تم استبداله بشاشة الإدخال الموحّدة." /></Layout></ProtectedRoute>} />
+            <Route path="/counterparties" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="قائمة الأطراف الموحَّدة" replacement="/suppliers-new" replacementLabel="الموردون" reason="تم استبدال شاشة الأطراف القديمة بصفحة الموردين الجديدة المبنية على financial_movements." /></Layout></ProtectedRoute>} />
             <Route path="/purchase-invoices" element={<ProtectedRoute><Layout><PurchaseInvoices /></Layout></ProtectedRoute>} />
-            <Route path="/advances" element={<ProtectedRoute><Layout><Advances /></Layout></ProtectedRoute>} />
+            <Route path="/advances" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="عُهد الموظفين والمندوبين" replacement="/new-transaction" replacementLabel="حركة مالية جديدة (موحّدة)" reason="استخدم نوع الحركة salary_advance من شاشة الإدخال الموحّدة." /></Layout></ProtectedRoute>} />
             <Route path="/receivables" element={<ProtectedRoute><Layout><Receivables /></Layout></ProtectedRoute>} />
             <Route path="/operations-dashboard" element={<ProtectedRoute><Layout><OperationsDashboard /></Layout></ProtectedRoute>} />
             <Route path="/integrations/custom-app" element={<ProtectedRoute><Layout><CustomAppIntegration /></Layout></ProtectedRoute>} />

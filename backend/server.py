@@ -3925,6 +3925,12 @@ from bank_current_balance_source_routes import (
 )
 api.include_router(
     make_bank_current_balance_source_router(db, current_user))
+# Iter-250a — Financial pages inventory (READ-ONLY).
+from financial_pages_inventory_routes import (
+    make_financial_pages_inventory_router,
+)
+api.include_router(
+    make_financial_pages_inventory_router(current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))

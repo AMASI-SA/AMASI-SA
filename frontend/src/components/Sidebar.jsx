@@ -43,9 +43,6 @@ const SECTIONS = [
             { to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" },
             { to: "/orders", label: "الطلبات", icon: Package, testid: "nav-orders" },
             { to: "/accounts", label: "الأصول والحسابات", icon: Wallet, testid: "nav-accounts" },
-            { to: "/transfers", label: "التحويلات بين الحسابات", icon: ArrowsLeftRight, testid: "nav-transfers" },
-            { to: "/reconciliation", label: "المطابقة والتسويات", icon: Scales, testid: "nav-reconciliation" },
-            { to: "/financial-position", label: "المركز المالي", icon: CurrencyDollar, testid: "nav-financial-position" },
             { to: "/new-transaction", label: "➕ حركة مالية جديدة (موحدة)", icon: PaperPlaneRight, testid: "nav-new-transaction" },
             { to: "/transactions", label: "📜 سجل الحركات المالية", icon: PaperPlaneRight, testid: "nav-ledger-transactions" },
             { to: "/employees-ledger", label: "👥 الموظفون (Ledger)", icon: PaperPlaneRight, testid: "nav-employees-ledger" },
@@ -58,9 +55,7 @@ const SECTIONS = [
             { to: "/couriers-ledger", label: "📦 شركات شحن (Ledger)", icon: PaperPlaneRight, testid: "nav-couriers-ledger" },
             { to: "/financial-position-ledger", label: "💰 المركز المالي (Ledger)", icon: PaperPlaneRight, testid: "nav-financial-position-ledger" },
             { to: "/accounting/reconciliation", label: "🔍 تقرير المطابقة", icon: ArrowsLeftRight, testid: "nav-reconciliation" },
-            { to: "/counterparties", label: "قائمة الأطراف الموحَّدة", icon: UsersThree, testid: "nav-counterparties" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
-            { to: "/settlements", label: "تسويات المدفوعات", icon: Receipt, testid: "nav-settlements" },
             { to: "/bnpl-settlements", label: "تسويات Tabby و Tamara", icon: Receipt, testid: "nav-bnpl-settlements" },
             { to: "/bnpl-settlements/register", label: "📝 تسجيل تسويات Tabby و Tamara", icon: Receipt, testid: "nav-bnpl-register" },
             { to: "/audit/employee-orphans", label: "🩺 تشخيص قيود الموظفين اليتيمة", icon: Receipt, testid: "nav-employee-orphans" },
@@ -100,7 +95,6 @@ const SECTIONS = [
         icon: Briefcase,
         items: [
             { to: "/operations-dashboard", label: "لوحة العمليات", icon: Briefcase, testid: "nav-operations-dashboard" },
-            { to: "/advances", label: "عهد الموظفين والمندوبين", icon: HandCoins, testid: "nav-advances" },
             { to: "/receivables", label: "الذمم والتحصيلات", icon: Coin, testid: "nav-receivables" },
             { to: "/ad-accounts", label: "الحسابات الإعلانية والمديونية", icon: ChartLineUp, testid: "nav-ad-accounts" },
             { to: "/reports/advertising-expenses", label: "📊 تقرير المصروفات الإعلانية", icon: ChartLineUp, testid: "nav-advertising-expenses" },
@@ -111,11 +105,6 @@ const SECTIONS = [
         label: "🚚 شركات الشحن",
         icon: Truck,
         items: [
-            { to: "/shipping-accounts", label: "حسابات الشحن الآجلة", icon: Truck, testid: "nav-shipping-accounts" },
-            // Iter-144 placeholders — pages will be wired during the
-            // ledger refactor.  Routes already exist as stubs so the
-            // sidebar links don't 404.
-            { to: "/shipping/ledger", label: "أرصدة شركات الشحن (موحَّد)", icon: Receipt, testid: "nav-shipping-ledger" },
             { to: "/shipping/orders-ledger", label: "🚚 دفتر الشحن التفصيلي", icon: Receipt, testid: "nav-shipping-orders-ledger" },
             { to: "/shipping/transfers", label: "تحويلات شركات الشحن", icon: Coin, testid: "nav-shipping-transfers" },
             { to: "/shipping/settings", label: "إعدادات شركات الشحن", icon: GearSix, testid: "nav-shipping-settings" },
@@ -169,7 +158,6 @@ const SECTIONS = [
             { to: "/purchase-invoices", label: "فواتير المشتريات 🕰️ Legacy", icon: Receipt, testid: "nav-purchase-invoices" },
             { to: "/operating-expenses", label: "المصروفات التشغيلية 🕰️ Legacy", icon: Wallet, testid: "nav-operating-expenses" },
             { to: "/daily-costs", label: "التكاليف اليومية 🕰️ Legacy", icon: Receipt, testid: "nav-daily-costs" },
-            { to: "/financial-input-hub", label: "مركز الإدخال المالي 🕰️ Legacy", icon: PaperPlaneRight, testid: "nav-financial-input-hub" },
         ],
     },
 ];
