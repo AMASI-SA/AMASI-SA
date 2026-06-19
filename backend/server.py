@@ -3868,6 +3868,12 @@ api.include_router(make_tamara_apply_router(db, current_user))
 # Iter-246t — Tamara SSOT diagnostic (modal vs forensic divergence).
 from tamara_ssot_diagnostic_routes import make_tamara_ssot_diagnostic_router
 api.include_router(make_tamara_ssot_diagnostic_router(db, current_user))
+# Iter-246v — Tamara receivable composition diagnostic.
+from tamara_receivable_diagnostic_routes import (
+    make_tamara_receivable_diagnostic_router,
+)
+api.include_router(
+    make_tamara_receivable_diagnostic_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
