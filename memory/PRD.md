@@ -4892,3 +4892,43 @@ Authorization: Bearer <token>
 **حالة الاختبارات:** 12/12 ناجحة (iter246r + iter246s + iter246t + iter246u).
 
 **ضمان لا انحدار:** بعد iter246u، أي مزامنة مستقبلية لتمارا أو استدعاء `attribution/recompute` لن يلمس القيود المُثبّتة تاريخياً.
+
+
+---
+
+## Iter-246w — Tamara Settlement History Forensic (READ-ONLY) (2026-06-19)
+**فرضية المستخدم:** قد تكون هناك عملية سابقة من شاشة "تحويلات بين الحسابات" بتاريخ 13/06/2026 بمبلغ 16,066.90 ر.س (تمارا → بنك الإنماء) **قد** تكون خفّضت `payment_gateway.tamara.receivable` فعلياً → ولذلك ترفض التسوية الجديدة بسبب نقص الرصيد.
+
+**الـ Endpoint الجديد:**
+```
+GET /api/audit/tamara-settlement-history?provider=tamara
+        [&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD]
+```
+
+**يُرجع لكل قيد على receivable تمارا:**
+- `ledger_entry_id`, `txn_group_id`, `transaction_date`, `created_at`, `created_by`
+- `side` (debit/credit), `amount`, `delta_on_receivable`
+- **`running_receivable_balance`** — رصيد متراكم يُظهر بالضبط متى دخلت الفجوة
+- `entry_type` (bnpl_sale/bnpl_refund/bnpl_settlement/**internal_transfer**/…)
+- **`source_endpoint`** (مثل `POST /api/transfers` ← تحويلات بين الحسابات، أو `bnpl_ledger_bridge`)
+- `description`, `idempotency_key`
+- **`all_legs_in_group`** — كل أرجل الـ txn_group (مثلاً: التحويل سيُظهر leg مقابل على `bank.bank-inma`)
+
+**رول-أب:**
+- `rollup_by_entry_type` — مثل {bnpl_sale, bnpl_refund, internal_transfer, ...}
+- `rollup_by_source_endpoint` — يكشف فوراً كم قيد جاء من شاشة التحويلات.
+
+**كاشف التكرارات:**
+- `suspected_duplicate_closures` — أي مبلغ CREDIT تكرّر ≥ مرتين يُعرض هنا.
+
+**ملفات Iter-246w:**
+- `backend/tamara_settlement_history_routes.py` — جديد.
+- `backend/server.py` — `api.include_router(make_tamara_settlement_history_router(db, current_user))`.
+- `backend/tests/test_iter246w_settlement_history.py` — 3 اختبارات pytest ✅:
+  - `test_history_returns_all_receivable_entries` (يتحقق من حساب الرصيد المتراكم).
+  - `test_history_identifies_transfer_source` (يثبت كشف `POST /api/transfers`).
+  - `test_history_is_read_only`.
+
+**اختبارات إجمالية ناجحة: 17/17** (iter246r + s + t + u + v + w).
+
+**STRICT READ-ONLY** — لا تعديل / لا حذف / لا إعادة ترحيل. تقرير محض.

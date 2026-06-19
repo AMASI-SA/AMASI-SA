@@ -3874,6 +3874,12 @@ from tamara_receivable_diagnostic_routes import (
 )
 api.include_router(
     make_tamara_receivable_diagnostic_router(db, current_user))
+# Iter-246w — Tamara settlement history forensic (READ-ONLY).
+from tamara_settlement_history_routes import (
+    make_tamara_settlement_history_router,
+)
+api.include_router(
+    make_tamara_settlement_history_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
