@@ -4768,3 +4768,78 @@ Matches Tamara's official invoice to within 0.19 SAR (pure rounding).
 - No Tabby code paths touched.
 - `general_ledger`, `bank_accounts`, account balances untouched.
 - Only the Tamara branch of the shared compute reads new filters.
+
+
+---
+
+## Iter-246s — SSOT Guard للمودال "إضافة تسوية تمارا" (2026-06-19)
+**المشكلة (مُبلَّغة بواسطة المستخدم):** بعد نشر iter246r، الـ forensic endpoint يعرض Gross=20,848.30 (صحيح) لكن نافذة "إضافة تسوية تمارا" ظلّت تعرض Gross=23,777.53 (متضخّم بـ 2,929.23 = نفس recovered_orders_sum القديم). كان المستخدم يخشى أن المودال يستخدم مساراً غير iter246r.
+
+**التحقيق:** ثبت أن `import-preview` و`reconciliation` و`registration-overview` يستدعون كلهم `compute_settlement_for_provider` (الذي عُدِّل في iter246r) — لذا الكود متّحد المصدر بعد النشر. لكن لم يكن هناك مؤشّر مرئي للمستخدم أو حارس يمنع الحفظ لو فُكَّ التطابق.
+
+**التعديلات (Iter-246s):**
+- `backend/bnpl/settlements_routes.py` — `import-preview` يُضيف `breakdown.engine_version` (مصدره `s.get("engine_version")` من المحرّك).
+- `frontend/src/pages/BnplSettlementsRegister.jsx` — المودال يعرض شارة `engine_version` (أخضر إذا iter246r، أحمر بخلاف ذلك) + تحذير SSOT صريح + زر "حفظ" يصبح disabled تلقائياً لو `engine_version !== "iter246r"`.
+- `backend/tests/test_iter246s_import_preview_ssot.py` — 3 اختبارات:
+  - `test_import_preview_exposes_engine_version_iter246r` ✅
+  - `test_import_preview_gross_matches_forensic` (يُقارن Gross المودال بـ Gross الـ forensic للفترة نفسها — يفشل لو حدث drift) ✅
+  - `test_import_preview_is_read_only` (يُثبت أن endpoint لا يكتب في general_ledger ولا bank_accounts) ✅
+
+**النطاق:** قراءة فقط. لا تعديل على Tabby ولا على دفتر الأستاذ ولا على أرصدة الحسابات.
+
+**خطوة المستخدم بعد النشر:**
+1. **Save to GitHub → Deploy**.
+2. افتح "إضافة تسوية تمارا" — يجب أن تظهر شارة خضراء `iter246r` بجانب أرقام الفترة.
+3. لو ظلّت أرقام Gross متضخّمة، شارة المحرّك ستكشف السبب فوراً (محرّك قديم → نشر فاشل/cache CDN).
+
+
+---
+
+## Iter-246t — SSOT Diagnostic Endpoint (READ-ONLY) (2026-06-19)
+**المشكلة المُبلَّغة:** بعد نشر iter246s، شارة `iter246r` تظهر خضراء في المودال (تأكيد أن الكود الجديد ينفّذ)، لكن Gross في المودال = 23,777.53 بينما Gross في forensic endpoint = 20,848.30. الفرق 2,929.23 = نفس مبلغ recovered_orders_sum القديم.
+
+**الفرضيات الممكنة لشرح الانحراف رغم وجود iter246r:**
+1. ملف تسوية تمارا الرسمي (`settlement_entries`) مرفوع للفترة → `_aggregate_official_totals` يكتب فوق الـ Gross المحسوب.
+2. أعلام iter246q (`same_week_netzero_exclusion`, `settlement_source=settlement_entries_historical`) لم تُطبَّق فعلاً على بيانات الإنتاج للفترة المعنية.
+3. نشر متعدّد الـ worker — استدعاءان متتاليان قد يصلان لـ worker قديم وآخر جديد.
+
+**الحلّ:** Endpoint تشخيصي يكشف كل المتغيرات في استدعاء واحد.
+
+**ملفات Iter-246t:**
+- `backend/tamara_ssot_diagnostic_routes.py` — جديد. يُنشئ `GET /api/audit/tamara-ssot-diagnostic`.
+- `backend/server.py` — `api.include_router(make_tamara_ssot_diagnostic_router(...))`.
+- `backend/tests/test_iter246t_ssot_diagnostic.py` — 4 اختبارات pytest:
+  - `test_diagnostic_endpoint_reports_iter246r` ✅
+  - `test_modal_vs_forensic_all_fields_within_tolerance` (tol ≤ 0.01 ر.س) ✅
+  - `test_modal_gross_matches_only_normal_captures` ✅
+  - `test_diagnostic_is_read_only` ✅
+
+**ما يُرجعه الـ endpoint:**
+```json
+{
+  "modal_path":    {"engine_version", "data_source", "gross_sales", "total_refunds", "net_sales", ...},
+  "forensic_path": { ...نفس الحقول ... },
+  "raw_db_counts": {
+    "all_captures_in_window":       {count, sum},
+    "netzero_excluded":             {count, sum},
+    "historical_pinned":            {count, sum},
+    "normal_counted_in_gross":      {count, sum},
+    "official_settlement_file_present": true|false,
+    "official_file_gross":          float
+  },
+  "delta": {
+    "modal_vs_forensic":   {gross/refunds/net/commission/payable: {a, b, delta, ok}},
+    "modal_vs_normal_only": {gross_sales: {a, b, delta, ok}}
+  },
+  "inferred_cause": "نص واضح يشرح السبب الجذري المرجَّح"
+}
+```
+
+`inferred_cause` يعطي تشخيصاً نصياً مباشراً يختار بين 4 أسباب محتملة: engine قديم، official file override، أعلام iter246q لم تُطبَّق، أو split deployment.
+
+**خطوات المستخدم على الإنتاج بعد النشر:**
+```
+GET https://mezansalla.com/api/audit/tamara-ssot-diagnostic?date_from=2026-06-06&date_to=2026-06-12
+Authorization: Bearer <token>
+```
+الرد سيُحدّد بدقة لماذا تختلف الأرقام (لو ظلّت).

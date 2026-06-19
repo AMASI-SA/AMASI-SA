@@ -1024,6 +1024,13 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 "transactions_count": tots.get("transactions_count") or 0,
                 "refunds_count": tots.get("refunds_count") or 0,
                 "net_payable": transferred_amount,
+                # Iter-246s — SSOT proof for the registration modal.
+                # The frontend MUST verify `engine_version == "iter246r"`
+                # before allowing the merchant to save. Older deployments
+                # without the Tamara historical-pin + Net-Zero filters
+                # will produce inflated Gross numbers — the modal will
+                # surface a red warning and block save in that case.
+                "engine_version": s.get("engine_version", "unknown"),
             },
             "bank_reconciliation": bank,
         }

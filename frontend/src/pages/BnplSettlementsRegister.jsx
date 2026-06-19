@@ -437,7 +437,7 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                         </div>
                     </div>
                     {importMeta && (
-                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-5
+                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-6
                                         gap-2 text-[10px] text-slate-700
                                         bg-white rounded-lg p-2
                                         border border-violet-100"
@@ -472,6 +472,45 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                                     {importMeta.period?.from} → {importMeta.period?.to}
                                 </span>
                             </div>
+                            {/* Iter-246s — Engine version badge. Proves to
+                                the merchant that the iter246r forensic
+                                hardening is active. Renders RED if not. */}
+                            <div data-testid="engine-version-badge">
+                                <span className="font-bold">المحرّك:</span>{" "}
+                                <span
+                                    className={
+                                        "font-mono px-1.5 py-0.5 rounded " +
+                                        (importMeta.breakdown?.engine_version
+                                         === "iter246r"
+                                            ? "bg-emerald-100 text-emerald-800"
+                                            : "bg-rose-100 text-rose-800 font-bold")
+                                    }
+                                >
+                                    {importMeta.breakdown?.engine_version
+                                     || "unknown"}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                    {/* Iter-246s — SSOT safety guard: block save when the
+                        backend is running an older engine (no Tamara
+                        historical-pin + Net-Zero filters). Prevents the
+                        merchant from posting an inflated Gross to the
+                        general ledger. */}
+                    {importMeta
+                     && provider === "tamara"
+                     && importMeta.breakdown?.engine_version !== "iter246r" && (
+                        <div className="mt-2 p-2 rounded-lg bg-rose-50
+                                        border border-rose-300 text-[11px]
+                                        text-rose-800 font-bold"
+                             data-testid="engine-version-warning">
+                            ⚠️ تحذير SSOT: المحرّك الحالي
+                            ({importMeta.breakdown?.engine_version || "unknown"})
+                            ليس <span className="font-mono">iter246r</span>.
+                            قد تكون أرقام إجمالي المبيعات مُضخّمة بسبب
+                            استرداد قيود تاريخية. زر &quot;حفظ وإنشاء القيد&quot;
+                            معطّل لمنع ترحيل أرقام خاطئة إلى دفتر الأستاذ.
+                            يرجى التأكد من نشر آخر إصدار من الـ backend.
                         </div>
                     )}
                 </div>
@@ -598,10 +637,25 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                     <button
                         type="button"
                         onClick={save}
-                        disabled={saving}
+                        disabled={
+                            saving
+                            || (provider === "tamara"
+                                && importMeta
+                                && importMeta.breakdown?.engine_version
+                                   !== "iter246r")
+                        }
+                        title={
+                            (provider === "tamara"
+                             && importMeta
+                             && importMeta.breakdown?.engine_version
+                                !== "iter246r")
+                                ? "محرّك الحساب ليس iter246r — الحفظ معطّل لمنع ترحيل أرقام مُضخّمة"
+                                : ""
+                        }
                         className="px-4 py-2 rounded-lg bg-slate-900
                                    hover:bg-slate-800 text-white text-sm
-                                   font-bold disabled:opacity-60"
+                                   font-bold disabled:opacity-60
+                                   disabled:cursor-not-allowed"
                         data-testid="modal-save"
                     >
                         {saving ? "جارٍ الحفظ…" : "حفظ وإنشاء القيد"}
