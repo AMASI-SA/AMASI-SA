@@ -4984,3 +4984,45 @@ GET /api/audit/tamara-settlement-history?provider=tamara
 - ✅ Health endpoint للرقابة المستمرة.
 
 **لا تعديل على Tabby logic** — فقط الحُرّاس المشتركة.
+
+
+---
+
+## Iter-246y — توصيل Tamara refunds إلى دفتر الأستاذ (Dry-Run + Apply)
+**السبب الجذري:** خط `post_bnpl_refund_to_ledger` موجود ويعمل لتابي (20 قيد، 2,984.51 ر.س مؤكَّد عبر Health endpoint). لكنه كان يتخطى Tamara refunds بسبب أحد شرطين:
+- `before_bridge_cutoff` (المرتجع قبل تاريخ التقويم).
+- `underlying_sale_not_in_ledger` (المبيعة الأصلية مستبعدة بـ cutoff).
+
+**الإصلاح غير غازي:** بدلاً من تعديل الجسر، أُضيف backfill manual:
+
+### الـ Endpoints الجديدة
+```
+GET  /api/audit/tamara-refund-backfill-dry-run       (READ-ONLY)
+POST /api/admin/tamara-refund-backfill-apply         (X-Apply-Token gated)
+```
+
+### Dry-Run يُرجع
+- `total_refunds_scanned` — كل مرتجعات تمارا في DB.
+- `ready_to_backfill_count` + `ready_to_backfill_sum` — المؤهَّلة للترحيل.
+- `skipped_breakdown` — أسباب الاستبعاد لكل فئة (already_in_ledger / before_bridge_cutoff / underlying_sale_not_in_ledger / missing_refund_id / zero_amount / marked_pre_accounting).
+- `proposed_entries` — قائمة كل قيد مقترح مع legs (Debit revenue.bnpl_sales / Credit payment_gateway.tamara.receivable).
+- `apply_token` — توكن SHA256 مشتقّ من (count, sum) — أي تغيير في البيانات يُبطله تلقائياً.
+
+### Apply مع X-Apply-Token
+- يستدعي **نفس** `post_bnpl_refund_to_ledger` Tabby استخدمته دائماً.
+- Idempotent: re-runs = no-ops (يكتشف عبر `bnpl_refund:tamara:<refund_id>` في metadata).
+- يُرجع تفاصيل كل عملية (نجاح / تخطي / خطأ).
+
+### الاختبارات (5/5 ✅)
+- `test_dry_run_classifies_ready_refund` ✅
+- `test_apply_rejects_without_token` (401) ✅
+- `test_apply_with_token_creates_refund_entries` (legs صحيحة في ledger) ✅
+- `test_apply_is_idempotent` (re-run = 0 ready) ✅
+- `test_tabby_refunds_untouched` (انحدار صفر على Tabby) ✅
+
+### الالتزامات
+- ❌ لم يُلمس Tabby logic.
+- ❌ لم يُعدَّل `bnpl_sale`.
+- ❌ لم تُلمس تسويات تمارا المُغلَقة.
+- ✅ Idempotency على مستوى السطر الواحد.
+- ✅ Token gating قبل أي write.
