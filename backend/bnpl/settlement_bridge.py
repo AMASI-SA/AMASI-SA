@@ -363,6 +363,42 @@ async def post_bnpl_settlement_to_ledger(
         entries=entries,
     )
 
+    # Iter-248 — Forward fix: ALSO mirror a single row into
+    # `account_transactions` on the receiving bank so the bank
+    # statement UI surfaces the inflow.  IMPORTANT:
+    #   • No new ledger entry — ledger already posted above.
+    #   • No `current_balance` mutation — it's computed from ledger.
+    #   • No call to `mirror_account_txn_to_ledger` (would duplicate).
+    # Idempotency: skipped if a row with the same bank-txn idem key
+    # already exists.
+    bank_txn_idem = (
+        f"bnpl_settlement_bank_txn:{provider}:{settlement_reference}")
+    existing = await db.account_transactions.find_one(
+        {"user_id": user_id, "idempotency_key": bank_txn_idem})
+    if not existing and transferred > 0:
+        from datetime import datetime, timezone
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.account_transactions.insert_one({
+            "id": str(__import__("uuid").uuid4()),
+            "user_id": user_id,
+            "account_id": bank_account_id,
+            "account_name": bank.get("name") or "",
+            "direction": "in",
+            "transaction_type": "bnpl_settlement",
+            "amount": transferred,
+            "transaction_date": settlement_date or "",
+            "reference": settlement_reference,
+            "txn_group_id": grp.get("txn_group_id"),
+            "provider": provider,
+            "description":
+                f"تسوية {provider} - {settlement_reference}",
+            "idempotency_key": bank_txn_idem,
+            "status": "posted",
+            "balance_after": 0.0,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        })
+
     remaining = _round(receivable - total)
     return {
         "ok": True,

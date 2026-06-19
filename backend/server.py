@@ -3901,6 +3901,12 @@ from bnpl_settlement_trace_routes import (
 )
 api.include_router(
     make_bnpl_settlement_trace_router(db, current_user))
+# Iter-248 — BNPL settlement bank-txn backfill & health.
+from bnpl_settlement_banktx_routes import (
+    make_bnpl_settlement_banktx_router,
+)
+api.include_router(
+    make_bnpl_settlement_banktx_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
