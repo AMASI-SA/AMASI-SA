@@ -143,39 +143,13 @@ async def _find_existing_period_settlement(
 
 
 # Iter-246x — Official invoice-issuance weekday per provider.
-# (Asia/Riyadh, 0=Monday … 6=Sunday).  A settlement covering a period
-# CANNOT be saved before the provider has actually issued its invoice,
-# otherwise the merchant would post provisional numbers to the books.
-_INVOICE_WEEKDAY: dict[str, int] = {
-    "tamara": 5,   # Saturday
-    "tabby":  0,   # Monday
-}
-_WEEKDAY_AR: dict[int, str] = {
-    0: "الإثنين", 1: "الثلاثاء", 2: "الأربعاء",
-    3: "الخميس", 4: "الجمعة", 5: "السبت", 6: "الأحد",
-}
-
-
-def _earliest_save_date_for_period(
-    provider: str, period_to: str,
-) -> str:
-    """Return the first Asia/Riyadh date (YYYY-MM-DD) on which a
-    settlement covering `period_to` may be saved.  Equals the next
-    occurrence of the provider's invoice-weekday on or after
-    `period_to + 1 day`."""
-    from datetime import date, timedelta
-
-    wd = _INVOICE_WEEKDAY.get(provider, 5)
-    y, m, d = map(int, period_to.split("-"))
-    first_eligible = date(y, m, d) + timedelta(days=1)
-    delta = (wd - first_eligible.weekday()) % 7
-    return (first_eligible + timedelta(days=delta)).isoformat()
-
-
-def _today_riyadh_iso() -> str:
-    from datetime import datetime, timedelta, timezone
-    return (datetime.now(timezone.utc)
-            + timedelta(hours=3)).date().isoformat()
+# Iter-246z — Centralised in `bnpl/timezone.py` (Asia/Riyadh SSOT).
+from .timezone import (
+    INVOICE_WEEKDAY as _INVOICE_WEEKDAY,
+    WEEKDAY_AR as _WEEKDAY_AR,
+    earliest_save_date_for_period as _earliest_save_date_for_period,
+    today_riyadh_iso as _today_riyadh_iso,
+)
 
 
 async def post_bnpl_settlement_to_ledger(

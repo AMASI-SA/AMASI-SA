@@ -3892,6 +3892,9 @@ from tamara_refund_backfill_routes import (
 )
 api.include_router(
     make_tamara_refund_backfill_router(db, current_user))
+# Iter-246z — BNPL Timezone SSOT health.
+from bnpl_timezone_health_routes import make_timezone_health_router
+api.include_router(make_timezone_health_router(current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))

@@ -951,10 +951,13 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             settlement_fee = round(settlement_fee + settlement_fee_vat, 2)
 
         # Auto-generated reference if none provided by the user.
+        # Iter-246z — use Asia/Riyadh today, not UTC.
+        from bnpl.timezone import today_riyadh
+        _ry_today = today_riyadh()
         ref_default = (
-            f"{provider.upper()}-{date_from or _dt.utcnow().date().isoformat()}-AUTO"
+            f"{provider.upper()}-{date_from or _ry_today.isoformat()}-AUTO"
             if date_from
-            else f"{provider.upper()}-AUTO-{_dt.utcnow().strftime('%Y%m%d')}"
+            else f"{provider.upper()}-AUTO-{_ry_today.strftime('%Y%m%d')}"
         )
 
         # Iter-231 — settlement_date_value is now driven by the

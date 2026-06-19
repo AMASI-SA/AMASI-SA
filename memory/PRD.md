@@ -5026,3 +5026,43 @@ POST /api/admin/tamara-refund-backfill-apply         (X-Apply-Token gated)
 - ❌ لم تُلمس تسويات تمارا المُغلَقة.
 - ✅ Idempotency على مستوى السطر الواحد.
 - ✅ Token gating قبل أي write.
+
+
+---
+
+## Iter-246z — BNPL Timezone SSOT (Asia/Riyadh) (2026-06-19)
+**الهدف:** مصدر زمني واحد (Asia/Riyadh) لكل منطق BNPL في الـ backend والـ frontend.
+
+### الملفات الجديدة / المُعدَّلة
+- `backend/bnpl/timezone.py` — جديد. يُصدّر:
+  - `BNPL_TZ` (`ZoneInfo("Asia/Riyadh")`), `BNPL_TZ_NAME`.
+  - `INVOICE_WEEKDAY` (tamara=5/Sat, tabby=0/Mon), `WEEKDAY_AR`.
+  - `riyadh_now()`, `today_riyadh()`, `today_riyadh_iso()`.
+  - `earliest_save_date_for_period(provider, period_to)`.
+- `backend/bnpl/settlement_bridge.py` — يستورد الـ helpers بدلاً من النسخ المحلية (حذف 30 سطر).
+- `backend/bnpl/settlements_routes.py` — استبدال `_dt.utcnow()` بـ `today_riyadh()` في `ref_default`.
+- `backend/bnpl_timezone_health_routes.py` — جديد. `GET /api/audit/timezone-health`.
+- `backend/server.py` — تركيب الـ router.
+- `frontend/src/pages/BnplSettlementsRegister.jsx`:
+  - `todayRiyadhISO()` + `nowRiyadh()` helpers.
+  - `settlement_date` الافتراضي يعتمد Riyadh (لا UTC).
+  - `last_week` / `this_week` / `last_7d` / إلخ تستخدم Riyadh.
+
+### Endpoint جديد
+```
+GET /api/audit/timezone-health
+```
+يُرجع: `bnpl_timezone`, `utc_now`, `riyadh_now`, `riyadh_date`, `riyadh_weekday_ar`, weekdays الفواتير لكل مزود، `all_bnpl_paths_using_riyadh=true`.
+
+### الاختبارات (6/6 ✅)
+- `test_timezone_module_uses_asia_riyadh` ✅
+- `test_today_riyadh_iso_handles_midnight_to_3am_window` ✅
+- `test_earliest_save_for_tamara_lands_on_saturday` (2026-06-12 → 2026-06-13) ✅
+- `test_earliest_save_for_tabby_lands_on_monday` (2026-06-12 → 2026-06-15) ✅
+- `test_timezone_health_endpoint` ✅
+- `test_no_utcnow_in_bnpl_or_tamara_modules` — static AST scan على bnpl/ + كل ملفات Tamara → 0 offenders ✅
+
+**الانحدار الكامل: 35/35 اختبار iter246r→iter246z ناجح.**
+
+### إصلاح الانزياح الفجري
+قبل Iter-246z: من 00:00 إلى 03:00 بتوقيت الرياض، الـ frontend كان يستخدم `new Date().toISOString()` (UTC) ويُسجّل `settlement_date` بيوم سابق. الآن `todayRiyadhISO()` يضيف +3 ساعة قبل توليد التاريخ.

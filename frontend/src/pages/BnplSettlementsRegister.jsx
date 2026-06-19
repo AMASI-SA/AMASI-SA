@@ -32,6 +32,20 @@ const fmt = (n) =>
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+// Iter-246z — BNPL Timezone SSOT. Saudi Arabia is Asia/Riyadh
+// (AST = UTC+3, no DST). Every BNPL-related date default MUST go
+// through this helper so the modal never silently slips a calendar
+// day between 00:00 and 03:00 Riyadh time.
+const todayRiyadhISO = () => {
+    const now = new Date();
+    const r = new Date(now.getTime() + 3 * 3600 * 1000);
+    return r.toISOString().slice(0, 10);
+};
+const nowRiyadh = () => {
+    const now = new Date();
+    return new Date(now.getTime() + 3 * 3600 * 1000);
+};
+
 const PROVIDERS = {
     tabby:  { name: "Tabby",  badge: "🟣", color: "violet" },
     tamara: { name: "Tamara", badge: "🩷", color: "rose" },
@@ -241,7 +255,10 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
 
     const [form, setForm] = useState({
         settlement_reference: prefill?.settlement_reference || "",
-        settlement_date: prefill?.settlement_date || todayISO(),
+        // Iter-246z — default settlement_date is Asia/Riyadh today,
+        // NOT the browser's UTC date (which slips back a day between
+        // midnight and 03:00 Riyadh time).
+        settlement_date: prefill?.settlement_date || todayRiyadhISO(),
         bank_account_id: prefill?.bank_account_id || banks?.[0]?.id || "",
         transferred_amount: prefill?.transferred_amount ?? "",
         commission: prefill?.commission ?? "",
@@ -300,25 +317,25 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
         if (provider !== "tabby" && provider !== "tamara") return;
         setResyncing(true);
         try {
-            // Derive the `since` date from the import period.
-            const today = new Date();
+            // Iter-246z — Use Asia/Riyadh "today" for week boundaries.
+            const today = nowRiyadh();
             const ms = 86400000;
             const fmt = (d) => d.toISOString().slice(0, 10);
             let since;
             if (importPeriod === "last_week") {
-                const wd = today.getDay() || 7;
+                const wd = today.getUTCDay() || 7;
                 since = fmt(new Date(today.getTime() - (wd + 6) * ms));
             } else if (importPeriod === "this_week") {
-                const wd = today.getDay() || 7;
+                const wd = today.getUTCDay() || 7;
                 since = fmt(new Date(today.getTime() - (wd - 1) * ms));
             } else if (importPeriod === "last_7d") {
                 since = fmt(new Date(today.getTime() - 6 * ms));
             } else if (importPeriod === "last_14d") {
                 since = fmt(new Date(today.getTime() - 13 * ms));
             } else if (importPeriod === "this_month") {
-                since = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+                since = fmt(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)));
             } else if (importPeriod === "last_month") {
-                since = fmt(new Date(today.getFullYear(), today.getMonth() - 1, 1));
+                since = fmt(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)));
             }
 
             const endpoint = provider === "tabby"
