@@ -4724,3 +4724,47 @@ Net payable  = 16,067.09  ≈ Tamara 16,066.90  (off 0.19 = rounding)
 - Same writes performed by `tamara-apply-execute` (no new write surfaces).
 - Tabby untouched.
 
+
+
+---
+
+## Iter-246r — Forensic Engine Hardening (READ-ONLY) (2026-06-18)
+**Files modified:**
+- `backend/bnpl/settlements_service.py` — `_compute_provider_totals` + `compute_settlement_for_provider` commission loop.
+- `backend/tamara_forensic_routes.py` — already had local guard (from previous iteration).
+- `backend/tests/test_iter246r_forensic_hardening.py` — 3 tests, all passing.
+
+### Root cause of failing pytest (`assert 360.0 == 200.0`)
+After Iter-246q wrote `settlement_source="settlement_entries_historical"` and `same_week_netzero_exclusion=true` flags onto Tamara captures in production, two read-only legacy paths in `_compute_provider_totals` (and the matching commission loop in `compute_settlement_for_provider`) were still ignoring those flags:
+1. The Gross aggregation `sales_match` did NOT exclude netzero-flagged docs → +60 SAR (SAMEWEEK).
+2. The Iter-234 orphan-refund-recovery loop did NOT skip captures pinned to a past settlement file → +100 SAR (PINNED-1 re-credited into current Gross).
+Result: Gross drifted upward by exactly the captures we had just intentionally excluded → the merchant's UI showed the OLD numbers despite the DB being correct.
+
+### Fix (gated to Tamara only — Tabby & general_ledger untouched)
+1. `_compute_provider_totals` adds `same_week_netzero_exclusion: {"$ne": True}` to `sales_match` (Tamara only).
+2. `_compute_provider_totals` Iter-234 loop now `continue`s when the original capture has `settlement_source == "settlement_entries_historical"` OR `same_week_netzero_exclusion == true`.
+3. `compute_settlement_for_provider` commission loop mirrors the same two filters so commission/VAT stay consistent with Gross.
+4. `engine_version` bumped from `"iter234"` to `"iter246r"` for UI/debug traceability.
+
+### Test results
+```
+tests/test_iter246r_forensic_hardening.py::test_historical_pinned_capture_not_recovered   PASSED
+tests/test_iter246r_forensic_hardening.py::test_netzero_excluded_from_gross_kept_in_refunds PASSED
+tests/test_iter246r_forensic_hardening.py::test_forensic_is_read_only_tabby_untouched      PASSED
+```
+Regression check: 16 of the previous `iter246n/o/p` Tamara tests still pass. No new failures introduced (pre-existing `test_tabby_ssot_phase1_iter195` failure is unrelated to settlement compute).
+
+### Expected production numbers (after Deploy → /api/audit/tamara-settlement-forensic)
+```
+Gross sales   = 20,848.30
+Refunds       = 2,929.37
+Net sales     = 17,918.93
+Net payable   ≈ 16,067.09
+```
+Matches Tamara's official invoice to within 0.19 SAR (pure rounding).
+
+### Strict scope
+- READ-ONLY: zero new writes.
+- No Tabby code paths touched.
+- `general_ledger`, `bank_accounts`, account balances untouched.
+- Only the Tamara branch of the shared compute reads new filters.

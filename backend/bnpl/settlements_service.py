@@ -381,6 +381,13 @@ async def _compute_provider_totals(
             rng["$lte"] = utc_lte
         sales_match[sales_date_field] = rng
 
+    # Iter-246r — Same-Week Net-Zero captures (Tamara) are excluded from
+    # Gross sales aggregation (their refund still appears on the refunds
+    # side, so the net effect on the cycle is zero, matching what Tamara
+    # actually reports on its Statement).  Read-only: no DB writes.
+    if provider == "tamara":
+        sales_match["same_week_netzero_exclusion"] = {"$ne": True}
+
     # Iter-149 — Skip orders & refunds whose entity date is BEFORE the
     # merchant's `accounting_start_date` for this provider.  These are
     # historical / pre-accounting rows the merchant has archived.
@@ -494,18 +501,32 @@ async def _compute_provider_totals(
                     {"user_id": user_id, "provider": "tamara",
                      "provider_id": pp_id},
                     {"_id": 0, "amount": 1, "provider_id": 1,
-                     "is_pre_accounting": 1},
+                     "is_pre_accounting": 1,
+                     "settlement_source": 1,
+                     "same_week_netzero_exclusion": 1},
                 )
             if not orig and ref_id:
                 orig = await db.payment_transactions.find_one(
                     {"user_id": user_id, "provider": "tamara",
                      "order_reference_id": ref_id},
                     {"_id": 0, "amount": 1, "provider_id": 1,
-                     "is_pre_accounting": 1},
+                     "is_pre_accounting": 1,
+                     "settlement_source": 1,
+                     "same_week_netzero_exclusion": 1},
                 )
             if not orig:
                 continue
             if orig.get("is_pre_accounting"):
+                continue
+            # Iter-246r — DO NOT recover captures that were explicitly
+            # pinned to a past Tamara settlement file (Fix #3) — they
+            # were already accounted for in a previous cycle.  Also
+            # skip captures flagged as Same-Week Net-Zero, since they
+            # were intentionally excluded from this cycle's Gross.
+            if (orig.get("settlement_source")
+                    == "settlement_entries_historical"):
+                continue
+            if orig.get("same_week_netzero_exclusion"):
                 continue
             orig_pid = orig.get("provider_id")
             if orig_pid and orig_pid in in_window_ids:
@@ -833,6 +854,11 @@ async def compute_settlement_for_provider(
             **({"$gte": utc_gte} if utc_gte else {}),
             **({"$lte": utc_lte} if utc_lte else {}),
         }
+    # Iter-246r — match `_compute_provider_totals`: exclude Same-Week
+    # Net-Zero captures from the per-order commission loop so the
+    # commission stays consistent with Gross.
+    if provider == "tamara":
+        sales_match["same_week_netzero_exclusion"] = {"$ne": True}
     refund_match: Dict[str, Any] = {"user_id": user_id, "provider": provider}
     if utc_gte or utc_lte:
         refund_match["refunded_at"] = {
@@ -885,16 +911,27 @@ async def compute_settlement_for_provider(
                     {"user_id": user_id, "provider": "tamara",
                      "provider_id": pp_id},
                     {"_id": 0, "amount": 1, "provider_id": 1,
-                     "is_pre_accounting": 1},
+                     "is_pre_accounting": 1,
+                     "settlement_source": 1,
+                     "same_week_netzero_exclusion": 1},
                 )
             if not orig and ref_id:
                 orig = await db.payment_transactions.find_one(
                     {"user_id": user_id, "provider": "tamara",
                      "order_reference_id": ref_id},
                     {"_id": 0, "amount": 1, "provider_id": 1,
-                     "is_pre_accounting": 1},
+                     "is_pre_accounting": 1,
+                     "settlement_source": 1,
+                     "same_week_netzero_exclusion": 1},
                 )
             if not orig or orig.get("is_pre_accounting"):
+                continue
+            # Iter-246r — skip historically-pinned and Net-Zero captures
+            # in the commission recovery loop too (mirrors gross loop).
+            if (orig.get("settlement_source")
+                    == "settlement_entries_historical"):
+                continue
+            if orig.get("same_week_netzero_exclusion"):
                 continue
             orig_pid = orig.get("provider_id")
             if orig_pid and orig_pid in counted_pids:
@@ -1028,7 +1065,7 @@ async def compute_settlement_for_provider(
         # the deployed engine includes the Tamara orphan-refund
         # recovery fix (gross + commission both honour
         # same-week-capture+refund orders).
-        "engine_version": "iter234",
+        "engine_version": "iter246r",
     }
 
 

@@ -100,14 +100,21 @@ def make_tamara_forensic_router(db, current_user):
              "provider_id": 1, "order_reference_id": 1, "order_number": 1,
              "created_at_provider": 1, "billing_eligible_at": 1,
              "effective_settlement_date": 1, "status": 1,
-             "settlement_source": 1, "is_pre_accounting": 1},
+             "settlement_source": 1, "is_pre_accounting": 1,
+             "same_week_netzero_exclusion": 1},
         ).sort([("effective_settlement_date", 1)]):
             amt = float(t.get("amount") or 0)
+            # Iter-246r: honor Same-Week Net-Zero — capture is dropped
+            # from gross totals but the order doc + its refund still
+            # appear in their respective sections for transparency.
+            netzero_excluded = bool(
+                t.get("same_week_netzero_exclusion"))
             fee = amt * commission_rate + fixed_fee_per_order
             vat = fee * vat_rate
-            sum_gross += amt
-            sum_per_order_commission += fee
-            sum_per_order_vat += vat
+            if not netzero_excluded:
+                sum_gross += amt
+                sum_per_order_commission += fee
+                sum_per_order_vat += vat
             pid = t.get("provider_id")
             if pid:
                 provider_ids_in_window.add(pid)
@@ -181,6 +188,7 @@ def make_tamara_forensic_router(db, current_user):
                     {"_id": 0, "amount": 1, "provider_id": 1,
                      "order_reference_id": 1, "order_number": 1,
                      "effective_settlement_date": 1,
+                     "settlement_source": 1,
                      "created_at_provider": 1, "is_pre_accounting": 1},
                 )
             if not orig and ref:
@@ -190,6 +198,7 @@ def make_tamara_forensic_router(db, current_user):
                     {"_id": 0, "amount": 1, "provider_id": 1,
                      "order_reference_id": 1, "order_number": 1,
                      "effective_settlement_date": 1,
+                     "settlement_source": 1,
                      "created_at_provider": 1, "is_pre_accounting": 1},
                 )
 
@@ -210,7 +219,16 @@ def make_tamara_forensic_router(db, current_user):
                     # is the typical Tamara "captured + refunded same
                     # week but billing_eligible drifted" scenario.
                     es_outside_count += 1
+                    # Iter-246r: skip Iter-234 recovery for captures
+                    # explicitly pinned to a historical settlement file
+                    # — these were already settled in a previous week
+                    # and must NOT be re-added to this week's gross.
+                    is_historically_pinned = (
+                        (orig.get("settlement_source") or "")
+                        == "settlement_entries_historical"
+                    )
                     if (not orig.get("is_pre_accounting")
+                            and not is_historically_pinned
                             and orig_pid not in provider_ids_in_window):
                         amt = float(orig.get("amount") or 0)
                         if amt > 0:
