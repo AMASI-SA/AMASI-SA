@@ -30,12 +30,11 @@ const fmt = (n) =>
         minimumFractionDigits: 2, maximumFractionDigits: 2,
     });
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-
 // Iter-246z — BNPL Timezone SSOT. Saudi Arabia is Asia/Riyadh
 // (AST = UTC+3, no DST). Every BNPL-related date default MUST go
-// through this helper so the modal never silently slips a calendar
-// day between 00:00 and 03:00 Riyadh time.
+// through these helpers so the modal never silently slips a calendar
+// day between 00:00 and 03:00 Riyadh time.  `todayISO()` (UTC) was
+// removed under Iter-246z — do not re-introduce it.
 const todayRiyadhISO = () => {
     const now = new Date();
     const r = new Date(now.getTime() + 3 * 3600 * 1000);
@@ -427,6 +426,18 @@ function AddSettlementModal({ provider, banks, prefill, onClose, onSaved }) {
                     <p className="text-xs text-slate-500 mt-1">
                         ستنشئ هذه العملية قيداً متوازناً في الدفتر العام.
                     </p>
+                    {/* Iter-246z — Asia/Riyadh SSOT banner */}
+                    <div className="mt-2 inline-flex items-center gap-1.5
+                                    px-2 py-1 rounded-md bg-emerald-50
+                                    border border-emerald-200 text-[10px]
+                                    font-bold text-emerald-800"
+                         data-testid="riyadh-tz-banner">
+                        <span>🇸🇦</span>
+                        <span>
+                            جميع فترات وتسويات BNPL تعتمد توقيت الرياض
+                            (Asia/Riyadh)
+                        </span>
+                    </div>
                 </div>
 
                 {/* Iter-223 — Auto Import bar */}
@@ -1000,31 +1011,33 @@ export default function BnplSettlementsRegister() {
     const loadReconcile = async (period) => {
         setReconcileLoading(true);
         try {
-            // Compute date range from period shorthand client-side so
-            // the user sees the actual window the system used.
-            const today = new Date();
+            // Iter-246z — Use Asia/Riyadh "today" for week boundaries.
+            const today = nowRiyadh();
             const fmt = (d) => d.toISOString().slice(0, 10);
             let from, to;
             const ms = 86400000;
             if (period === "last_week") {
-                const wd = today.getDay() || 7;
+                const wd = today.getUTCDay() || 7;
                 const sun = new Date(today.getTime() - wd * ms);
                 from = fmt(new Date(sun.getTime() - 6 * ms));
                 to = fmt(sun);
             } else if (period === "this_week") {
-                const wd = today.getDay() || 7;
+                const wd = today.getUTCDay() || 7;
                 from = fmt(new Date(today.getTime() - (wd - 1) * ms));
                 to = fmt(new Date(today.getTime() + (7 - wd) * ms));
             } else if (period === "last_7d") {
                 from = fmt(new Date(today.getTime() - 6 * ms));
                 to = fmt(today);
             } else if (period === "this_month") {
-                const f = new Date(today.getFullYear(), today.getMonth(), 1);
+                const f = new Date(Date.UTC(
+                    today.getUTCFullYear(), today.getUTCMonth(), 1));
                 from = fmt(f);
                 to = fmt(today);
             } else if (period === "last_month") {
-                const f = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                const t = new Date(today.getFullYear(), today.getMonth(), 0);
+                const f = new Date(Date.UTC(
+                    today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+                const t = new Date(Date.UTC(
+                    today.getUTCFullYear(), today.getUTCMonth(), 0));
                 from = fmt(f);
                 to = fmt(t);
             }
