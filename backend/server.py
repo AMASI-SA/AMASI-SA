@@ -3919,6 +3919,12 @@ from bank_balance_subaccount_diagnostic_routes import (
 )
 api.include_router(
     make_bank_balance_subaccount_diag_router(db, current_user))
+# Iter-249d — Bank current_balance source diagnostic (READ-ONLY).
+from bank_current_balance_source_routes import (
+    make_bank_current_balance_source_router,
+)
+api.include_router(
+    make_bank_current_balance_source_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
