@@ -4843,3 +4843,52 @@ GET https://mezansalla.com/api/audit/tamara-ssot-diagnostic?date_from=2026-06-06
 Authorization: Bearer <token>
 ```
 الرد سيُحدّد بدقة لماذا تختلف الأرقام (لو ظلّت).
+
+
+---
+
+## Iter-246u — Sticky Historical Pin (2026-06-19)
+**السبب الجذري الذي كشفه Iter-246t Diagnostic:** الـ endpoint التشخيصي على الإنتاج أعاد:
+```json
+{
+  "historical_pinned":           {"count": 0, "sum": 0.0},   ← ZERO!
+  "netzero_excluded":            {"count": 1, "sum": 133.73},
+  "normal_counted_in_gross":     {"count": 115, "sum": 23777.53},
+  "transactions_count":          115,  // كانت 102 بعد iter246q أمس
+  "official_settlement_file_present": false
+}
+```
+
+أمس بعد iter246q apply: 102 معاملة في النافذة، 13 منها مُثبّتة بـ `settlement_source=settlement_entries_historical`. اليوم: 115 معاملة، 0 مُثبّتة. **الـ 13 معاملة فقدت ثبيتها واستعادت `settlement_source=provider_official` ودخلت Gross.**
+
+**كيف؟** التتبع لـ `bnpl/settlement_attribution.py::recompute_attribution_for_doc` كشف أن الدالة (التي تستدعيها مزامنة تمارا الدورية + `POST /api/diagnostics/tamara/attribution/recompute`) كانت تكتب فوق `settlement_source` بقيمة `compute_attribution(doc)` بشكل أعمى، فأبطلت ثبيت iter246q.
+
+**التعديل (Iter-246u):**
+- `backend/bnpl/settlement_attribution.py::recompute_attribution_for_doc` — حارس مبكر:
+  ```python
+  if doc.get("settlement_source") == "settlement_entries_historical":
+      return {"updated": 0, "reason": "historical_pin_preserved", ...}
+  ```
+- `backend/tamara_ssot_diagnostic_routes.py` — تحسين `inferred_cause` ليكشف هذا السيناريو تحديداً بنص واضح يطلب إعادة تشغيل iter246q apply.
+- `backend/tests/test_iter246u_sticky_pin.py` — 2 اختبارات:
+  - `test_historical_pin_survives_recompute` ✅
+  - `test_non_pinned_row_still_gets_recomputed` (لا انحدار للقيود غير المُثبّتة) ✅
+
+**خطوات المستخدم على الإنتاج بعد النشر:**
+1. **Save to GitHub → Deploy** (لنشر iter246u).
+2. **إعادة تشغيل iter246q apply** لإعادة تثبيت الـ 13 معاملة:
+   ```bash
+   curl -X POST https://mezansalla.com/api/admin/tamara-apply-execute \
+        -H "Authorization: Bearer <TOKEN>" \
+        -H "X-Apply-Token: <APPLY_TOKEN>" ...
+   ```
+3. التحقّق:
+   ```bash
+   curl https://mezansalla.com/api/audit/tamara-ssot-diagnostic\
+        ?date_from=2026-06-06&date_to=2026-06-12
+   # متوقَّع: historical_pinned.count=13, modal_path.gross_sales=20848.30
+   ```
+
+**حالة الاختبارات:** 12/12 ناجحة (iter246r + iter246s + iter246t + iter246u).
+
+**ضمان لا انحدار:** بعد iter246u، أي مزامنة مستقبلية لتمارا أو استدعاء `attribution/recompute` لن يلمس القيود المُثبّتة تاريخياً.

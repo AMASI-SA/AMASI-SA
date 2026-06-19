@@ -207,6 +207,11 @@ def make_tamara_ssot_diagnostic_router(db, current_user):
 
         # ── 5. Inferred cause ──
         cause = None
+        # The merchant's expected Gross — if they passed it via baseline.
+        # Heuristic: when historical_count==0 but the modal Gross is
+        # markedly larger than what iter246q would have computed (we
+        # cannot know iter246q's previous output without history), we
+        # warn about a likely pin-wipe.
         if (modal_path["engine_version"] != "iter246r"
                 or forensic_path["engine_version"] != "iter246r"):
             cause = (
@@ -223,6 +228,30 @@ def make_tamara_ssot_diagnostic_router(db, current_user):
                 "policy, its rows will inflate Gross by the historical "
                 "captures' amount. Re-import the CSV or delete the "
                 "outdated `settlement_entries` rows."
+            )
+        elif (historical_count == 0
+              and netzero_count > 0
+              and modal_path["refunds_count"] > netzero_count):
+            # Refunds exceed the captures-in-window with netzero flag —
+            # which implies some refunds point at captures pinned to a
+            # past cycle.  But historical_count==0 says zero captures
+            # carry the pin in the current DB → iter246q's pins were
+            # WIPED (most likely by a Tamara sync calling
+            # `recompute_attribution_for_doc`).  Iter-246u protects
+            # against this going forward, but the merchant needs to
+            # re-run the iter246q apply endpoint to restore the
+            # current row's pins.
+            cause = (
+                "ROOT CAUSE: zero captures in window carry the "
+                "iter246q historical-pin flag, yet refunds_count "
+                f"({modal_path['refunds_count']}) > "
+                f"netzero_count ({netzero_count}). This means a "
+                "subsequent Tamara sync overwrote iter246q's pins. "
+                "Iter-246u patches `recompute_attribution_for_doc` "
+                "to make the pin sticky. After deploying iter-246u, "
+                "re-run `POST /api/admin/tamara-apply-execute` to "
+                "re-pin the affected captures — they will then stay "
+                "pinned forever."
             )
         elif (netzero_count == 0 and historical_count == 0
               and modal_path["gross_sales"] > raw_db_counts[

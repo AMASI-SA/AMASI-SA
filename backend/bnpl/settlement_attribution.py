@@ -120,6 +120,21 @@ async def recompute_attribution_for_doc(
     if not doc:
         return {"updated": 0, "reason": "not found"}
 
+    # Iter-246u — sticky historical pin.  When iter246q deliberately
+    # pinned a capture to a past Tamara settlement file by writing
+    # `settlement_source="settlement_entries_historical"`, subsequent
+    # Tamara syncs MUST NOT overwrite that pin.  Otherwise the 13
+    # captures iter246q stabilised get re-attributed by the next
+    # sync, sneak back into the current cycle's Gross, and the
+    # forensic engine has to do its filtering all over again.
+    if (doc.get("settlement_source")
+            == "settlement_entries_historical"):
+        return {"updated": 0, "reason": "historical_pin_preserved",
+                "effective_settlement_date":
+                    doc.get("effective_settlement_date"),
+                "settlement_source":
+                    "settlement_entries_historical"}
+
     new_eff, new_src = compute_attribution(doc)
     old_eff = doc.get("effective_settlement_date")
     old_src = doc.get("settlement_source")
