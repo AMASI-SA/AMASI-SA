@@ -3950,6 +3950,12 @@ from salla_balance_forensic_routes import (
 )
 api.include_router(
     make_salla_balance_forensic_router(db, current_user))
+# Iter-250b P1.5.d — Settlement File Forensic (READ-ONLY).
+from settlement_file_forensic_routes import (
+    make_settlement_file_forensic_router,
+)
+api.include_router(
+    make_settlement_file_forensic_router(db, current_user))
 # Iter-250a — Post-deploy verification (READ-ONLY).
 from iter250a_verification_routes import (
     make_iter250a_verification_router,
