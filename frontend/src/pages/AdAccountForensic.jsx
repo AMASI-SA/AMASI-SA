@@ -151,9 +151,12 @@ export default function AdAccountForensic() {
     const [forensicResult, setForensicResult] = useState(null);
     const [dryrunResult, setDryrunResult] = useState(null);
     const [recomputeResult, setRecomputeResult] = useState(null);
+    const [rootCauseResult, setRootCauseResult] = useState(null);
+    const [rootCauseCp, setRootCauseCp] = useState("");
     const [busy, setBusy] = useState({ deploy: false, catalog: false,
                                        accounts: false, forensic: false,
-                                       dryrun: false, recompute: false });
+                                       dryrun: false, recompute: false,
+                                       rootCause: false });
 
     const load = async (key, fn) => {
         setBusy((b) => ({ ...b, [key]: true }));
@@ -212,6 +215,19 @@ export default function AdAccountForensic() {
         setRecomputeResult(r.data);
         toast.success("تم تشغيل Reconciliation Dry-Run");
     });
+
+    const runRootCause = () => {
+        if (!rootCauseCp) {
+            toast.error("اختر حساباً للتحقيق العميق أولاً");
+            return;
+        }
+        load("rootCause", async () => {
+            const r = await api.get(
+                `/audit/ad-account-root-cause?ad_account_id=${rootCauseCp}`);
+            setRootCauseResult(r.data);
+            toast.success("تم تشغيل Root-Cause للحساب");
+        });
+    };
 
     return (
         <div className="space-y-6" data-testid="ad-forensic-page"
@@ -1156,6 +1172,329 @@ export default function AdAccountForensic() {
                                     </div>
                                 </div>
                         ))}
+                    </div>
+                )}
+            </SectionCard>
+
+            {/* ─── 6. Root-Cause Forensic (Phase 0.6) ─── */}
+            <SectionCard
+                title="6. Root-Cause Forensic لكل حساب MANUAL_REVIEW"
+                icon={Database}
+                actions={
+                    <JsonActions payload={rootCauseResult}
+                        filename={`root-cause-${rootCauseCp || "x"}.json`}
+                        testidPrefix="rootcause" />
+                }>
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                    <select
+                        data-testid="root-cause-select"
+                        className="rounded-lg border border-slate-300
+                                   px-3 py-2 text-sm min-w-[300px]"
+                        value={rootCauseCp}
+                        onChange={(e) => setRootCauseCp(e.target.value)}>
+                        <option value="">
+                            — اختر حساباً للتحقيق العميق —
+                        </option>
+                        {adAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>
+                                {a.name}
+                                {a.platform ? ` · ${a.platform}` : ""}
+                                {a.currency ? ` · ${a.currency}` : ""}
+                            </option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={runRootCause}
+                        disabled={busy.rootCause || !rootCauseCp}
+                        data-testid="run-root-cause-btn"
+                        className="inline-flex items-center gap-2 px-4 py-2
+                                    rounded-xl bg-emerald-600
+                                    hover:bg-emerald-700 disabled:opacity-50
+                                    text-white text-sm font-bold">
+                        {busy.rootCause
+                            ? <Spinner className="animate-spin" size={16} />
+                            : <MagnifyingGlass size={16} />}
+                        تشغيل Root-Cause
+                    </button>
+                </div>
+
+                {!rootCauseResult && (
+                    <p className="text-sm text-slate-500">
+                        تحقيق عميق Read-Only: آخر 30 قيد، تجميعات
+                        sub_account / entry_type / source / reference_id /
+                        txn_group_id، Topups vs Spends، اكتشاف
+                        misattribution، اقتراح تسوية محاسبية. لا يُجرى
+                        أي تعديل.
+                    </p>
+                )}
+
+                {rootCauseResult && (
+                    <div className="space-y-5"
+                         data-testid="root-cause-results">
+                        <div className="pb-3 border-b border-slate-200">
+                            <h3 className="text-base font-extrabold
+                                            text-slate-900">
+                                {rootCauseResult.ad_account?.name}
+                            </h3>
+                            <div className="text-[11px] text-slate-500
+                                            flex flex-wrap gap-3 mt-1">
+                                <span>currency:&nbsp;
+                                    <b>{rootCauseResult.ad_account?.currency
+                                        || "—"}</b></span>
+                                <span>platform:&nbsp;
+                                    <b>{rootCauseResult.ad_account
+                                        ?.platform_from_counterparty || "<null>"}</b></span>
+                                <span>cached_balance:&nbsp;
+                                    <b className="num">
+                                        {fmtMoney(rootCauseResult.ad_account
+                                            ?.current_balance_cached)}</b></span>
+                                <span>cached_debt:&nbsp;
+                                    <b className="num">
+                                        {fmtMoney(rootCauseResult.ad_account
+                                            ?.debt_balance_cached)}</b></span>
+                            </div>
+                        </div>
+
+                        {/* Identity hints */}
+                        <div className="rounded-xl bg-slate-50/60 border
+                                        border-slate-200 p-3">
+                            <div className="text-[11px] font-extrabold
+                                             text-slate-700 mb-1">
+                                🆔 Identity Hints
+                            </div>
+                            <ul className="text-xs text-slate-700
+                                            list-disc list-inside space-y-1">
+                                {(rootCauseResult.identity_hints || [])
+                                    .map((h, i) => <li key={i}>{h}</li>)}
+                            </ul>
+                            {Object.keys(rootCauseResult
+                                .platform_hints_from_gl_metadata || {})
+                                .length > 0 && (
+                                <div className="mt-2 text-[11px]
+                                                text-slate-600">
+                                    <b>GL metadata.platform:</b>&nbsp;
+                                    {Object.entries(rootCauseResult
+                                        .platform_hints_from_gl_metadata)
+                                        .map(([k, v]) => (
+                                            <span key={k}
+                                                  className="inline-block
+                                                              px-1.5 py-0.5
+                                                              rounded
+                                                              bg-white
+                                                              border
+                                                              border-slate-200
+                                                              ml-1">
+                                                {k}: <b>{v}</b>
+                                            </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Topups vs Spends */}
+                        <div>
+                            <h4 className="text-sm font-extrabold mb-2">
+                                💸 Topups vs Spends
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4
+                                            gap-2 text-xs"
+                                 data-testid="topups-vs-spends-grid">
+                                {Object.entries(rootCauseResult
+                                    .topups_vs_spends || {}).map(([k, v]) => (
+                                    <div key={k}
+                                         className="bg-white rounded border
+                                                     border-slate-200 p-2">
+                                        <div className="text-[9px] font-bold
+                                                         text-slate-500">{k}</div>
+                                        <div className="num text-base
+                                                         font-extrabold
+                                                         text-slate-900">
+                                            {typeof v === "number"
+                                                ? fmtMoney(v) : v}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Aggregations */}
+                        <details>
+                            <summary className="cursor-pointer text-sm
+                                                font-extrabold text-emerald-700">
+                                📊 التجميعات بحسب sub_account / entry_type
+                                / source / txn_group
+                            </summary>
+                            <div className="mt-3 space-y-3 text-xs">
+                                {Object.entries(rootCauseResult
+                                    .aggregations || {}).map(([k, agg]) => (
+                                    <div key={k}>
+                                        <div className="font-extrabold
+                                                         text-slate-700 mb-1">
+                                            {k}
+                                        </div>
+                                        <pre className="bg-slate-50 rounded
+                                                        p-2 overflow-x-auto
+                                                        text-[10px]">
+{JSON.stringify(agg, null, 2)}
+                                        </pre>
+                                    </div>
+                                ))}
+                            </div>
+                        </details>
+
+                        {/* Misattribution */}
+                        {(rootCauseResult.misattribution_signals || [])
+                            .length > 0 && (
+                            <div className="rounded-xl border border-amber-300
+                                            bg-amber-50/40 p-3">
+                                <div className="text-[11px] font-extrabold
+                                                 text-amber-700 mb-1">
+                                    ⚠️ إشارات Misattribution
+                                </div>
+                                <ul className="text-xs text-slate-700
+                                                list-disc list-inside
+                                                space-y-1">
+                                    {rootCauseResult.misattribution_signals
+                                        .map((m, i) => (
+                                        <li key={i}>
+                                            <b>{m.kind}</b>:&nbsp;
+                                            <span className="num">
+                                                {m.count}
+                                            </span>
+                                            &nbsp;— {m.note}
+                                            {m.ids && (
+                                                <div className="text-[10px]
+                                                                text-slate-500
+                                                                ml-4">
+                                                    ids: {m.ids.join(", ")}
+                                                </div>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        {/* Last 30 entries */}
+                        <details>
+                            <summary className="cursor-pointer text-sm
+                                                font-extrabold text-emerald-700">
+                                📜 آخر 30 قيد GL
+                                ({rootCauseResult.last_30_gl_entries?.length
+                                  || 0})
+                            </summary>
+                            <div className="mt-3 overflow-x-auto">
+                                <table className="w-full text-[11px] border
+                                                  border-slate-200 rounded">
+                                    <thead>
+                                        <tr className="bg-slate-100">
+                                            <th className="px-2 py-1">posted_at</th>
+                                            <th className="px-2 py-1">entry_type</th>
+                                            <th className="px-2 py-1">sub_acct</th>
+                                            <th className="px-2 py-1">side</th>
+                                            <th className="px-2 py-1">amount</th>
+                                            <th className="px-2 py-1">notes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(rootCauseResult.last_30_gl_entries
+                                            || []).map((e, i) => (
+                                            <tr key={i}
+                                                className="border-b border-slate-100">
+                                                <td className="px-2 py-1
+                                                                text-[10px]">
+                                                    {(e.posted_at || "")
+                                                        .slice(0, 16)}
+                                                </td>
+                                                <td className="px-2 py-1">
+                                                    {e.entry_type}
+                                                </td>
+                                                <td className="px-2 py-1">
+                                                    {e.sub_account}
+                                                </td>
+                                                <td className={`px-2 py-1 ${
+                                                    e.side === "debit"
+                                                        ? "text-emerald-700"
+                                                        : "text-rose-700"}`}>
+                                                    {e.side}
+                                                </td>
+                                                <td className="px-2 py-1 num">
+                                                    {fmtMoney(e.amount)}
+                                                </td>
+                                                <td className="px-2 py-1
+                                                                text-slate-500
+                                                                text-[10px]">
+                                                    {(e.notes || "")
+                                                        .slice(0, 40)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+
+                        {/* Accounting suggestions */}
+                        {(rootCauseResult.accounting_suggestions || [])
+                            .length > 0 && (
+                            <div className="space-y-2"
+                                 data-testid="accounting-suggestions">
+                                <h4 className="text-sm font-extrabold">
+                                    💡 الاقتراح المحاسبي
+                                </h4>
+                                {rootCauseResult.accounting_suggestions
+                                    .map((s, i) => (
+                                    <div key={i}
+                                         className="rounded-lg border
+                                                     border-emerald-200
+                                                     bg-emerald-50/30 p-3">
+                                        <div className="font-extrabold
+                                                         text-emerald-700">
+                                            {s.title}
+                                        </div>
+                                        <div className="text-xs text-slate-700
+                                                         mt-1">
+                                            {s.explain}
+                                        </div>
+                                        <div className="text-[11px]
+                                                         text-slate-600 mt-2
+                                                         pt-2 border-t
+                                                         border-emerald-200">
+                                            <b>الإجراء المُقترَح:</b>&nbsp;
+                                            {s.action_hint}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Decision matrix */}
+                        <div className="rounded-xl border border-slate-200
+                                         bg-slate-50/60 p-3">
+                            <div className="text-[11px] font-extrabold
+                                             text-slate-700 mb-2">
+                                🎯 Decision Matrix
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4
+                                            gap-2 text-xs">
+                                {Object.entries(rootCauseResult
+                                    .decision_matrix || {}).map(([k, v]) => (
+                                    <div key={k}
+                                         className={`rounded p-2 border ${
+                                            v
+                                                ? "bg-amber-50 border-amber-300 text-amber-700"
+                                                : "bg-slate-50 border-slate-200 text-slate-500"
+                                         }`}>
+                                        <div className="text-[10px] font-bold">
+                                            {k}
+                                        </div>
+                                        <div className="font-extrabold">
+                                            {v ? "نعم" : "لا"}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 )}
             </SectionCard>
