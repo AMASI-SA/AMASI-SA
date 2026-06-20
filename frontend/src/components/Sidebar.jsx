@@ -61,6 +61,7 @@ const SECTIONS = [
             { to: "/audit/employee-orphans", label: "🩺 تشخيص قيود الموظفين اليتيمة", icon: Receipt, testid: "nav-employee-orphans" },
             { to: "/audit/ad-debt", label: "📊 تشخيص فرق المديونيات الإعلانية", icon: Receipt, testid: "nav-ad-debt-diagnostic" },
             { to: "/audit/ad-account-forensic", label: "🔬 Forensic للحسابات الإعلانية", icon: Receipt, testid: "nav-ad-account-forensic" },
+            { to: "/audit/balance-drift", label: "🩺 انحراف الأرصدة (Iter-250b P1.5)", icon: Receipt, testid: "nav-balance-drift" },
             { to: "/audit/ledger-health", label: "🩺 صحة الـ Ledger (Iter-240)", icon: Receipt, testid: "nav-ledger-health" },
             { to: "/settings/ads-currencies", label: "💱 عملات وعمولة بنكية للحسابات الإعلانية", icon: Gear, testid: "nav-ads-currencies" },
             { to: "/salla-settlements", label: "تسويات سلة 🟧", icon: Receipt, testid: "nav-salla-settlements" },

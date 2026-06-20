@@ -3931,6 +3931,12 @@ from financial_pages_inventory_routes import (
 )
 api.include_router(
     make_financial_pages_inventory_router(current_user))
+# Iter-250b P1.5 — Balance drift diagnostic (READ-ONLY).
+from balance_drift_diagnostic_routes import (
+    make_balance_drift_diagnostic_router,
+)
+api.include_router(
+    make_balance_drift_diagnostic_router(db, current_user))
 # Iter-250a — Post-deploy verification (READ-ONLY).
 from iter250a_verification_routes import (
     make_iter250a_verification_router,
