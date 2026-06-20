@@ -3961,6 +3961,12 @@ from ad_account_root_cause_routes import (
 )
 api.include_router(
     make_ad_account_root_cause_router(db, current_user))
+# Iter-250b P0.7 — Ad-account actual unpaid debt dry-run (READ-ONLY).
+from ad_account_actual_debt_routes import (
+    make_ad_account_actual_debt_router,
+)
+api.include_router(
+    make_ad_account_actual_debt_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))

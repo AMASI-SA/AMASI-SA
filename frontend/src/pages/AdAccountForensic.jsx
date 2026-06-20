@@ -153,10 +153,12 @@ export default function AdAccountForensic() {
     const [recomputeResult, setRecomputeResult] = useState(null);
     const [rootCauseResult, setRootCauseResult] = useState(null);
     const [rootCauseCp, setRootCauseCp] = useState("");
+    const [actualDebtResult, setActualDebtResult] = useState(null);
     const [busy, setBusy] = useState({ deploy: false, catalog: false,
                                        accounts: false, forensic: false,
                                        dryrun: false, recompute: false,
-                                       rootCause: false });
+                                       rootCause: false,
+                                       actualDebt: false });
 
     const load = async (key, fn) => {
         setBusy((b) => ({ ...b, [key]: true }));
@@ -228,6 +230,13 @@ export default function AdAccountForensic() {
             toast.success("تم تشغيل Root-Cause للحساب");
         });
     };
+
+    const runActualDebt = () => load("actualDebt", async () => {
+        const r = await api.get(
+            "/audit/ad-account-actual-debt-dryrun?include_clean=true");
+        setActualDebtResult(r.data);
+        toast.success("تم تشغيل Actual Unpaid Debt Dry-Run");
+    });
 
     return (
         <div className="space-y-6" data-testid="ad-forensic-page"
@@ -1658,6 +1667,213 @@ export default function AdAccountForensic() {
                                 ))}
                             </div>
                         </div>
+                    </div>
+                )}
+            </SectionCard>
+
+            {/* ─── 7. Actual Unpaid Debt Dry-Run (Phase 0.7) ─── */}
+            <SectionCard
+                title="7. Actual Unpaid Debt — استبعاد الافتتاحيات (Phase 0.7)"
+                icon={Warning}
+                actions={
+                    <div className="flex items-center gap-2">
+                        <JsonActions payload={actualDebtResult}
+                            filename="ad-actual-debt.json"
+                            testidPrefix="actualdebt" />
+                        <button
+                            onClick={runActualDebt}
+                            disabled={busy.actualDebt}
+                            data-testid="run-actual-debt-btn"
+                            className="inline-flex items-center gap-2 px-4 py-2
+                                        rounded-xl bg-emerald-600
+                                        hover:bg-emerald-700 disabled:opacity-50
+                                        text-white text-sm font-bold">
+                            {busy.actualDebt
+                                ? <Spinner className="animate-spin" size={16} />
+                                : <MagnifyingGlass size={16} />}
+                            تشغيل الـ Dry-Run
+                        </button>
+                    </div>
+                }>
+                {!actualDebtResult && (
+                    <p className="text-sm text-slate-500">
+                        يستبعد كل قيود opening_balance / manual_debt /
+                        migration ويحسب الدين الفعلي:
+                        <code className="text-emerald-700 text-[11px]
+                                          mx-1">
+                            actual_unpaid_debt = actual_ad_spend −
+                            actual_topups − actual_payments
+                        </code>
+                        لكل حساب إعلاني. لا يُجرى أي تعديل.
+                    </p>
+                )}
+                {actualDebtResult && (
+                    <div className="space-y-4">
+                        <div className="rounded-xl border border-emerald-200
+                                        bg-emerald-50/30 p-3 text-xs
+                                        text-slate-700">
+                            <b>القاعدة المحاسبية:</b>&nbsp;
+                            <code>
+                                {actualDebtResult.accounting_rule}
+                            </code>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3
+                                         pb-3 border-b border-slate-200">
+                            <span data-testid="actualdebt-overall"
+                                  className={`px-3 py-1 rounded-full border
+                                              text-xs font-extrabold ${
+                                actualDebtResult.overall
+                                    === "all_accounts_will_become_zero"
+                                    ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+                                : actualDebtResult.overall
+                                    === "some_accounts_show_overpayment_needs_review"
+                                    ? "bg-rose-100 text-rose-700 border-rose-300"
+                                : "bg-amber-100 text-amber-700 border-amber-300"
+                            }`}>
+                                overall: {actualDebtResult.overall}
+                            </span>
+                            <span className="text-xs text-slate-600">
+                                scanned:&nbsp;
+                                <b>{actualDebtResult.totals?.accounts_scanned}</b>
+                                &nbsp;· zero:&nbsp;
+                                <b className="text-emerald-700">
+                                    {actualDebtResult.totals
+                                        ?.accounts_becoming_zero}
+                                </b>
+                                &nbsp;· real_debt:&nbsp;
+                                <b className="text-amber-700">
+                                    {actualDebtResult.totals
+                                        ?.accounts_with_real_debt}
+                                </b>
+                                &nbsp;· overpaid:&nbsp;
+                                <b className="text-rose-700">
+                                    {actualDebtResult.totals
+                                        ?.accounts_with_credit_overpaid}
+                                </b>
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4
+                                        gap-2 text-xs">
+                            {Object.entries(actualDebtResult.totals || {})
+                                .filter(([k]) => k.startsWith("total_"))
+                                .map(([k, v]) => (
+                                <div key={k}
+                                     className="bg-white rounded border
+                                                 border-slate-200 p-2">
+                                    <div className="text-[9px] font-bold
+                                                     text-slate-500">{k}</div>
+                                    <div className="num text-base
+                                                     font-extrabold">
+                                        {fmtMoney(v)}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs border
+                                              border-slate-200 rounded-lg"
+                                   data-testid="actualdebt-table">
+                                <thead>
+                                    <tr className="bg-slate-100 text-slate-700">
+                                        <th className="px-3 py-2 text-right">الحساب</th>
+                                        <th className="px-3 py-2">current_gl_debt</th>
+                                        <th className="px-3 py-2">excluded_opening</th>
+                                        <th className="px-3 py-2">actual_spend</th>
+                                        <th className="px-3 py-2">actual_topups</th>
+                                        <th className="px-3 py-2">actual_payments</th>
+                                        <th className="px-3 py-2">→ proposed</th>
+                                        <th className="px-3 py-2">Δ</th>
+                                        <th className="px-3 py-2">status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(actualDebtResult.accounts || []).map(
+                                        (a, i) => (
+                                        <tr key={a.ad_account_id}
+                                            data-testid={`actualdebt-row-${i}`}
+                                            className={`border-b ${
+                                                a.final_status === "becomes_zero"
+                                                    ? "bg-emerald-50/30"
+                                                : a.final_status
+                                                    === "has_credit_overpaid"
+                                                    ? "bg-rose-50/30"
+                                                    : "bg-amber-50/20"
+                                            }`}>
+                                            <td className="px-3 py-2 font-bold">
+                                                {a.name}
+                                                <div className="text-[10px]
+                                                                text-slate-500">
+                                                    {a.platform}
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2 num">
+                                                {fmtMoney(a.current_gl_debt)}
+                                            </td>
+                                            <td className="px-3 py-2 num
+                                                            text-slate-500">
+                                                {fmtMoney(a.excluded_opening_debt)}
+                                            </td>
+                                            <td className="px-3 py-2 num">
+                                                {fmtMoney(a.actual_ad_spend)}
+                                            </td>
+                                            <td className="px-3 py-2 num">
+                                                {fmtMoney(a.actual_topups)}
+                                            </td>
+                                            <td className="px-3 py-2 num">
+                                                {fmtMoney(a.actual_payments)}
+                                            </td>
+                                            <td className="px-3 py-2 num
+                                                            font-extrabold
+                                                            text-emerald-700">
+                                                {fmtMoney(a
+                                                    .proposed_actual_unpaid_debt)}
+                                            </td>
+                                            <td className="px-3 py-2 num"
+                                                style={{
+                                                  color: Math.abs(
+                                                    a.delta_vs_current_gl_debt
+                                                      || 0) > 0.02
+                                                    ? "#dc2626" : "#059669"
+                                                }}>
+                                                {fmtMoney(a
+                                                    .delta_vs_current_gl_debt)}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <span className={`px-1.5 py-0.5
+                                                    rounded text-[10px]
+                                                    font-extrabold ${
+                                                    a.final_status
+                                                        === "becomes_zero"
+                                                    ? "bg-emerald-100 text-emerald-700"
+                                                    : a.final_status
+                                                        === "has_credit_overpaid"
+                                                    ? "bg-rose-100 text-rose-700"
+                                                    : "bg-amber-100 text-amber-700"
+                                                }`}>
+                                                    {a.final_status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {(actualDebtResult.accounts || []).map((a, i) => (
+                            <div key={`int-${i}`}
+                                 className="rounded-lg border
+                                             border-slate-200 bg-white
+                                             p-3 text-xs">
+                                <b>{a.name}:</b>&nbsp;{a.interpretation}
+                                <div className="text-[10px] text-slate-500
+                                                 mt-1 font-mono">
+                                    {a.formula}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </SectionCard>
