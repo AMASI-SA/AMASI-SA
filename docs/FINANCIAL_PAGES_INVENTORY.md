@@ -80,7 +80,7 @@
 | Route | المصدر | SSOT | تصنيف | Hide | Risk | يؤثر على الرصيد؟ | البديل | السبب |
 |---|---|---|---|---|---|---|---|---|
 | `/accounts` | `mixed` | SSOT | 🟢 KEEP | ✅ KEEP_VISIBLE | 🟢 LOW | نعم | `—` | نقطة الدخول الرئيسية لإدارة الحسابات. ترتد على account_balance_ssot() لذا متوافقة مع SSOT. |
-| `/accounts/:id` | `mixed` | LEGACY | 🟡 MERGE | 🔍 NEEDS_REVIEW | 🔴 HIGH | نعم | `دمج _ledger_based_tx_feed + legacy walker إلى مصدر موحّد بعد Reset` | ينقسم بين فرعين (is_migrated → ledger، غير ذلك → account_transactions). أصل مشكلة Iter-249. لا يجب إبقاء فرعين. |
+| `/accounts/:id` | `mixed` | HYBRID (SSOT headline + Legacy feed) | 🟢 KEEP (Page) + 🟡 MERGE (Backend SSOT) | ✅ KEEP_VISIBLE | 🔴 HIGH | نعم | `—` (الصفحة فريدة وتجب إبقاؤها) | **تمت المراجعة في Iter-250b · P1.4** (راجع ITER250B_P1.4_ACCOUNTS_REVIEW.md). Headline يستخدم `account_balance_ssot` ✓. لكن Feed يفلتر `sub_account="main"` فقط ⇒ يُخفي BNPL Settlements (Iter-249). 8 إصلاحات F1–F8 مقترَحة (تنتظر موافقة). |
 | `/financial-position` | `mixed` | LEGACY | 🟠 DEPRECATE | 🚫 SAFE_TO_HIDE | 🟡 MEDIUM | لا | `/financial-position-ledger` | تقرير المركز المالي القديم. تم استبداله بالنسخة المبنية على ledger مباشرة. |
 | `/financial-position-ledger` | `general_ledger` | SSOT | 🟢 KEEP | ✅ KEEP_VISIBLE | 🟢 LOW | لا | `—` | البديل الـ SSOT لتقرير المركز المالي. |
 
