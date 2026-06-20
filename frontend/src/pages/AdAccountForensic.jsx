@@ -716,6 +716,58 @@ export default function AdAccountForensic() {
                 )}
                 {dryrunResult && (
                     <div className="space-y-4">
+                        {dryrunResult.accounts_source && (
+                            <div className="rounded-xl border
+                                            border-emerald-200
+                                            bg-emerald-50/30 p-3"
+                                 data-testid="dryrun-discovery">
+                                <div className="text-[11px] font-extrabold
+                                                text-emerald-700 mb-2">
+                                    🔍 اكتشاف الحسابات (Discovery)
+                                </div>
+                                <div className="grid grid-cols-2
+                                                md:grid-cols-4 gap-2 text-xs">
+                                    {Object.entries(
+                                        dryrunResult.accounts_source
+                                    ).map(([k, v]) => (
+                                        (typeof v === "number") && (
+                                            <div key={k}
+                                                 className="bg-white rounded
+                                                            border border-slate-200
+                                                            p-2">
+                                                <div className="text-[9px]
+                                                                text-slate-500
+                                                                font-bold">
+                                                    {k}
+                                                </div>
+                                                <div className="num text-lg
+                                                                font-extrabold
+                                                                text-slate-900">
+                                                    {v}
+                                                </div>
+                                            </div>
+                                        )
+                                    ))}
+                                </div>
+                                {dryrunResult.accounts_source
+                                    ?.no_accounts_reason && (
+                                    <div className="text-xs text-rose-700
+                                                    mt-2 font-bold">
+                                        ⚠️ {dryrunResult.accounts_source
+                                                .no_accounts_reason}
+                                    </div>
+                                )}
+                                {(dryrunResult.accounts_source
+                                    ?.gl_only_orphans || []).length > 0 && (
+                                    <div className="text-[10px] text-amber-700
+                                                    mt-2">
+                                        <b>GL-only orphans:</b>&nbsp;
+                                        {dryrunResult.accounts_source
+                                            .gl_only_orphans.join(", ")}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <div className="flex flex-wrap items-center gap-3
                                          pb-3 border-b border-slate-200">
                             <span data-testid="dryrun-overall"

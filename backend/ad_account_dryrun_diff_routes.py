@@ -50,20 +50,87 @@ def make_ad_account_dryrun_diff_router(db, current_user):
     ):
         uid = user["id"]
 
-        # 1. Discover accounts to scan
-        accounts_filter: Dict[str, Any] = {
-            "user_id": uid, "type": "ad_account",
+        # 1. Discover accounts using **multi-source** logic so we
+        #    don't miss anything (Iter-250b dryrun-fix).
+        #
+        # The historic counterparty field is `kind` (NOT `type`). On
+        # top of that, some accounts may have GL rows but no longer
+        # match the counterparty filter (renamed/soft-deleted). We
+        # therefore collect ids from THREE sources and merge.
+        accounts: List[Dict[str, Any]] = []
+        accounts_by_id: Dict[str, Dict[str, Any]] = {}
+
+        # Source A — counterparties.kind == ad_account
+        cp_filter_a: Dict[str, Any] = {
+            "user_id": uid, "kind": "ad_account",
         }
         if ad_account_id:
-            accounts_filter["id"] = ad_account_id
-        accounts = []
+            cp_filter_a["id"] = ad_account_id
         async for a in db.counterparties.find(
-            accounts_filter,
+            cp_filter_a,
             {"_id": 0, "id": 1, "name": 1, "platform": 1,
              "currency": 1, "opening_balance": 1,
-             "current_balance": 1, "debt_balance": 1},
+             "current_balance": 1, "debt_balance": 1,
+             "kind": 1, "category": 1},
         ):
-            accounts.append(a)
+            a["_source"] = "counterparties.kind"
+            accounts_by_id[a["id"]] = a
+
+        # Source B — counterparties.category == 'advertising' (older
+        # docs / sub-classification).
+        cp_filter_b: Dict[str, Any] = {
+            "user_id": uid, "category": "advertising",
+        }
+        if ad_account_id:
+            cp_filter_b["id"] = ad_account_id
+        async for a in db.counterparties.find(
+            cp_filter_b,
+            {"_id": 0, "id": 1, "name": 1, "platform": 1,
+             "currency": 1, "opening_balance": 1,
+             "current_balance": 1, "debt_balance": 1,
+             "kind": 1, "category": 1},
+        ):
+            if a["id"] not in accounts_by_id:
+                a["_source"] = "counterparties.category"
+                accounts_by_id[a["id"]] = a
+
+        # Source C — distinct entity_id in general_ledger where
+        # entity_type='ad_account' (catches GL-only orphans).
+        gl_match: Dict[str, Any] = {
+            "user_id": uid, "entity_type": "ad_account",
+            "status": "posted",
+        }
+        if ad_account_id:
+            gl_match["entity_id"] = ad_account_id
+        gl_ids: List[str] = await db.general_ledger.distinct(
+            "entity_id", gl_match)
+        gl_only_ids: List[str] = []
+        for gid in gl_ids:
+            if gid and gid not in accounts_by_id:
+                gl_only_ids.append(gid)
+                # Fetch counterparty doc even if it doesn't match
+                # kind/category filters (could be renamed/legacy).
+                cp = await db.counterparties.find_one(
+                    {"id": gid, "user_id": uid},
+                    {"_id": 0, "id": 1, "name": 1, "platform": 1,
+                     "currency": 1, "opening_balance": 1,
+                     "current_balance": 1, "debt_balance": 1,
+                     "kind": 1, "category": 1},
+                )
+                if cp:
+                    cp["_source"] = "general_ledger.entity_id"
+                    accounts_by_id[gid] = cp
+                else:
+                    accounts_by_id[gid] = {
+                        "id": gid,
+                        "name": f"<orphan:{gid[:8]}>",
+                        "platform": None, "currency": None,
+                        "opening_balance": 0,
+                        "current_balance": 0, "debt_balance": 0,
+                        "_source": "general_ledger.orphan",
+                    }
+
+        accounts = list(accounts_by_id.values())
 
         results: List[Dict[str, Any]] = []
         totals = {
@@ -269,12 +336,52 @@ def make_ad_account_dryrun_diff_router(db, current_user):
         else:
             overall = "partial_apply_possible"
 
+        # ── Discovery diagnostics (Iter-250b dryrun-fix) ──────────
+        counterparties_count = await db.counterparties.count_documents({
+            "user_id": uid, "kind": "ad_account",
+        })
+        counterparties_by_category = (
+            await db.counterparties.count_documents({
+                "user_id": uid, "category": "advertising",
+            })
+        )
+        api_listing_count = await db.counterparties.count_documents({
+            "user_id": uid, "kind": "ad_account", "active": {"$ne": False},
+        })
+        gl_distinct_count = len(gl_ids)
+        sources_breakdown: Dict[str, int] = {}
+        for a in accounts:
+            sources_breakdown[a.get("_source", "?")] = (
+                sources_breakdown.get(a.get("_source", "?"), 0) + 1
+            )
+        accounts_source = {
+            "counterparties_kind_ad_account": counterparties_count,
+            "counterparties_category_advertising":
+                counterparties_by_category,
+            "gl_distinct_ad_account_entity_ids": gl_distinct_count,
+            "api_ad_accounts_count (kind=ad_account, active≠false)":
+                api_listing_count,
+            "merged_unique_accounts_scanned":
+                totals["accounts_scanned"],
+            "per_source_breakdown": sources_breakdown,
+            "gl_only_orphans": gl_only_ids,
+            "no_accounts_reason": (
+                None if totals["accounts_scanned"] > 0
+                else (
+                    "لم يُعثر على حسابات في counterparties "
+                    "(kind=ad_account) ولا category=advertising "
+                    "ولا في general_ledger (entity_type=ad_account)."
+                )
+            ),
+        }
+
         return {
             "ok": True,
             "iter": "iter250b-p0-dryrun",
             "read_only": True,
             "totals": totals,
             "overall_recommendation": overall,
+            "accounts_source": accounts_source,
             "accounts": results,
             "forward_fix_plan_ref": "/app/docs/ITER250B_P0_PLAN.md",
         }

@@ -273,7 +273,7 @@ def make_ad_account_forensic_router(db, current_user):
         uid = user["id"]
         cp = await db.counterparties.find_one(
             {"id": ad_account_id, "user_id": uid,
-             "type": "ad_account"},
+             "kind": "ad_account"},
             {"_id": 0},
         )
         if not cp:
