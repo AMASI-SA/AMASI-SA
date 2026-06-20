@@ -3944,6 +3944,12 @@ from account_tx_vs_ledger_walk_routes import (
 )
 api.include_router(
     make_account_tx_vs_ledger_walk_router(db, current_user))
+# Iter-250b P1.5.c — Salla Balance Forensic (READ-ONLY).
+from salla_balance_forensic_routes import (
+    make_salla_balance_forensic_router,
+)
+api.include_router(
+    make_salla_balance_forensic_router(db, current_user))
 # Iter-250a — Post-deploy verification (READ-ONLY).
 from iter250a_verification_routes import (
     make_iter250a_verification_router,
