@@ -3931,6 +3931,18 @@ from financial_pages_inventory_routes import (
 )
 api.include_router(
     make_financial_pages_inventory_router(current_user))
+# Iter-250a — Post-deploy verification (READ-ONLY).
+from iter250a_verification_routes import (
+    make_iter250a_verification_router,
+)
+api.include_router(
+    make_iter250a_verification_router(db, current_user))
+# Iter-250b P0 — Ad-account write-paths forensic (READ-ONLY).
+from ad_account_forensic_routes import (
+    make_ad_account_forensic_router,
+)
+api.include_router(
+    make_ad_account_forensic_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
