@@ -213,6 +213,12 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             })
             salla_purchases_total += abs(net or gross)
             salla_purchases_count += 1
+            # Iter-250b · P1.5.e — Bug fix: include wallet_recharge in
+            # totals.net so that Σ(actual_net_amount) across ALL rows
+            # equals totals.net. Previously omitted, causing the
+            # parser header total to overshoot the Salla panel net
+            # by exactly `salla_purchases_total`.
+            total_net += net
             continue
 
         # ── Customer refund rows ─────────────────────────────────────
