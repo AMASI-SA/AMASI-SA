@@ -60,6 +60,12 @@ def make_salla_balance_forensic_router(db, current_user):
         search_tolerance: float = Query(1.0, ge=0.0, le=100.0),
         lookback_days: int = Query(14, ge=1, le=365),
         list_limit: int = Query(20, ge=1, le=100),
+        real_balance_at_provider: Optional[float] = Query(
+            None,
+            description=(
+                "Optional: merchant-reported REAL balance on the "
+                "Salla panel right now (in SAR). Used to compute "
+                "the exact gap reconciliation.")),
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
@@ -483,6 +489,201 @@ def make_salla_balance_forensic_router(db, current_user):
             else "accounts.current_balance (legacy fallback)"
         )
 
+        # ── 12.b — Live central metrics (READ-ONLY, no sync) ──────
+        # Recompute expected_orders RIGHT NOW from unified_orders so
+        # we can see if the stored expected is stale.
+        central_live: Dict[str, Any] = {"available": False}
+        try:
+            from payment_gateway_metrics import compute_metrics
+            metrics = await compute_metrics(db, uid)
+            rows = metrics.get("rows") or []
+            # Map account's canonical key → central keys
+            account_to_central = {
+                "salla": ["salla", "mada", "applepay",
+                          "stcpay", "credit_card"],
+                "tamara": ["tamara"],
+                "tabby": ["tabby"],
+                "emkan": ["emkan"],
+                "bank_transfer": ["bank_transfer"],
+                "cash_on_delivery": ["cod"],
+            }
+            keys = account_to_central.get(
+                acc.get("normalized_payment_method"), [])
+            live_net = 0.0
+            live_orders = 0
+            per_key_breakdown: List[Dict[str, Any]] = []
+            for r in rows:
+                if r.get("key") in keys:
+                    live_net += float(r.get("net") or 0)
+                    live_orders += int(r.get("orders_count") or 0)
+                    per_key_breakdown.append({
+                        "key": r.get("key"),
+                        "net": _r(r.get("net")),
+                        "gross": _r(r.get("gross")),
+                        "fees": _r(r.get("fees")),
+                        "refunds": _r(r.get("refunds")),
+                        "orders_count": int(r.get("orders_count") or 0),
+                    })
+            central_live = {
+                "available": True,
+                "live_expected_net": _r(live_net),
+                "live_orders_count": live_orders,
+                "stored_expected": stored_expected,
+                "drift_live_vs_stored": _r(live_net - stored_expected),
+                "per_key_breakdown": per_key_breakdown,
+            }
+        except Exception as e:  # noqa: BLE001
+            central_live = {"available": False, "error": repr(e)}
+
+        # ── 12.c — Transfer summary by month ──────────────────────
+        # Show every recorded transfer OUT of Salla so the merchant
+        # can match against bank statements.
+        transfers_by_month: Dict[str, Dict[str, Any]] = {}
+        transfers_all: List[Dict[str, Any]] = []
+        async for tx in db.account_transactions.find(
+            {"user_id": uid, "account_id": acc["id"],
+             "direction": "out"},
+            {"_id": 0, "id": 1, "transaction_type": 1, "amount": 1,
+             "description": 1, "transaction_date": 1,
+             "peer_account_id": 1, "peer_account_name": 1,
+             "created_at": 1},
+        ).sort("transaction_date", -1):
+            amt = float(tx.get("amount") or 0)
+            month = (
+                tx.get("transaction_date") or tx.get("created_at")
+                or "—"
+            )
+            if isinstance(month, datetime):
+                month = month.strftime("%Y-%m")
+            elif isinstance(month, str):
+                month = month[:7] if len(month) >= 7 else month
+            else:
+                month = "—"
+            agg = transfers_by_month.setdefault(
+                month, {"count": 0, "total": 0.0})
+            agg["count"] += 1
+            agg["total"] += amt
+            transfers_all.append({
+                "id": tx.get("id"),
+                "transaction_type": tx.get("transaction_type"),
+                "amount": _r(amt),
+                "description": (tx.get("description") or "")[:80],
+                "transaction_date": tx.get("transaction_date"),
+                "peer_account_name": tx.get("peer_account_name"),
+                "peer_account_id": tx.get("peer_account_id"),
+            })
+        transfers_by_month_list = [
+            {"month": k, "count": v["count"], "total": _r(v["total"])}
+            for k, v in sorted(transfers_by_month.items())
+        ]
+        transfers_total = _r(sum(t["amount"] for t in transfers_all))
+
+        # ── 12.d — Refunds tracking ───────────────────────────────
+        # Sum of refund event_types in settlement_entries.
+        refunds_summary = {
+            "full_refunds_count": 0,
+            "full_refunds_amount": 0.0,
+            "partial_refunds_count": 0,
+            "partial_refunds_amount": 0.0,
+        }
+        async for r in db.settlement_entries.aggregate([
+            {"$match": {
+                "user_id": uid, "provider": "salla",
+                "event_type": "refund"}},
+            {"$group": {
+                "_id": None,
+                "full_count": {"$sum": {"$cond": [
+                    {"$gt": ["$actual_refund_amount", 0]}, 1, 0]}},
+                "full_amount": {
+                    "$sum": "$actual_refund_amount"},
+                "partial_count": {"$sum": {"$cond": [
+                    {"$gt":
+                     ["$actual_partial_refund_amount", 0]}, 1, 0]}},
+                "partial_amount": {
+                    "$sum": "$actual_partial_refund_amount"},
+            }},
+        ]):
+            refunds_summary["full_refunds_count"] = int(
+                r.get("full_count") or 0)
+            refunds_summary["full_refunds_amount"] = _r(
+                r.get("full_amount"))
+            refunds_summary["partial_refunds_count"] = int(
+                r.get("partial_count") or 0)
+            refunds_summary["partial_refunds_amount"] = _r(
+                r.get("partial_amount"))
+
+        # ── 12.e — Commissions / fees tracking ────────────────────
+        commissions_summary = {"total_fees": 0.0, "total_vat": 0.0,
+                               "entries_count": 0}
+        async for r in db.settlement_entries.aggregate([
+            {"$match": {"user_id": uid, "provider": "salla"}},
+            {"$group": {
+                "_id": None,
+                "fees": {"$sum": "$actual_payment_fee"},
+                "vat": {"$sum": "$actual_payment_vat"},
+                "n": {"$sum": 1}}},
+        ]):
+            commissions_summary["total_fees"] = _r(r.get("fees"))
+            commissions_summary["total_vat"] = _r(r.get("vat"))
+            commissions_summary["entries_count"] = int(
+                r.get("n") or 0)
+
+        # ── 12.f — GAP RECONCILIATION ─────────────────────────────
+        # The crown jewel — exactly what part of the gap belongs to
+        # which suspect. Always computed; if no real_balance was
+        # passed, returns hypothetical breakdown.
+        system_displayed = ssot_value or stored_current_balance
+        gap_reconciliation = {
+            "system_displayed_balance": system_displayed,
+            "stored_expected": stored_expected,
+            "transferred_total_out": transfers_total,
+            "stored_formula_check": _r(
+                stored_expected - transfers_total
+                - system_displayed),  # should be ~0 if formula holds
+        }
+        if real_balance_at_provider is not None:
+            real = float(real_balance_at_provider)
+            gap = _r(real - system_displayed)
+            # Scenario A: expected is stale (too low)
+            # If transferred is correct: real_expected = real + transferred
+            expected_should_be_A = _r(real + transfers_total)
+            expected_shortfall_A = _r(
+                expected_should_be_A - stored_expected)
+            # Scenario B: transferred is too high
+            # If expected is correct: real_transferred = expected - real
+            transferred_should_be_B = _r(stored_expected - real)
+            transferred_excess_B = _r(
+                transfers_total - transferred_should_be_B)
+            gap_reconciliation.update({
+                "real_balance_at_provider": real,
+                "gap_real_minus_system": gap,
+                "scenario_A_expected_stale": {
+                    "description": (
+                        "expected_orders_balance is too low because "
+                        "Salla received MORE sales than we've synced."),
+                    "expected_should_be": expected_should_be_A,
+                    "expected_shortfall": expected_shortfall_A,
+                    "likelihood_check": (
+                        "live central metrics vs stored expected — "
+                        "see central_live.drift_live_vs_stored"),
+                },
+                "scenario_B_transferred_excess": {
+                    "description": (
+                        "account_transactions OUT is too high "
+                        "(duplicate/over-recorded transfers)."),
+                    "transferred_should_be": transferred_should_be_B,
+                    "transferred_excess": transferred_excess_B,
+                    "likelihood_check": (
+                        "review transfers_all and match each row "
+                        "to a real bank deposit."),
+                },
+                "likely_cause_hint": (
+                    "If central_live.drift_live_vs_stored > 0, "
+                    "Scenario A is more likely (sync stale). "
+                    "If = 0, Scenario B is more likely "
+                    "(over-recorded transfers)."),
+            })
+
         return {
             "ok": True,
             "iter": "iter250b_p1_5_c",
@@ -554,6 +755,17 @@ def make_salla_balance_forensic_router(db, current_user):
                 "lookback_days": lookback_days,
                 "since": since_dt.isoformat(),
             },
+            # ── Iter-250b · P1.5.c+ — extended sections ──
+            "central_metrics_live": central_live,
+            "transfers_out_summary": {
+                "total_count": len(transfers_all),
+                "total_amount": transfers_total,
+                "by_month": transfers_by_month_list,
+                "all_rows": transfers_all,
+            },
+            "refunds_summary": refunds_summary,
+            "commissions_summary": commissions_summary,
+            "gap_reconciliation": gap_reconciliation,
             "recent_settlement_files": settlement_files_list,
             "recent_settlement_entries": settlement_entries_recent,
             "recent_payment_adjustments": pa_recent,
