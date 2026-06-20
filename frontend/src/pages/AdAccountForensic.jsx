@@ -149,8 +149,10 @@ export default function AdAccountForensic() {
     const [adAccounts, setAdAccounts] = useState([]);
     const [selectedCp, setSelectedCp] = useState("");
     const [forensicResult, setForensicResult] = useState(null);
+    const [dryrunResult, setDryrunResult] = useState(null);
     const [busy, setBusy] = useState({ deploy: false, catalog: false,
-                                       accounts: false, forensic: false });
+                                       accounts: false, forensic: false,
+                                       dryrun: false });
 
     const load = async (key, fn) => {
         setBusy((b) => ({ ...b, [key]: true }));
@@ -195,6 +197,13 @@ export default function AdAccountForensic() {
             toast.success("تم تشغيل Forensic للحساب");
         });
     };
+
+    const runDryrun = () => load("dryrun", async () => {
+        const r = await api.get(
+            "/audit/ad-account-dryrun-diff?include_clean=true");
+        setDryrunResult(r.data);
+        toast.success("تم تشغيل Dry-Run Diff لكل الحسابات");
+    });
 
     return (
         <div className="space-y-6" data-testid="ad-forensic-page"
@@ -666,6 +675,196 @@ export default function AdAccountForensic() {
                                 {forensicResult.recommendation}
                             </p>
                         </div>
+                    </div>
+                )}
+            </SectionCard>
+
+            {/* ─────────── 4. Dry-Run Diff (Iter-250b P0) ─────────── */}
+            <SectionCard
+                title="4. Forward-Fix Dry-Run Diff (لكل الحسابات)"
+                icon={Warning}
+                actions={
+                    <div className="flex items-center gap-2">
+                        <JsonActions payload={dryrunResult}
+                            filename="ad-dryrun-diff.json"
+                            testidPrefix="dryrun" />
+                        <button
+                            onClick={runDryrun}
+                            disabled={busy.dryrun}
+                            data-testid="run-dryrun-btn"
+                            className="inline-flex items-center gap-2 px-4 py-2
+                                        rounded-xl bg-emerald-600
+                                        hover:bg-emerald-700 disabled:opacity-50
+                                        text-white text-sm font-bold">
+                            {busy.dryrun ? <Spinner className="animate-spin"
+                                                    size={16} />
+                                         : <MagnifyingGlass size={16} />}
+                            تشغيل Dry-Run
+                        </button>
+                    </div>
+                }>
+                {!dryrunResult && (
+                    <p className="text-sm text-slate-500">
+                        يقرأ legacy + GL لكل حساب إعلاني ويُصنّف كل
+                        حساب بـ freeze_safety. لا يُنفّذ أي كتابة.
+                        راجع
+                        &nbsp;<code className="text-emerald-700 text-[11px]">
+                            /app/docs/ITER250B_P0_PLAN.md
+                        </code>
+                        &nbsp;للخطة الكاملة قبل المراحل التالية.
+                    </p>
+                )}
+                {dryrunResult && (
+                    <div className="space-y-4">
+                        <div className="flex flex-wrap items-center gap-3
+                                         pb-3 border-b border-slate-200">
+                            <span data-testid="dryrun-overall"
+                                  className={`px-3 py-1 rounded-full border
+                                              text-xs font-extrabold ${
+                                dryrunResult.overall_recommendation
+                                    === "safe_to_apply_forward_fix"
+                                    ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+                                : dryrunResult.overall_recommendation
+                                    === "all_clean"
+                                    ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+                                : dryrunResult.overall_recommendation
+                                    === "needs_reconciliation_before_apply"
+                                    ? "bg-rose-100 text-rose-700 border-rose-300"
+                                : "bg-amber-100 text-amber-700 border-amber-300"
+                            }`}>
+                                overall: {dryrunResult.overall_recommendation}
+                            </span>
+                            <span className="text-xs text-slate-600">
+                                scanned:&nbsp;
+                                <b>{dryrunResult.totals?.accounts_scanned}</b>
+                                &nbsp;· clean:&nbsp;
+                                <b className="text-emerald-700">
+                                    {dryrunResult.totals?.accounts_clean}
+                                </b>
+                                &nbsp;· with_diff:&nbsp;
+                                <b className="text-amber-700">
+                                    {dryrunResult.totals?.accounts_with_diff}
+                                </b>
+                            </span>
+                            <span className="text-xs text-slate-600">
+                                |Δ debt|:&nbsp;
+                                <b className="num">
+                                    {fmtMoney(dryrunResult.totals
+                                              ?.total_abs_delta_debt)}
+                                </b>
+                                &nbsp;· |Δ balance|:&nbsp;
+                                <b className="num">
+                                    {fmtMoney(dryrunResult.totals
+                                              ?.total_abs_delta_balance)}
+                                </b>
+                            </span>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs border
+                                              border-slate-200 rounded-lg
+                                              overflow-hidden"
+                                   data-testid="dryrun-table">
+                                <thead>
+                                    <tr className="bg-slate-100 text-slate-700">
+                                        <th className="px-3 py-2 text-right">
+                                            الحساب</th>
+                                        <th className="px-3 py-2">Cache.debt</th>
+                                        <th className="px-3 py-2">GL.debt</th>
+                                        <th className="px-3 py-2">Δ debt</th>
+                                        <th className="px-3 py-2">liab.sum</th>
+                                        <th className="px-3 py-2">legacy_rows</th>
+                                        <th className="px-3 py-2">freeze_safety</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(dryrunResult.accounts || []).map(
+                                        (a, i) => (
+                                        <tr key={a.ad_account_id}
+                                            data-testid={`dryrun-row-${i}`}
+                                            className={`border-b ${
+                                                a.is_clean
+                                                    ? "bg-emerald-50/30"
+                                                    : "bg-rose-50/20"
+                                            }`}>
+                                            <td className="px-3 py-2 font-bold">
+                                                {a.name}
+                                                <div className="text-[10px]
+                                                                text-slate-500">
+                                                    {a.platform}
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2 num">
+                                                {fmtMoney(a.counterparties_cache
+                                                          ?.debt_balance)}
+                                            </td>
+                                            <td className="px-3 py-2 num">
+                                                {fmtMoney(a.general_ledger
+                                                          ?.debt_net)}
+                                            </td>
+                                            <td className="px-3 py-2 num font-bold"
+                                                style={{
+                                                    color: Math.abs(
+                                                        a.deltas?.debt_balance_minus_GL_debt
+                                                        || 0) > 0.02
+                                                        ? "#dc2626"
+                                                        : "#059669"
+                                                }}>
+                                                {fmtMoney(a.deltas
+                                                  ?.debt_balance_minus_GL_debt)}
+                                            </td>
+                                            <td className="px-3 py-2 num">
+                                                {fmtMoney(a.legacy_collections
+                                                  ?.liabilities?.sum_balance)}
+                                            </td>
+                                            <td className="px-3 py-2 num
+                                                            text-center">
+                                                {a.legacy_collections
+                                                  ?.ad_account_ledger?.row_count}
+                                                {" / "}
+                                                {a.legacy_collections
+                                                  ?.liabilities?.row_count}
+                                                {" / "}
+                                                {a.legacy_collections
+                                                  ?.account_transactions
+                                                  ?.row_count}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <span className={`px-1.5 py-0.5
+                                                    rounded text-[10px]
+                                                    font-extrabold ${
+                                                    a.freeze_safety
+                                                        === "SAFE_TO_FREEZE_LEGACY"
+                                                    ? "bg-emerald-100 text-emerald-700"
+                                                    : a.freeze_safety
+                                                        === "NEEDS_RECONCILIATION_FIRST"
+                                                    ? "bg-rose-100 text-rose-700"
+                                                    : "bg-amber-100 text-amber-700"
+                                                }`}>
+                                                    {a.freeze_safety}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="text-[10px] text-slate-500 mt-1">
+                                legacy_rows = ad_account_ledger / liabilities
+                                / account_transactions
+                            </div>
+                        </div>
+                        {(dryrunResult.accounts || []).map((a, i) => (
+                            a.freeze_safety !== "SAFE_TO_FREEZE_LEGACY" && (
+                                <div key={`exp-${i}`}
+                                     className="rounded-lg border
+                                                 border-amber-200
+                                                 bg-amber-50/40 p-3 text-xs"
+                                     data-testid={`dryrun-rationale-${i}`}>
+                                    <b className="text-amber-700">
+                                        {a.name}
+                                    </b>: {a.rationale}
+                                </div>
+                            )
+                        ))}
                     </div>
                 )}
             </SectionCard>
