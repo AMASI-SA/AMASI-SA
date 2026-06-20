@@ -196,11 +196,16 @@ async def _ledger_based_tx_feed(db, user_id: str, account_id: str) -> list:
         {"user_id": user_id,
          "entity_type": "bank",
          "entity_id": account_id,
-         "sub_account": "main",
+         # Iter-250b · F1 — widen filter to include "balance" because the
+         # BNPL settlement bridge (bnpl/settlement_bridge.py) writes
+         # bank legs with sub_account="balance". Filtering on "main"
+         # only hid those rows from the UI (root cause of Iter-249).
+         "sub_account": {"$in": ["main", "balance"]},
          "status": "posted"},
         {"_id": 0, "id": 1, "entry_type": 1, "side": 1, "amount": 1,
          "notes": 1, "posted_at": 1, "created_at": 1,
          "txn_group_id": 1, "metadata": 1, "actor_name": 1,
+         "sub_account": 1,
          "reversal_of_txn_group_id": 1,
          "corrects_txn_group_id": 1},
     ).sort([("posted_at", 1), ("created_at", 1), ("id", 1)]).to_list(50000)
@@ -300,6 +305,10 @@ async def _ledger_based_tx_feed(db, user_id: str, account_id: str) -> list:
             "actor_name": r.get("actor_name"),
             "metadata": md,
             "source": "ledger",
+            # Iter-250b · F1 — surface the sub_account so the UI can
+            # render a badge for rows that come from the BNPL bridge
+            # (sub_account="balance") instead of the main bank channel.
+            "sub_account": r.get("sub_account") or "main",
             # Iter-200 — audit badges
             "is_reversal": ttype == "reversal",
             "is_correction": ttype == "correction",

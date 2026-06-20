@@ -404,6 +404,16 @@ export default function AccountDetails() {
                                                 قيد تصحيح
                                             </span>
                                         )}
+                                        {/* Iter-250b F1 — BNPL bridge badge */}
+                                        {tx.sub_account === "balance" && (
+                                            <span
+                                                data-testid={`badge-bnpl-bridge-${tx.id}`}
+                                                title="هذا السطر من جسر تسويات BNPL (sub_account=balance). كان مخفياً قبل Iter-250b · F1."
+                                                className="ms-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200"
+                                            >
+                                                💳 BNPL Bridge
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-4 py-2.5 text-xs text-foreground max-w-[20ch] truncate" title={tx.description}>
                                         {tx.description || "—"}

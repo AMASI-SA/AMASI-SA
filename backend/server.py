@@ -3937,6 +3937,13 @@ from balance_drift_diagnostic_routes import (
 )
 api.include_router(
     make_balance_drift_diagnostic_router(db, current_user))
+# Iter-250b P1.5.b — account_transactions vs general_ledger walk
+# (READ-ONLY).
+from account_tx_vs_ledger_walk_routes import (
+    make_account_tx_vs_ledger_walk_router,
+)
+api.include_router(
+    make_account_tx_vs_ledger_walk_router(db, current_user))
 # Iter-250a — Post-deploy verification (READ-ONLY).
 from iter250a_verification_routes import (
     make_iter250a_verification_router,
