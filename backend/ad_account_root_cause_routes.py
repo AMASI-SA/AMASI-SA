@@ -275,12 +275,189 @@ def make_ad_account_root_cause_router(db, current_user):
                 ),
             })
 
-        # ── 6. Accounting recommendation tree ─────────────────────
+        # ── 6. Opening Balance Audit (Iter-250b P0.6.1) ──────────
+        # Per user request: prove whether the gap is explained by a
+        # manual opening_balance / manual_debt / migration entry
+        # BEFORE classifying the account as "broken".
+        ob_entries: List[Dict[str, Any]] = []
+        ob_totals_by_source: Dict[str, Dict[str, Any]] = {}
+        ob_totals_by_entry_type: Dict[str, Dict[str, Any]] = {}
+
+        # Patterns considered "opening-flavored"
+        opening_entry_types = [
+            "opening_balance", "opening_debt", "opening_entry",
+            "manual_debt", "manual_opening", "migration",
+            "migration_opening", "ad_account_opening_debt",
+            "migration_debt",
+        ]
+        opening_sources = [
+            "opening_balance", "manual_debt", "migration",
+            "opening_entry", "manual_opening",
+            "ad_account_migration",
+        ]
+
+        async for r in db.general_ledger.find(
+            {"user_id": uid, "entity_type": "ad_account",
+             "entity_id": ad_account_id, "status": "posted",
+             "$or": [
+                 {"entry_type": {"$in": opening_entry_types}},
+                 {"metadata.source": {"$in": opening_sources}},
+                 {"metadata.is_opening": True},
+                 {"metadata.is_manual_debt": True},
+                 {"notes": {"$regex":
+                            "افتتاح|مدين افتتاحي|opening|manual debt",
+                            "$options": "i"}},
+             ]},
+            {"_id": 0, "id": 1, "entry_no": 1, "entry_type": 1,
+             "sub_account": 1, "side": 1, "amount": 1,
+             "currency": 1, "posted_at": 1, "txn_group_id": 1,
+             "notes": 1, "metadata": 1},
+        ).sort([("posted_at", 1)]):
+            ob_entries.append(r)
+            # Aggregate by source
+            src = ((r.get("metadata") or {}).get("source")
+                   or "<no_source>")
+            sb = ob_totals_by_source.setdefault(src, {
+                "count": 0, "debit_sum": 0.0, "credit_sum": 0.0,
+                "net": 0.0,
+            })
+            sb["count"] += 1
+            if r.get("side") == "debit":
+                sb["debit_sum"] = _r(
+                    sb["debit_sum"] + float(r.get("amount") or 0))
+            else:
+                sb["credit_sum"] = _r(
+                    sb["credit_sum"] + float(r.get("amount") or 0))
+            sb["net"] = _r(sb["debit_sum"] - sb["credit_sum"])
+            # Aggregate by entry_type
+            et = r.get("entry_type") or "<null>"
+            eb = ob_totals_by_entry_type.setdefault(et, {
+                "count": 0, "debit_sum": 0.0, "credit_sum": 0.0,
+                "net": 0.0,
+            })
+            eb["count"] += 1
+            if r.get("side") == "debit":
+                eb["debit_sum"] = _r(
+                    eb["debit_sum"] + float(r.get("amount") or 0))
+            else:
+                eb["credit_sum"] = _r(
+                    eb["credit_sum"] + float(r.get("amount") or 0))
+            eb["net"] = _r(eb["debit_sum"] - eb["credit_sum"])
+
+        # Net opening contribution to debt sub_account
+        opening_debt_contribution = 0.0
+        opening_balance_contribution = 0.0
+        for r in ob_entries:
+            sub = r.get("sub_account")
+            amt = float(r.get("amount") or 0)
+            sign = 1 if r.get("side") == "debit" else -1
+            if sub == "debt":
+                opening_debt_contribution = _r(
+                    opening_debt_contribution + sign * amt)
+            elif sub == "balance":
+                opening_balance_contribution = _r(
+                    opening_balance_contribution + sign * amt)
+
+        # First-ever entry on this entity (any type)
+        first_entry = await db.general_ledger.find_one(
+            {"user_id": uid, "entity_type": "ad_account",
+             "entity_id": ad_account_id, "status": "posted"},
+            {"_id": 0, "id": 1, "entry_type": 1, "sub_account": 1,
+             "side": 1, "amount": 1, "posted_at": 1, "notes": 1,
+             "metadata": 1},
+            sort=[("posted_at", 1)],
+        )
+
+        # ── 7. Expected debt formula ───────────────────────────────
+        # The user's accounting model:
+        #   expected_debt = opening_debt + total_spend - total_topups
+        # We compute this then compare with actual GL.debt.
+        # Note: spend is a debit on debt (increases liability), topup
+        # is a credit on debt (decreases liability). So:
+        #   GL(debt).net (debit - credit) = opening_debit_legs
+        #     + spend_legs - topup_legs
+        # If the formula matches GL.debt within tolerance → gap is
+        # FULLY EXPLAINED by opening + ordinary activity.
+        expected_debt = _r(
+            opening_debt_contribution
+            + spend_total - topup_total
+        )
+        # Pre-compute GL net for opening audit (used twice).
         gl_balance_net = (
             by_sub_account.get("balance", {}).get("net", 0.0))
         gl_debt_net = (
             by_sub_account.get("debt", {}).get("net", 0.0))
+        actual_gl_debt = gl_debt_net
+        formula_residual = _r(actual_gl_debt - expected_debt)
+        gap_explained_by_opening = abs(formula_residual) <= 1.0
+
+        opening_balance_audit = {
+            "entries_count": len(ob_entries),
+            "entries": ob_entries,
+            "totals_by_source": ob_totals_by_source,
+            "totals_by_entry_type": ob_totals_by_entry_type,
+            "opening_debt_contribution": opening_debt_contribution,
+            "opening_balance_contribution":
+                opening_balance_contribution,
+            "first_ever_entry": first_entry,
+            "expected_debt_formula": {
+                "opening_debt_contribution":
+                    opening_debt_contribution,
+                "plus_total_spend": spend_total,
+                "minus_total_topups": topup_total,
+                "computed_expected_debt": expected_debt,
+                "actual_gl_debt_net": actual_gl_debt,
+                "residual_gap": formula_residual,
+                "tolerance_sar": 1.0,
+                "gap_explained_by_opening_and_activity":
+                    gap_explained_by_opening,
+            },
+            "verdict": (
+                "✅ الفارق مُفسَّر بالكامل بـ opening_balance "
+                "+ النشاط العادي (spend + topups). لا يوجد خطأ "
+                "محاسبي في GL — فقط الكاش غير مُحدَّث."
+                if gap_explained_by_opening
+                else (
+                    "⚠️ الفارق غير مُفسَّر بالكامل بـ opening + "
+                    f"النشاط. residual = {formula_residual} ريال. "
+                    "يحتاج تحقيقاً يدوياً إضافياً."
+                )
+            ),
+        }
+
+        # ── 8. Refine accounting recommendation tree ──────────────
+        # If opening explains the full gap, demote the
+        # 'missing_spend_entries' suggestion and surface a milder
+        # 'cache_update_only_with_opening_context' suggestion.
         suggestions: List[Dict[str, Any]] = []
+
+        # Promote opening-balance explanation to TOP of suggestions
+        # when the formula matches.
+        if gap_explained_by_opening and \
+                abs(opening_debt_contribution) > TOL:
+            suggestions.append({
+                "kind": "gap_explained_by_opening_balance",
+                "title": (
+                    "الفارق ناتج عن Opening Balance يدوي — ليس خطأً"
+                ),
+                "explain": (
+                    f"opening_debt_contribution = "
+                    f"{opening_debt_contribution} ريال، "
+                    f"spends = {spend_total}، topups = "
+                    f"{topup_total}. المعادلة: opening + spend − "
+                    f"topup = {expected_debt} ≈ GL.debt = "
+                    f"{actual_gl_debt}. residual = "
+                    f"{formula_residual}. الحساب صحيح محاسبياً."
+                ),
+                "action_hint": (
+                    "1) لا تُجرِ تسوية على GL. "
+                    "2) فقط حدّث الكاش "
+                    "(counterparties.{current,debt}_balance) من "
+                    "GL — recompute آمن. "
+                    "3) إن أردت إخفاء الـ opening من العرض "
+                    "العادي للمستخدم، أضف فلتراً للـ UI لا للـ GL."
+                ),
+            })
 
         if gl_balance_net > TOL and gl_debt_net < -TOL:
             # The case for Meta and الرياض.
@@ -306,8 +483,10 @@ def make_ad_account_root_cause_router(db, current_user):
             })
 
         if gl_debt_net < -TOL and gl_balance_net <= TOL \
-                and topup_total > spend_total + TOL:
-            # The case for Self Service.
+                and topup_total > spend_total + TOL \
+                and not gap_explained_by_opening:
+            # The case for Self Service — only if opening doesn't
+            # account for the gap.
             suggestions.append({
                 "kind": "missing_spend_entries",
                 "title": "إضافة spend مفقود",
@@ -359,21 +538,27 @@ def make_ad_account_root_cause_router(db, current_user):
                 ),
             })
 
-        # ── 7. Final decision matrix ──────────────────────────────
+        # ── 9. Final decision matrix ──────────────────────────────
         decision = {
             "can_just_recompute_cache": (
-                len(suggestions) == 0
-                or all(s["kind"] in ("tag_missing_platform",
-                                     "rename_self_service")
-                       for s in suggestions)
+                gap_explained_by_opening
+                or len(suggestions) == 0
+                or all(s["kind"] in (
+                    "gap_explained_by_opening_balance",
+                    "tag_missing_platform",
+                    "rename_self_service",
+                ) for s in suggestions)
             ),
-            "needs_gl_adjustment": any(
-                s["kind"] in ("review_sub_account_split",
-                              "missing_spend_entries")
-                for s in suggestions
+            "needs_gl_adjustment": (
+                any(s["kind"] in ("review_sub_account_split",
+                                  "missing_spend_entries")
+                    for s in suggestions)
+                and not gap_explained_by_opening
             ),
             "needs_metadata_cleanup": no_platform_count > 0,
             "needs_rename": "Self Service" in (cp.get("name") or ""),
+            "gap_fully_explained_by_opening_balance":
+                gap_explained_by_opening,
         }
 
         return {
@@ -394,6 +579,7 @@ def make_ad_account_root_cause_router(db, current_user):
             "identity_hints": identity_hints,
             "platform_hints_from_gl_metadata": platform_hints_from_gl,
             "topups_vs_spends": topups_vs_spends,
+            "opening_balance_audit": opening_balance_audit,
             "aggregations": {
                 "by_sub_account": by_sub_account,
                 "by_entry_type": by_entry_type,

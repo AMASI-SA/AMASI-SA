@@ -1317,6 +1317,169 @@ export default function AdAccountForensic() {
                             </div>
                         </div>
 
+                        {/* Opening Balance Audit (Iter-250b P0.6.1) */}
+                        {rootCauseResult.opening_balance_audit && (
+                            <div className={`rounded-xl border p-3 ${
+                                rootCauseResult.opening_balance_audit
+                                    ?.expected_debt_formula
+                                    ?.gap_explained_by_opening_and_activity
+                                    ? "border-emerald-300 bg-emerald-50/40"
+                                    : "border-amber-300 bg-amber-50/30"
+                            }`}
+                                 data-testid="opening-balance-audit">
+                                <div className="text-[11px] font-extrabold
+                                                 text-slate-800 mb-2">
+                                    📜 Opening Balance Audit
+                                </div>
+                                <div className="text-xs text-slate-800
+                                                font-bold mb-3">
+                                    {rootCauseResult.opening_balance_audit
+                                        ?.verdict}
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4
+                                                gap-2 text-xs mb-3">
+                                    <div className="bg-white rounded border
+                                                    border-slate-200 p-2">
+                                        <div className="text-[9px] font-bold
+                                                         text-slate-500">
+                                            opening_debt_contribution
+                                        </div>
+                                        <div className="num text-base
+                                                         font-extrabold">
+                                            {fmtMoney(rootCauseResult
+                                                .opening_balance_audit
+                                                ?.opening_debt_contribution)}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded border
+                                                    border-slate-200 p-2">
+                                        <div className="text-[9px] font-bold
+                                                         text-slate-500">
+                                            opening_balance_contribution
+                                        </div>
+                                        <div className="num text-base
+                                                         font-extrabold">
+                                            {fmtMoney(rootCauseResult
+                                                .opening_balance_audit
+                                                ?.opening_balance_contribution)}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded border
+                                                    border-slate-200 p-2">
+                                        <div className="text-[9px] font-bold
+                                                         text-slate-500">
+                                            entries_count
+                                        </div>
+                                        <div className="num text-base
+                                                         font-extrabold">
+                                            {rootCauseResult
+                                                .opening_balance_audit
+                                                ?.entries_count}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded border
+                                                    border-slate-200 p-2">
+                                        <div className="text-[9px] font-bold
+                                                         text-slate-500">
+                                            residual_gap
+                                        </div>
+                                        <div className="num text-base
+                                                         font-extrabold"
+                                             style={{ color: Math.abs(
+                                                rootCauseResult
+                                                  .opening_balance_audit
+                                                  ?.expected_debt_formula
+                                                  ?.residual_gap || 0) > 1
+                                                ? "#dc2626" : "#059669" }}>
+                                            {fmtMoney(rootCauseResult
+                                                .opening_balance_audit
+                                                ?.expected_debt_formula
+                                                ?.residual_gap)}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded bg-white border
+                                                border-slate-200 p-2 mb-2">
+                                    <div className="text-[10px] font-bold
+                                                     text-slate-600 mb-1">
+                                        المعادلة المحاسبية:
+                                    </div>
+                                    <code className="text-xs text-slate-800
+                                                       block">
+                                        opening_debt ({fmtMoney(rootCauseResult
+                                            .opening_balance_audit
+                                            ?.expected_debt_formula
+                                            ?.opening_debt_contribution)})
+                                        &nbsp;+ spends ({fmtMoney(
+                                            rootCauseResult
+                                            .opening_balance_audit
+                                            ?.expected_debt_formula
+                                            ?.plus_total_spend)})
+                                        &nbsp;− topups ({fmtMoney(
+                                            rootCauseResult
+                                            .opening_balance_audit
+                                            ?.expected_debt_formula
+                                            ?.minus_total_topups)})
+                                        &nbsp;= {fmtMoney(rootCauseResult
+                                            .opening_balance_audit
+                                            ?.expected_debt_formula
+                                            ?.computed_expected_debt)}
+                                        &nbsp;<b>vs</b>
+                                        &nbsp;GL.debt = {fmtMoney(
+                                            rootCauseResult
+                                            .opening_balance_audit
+                                            ?.expected_debt_formula
+                                            ?.actual_gl_debt_net)}
+                                    </code>
+                                </div>
+
+                                {rootCauseResult.opening_balance_audit
+                                    ?.first_ever_entry && (
+                                    <div className="text-[11px] text-slate-600
+                                                    mb-2">
+                                        <b>أول قيد على الحساب:</b>&nbsp;
+                                        {(rootCauseResult.opening_balance_audit
+                                            .first_ever_entry.posted_at
+                                            || "").slice(0, 16)}
+                                        &nbsp;·&nbsp;
+                                        {rootCauseResult.opening_balance_audit
+                                            .first_ever_entry.entry_type}
+                                        &nbsp;·&nbsp;
+                                        {rootCauseResult.opening_balance_audit
+                                            .first_ever_entry.sub_account}
+                                        &nbsp;·&nbsp;
+                                        {fmtMoney(rootCauseResult
+                                            .opening_balance_audit
+                                            .first_ever_entry.amount)}
+                                    </div>
+                                )}
+
+                                <details className="mt-2">
+                                    <summary className="cursor-pointer
+                                                        text-[11px] font-bold
+                                                        text-emerald-700">
+                                        قيود Opening المُكتشَفة (
+                                        {rootCauseResult
+                                            .opening_balance_audit
+                                            ?.entries_count})
+                                    </summary>
+                                    <pre className="bg-slate-50 rounded p-2
+                                                    overflow-x-auto text-[10px]
+                                                    mt-2">
+{JSON.stringify(rootCauseResult.opening_balance_audit?.totals_by_entry_type,
+                null, 2)}
+                                    </pre>
+                                    <pre className="bg-slate-50 rounded p-2
+                                                    overflow-x-auto text-[10px]
+                                                    mt-2">
+{JSON.stringify(rootCauseResult.opening_balance_audit?.totals_by_source,
+                null, 2)}
+                                    </pre>
+                                </details>
+                            </div>
+                        )}
+
                         {/* Aggregations */}
                         <details>
                             <summary className="cursor-pointer text-sm
