@@ -1027,61 +1027,42 @@ def make_universal_router(db) -> APIRouter:
              "normalized_payment_method": 1},
         ).sort("name", 1).to_list(2000)
 
-        # Bulk-compute the ledger delta to keep this endpoint cheap.
-        # Banks only use sub_account="main"; compute_balances_bulk sums
-        # all entries for entity_type=bank, which is fine.
-        ids = [d["id"] for d in docs]
-        bulk = await compute_balances_bulk(
-            db, user_id=uid, entity_type="bank", entity_ids=ids,
-        ) if ids else {}
-
-        # Iter-192 — Determine which accounts have a migration
-        # opening_balance entry. For those, ledger is the SINGLE source
-        # of truth; mixing in current_balance double-counts the
-        # opening. Everyone else falls back to current_balance.
-        migrated_ids: set[str] = set()
-        if ids:
-            async for row in db.general_ledger.find(
-                {"user_id": uid, "entity_type": "bank",
-                 "entity_id": {"$in": ids},
-                 "entry_type": "opening_balance",
-                 "status": "posted"},
-                {"_id": 0, "entity_id": 1},
-            ):
-                migrated_ids.add(row["entity_id"])
-
-        # Iter-195 — BNPL SSOT priority for Tabby/Tamara wallets.
-        from balance_resolver import resolve_live_balance
+        # Iter-250b · P1.5.h — Unify the live-balance source with the
+        # `/accounts` page so dropdowns in `/new-transaction` show the
+        # SAME number the merchant sees on the assets-and-accounts
+        # page. Previously this endpoint had its own inline logic
+        # (`migrated_ids` check → ledger_net vs current_balance) which
+        # diverged from `_account_with_meta` once `account_balance_ssot`
+        # gained the Iter-240 hybrid (`ledger_net + current_balance -
+        # dw_net`). The hybrid is required for accounts whose history
+        # lives in BOTH `account_transactions` (legacy) AND
+        # `general_ledger` (new) — like Salla after a manual transfer:
+        # ledger reflects the transfer but current_balance is not
+        # auto-recomputed by `/accounting/bank-transfer`, so the old
+        # logic returned the pre-transfer stored value.
+        from financial_position_ssot import account_balance_ssot
         out = []
         for d in docs:
             base = float(d.get("current_balance") or 0)
-            ledger_net = float(
-                bulk.get(d["id"], {}).get("net_balance", 0) or 0
-            )
-
-            # BNPL accounts: always trust the BNPL SSOT formula.
-            # Without this, the Unified Entry Screen shows Tabby's
-            # stale -47k while every other page shows +13k.
-            res = await resolve_live_balance(
-                db, user_id=uid, account=d,
-            )
-            if res["source"] == "bnpl_ssot":
-                live = res["balance"]
-                source = "bnpl_ssot"
-            elif d["id"] in migrated_ids:
-                live = round(ledger_net, 2)
-                source = "ledger"
-            else:
-                live = round(base, 2)
-                source = "current_balance"
+            try:
+                live = float(
+                    await account_balance_ssot(
+                        db, user_id=uid, account=d,
+                    )
+                )
+                source = "ssot"
+            except Exception:  # noqa: BLE001
+                # Defensive: if the SSOT helper throws, fall back to
+                # the stored value so the page doesn't break.
+                live = base
+                source = "current_balance_fallback"
             out.append({
                 "id": d["id"],
                 "name": d.get("name"),
                 "account_type": d.get("account_type"),
                 "provider_name": d.get("provider_name"),
                 "current_balance": round(base, 2),
-                "ledger_delta": round(ledger_net, 2),
-                "live_balance": live,
+                "live_balance": round(live, 2),
                 "balance_source": source,
             })
         return {"accounts": out}
