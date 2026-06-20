@@ -271,11 +271,48 @@ export default function UnifiedEntryScreen() {
         return banks.filter((b) => allowedAccountIds.has(b.id)).length === 0;
     }, [allowedAccountIds, banks, opType]);
 
+    // Iter-250b · P1.5.k — Helper: is this account INELIGIBLE for an
+    // internal transfer between accounts?
+    //
+    // Rejected:
+    //   - account_type ∉ {bank, cash, payment_platform}
+    //   - payment_platform whose provider is COD (الدفع عند الاستلام)
+    //   - payment_platform whose provider is "تحويل بنكي" (bank_transfer)
+    const isInternalTransferIneligible = (b) => {
+        if (!b) return true;
+        const atype = b.account_type;
+        if (!["bank", "cash", "payment_platform"].includes(atype)) {
+            return true;
+        }
+        const name = (b.name || "").toLowerCase();
+        const provider = (b.provider_name || "").toLowerCase();
+        const npm = (b.normalized_payment_method || "").toLowerCase();
+        const codRe = /الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|\bcod\b/i;
+        const btRe = /تحويل\s*بنكي|bank[\s_-]*transfer/i;
+        if (codRe.test(name) || codRe.test(provider) || npm === "cod" || npm === "cash_on_delivery") {
+            return true;
+        }
+        if (btRe.test(name) || btRe.test(provider) || npm === "bank_transfer") {
+            return true;
+        }
+        return false;
+    };
+
     // The filtered bank list used by both source and destination dropdowns.
     const filteredBanks = useMemo(
-        () => filterAccounts(banks),
+        () => {
+            const base = filterAccounts(banks);
+            // For internal transfers (bank_transfer opType) we additionally
+            // exclude COD and bank-transfer payment platforms because they
+            // are NOT real transferable wallets — they belong to the
+            // courier/COD settlement workflow, not the generic transfer.
+            if (opType === "bank_transfer") {
+                return base.filter((b) => !isInternalTransferIneligible(b));
+            }
+            return base;
+        },
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [banks, allowedAccountIds]
+        [banks, allowedAccountIds, opType]
     );
 
     // Iter-185 — Load live cash balances on mount and after each submit.
@@ -460,6 +497,15 @@ export default function UnifiedEntryScreen() {
                 const pp = await api.get("/accounts?account_type=payment_platform&limit=200");
                 const ppItems = pp.data?.items || pp.data || [];
                 allAccounts = [...allAccounts, ...dedupe(ppItems)];
+            } catch (e) { /* optional */ }
+            // Iter-250b · P1.5.k — Fetch cash accounts as well so the
+            // «تحويل بين الحسابات» dropdowns can show الصناديق النقدية
+            // (e.g. صندوق الرياض). Previously only bank + payment_platform
+            // were loaded, hiding all cash funds from the picker.
+            try {
+                const ca = await api.get("/accounts?account_type=cash&limit=200");
+                const caItems = ca.data?.items || ca.data || [];
+                allAccounts = [...allAccounts, ...dedupe(caItems)];
             } catch (e) { /* optional */ }
             setBanks(allAccounts);
             setCategories(cat.data || []);

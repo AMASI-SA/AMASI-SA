@@ -1567,6 +1567,46 @@ def make_universal_router(db) -> APIRouter:
     # ═══════════════════════════════════════════════════════════════
     # Bank transfer & General expense
     # ═══════════════════════════════════════════════════════════════
+
+    # Iter-250b · P1.5.j — Helper: is this account eligible for an
+    # internal transfer between accounts?
+    #
+    # ALLOWED: bank · cash · payment_platform EXCEPT:
+    #   - COD (الدفع عند الاستلام)        → settled by courier-side flow
+    #   - bank_transfer (تحويل بنكي)       → not a real wallet
+    # REJECTED everywhere else (courier, ads, suppliers, employees, …)
+    def _account_blocks_internal_transfer(acc: dict):
+        """Return (blocked: bool, reason: str)."""
+        atype = (acc.get("account_type") or "").strip()
+        if atype not in ("bank", "cash", "payment_platform"):
+            return True, (
+                "هذا الحساب ليس حساباً قابلاً للتحويل الداخلي. "
+                "استخدم المسار المحاسبي المخصص له."
+            )
+        # Block COD / bank_transfer payment_platforms by canonical key
+        # or by Arabic provider name (data may have either).
+        npm = (acc.get("normalized_payment_method") or "").lower()
+        pname = acc.get("provider_name") or acc.get("name") or ""
+        cod_patterns = [
+            "cod", "cash_on_delivery", "الدفع عند الاستلام",
+        ]
+        bank_transfer_patterns = [
+            "bank_transfer", "تحويل بنكي",
+        ]
+        for p in cod_patterns:
+            if p in npm or p in pname:
+                return True, (
+                    "هذا الحساب ليس حساباً قابلاً للتحويل الداخلي. "
+                    "استخدم المسار المحاسبي المخصص له."
+                )
+        for p in bank_transfer_patterns:
+            if p in npm or p in pname:
+                return True, (
+                    "هذا الحساب ليس حساباً قابلاً للتحويل الداخلي. "
+                    "استخدم المسار المحاسبي المخصص له."
+                )
+        return False, ""
+
     @router.post("/bank-transfer")
     async def bank_transfer(
         payload: BankTransferIn,
@@ -1578,10 +1618,17 @@ def make_universal_router(db) -> APIRouter:
             {"id": {"$in": [payload.from_account_id,
                               payload.to_account_id]},
              "user_id": user["id"]},
-            {"_id": 0, "id": 1, "name": 1},
+            {"_id": 0, "id": 1, "name": 1, "account_type": 1,
+             "provider_name": 1, "normalized_payment_method": 1},
         ).to_list(2)
         if len(accs) != 2:
             raise HTTPException(404, "أحد الحسابات البنكية غير موجود")
+        # Iter-250b · P1.5.j — Validate both accounts are
+        # internal-transfer-eligible BEFORE binding/sufficient-funds.
+        for a in accs:
+            blocked, reason = _account_blocks_internal_transfer(a)
+            if blocked:
+                raise HTTPException(400, reason)
         await _enforce_account_binding(
             db, user_id=user["id"], op_type="bank_transfer",
             account_id=payload.from_account_id,
