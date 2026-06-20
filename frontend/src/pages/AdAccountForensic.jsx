@@ -266,6 +266,46 @@ export default function AdAccountForensic() {
                 </div>
             </header>
 
+            <div className="rounded-2xl border-2 border-amber-300
+                            bg-amber-50/60 p-4"
+                 data-testid="zeroing-postponed-banner">
+                <div className="flex items-start gap-3">
+                    <Warning size={22} weight="duotone"
+                             className="text-amber-700 shrink-0" />
+                    <div>
+                        <h3 className="text-sm font-extrabold text-amber-800">
+                            🛑 تصفير مديونيات الحسابات الإعلانية —
+                            مؤجَّل بقرار رسمي
+                        </h3>
+                        <ul className="text-xs text-amber-800 mt-2 space-y-1
+                                        list-disc list-inside">
+                            <li>لا يتم تصفير المديونيات.</li>
+                            <li>لا يتم استبعاد Opening Balance.</li>
+                            <li>لا يتم حذف أو تعديل قيود تاريخية.</li>
+                            <li>لا يتم Recompute للكاش.</li>
+                            <li>لا يتم تفعيل Feature Flag.</li>
+                            <li>لا Cleanup ولا Migration.</li>
+                        </ul>
+                        <p className="text-xs text-amber-800 mt-2">
+                            <b>المبدأ المعتمد:</b>&nbsp;
+                            <code className="bg-white px-1 rounded">
+                                general_ledger
+                            </code>
+                            &nbsp;هو مصدر الحقيقة. &nbsp;
+                            <code className="bg-white px-1 rounded">
+                                counterparties
+                            </code>
+                            &nbsp;و&nbsp;
+                            <code className="bg-white px-1 rounded">
+                                liabilities
+                            </code>
+                            &nbsp;تُعتبر legacy/cache غير معتمدة.
+                            الأقسام أدناه تبقى للقراءة فقط.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             {/* ─────────── 1. Post-Deploy Check ─────────── */}
             <SectionCard
                 title="1. Post-Deploy Check (Iter-250a)"

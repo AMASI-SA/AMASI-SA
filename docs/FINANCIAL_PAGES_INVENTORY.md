@@ -7,17 +7,17 @@
 
 - **total_pages**: `64`
 - **keep_count**: `46` 🟢
-- **merge_count**: `7` 🟡
+- **merge_count**: `6` 🟡
 - **deprecate_count**: `9` 🟠
-- **delete_count**: `2` 🔴
+- **delete_count**: `3` 🔴
 - **legacy_pages_affecting_balance**: `10`
 
 ### Hide Safety (Iter-250a)
 
 - ✅ **KEEP_VISIBLE**: `46`
-- 🔍 **NEEDS_REVIEW**: `8`
+- 🔍 **NEEDS_REVIEW**: `7`
 - 🚫 **SAFE_TO_HIDE**: `8`
-- ↪️ **NEEDS_REDIRECT**: `2`
+- ↪️ **NEEDS_REDIRECT**: `3`
 
 ## 🚫 Routes للإخفاء الآن (SAFE_TO_HIDE)
 
@@ -36,6 +36,7 @@
 
 | Route | البديل |
 |---|---|
+| `/financial-movement/new` | `/new-transaction (UnifiedEntryScreen)` |
 | `/shipping/ledger` | `/shipping/orders-ledger` |
 | `/shipping/cod-settlements` | `/shipping/orders-ledger` |
 
@@ -44,7 +45,6 @@
 | Route | التصنيف | البديل المقترح | السبب |
 |---|---|---|---|
 | `/accounts/:id` | MERGE | `دمج _ledger_based_tx_feed + legacy walker إلى مصدر موحّد بعد Reset` | ينقسم بين فرعين (is_migrated → ledger، غير ذلك → account_transactions). أصل مشكلة Iter-249. لا يجب إبقاء فرعين. |
-| `/financial-movement/new` | MERGE | `/new-transaction (UnifiedEntryScreen)` | نسخة قديمة من شاشة الإدخال. ندمج الوظيفتين تحت /new-transaction لتجنّب الازدواج. |
 | `/ad-accounts` | MERGE | `توحيد عبر /new-transaction + ad_account_ledger sub` | يكتب في general_ledger (sub_account=balance) + account_transactions + يحدّث current_balance لـ counterparty. ثلاثة مسارات متوازية — مصدر تضارب حقيقي مع نموذج Iter-249. |
 | `/purchase-invoices` | MERGE | `/suppliers-new (نموذج فاتورة موحّد)` | يكتب في liabilities + account_transactions. النموذج الجديد يجب أن يتولّى دورة الفاتورة كاملة. |
 | `/shipping/transfers` | MERGE | `/new-transaction (type=courier_transfer)` | ندمج تحويلات الشحن مع شاشة الإدخال الموحّدة. |
@@ -91,7 +91,7 @@
 |---|---|---|---|---|---|---|---|---|
 | `/new-transaction` | `financial_movements` | SSOT | 🟢 KEEP | ✅ KEEP_VISIBLE | 🟢 LOW | نعم | `—` | نقطة إدخال الحركة الموحّدة (SSOT). يجب توجيه كل الكتابات الجديدة هنا. |
 | `/financial-movements` | `financial_movements` | SSOT | 🟢 KEEP | ✅ KEEP_VISIBLE | 🟢 LOW | لا | `—` | العرض القانوني لجدول financial_movements. |
-| `/financial-movement/new` | `financial_movements` | SSOT | 🟡 MERGE | 🔍 NEEDS_REVIEW | 🟢 LOW | نعم | `/new-transaction (UnifiedEntryScreen)` | نسخة قديمة من شاشة الإدخال. ندمج الوظيفتين تحت /new-transaction لتجنّب الازدواج. |
+| `/financial-movement/new` | `config_only` | LEGACY | 🔴 DELETE | ↪️ NEEDS_REDIRECT | 🟢 LOW | لا | `/new-transaction (UnifiedEntryScreen)` | الصفحة مُدمَجة فعلياً منذ Iter-246 — 40 سطر فقط، بانر redirect نقي بدون أي منطق إدخال أو API. آمن لاستبدالها بـ LegacyRedirect الموحّد. |
 | `/transfers` | `mixed` | LEGACY | 🟠 DEPRECATE | 🚫 SAFE_TO_HIDE | 🟡 MEDIUM | نعم | `/new-transaction (type=internal_transfer)` | تكتب في account_transactions + general_ledger. /new-transaction يغطي نفس الحالة بدون ازدواج كتابة. |
 | `/financial-input-hub` | `mixed` | LEGACY | 🟠 DEPRECATE | 🚫 SAFE_TO_HIDE | 🟢 LOW | لا | `/new-transaction + /financial-movements` | صفحة قديمة تجمع liabilities + account_transactions. العرض والإدخال الموحّد البديل أفضل. |
 | `/transactions` | `general_ledger` | SSOT | 🟢 KEEP | ✅ KEEP_VISIBLE | 🟢 LOW | لا | `—` | العرض الموحّد لكل قيود الـ ledger. |

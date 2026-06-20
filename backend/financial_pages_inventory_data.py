@@ -153,18 +153,17 @@ INVENTORY: List[Dict[str, Any]] = [
         "area": "transfers_and_entries",
         "frontend_route": "/financial-movement/new",
         "frontend_file": "pages/FinancialMovementNewPage.jsx",
-        "backend_endpoints": [
-            "POST /api/financial-movements",
-        ],
-        "data_source": "financial_movements",
-        "ssot_status": "SSOT",
-        "affects_balance": True,
-        "classification": "MERGE",
+        "backend_endpoints": [],
+        "data_source": "config_only",
+        "ssot_status": "LEGACY",
+        "affects_balance": False,
+        "classification": "DELETE",
         "replacement": "/new-transaction (UnifiedEntryScreen)",
         "risk": "LOW",
         "reason": (
-            "نسخة قديمة من شاشة الإدخال. ندمج الوظيفتين تحت "
-            "/new-transaction لتجنّب الازدواج."
+            "الصفحة مُدمَجة فعلياً منذ Iter-246 — 40 سطر فقط، "
+            "بانر redirect نقي بدون أي منطق إدخال أو API. آمن "
+            "لاستبدالها بـ LegacyRedirect الموحّد."
         ),
     },
     {
