@@ -2065,10 +2065,18 @@ def make_universal_router(db) -> APIRouter:
         )
         cutoff_date_str = (cutoff_doc or {}).get("cutoff_date")
         # Bulk-aggregate the 3 sub-accounts in one pipeline
+        # Iter-250b · P1.5.i — Apply the SAME filters as `compute_balance`
+        # (used by /employees/{id}/summary-balance + /financial-summary)
+        # so the table totals match the details/new-transaction screen.
+        # Without these filters, reversed entries and legacy_orphan
+        # rows leak into the table's payable column, inflating the
+        # «المستحق» figure that drives «صرف راتب» picker.
         agg = await db.general_ledger.aggregate([
             {"$match": {"user_id": uid, "entity_type": "employee",
                           "entity_id": {"$in": emp_ids},
-                          "status": "posted"}},
+                          "status": "posted",
+                          "entry_type": {"$ne": "reversal"},
+                          "metadata.legacy_orphan": {"$ne": True}}},
             {"$group": {
                 "_id": {"emp": "$entity_id", "sub": "$sub_account",
                           "side": "$side"},
