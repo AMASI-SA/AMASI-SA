@@ -527,6 +527,11 @@ export default function UnifiedEntryScreen() {
                     entity_type: e.entity_type,
                     entity_id: e.entity_id,
                     sub_account: e.sub_account,
+                    // Iter-250b · P1.5.g — surface entry_type + metadata.source
+                    // so the UI can detect auto-seeded opening balances and
+                    // relabel them as "رصيد افتتاحي مرحّل" instead of "تسوية".
+                    entry_type: e.entry_type,
+                    metadata_source: (e.metadata && e.metadata.source) || null,
                     status: e.status,
                     reversed_by_entry_id: e.reversed_by_entry_id || null,
                 });
@@ -1917,6 +1922,7 @@ const TXN_TYPE_LABELS = {
     correction: "تصحيح قيد",
     reversal: "عكس قيد",
     opening_balance: "رصيد افتتاحي",
+    auto_opening_balance: "رصيد افتتاحي مرحّل",
     topup: "تعبئة",
     spend: "صرف",
     sale: "بيع",
@@ -2006,7 +2012,29 @@ function RecentTxnsPanel({ rows, highlightGroupId, loading, onRefresh }) {
                                             {timeAgo(g.posted_at)}
                                         </td>
                                         <td className="py-2 px-3 font-bold text-slate-800">
-                                            {txnLabel(g.txn_type)}
+                                            {(() => {
+                                                // Iter-250b · P1.5.g — relabel auto-seeded
+                                                // opening balances in the recent rows table too.
+                                                const isOB = (g.legs || []).some(
+                                                    (l) =>
+                                                        l.entry_type === "opening_balance" ||
+                                                        l.metadata_source === "iter192_auto_seed",
+                                                );
+                                                return (
+                                                    <>
+                                                        {txnLabel(isOB ? "auto_opening_balance" : g.txn_type)}
+                                                        {isOB && (
+                                                            <span
+                                                                data-testid={`row-badge-ob-${g.txn_group_id}`}
+                                                                className="ms-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200"
+                                                                title="رصيد افتتاحي مرحّل تلقائياً"
+                                                            >
+                                                                🪙 OB
+                                                            </span>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="py-2 px-3 text-slate-600 truncate max-w-[220px]"
                                             title={g.notes}>
@@ -2123,6 +2151,19 @@ function TxnDetailModal({ txn, onClose, onReversed }) {
     const balanced = Math.abs(totalDebit - totalCredit) < 0.01;
     const isReversed = !!txn.reversed_by_name;
     const canReverse = !isReversed && balanced;
+    // Iter-250b · P1.5.g — Detect auto-seeded opening balance groups so
+    // we relabel them as "رصيد افتتاحي مرحّل" instead of generic "تسوية",
+    // render an explicit badge, and require a stronger confirmation
+    // before allowing reversal (reversing changes the account's starting
+    // point in the ledger).
+    const isAutoOpeningBalance = (txn.legs || []).some(
+        (l) =>
+            l.entry_type === "opening_balance" ||
+            l.metadata_source === "iter192_auto_seed",
+    );
+    const effectiveTxnType = isAutoOpeningBalance
+        ? "auto_opening_balance"
+        : txn.txn_type;
 
     const handleReverse = async () => {
         if (!reason) {
@@ -2158,11 +2199,20 @@ function TxnDetailModal({ txn, onClose, onReversed }) {
                 <div className="px-5 py-3 bg-gradient-to-l from-sky-50 to-emerald-50 border-b border-sky-200 flex items-center justify-between">
                     <div>
                         <h3 className="font-extrabold text-slate-900" style={{ fontFamily: "Tajawal" }}>
-                            تفاصيل الحركة — {txnLabel(txn.txn_type)}
+                            تفاصيل الحركة — {txnLabel(effectiveTxnType)}
                         </h3>
                         <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
                             {txn.txn_group_id}
                         </p>
+                        {isAutoOpeningBalance && (
+                            <span
+                                data-testid="badge-auto-opening-balance"
+                                title="هذا قيد افتتاحي تلقائي صدر عند أول قيد محاسبي على الحساب — يربط رصيد الحساب القديم بـ Ledger."
+                                className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] font-extrabold"
+                            >
+                                🪙 Opening Balance · رصيد افتتاحي
+                            </span>
+                        )}
                     </div>
                     <button onClick={onClose}
                         className="w-8 h-8 rounded-lg hover:bg-sky-100 flex items-center justify-center text-slate-600 font-bold"
@@ -2305,6 +2355,13 @@ function TxnDetailModal({ txn, onClose, onReversed }) {
                             <h5 className="text-xs font-extrabold text-rose-900">
                                 تأكيد عكس الحركة
                             </h5>
+                            {isAutoOpeningBalance && (
+                                <div
+                                    data-testid="txn-reverse-opening-warning"
+                                    className="p-2 rounded-md bg-amber-100 border-2 border-amber-400 text-amber-900 text-[11px] font-extrabold leading-relaxed">
+                                    ⚠️ هذا رصيد افتتاحي مرحّل — عكسه سيُغيّر نقطة بداية الحساب في Ledger وقد يجعل جميع الأرصدة اللاحقة غير متطابقة مع البيانات التاريخية. تابع فقط إذا كنت متأكداً تماماً.
+                                </div>
+                            )}
                             <p className="text-[11px] text-rose-700 leading-relaxed">
                                 سيُنشأ قيد عكسي يلغي أثر هذه الحركة على جميع الحسابات. القيد الأصلي يبقى محفوظاً للمراجعة.
                             </p>

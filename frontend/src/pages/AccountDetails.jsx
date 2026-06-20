@@ -367,6 +367,17 @@ export default function AccountDetails() {
                                         ) : (
                                             tx.type_label || tx.transaction_type
                                         )}
+                                        {/* Iter-250b · P1.5.g — Auto-seeded opening balance badge */}
+                                        {(tx.transaction_type === "opening_balance"
+                                            || (tx.metadata && tx.metadata.source === "iter192_auto_seed")) && (
+                                            <span
+                                                data-testid={`badge-opening-balance-${tx.id}`}
+                                                title="رصيد افتتاحي مرحّل تلقائياً عند أول قيد على الحساب. لا يُعدّ تسوية تشغيلية."
+                                                className="ms-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200"
+                                            >
+                                                🪙 رصيد افتتاحي
+                                            </span>
+                                        )}
                                         {/* Iter-200 — Audit badges */}
                                         {tx.was_reversed && (
                                             <span
