@@ -1560,6 +1560,13 @@ export default function UnifiedEntryScreen() {
                                         {filteredBanks.filter(b => b.account_type === "bank" && b.id !== bankId).map(b =>
                                             <option key={b.id} value={b.id}>{b.name} · بنك</option>)}
                                     </optgroup>
+                                    {/* Iter-250b · P1.5.f — Include cash accounts as a valid transfer destination */}
+                                    {filteredBanks.some(b => b.account_type === "cash" && b.id !== bankId) && (
+                                        <optgroup label="💵 الصندوق النقدي">
+                                            {filteredBanks.filter(b => b.account_type === "cash" && b.id !== bankId).map(b =>
+                                                <option key={b.id} value={b.id} data-testid={`unified-bank-to-opt-${b.id}`}>{b.name} · صندوق</option>)}
+                                        </optgroup>
+                                    )}
                                     <optgroup label="💳 بوابات الدفع">
                                         {filteredBanks.filter(b => b.account_type === "payment_platform" && b.id !== bankId && !/الدفع\s*عند\s*الاستلام|cash[\s_-]*on[\s_-]*delivery|COD/i.test(b.name || "")).map(b =>
                                             <option key={b.id} value={b.id}>{b.name} · بوابة دفع</option>)}
