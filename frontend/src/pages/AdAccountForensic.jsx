@@ -150,9 +150,10 @@ export default function AdAccountForensic() {
     const [selectedCp, setSelectedCp] = useState("");
     const [forensicResult, setForensicResult] = useState(null);
     const [dryrunResult, setDryrunResult] = useState(null);
+    const [recomputeResult, setRecomputeResult] = useState(null);
     const [busy, setBusy] = useState({ deploy: false, catalog: false,
                                        accounts: false, forensic: false,
-                                       dryrun: false });
+                                       dryrun: false, recompute: false });
 
     const load = async (key, fn) => {
         setBusy((b) => ({ ...b, [key]: true }));
@@ -203,6 +204,13 @@ export default function AdAccountForensic() {
             "/audit/ad-account-dryrun-diff?include_clean=true");
         setDryrunResult(r.data);
         toast.success("تم تشغيل Dry-Run Diff لكل الحسابات");
+    });
+
+    const runRecompute = () => load("recompute", async () => {
+        const r = await api.get(
+            "/audit/ad-account-recompute-dryrun?include_clean=true");
+        setRecomputeResult(r.data);
+        toast.success("تم تشغيل Reconciliation Dry-Run");
     });
 
     return (
@@ -916,6 +924,237 @@ export default function AdAccountForensic() {
                                     </b>: {a.rationale}
                                 </div>
                             )
+                        ))}
+                    </div>
+                )}
+            </SectionCard>
+
+            {/* ─── 5. Reconciliation Dry-Run (Phase 0.5) ─── */}
+            <SectionCard
+                title="5. Reconciliation Dry-Run (Phase 0.5)"
+                icon={Stethoscope}
+                actions={
+                    <div className="flex items-center gap-2">
+                        <JsonActions payload={recomputeResult}
+                            filename="ad-recompute-dryrun.json"
+                            testidPrefix="recompute" />
+                        <button
+                            onClick={runRecompute}
+                            disabled={busy.recompute}
+                            data-testid="run-recompute-btn"
+                            className="inline-flex items-center gap-2 px-4 py-2
+                                        rounded-xl bg-emerald-600
+                                        hover:bg-emerald-700 disabled:opacity-50
+                                        text-white text-sm font-bold">
+                            {busy.recompute
+                                ? <Spinner className="animate-spin" size={16} />
+                                : <MagnifyingGlass size={16} />}
+                            تشغيل Reconciliation Dry-Run
+                        </button>
+                    </div>
+                }>
+                {!recomputeResult && (
+                    <p className="text-sm text-slate-500">
+                        يعرض لكل حساب: قيمة الكاش الحالية، القيمة المقترحة
+                        من GL، الفرق، وعدد سطور legacy التي ستبقى deprecated.
+                        لا يُنفّذ recompute فعلي.
+                    </p>
+                )}
+                {recomputeResult && (
+                    <div className="space-y-4">
+                        <div className="flex flex-wrap items-center gap-3
+                                         pb-3 border-b border-slate-200">
+                            <span data-testid="recompute-overall"
+                                  className={`px-3 py-1 rounded-full border
+                                              text-xs font-extrabold ${
+                                recomputeResult.overall_recommendation
+                                    === "all_safe_to_recompute"
+                                    ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+                                : recomputeResult.overall_recommendation
+                                    === "all_need_manual_review"
+                                    ? "bg-rose-100 text-rose-700 border-rose-300"
+                                : "bg-amber-100 text-amber-700 border-amber-300"
+                            }`}>
+                                overall: {recomputeResult.overall_recommendation}
+                            </span>
+                            <span className="text-xs text-slate-600">
+                                scanned:&nbsp;
+                                <b>{recomputeResult.totals?.accounts_scanned}</b>
+                                &nbsp;· cache_only:&nbsp;
+                                <b className="text-emerald-700">
+                                    {recomputeResult.totals?.recompute_cache_only}
+                                </b>
+                                &nbsp;· manual_review:&nbsp;
+                                <b className="text-rose-700">
+                                    {recomputeResult.totals?.manual_review_required}
+                                </b>
+                            </span>
+                            <span className="text-xs text-slate-600">
+                                |Δ balance|:&nbsp;
+                                <b className="num">
+                                    {fmtMoney(recomputeResult.totals
+                                        ?.total_abs_delta_current_balance)}
+                                </b>
+                                &nbsp;· |Δ debt|:&nbsp;
+                                <b className="num">
+                                    {fmtMoney(recomputeResult.totals
+                                        ?.total_abs_delta_debt_balance)}
+                                </b>
+                            </span>
+                        </div>
+
+                        <div className="rounded-xl border border-emerald-200
+                                        bg-emerald-50/30 p-3">
+                            <div className="text-[11px] font-extrabold
+                                             text-emerald-700 mb-1">
+                                ✅ ضمانات هذا التشغيل
+                            </div>
+                            <ul className="text-[11px] text-slate-700 space-y-0.5
+                                            list-disc list-inside">
+                                {(recomputeResult.constraints_honored || [])
+                                    .map((c, i) => (
+                                    <li key={i}>{c}</li>
+                                ))}
+                            </ul>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs border
+                                              border-slate-200 rounded-lg
+                                              overflow-hidden"
+                                   data-testid="recompute-table">
+                                <thead>
+                                    <tr className="bg-slate-100 text-slate-700">
+                                        <th className="px-3 py-2 text-right">الحساب</th>
+                                        <th className="px-3 py-2">cache.balance</th>
+                                        <th className="px-3 py-2">→ GL.balance</th>
+                                        <th className="px-3 py-2">Δ</th>
+                                        <th className="px-3 py-2">cache.debt</th>
+                                        <th className="px-3 py-2">→ GL.debt</th>
+                                        <th className="px-3 py-2">Δ</th>
+                                        <th className="px-3 py-2">legacy_rows</th>
+                                        <th className="px-3 py-2">التوصية</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(recomputeResult.accounts || []).map(
+                                        (a, i) => (
+                                        <tr key={a.ad_account_id}
+                                            data-testid={`recompute-row-${i}`}
+                                            className={`border-b ${
+                                                a.recommendation
+                                                    === "RECOMPUTE_CACHE_ONLY"
+                                                    ? "bg-emerald-50/30"
+                                                    : "bg-rose-50/30"
+                                            }`}>
+                                            <td className="px-3 py-2 font-bold">
+                                                {a.name}
+                                                <div className="text-[10px]
+                                                                 text-slate-500">
+                                                    {a.platform || a.source}
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2 num">
+                                                {fmtMoney(a.current_cache
+                                                    ?.current_balance)}
+                                            </td>
+                                            <td className="px-3 py-2 num
+                                                            font-bold
+                                                            text-emerald-700">
+                                                {fmtMoney(a.proposed_from_gl
+                                                    ?.current_balance)}
+                                            </td>
+                                            <td className="px-3 py-2 num
+                                                            font-extrabold"
+                                                style={{
+                                                  color: Math.abs(
+                                                    a.deltas
+                                                      ?.current_balance_delta
+                                                      || 0) > 0.02
+                                                    ? "#dc2626" : "#059669"
+                                                }}>
+                                                {fmtMoney(a.deltas
+                                                    ?.current_balance_delta)}
+                                            </td>
+                                            <td className="px-3 py-2 num">
+                                                {fmtMoney(a.current_cache
+                                                    ?.debt_balance)}
+                                            </td>
+                                            <td className="px-3 py-2 num
+                                                            font-bold
+                                                            text-emerald-700">
+                                                {fmtMoney(a.proposed_from_gl
+                                                    ?.debt_balance)}
+                                            </td>
+                                            <td className="px-3 py-2 num
+                                                            font-extrabold"
+                                                style={{
+                                                  color: Math.abs(
+                                                    a.deltas?.debt_balance_delta
+                                                      || 0) > 0.02
+                                                    ? "#dc2626" : "#059669"
+                                                }}>
+                                                {fmtMoney(a.deltas
+                                                    ?.debt_balance_delta)}
+                                            </td>
+                                            <td className="px-3 py-2 num
+                                                            text-center
+                                                            text-[10px]">
+                                                {a.legacy_rows_remaining
+                                                    ?.ad_account_ledger}
+                                                {" / "}
+                                                {a.legacy_rows_remaining
+                                                    ?.liabilities}
+                                                {" / "}
+                                                {a.legacy_rows_remaining
+                                                    ?.account_transactions}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <span className={`px-1.5 py-0.5
+                                                    rounded text-[10px]
+                                                    font-extrabold ${
+                                                    a.recommendation
+                                                        === "RECOMPUTE_CACHE_ONLY"
+                                                    ? "bg-emerald-100 text-emerald-700"
+                                                    : "bg-rose-100 text-rose-700"
+                                                }`}>
+                                                    {a.recommendation}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="text-[10px] text-slate-500 mt-1">
+                                legacy_rows = ad_account_ledger / liabilities
+                                / account_transactions (كلها ستبقى deprecated
+                                بدون حذف)
+                            </div>
+                        </div>
+
+                        {(recomputeResult.accounts || [])
+                            .filter(a => a.reasons?.length > 0)
+                            .map((a, i) => (
+                                <div key={`reason-${i}`}
+                                     className="rounded-lg border border-rose-200
+                                                 bg-rose-50/40 p-3 text-xs"
+                                     data-testid={`recompute-reasons-${i}`}>
+                                    <div className="font-extrabold text-rose-700
+                                                     mb-1">
+                                        ⚠️ {a.name} — أسباب MANUAL_REVIEW:
+                                    </div>
+                                    <ul className="list-disc list-inside
+                                                    text-slate-700 space-y-1">
+                                        {a.reasons.map((r, j) => (
+                                            <li key={j}>{r}</li>
+                                        ))}
+                                    </ul>
+                                    <div className="mt-2 text-[11px]
+                                                     text-slate-600">
+                                        <b>التفصيل:</b>&nbsp;
+                                        {a.recommendation_detail}
+                                    </div>
+                                </div>
                         ))}
                     </div>
                 )}

@@ -3949,6 +3949,12 @@ from ad_account_dryrun_diff_routes import (
 )
 api.include_router(
     make_ad_account_dryrun_diff_router(db, current_user))
+# Iter-250b P0.5 — Ad-account recompute dry-run (READ-ONLY).
+from ad_account_recompute_dryrun_routes import (
+    make_ad_account_recompute_dryrun_router,
+)
+api.include_router(
+    make_ad_account_recompute_dryrun_router(db, current_user))
 # Iter-217b — Reversal Impact Report (read-only audit of Iter-217 fix)
 from reversal_impact_audit_routes import make_reversal_impact_router
 api.include_router(make_reversal_impact_router(db, current_user))
