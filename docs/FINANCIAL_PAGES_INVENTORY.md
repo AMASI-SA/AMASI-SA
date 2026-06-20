@@ -6,16 +6,16 @@
 ## الملخّص التنفيذي
 
 - **total_pages**: `64`
-- **keep_count**: `46` 🟢
-- **merge_count**: `6` 🟡
+- **keep_count**: `47` 🟢
+- **merge_count**: `5` 🟡
 - **deprecate_count**: `9` 🟠
 - **delete_count**: `3` 🔴
 - **legacy_pages_affecting_balance**: `10`
 
 ### Hide Safety (Iter-250a)
 
-- ✅ **KEEP_VISIBLE**: `46`
-- 🔍 **NEEDS_REVIEW**: `7`
+- ✅ **KEEP_VISIBLE**: `47`
+- 🔍 **NEEDS_REVIEW**: `6`
 - 🚫 **SAFE_TO_HIDE**: `8`
 - ↪️ **NEEDS_REDIRECT**: `3`
 
@@ -49,7 +49,6 @@
 | `/purchase-invoices` | MERGE | `/suppliers-new (نموذج فاتورة موحّد)` | يكتب في liabilities + account_transactions. النموذج الجديد يجب أن يتولّى دورة الفاتورة كاملة. |
 | `/shipping/transfers` | MERGE | `/new-transaction (type=courier_transfer)` | ندمج تحويلات الشحن مع شاشة الإدخال الموحّدة. |
 | `/receivables` | MERGE | `/new-transaction (type=receivable_collect) + /externals-ledger` | يستخدم liabilities + account_transactions. الكيان الخارجي يجب أن يُدار من /externals-ledger. |
-| `/payment-settlements` | MERGE | `/settlements-overview` | نظرة عامة عن تسويات منصات الدفع. |
 | `/accounting/migration` | DEPRECATE | `—` | أداة هجرة استُخدمت مرة واحدة. خطر إعادة تشغيلها بالخطأ. يجب إخفاؤها من القائمة بعد Iter-250. |
 
 ## 🔴 أعلى المخاطر (highest_risk_duplicates)
@@ -163,7 +162,7 @@
 | Route | المصدر | SSOT | تصنيف | Hide | Risk | يؤثر على الرصيد؟ | البديل | السبب |
 |---|---|---|---|---|---|---|---|---|
 | `/settlements` | `account_transactions` | LEGACY | 🟠 DEPRECATE | 🚫 SAFE_TO_HIDE | 🟢 LOW | لا | `/settlements-overview أو /salla-settlements` | صفحة قديمة لتسويات سلة. |
-| `/payment-settlements` | `account_transactions` | LEGACY | 🟡 MERGE | 🔍 NEEDS_REVIEW | 🟢 LOW | لا | `/settlements-overview` | نظرة عامة عن تسويات منصات الدفع. |
+| `/payment-settlements` | `account_transactions` | SSOT | 🟢 KEEP | ✅ KEEP_VISIBLE | 🟢 LOW | لا | `—` | Standalone settlement importer |
 | `/salla-settlements` | `external` | EXTERNAL | 🟢 KEEP | ✅ KEEP_VISIBLE | 🟢 LOW | لا | `—` | مزامنة تسويات سلة من API الخارجي. |
 | `/settlements-overview` | `general_ledger` | SSOT | 🟢 KEEP | ✅ KEEP_VISIBLE | 🟢 LOW | لا | `—` | نظرة عامة شاملة (ledger-based). |
 | `/reconciliation` | `mixed` | LEGACY | 🟠 DEPRECATE | 🚫 SAFE_TO_HIDE | 🟢 LOW | لا | `/accounting/reconciliation` | النسخة القديمة من المطابقة (يقرأ AT + current_balance). تم استبدالها بـ forensic ledger. |
