@@ -37,57 +37,102 @@ def make_employee_ledger_forensic_router(db, current_user):
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
-        emp = await db.operating_salaries.find_one(
-            {"user_id": uid, "id": employee_id}, {"_id": 0},
-        )
-        if not emp:
-            raise HTTPException(404, "employee not found")
+        # Iter-250b · P1.5.m.fix — guard the whole body so any failure
+        # returns a structured JSON instead of a 500. The merchant
+        # cannot debug a blank "Internal Server Error".
+        received_params = {
+            "employee_id": employee_id,
+            "include_account_transactions": include_account_transactions,
+        }
+        try:
+            emp = await db.operating_salaries.find_one(
+                {"user_id": uid, "id": employee_id}, {"_id": 0},
+            )
+            if not emp:
+                # Fallback — sometimes the merchant passes a name or
+                # a partial UUID. Try matching by name OR by id prefix.
+                emp = await db.operating_salaries.find_one(
+                    {"user_id": uid,
+                     "$or": [
+                         {"name": employee_id},
+                         {"id": {"$regex":
+                                  f"^{employee_id}", "$options": "i"}},
+                     ]},
+                    {"_id": 0},
+                )
+                if not emp:
+                    return {
+                        "ok": False,
+                        "error": "employee_not_found",
+                        "details": (
+                            "No employee matches the given id, name, "
+                            "or id prefix."),
+                        "received_params": received_params,
+                    }
+            employee_id = emp["id"]  # canonicalise
+        except Exception as e:  # noqa: BLE001
+            return {
+                "ok": False,
+                "error": "employee_lookup_failed",
+                "details": repr(e),
+                "received_params": received_params,
+            }
 
         # ── 1. Pull EVERY ledger row, no filtering ─────────────────
         all_rows: List[Dict[str, Any]] = []
-        async for r in db.general_ledger.find(
-            {"user_id": uid,
-             "entity_type": "employee",
-             "entity_id": employee_id},
-            {"_id": 0, "id": 1, "entry_type": 1, "sub_account": 1,
-             "side": 1, "amount": 1, "notes": 1, "posted_at": 1,
-             "created_at": 1, "txn_group_id": 1, "metadata": 1,
-             "status": 1, "reversed_by_entry_id": 1,
-             "reversal_of_entry_id": 1},
-        ).sort("posted_at", 1):
-            md = r.get("metadata") or {}
-            all_rows.append({
-                "id": r.get("id"),
-                "entry_type": r.get("entry_type"),
-                "sub_account": r.get("sub_account"),
-                "side": r.get("side"),
-                "amount": _r(r.get("amount")),
-                "status": r.get("status"),
-                "notes": (r.get("notes") or "")[:120],
-                "posted_at": r.get("posted_at"),
-                "created_at": r.get("created_at"),
-                "txn_group_id": r.get("txn_group_id"),
-                "reversed_by_entry_id": r.get("reversed_by_entry_id"),
-                "reversal_of_entry_id": r.get("reversal_of_entry_id"),
-                "metadata_source": md.get("source"),
-                "metadata_legacy_orphan": bool(md.get("legacy_orphan")),
-                "metadata_keys": list(md.keys()),
-                # Iter-250b · P1.5.m — classify why this row is or
-                # is NOT counted by /summary-balance and /employees/list.
-                "ssot_filter_status": (
-                    "EXCLUDED_reversal"
-                    if (r.get("entry_type") == "reversal")
-                    else (
-                        "EXCLUDED_legacy_orphan"
-                        if md.get("legacy_orphan")
+        try:
+            async for r in db.general_ledger.find(
+                {"user_id": uid,
+                 "entity_type": "employee",
+                 "entity_id": employee_id},
+                {"_id": 0, "id": 1, "entry_type": 1, "sub_account": 1,
+                 "side": 1, "amount": 1, "notes": 1, "posted_at": 1,
+                 "created_at": 1, "txn_group_id": 1, "metadata": 1,
+                 "status": 1, "reversed_by_entry_id": 1,
+                 "reversal_of_entry_id": 1},
+            ).sort("posted_at", 1):
+                md = r.get("metadata") or {}
+                all_rows.append({
+                    "id": r.get("id"),
+                    "entry_type": r.get("entry_type"),
+                    "sub_account": r.get("sub_account"),
+                    "side": r.get("side"),
+                    "amount": _r(r.get("amount")),
+                    "status": r.get("status"),
+                    "notes": (r.get("notes") or "")[:120],
+                    "posted_at": r.get("posted_at"),
+                    "created_at": r.get("created_at"),
+                    "txn_group_id": r.get("txn_group_id"),
+                    "reversed_by_entry_id":
+                        r.get("reversed_by_entry_id"),
+                    "reversal_of_entry_id":
+                        r.get("reversal_of_entry_id"),
+                    "metadata_source": md.get("source"),
+                    "metadata_legacy_orphan":
+                        bool(md.get("legacy_orphan")),
+                    "metadata_keys": list(md.keys()),
+                    "ssot_filter_status": (
+                        "EXCLUDED_reversal"
+                        if (r.get("entry_type") == "reversal")
                         else (
-                            "EXCLUDED_not_posted"
-                            if (r.get("status") != "posted")
-                            else "INCLUDED"
+                            "EXCLUDED_legacy_orphan"
+                            if md.get("legacy_orphan")
+                            else (
+                                "EXCLUDED_not_posted"
+                                if (r.get("status") != "posted")
+                                else "INCLUDED"
+                            )
                         )
-                    )
-                ),
-            })
+                    ),
+                })
+        except Exception as e:  # noqa: BLE001
+            return {
+                "ok": False,
+                "error": "ledger_scan_failed",
+                "details": repr(e),
+                "received_params": received_params,
+                "employee_id": employee_id,
+            }
 
         # ── 2. Aggregate three views ──────────────────────────────
         def _net_by_sub(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -119,81 +164,136 @@ def make_employee_ledger_forensic_router(db, current_user):
                                if r["ssot_filter_status"] == "EXCLUDED_not_posted"]
 
         # ── 3. Optional: legacy account_transactions ──────────────
+        # NOTE: account_transactions stores `account_id` (bank/cash
+        # account) and links to employees via `peer_liability_id` →
+        # `liabilities.entity_id`. Direct entity_type filter would
+        # always return zero rows. We discover the linkage via
+        # liabilities first, then pull matching account_transactions.
         legacy_account_txns: List[Dict[str, Any]] = []
         legacy_summary: Optional[Dict[str, Any]] = None
+        legacy_error: Optional[str] = None
         if include_account_transactions:
-            inc = 0.0
-            out = 0.0
-            n_in = 0
-            n_out = 0
-            async for r in db.account_transactions.aggregate([
-                {"$match": {"user_id": uid,
-                            "entity_type": "employee",
-                            "entity_id": employee_id}},
-                {"$group": {"_id": "$direction",
-                            "total": {"$sum": "$amount"},
-                            "n": {"$sum": 1}}},
-            ]):
-                if r["_id"] == "in":
-                    inc = float(r["total"])
-                    n_in = int(r["n"])
-                elif r["_id"] == "out":
-                    out = float(r["total"])
-                    n_out = int(r["n"])
-            legacy_summary = {
-                "in_total": _r(inc),
-                "out_total": _r(out),
-                "net": _r(inc - out),
-                "in_count": n_in,
-                "out_count": n_out,
-            }
-            async for t in db.account_transactions.find(
-                {"user_id": uid,
-                 "entity_type": "employee",
-                 "entity_id": employee_id},
-                {"_id": 0, "id": 1, "transaction_type": 1, "amount": 1,
-                 "direction": 1, "description": 1, "transaction_date": 1,
-                 "created_at": 1, "txn_group_id": 1, "metadata": 1},
-            ).sort("transaction_date", 1):
-                legacy_account_txns.append({
-                    "id": t.get("id"),
-                    "transaction_type": t.get("transaction_type"),
-                    "amount": _r(t.get("amount")),
-                    "direction": t.get("direction"),
-                    "description": (t.get("description") or "")[:120],
-                    "transaction_date": t.get("transaction_date"),
-                    "txn_group_id": t.get("txn_group_id"),
-                })
+            try:
+                liability_ids: List[str] = []
+                liabilities_rows = await db.liabilities.find(
+                    {"user_id": uid,
+                     "$or": [
+                         {"entity_id": employee_id},
+                         {"employee_id": employee_id},
+                     ]},
+                    {"_id": 0, "id": 1, "entity_id": 1,
+                     "employee_id": 1, "title": 1, "type": 1,
+                     "status": 1, "amount": 1, "remaining_amount": 1},
+                ).to_list(500)
+                for lia in liabilities_rows:
+                    if lia.get("id"):
+                        liability_ids.append(lia["id"])
+
+                inc = 0.0
+                out = 0.0
+                n_in = 0
+                n_out = 0
+                if liability_ids:
+                    async for r in db.account_transactions.aggregate([
+                        {"$match": {
+                            "user_id": uid,
+                            "peer_liability_id":
+                                {"$in": liability_ids}}},
+                        {"$group": {"_id": "$direction",
+                                    "total": {"$sum": "$amount"},
+                                    "n": {"$sum": 1}}},
+                    ]):
+                        if r["_id"] == "in":
+                            inc = float(r["total"] or 0)
+                            n_in = int(r["n"] or 0)
+                        elif r["_id"] == "out":
+                            out = float(r["total"] or 0)
+                            n_out = int(r["n"] or 0)
+
+                    async for t in db.account_transactions.find(
+                        {"user_id": uid,
+                         "peer_liability_id":
+                             {"$in": liability_ids}},
+                        {"_id": 0, "id": 1, "account_id": 1,
+                         "transaction_type": 1, "amount": 1,
+                         "direction": 1, "description": 1,
+                         "transaction_date": 1, "created_at": 1,
+                         "txn_group_id": 1,
+                         "peer_liability_id": 1},
+                    ).limit(500):
+                        legacy_account_txns.append({
+                            "id": t.get("id"),
+                            "account_id": t.get("account_id"),
+                            "transaction_type":
+                                t.get("transaction_type"),
+                            "amount": _r(t.get("amount")),
+                            "direction": t.get("direction"),
+                            "description":
+                                (t.get("description") or "")[:120],
+                            "transaction_date":
+                                str(t.get("transaction_date"))
+                                if t.get("transaction_date") else None,
+                            "created_at":
+                                str(t.get("created_at"))
+                                if t.get("created_at") else None,
+                            "txn_group_id": t.get("txn_group_id"),
+                            "peer_liability_id":
+                                t.get("peer_liability_id"),
+                        })
+
+                legacy_summary = {
+                    "liabilities_linked_count": len(liability_ids),
+                    "liability_ids_sample": liability_ids[:5],
+                    "in_total": _r(inc),
+                    "out_total": _r(out),
+                    "net": _r(inc - out),
+                    "in_count": n_in,
+                    "out_count": n_out,
+                }
+            except Exception as e:  # noqa: BLE001
+                legacy_error = repr(e)
 
         # ── 4. Build the answer ────────────────────────────────────
-        ssot_view = _net_by_sub(all_included)
-        unfiltered_view = _net_by_sub(all_rows)
-        orphan_only_view = _net_by_sub(excluded_orphan)
-        reversal_only_view = _net_by_sub(excluded_reversal)
+        try:
+            ssot_view = _net_by_sub(all_included)
+            unfiltered_view = _net_by_sub(all_rows)
+            orphan_only_view = _net_by_sub(excluded_orphan)
+            reversal_only_view = _net_by_sub(excluded_reversal)
 
-        # Diagnose: which sub_accounts have a non-zero filtered impact?
-        filtered_impact: List[Dict[str, Any]] = []
-        for sub in set(list(ssot_view.keys())
-                       + list(unfiltered_view.keys())):
-            ssot_net = ssot_view.get(sub, {}).get("net", 0.0)
-            full_net = unfiltered_view.get(sub, {}).get("net", 0.0)
-            delta = _r(full_net - ssot_net)
-            if abs(delta) > 0.005:
-                filtered_impact.append({
-                    "sub_account": sub,
-                    "ssot_net": ssot_net,
-                    "unfiltered_net": full_net,
-                    "delta_hidden_by_filters": delta,
-                    "orphan_net":
-                        orphan_only_view.get(sub, {}).get("net", 0.0),
-                    "reversal_net":
-                        reversal_only_view.get(sub, {}).get("net", 0.0),
-                })
+            filtered_impact: List[Dict[str, Any]] = []
+            for sub in set(list(ssot_view.keys())
+                           + list(unfiltered_view.keys())):
+                ssot_net = ssot_view.get(sub, {}).get("net", 0.0)
+                full_net = unfiltered_view.get(sub, {}).get("net", 0.0)
+                delta = _r(full_net - ssot_net)
+                if abs(delta) > 0.005:
+                    filtered_impact.append({
+                        "sub_account": sub,
+                        "ssot_net": ssot_net,
+                        "unfiltered_net": full_net,
+                        "delta_hidden_by_filters": delta,
+                        "orphan_net":
+                            orphan_only_view.get(sub, {}).get(
+                                "net", 0.0),
+                        "reversal_net":
+                            reversal_only_view.get(sub, {}).get(
+                                "net", 0.0),
+                    })
+        except Exception as e:  # noqa: BLE001
+            return {
+                "ok": False,
+                "error": "aggregation_failed",
+                "details": repr(e),
+                "received_params": received_params,
+                "employee_id": employee_id,
+                "row_counts": {"all": len(all_rows)},
+            }
 
         return {
             "ok": True,
             "iter": "iter250b_p1_5_m",
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "received_params": received_params,
             "employee": {
                 "id": emp["id"],
                 "name": emp.get("name"),
@@ -223,18 +323,17 @@ def make_employee_ledger_forensic_router(db, current_user):
             "excluded_reversal_rows": excluded_reversal,
             "legacy_account_transactions_summary": legacy_summary,
             "legacy_account_transactions": legacy_account_txns,
+            "legacy_account_transactions_error": legacy_error,
             "notes": [
                 "READ-ONLY · no writes performed.",
-                "ssot_view is what /employees/list, /financial-summary "
-                "and /new-transaction all show after P1.5.i.",
-                "filtered_impact shows EXACTLY how much money is "
-                "hidden because the row was a reversal or carried "
-                "metadata.legacy_orphan=True.",
-                "If delta_hidden_by_filters on sub_account=advance is "
-                "positive ≈ 14,700, the missing advance is in "
-                "excluded_legacy_orphan_rows.",
-                "Use include_account_transactions=true to also list "
-                "legacy `account_transactions` rows (pre-ledger).",
+                "ssot_view = ما تعرضه /employees/list و /summary-balance.",
+                "filtered_impact = الفجوة بين الفلتر والـ raw — لو وُجد "
+                "advance=14700 هنا ⇒ القيد مخفي بسبب legacy_orphan.",
+                "account_transactions linked via "
+                "liabilities.entity_id = employee_id ⇒ "
+                "peer_liability_id (ليس entity_id).",
+                "include_account_transactions=true ⇒ يَجلب القيود "
+                "الـ legacy المرتبطة بـ liabilities الموظف.",
             ],
         }
 
