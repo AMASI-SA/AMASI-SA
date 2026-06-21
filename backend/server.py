@@ -3987,6 +3987,12 @@ from movements_gl_drift_routes import (
 )
 api.include_router(
     make_movements_gl_drift_router(db, current_user))
+# Iter-250b P1.5.ab — Suppliers Unification Forensic (READ-ONLY).
+from suppliers_unification_forensic_routes import (
+    make_suppliers_unification_forensic_router,
+)
+api.include_router(
+    make_suppliers_unification_forensic_router(db, current_user))
 # Iter-250a — Post-deploy verification (READ-ONLY).
 from iter250a_verification_routes import (
     make_iter250a_verification_router,

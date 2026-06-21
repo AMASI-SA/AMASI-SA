@@ -729,13 +729,19 @@ def make_financial_movements_router(db, current_user):
         limit: int = Query(200, ge=1, le=1000),
     ):
         uid = user["id"]
-        q: dict = {"user_id": uid, "status": "posted"}
+        # Iter-250b · P1.5.aa — Show ALL movements (including
+        # `ledger_failed` ones) so the merchant can never have a
+        # "ghost" row that exists in financial_movements but is
+        # invisible everywhere. We classify each row's posting
+        # status against general_ledger and surface it in the
+        # response.
+        q: dict = {"user_id": uid,
+                    "status": {"$in": ["posted", "ledger_failed"]}}
         if movement_type:
             q["movement_type"] = movement_type
         if supplier_id:
             q["supplier_id"] = supplier_id
         if category_id:
-            # Match either header category OR any path-id in ancestors.
             q["$or"] = [
                 {"category_id": category_id},
                 {"category_path_ids": category_id},
@@ -748,9 +754,49 @@ def make_financial_movements_router(db, current_user):
                 q["doc_date"]["$lte"] = to_date
         rows = await db.financial_movements.find(
             q,
-            {"_id": 0,
-             "receipt_attachment.base64": 0},  # don't ship file bytes
+            {"_id": 0, "receipt_attachment.base64": 0},
         ).sort([("doc_date", -1), ("created_at", -1)]).to_list(limit)
+
+        # ── Iter-250b · P1.5.aa — Enrich each row with posting status.
+        # We collect all referenced txn_group_ids and check their
+        # existence in `general_ledger` in ONE roundtrip.
+        group_ids = list({r.get("ledger_txn_group_id")
+                          for r in rows if r.get("ledger_txn_group_id")})
+        gl_present: set = set()
+        gl_counts: dict = {}
+        if group_ids:
+            pipeline = [
+                {"$match": {"user_id": uid,
+                            "txn_group_id": {"$in": group_ids},
+                            "status": "posted"}},
+                {"$group": {"_id": "$txn_group_id",
+                            "n": {"$sum": 1}}},
+            ]
+            async for g in db.general_ledger.aggregate(pipeline):
+                gl_present.add(g["_id"])
+                gl_counts[g["_id"]] = g["n"]
+
+        for r in rows:
+            tg = r.get("ledger_txn_group_id")
+            mv_status = r.get("status") or "posted"
+            if mv_status == "ledger_failed":
+                ps = "posted_failed"
+                reason = "فشل ترحيل القيد إلى GL"
+            elif tg and tg in gl_present:
+                ps = "posted_to_gl"
+                reason = ""
+            elif tg and tg not in gl_present:
+                ps = "not_posted"
+                reason = ("تحمل ledger_txn_group_id لكن لا يوجد قيد "
+                          "GL — فشل كتابة جزئي")
+            else:
+                ps = "not_posted"
+                reason = ("بدون ledger_txn_group_id — Legacy أو مسار "
+                          "كود قديم لا يكتب GL")
+            r["posting_status"] = ps
+            r["posting_status_reason"] = reason
+            r["gl_entries_count"] = gl_counts.get(tg, 0)
+
         return {"ok": True, "items": rows, "count": len(rows)}
 
     @router.get("/{mv_id}")
@@ -758,10 +804,45 @@ def make_financial_movements_router(db, current_user):
         mv_id: str,
         user: dict = Depends(current_user),
     ):
+        uid = user["id"]
         mv = await db.financial_movements.find_one(
-            {"id": mv_id, "user_id": user["id"]}, {"_id": 0})
+            {"id": mv_id, "user_id": uid}, {"_id": 0})
         if not mv:
             raise HTTPException(404, "العملية غير موجودة")
+        # Iter-250b · P1.5.aa — Add forensic block: GL link, entry
+        # count, sample entries (for diagnosis).
+        tg = mv.get("ledger_txn_group_id")
+        gl_entries = []
+        if tg:
+            async for g in db.general_ledger.find(
+                {"user_id": uid, "txn_group_id": tg},
+                {"_id": 0, "id": 1, "side": 1, "amount": 1,
+                 "entity_type": 1, "entity_id": 1, "sub_account": 1,
+                 "status": 1, "entry_type": 1, "created_at": 1,
+                 "notes": 1},
+            ).limit(20):
+                gl_entries.append(g)
+        mv_status = mv.get("status") or "posted"
+        if mv_status == "ledger_failed":
+            ps = "posted_failed"; reason = "فشل ترحيل القيد إلى GL"
+        elif tg and gl_entries:
+            ps = "posted_to_gl"; reason = ""
+        elif tg and not gl_entries:
+            ps = "not_posted"
+            reason = "تحمل ledger_txn_group_id لكن لا يوجد قيد GL"
+        else:
+            ps = "not_posted"
+            reason = "بدون ledger_txn_group_id — Legacy أو مسار قديم"
+        mv["posting_diagnostic"] = {
+            "movement_id":          mv.get("id"),
+            "txn_group_id":         tg,
+            "has_gl_entries":       bool(gl_entries),
+            "gl_entries_count":     len(gl_entries),
+            "gl_entries_sample":    gl_entries,
+            "movement_status":      mv_status,
+            "posting_status":       ps,
+            "reason":               reason,
+        }
         return mv
 
     return router

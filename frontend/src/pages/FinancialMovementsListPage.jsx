@@ -179,6 +179,7 @@ export default function FinancialMovementsListPage() {
                 <th className="p-2">السداد</th>
                 <th className="p-2">الحساب</th>
                 <th className="p-2">مرفق</th>
+                <th className="p-2">الحالة المحاسبية</th>
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -216,6 +217,28 @@ export default function FinancialMovementsListPage() {
                   </td>
                   <td className="p-2">
                     {m.receipt_attachment ? "📎" : "—"}
+                  </td>
+                  {/* Iter-250b · P1.5.aa — Posting status badge. */}
+                  <td className="p-2">
+                    {m.posting_status === "posted_to_gl" ? (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"
+                            title={"GL entries: " + (m.gl_entries_count || 0)}
+                            data-testid={"fm-posting-" + m.id}>
+                        ✓ مُرحَّلة
+                      </span>
+                    ) : m.posting_status === "posted_failed" ? (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300"
+                            title={m.posting_status_reason || ""}
+                            data-testid={"fm-posting-" + m.id}>
+                        ✕ فشل ترحيل
+                      </span>
+                    ) : (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300"
+                            title={m.posting_status_reason || ""}
+                            data-testid={"fm-posting-" + m.id}>
+                        ⚠️ غير مُرحَّلة
+                      </span>
+                    )}
                   </td>
                   <td className="p-2">
                     <button onClick={() => setDetail(m)}

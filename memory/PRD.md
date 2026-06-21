@@ -92,6 +92,16 @@
 - [P2] Execute Financial Reset / Ad-Account Recompute (postponed)
 - [P2] Category Reports & Expense Analysis Dashboard
 - [P2] Product Linkage (Inventory, SKUs)
+- [P2] Phase 2 of Supplier Unification — provide a (gated) "Link Ledger-only supplier to db.suppliers" action once user reviews the forensic report
+
+## P1.5.ab — Suppliers Unification (2026-02 · READ-ONLY)
+Backend: `suppliers_unification_forensic_routes.py`
+  - `GET /api/suppliers-unified` — merged list (db.suppliers + db.counterparties + GL/FM ghosts) with `link_status` ∈ {new_only, linked, ledger_only}, `editable` flag, GL balance per row
+  - `GET /api/audit/suppliers-unification-forensic` — full diagnostic dump: counts, lists per category, ghosts (GL/FM IDs missing from both tables), duplicate suspects by name/phone/email
+Frontend:
+  - `SuppliersPage.jsx` Management tab now calls `/suppliers-unified` instead of `/suppliers` and shows badges + summary cards + link-status filter
+  - `SuppliersUnificationForensicModal.jsx` — modal with 6 tabs (نظرة عامة، مورد جديد، Ledger فقط، مربوط، GL/FM أيتام، تكرارات مُشتبه بها)
+Tests: `tests/test_p15ab_suppliers_unification_forensic.py` — 3/3 PASS
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
@@ -99,3 +109,4 @@ See `/app/memory/test_credentials.md`.
 ## Tests
 - `/app/backend/tests/test_p15L_bnpl_transfer_block.py` — 11/11 PASS
 - `/app/backend/tests/test_p15p_employee_guard_widened.py` — 7/7 PASS
+- `/app/backend/tests/test_p15ab_suppliers_unification_forensic.py` — 3/3 PASS
