@@ -350,7 +350,12 @@ def make_supplier_ledger_detail_router(db, current_user):
             fm_period_query,
             {"_id": 0, "id": 1, "doc_number": 1, "doc_date": 1,
              "total_amount": 1, "paid_amount": 1,
-             "ledger_txn_group_id": 1, "notes": 1},
+             "ledger_txn_group_id": 1, "notes": 1,
+             # Iter-250b · P1.5.w — expose the `status` so the merchant
+             # can immediately tell apart `ledger_failed` (a real GL
+             # post failure that needs Operator action) from
+             # truly-legacy orphans (`posted` with no group_id).
+             "status": 1, "created_at": 1},
         ):
             movements_period_count += 1
             tg = m.get("ledger_txn_group_id")
@@ -362,6 +367,9 @@ def make_supplier_ledger_detail_router(db, current_user):
                     "total_amount": _r(m.get("total_amount")),
                     "paid_amount":  _r(m.get("paid_amount")),
                     "notes":        m.get("notes"),
+                    "status":       m.get("status") or "posted",
+                    "has_group_id": bool(tg),
+                    "created_at":   m.get("created_at"),
                 })
 
         # Period totals — preferred for the summary cards.

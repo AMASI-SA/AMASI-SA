@@ -249,18 +249,30 @@ export default function SupplierLedgerDetailPage() {
             // Sheet 7 — Drift diagnostic (if any)
             if ((recon.movements_orphaned || []).length > 0) {
                 const driftHeader = [
-                    "رقم", "التاريخ", "الإجمالي", "المدفوع", "ملاحظات",
+                    "رقم", "التاريخ", "الإجمالي", "المدفوع",
+                    "الحالة", "السبب المحتمل", "ملاحظات",
                 ];
-                const driftRows = recon.movements_orphaned.map(o => [
-                    o.doc_number || "—", ymd(o.doc_date),
-                    Number(o.total_amount || 0), Number(o.paid_amount || 0),
-                    o.notes || "",
-                ]);
+                const driftRows = recon.movements_orphaned.map(o => {
+                    const isFailed = o.status === "ledger_failed";
+                    const statusLabel = isFailed ? "فشل ترحيل القيد"
+                        : (o.status || "posted");
+                    const reason = isFailed
+                        ? "خطأ أثناء كتابة القيد في GL"
+                        : !o.has_group_id
+                            ? "بدون ledger_txn_group_id"
+                            : "GL row مفقود (فشل جزئي)";
+                    return [
+                        o.doc_number || "—", ymd(o.doc_date),
+                        Number(o.total_amount || 0),
+                        Number(o.paid_amount || 0),
+                        statusLabel, reason, o.notes || "",
+                    ];
+                });
                 const ws7 = XLSX.utils.aoa_to_sheet(
                     [driftHeader, ...driftRows]);
                 ws7["!cols"] = [
                     { wch: 18 }, { wch: 12 }, { wch: 14 },
-                    { wch: 14 }, { wch: 30 },
+                    { wch: 14 }, { wch: 22 }, { wch: 36 }, { wch: 30 },
                 ];
                 XLSX.utils.book_append_sheet(wb, ws7, "تشخيص التباين");
             }
@@ -772,19 +784,42 @@ export default function SupplierLedgerDetailPage() {
                                     <th className="p-2 text-right border">التاريخ</th>
                                     <th className="p-2 text-right border">الإجمالي</th>
                                     <th className="p-2 text-right border">المدفوع</th>
+                                    <th className="p-2 text-right border">الحالة</th>
+                                    <th className="p-2 text-right border">السبب المحتمل</th>
                                     <th className="p-2 text-right border">ملاحظات</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {reconciliation.movements_orphaned.map((o, i) => (
-                                    <tr key={i} className="bg-rose-50/40">
-                                        <td className="p-2 border">{o.doc_number || "—"}</td>
-                                        <td className="p-2 border whitespace-nowrap">{ymd(o.doc_date)}</td>
-                                        <td className="p-2 border text-left font-mono">{fmt(o.total_amount)}</td>
-                                        <td className="p-2 border text-left font-mono">{fmt(o.paid_amount)}</td>
-                                        <td className="p-2 border max-w-[300px]">{o.notes}</td>
-                                    </tr>
-                                ))}
+                                {reconciliation.movements_orphaned.map((o, i) => {
+                                    // Iter-250b · P1.5.w — Status-aware diagnostic.
+                                    // `ledger_failed` is a REAL GL post failure (needs
+                                    // operator action). Anything else is most likely a
+                                    // legacy / pre-GL movement.
+                                    const isFailed = o.status === "ledger_failed";
+                                    const statusLabel = isFailed
+                                        ? "🔴 فشل ترحيل القيد"
+                                        : o.status === "voided"   ? "ملغاة"
+                                        : o.status === "draft"    ? "مسودة"
+                                        : o.status === "deleted"  ? "محذوفة"
+                                        : "📝 منشورة (orphan)";
+                                    const reason = isFailed
+                                        ? "حدث خطأ أثناء كتابة القيد في GL — تواصل مع الدعم لمراجعة logs"
+                                        : !o.has_group_id
+                                            ? "بدون ledger_txn_group_id (legacy أو مسار قديم)"
+                                            : "تحمل group_id لكن GL row مفقود (فشل كتابة جزئي)";
+                                    return (
+                                        <tr key={i}
+                                            className={isFailed ? "bg-rose-100 font-semibold" : "bg-rose-50/40"}>
+                                            <td className="p-2 border">{o.doc_number || "—"}</td>
+                                            <td className="p-2 border whitespace-nowrap">{ymd(o.doc_date)}</td>
+                                            <td className="p-2 border text-left font-mono">{fmt(o.total_amount)}</td>
+                                            <td className="p-2 border text-left font-mono">{fmt(o.paid_amount)}</td>
+                                            <td className="p-2 border whitespace-nowrap">{statusLabel}</td>
+                                            <td className="p-2 border text-[11px] text-slate-700">{reason}</td>
+                                            <td className="p-2 border max-w-[300px]">{o.notes}</td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </Section>
