@@ -1004,6 +1004,55 @@ export default function UnifiedEntryScreen() {
                             </>
                         )}
 
+                        {/* Iter-250b · P1.5.o — PREVIEW-only debug overlay.
+                            Renders ONLY when the page is served from a
+                            preview hostname (contains "preview" or
+                            "localhost"). Production users never see it.
+                            Shows the exact (id, name, monthly_amount)
+                            of the currently selected employee so we
+                            can verify the picker binding visually
+                            during forensic regression. */}
+                        {needsEmployee && entityId
+                          && typeof window !== "undefined"
+                          && (window.location.hostname.includes("preview")
+                              || window.location.hostname === "localhost"
+                              || window.location.hostname === "127.0.0.1") && (() => {
+                            const selEmp = employees.find(e => e.id === entityId);
+                            const selEmpTo = entityToId
+                              ? employees.find(e => e.id === entityToId) : null;
+                            return (
+                                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-mono leading-relaxed"
+                                     data-testid="iter250b-employee-binding-debug">
+                                    <div className="font-bold text-amber-900 mb-1">
+                                        🔬 DEBUG (Preview only · P1.5.o)
+                                    </div>
+                                    <div className="text-amber-900">
+                                        selected_employee_id: <span className="font-bold">{selEmp?.id || "—"}</span>
+                                    </div>
+                                    <div className="text-amber-900">
+                                        selected_employee_name: <span className="font-bold">{selEmp?.name || "—"}</span>
+                                    </div>
+                                    <div className="text-amber-900">
+                                        source_endpoint: /operating-expenses/salaries
+                                    </div>
+                                    <div className="text-amber-900">
+                                        monthly_amount: {Number(selEmp?.monthly_amount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    {selEmpTo && (
+                                        <>
+                                            <div className="border-t border-amber-200 my-1"></div>
+                                            <div className="text-amber-900">
+                                                to_employee_id: <span className="font-bold">{selEmpTo.id}</span>
+                                            </div>
+                                            <div className="text-amber-900">
+                                                to_employee_name: <span className="font-bold">{selEmpTo.name}</span>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
                         {/* Iter-185/186 — Employee context card.
                             For CUSTODY operations we show ONLY the open
                             custody balance (red when employee holds
