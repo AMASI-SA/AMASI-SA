@@ -1030,9 +1030,63 @@ def make_universal_router(db) -> APIRouter:
         ).to_list(2000)
         name_map = {e["id"]: e.get("name") for e in emp_docs}
 
+        # P1.5.s.fix.custody — Bulk salary_payable + advance balances
+        # per employee so the Custody Open Balances page can render the
+        # FULL employee picture (custody is independent, but salary
+        # and advance still belong on the same screen). ONE Mongo
+        # aggregation, grouped by (entity_id, sub_account, side).
+        salary_net: dict[str, float] = {sid: 0.0 for sid in emp_ids}
+        advance_bal: dict[str, float] = {sid: 0.0 for sid in emp_ids}
+        sub_pipe = [
+            {"$match": {
+                "user_id": uid,
+                "entity_type": "employee",
+                "entity_id": {"$in": emp_ids},
+                "sub_account": {"$in": ["salary_payable", "advance"]},
+                "status": "posted",
+            }},
+            {"$group": {
+                "_id": {
+                    "emp":  "$entity_id",
+                    "sub":  "$sub_account",
+                    "side": "$side",
+                },
+                "total": {"$sum": "$amount"},
+            }},
+        ]
+        async for row in db.general_ledger.aggregate(sub_pipe):
+            emp = row["_id"]["emp"]
+            sub = row["_id"]["sub"]
+            side = row["_id"]["side"]
+            amt = float(row["total"] or 0)
+            if sub == "salary_payable":
+                # Liability: credit increases (owed to employee),
+                # debit decreases (settled by salary_payment).
+                if side == "credit":
+                    salary_net[emp] = salary_net.get(emp, 0.0) + amt
+                else:
+                    salary_net[emp] = salary_net.get(emp, 0.0) - amt
+            else:  # advance
+                # Asset/Receivable: debit increases (we paid forward),
+                # credit decreases (employee settled).
+                if side == "debit":
+                    advance_bal[emp] = advance_bal.get(emp, 0.0) + amt
+                else:
+                    advance_bal[emp] = advance_bal.get(emp, 0.0) - amt
+
         rows = []
         for emp_id, b in buckets.items():
             open_balance = round(b["debits"] - b["credits"], 2)
+            sp = round(max(0.0, salary_net.get(emp_id, 0.0)), 2)
+            adv = round(max(0.0, advance_bal.get(emp_id, 0.0)), 2)
+            # Net to employee (custody EXCLUDED per business rule).
+            net = round(sp - adv, 2)
+            if   net > 0.01:
+                net_status = "owed_to_employee"   # له علينا
+            elif net < -0.01:
+                net_status = "owed_by_employee"   # عليه للنظام
+            else:
+                net_status = "balanced"
             rows.append({
                 "employee_id": emp_id,
                 "name": name_map.get(emp_id) or "(موظف محذوف)",
@@ -1045,10 +1099,25 @@ def make_universal_router(db) -> APIRouter:
                 "other_debit":        round(b["other_debit"], 2),
                 "other_credit":       round(b["other_credit"], 2),
                 "open_balance":       open_balance,
+                # P1.5.s.fix.custody — Salary/advance/net side panel.
+                "salary_owed":        sp,
+                "advance_open":       adv,
+                "net_to_employee":    net,
+                "net_status":         net_status,
             })
         rows.sort(key=lambda r: (-r["open_balance"], r["name"] or ""))
         total_open = round(sum(r["open_balance"] for r in rows), 2)
-        return {"rows": rows, "total_open_balance": total_open}
+        return {
+            "rows": rows,
+            "total_open_balance": total_open,
+            # Roll-ups for the new salary side cards.
+            "total_salary_owed":     round(
+                sum(r["salary_owed"]     for r in rows), 2),
+            "total_advance_open":    round(
+                sum(r["advance_open"]    for r in rows), 2),
+            "total_net_to_employee": round(
+                sum(r["net_to_employee"] for r in rows), 2),
+        }
 
     # ───────────────────────────────────────────────────────────────
     # Iter-250b · P1.5.q — Spendable custody sources.
