@@ -81,6 +81,14 @@
 - Roll-ups by cause, supplier, year
 - Read-only — pure diagnostic, no writes
 
+## P1.5.s.fix — Supplier Ledger Cash-Invoice Reclassification (2026-02 · READ-ONLY)
+Backend: `supplier_ledger_detail_routes.py` reconciliation block now classifies orphans into 3 buckets:
+  - `cash_invoices` — paid_amount ≥ total_amount AND GL exists for the group_id (just no payable leg). Valid postings, NOT drift.
+  - `drift_credit` — paid_amount < total_amount AND no supplier-payable leg in GL. Real drift, needs review.
+  - `ledger_failed` — no GL row at all for group_id (or status=ledger_failed). True GL post failure.
+Period block exposes `total_cash_purchases` + `cash_invoices_count`. `drift_detected` no longer fires on cash invoices.
+Frontend: `SupplierLedgerDetailPage.jsx` now renders 3 separate sections (📗 / 🟠 / 🔴) instead of one «orphan» bucket. New summary card «إجمالي مشتريات نقدية». Excel export splits to 3 sheets.
+
 ## Pending / Backlog
 - [P0] Analyze Tamara settlement JSON (26,279.64 vs 10,509.12 SAR discrepancy) — waiting for user to re-paste
 - [P1] Analyze Production drift report from P1.5.t (waiting for user output)

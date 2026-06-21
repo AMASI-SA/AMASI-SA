@@ -345,7 +345,21 @@ def make_supplier_ledger_detail_router(db, current_user):
         # Set of group_ids already correlated via GL.
         correlated_groups = set(fm_by_group.keys())
         movements_period_count = 0
-        movements_orphaned: List[Dict[str, Any]] = []
+        # P1.5.s.fix — Reclassify the previously-grouped "orphans" into
+        # three buckets so the merchant doesn't see a 100%-paid cash
+        # purchase mis-reported as a GL failure.
+        #
+        # • cash_invoices   : paid_amount ≥ total_amount AND there IS
+        #                     a GL post for that group_id (just not on
+        #                     supplier-payable — perfectly correct
+        #                     accounting for cash purchases).
+        # • drift_credit    : paid_amount < total_amount AND the
+        #                     supplier-payable leg is missing → real
+        #                     drift the operator must reconcile.
+        # • ledger_failed   : no GL row at all for the group_id (or no
+        #                     group_id) → true orphan / GL write
+        #                     failure.
+        candidates: List[Dict[str, Any]] = []
         async for m in db.financial_movements.find(
             fm_period_query,
             {"_id": 0, "id": 1, "doc_number": 1, "doc_date": 1,
@@ -355,22 +369,91 @@ def make_supplier_ledger_detail_router(db, current_user):
              # can immediately tell apart `ledger_failed` (a real GL
              # post failure that needs Operator action) from
              # truly-legacy orphans (`posted` with no group_id).
-             "status": 1, "created_at": 1},
+             "status": 1, "created_at": 1, "payment_terms": 1,
+             "category_snapshot": 1},
         ):
             movements_period_count += 1
             tg = m.get("ledger_txn_group_id")
-            if not tg or tg not in correlated_groups:
-                movements_orphaned.append({
-                    "movement_id":  m.get("id"),
-                    "doc_number":   m.get("doc_number"),
-                    "doc_date":     m.get("doc_date"),
-                    "total_amount": _r(m.get("total_amount")),
-                    "paid_amount":  _r(m.get("paid_amount")),
-                    "notes":        m.get("notes"),
-                    "status":       m.get("status") or "posted",
-                    "has_group_id": bool(tg),
-                    "created_at":   m.get("created_at"),
+            if tg and tg in correlated_groups:
+                continue  # already linked via supplier-payable
+            candidates.append(m)
+
+        # Bulk-fetch which uncorrelated group_ids exist ANYWHERE in
+        # GL (not just on supplier-payable). One Mongo round-trip.
+        candidate_groups = [c.get("ledger_txn_group_id")
+                            for c in candidates
+                            if c.get("ledger_txn_group_id")]
+        groups_with_any_gl: set = set()
+        if candidate_groups:
+            async for g in db.general_ledger.find(
+                {"user_id": uid,
+                 "txn_group_id": {"$in": candidate_groups},
+                 "status": "posted"},
+                {"_id": 0, "txn_group_id": 1},
+            ):
+                groups_with_any_gl.add(g["txn_group_id"])
+
+        cash_invoices:   List[Dict[str, Any]] = []
+        drift_credit:    List[Dict[str, Any]] = []
+        ledger_failed:   List[Dict[str, Any]] = []
+        total_cash_purchases = 0.0
+
+        for m in candidates:
+            tg = m.get("ledger_txn_group_id")
+            total = _r(m.get("total_amount"))
+            paid  = _r(m.get("paid_amount"))
+            base = {
+                "movement_id":  m.get("id"),
+                "doc_number":   m.get("doc_number"),
+                "doc_date":     m.get("doc_date"),
+                "total_amount": total,
+                "paid_amount":  paid,
+                "notes":        m.get("notes"),
+                "status":       m.get("status") or "posted",
+                "has_group_id": bool(tg),
+                "created_at":   m.get("created_at"),
+                "payment_terms": m.get("payment_terms"),
+                "category_name": (
+                    (m.get("category_snapshot") or {}).get("name")),
+            }
+            has_any_gl = bool(tg) and (tg in groups_with_any_gl)
+            failed_status = (m.get("status") == "ledger_failed")
+            # Bucket 3 — true GL failure: missing group_id OR group_id
+            # has no GL rows at all, OR FM was flipped to
+            # `ledger_failed` by the create_movement except-branch.
+            if (not has_any_gl) or failed_status:
+                ledger_failed.append({
+                    **base,
+                    "classification": "ledger_failed",
+                    "reason_code":    "gl_write_failure",
                 })
+                continue
+            # Bucket 1 — cash purchase: fully paid, GL legs exist
+            # (expense + cash), no payable was needed.
+            if paid >= total and total > 0:
+                cash_invoices.append({
+                    **base,
+                    "classification": "cash_invoice",
+                    "reason_code":    "fully_paid_no_payable",
+                })
+                total_cash_purchases += total
+                continue
+            # Bucket 2 — real drift: credit/partial invoice but no
+            # supplier-payable leg posted.
+            drift_credit.append({
+                **base,
+                "classification": "drift_credit",
+                "reason_code":    "missing_supplier_payable_leg",
+                "expected_payable_amount": _r(total - paid),
+            })
+
+        # Back-compat: keep `movements_orphaned` but populate it ONLY
+        # with the buckets that represent real problems (drift +
+        # ledger_failed). The frontend has logic to consume the new
+        # buckets directly.
+        movements_orphaned: List[Dict[str, Any]] = (
+            drift_credit + ledger_failed
+        )
 
         # Period totals — preferred for the summary cards.
         period_block = {
@@ -380,6 +463,10 @@ def make_supplier_ledger_detail_router(db, current_user):
             "total_paid":      total_paid_gl,
             "closing_balance": derived_balance,
             "entries_count":   len(gl_entries),
+            # P1.5.s.fix — Cash purchases roll-up (informational, not
+            # part of the supplier-payable balance which stays GL-only).
+            "total_cash_purchases": _r(total_cash_purchases),
+            "cash_invoices_count":  len(cash_invoices),
         }
 
         balance_match = (
@@ -402,9 +489,22 @@ def make_supplier_ledger_detail_router(db, current_user):
             "gl_entries_in_period":     len(gl_entries),
             "gl_only_count":            gl_only_count,
             "movements_in_period":      movements_period_count,
+            # P1.5.s.fix — Classified buckets. Cash invoices are NOT
+            # reported as drift anymore.
+            "cash_invoices_count":      len(cash_invoices),
+            "cash_invoices":            cash_invoices,
+            "drift_credit_count":       len(drift_credit),
+            "drift_credit":             drift_credit,
+            "ledger_failed_count":      len(ledger_failed),
+            "ledger_failed":            ledger_failed,
+            # Back-compat: combined "real problems" list.
             "movements_orphaned_count": len(movements_orphaned),
             "movements_orphaned":       movements_orphaned,
             "drift_detected":           (
+                # Drift now means: real drift (credit/partial without
+                # payable leg) OR ledger_failed OR full-history
+                # balance mismatch. Cash invoices DO NOT count as
+                # drift.
                 len(movements_orphaned) > 0
                 or (not from_ and not to
                     and abs(derived_balance - gl_balance_total) >= 0.01)
@@ -413,7 +513,7 @@ def make_supplier_ledger_detail_router(db, current_user):
 
         return {
             "ok": True,
-            "iter": "250b.P1.5.s",
+            "iter": "250b.P1.5.s.fix",
             "supplier": supplier_block,
             "period":   period_block,
             "timeline": timeline,
@@ -426,9 +526,13 @@ def make_supplier_ledger_detail_router(db, current_user):
                 "ONLY to enrich invoice metadata (line items, doc "
                 "number, discount, tax). It is never used to compute "
                 "the balance.",
-                "Any movement without a matching GL entry surfaces in "
-                "`reconciliation.movements_orphaned` — a real drift "
-                "that needs attention.",
+                "Cash-paid invoices (paid_amount == total_amount) are "
+                "valid postings (Dr expense / Cr bank) and do NOT "
+                "touch supplier-payable. They appear in "
+                "`reconciliation.cash_invoices`, not in "
+                "`movements_orphaned`.",
+                "Real drift = `drift_credit` (credit/partial without "
+                "supplier-payable leg) + `ledger_failed`.",
             ],
         }
 

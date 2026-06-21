@@ -246,16 +246,63 @@ export default function SupplierLedgerDetailPage() {
                 XLSX.utils.book_append_sheet(wb, ws6, "قيود يدوية");
             }
 
-            // Sheet 7 — Drift diagnostic (if any)
-            if ((recon.movements_orphaned || []).length > 0) {
+            // Sheet 7 — Cash invoices (informational)
+            if ((recon.cash_invoices || []).length > 0) {
+                const cashHeader = [
+                    "رقم", "التاريخ", "التصنيف", "الإجمالي",
+                    "المدفوع", "ملاحظات",
+                ];
+                const cashRows = recon.cash_invoices.map(c => [
+                    c.doc_number || "—", ymd(c.doc_date),
+                    c.category_name || "",
+                    Number(c.total_amount || 0),
+                    Number(c.paid_amount || 0),
+                    c.notes || "",
+                ]);
+                const wsC = XLSX.utils.aoa_to_sheet([cashHeader, ...cashRows]);
+                wsC["!cols"] = [
+                    { wch: 18 }, { wch: 12 }, { wch: 22 },
+                    { wch: 14 }, { wch: 14 }, { wch: 30 },
+                ];
+                XLSX.utils.book_append_sheet(wb, wsC, "فواتير نقدية");
+            }
+
+            // Sheet 8 — Drift (credit/partial without payable leg)
+            if ((recon.drift_credit || []).length > 0) {
                 const driftHeader = [
                     "رقم", "التاريخ", "الإجمالي", "المدفوع",
-                    "الحالة", "السبب المحتمل", "ملاحظات",
+                    "المتوقع على الذمة", "ملاحظات",
                 ];
-                const driftRows = recon.movements_orphaned.map(o => {
+                const driftRows = recon.drift_credit.map(d => [
+                    d.doc_number || "—", ymd(d.doc_date),
+                    Number(d.total_amount || 0),
+                    Number(d.paid_amount || 0),
+                    Number(d.expected_payable_amount || 0),
+                    d.notes || "",
+                ]);
+                const wsD = XLSX.utils.aoa_to_sheet(
+                    [driftHeader, ...driftRows]);
+                wsD["!cols"] = [
+                    { wch: 18 }, { wch: 12 }, { wch: 14 },
+                    { wch: 14 }, { wch: 18 }, { wch: 30 },
+                ];
+                XLSX.utils.book_append_sheet(wb, wsD,
+                    "آجلة بدون ذمة (Drift)");
+            }
+
+            // Sheet 9 — Ledger failed (true GL post failures)
+            if ((recon.ledger_failed || []).length > 0) {
+                const failHeader = [
+                    "رقم", "التاريخ", "الإجمالي", "المدفوع",
+                    "الحالة", "السبب", "ملاحظات",
+                ];
+                const failRows = recon.ledger_failed.map(o => {
                     const isFailed = o.status === "ledger_failed";
-                    const statusLabel = isFailed ? "فشل ترحيل القيد"
-                        : (o.status || "posted");
+                    const statusLabel = isFailed
+                        ? "status=ledger_failed"
+                        : !o.has_group_id
+                            ? "بدون group_id"
+                            : "posted (orphan)";
                     const reason = isFailed
                         ? "خطأ أثناء كتابة القيد في GL"
                         : !o.has_group_id
@@ -268,13 +315,13 @@ export default function SupplierLedgerDetailPage() {
                         statusLabel, reason, o.notes || "",
                     ];
                 });
-                const ws7 = XLSX.utils.aoa_to_sheet(
-                    [driftHeader, ...driftRows]);
-                ws7["!cols"] = [
+                const wsF = XLSX.utils.aoa_to_sheet(
+                    [failHeader, ...failRows]);
+                wsF["!cols"] = [
                     { wch: 18 }, { wch: 12 }, { wch: 14 },
                     { wch: 14 }, { wch: 22 }, { wch: 36 }, { wch: 30 },
                 ];
-                XLSX.utils.book_append_sheet(wb, ws7, "تشخيص التباين");
+                XLSX.utils.book_append_sheet(wb, wsF, "فشل GL");
             }
 
             const filename = `دفتر-المورد-${supplier.name || "supplier"}-${todayISO()}.xlsx`;
@@ -468,10 +515,16 @@ export default function SupplierLedgerDetailPage() {
                             ⚠️ تباين بين السجلات اكتُشف — يحتاج مراجعة محاسبية
                         </div>
                         <ul className="text-[12px] text-rose-700 list-disc pr-5 space-y-1">
-                            {reconciliation.movements_orphaned_count > 0 && (
+                            {reconciliation.drift_credit_count > 0 && (
                                 <li>
-                                    عدد فواتير في <code>financial_movements</code> بدون قيد محاسبي مقابل = <b>{reconciliation.movements_orphaned_count}</b>
-                                    {" "}— ستظهر في قسم «تشخيص التباين» أسفل الصفحة.
+                                    فواتير آجلة/جزئية بدون قيد ذمة على المورد = <b>{reconciliation.drift_credit_count}</b>
+                                    {" "}— ستظهر في قسم «🟠 فواتير آجلة/جزئية بدون قيد ذمة» أسفل الصفحة.
+                                </li>
+                            )}
+                            {reconciliation.ledger_failed_count > 0 && (
+                                <li>
+                                    فواتير فشل فيها إنشاء قيد GL أصلاً = <b>{reconciliation.ledger_failed_count}</b>
+                                    {" "}— ستظهر في قسم «🔴 فشل إنشاء قيد GL» — تواصل مع الدعم.
                                 </li>
                             )}
                             {reconciliation.gl_only_count > 0 && (
@@ -493,7 +546,7 @@ export default function SupplierLedgerDetailPage() {
                 )}
 
                 {/* Period summary */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:gap-2"
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 print:gap-2"
                      data-testid="sup-ledger-summary">
                     <SummaryCard label="الرصيد الافتتاحي"
                                  value={fmt(period.opening_balance)}
@@ -506,10 +559,16 @@ export default function SupplierLedgerDetailPage() {
                                  value={fmt(period.total_paid)}
                                  color="emerald"
                                  testid="sum-paid" />
-                    <SummaryCard label="الرصيد الختامي"
+                    <SummaryCard label="الرصيد الختامي (مستحق)"
                                  value={fmt(period.closing_balance)}
                                  color={Number(period.closing_balance) > 0 ? "rose" : "emerald"}
                                  testid="sum-closing" />
+                    {/* P1.5.s.fix — Cash purchases roll-up. */}
+                    <SummaryCard
+                        label={`📗 إجمالي مشتريات نقدية (${period.cash_invoices_count || 0})`}
+                        value={fmt(period.total_cash_purchases)}
+                        color="blue"
+                        testid="sum-cash-purchases" />
                 </div>
 
                 {/* Chronological timeline */}
@@ -768,48 +827,129 @@ export default function SupplierLedgerDetailPage() {
                     </Section>
                 )}
 
-                {/* Drift diagnostic */}
-                {reconciliation.movements_orphaned_count > 0 && (
-                    <Section title={`🔬 تشخيص التباين — فواتير بدون قيد محاسبي (${reconciliation.movements_orphaned_count})`}
-                             testid="sup-ledger-drift-section">
-                        <div className="text-[12px] text-rose-700 mb-2 font-bold">
-                            هذه فواتير موجودة في <code>financial_movements</code> لكن
-                            لم يُنشأ لها قيد في <code>general_ledger</code>. الرجاء
-                            المراجعة المحاسبية.
+                {/* P1.5.s.fix — Section 1: Cash invoices (informational,
+                    NOT a drift). Always shown when cash purchases exist. */}
+                {(reconciliation.cash_invoices_count || 0) > 0 && (
+                    <Section title={`📗 فواتير نقدية — لا تؤثر على ذمة المورد (${reconciliation.cash_invoices_count})`}
+                             testid="sup-ledger-cash-section">
+                        <div className="text-[12px] text-blue-800 mb-2 bg-blue-50 border border-blue-200 rounded p-2">
+                            هذه فواتير دفعتها <b>كاش 100%</b>. القيد المحاسبي
+                            صحيح: <code>مدين: المصروف / دائن: البنك</code>،
+                            ولا يُسجَّل على ذمة المورد لأنه لا يدين بشيء.
+                            تظهر هنا للسجل التاريخي فقط.
                         </div>
                         <table className="w-full text-[12px] border-collapse">
                             <thead>
-                                <tr className="bg-rose-100">
+                                <tr className="bg-blue-100 text-blue-900">
+                                    <th className="p-2 text-right border">رقم</th>
+                                    <th className="p-2 text-right border">التاريخ</th>
+                                    <th className="p-2 text-right border">التصنيف</th>
+                                    <th className="p-2 text-right border">الإجمالي</th>
+                                    <th className="p-2 text-right border">المدفوع</th>
+                                    <th className="p-2 text-right border">ملاحظات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {reconciliation.cash_invoices.map((c, i) => (
+                                    <tr key={i} className="bg-blue-50/40 hover:bg-blue-50"
+                                        data-testid={`sup-cash-row-${i}`}>
+                                        <td className="p-2 border">{c.doc_number || "—"}</td>
+                                        <td className="p-2 border whitespace-nowrap">{ymd(c.doc_date)}</td>
+                                        <td className="p-2 border text-[11px]">{c.category_name || "—"}</td>
+                                        <td className="p-2 border text-left font-mono">{fmt(c.total_amount)}</td>
+                                        <td className="p-2 border text-left font-mono">{fmt(c.paid_amount)}</td>
+                                        <td className="p-2 border max-w-[300px]">{c.notes || ""}</td>
+                                    </tr>
+                                ))}
+                                <tr className="bg-blue-100 font-bold">
+                                    <td className="p-2 border" colSpan={3}>إجمالي مشتريات نقدية</td>
+                                    <td className="p-2 border text-left font-mono">{fmt(period.total_cash_purchases)}</td>
+                                    <td className="p-2 border" colSpan={2}></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </Section>
+                )}
+
+                {/* P1.5.s.fix — Section 2: REAL drift — credit/partial
+                    invoices missing the supplier-payable GL leg. */}
+                {(reconciliation.drift_credit_count || 0) > 0 && (
+                    <Section title={`🟠 فواتير آجلة/جزئية بدون قيد ذمة (${reconciliation.drift_credit_count})`}
+                             testid="sup-ledger-drift-credit-section">
+                        <div className="text-[12px] text-amber-800 mb-2 bg-amber-50 border border-amber-200 rounded p-2">
+                            هذه فواتير <b>آجلة أو جزئية</b> — يجب أن يكون لها
+                            قيد ذمة (supplier-payable) في general_ledger،
+                            لكنه مفقود. هذا هو الـ <b>Drift الحقيقي</b>
+                            ويحتاج مراجعة محاسبية.
+                        </div>
+                        <table className="w-full text-[12px] border-collapse">
+                            <thead>
+                                <tr className="bg-amber-100 text-amber-900">
+                                    <th className="p-2 text-right border">رقم</th>
+                                    <th className="p-2 text-right border">التاريخ</th>
+                                    <th className="p-2 text-right border">الإجمالي</th>
+                                    <th className="p-2 text-right border">المدفوع</th>
+                                    <th className="p-2 text-right border">المتوقع على الذمة</th>
+                                    <th className="p-2 text-right border">ملاحظات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {reconciliation.drift_credit.map((d, i) => (
+                                    <tr key={i} className="bg-amber-50/40 hover:bg-amber-50"
+                                        data-testid={`sup-drift-credit-row-${i}`}>
+                                        <td className="p-2 border">{d.doc_number || "—"}</td>
+                                        <td className="p-2 border whitespace-nowrap">{ymd(d.doc_date)}</td>
+                                        <td className="p-2 border text-left font-mono">{fmt(d.total_amount)}</td>
+                                        <td className="p-2 border text-left font-mono">{fmt(d.paid_amount)}</td>
+                                        <td className="p-2 border text-left font-mono text-amber-900 font-bold">
+                                            {fmt(d.expected_payable_amount)}
+                                        </td>
+                                        <td className="p-2 border max-w-[300px]">{d.notes || ""}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </Section>
+                )}
+
+                {/* P1.5.s.fix — Section 3: True GL failures. */}
+                {(reconciliation.ledger_failed_count || 0) > 0 && (
+                    <Section title={`🔴 فشل إنشاء قيد GL (${reconciliation.ledger_failed_count})`}
+                             testid="sup-ledger-failed-section">
+                        <div className="text-[12px] text-rose-800 mb-2 bg-rose-50 border border-rose-200 rounded p-2">
+                            هذه فواتير <b>لم يُكتب لها أي قيد GL</b> أصلاً —
+                            فشل في الكتابة المحاسبية. <b>تواصل مع الدعم
+                            الفني</b> لمراجعة logs وإعادة الترحيل اليدوي.
+                        </div>
+                        <table className="w-full text-[12px] border-collapse">
+                            <thead>
+                                <tr className="bg-rose-100 text-rose-900">
                                     <th className="p-2 text-right border">رقم</th>
                                     <th className="p-2 text-right border">التاريخ</th>
                                     <th className="p-2 text-right border">الإجمالي</th>
                                     <th className="p-2 text-right border">المدفوع</th>
                                     <th className="p-2 text-right border">الحالة</th>
-                                    <th className="p-2 text-right border">السبب المحتمل</th>
+                                    <th className="p-2 text-right border">السبب</th>
                                     <th className="p-2 text-right border">ملاحظات</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {reconciliation.movements_orphaned.map((o, i) => {
-                                    // Iter-250b · P1.5.w — Status-aware diagnostic.
-                                    // `ledger_failed` is a REAL GL post failure (needs
-                                    // operator action). Anything else is most likely a
-                                    // legacy / pre-GL movement.
+                                {reconciliation.ledger_failed.map((o, i) => {
                                     const isFailed = o.status === "ledger_failed";
                                     const statusLabel = isFailed
-                                        ? "🔴 فشل ترحيل القيد"
-                                        : o.status === "voided"   ? "ملغاة"
-                                        : o.status === "draft"    ? "مسودة"
-                                        : o.status === "deleted"  ? "محذوفة"
-                                        : "📝 منشورة (orphan)";
+                                        ? "🔴 status=ledger_failed"
+                                        : !o.has_group_id
+                                            ? "⚠️ بدون group_id"
+                                            : "📝 status=posted (orphan)";
                                     const reason = isFailed
-                                        ? "حدث خطأ أثناء كتابة القيد في GL — تواصل مع الدعم لمراجعة logs"
+                                        ? "حدث خطأ أثناء كتابة القيد في GL — راجع backend logs"
                                         : !o.has_group_id
                                             ? "بدون ledger_txn_group_id (legacy أو مسار قديم)"
-                                            : "تحمل group_id لكن GL row مفقود (فشل كتابة جزئي)";
+                                            : "تحمل group_id لكن لا يوجد أي قيد GL مرتبط";
                                     return (
                                         <tr key={i}
-                                            className={isFailed ? "bg-rose-100 font-semibold" : "bg-rose-50/40"}>
+                                            className={isFailed ? "bg-rose-100 font-semibold" : "bg-rose-50/40"}
+                                            data-testid={`sup-ledger-failed-row-${i}`}>
                                             <td className="p-2 border">{o.doc_number || "—"}</td>
                                             <td className="p-2 border whitespace-nowrap">{ymd(o.doc_date)}</td>
                                             <td className="p-2 border text-left font-mono">{fmt(o.total_amount)}</td>
@@ -838,7 +978,11 @@ export default function SupplierLedgerDetailPage() {
                     {" · "}
                     قيود يدوية: {reconciliation.gl_only_count}
                     {" · "}
-                    فواتير drift: {reconciliation.movements_orphaned_count}
+                    نقدية: {reconciliation.cash_invoices_count || 0}
+                    {" · "}
+                    آجلة بلا ذمة: {reconciliation.drift_credit_count || 0}
+                    {" · "}
+                    فشل GL: {reconciliation.ledger_failed_count || 0}
                 </div>
             </div>
 
@@ -860,6 +1004,7 @@ function SummaryCard({ label, value, color = "slate", testid }) {
         rose:    "bg-rose-50   border-rose-200   text-rose-900",
         emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
         amber:   "bg-amber-50  border-amber-200  text-amber-900",
+        blue:    "bg-blue-50   border-blue-200   text-blue-900",
     }[color] || "bg-slate-50 border-slate-200 text-slate-900";
     return (
         <div className={`rounded-lg border ${palette} p-3 print:p-2 print:rounded-none`}
