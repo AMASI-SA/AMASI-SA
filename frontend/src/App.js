@@ -76,6 +76,8 @@ import ExpenseReversals from "./pages/ExpenseReversals";
 import SuppliersLedger from "./pages/SuppliersLedger";
 import ExternalsLedger from "./pages/ExternalsLedger";
 import CouriersLedger from "./pages/CouriersLedger";
+// Iter-250b · P1.5.r — Deep-link wrapper for /entity-ledger/:type/:id
+import EntityLedgerByIdPage from "./pages/EntityLedgerByIdPage";
 import FinancialPositionLedger from "./pages/FinancialPositionLedger";
 import ReconciliationReport from "./pages/ReconciliationReport";
 import ApiPermissionsDiagnostic from "./pages/ApiPermissionsDiagnostic";
@@ -171,6 +173,10 @@ function AppRoutes() {
             <Route path="/salary-reversals" element={<ProtectedRoute><Layout><SalaryReversals /></Layout></ProtectedRoute>} />
             <Route path="/expense-reversals" element={<ProtectedRoute><Layout><ExpenseReversals /></Layout></ProtectedRoute>} />
             <Route path="/suppliers-ledger" element={<ProtectedRoute><Layout><SuppliersLedger /></Layout></ProtectedRoute>} />
+            {/* Iter-250b · P1.5.r — Deep-link: /entity-ledger/:type/:id
+                (supplier|external|external_person|courier).
+                Routes backend-generated `ledger_url` correctly. */}
+            <Route path="/entity-ledger/:type/:id" element={<ProtectedRoute><Layout><EntityLedgerByIdPage /></Layout></ProtectedRoute>} />
             <Route path="/externals-ledger" element={<ProtectedRoute><Layout><ExternalsLedger /></Layout></ProtectedRoute>} />
             <Route path="/couriers-ledger" element={<ProtectedRoute><Layout><CouriersLedger /></Layout></ProtectedRoute>} />
             <Route path="/financial-position-ledger" element={<ProtectedRoute><Layout><FinancialPositionLedger /></Layout></ProtectedRoute>} />

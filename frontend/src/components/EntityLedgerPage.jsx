@@ -27,7 +27,7 @@ const fmt = (n) => Number(n || 0).toLocaleString(
  *   newTxnRoute:      "/new-transaction"
  *   noDataText:       "لا يوجد موردون"
  */
-export default function EntityLedgerPage({ config }) {
+export default function EntityLedgerPage({ config, autoOpenId = null }) {
     const [rows, setRows] = useState([]);
     const [totals, setTotals] = useState({});
     const [loading, setLoading] = useState(true);
@@ -38,13 +38,31 @@ export default function EntityLedgerPage({ config }) {
         setLoading(true);
         try {
             const { data } = await api.get(config.listEndpoint);
-            setRows(data[config.itemsKey] || []);
+            const items = data[config.itemsKey] || [];
+            setRows(items);
             setTotals(data.totals || {});
+            // Iter-250b · P1.5.r — Deep-link support. When the page
+            // was opened via `/entity-ledger/:type/:id`, auto-open the
+            // matching row's drawer. Falls back gracefully (toast) if
+            // the id is unknown — most likely the entity was deleted
+            // or belongs to another tenant.
+            if (autoOpenId) {
+                const match = items.find(it =>
+                    String(it.id) === String(autoOpenId));
+                if (match) {
+                    setOpen(match);
+                } else {
+                    toast.error(
+                        "العنصر المطلوب غير موجود في القائمة. " +
+                        "قد يكون قد تم حذفه أو ليس لديك صلاحية عرضه.");
+                }
+            }
         } catch (e) {
             toast.error("فشل تحميل القائمة");
         } finally { setLoading(false); }
     };
-    useEffect(() => { load(); }, [config.listEndpoint]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { load(); }, [config.listEndpoint, autoOpenId]);
 
     return (
         <div className="p-6 max-w-6xl mx-auto" data-testid={`${config.testIdPrefix}-ledger-page`}>
