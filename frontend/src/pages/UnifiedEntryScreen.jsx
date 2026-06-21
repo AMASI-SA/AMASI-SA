@@ -559,7 +559,12 @@ export default function UnifiedEntryScreen() {
     // freshly-granted custodies. We DO NOT pre-fetch on mount because
     // most operations don't need this list.
     useEffect(() => {
-        if (opType !== "expense_record" || paySource !== "custody") return;
+        // Iter-250b · P1.5.q + P1.5.y — Lazy-load spendable custody
+        // sources for both `expense_record` and `supplier_pay` when
+        // the merchant flips to «عهدة موظف».
+        const eligible = ["expense_record", "supplier_pay"]
+            .includes(opType);
+        if (!eligible || paySource !== "custody") return;
         let alive = true;
         (async () => {
             try {
@@ -571,8 +576,6 @@ export default function UnifiedEntryScreen() {
                     can_spend_any: !!data.can_spend_any,
                     sources: Array.isArray(data.sources) ? data.sources : [],
                 });
-                // Auto-pick the only available employee for a regular
-                // (non-admin) user so they don't have to click.
                 if (!data.can_spend_any
                     && Array.isArray(data.sources)
                     && data.sources.length === 1) {
@@ -839,7 +842,34 @@ export default function UnifiedEntryScreen() {
                     break;
                 case "supplier_pay":
                     url = `/accounting/suppliers/${entityId}/pay`;
-                    body = { amount: amt, paid_from_account_id: bankId, ...common };
+                    // Iter-250b · P1.5.y — Two new dimensions:
+                    //   • Custody as a pay source (mirrors expense_record)
+                    //   • Over-payment routes the excess to
+                    //     `supplier.advance` (دفعة مقدمة). The backend
+                    //     splits & guards; the frontend only needs to
+                    //     send `allow_advance: true`.
+                    if (paySource === "custody") {
+                        if (!custodyEmployeeId) {
+                            toast.error("اختر موظفاً لديه رصيد عهدة");
+                            setBusy(false); return;
+                        }
+                        const src = (custodySources.sources || []).find(
+                            s => s.employee_id === custodyEmployeeId);
+                        const available = src ? Number(src.available_balance) : 0;
+                        if (amt > available + 0.001) {
+                            toast.error(
+                                `رصيد العهدة غير كافٍ. المتاح: ` +
+                                `${available.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`);
+                            setBusy(false); return;
+                        }
+                        body = { amount: amt,
+                                 custody_employee_id: custodyEmployeeId,
+                                 allow_advance: true, ...common };
+                    } else {
+                        body = { amount: amt,
+                                 paid_from_account_id: bankId,
+                                 allow_advance: true, ...common };
+                    }
                     break;
                 case "external_grant":
                     url = `/accounting/external-persons/${entityId}/grant`;
@@ -987,11 +1017,11 @@ export default function UnifiedEntryScreen() {
     const needsEmployeeTo = opType === "custody_transfer";
     const needsSupplier = ["supplier_invoice","supplier_pay"].includes(opType);
     const needsExternal = ["external_grant","external_collect"].includes(opType);
-    // Iter-250b · P1.5.q — `expense_record` paid from CUSTODY skips
-    // the bank picker entirely (custody is its own funding source).
+    // Iter-250b · P1.5.q + P1.5.y — `expense_record` AND `supplier_pay`
+    // both skip the bank picker when paid from employee custody.
     const needsBank = !isCodSettle
         && !["salary_accrual","custody_settle","supplier_invoice","custody_transfer"].includes(opType)
-        && !(opType === "expense_record" && paySource === "custody");
+        && !(["expense_record","supplier_pay"].includes(opType) && paySource === "custody");
     const needsBankTo = opType === "bank_transfer";
     const needsCategory = ["supplier_invoice","expense_record"].includes(opType);
     const needsCourier = isCodSettle;
@@ -1294,39 +1324,115 @@ export default function UnifiedEntryScreen() {
                                     className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
                                     data-testid="unified-entity-supplier">
                                     <option value="">— اختر —</option>
-                                    {/* Iter-246f — For «سداد مورد» we
-                                        only show suppliers with an
-                                        outstanding debt > 0 so phantom
-                                        names like «عرفات» (0-debt
-                                        legacy counterparties) never
-                                        appear.  For «فاتورة مورد» we
-                                        show the full list.  Debt
-                                        figure is shown next to every
-                                        eligible supplier so the
-                                        merchant picks confidently. */}
-                                    {suppliers
-                                      .filter((s) => opType !== "supplier_pay"
-                                          || Number(s.outstanding_debt || 0) > 0)
-                                      .map((s) => {
+                                    {/* Iter-250b · P1.5.y — `supplier_pay` no
+                                        longer filters out suppliers with
+                                        zero debt: the merchant is now
+                                        allowed to record a pre-advance
+                                        (دفعة مقدمة) against any supplier. */}
+                                    {suppliers.map((s) => {
                                         const debt = Number(s.outstanding_debt || 0);
                                         const label = debt > 0
                                           ? `${s.name} — مستحق ${debt.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})} ر.س`
-                                          : s.name;
+                                          : `${s.name} — لا يوجد رصيد مستحق`;
                                         return (
                                           <option key={s.id} value={s.id}>{label}</option>
                                         );
-                                      })}
+                                    })}
                                 </select>
-                                {opType === "supplier_pay"
-                                  && suppliers.filter(s => Number(s.outstanding_debt || 0) > 0).length === 0 && (
-                                    <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-1"
-                                       data-testid="unified-supplier-pay-empty">
-                                        لا يوجد أي مورد عليه رصيد مستحق.
-                                        أنشئ أولاً فاتورة آجل أو سداد جزئي ثم عد لهذه الشاشة.
-                                    </p>
+                            </div>
+                        )}
+
+                        {/* Iter-250b · P1.5.y — Pay-source toggle for
+                            «سداد مورد». Lets the merchant pay from a
+                            bank/cash account OR from an employee's open
+                            custody wallet. Only one source per txn. */}
+                        {opType === "supplier_pay" && (
+                            <div className="rounded-lg border border-slate-300 bg-slate-50 p-3"
+                                 data-testid="suppay-paysource-block">
+                                <label className="block text-sm font-bold text-slate-700 mb-2">
+                                    طريقة السداد:
+                                </label>
+                                <div className="flex gap-2 mb-2">
+                                    <button type="button"
+                                        onClick={() => setPaySource("bank")}
+                                        className={`flex-1 px-3 py-2 rounded text-sm font-bold border transition ${paySource === "bank"
+                                            ? "bg-indigo-600 text-white border-indigo-600"
+                                            : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"}`}
+                                        data-testid="suppay-paysource-bank-btn">
+                                        🏦 بنك / صندوق
+                                    </button>
+                                    <button type="button"
+                                        onClick={() => setPaySource("custody")}
+                                        className={`flex-1 px-3 py-2 rounded text-sm font-bold border transition ${paySource === "custody"
+                                            ? "bg-amber-600 text-white border-amber-600"
+                                            : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"}`}
+                                        data-testid="suppay-paysource-custody-btn">
+                                        👤 عهدة موظف
+                                    </button>
+                                </div>
+                                {paySource === "custody" && (
+                                    <div>
+                                        {!custodySources.loaded ? (
+                                            <div className="text-xs text-slate-500 py-2">⏳ يتم تحميل قائمة العهد...</div>
+                                        ) : custodySources.sources.length === 0 ? (
+                                            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2 font-bold">
+                                                {custodySources.can_spend_any
+                                                    ? "🚫 لا يوجد موظفون لديهم رصيد عهدة موجب حالياً."
+                                                    : "🚫 لا توجد عهدة مرتبطة بحسابك حالياً، أو رصيدك = 0."}
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">اختر الموظف:</label>
+                                                <select
+                                                    value={custodyEmployeeId}
+                                                    onChange={(e) => setCustodyEmployeeId(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-amber-300 bg-white rounded text-sm"
+                                                    data-testid="suppay-custody-employee-select">
+                                                    <option value="">— اختر موظفاً —</option>
+                                                    {custodySources.sources.map(s => (
+                                                        <option key={s.employee_id} value={s.employee_id}>
+                                                            {s.name} · رصيد العهدة: {Number(s.available_balance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         )}
+
+                        {/* Iter-250b · P1.5.y — Pre-advance preview when
+                            the amount exceeds the supplier's outstanding
+                            debt. Shows the split BEFORE the merchant
+                            clicks save. */}
+                        {opType === "supplier_pay" && entityId && Number(amount) > 0 && (() => {
+                            const sup = suppliers.find(s => s.id === entityId);
+                            if (!sup) return null;
+                            const outstanding = Number(sup.outstanding_debt || 0);
+                            const amt = Number(amount);
+                            if (amt <= outstanding + 0.001) return null;
+                            const toDebt = Math.max(Math.min(amt, outstanding), 0);
+                            const toAdvance = amt - toDebt;
+                            const f = (n) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            return (
+                                <div className="rounded-lg border border-amber-400 bg-amber-50 p-3 text-[12px]"
+                                     data-testid="suppay-advance-warning">
+                                    <div className="font-extrabold text-amber-900 mb-1">
+                                        ⚠️ تنبيه: السداد أكبر من المستحق
+                                    </div>
+                                    <div className="text-amber-800 leading-relaxed">
+                                        رصيد المورد المستحق ({f(outstanding)} ر.س) أقل من مبلغ السداد ({f(amt)} ر.س).
+                                        سيتم تسجيل الفرق كـ <b>دفعة مقدمة للمورد</b> لصالحنا.
+                                    </div>
+                                    <div className="mt-2 pt-2 border-t border-amber-200 flex flex-wrap gap-3 font-mono">
+                                        <span>سداد مستحق: <b className="text-emerald-700">{f(toDebt)}</b></span>
+                                        <span>دفعة مقدمة: <b className="text-indigo-700">{f(toAdvance)}</b></span>
+                                        <span>الإجمالي: <b>{f(amt)}</b></span>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                         {needsExternal && (
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-1">الشخص:</label>

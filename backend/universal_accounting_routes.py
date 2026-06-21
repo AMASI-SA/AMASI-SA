@@ -206,9 +206,19 @@ class SupplierInvoiceIn(BaseModel):
 
 class SupplierPaymentIn(BaseModel):
     amount: float = Field(..., gt=0)
-    paid_from_account_id: str
+    # Iter-250b · P1.5.y — Pay source is polymorphic. EXACTLY ONE must
+    # be provided. `paid_from_account_id` = bank/cash account;
+    # `custody_employee_id` = employee custody wallet.
+    paid_from_account_id: Optional[str] = None
+    custody_employee_id: Optional[str] = None
     payment_date: Optional[str] = None
     notes: Optional[str] = ""
+    # Iter-250b · P1.5.y — Allow over-payment. When True, any amount
+    # in excess of `outstanding_debt` is booked to the supplier's
+    # `advance` sub-account (دفعة مقدمة للمورد). Backend SAFE-defaults
+    # to True so the new behaviour ships even if the form forgets to
+    # send the flag.
+    allow_advance: bool = True
 
 
 class ExternalGrantIn(BaseModel):
@@ -1542,64 +1552,187 @@ def make_universal_router(db) -> APIRouter:
                 cp = {"name": name}
         if not cp:
             raise HTTPException(404, "المورد غير موجود")
-        # Iter-246h — Refuse over-payment.  Mirrors the merchant's
-        # rule «لا يسمح بسداد أكبر من رصيد المورد المستحق».  Also
-        # rejects a second payment after the debt is already settled
-        # (frontend stale-state guard).
+
+        # Iter-250b · P1.5.y — Reworked payment flow.
+        #   • Allow over-payment: excess routes to `supplier.advance`
+        #     (دفعة مقدمة) instead of being rejected.
+        #   • Allow zero outstanding debt: full payment becomes a
+        #     pre-advance against future invoices.
+        #   • Allow paying from an employee CUSTODY wallet instead of
+        #     a bank/cash account.
         sup_bal = await compute_balance(
             db, user_id=uid, entity_type="supplier",
             entity_id=supplier_id, sub_account="payable")
         outstanding = float(sup_bal.get("outstanding_debt") or 0.0)
-        if outstanding <= 0.01:
+        if outstanding < 0:
+            outstanding = 0.0  # never go below zero in the split
+        amount = round(float(payload.amount), 2)
+        # Split: how much settles existing debt vs how much pre-pays.
+        pay_to_debt   = round(min(amount, outstanding), 2)
+        pay_to_advance = round(amount - pay_to_debt, 2)
+        if pay_to_advance > 0 and not payload.allow_advance:
             raise HTTPException(
                 400,
-                "لا يوجد رصيد مستحق على هذا المورد. تم تسوية الدين "
-                "بالكامل بالفعل.",
+                f"مبلغ السداد ({amount:.2f}) أكبر من الرصيد المستحق "
+                f"({outstanding:.2f} ر.س) وتم رفض الدفعة المقدمة.",
             )
-        if round(payload.amount, 2) > round(outstanding, 2) + 0.01:
+
+        # ── Resolve the funding source ────────────────────────────
+        has_bank    = bool(payload.paid_from_account_id)
+        has_custody = bool(payload.custody_employee_id)
+        if has_bank == has_custody:
             raise HTTPException(
                 400,
-                f"مبلغ السداد ({payload.amount:.2f}) أكبر من الرصيد "
-                f"المستحق للمورد ({outstanding:.2f} ر.س).",
+                "يجب اختيار مصدر سداد واحد فقط: حساب بنكي/صندوق أو "
+                "عهدة موظف.",
             )
-        acc = await db.accounts.find_one(
-            {"id": payload.paid_from_account_id, "user_id": user["id"]},
-            {"_id": 0, "name": 1},
-        )
-        if not acc:
-            raise HTTPException(404, "الحساب البنكي غير موجود")
-        await _enforce_account_binding(
-            db, user_id=user["id"], op_type="supplier_pay",
-            account_id=payload.paid_from_account_id,
-        )
-        await _enforce_sufficient_funds(
-            db, user_id=user["id"],
-            account_id=payload.paid_from_account_id,
-            amount=payload.amount,
-        )
+
         actor_id, actor_name = await _resolve_actor(user)
-        result = await post_txn_group(
-            db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
-            txn_type="supplier_payment",
-            notes=payload.notes or f"سداد مورد — {cp.get('name')}",
-            metadata={"supplier_name": cp.get("name"),
-                       "payment_date": payload.payment_date},
-            entries=[
-                {"entity_type": "supplier", "entity_id": supplier_id,
-                 "sub_account": "payable", "side": "debit",
-                 "amount": payload.amount,
-                 "entry_type": "supplier_payment"},
-                {"entity_type": "bank",
-                 "entity_id": payload.paid_from_account_id,
-                 "sub_account": "main", "side": "credit",
-                 "amount": payload.amount,
-                 "entry_type": "supplier_payment"},
-            ],
+        credit_leg = None
+        custody_emp_doc = None
+        custody_avail = 0.0
+
+        if has_bank:
+            acc = await db.accounts.find_one(
+                {"id": payload.paid_from_account_id,
+                 "user_id": user["id"]},
+                {"_id": 0, "name": 1},
+            )
+            if not acc:
+                raise HTTPException(404, "الحساب البنكي غير موجود")
+            await _enforce_account_binding(
+                db, user_id=user["id"], op_type="supplier_pay",
+                account_id=payload.paid_from_account_id,
+            )
+            await _enforce_sufficient_funds(
+                db, user_id=user["id"],
+                account_id=payload.paid_from_account_id,
+                amount=amount,
+            )
+            credit_leg = {
+                "entity_type": "bank",
+                "entity_id":   payload.paid_from_account_id,
+                "sub_account": "main",
+                "side":        "credit",
+                "amount":      amount,
+                "entry_type":  "supplier_payment",
+            }
+        else:
+            # Pay from employee custody — replicate the P1.5.q rules.
+            emp_id = payload.custody_employee_id
+            emp_query = {
+                "user_id": uid,
+                "$or": [
+                    {"id": emp_id}, {"employee_id": emp_id},
+                    {"external_id": emp_id}, {"legacy_id": emp_id},
+                ],
+                "archived":    {"$ne": True},
+                "is_archived": {"$ne": True},
+                "deleted":     {"$ne": True},
+                "is_deleted":  {"$ne": True},
+            }
+            custody_emp_doc = (
+                await db.operating_salaries.find_one(
+                    emp_query, {"_id": 0, "id": 1, "name": 1})
+                or await db.employees.find_one(
+                    emp_query, {"_id": 0, "id": 1, "name": 1})
+            )
+            if not custody_emp_doc:
+                raise HTTPException(
+                    404, "الموظف غير موجود أو غير نشط.")
+            perms = _effective_perms_for(user)
+            if "accounting.custody.spend_any" not in perms:
+                linked_emp = (user.get("linked_employee_id") or "")
+                if not linked_emp or linked_emp != emp_id:
+                    raise HTTPException(
+                        403, "لا يمكنك الصرف من عهدة موظف آخر.")
+            cust = await compute_balance(
+                db, user_id=uid, entity_type="employee",
+                entity_id=emp_id, sub_account="custody",
+            )
+            custody_avail = float(cust.get("net_balance") or 0)
+            if amount > custody_avail + 0.001:
+                raise HTTPException(
+                    400,
+                    f"رصيد العهدة غير كافٍ. "
+                    f"المتاح: {custody_avail:.2f} ر.س، "
+                    f"المطلوب: {amount:.2f} ر.س.",
+                )
+            credit_leg = {
+                "entity_type": "employee",
+                "entity_id":   emp_id,
+                "sub_account": "custody",
+                "side":        "credit",
+                "amount":      amount,
+                "entry_type":  "supplier_payment",
+            }
+
+        # ── Build the debit legs ──────────────────────────────────
+        debit_legs = []
+        if pay_to_debt > 0:
+            debit_legs.append({
+                "entity_type": "supplier", "entity_id": supplier_id,
+                "sub_account": "payable", "side": "debit",
+                "amount":      pay_to_debt,
+                "entry_type":  "supplier_payment",
+            })
+        if pay_to_advance > 0:
+            debit_legs.append({
+                "entity_type": "supplier", "entity_id": supplier_id,
+                "sub_account": "advance", "side": "debit",
+                "amount":      pay_to_advance,
+                # Re-use the standard `supplier_payment` entry_type so
+                # the GL validator (Iter-226) accepts the row; the
+                # `sub_account=advance` is the discriminator that
+                # downstream reports / detail-page filters use.
+                "entry_type":  "supplier_payment",
+            })
+
+        # ── Metadata for the timeline + employee ledger replays ───
+        extra_meta = {
+            "supplier_name": cp.get("name"),
+            "payment_date":  payload.payment_date,
+            "pay_to_debt":     pay_to_debt,
+            "pay_to_advance":  pay_to_advance,
+            "outstanding_before": round(outstanding, 2),
+            "pay_source": "custody" if has_custody else "bank",
+        }
+        if has_custody:
+            extra_meta.update({
+                "custody_employee_id":   payload.custody_employee_id,
+                "custody_employee_name": custody_emp_doc.get("name"),
+                "custody_balance_before": round(custody_avail, 2),
+                "custody_balance_after":  round(
+                    custody_avail - amount, 2),
+            })
+
+        notes = payload.notes or (
+            f"سداد مورد — {cp.get('name')}"
+            + (f" (دفعة مقدمة {pay_to_advance:.2f})"
+                if pay_to_advance > 0 else "")
         )
-        return {"ok": True, **result,
-                "balance": await compute_balance(
-                    db, user_id=user["id"], entity_type="supplier",
-                    entity_id=supplier_id, sub_account="payable")}
+        result = await post_txn_group(
+            db, user_id=user["id"], actor_id=actor_id,
+            actor_name=actor_name,
+            txn_type="supplier_payment",
+            notes=notes, metadata=extra_meta,
+            entries=debit_legs + [credit_leg],
+        )
+        return {
+            "ok": True,
+            **result,
+            "split": {
+                "paid_to_debt":     pay_to_debt,
+                "paid_to_advance":  pay_to_advance,
+                "outstanding_before": round(outstanding, 2),
+            },
+            "balance": await compute_balance(
+                db, user_id=user["id"], entity_type="supplier",
+                entity_id=supplier_id, sub_account="payable"),
+            "advance_balance": await compute_balance(
+                db, user_id=user["id"], entity_type="supplier",
+                entity_id=supplier_id, sub_account="advance"),
+        }
 
     # ═══════════════════════════════════════════════════════════════
     # External persons (Receivables / Payables)
