@@ -20,6 +20,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useReactToPrint } from "react-to-print";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import api from "../lib/api";
 
 const fmt = (n) =>
@@ -86,6 +87,192 @@ export default function SupplierLedgerDetailPage() {
             ? `دفتر المورد - ${data.supplier.name}`
             : "دفتر المورد",
     });
+
+    // Iter-250b · P1.5.v — Invoice detail modal (Task 2).
+    const [invoiceModal, setInvoiceModal] = useState(null);
+
+    // Iter-250b · P1.5.v — Excel multi-sheet export (Task 1).
+    // Each section lands in its own sheet so the accountant can filter
+    // / pivot without flattening the report. Generated entirely
+    // client-side via SheetJS.
+    const handleExportExcel = () => {
+        if (!data) {
+            toast.error("لا توجد بيانات للتصدير");
+            return;
+        }
+        try {
+            const wb = XLSX.utils.book_new();
+            const supplier = data.supplier || {};
+            const period   = data.period   || {};
+            const recon    = data.reconciliation || {};
+
+            // Sheet 1 — supplier identity + period summary
+            const meta = [
+                ["دفتر المورد التفصيلي"],
+                ["تاريخ التصدير", todayISO()],
+                [],
+                ["── بيانات المورد ──"],
+                ["الاسم",        supplier.name || ""],
+                ["الهاتف",       supplier.phone || ""],
+                ["البريد",       supplier.email || ""],
+                ["الرقم الضريبي", supplier.vat_number || ""],
+                ["العنوان",      supplier.address || ""],
+                [],
+                ["── الفترة ──"],
+                ["من", period.from || "البداية"],
+                ["إلى", period.to || "اليوم"],
+                ["الرصيد الافتتاحي", period.opening_balance],
+                ["إجمالي الفواتير (من GL)", period.total_invoiced],
+                ["إجمالي السدادات (من GL)", period.total_paid],
+                ["الرصيد الختامي", period.closing_balance],
+                [],
+                ["── تشخيص التطابق ──"],
+                ["رصيد GL الكلي", recon.gl_balance_total],
+                ["رصيد مُستخرَج من الفترة", recon.derived_balance_period],
+                ["تطابق", recon.balance_match ? "✓" : "✗"],
+                ["قيود يدوية بدون فاتورة", recon.gl_only_count],
+                ["فواتير drift", recon.movements_orphaned_count],
+            ];
+            const ws1 = XLSX.utils.aoa_to_sheet(meta);
+            ws1["!cols"] = [{ wch: 28 }, { wch: 40 }];
+            XLSX.utils.book_append_sheet(wb, ws1, "بيانات المورد");
+
+            // Sheet 2 — invoices
+            const invHeader = [
+                "رقم الفاتورة", "التاريخ", "الإجمالي",
+                "المدفوع", "المتبقي", "الحالة",
+                "نوع السداد", "التصنيف", "ملاحظات",
+            ];
+            const invRows = (data.invoices || []).map(inv => [
+                inv.doc_number || "", ymd(inv.doc_date),
+                Number(inv.total_amount || 0), Number(inv.paid_amount || 0),
+                Number(inv.remaining || 0),
+                (STATUS_BADGE[inv.status] || {}).label || inv.status,
+                inv.payment_terms || "", inv.category_name || "",
+                inv.notes || "",
+            ]);
+            const ws2 = XLSX.utils.aoa_to_sheet([invHeader, ...invRows]);
+            ws2["!cols"] = [
+                { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+                { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 20 },
+                { wch: 30 },
+            ];
+            XLSX.utils.book_append_sheet(wb, ws2, "الفواتير");
+
+            // Sheet 3 — line items (flattened: one row per item)
+            const liHeader = [
+                "رقم الفاتورة", "تاريخ الفاتورة",
+                "الوصف", "الكمية", "سعر الوحدة", "الإجمالي",
+            ];
+            const liRows = [];
+            for (const inv of data.invoices || []) {
+                for (const li of (inv.line_items || [])) {
+                    const qty = Number(li.quantity || 0);
+                    const up  = Number(li.unit_price || 0);
+                    liRows.push([
+                        inv.doc_number || "", ymd(inv.doc_date),
+                        li.description || "", qty, up,
+                        Number((qty * up).toFixed(2)),
+                    ]);
+                }
+            }
+            const ws3 = XLSX.utils.aoa_to_sheet([liHeader, ...liRows]);
+            ws3["!cols"] = [
+                { wch: 18 }, { wch: 12 }, { wch: 38 },
+                { wch: 10 }, { wch: 14 }, { wch: 14 },
+            ];
+            XLSX.utils.book_append_sheet(wb, ws3, "بنود الفواتير");
+
+            // Sheet 4 — payments applied
+            const payHeader = [
+                "رقم الفاتورة", "تاريخ الفاتورة",
+                "تاريخ الدفعة", "المبلغ", "ملاحظات",
+            ];
+            const payRows = [];
+            for (const inv of data.invoices || []) {
+                for (const p of (inv.payments_applied || [])) {
+                    payRows.push([
+                        inv.doc_number || "", ymd(inv.doc_date),
+                        ymd(p.date), Number(p.amount || 0),
+                        p.notes || "",
+                    ]);
+                }
+            }
+            const ws4 = XLSX.utils.aoa_to_sheet([payHeader, ...payRows]);
+            ws4["!cols"] = [
+                { wch: 18 }, { wch: 12 }, { wch: 12 },
+                { wch: 14 }, { wch: 30 },
+            ];
+            XLSX.utils.book_append_sheet(wb, ws4, "المدفوعات");
+
+            // Sheet 5 — GL entries (all timeline)
+            const glHeader = [
+                "التاريخ", "النوع", "رقم الفاتورة",
+                "ملاحظات", "مدين", "دائن", "الرصيد بعد",
+                "قيد يدوي؟",
+            ];
+            const glRows = (data.timeline || []).map(t => [
+                ymd(t.created_at), EntryTypeLabel(t.entry_type),
+                (t.linked_movement || {}).doc_number || "",
+                t.notes || "",
+                t.side === "debit"  ? Number(t.amount || 0) : "",
+                t.side === "credit" ? Number(t.amount || 0) : "",
+                Number(t.running_balance || 0),
+                t.is_manual ? "نعم" : "",
+            ]);
+            const ws5 = XLSX.utils.aoa_to_sheet([glHeader, ...glRows]);
+            ws5["!cols"] = [
+                { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 30 },
+                { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
+            ];
+            XLSX.utils.book_append_sheet(wb, ws5, "القيود المحاسبية");
+
+            // Sheet 6 — manual entries (audit)
+            if ((data.manual_entries || []).length > 0) {
+                const manHeader = [
+                    "التاريخ", "النوع", "ملاحظات", "مدين", "دائن",
+                ];
+                const manRows = data.manual_entries.map(m => [
+                    ymd(m.created_at), EntryTypeLabel(m.entry_type),
+                    m.notes || "",
+                    m.side === "debit"  ? Number(m.amount || 0) : "",
+                    m.side === "credit" ? Number(m.amount || 0) : "",
+                ]);
+                const ws6 = XLSX.utils.aoa_to_sheet([manHeader, ...manRows]);
+                ws6["!cols"] = [
+                    { wch: 12 }, { wch: 18 }, { wch: 30 },
+                    { wch: 12 }, { wch: 12 },
+                ];
+                XLSX.utils.book_append_sheet(wb, ws6, "قيود يدوية");
+            }
+
+            // Sheet 7 — Drift diagnostic (if any)
+            if ((recon.movements_orphaned || []).length > 0) {
+                const driftHeader = [
+                    "رقم", "التاريخ", "الإجمالي", "المدفوع", "ملاحظات",
+                ];
+                const driftRows = recon.movements_orphaned.map(o => [
+                    o.doc_number || "—", ymd(o.doc_date),
+                    Number(o.total_amount || 0), Number(o.paid_amount || 0),
+                    o.notes || "",
+                ]);
+                const ws7 = XLSX.utils.aoa_to_sheet(
+                    [driftHeader, ...driftRows]);
+                ws7["!cols"] = [
+                    { wch: 18 }, { wch: 12 }, { wch: 14 },
+                    { wch: 14 }, { wch: 30 },
+                ];
+                XLSX.utils.book_append_sheet(wb, ws7, "تشخيص التباين");
+            }
+
+            const filename = `دفتر-المورد-${supplier.name || "supplier"}-${todayISO()}.xlsx`;
+            XLSX.writeFile(wb, filename);
+            toast.success(`تم تصدير ${filename}`);
+        } catch (e) {
+            console.error(e);
+            toast.error("فشل تصدير Excel");
+        }
+    };
 
     const load = async (f, t) => {
         setLoading(true);
@@ -164,6 +351,11 @@ export default function SupplierLedgerDetailPage() {
                             className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-sm font-bold"
                             data-testid="sup-ledger-refresh-btn">
                         ↻ تحديث
+                    </button>
+                    <button onClick={handleExportExcel}
+                            className="px-3 py-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-bold"
+                            data-testid="sup-ledger-excel-btn">
+                        📊 تصدير Excel
                     </button>
                     <button onClick={handlePrint}
                             className="px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-bold"
@@ -349,7 +541,19 @@ export default function SupplierLedgerDetailPage() {
                                                 )}
                                             </td>
                                             <td className="p-2 border">
-                                                {t.linked_movement?.doc_number || "—"}
+                                                {t.linked_movement?.doc_number ? (
+                                                    <button
+                                                        onClick={() => {
+                                                            const inv = (invoices || []).find(
+                                                                x => x.movement_id === t.linked_movement.movement_id
+                                                                     || x.doc_number === t.linked_movement.doc_number);
+                                                            if (inv) setInvoiceModal(inv);
+                                                        }}
+                                                        className="text-indigo-600 hover:text-indigo-800 hover:underline font-bold print:no-underline"
+                                                        data-testid={`sup-ledger-row-doc-${i}`}>
+                                                        {t.linked_movement.doc_number}
+                                                    </button>
+                                                ) : "—"}
                                             </td>
                                             <td className="p-2 border max-w-[280px] text-slate-700">
                                                 {t.notes || ""}
@@ -385,11 +589,10 @@ export default function SupplierLedgerDetailPage() {
                             <div key={inv.movement_id}
                                  className="border border-slate-200 rounded-lg mb-2 print:rounded-none print:break-inside-avoid"
                                  data-testid={`sup-ledger-invoice-${inv.movement_id}`}>
-                                <button onClick={() => setExpanded(p => ({
-                                            ...p, [inv.movement_id]: !p[inv.movement_id] }))}
+                                <button onClick={() => setInvoiceModal(inv)}
                                     className="w-full p-3 flex flex-wrap items-center gap-3 text-right bg-slate-50 hover:bg-slate-100 print:bg-white"
-                                    data-testid={`sup-ledger-invoice-toggle-${inv.movement_id}`}>
-                                    <span className="font-bold text-slate-900">
+                                    data-testid={`sup-ledger-invoice-open-${inv.movement_id}`}>
+                                    <span className="font-bold text-indigo-700 hover:underline">
                                         فاتورة #{inv.doc_number || "—"}
                                     </span>
                                     <span className="text-[12px] text-slate-600">
@@ -406,12 +609,13 @@ export default function SupplierLedgerDetailPage() {
                                         <span className="text-slate-500"> | </span>
                                         <span className="text-rose-700">متبقي: {fmt(inv.remaining)}</span>
                                     </span>
-                                    <span className="text-slate-400 print:hidden">
-                                        {isOpen ? "▲" : "▼"}
+                                    <span className="text-slate-400 text-xs print:hidden">
+                                        فتح التفاصيل ←
                                     </span>
                                 </button>
-                                {(isOpen || true /* always print */) && (
-                                    <div className={`p-3 border-t border-slate-200 ${isOpen ? "block" : "hidden print:block"}`}>
+                                {(true /* inline detail rendered for PRINT only — modal is the
+                                       interactive path */) && (
+                                    <div className="p-3 border-t border-slate-200 hidden print:block">
                                         {/* Line items */}
                                         {(inv.line_items || []).length > 0 && (
                                             <div className="mb-3">
@@ -602,6 +806,13 @@ export default function SupplierLedgerDetailPage() {
                     فواتير drift: {reconciliation.movements_orphaned_count}
                 </div>
             </div>
+
+            {/* Iter-250b · P1.5.v — Invoice detail modal */}
+            {invoiceModal && (
+                <InvoiceDetailModal
+                    invoice={invoiceModal}
+                    onClose={() => setInvoiceModal(null)} />
+            )}
         </div>
     );
 }
@@ -663,4 +874,173 @@ function AccountLabel(leg) {
     if (leg.entity_type === "employee")  return `موظف · ${leg.sub_account || ""}`;
     if (leg.entity_type === "purchases") return "مشتريات";
     return `${leg.entity_type} · ${leg.sub_account || ""}`;
+}
+
+// ─── Invoice Detail Modal ───────────────────────────────────────────
+// Opens when the merchant clicks an invoice number anywhere on the
+// page (timeline cell or invoice card header). Read-only — surfaces
+// EVERYTHING we have on the invoice in one focused panel.
+
+function InvoiceDetailModal({ invoice, onClose }) {
+    const sb = STATUS_BADGE[invoice.status] || STATUS_BADGE.unpaid;
+    return (
+        <div
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4"
+            onClick={onClose}
+            data-testid="sup-ledger-invoice-modal">
+            <div onClick={(e) => e.stopPropagation()}
+                 className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-8"
+                 dir="rtl">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50 rounded-t-2xl">
+                    <div>
+                        <h2 className="text-lg font-extrabold text-slate-900">
+                            تفاصيل الفاتورة #{invoice.doc_number || "—"}
+                        </h2>
+                        <div className="text-xs text-slate-600 mt-0.5">
+                            {ymd(invoice.doc_date)}
+                            <span className={`mr-2 px-2 py-0.5 rounded-full border text-[11px] font-bold ${sb.cls}`}>
+                                {sb.label}
+                            </span>
+                        </div>
+                    </div>
+                    <button onClick={onClose}
+                        className="px-3 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm font-bold"
+                        data-testid="sup-ledger-invoice-modal-close">
+                        إغلاق ✕
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-4 space-y-4 max-h-[75vh] overflow-y-auto">
+
+                    {/* Totals strip */}
+                    <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                        <Mini label="الإجمالي"   value={fmt(invoice.total_amount)} bold />
+                        <Mini label="المدفوع"    value={fmt(invoice.paid_amount)} />
+                        <Mini label="المتبقي"    value={fmt(invoice.remaining)} />
+                        {invoice.discount > 0 && (
+                            <Mini label="الخصم" value={fmt(invoice.discount)} />
+                        )}
+                        {invoice.tax > 0 && (
+                            <Mini label="الضريبة" value={fmt(invoice.tax)} />
+                        )}
+                    </div>
+
+                    {invoice.notes && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-[12px] text-slate-700">
+                            <span className="font-bold">ملاحظات:</span> {invoice.notes}
+                        </div>
+                    )}
+
+                    {/* Line items */}
+                    <div>
+                        <h3 className="text-sm font-extrabold text-slate-900 mb-2">
+                            بنود الفاتورة ({(invoice.line_items || []).length})
+                        </h3>
+                        {(invoice.line_items || []).length === 0 ? (
+                            <div className="text-xs text-slate-500 py-2">
+                                لا توجد بنود مسجَّلة لهذه الفاتورة.
+                            </div>
+                        ) : (
+                            <table className="w-full text-[12px] border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-100">
+                                        <th className="p-1.5 text-right border">الوصف</th>
+                                        <th className="p-1.5 text-right border w-20">الكمية</th>
+                                        <th className="p-1.5 text-right border w-28">سعر الوحدة</th>
+                                        <th className="p-1.5 text-right border w-28">الإجمالي</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {invoice.line_items.map((li, i) => {
+                                        const total = Number(li.quantity || 0)
+                                                     * Number(li.unit_price || 0);
+                                        return (
+                                            <tr key={i}>
+                                                <td className="p-1.5 border">{li.description}</td>
+                                                <td className="p-1.5 border text-center font-mono">{li.quantity}</td>
+                                                <td className="p-1.5 border text-left font-mono">{fmt(li.unit_price)}</td>
+                                                <td className="p-1.5 border text-left font-mono font-bold">{fmt(total)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+
+                    {/* GL entries */}
+                    <div>
+                        <h3 className="text-sm font-extrabold text-slate-900 mb-2">
+                            القيود المحاسبية (من general_ledger)
+                        </h3>
+                        {(invoice.gl_legs || []).length === 0 ? (
+                            <div className="text-xs text-slate-500 py-2">
+                                لا توجد قيود مرتبطة بهذه الفاتورة.
+                            </div>
+                        ) : (
+                            <table className="w-full text-[12px] border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-100">
+                                        <th className="p-1.5 text-right border">الحساب</th>
+                                        <th className="p-1.5 text-right border w-24">مدين</th>
+                                        <th className="p-1.5 text-right border w-24">دائن</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {invoice.gl_legs.map((leg, i) => (
+                                        <tr key={i}>
+                                            <td className="p-1.5 border">{AccountLabel(leg)}</td>
+                                            <td className="p-1.5 border text-left font-mono text-rose-700">
+                                                {leg.side === "debit" ? fmt(leg.amount) : ""}
+                                            </td>
+                                            <td className="p-1.5 border text-left font-mono text-emerald-700">
+                                                {leg.side === "credit" ? fmt(leg.amount) : ""}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+
+                    {/* Payments applied */}
+                    {(invoice.payments_applied || []).length > 0 && (
+                        <div>
+                            <h3 className="text-sm font-extrabold text-slate-900 mb-2">
+                                السدادات المرتبطة ({invoice.payments_applied.length})
+                            </h3>
+                            <table className="w-full text-[12px] border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-100">
+                                        <th className="p-1.5 text-right border">التاريخ</th>
+                                        <th className="p-1.5 text-right border w-32">المبلغ</th>
+                                        <th className="p-1.5 text-right border">ملاحظات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {invoice.payments_applied.map((p, i) => (
+                                        <tr key={i}>
+                                            <td className="p-1.5 border">{ymd(p.date)}</td>
+                                            <td className="p-1.5 border text-left font-mono">{fmt(p.amount)}</td>
+                                            <td className="p-1.5 border">{p.notes || ""}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* Metadata footer */}
+                    <div className="text-[10px] text-slate-500 border-t border-slate-200 pt-2 grid grid-cols-2 md:grid-cols-4 gap-1">
+                        <div>movement_id: <code className="bg-slate-100 px-1 rounded">{invoice.movement_id || "—"}</code></div>
+                        <div>txn_group: <code className="bg-slate-100 px-1 rounded">{invoice.txn_group_id || "—"}</code></div>
+                        <div>طريقة الدفع: {invoice.withdrawal_method || "—"}</div>
+                        <div>مرجع: {invoice.reference_number || "—"}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }

@@ -177,6 +177,15 @@ def make_movements_gl_drift_router(db, current_user):
             c = d["cause"]
             slot = by_cause.setdefault(c, {
                 "count": 0, "total_amount": 0.0, "samples": [],
+                # Iter-250b · P1.5.v — extra forensic fields the
+                # merchant asked for so we can later treat the root
+                # cause without blind auto-fixes.
+                "first_doc_date":   None,
+                "last_doc_date":    None,
+                "first_created_at": None,
+                "last_created_at":  None,
+                "affected_supplier_ids":   set(),
+                "affected_supplier_names": set(),
             })
             slot["count"] += 1
             slot["total_amount"] = _r(slot["total_amount"] + d["total_amount"])
@@ -188,6 +197,30 @@ def make_movements_gl_drift_router(db, current_user):
                     "supplier":    (d["supplier_snapshot"] or {}).get("name"),
                     "total":       d["total_amount"],
                 })
+            dd = d.get("doc_date") or ""
+            ca = d.get("created_at") or ""
+            if dd:
+                if not slot["first_doc_date"] or dd < slot["first_doc_date"]:
+                    slot["first_doc_date"] = dd
+                if not slot["last_doc_date"]  or dd > slot["last_doc_date"]:
+                    slot["last_doc_date"]  = dd
+            if ca:
+                if not slot["first_created_at"] or str(ca) < str(slot["first_created_at"]):
+                    slot["first_created_at"] = ca
+                if not slot["last_created_at"]  or str(ca) > str(slot["last_created_at"]):
+                    slot["last_created_at"]  = ca
+            if d.get("supplier_id"):
+                slot["affected_supplier_ids"].add(d["supplier_id"])
+            sn = (d.get("supplier_snapshot") or {}).get("name")
+            if sn:
+                slot["affected_supplier_names"].add(sn)
+        # JSON-serialise the per-cause sets.
+        for v in by_cause.values():
+            v["affected_supplier_ids"] = sorted(list(
+                v["affected_supplier_ids"]))
+            v["affected_supplier_names"] = sorted(list(
+                v["affected_supplier_names"]))
+            v["affected_supplier_count"] = len(v["affected_supplier_ids"])
 
         by_supplier: Dict[str, Dict[str, Any]] = {}
         for d in drifted:
