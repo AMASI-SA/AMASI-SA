@@ -984,6 +984,35 @@ export default function SupplierLedgerDetailPage() {
                     {" · "}
                     فشل GL: {reconciliation.ledger_failed_count || 0}
                 </div>
+
+                {/* P1.5.s.fix.diag — Always-on technical diagnostic
+                    bar. Useful when classification seems off. */}
+                {data?._debug && (
+                    <details className="text-[10px] text-slate-500 mt-1 border-t border-dashed border-slate-300 pt-1 print:hidden"
+                             data-testid="sup-ledger-debug">
+                        <summary className="cursor-pointer font-bold text-slate-600">
+                            🔧 تشخيص تقني (READ-ONLY)
+                        </summary>
+                        <div className="mt-1 bg-slate-50 p-2 rounded font-mono text-[10px] leading-tight">
+                            <div>FM movements matched: <b>{data._debug.fm_matching_movements_count}</b></div>
+                            <div>Candidates (uncorrelated): <b>{data._debug.candidates_count}</b></div>
+                            <div>Candidate group_ids: <b>{data._debug.candidate_groups_count}</b></div>
+                            <div>Groups with ANY GL: <b>{data._debug.candidate_groups_with_any_gl}</b></div>
+                            <div>Supplier-payable GL entries: <b>{data._debug.supplier_payable_gl_entries_in_period}</b></div>
+                            <div>Classified → cash: <b>{data._debug.classified?.cash_invoices}</b> · drift: <b>{data._debug.classified?.drift_credit}</b> · failed: <b>{data._debug.classified?.ledger_failed}</b></div>
+                            {(data._debug.candidates_sample || []).length > 0 && (
+                                <div className="mt-1 border-t border-slate-200 pt-1">
+                                    <div className="font-bold mb-1">Sample candidates:</div>
+                                    {data._debug.candidates_sample.map((c, i) => (
+                                        <div key={i} className="text-[9px]">
+                                            #{i+1} {ymd(c.doc_date)} · total={c.total} paid={c.paid} status={c.status} group={c.has_group_id ? "Y" : "N"} gl_exists={c.gl_exists_for_group ? "Y" : "N"} → <b>{c.classified_as}</b>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </details>
+                )}
             </div>
 
             {/* Iter-250b · P1.5.v — Invoice detail modal */}

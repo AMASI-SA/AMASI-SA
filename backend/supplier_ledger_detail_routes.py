@@ -455,6 +455,56 @@ def make_supplier_ledger_detail_router(db, current_user):
             drift_credit + ledger_failed
         )
 
+        # P1.5.s.fix.diag — Always-on tiny diagnostic block so the
+        # merchant can self-troubleshoot when classification seems
+        # off. READ-ONLY, ≤ a few hundred bytes. Includes:
+        #   * raw FM count returned by `fm_period_query`
+        #   * candidates count (uncorrelated with supplier-payable)
+        #   * how many of those have ANY GL row (regardless of entity)
+        #   * effective movement_type filter
+        #   * sample of first 10 candidates with their classification
+        #     and reasoning
+        diag_samples: List[Dict[str, Any]] = []
+        for m in candidates[:10]:
+            tg = m.get("ledger_txn_group_id")
+            total = _r(m.get("total_amount"))
+            paid  = _r(m.get("paid_amount"))
+            has_any_gl = bool(tg) and (tg in groups_with_any_gl)
+            failed_status = (m.get("status") == "ledger_failed")
+            if (not has_any_gl) or failed_status:
+                cls = "ledger_failed"
+            elif paid >= total and total > 0:
+                cls = "cash_invoice"
+            else:
+                cls = "drift_credit"
+            diag_samples.append({
+                "doc_number": m.get("doc_number"),
+                "doc_date":   m.get("doc_date"),
+                "total":      total,
+                "paid":       paid,
+                "status":     m.get("status"),
+                "has_group_id": bool(tg),
+                "txn_group_id": tg,
+                "gl_exists_for_group": has_any_gl,
+                "classified_as": cls,
+            })
+        debug_block = {
+            "movement_type_filter": "supplier_invoice",
+            "fm_period_query_keys": sorted(fm_period_query.keys()),
+            "fm_matching_movements_count": movements_period_count,
+            "candidates_count": len(candidates),
+            "candidate_groups_count": len(candidate_groups),
+            "candidate_groups_with_any_gl": len(groups_with_any_gl),
+            "supplier_payable_gl_entries_in_period":
+                len(gl_entries),
+            "classified": {
+                "cash_invoices":  len(cash_invoices),
+                "drift_credit":   len(drift_credit),
+                "ledger_failed":  len(ledger_failed),
+            },
+            "candidates_sample": diag_samples,
+        }
+
         # Period totals — preferred for the summary cards.
         period_block = {
             "from": from_, "to": to,
@@ -513,13 +563,14 @@ def make_supplier_ledger_detail_router(db, current_user):
 
         return {
             "ok": True,
-            "iter": "250b.P1.5.s.fix",
+            "iter": "250b.P1.5.s.fix.diag",
             "supplier": supplier_block,
             "period":   period_block,
             "timeline": timeline,
             "invoices": invoices,
             "manual_entries": manual_entries,
             "reconciliation": reconciliation,
+            "_debug": debug_block,
             "notes": [
                 "All monetary numbers are derived from `general_ledger` (SSOT).",
                 "`financial_movements` is joined by `txn_group_id` "
