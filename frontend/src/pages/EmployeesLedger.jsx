@@ -76,13 +76,20 @@ export default function EmployeesLedger() {
                         color={totals.net_position >= 0 ? "emerald" : "rose"} />
                 </div>
 
-                {/* Iter-171 — economic net explainer */}
+                {/* Iter-250b · P1.5.u — Custody is now an independent
+                    balance, NOT auto-deducted from net salary. Only
+                    advances offset against salary automatically. */}
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4 text-[11px] text-slate-600 leading-relaxed">
-                    <span className="font-bold text-slate-800">💡 المعادلة:</span>{" "}
-                    <span className="num">الصافي الاقتصادي = الراتب المستحق − السلفة المفتوحة − العهدة المفتوحة</span>{" "}
+                    <span className="font-bold text-slate-800">💡 المعادلة الجديدة:</span>{" "}
+                    <span className="num">صافي الراتب = الراتب المستحق − السلفة المفتوحة</span>{" "}
                     · <span className="text-emerald-700 font-bold">موجب = الموظف له علينا</span>{" "}
-                    · <span className="text-rose-700 font-bold">سالب = الموظف عليه للنظام</span>{" "}
-                    · القيود المحاسبية في دفتر الأستاذ تبقى مفصولة (التزام + أصلين منفصلين).
+                    · <span className="text-rose-700 font-bold">سالب = الموظف عليه للنظام</span>
+                    <div className="mt-1 pt-1 border-t border-slate-200">
+                        <span className="font-bold text-sky-700">🏷️ العهدة:</span>{" "}
+                        تُعرض في عمود وبطاقة مستقلين، ولا تُخصم من الراتب تلقائياً.
+                        لخصمها من الراتب استخدم عملية محاسبية صريحة
+                        («خصم عهدة من راتب» أو «تسوية عهدة»).
+                    </div>
                 </div>
 
                 {loading ? (

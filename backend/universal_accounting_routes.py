@@ -1244,10 +1244,15 @@ def make_universal_router(db) -> APIRouter:
         ledger_outstanding = float(payable["outstanding_debt"])
         outstanding_with_pending = round(
             ledger_outstanding + pending_accrual, 2)
+        # Iter-250b · P1.5.u — Custody is NO LONGER auto-deducted
+        # from the employee's net. By policy, custody is an
+        # independent open-balance card; offsetting it against
+        # salary requires an explicit accounting operation
+        # ("custody → salary deduction" or "custody settlement").
+        # Only ADVANCES still net against salary automatically.
         net_due = round(
             outstanding_with_pending
-            - advance["net_balance"]
-            - custody["net_balance"],
+            - advance["net_balance"],
             2,
         )
         return {
@@ -2322,9 +2327,11 @@ def make_universal_router(db) -> APIRouter:
         salary_payable["pending_accrual"] = round(pending_accrual, 2)
         salary_payable["outstanding_debt"] = round(
             ledger_outstanding + pending_accrual, 2)
-        # Net position: we owe him (payable) minus what he owes us (advance+custody)
+        # Iter-250b · P1.5.u — Custody is NOT a debt against the
+        # employee's salary; surfaced separately as `custody_open`.
+        # Only ADVANCES net against salary automatically.
         owed_to_emp = salary_payable["outstanding_debt"]
-        owed_by_emp = advance["net_balance"] + custody["net_balance"]
+        owed_by_emp = advance["net_balance"]   # custody intentionally excluded
         net = round(owed_to_emp - owed_by_emp, 2)
         return {
             "employee_id": emp_id,
@@ -2335,6 +2342,7 @@ def make_universal_router(db) -> APIRouter:
             "net_position": net,
             "owed_to_employee": round(owed_to_emp, 2),
             "owed_by_employee": round(owed_by_emp, 2),
+            "custody_open": round(custody["net_balance"], 2),
         }
 
     # ═══════════════════════════════════════════════════════════════
@@ -2402,7 +2410,11 @@ def make_universal_router(db) -> APIRouter:
             pending_accrual = await _post_cutoff_accrual_delta(
                 db, uid, e, cutoff_date_str)
             payable = round(ledger_payable + pending_accrual, 2)
-            net_pos = round(payable - advance - custody, 2)
+            # Iter-250b · P1.5.u — Salary net position no longer
+            # auto-deducts custody. Custody is a separate open balance
+            # that requires an explicit accounting operation to offset
+            # against salary. Only advances net automatically.
+            net_pos = round(payable - advance, 2)
             rows.append({
                 "id": e["id"], "name": e.get("name"),
                 "monthly_amount": round(float(e.get("monthly_amount") or 0), 2),
@@ -2425,7 +2437,10 @@ def make_universal_router(db) -> APIRouter:
                 "pending_accrual": round(total_pending_accrual, 2),
                 "advance": round(total_advance, 2),
                 "custody": round(total_custody, 2),
-                "net_position": round(total_payable - total_advance - total_custody, 2),
+                # Iter-250b · P1.5.u — Top-level net position excludes
+                # custody. Custody is shown side-by-side as its own
+                # independent metric.
+                "net_position": round(total_payable - total_advance, 2),
             },
             "cutoff_date": cutoff_date_str,
         }
