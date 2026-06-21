@@ -3981,6 +3981,12 @@ from supplier_ledger_detail_routes import (
 )
 api.include_router(
     make_supplier_ledger_detail_router(db, current_user))
+# Iter-250b P1.5.t — Movements↔GL Drift Analyzer (READ-ONLY).
+from movements_gl_drift_routes import (
+    make_movements_gl_drift_router,
+)
+api.include_router(
+    make_movements_gl_drift_router(db, current_user))
 # Iter-250a — Post-deploy verification (READ-ONLY).
 from iter250a_verification_routes import (
     make_iter250a_verification_router,
