@@ -111,6 +111,23 @@ def make_employee_ledger_forensic_router(db, current_user):
                     "metadata_legacy_orphan":
                         bool(md.get("legacy_orphan")),
                     "metadata_keys": list(md.keys()),
+                    # Iter-250b · P1.5.m.fix2 — Surface archive trail
+                    # so merchants can see WHO archived this row and
+                    # WHY, instead of just knowing it's hidden.
+                    "archive_reason": md.get("archive_reason"),
+                    "archived_at": (
+                        str(md.get("archived_at"))
+                        if md.get("archived_at") else None
+                    ),
+                    "archived_by_user_id":
+                        md.get("archived_by_user_id"),
+                    "txn_type_meta": md.get("txn_type"),
+                    "employee_name_meta": md.get("employee_name"),
+                    "bank_name_meta": md.get("bank_name"),
+                    "payment_date_meta": (
+                        str(md.get("payment_date"))
+                        if md.get("payment_date") else None
+                    ),
                     "ssot_filter_status": (
                         "EXCLUDED_reversal"
                         if (r.get("entry_type") == "reversal")
