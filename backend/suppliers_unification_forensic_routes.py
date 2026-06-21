@@ -153,6 +153,133 @@ async def _last_activity_bulk(
     return out
 
 
+# P1.5.s.fix.activity — extra per-supplier metrics for the suppliers
+# unified list: last invoice / last payment dates, totals and the
+# transaction_type classification (cash_only / credit_only / mixed /
+# none). All computed via THREE bulk aggregations to avoid N+1 even
+# on tenants with thousands of suppliers.
+async def _supplier_metrics_bulk(
+    db, uid: str, supplier_ids: list[str],
+) -> dict[str, dict]:
+    if not supplier_ids:
+        return {}
+
+    out: dict[str, dict] = {
+        sid: {
+            "last_invoice_date":      None,
+            "last_payment_date":      None,
+            "total_credit_purchases": 0.0,
+            "total_payments":         0.0,
+            "total_cash_purchases":   0.0,
+            "credit_invoice_count":   0,
+            "cash_invoice_count":     0,
+            "payment_count":          0,
+        }
+        for sid in supplier_ids
+    }
+
+    # 1) GL — credit legs (invoices) per supplier-payable.
+    inv_pipe = [
+        {"$match": {
+            "user_id": uid, "status": "posted",
+            "entity_type": "supplier", "sub_account": "payable",
+            "entity_id": {"$in": supplier_ids},
+            "side": "credit",
+        }},
+        {"$group": {
+            "_id": "$entity_id",
+            "total":     {"$sum": "$amount"},
+            "count":     {"$sum": 1},
+            "last_date": {"$max": {
+                "$ifNull": ["$txn_date", "$created_at"]}},
+        }},
+    ]
+    async for row in db.general_ledger.aggregate(inv_pipe):
+        sid = row.get("_id")
+        if sid in out:
+            out[sid]["total_credit_purchases"] = round(
+                float(row.get("total") or 0), 2)
+            out[sid]["credit_invoice_count"] = int(row.get("count") or 0)
+            out[sid]["last_invoice_date"] = row.get("last_date")
+
+    # 2) GL — debit legs (payments) per supplier-payable.
+    pay_pipe = [
+        {"$match": {
+            "user_id": uid, "status": "posted",
+            "entity_type": "supplier", "sub_account": "payable",
+            "entity_id": {"$in": supplier_ids},
+            "side": "debit",
+        }},
+        {"$group": {
+            "_id": "$entity_id",
+            "total":     {"$sum": "$amount"},
+            "count":     {"$sum": 1},
+            "last_date": {"$max": {
+                "$ifNull": ["$txn_date", "$created_at"]}},
+        }},
+    ]
+    async for row in db.general_ledger.aggregate(pay_pipe):
+        sid = row.get("_id")
+        if sid in out:
+            out[sid]["total_payments"] = round(
+                float(row.get("total") or 0), 2)
+            out[sid]["payment_count"] = int(row.get("count") or 0)
+            out[sid]["last_payment_date"] = row.get("last_date")
+
+    # 3) FM — cash invoices (paid_amount >= total_amount).
+    #    We accept the small false-positive risk: an FM with no GL at
+    #    all but paid==total would still be counted as "cash" — but
+    #    those are extremely rare (status=ledger_failed) and worth
+    #    showing on the list anyway so the merchant notices them.
+    cash_pipe = [
+        {"$match": {
+            "user_id": uid,
+            "movement_type": "supplier_invoice",
+            "supplier_id": {"$in": supplier_ids},
+            "$expr": {
+                "$gte": [{"$ifNull": ["$paid_amount", 0]},
+                         {"$ifNull": ["$total_amount", 0]}],
+            },
+        }},
+        {"$group": {
+            "_id": "$supplier_id",
+            "total":     {"$sum": {"$ifNull": ["$total_amount", 0]}},
+            "count":     {"$sum": 1},
+            "last_date": {"$max": {
+                "$ifNull": ["$doc_date", "$created_at"]}},
+        }},
+    ]
+    async for row in db.financial_movements.aggregate(cash_pipe):
+        sid = row.get("_id")
+        if sid in out:
+            out[sid]["total_cash_purchases"] = round(
+                float(row.get("total") or 0), 2)
+            out[sid]["cash_invoice_count"] = int(row.get("count") or 0)
+            d = row.get("last_date")
+            # Promote the cash-invoice date to last_invoice_date if it
+            # is newer than the GL credit one.
+            if d and (out[sid].get("last_invoice_date") is None
+                      or d > out[sid]["last_invoice_date"]):
+                out[sid]["last_invoice_date"] = d
+
+    # 4) Derive transaction_type.
+    for sid, m in out.items():
+        has_credit = m["credit_invoice_count"] > 0
+        has_cash   = m["cash_invoice_count"]   > 0
+        if has_credit and has_cash:
+            m["transaction_type"] = "mixed"
+        elif has_credit:
+            m["transaction_type"] = "credit_only"
+        elif has_cash:
+            m["transaction_type"] = "cash_only"
+        else:
+            m["transaction_type"] = "none"
+        m["total_period_purchases"] = round(
+            m["total_credit_purchases"] + m["total_cash_purchases"], 2)
+
+    return out
+
+
 def _activity_summary(act: dict) -> dict:
     """Derive `last_activity`, `activity_source` and the
     active/inactive badge from the raw {last_gl, last_fm} pair.
@@ -290,6 +417,10 @@ def make_suppliers_unification_forensic_router(db, current_user):
 
         # P1.5.ab.2 — Last-activity in bulk across GL + FM.
         activity_raw = await _last_activity_bulk(db, uid, all_visible_ids)
+        # P1.5.s.fix.activity — Bulk extra metrics (last dates, totals,
+        # transaction_type) for the unified list.
+        metrics_raw = await _supplier_metrics_bulk(
+            db, uid, all_visible_ids)
 
         rows: list[dict] = []
 
@@ -307,6 +438,7 @@ def make_suppliers_unification_forensic_router(db, current_user):
                      (cp or {}).get("status") or "active"
             b = balances.get(sid, {})
             act = _activity_summary(activity_raw.get(sid) or {})
+            mx = metrics_raw.get(sid) or {}
             rows.append({
                 "id": sid,
                 "link_status": link_status,
@@ -326,6 +458,16 @@ def make_suppliers_unification_forensic_router(db, current_user):
                 "editable": link_status in ("new_only", "linked"),
                 # P1.5.ab.2 — activity meta.
                 **act,
+                # P1.5.s.fix.activity — extra activity columns.
+                "last_invoice_date":      mx.get("last_invoice_date"),
+                "last_payment_date":      mx.get("last_payment_date"),
+                "transaction_type":       mx.get("transaction_type", "none"),
+                "total_period_purchases": mx.get("total_period_purchases", 0.0),
+                "total_cash_purchases":   mx.get("total_cash_purchases", 0.0),
+                "total_credit_purchases": mx.get("total_credit_purchases", 0.0),
+                "total_payments":         mx.get("total_payments", 0.0),
+                "credit_invoice_count":   mx.get("credit_invoice_count", 0),
+                "cash_invoice_count":     mx.get("cash_invoice_count", 0),
             })
 
         for sid in linked_ids:
@@ -340,6 +482,7 @@ def make_suppliers_unification_forensic_router(db, current_user):
             # "edit" them through /suppliers patch.
             b = balances.get(sid, {})
             act = _activity_summary(activity_raw.get(sid) or {})
+            mx = metrics_raw.get(sid) or {}
             rows.append({
                 "id": sid,
                 "link_status": "ledger_only",
@@ -358,6 +501,15 @@ def make_suppliers_unification_forensic_router(db, current_user):
                 "credits": b.get("credits", 0.0),
                 "editable": False,
                 **act,
+                "last_invoice_date":      mx.get("last_invoice_date"),
+                "last_payment_date":      mx.get("last_payment_date"),
+                "transaction_type":       mx.get("transaction_type", "none"),
+                "total_period_purchases": mx.get("total_period_purchases", 0.0),
+                "total_cash_purchases":   mx.get("total_cash_purchases", 0.0),
+                "total_credit_purchases": mx.get("total_credit_purchases", 0.0),
+                "total_payments":         mx.get("total_payments", 0.0),
+                "credit_invoice_count":   mx.get("credit_invoice_count", 0),
+                "cash_invoice_count":     mx.get("cash_invoice_count", 0),
             })
 
         # Sort: linked + new_only first (alphabetical by name), then

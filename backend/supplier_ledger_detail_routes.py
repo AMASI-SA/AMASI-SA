@@ -202,18 +202,28 @@ def make_supplier_ledger_detail_router(db, current_user):
         running_bal = opening_balance
         total_invoiced_gl = 0.0
         total_paid_gl     = 0.0
+        # P1.5.s.fix.activity — track latest dates for activity card.
+        last_invoice_date_gl: str | None = None
+        last_payment_date_gl: str | None = None
         timeline: List[Dict[str, Any]] = []
         gl_only_count = 0
         for e in gl_entries:
             amt = _r(e.get("amount"))
             side = e.get("side")
             # Supplier-payable is a liability: credit→increase, debit→decrease.
+            entry_dt = e.get("txn_date") or e.get("created_at")
             if side == "credit":
                 running_bal = _r(running_bal + amt)
                 total_invoiced_gl = _r(total_invoiced_gl + amt)
+                if entry_dt and (not last_invoice_date_gl
+                                 or entry_dt > last_invoice_date_gl):
+                    last_invoice_date_gl = entry_dt
             else:
                 running_bal = _r(running_bal - amt)
                 total_paid_gl = _r(total_paid_gl + amt)
+                if entry_dt and (not last_payment_date_gl
+                                 or entry_dt > last_payment_date_gl):
+                    last_payment_date_gl = entry_dt
 
             tg = e.get("txn_group_id") or ""
             fm = fm_by_group.get(tg) if tg else None
@@ -598,6 +608,43 @@ def make_supplier_ledger_detail_router(db, current_user):
         }
 
         # Period totals — preferred for the summary cards.
+        # P1.5.s.fix.activity — Activity summary for the new
+        # "بطاقة نشاط المورد" header section.
+        last_cash_invoice_date: str | None = None
+        for fm in cash_fms:
+            d = fm.get("doc_date") or fm.get("created_at")
+            if d and (not last_cash_invoice_date or d > last_cash_invoice_date):
+                last_cash_invoice_date = d
+
+        def _max_iso(a: str | None, b: str | None) -> str | None:
+            if not a:
+                return b
+            if not b:
+                return a
+            return a if a >= b else b
+
+        last_invoice_date = _max_iso(
+            last_invoice_date_gl, last_cash_invoice_date)
+        last_payment_date = last_payment_date_gl
+
+        has_credit = (total_invoiced_gl > 0.01
+                      or len(drift_credit) > 0)
+        has_cash   = len(cash_invoices) > 0
+        if has_credit and has_cash:
+            transaction_type = "mixed"
+        elif has_credit:
+            transaction_type = "credit_only"
+        elif has_cash:
+            transaction_type = "cash_only"
+        else:
+            transaction_type = "none"
+
+        # Invoice count = credit invoices (from GL) + cash invoices
+        # (from synthetic injection) within the period.
+        invoice_count_in_period = sum(
+            1 for inv in invoices
+        )
+
         period_block = {
             "from": from_, "to": to,
             "opening_balance": opening_balance,
@@ -607,8 +654,15 @@ def make_supplier_ledger_detail_router(db, current_user):
             "entries_count":   len(timeline),
             # P1.5.s.fix — Cash purchases roll-up (informational, not
             # part of the supplier-payable balance which stays GL-only).
-            "total_cash_purchases": _r(total_cash_purchases),
-            "cash_invoices_count":  len(cash_invoices),
+            "total_cash_purchases":   _r(total_cash_purchases),
+            "cash_invoices_count":    len(cash_invoices),
+            # P1.5.s.fix.activity — extra activity fields.
+            "total_credit_purchases": _r(total_invoiced_gl),
+            "total_payments":         _r(total_paid_gl),
+            "last_invoice_date":      last_invoice_date,
+            "last_payment_date":      last_payment_date,
+            "invoice_count_in_period": invoice_count_in_period,
+            "transaction_type":       transaction_type,
         }
 
         balance_match = (

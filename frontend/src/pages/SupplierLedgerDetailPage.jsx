@@ -508,6 +508,52 @@ export default function SupplierLedgerDetailPage() {
                     </div>
                 </div>
 
+                {/* P1.5.s.fix.activity — Supplier activity card */}
+                <div className="rounded-xl border border-indigo-200 bg-gradient-to-l from-indigo-50 to-white p-3 print:rounded-none"
+                     data-testid="sup-ledger-activity-card">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-extrabold text-indigo-900 text-sm">
+                            📊 نشاط المورد خلال الفترة
+                        </h3>
+                        <TransactionTypeBadge type={period.transaction_type} />
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                        <ActivityMini
+                            label="💵 مشتريات نقدية"
+                            value={fmt(period.total_cash_purchases)}
+                            sub={`${period.cash_invoices_count || 0} فاتورة`}
+                            tone="blue"
+                            testid="act-cash" />
+                        <ActivityMini
+                            label="📒 مشتريات آجلة"
+                            value={fmt(period.total_credit_purchases)}
+                            sub={`${(period.invoice_count_in_period || 0)
+                                    - (period.cash_invoices_count || 0)} فاتورة`}
+                            tone="amber"
+                            testid="act-credit" />
+                        <ActivityMini
+                            label="💰 إجمالي السدادات"
+                            value={fmt(period.total_payments)}
+                            tone="emerald"
+                            testid="act-payments" />
+                        <ActivityMini
+                            label="🧾 عدد الفواتير"
+                            value={period.invoice_count_in_period || 0}
+                            tone="indigo"
+                            testid="act-invoice-count" />
+                        <ActivityMini
+                            label="📅 آخر فاتورة"
+                            value={ymd(period.last_invoice_date) || "—"}
+                            tone="slate"
+                            testid="act-last-invoice" />
+                        <ActivityMini
+                            label="📅 آخر سداد"
+                            value={ymd(period.last_payment_date) || "—"}
+                            tone="slate"
+                            testid="act-last-payment" />
+                    </div>
+                </div>
+
                 {/* Drift banner */}
                 {driftDetected && (
                     <div className="rounded-xl border-2 border-rose-400 bg-rose-50 p-4 print:rounded-none"
@@ -1060,6 +1106,47 @@ function SummaryCard({ label, value, color = "slate", testid }) {
             <div className="text-[11px] text-slate-600 mb-0.5">{label}</div>
             <div className="text-base font-extrabold font-mono">{value} ر.س</div>
         </div>
+    );
+}
+
+// P1.5.s.fix.activity — Tiny KPI tile used inside the supplier-activity
+// header card. The `value` is rendered as-is (no currency suffix).
+function ActivityMini({ label, value, sub, tone = "slate", testid }) {
+    const palette = {
+        slate:   "bg-slate-50  border-slate-200  text-slate-900",
+        blue:    "bg-blue-50   border-blue-200   text-blue-900",
+        amber:   "bg-amber-50  border-amber-200  text-amber-900",
+        emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
+        indigo:  "bg-indigo-50 border-indigo-200 text-indigo-900",
+    }[tone] || "bg-slate-50 border-slate-200 text-slate-900";
+    return (
+        <div className={`rounded-lg border ${palette} p-2 print:p-1.5`}
+             data-testid={testid}>
+            <div className="text-[10px] font-bold opacity-80">{label}</div>
+            <div className="text-sm font-extrabold font-mono mt-0.5">{value}</div>
+            {sub && (
+                <div className="text-[10px] text-slate-500 mt-0.5">{sub}</div>
+            )}
+        </div>
+    );
+}
+
+// P1.5.s.fix.activity — Auto badge classifying the supplier's
+// transaction pattern: cash_only / credit_only / mixed / none.
+function TransactionTypeBadge({ type }) {
+    const cfg = {
+        cash_only:   { emoji: "💵", label: "نقدي فقط",  cls: "bg-blue-100 text-blue-900 border-blue-300" },
+        credit_only: { emoji: "📒", label: "آجل فقط",   cls: "bg-amber-100 text-amber-900 border-amber-300" },
+        mixed:       { emoji: "🔄", label: "نقدي + آجل", cls: "bg-purple-100 text-purple-900 border-purple-300" },
+        none:        { emoji: "💤", label: "بدون نشاط",  cls: "bg-slate-100 text-slate-600 border-slate-300" },
+    }[type] || { emoji: "❔", label: type || "—", cls: "bg-slate-100 text-slate-600 border-slate-300" };
+    return (
+        <span
+            className={`inline-block text-[12px] px-2.5 py-1 rounded-full border font-bold ${cfg.cls}`}
+            data-testid={`txn-type-badge-${type}`}
+        >
+            {cfg.emoji} {cfg.label}
+        </span>
     );
 }
 

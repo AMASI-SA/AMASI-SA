@@ -283,6 +283,10 @@ function SuppliersTable({ items, catMap, openEdit }) {
           <th className="p-3">شخص الاتصال</th>
           <th className="p-3">الجوال</th>
           <th className="p-3">البريد</th>
+          <th className="p-3">نوع التعامل</th>
+          <th className="p-3">إجمالي المشتريات</th>
+          <th className="p-3">آخر فاتورة</th>
+          <th className="p-3">آخر سداد</th>
           <th className="p-3">التخصصات</th>
           <th className="p-3">المستحق (GL)</th>
           <th className="p-3">الحالة</th>
@@ -301,6 +305,46 @@ function SuppliersTable({ items, catMap, openEdit }) {
       </tbody>
     </table>
   );
+}
+
+// P1.5.s.fix.activity — Auto badge for the supplier's transaction
+// pattern across cash / credit invoices.
+function TxTypeChip({ type }) {
+  const cfg = {
+    cash_only:   { emoji: "💵", label: "نقدي",     cls: "bg-blue-50 text-blue-800 border-blue-300" },
+    credit_only: { emoji: "📒", label: "آجل",      cls: "bg-amber-50 text-amber-800 border-amber-300" },
+    mixed:       { emoji: "🔄", label: "مختلط",    cls: "bg-purple-50 text-purple-800 border-purple-300" },
+    none:        { emoji: "💤", label: "بلا نشاط", cls: "bg-slate-50 text-slate-500 border-slate-200" },
+  }[type] || { emoji: "❔", label: type || "—", cls: "bg-slate-50 text-slate-500 border-slate-200" };
+  return (
+    <span
+      className={"inline-block text-[11px] px-1.5 py-0.5 rounded border font-bold " + cfg.cls}
+      data-testid={"supplier-tx-type-" + (type || "none")}
+    >
+      {cfg.emoji} {cfg.label}
+    </span>
+  );
+}
+
+// Compact "YYYY-MM-DD" formatter — tolerant to ISO strings + null.
+function ymd(v) {
+  if (!v) return "—";
+  const s = String(v);
+  // Pre-trimmed YYYY-MM-DD already? Mongo $ifNull may emit full ISO.
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toISOString().slice(0, 10);
+}
+
+// Compact 0-decimal money formatter (saves real-estate on table).
+function fmt0(v) {
+  const n = Number(v || 0);
+  if (n === 0) return "—";
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
 }
 
 function LinkStatusBadge({ status }) {
@@ -361,6 +405,14 @@ function SupplierRow({ s, catMap, openEdit }) {
       <td className="p-3">{s.contact_person || "—"}</td>
       <td className="p-3 font-mono">{s.phone || "—"}</td>
       <td className="p-3 text-xs text-gray-600">{s.email || "—"}</td>
+      <td className="p-3">
+        <TxTypeChip type={s.transaction_type} />
+      </td>
+      <td className="p-3 font-mono text-xs text-indigo-800 font-bold">
+        {fmt0(s.total_period_purchases)}
+      </td>
+      <td className="p-3 text-xs whitespace-nowrap">{ymd(s.last_invoice_date)}</td>
+      <td className="p-3 text-xs whitespace-nowrap">{ymd(s.last_payment_date)}</td>
       <td className="p-3">
         <div className="flex flex-wrap gap-1">
           {visible.map((cid) => (
