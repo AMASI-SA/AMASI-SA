@@ -957,18 +957,27 @@ def make_universal_router(db) -> APIRouter:
     # ───────────────────────────────────────────────────────────────
     @router.get("/employees/custody/open-balances")
     async def custody_open_balances(
+        debug_employee_id: str | None = None,
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
         # Aggregate sub_account=custody entries grouped by
         # (employee_id, entry_type, side). One DB roundtrip.
+        # P1.5.s.fix.custody-align — Apply the SAME filters as
+        # `/employees/list` so the custody column matches across
+        # pages. Without these filters reversed entries +
+        # legacy_orphan rows leaked into the open balance and made
+        # this page report up to 2× the Employees-Ledger value.
+        match_filter = {
+            "user_id": uid,
+            "entity_type": "employee",
+            "sub_account": "custody",
+            "status": "posted",
+            "entry_type": {"$ne": "reversal"},
+            "metadata.legacy_orphan": {"$ne": True},
+        }
         pipeline = [
-            {"$match": {
-                "user_id": uid,
-                "entity_type": "employee",
-                "sub_account": "custody",
-                "status": "posted",
-            }},
+            {"$match": match_filter},
             {"$group": {
                 "_id": {
                     "emp": "$entity_id",
@@ -1044,6 +1053,10 @@ def make_universal_router(db) -> APIRouter:
                 "entity_id": {"$in": emp_ids},
                 "sub_account": {"$in": ["salary_payable", "advance"]},
                 "status": "posted",
+                # P1.5.s.fix.custody-align — same filter as
+                # /employees/list to keep both screens in sync.
+                "entry_type": {"$ne": "reversal"},
+                "metadata.legacy_orphan": {"$ne": True},
             }},
             {"$group": {
                 "_id": {
@@ -1074,6 +1087,44 @@ def make_universal_router(db) -> APIRouter:
                 else:
                     advance_bal[emp] = advance_bal.get(emp, 0.0) - amt
 
+        # P1.5.s.fix.activity — Last activity date per employee
+        # (across ANY sub_account so we know when we last touched
+        # them). One aggregation. Same filters as the balance pipes.
+        last_activity: dict[str, str] = {}
+        async for row in db.general_ledger.aggregate([
+            {"$match": {
+                "user_id": uid,
+                "entity_type": "employee",
+                "entity_id": {"$in": emp_ids},
+                "status": "posted",
+                "entry_type": {"$ne": "reversal"},
+                "metadata.legacy_orphan": {"$ne": True},
+            }},
+            {"$group": {
+                "_id": "$entity_id",
+                "last_dt": {"$max": {
+                    "$ifNull": ["$txn_date", "$created_at"]}},
+            }},
+        ]):
+            last_activity[row["_id"]] = row.get("last_dt")
+
+        from datetime import datetime, timezone
+        now_utc = datetime.now(timezone.utc)
+
+        def _days_since(iso) -> int | None:
+            if not iso:
+                return None
+            try:
+                s = str(iso)
+                if s.endswith("Z"):
+                    s = s[:-1] + "+00:00"
+                dt = datetime.fromisoformat(s)
+                if not dt.tzinfo:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return (now_utc - dt).days
+            except Exception:
+                return None
+
         rows = []
         for emp_id, b in buckets.items():
             open_balance = round(b["debits"] - b["credits"], 2)
@@ -1087,6 +1138,9 @@ def make_universal_router(db) -> APIRouter:
                 net_status = "owed_by_employee"   # عليه للنظام
             else:
                 net_status = "balanced"
+            last_dt = last_activity.get(emp_id)
+            days = _days_since(last_dt)
+            is_active = (days is not None and days <= 90)
             rows.append({
                 "employee_id": emp_id,
                 "name": name_map.get(emp_id) or "(موظف محذوف)",
@@ -1104,9 +1158,92 @@ def make_universal_router(db) -> APIRouter:
                 "advance_open":       adv,
                 "net_to_employee":    net,
                 "net_status":         net_status,
+                # P1.5.s.fix.activity — last activity meta.
+                "last_activity":      last_dt,
+                "days_since_last_activity": days,
+                "is_active":          is_active,
             })
         rows.sort(key=lambda r: (-r["open_balance"], r["name"] or ""))
         total_open = round(sum(r["open_balance"] for r in rows), 2)
+
+        # P1.5.s.fix.custody-align — Optional per-employee debug.
+        # READ-ONLY: dumps every custody entry for `debug_employee_id`
+        # with its `entry_type`, `side`, `amount`, `txn_date`,
+        # `txn_group_id`, and the filters that include/exclude it.
+        debug_block = None
+        if debug_employee_id:
+            emp_entries = []
+            included_dr = 0.0
+            included_cr = 0.0
+            excluded_dr = 0.0
+            excluded_cr = 0.0
+            async for e in db.general_ledger.find(
+                {"user_id": uid,
+                 "entity_type": "employee",
+                 "sub_account": "custody",
+                 "entity_id": debug_employee_id},
+                {"_id": 0, "id": 1, "side": 1, "amount": 1,
+                 "entry_type": 1, "status": 1, "txn_date": 1,
+                 "created_at": 1, "txn_group_id": 1, "metadata": 1,
+                 "notes": 1},
+            ).sort([("txn_date", 1), ("created_at", 1)]):
+                meta = e.get("metadata") or {}
+                is_legacy_orphan = bool(meta.get("legacy_orphan"))
+                is_reversal = (e.get("entry_type") == "reversal")
+                is_unposted = (e.get("status") != "posted")
+                excluded_reasons = []
+                if is_unposted:
+                    excluded_reasons.append("not_posted")
+                if is_reversal:
+                    excluded_reasons.append("reversal")
+                if is_legacy_orphan:
+                    excluded_reasons.append("legacy_orphan")
+                included = not excluded_reasons
+                amt = round(float(e.get("amount") or 0), 2)
+                if included:
+                    if e.get("side") == "debit":
+                        included_dr += amt
+                    else:
+                        included_cr += amt
+                else:
+                    if e.get("side") == "debit":
+                        excluded_dr += amt
+                    else:
+                        excluded_cr += amt
+                emp_entries.append({
+                    "gl_id":         e.get("id"),
+                    "txn_date":      (e.get("txn_date")
+                                       or e.get("created_at")),
+                    "entry_type":    e.get("entry_type"),
+                    "side":          e.get("side"),
+                    "amount":        amt,
+                    "status":        e.get("status"),
+                    "txn_group_id":  e.get("txn_group_id"),
+                    "notes":         e.get("notes"),
+                    "legacy_orphan": is_legacy_orphan,
+                    "included_in_balance": included,
+                    "excluded_reasons":    excluded_reasons,
+                })
+            included_balance = round(included_dr - included_cr, 2)
+            excluded_balance = round(excluded_dr - excluded_cr, 2)
+            debug_block = {
+                "employee_id": debug_employee_id,
+                "total_entries": len(emp_entries),
+                "included_debits":  round(included_dr, 2),
+                "included_credits": round(included_cr, 2),
+                "included_balance_open": included_balance,
+                "excluded_debits":  round(excluded_dr, 2),
+                "excluded_credits": round(excluded_cr, 2),
+                "excluded_balance": excluded_balance,
+                "raw_unfiltered_balance": round(
+                    included_balance + excluded_balance, 2),
+                "filter_applied": (
+                    "status==posted AND entry_type!=reversal "
+                    "AND metadata.legacy_orphan!=true"),
+                "matches_employees_list_endpoint": True,
+                "entries": emp_entries,
+            }
+
         return {
             "rows": rows,
             "total_open_balance": total_open,
@@ -1117,6 +1254,7 @@ def make_universal_router(db) -> APIRouter:
                 sum(r["advance_open"]    for r in rows), 2),
             "total_net_to_employee": round(
                 sum(r["net_to_employee"] for r in rows), 2),
+            "_debug": debug_block,
         }
 
     # ───────────────────────────────────────────────────────────────

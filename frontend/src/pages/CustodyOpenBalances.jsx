@@ -38,6 +38,58 @@ function NetStatusBadge({ status }) {
     );
 }
 
+// P1.5.s.fix.activity — Clickable summary card used in the
+// custody page header. Active = a filter is currently applied.
+function StatCard({ label, value, sub, tone, active, onClick, testid }) {
+    const palette = {
+        emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
+        rose:    "bg-rose-50 border-rose-200 text-rose-900",
+        slate:   "bg-slate-50 border-slate-200 text-slate-700",
+        indigo:  "bg-indigo-50 border-indigo-200 text-indigo-900",
+        amber:   "bg-amber-50 border-amber-200 text-amber-900",
+    }[tone] || "bg-slate-50 border-slate-200 text-slate-700";
+    const ring = active ? " ring-2 ring-offset-1 ring-indigo-500" : "";
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={"text-right rounded-xl border px-3 py-2 hover:brightness-95 transition cursor-pointer " + palette + ring}
+            data-testid={testid}
+        >
+            <div className="text-[11px] font-bold opacity-80">{label}</div>
+            <div className="text-xl font-extrabold mt-0.5 num">{value}</div>
+            {sub && <div className="text-[10px] font-mono opacity-70 mt-0.5">{sub}</div>}
+        </button>
+    );
+}
+
+// P1.5.s.fix.activity — Activity (active <=90d) badge.
+function ActivityBadge({ active, days }) {
+    if (active) {
+        return (
+            <span className="inline-block text-[10px] px-1.5 py-0.5 rounded border font-bold bg-emerald-100 text-emerald-800 border-emerald-300"
+                  title={"آخر حركة: " + (days ?? "?") + " يوم"}>
+                🟢 نشط
+            </span>
+        );
+    }
+    return (
+        <span className="inline-block text-[10px] px-1.5 py-0.5 rounded border font-bold bg-slate-100 text-slate-600 border-slate-300"
+              title={days != null ? (days + " يوم منذ آخر حركة") : "لا توجد حركات"}>
+            ⚪ {days != null ? "خامل" : "بلا حركة"}
+        </span>
+    );
+}
+
+function ymd(v) {
+    if (!v) return "—";
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toISOString().slice(0, 10);
+}
+
 export default function CustodyOpenBalances() {
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState([]);
@@ -47,6 +99,11 @@ export default function CustodyOpenBalances() {
     const [totalNet, setTotalNet] = useState(0);
     const [hideZero, setHideZero] = useState(true);
     const [q, setQ] = useState("");
+    // P1.5.s.fix.activity — Daily-monitoring filters + sort.
+    const [statusFilter, setStatusFilter] = useState("all");
+    const [hasCustody, setHasCustody] = useState(false);
+    const [hasAdvance, setHasAdvance] = useState(false);
+    const [sortKey, setSortKey] = useState("net_owed");
 
     const load = async () => {
         setLoading(true);
@@ -68,12 +125,46 @@ export default function CustodyOpenBalances() {
 
     const filtered = useMemo(() => {
         const t = q.trim().toLowerCase();
-        return rows.filter(r => {
-            if (hideZero && Math.abs(r.open_balance) < 0.01) return false;
+        const rs = rows.filter(r => {
+            if (hideZero
+                && Math.abs(r.open_balance) < 0.01
+                && Math.abs(r.salary_owed || 0) < 0.01
+                && Math.abs(r.advance_open || 0) < 0.01) return false;
+            if (statusFilter !== "all" && r.net_status !== statusFilter) return false;
+            if (hasCustody && !(Math.abs(r.open_balance) > 0.01)) return false;
+            if (hasAdvance && !((r.advance_open || 0) > 0.01)) return false;
             if (t && !(r.name || "").toLowerCase().includes(t)) return false;
             return true;
         });
-    }, [rows, q, hideZero]);
+        const sorters = {
+            name: (a, b) => (a.name || "").localeCompare(b.name || "", "ar"),
+            salary: (a, b) => (b.salary_owed || 0) - (a.salary_owed || 0),
+            advance: (a, b) => (b.advance_open || 0) - (a.advance_open || 0),
+            custody: (a, b) => (b.open_balance || 0) - (a.open_balance || 0),
+            net_owed:    (a, b) => (b.net_to_employee || 0) - (a.net_to_employee || 0),
+            net_owing:   (a, b) => (a.net_to_employee || 0) - (b.net_to_employee || 0),
+        };
+        return [...rs].sort(sorters[sortKey] || sorters.net_owed);
+    }, [rows, q, hideZero, statusFilter, hasCustody, hasAdvance, sortKey]);
+
+    // P1.5.s.fix.activity — Counters for the clickable summary cards.
+    const counts = useMemo(() => {
+        const c = {
+            owed_to_employee: 0,
+            owed_by_employee: 0,
+            balanced: 0,
+            with_custody: 0,
+            with_advance: 0,
+        };
+        rows.forEach(r => {
+            if (r.net_status === "owed_to_employee") c.owed_to_employee += 1;
+            else if (r.net_status === "owed_by_employee") c.owed_by_employee += 1;
+            else c.balanced += 1;
+            if (Math.abs(r.open_balance || 0) > 0.01) c.with_custody += 1;
+            if ((r.advance_open || 0) > 0.01) c.with_advance += 1;
+        });
+        return c;
+    }, [rows]);
 
     return (
         <div className="p-6 max-w-7xl mx-auto" data-testid="custody-open-balances-page">
@@ -125,34 +216,65 @@ export default function CustodyOpenBalances() {
                 </div>
 
                 {/* P1.5.s.fix.custody — Salary side panel roll-ups. */}
-                <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3"
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3"
                      data-testid="custody-salary-summary">
-                    <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2"
-                         data-testid="total-salary-card">
-                        <div className="text-[11px] text-indigo-700 font-bold">إجمالي الرواتب المستحقة</div>
-                        <div className="text-lg font-extrabold text-indigo-900 num">
-                            {fmt(totalSalary)} ر.س
-                        </div>
-                    </div>
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2"
-                         data-testid="total-advance-card">
-                        <div className="text-[11px] text-amber-700 font-bold">إجمالي السلف المفتوحة</div>
-                        <div className="text-lg font-extrabold text-amber-900 num">
-                            {fmt(totalAdvance)} ر.س
-                        </div>
-                    </div>
-                    <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-2"
-                         data-testid="total-net-card">
-                        <div className="text-[11px] text-violet-700 font-bold">
-                            صافي الموظفين (راتب − سلف · العهدة مستقلة)
-                        </div>
-                        <div className={"text-lg font-extrabold num " +
-                            (totalNet > 0.01 ? "text-emerald-800"
-                             : totalNet < -0.01 ? "text-rose-800"
-                             : "text-slate-600")}>
+                    <StatCard label="🟢 له علينا" value={counts.owed_to_employee}
+                              sub={fmt(totalNet > 0 ? totalNet : 0) + " ر.س"}
+                              tone="emerald"
+                              active={statusFilter === "owed_to_employee"}
+                              onClick={() => setStatusFilter(statusFilter === "owed_to_employee" ? "all" : "owed_to_employee")}
+                              testid="card-owed-to" />
+                    <StatCard label="🔴 عليه للنظام" value={counts.owed_by_employee}
+                              sub={fmt(totalNet < 0 ? -totalNet : 0) + " ر.س"}
+                              tone="rose"
+                              active={statusFilter === "owed_by_employee"}
+                              onClick={() => setStatusFilter(statusFilter === "owed_by_employee" ? "all" : "owed_by_employee")}
+                              testid="card-owed-by" />
+                    <StatCard label="⚪ متوازنون" value={counts.balanced}
+                              tone="slate"
+                              active={statusFilter === "balanced"}
+                              onClick={() => setStatusFilter(statusFilter === "balanced" ? "all" : "balanced")}
+                              testid="card-balanced" />
+                    <StatCard label="🎒 عهد مفتوحة" value={counts.with_custody}
+                              sub={fmt(total) + " ر.س"}
+                              tone="indigo"
+                              active={hasCustody}
+                              onClick={() => setHasCustody(v => !v)}
+                              testid="card-with-custody" />
+                    <StatCard label="💰 سلف مفتوحة" value={counts.with_advance}
+                              sub={fmt(totalAdvance) + " ر.س"}
+                              tone="amber"
+                              active={hasAdvance}
+                              onClick={() => setHasAdvance(v => !v)}
+                              testid="card-with-advance" />
+                </div>
+
+                {/* P1.5.s.fix.activity — Sort selector + extra totals row */}
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                    <select
+                        value={sortKey}
+                        onChange={(e) => setSortKey(e.target.value)}
+                        className="border rounded-lg px-3 py-2 font-bold bg-indigo-50 border-indigo-200 text-indigo-800"
+                        data-testid="custody-sort-key"
+                    >
+                        <option value="net_owed">↕ ترتيب: الأعلى صافي علينا</option>
+                        <option value="net_owing">↕ ترتيب: الأعلى صافي عليهم</option>
+                        <option value="salary">↕ ترتيب: الأعلى استحقاقاً</option>
+                        <option value="advance">↕ ترتيب: الأعلى سلفة</option>
+                        <option value="custody">↕ ترتيب: الأعلى عهدة</option>
+                        <option value="name">↕ ترتيب: أبجدي</option>
+                    </select>
+                    <span className="text-slate-500">
+                        إجمالي الرواتب: <b className="text-indigo-800">{fmt(totalSalary)} ر.س</b>
+                    </span>
+                    <span className="text-slate-500">
+                        إجمالي السلف: <b className="text-amber-800">{fmt(totalAdvance)} ر.س</b>
+                    </span>
+                    <span className="text-slate-500">
+                        صافي الموظفين: <b className={totalNet > 0 ? "text-emerald-800" : totalNet < 0 ? "text-rose-800" : "text-slate-600"}>
                             {fmt(totalNet)} ر.س
-                        </div>
-                    </div>
+                        </b>
+                    </span>
                 </div>
 
                 {/* Table */}
@@ -183,16 +305,18 @@ export default function CustodyOpenBalances() {
                                 <th className="text-right p-2.5 font-extrabold bg-violet-50">
                                     الحالة
                                 </th>
+                                <th className="text-right p-2.5 font-extrabold">آخر حركة</th>
+                                <th className="text-right p-2.5 font-extrabold">نشاط</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading && (
-                                <tr><td colSpan={12} className="text-center p-6 text-slate-500">
+                                <tr><td colSpan={14} className="text-center p-6 text-slate-500">
                                     جاري التحميل…
                                 </td></tr>
                             )}
                             {!loading && filtered.length === 0 && (
-                                <tr><td colSpan={12} className="text-center p-6 text-slate-500"
+                                <tr><td colSpan={14} className="text-center p-6 text-slate-500"
                                         data-testid="custody-empty-row">
                                     {rows.length === 0
                                         ? "لا توجد عهد مسجّلة بعد."
@@ -239,6 +363,13 @@ export default function CustodyOpenBalances() {
                                         <td className="p-2.5 text-right">
                                             <NetStatusBadge status={r.net_status} />
                                         </td>
+                                        <td className="p-2.5 text-right text-[11px] whitespace-nowrap font-mono">
+                                            {ymd(r.last_activity)}
+                                        </td>
+                                        <td className="p-2.5 text-right">
+                                            <ActivityBadge active={r.is_active}
+                                                           days={r.days_since_last_activity} />
+                                        </td>
                                     </tr>
                                 );
                             })}
@@ -277,6 +408,8 @@ export default function CustodyOpenBalances() {
                                     <td className="p-2.5 text-left num text-violet-900 bg-violet-100">
                                         {fmt(filtered.reduce((s, r) => s + (r.net_to_employee || 0), 0))}
                                     </td>
+                                    <td className="p-2.5"></td>
+                                    <td className="p-2.5"></td>
                                     <td className="p-2.5"></td>
                                 </tr>
                             </tfoot>
