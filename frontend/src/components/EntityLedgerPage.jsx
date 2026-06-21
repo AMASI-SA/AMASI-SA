@@ -83,15 +83,24 @@ export default function EntityLedgerPage({ config, autoOpenId = null }) {
                 </div>
 
                 <div className={`grid grid-cols-${Math.min(config.summaryCards.length, 4)} gap-3 mb-4`}>
-                    {config.summaryCards.map(card => (
-                        <div key={card.totalsKey}
-                            className={`bg-${card.color}-50 border border-${card.color}-200 rounded-lg p-3`}>
-                            <div className="text-[10px] text-slate-600 font-bold mb-1">{card.label}</div>
-                            <div className={`text-lg font-extrabold text-${card.color}-700 num`}>
-                                {fmt(totals[card.totalsKey])} ر.س
+                    {config.summaryCards.map(card => {
+                        const val = totals[card.totalsKey];
+                        // Iter-250b · P1.5.x — Honor `isCurrency:false` so
+                        // count cards (e.g. drift count) don't render as
+                        // "3.00 ر.س".
+                        const display = card.isCurrency === false
+                            ? Number(val || 0).toLocaleString("en-US")
+                            : `${fmt(val)} ر.س`;
+                        return (
+                            <div key={card.totalsKey}
+                                className={`bg-${card.color}-50 border border-${card.color}-200 rounded-lg p-3`}>
+                                <div className="text-[10px] text-slate-600 font-bold mb-1">{card.label}</div>
+                                <div className={`text-lg font-extrabold text-${card.color}-700 num`}>
+                                    {display}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 {loading ? (
@@ -118,10 +127,24 @@ export default function EntityLedgerPage({ config, autoOpenId = null }) {
                                         className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
                                         onClick={() => setOpen(r)}
                                         data-testid={`${config.testIdPrefix}-row-${r.id}`}>
-                                        <td className="py-2 px-2 font-bold text-slate-900">{r.name}</td>
+                                        <td className="py-2 px-2 font-bold text-slate-900">
+                                            {r.name}
+                                            {/* Iter-250b · P1.5.x — Drift inline warning so
+                                                the merchant can never miss un-posted
+                                                invoices when scanning the supplier list. */}
+                                            {Number(r.drifted_count || 0) > 0 && (
+                                                <span className="inline-block ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300"
+                                                      title={`${r.drifted_count} فاتورة في financial_movements بدون قيد محاسبي`}>
+                                                    ⚠️ {r.drifted_count} بدون قيد
+                                                </span>
+                                            )}
+                                        </td>
                                         {config.columns.map(col => (
-                                            <td key={col.key} className={`text-left py-2 px-2 num ${col.color ? `font-bold text-${col.color}-700` : ""}`}>
-                                                {col.isCurrency !== false ? fmt(r[col.key]) : (r[col.key] || "—")}
+                                            <td key={col.key}
+                                                className={`text-left py-2 px-2 num ${col.color ? `font-bold text-${col.color}-700` : ""}`}>
+                                                {col.renderCell ? col.renderCell(r)
+                                                  : col.isCurrency !== false ? fmt(r[col.key])
+                                                  : (r[col.key] || "—")}
                                             </td>
                                         ))}
                                         <td className="text-left py-2 px-2 text-slate-400 text-xs">عرض ←</td>

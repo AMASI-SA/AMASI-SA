@@ -2489,25 +2489,98 @@ def make_universal_router(db) -> APIRouter:
         balances = await __import__("ledger_core").compute_balances_bulk(
             db, user_id=uid, entity_type="supplier", entity_ids=ids,
         ) if ids else {}
+
+        # Iter-250b · P1.5.x — Per-supplier DRIFT counts (movements
+        # in `financial_movements` without a valid GL post). We
+        # aggregate in ONE round-trip to avoid an N+1 hit.
+        # READ-ONLY · no writes.
+        drift_by_supplier: dict = {}
+        if ids:
+            # Step 1: pull all supplier_invoice movements for these
+            # suppliers and their ledger_txn_group_id.
+            mvs_cursor = db.financial_movements.find(
+                {"user_id": uid,
+                 "supplier_id": {"$in": ids},
+                 "movement_type": "supplier_invoice"},
+                {"_id": 0, "supplier_id": 1,
+                 "ledger_txn_group_id": 1,
+                 "total_amount": 1, "status": 1},
+            )
+            mv_buckets: dict = {sid: [] for sid in ids}
+            referenced_groups: set = set()
+            async for m in mvs_cursor:
+                sid = m.get("supplier_id")
+                if sid in mv_buckets:
+                    mv_buckets[sid].append(m)
+                tg = m.get("ledger_txn_group_id")
+                if tg:
+                    referenced_groups.add(tg)
+            # Step 2: in one shot, find which of those group_ids
+            # actually have a SUPPLIER-PAYABLE leg posted in GL.
+            # This is the SAME criterion used by the supplier detail
+            # page (`supplier_ledger_detail_routes.py`) — without it,
+            # the two pages disagree on the drift count.
+            present_groups: set = set()
+            if referenced_groups:
+                async for g in db.general_ledger.find(
+                    {"user_id": uid,
+                     "entity_type": "supplier",
+                     "sub_account": "payable",
+                     "txn_group_id": {"$in": list(referenced_groups)},
+                     "status": "posted"},
+                    {"_id": 0, "txn_group_id": 1},
+                ):
+                    present_groups.add(g["txn_group_id"])
+            # Step 3: classify each movement.
+            for sid, mlist in mv_buckets.items():
+                cnt = 0; tot = 0.0
+                for m in mlist:
+                    tg = m.get("ledger_txn_group_id")
+                    if (not tg) or (tg not in present_groups):
+                        cnt += 1
+                        tot += float(m.get("total_amount") or 0)
+                if cnt > 0:
+                    drift_by_supplier[sid] = {
+                        "drifted_count":  cnt,
+                        "drifted_total":  round(tot, 2),
+                    }
+
         rows = []
         total_owed = 0.0
+        total_drifted_count = 0
+        total_drifted_amount = 0.0
         for c in cps:
             b = balances.get(c["id"], {})
             owed = b.get("outstanding_debt", 0.0)
-            if with_debt_only and owed <= 0:
+            drift = drift_by_supplier.get(c["id"], {})
+            d_cnt = drift.get("drifted_count", 0)
+            d_amt = drift.get("drifted_total", 0.0)
+            # Iter-250b · P1.5.x — `with_debt_only` filter must NOT
+            # hide a supplier that only has drifted movements; the
+            # merchant still needs to see them.
+            if with_debt_only and owed <= 0 and d_cnt == 0:
                 continue
             total_owed += owed
+            total_drifted_count += d_cnt
+            total_drifted_amount += d_amt
             rows.append({
                 "id": c["id"], "name": c.get("name"),
                 "outstanding_debt": owed,
                 "debits": b.get("debits", 0.0),
                 "credits": b.get("credits", 0.0),
+                # New drift fields (always present, zero by default).
+                "drifted_count":  d_cnt,
+                "drifted_total":  d_amt,
             })
         # Sort by debt desc so the «top owed» supplier surfaces first
         # in the merchant's pay flow.
         rows.sort(key=lambda r: r["outstanding_debt"], reverse=True)
         return {"suppliers": rows,
-                 "totals": {"outstanding_debt": round(total_owed, 2)}}
+                 "totals": {
+                    "outstanding_debt": round(total_owed, 2),
+                    "drifted_count":  total_drifted_count,
+                    "drifted_total":  round(total_drifted_amount, 2),
+                 }}
 
     @router.get("/externals/list")
     async def externals_with_balances(user: dict = Depends(current_user)):
