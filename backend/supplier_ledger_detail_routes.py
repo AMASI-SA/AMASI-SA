@@ -396,6 +396,10 @@ def make_supplier_ledger_detail_router(db, current_user):
         cash_invoices:   List[Dict[str, Any]] = []
         drift_credit:    List[Dict[str, Any]] = []
         ledger_failed:   List[Dict[str, Any]] = []
+        # P1.5.s.fix.timeline — keep raw FM docs for cash invoices so
+        # we can render them as synthetic timeline + invoice cards
+        # (informational, no balance impact).
+        cash_fms: List[Dict[str, Any]] = []
         total_cash_purchases = 0.0
 
         for m in candidates:
@@ -436,6 +440,7 @@ def make_supplier_ledger_detail_router(db, current_user):
                     "classification": "cash_invoice",
                     "reason_code":    "fully_paid_no_payable",
                 })
+                cash_fms.append(m)
                 total_cash_purchases += total
                 continue
             # Bucket 2 — real drift: credit/partial invoice but no
@@ -454,6 +459,93 @@ def make_supplier_ledger_detail_router(db, current_user):
         movements_orphaned: List[Dict[str, Any]] = (
             drift_credit + ledger_failed
         )
+
+        # P1.5.s.fix.timeline — Inject cash invoices into the timeline
+        # and invoices section as INFORMATIONAL rows. They do NOT
+        # affect the supplier-payable balance (debit=credit=0 from a
+        # payable standpoint), but they DO represent real purchases
+        # from the supplier and belong in his trading history.
+        for fm in cash_fms:
+            tg = fm.get("ledger_txn_group_id")
+            total = _r(fm.get("total_amount"))
+            paid  = _r(fm.get("paid_amount"))
+            timeline.append({
+                "gl_entry_id":   None,
+                "txn_group_id":  tg,
+                # Use the business doc_date when available so the row
+                # sorts correctly within the period. Fall back to the
+                # creation timestamp.
+                "created_at":    (fm.get("doc_date")
+                                  or fm.get("created_at")),
+                "entry_type":    "supplier_invoice_cash",
+                "side":          "info",
+                "amount":        total,
+                "notes":         (fm.get("notes") or
+                                  "فاتورة نقدية — لا تؤثر على الذمة"),
+                "metadata":      {"payment_terms": "cash",
+                                  "is_cash_only":  True},
+                "running_balance": running_bal,   # unchanged
+                "is_manual":     False,
+                "is_cash_only":  True,
+                "opposite_legs": [],
+                "linked_movement": {
+                    "movement_id":   fm.get("id"),
+                    "movement_type": fm.get("movement_type"),
+                    "doc_number":    fm.get("doc_number"),
+                    "doc_date":      fm.get("doc_date"),
+                    "total_amount":  total,
+                    "paid_amount":   paid,
+                    "payment_terms": fm.get("payment_terms") or "cash",
+                    "category_name": (fm.get("category_snapshot")
+                                       or {}).get("name"),
+                },
+            })
+            invoices.append({
+                "movement_id":     fm.get("id"),
+                "txn_group_id":    tg,
+                "doc_number":      fm.get("doc_number"),
+                "doc_date":        fm.get("doc_date"),
+                "total_amount":    total,
+                "paid_amount":     paid,
+                "remaining":       0.0,
+                "payment_terms":   fm.get("payment_terms") or "cash",
+                "status":          "paid_cash",
+                "is_cash_only":    True,
+                "category_name":   (fm.get("category_snapshot")
+                                     or {}).get("name"),
+                "notes":           fm.get("notes"),
+                "line_items":      fm.get("line_items") or [],
+                "discount":        _r(fm.get("discount")),
+                "tax":             _r(fm.get("tax")),
+                # Show whichever GL legs we have for this group (the
+                # expense + cash legs) so the merchant can audit them.
+                "gl_legs":         [],
+                "payments_applied": [],
+                "withdrawal_method": fm.get("withdrawal_method"),
+                "reference_number":  fm.get("reference_number"),
+            })
+
+        # Re-sort the timeline chronologically after injection.
+        timeline.sort(
+            key=lambda t: (t.get("created_at") or ""))
+        # P1.5.s.fix.timeline — Recompute running balance in
+        # chronological order, treating cash-only rows as no-ops.
+        rb = opening_balance
+        for t in timeline:
+            if t.get("is_cash_only"):
+                t["running_balance"] = rb  # unchanged
+                continue
+            amt = _r(t.get("amount"))
+            if t.get("side") == "credit":
+                rb = _r(rb + amt)
+            elif t.get("side") == "debit":
+                rb = _r(rb - amt)
+            t["running_balance"] = rb
+        invoices.sort(
+            key=lambda r: (
+                r.get("doc_date") or "",
+                r.get("doc_number") or "",
+            ))
 
         # P1.5.s.fix.diag — Always-on tiny diagnostic block so the
         # merchant can self-troubleshoot when classification seems
@@ -512,7 +604,7 @@ def make_supplier_ledger_detail_router(db, current_user):
             "total_invoiced":  total_invoiced_gl,
             "total_paid":      total_paid_gl,
             "closing_balance": derived_balance,
-            "entries_count":   len(gl_entries),
+            "entries_count":   len(timeline),
             # P1.5.s.fix — Cash purchases roll-up (informational, not
             # part of the supplier-payable balance which stays GL-only).
             "total_cash_purchases": _r(total_cash_purchases),

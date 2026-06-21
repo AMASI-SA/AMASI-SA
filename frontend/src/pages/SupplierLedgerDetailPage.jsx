@@ -35,9 +35,10 @@ const ymd = (d) => {
 };
 
 const STATUS_BADGE = {
-    paid:    { label: "مدفوعة",       cls: "bg-emerald-100 text-emerald-800 border-emerald-300" },
-    partial: { label: "جزئية",        cls: "bg-amber-100 text-amber-800 border-amber-300" },
-    unpaid:  { label: "غير مدفوعة",   cls: "bg-rose-100 text-rose-800 border-rose-300" },
+    paid:      { label: "مدفوعة",       cls: "bg-emerald-100 text-emerald-800 border-emerald-300" },
+    partial:   { label: "جزئية",        cls: "bg-amber-100 text-amber-800 border-amber-300" },
+    unpaid:    { label: "غير مدفوعة",   cls: "bg-rose-100 text-rose-800 border-rose-300" },
+    paid_cash: { label: "نقدية",        cls: "bg-blue-100 text-blue-800 border-blue-300" },
 };
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -594,16 +595,25 @@ export default function SupplierLedgerDetailPage() {
                                 </thead>
                                 <tbody>
                                     {timeline.map((t, i) => (
-                                        <tr key={t.gl_entry_id || i}
-                                            className={t.is_manual
-                                                ? "bg-amber-50 hover:bg-amber-100"
-                                                : "hover:bg-slate-50"}
+                                        <tr key={t.gl_entry_id || `cash-${i}`}
+                                            className={t.is_cash_only
+                                                ? "bg-blue-50 hover:bg-blue-100"
+                                                : t.is_manual
+                                                    ? "bg-amber-50 hover:bg-amber-100"
+                                                    : "hover:bg-slate-50"}
                                             data-testid={`sup-ledger-row-${i}`}>
                                             <td className="p-2 border whitespace-nowrap">
                                                 {ymd(t.created_at)}
                                             </td>
                                             <td className="p-2 border">
                                                 {EntryTypeLabel(t.entry_type)}
+                                                {t.is_cash_only && (
+                                                    <span className="ml-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-200 text-blue-900"
+                                                          data-testid="cash-badge"
+                                                          title="فاتورة نقدية — لا تؤثر على ذمة المورد">
+                                                        📗 نقدية
+                                                    </span>
+                                                )}
                                                 {t.is_manual && (
                                                     <span className="ml-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900"
                                                           data-testid="manual-badge">
@@ -624,19 +634,28 @@ export default function SupplierLedgerDetailPage() {
                                                         data-testid={`sup-ledger-row-doc-${i}`}>
                                                         {t.linked_movement.doc_number}
                                                     </button>
+                                                ) : t.is_cash_only ? (
+                                                    <span className="text-[11px] text-blue-700">
+                                                        {fmt(t.amount)} ر.س
+                                                    </span>
                                                 ) : "—"}
                                             </td>
                                             <td className="p-2 border max-w-[280px] text-slate-700">
                                                 {t.notes || ""}
                                             </td>
                                             <td className="p-2 border text-rose-700 text-left font-mono">
-                                                {t.side === "debit" ? fmt(t.amount) : ""}
+                                                {(!t.is_cash_only && t.side === "debit") ? fmt(t.amount) : ""}
                                             </td>
                                             <td className="p-2 border text-emerald-700 text-left font-mono">
-                                                {t.side === "credit" ? fmt(t.amount) : ""}
+                                                {(!t.is_cash_only && t.side === "credit") ? fmt(t.amount) : ""}
                                             </td>
                                             <td className="p-2 border text-left font-mono font-bold">
-                                                {fmt(t.running_balance)}
+                                                {t.is_cash_only ? (
+                                                    <span className="text-blue-700 text-[11px]"
+                                                          title="لا يؤثر على الذمة">
+                                                        — (نقدي)
+                                                    </span>
+                                                ) : fmt(t.running_balance)}
                                             </td>
                                         </tr>
                                     ))}
@@ -1065,12 +1084,13 @@ function Mini({ label, value, bold = false }) {
 
 function EntryTypeLabel(t) {
     const m = {
-        supplier_invoice:  "فاتورة مورد",
-        supplier_payment:  "سداد مورد",
-        purchase_return:   "مرتجع مشتريات",
-        opening_balance:   "رصيد افتتاحي",
-        adjustment:        "تسوية",
-        reversal:          "عكس قيد",
+        supplier_invoice:       "فاتورة مورد",
+        supplier_invoice_cash:  "فاتورة نقدية",
+        supplier_payment:       "سداد مورد",
+        purchase_return:        "مرتجع مشتريات",
+        opening_balance:        "رصيد افتتاحي",
+        adjustment:             "تسوية",
+        reversal:               "عكس قيد",
     };
     return m[t] || t || "—";
 }
