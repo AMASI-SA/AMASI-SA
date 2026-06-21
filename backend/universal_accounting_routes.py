@@ -1586,7 +1586,8 @@ def make_universal_router(db) -> APIRouter:
         # Block COD / bank_transfer payment_platforms by canonical key
         # or by Arabic provider name (data may have either).
         npm = (acc.get("normalized_payment_method") or "").lower()
-        pname = acc.get("provider_name") or acc.get("name") or ""
+        pname_raw = acc.get("provider_name") or acc.get("name") or ""
+        pname = pname_raw.lower()
         cod_patterns = [
             "cod", "cash_on_delivery", "الدفع عند الاستلام",
         ]
@@ -1594,16 +1595,28 @@ def make_universal_router(db) -> APIRouter:
             "bank_transfer", "تحويل بنكي",
         ]
         for p in cod_patterns:
-            if p in npm or p in pname:
+            if p in npm or p in pname_raw:
                 return True, (
                     "هذا الحساب ليس حساباً قابلاً للتحويل الداخلي. "
                     "استخدم المسار المحاسبي المخصص له."
                 )
         for p in bank_transfer_patterns:
-            if p in npm or p in pname:
+            if p in npm or p in pname_raw:
                 return True, (
                     "هذا الحساب ليس حساباً قابلاً للتحويل الداخلي. "
                     "استخدم المسار المحاسبي المخصص له."
+                )
+        # Iter-250b · P1.5.L — Block Tamara/Tabby BNPL wallets from
+        # internal transfers. Direct bank/cash → BNPL transfers
+        # corrupt the canonical BNPL settlement bridge. The official
+        # BNPL Settlements screen is the only valid path for these
+        # wallets. Salla is NOT blocked — only Tamara/Tabby/bnpl.
+        bnpl_patterns = ["tamara", "tabby", "bnpl", "تمارا", "تابي"]
+        for p in bnpl_patterns:
+            if p in npm or p in pname:
+                return True, (
+                    "لا يمكن تسجيل تحويل مباشر على حسابات Tamara/Tabby. "
+                    "استخدم شاشة تسويات BNPL الرسمية."
                 )
         return False, ""
 

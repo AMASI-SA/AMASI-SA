@@ -278,6 +278,10 @@ export default function UnifiedEntryScreen() {
     //   - account_type ∉ {bank, cash, payment_platform}
     //   - payment_platform whose provider is COD (الدفع عند الاستلام)
     //   - payment_platform whose provider is "تحويل بنكي" (bank_transfer)
+    //   - Iter-250b · P1.5.L — BNPL wallets (Tamara/Tabby). Direct
+    //     transfers onto BNPL accounts corrupt the canonical BNPL
+    //     settlement bridge; the official BNPL Settlements screen is
+    //     the only valid path. Salla is NOT blocked.
     const isInternalTransferIneligible = (b) => {
         if (!b) return true;
         const atype = b.account_type;
@@ -293,6 +297,10 @@ export default function UnifiedEntryScreen() {
             return true;
         }
         if (btRe.test(name) || btRe.test(provider) || npm === "bank_transfer") {
+            return true;
+        }
+        const bnplRe = /tamara|tabby|bnpl|تمارا|تابي/i;
+        if (bnplRe.test(name) || bnplRe.test(provider) || bnplRe.test(npm)) {
             return true;
         }
         return false;
