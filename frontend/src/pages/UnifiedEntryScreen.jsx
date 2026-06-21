@@ -199,6 +199,21 @@ export default function UnifiedEntryScreen() {
         { expense_category: "", amount: "", notes: "" },
     ]);
 
+    // Iter-250b · P1.5.q — "Pay from custody" support for expense_record.
+    //   • paySource: which funding path the merchant picked for the
+    //     current expense — "bank" (default) or "custody".
+    //   • custodyEmployeeId: when paySource === "custody", which
+    //     employee's open custody to debit.
+    //   • custodySources: live list fetched from
+    //     /accounting/custody/spendable-sources — respects the per-user
+    //     permission filter (owner sees all positive-balance custodies;
+    //     a regular linked employee sees only their own).
+    const [paySource, setPaySource] = useState("bank");
+    const [custodyEmployeeId, setCustodyEmployeeId] = useState("");
+    const [custodySources, setCustodySources] = useState({
+        loaded: false, can_spend_any: false, sources: [],
+    });
+
     // Iter-182 — hidden transaction types loaded from /settings, plus
     // visibility-management modal state.
     const [hiddenTypes, setHiddenTypes] = useState([]);
@@ -530,9 +545,48 @@ export default function UnifiedEntryScreen() {
         // Iter-191 — COD settlement legs.
         setCodBankAmount(""); setCodShippingCost("");
         setCodFee(""); setCodOtherFees(""); setCodOtherCategory("");
+        // Iter-250b · P1.5.q — reset pay-source picker so it doesn't
+        // bleed across operation switches.
+        setPaySource("bank"); setCustodyEmployeeId("");
     };
 
     useEffect(() => { resetForm(); }, [opType]);
+
+    // Iter-250b · P1.5.q — Lazy-load spendable custody sources the
+    // first time the merchant flips the toggle to "عهدة موظف". Cached
+    // for the rest of the session — re-fetches whenever paySource
+    // flips back from custody to bank and back again, to surface
+    // freshly-granted custodies. We DO NOT pre-fetch on mount because
+    // most operations don't need this list.
+    useEffect(() => {
+        if (opType !== "expense_record" || paySource !== "custody") return;
+        let alive = true;
+        (async () => {
+            try {
+                const { data } = await api.get(
+                    "/accounting/custody/spendable-sources");
+                if (!alive) return;
+                setCustodySources({
+                    loaded: true,
+                    can_spend_any: !!data.can_spend_any,
+                    sources: Array.isArray(data.sources) ? data.sources : [],
+                });
+                // Auto-pick the only available employee for a regular
+                // (non-admin) user so they don't have to click.
+                if (!data.can_spend_any
+                    && Array.isArray(data.sources)
+                    && data.sources.length === 1) {
+                    setCustodyEmployeeId(data.sources[0].employee_id);
+                }
+            } catch (e) {
+                if (!alive) return;
+                setCustodySources({
+                    loaded: true, can_spend_any: false, sources: [],
+                });
+            }
+        })();
+        return () => { alive = false; };
+    }, [opType, paySource]);
 
     // Iter-209 — Fetch the last 10 ledger txn-groups and surface them
     // in a compact table at the bottom. Optionally highlights the new
@@ -683,10 +737,21 @@ export default function UnifiedEntryScreen() {
                 e.push({ side: "debit",  acc: bankName,    amt });
                 e.push({ side: "credit", acc: `قرض/مستحق على ${extName || ""}`, amt });
                 break;
-            case "expense_record":
+            case "expense_record": {
                 e.push({ side: "debit",  acc: `مصروف: ${catName || ""}`, amt });
-                e.push({ side: "credit", acc: bankName,    amt });
+                // Iter-250b · P1.5.q — Credit leg follows the chosen
+                // pay source.
+                if (paySource === "custody") {
+                    const sel = (custodySources.sources || []).find(
+                        s => s.employee_id === custodyEmployeeId);
+                    e.push({ side: "credit",
+                             acc: `عهدة ${sel?.name || "(اختر موظفاً)"}`,
+                             amt });
+                } else {
+                    e.push({ side: "credit", acc: bankName, amt });
+                }
                 break;
+            }
             case "bank_transfer":
                 e.push({ side: "debit",  acc: bankToName,  amt });
                 e.push({ side: "credit", acc: bankName,    amt });
@@ -696,7 +761,8 @@ export default function UnifiedEntryScreen() {
         const credit = e.filter(x => x.side === "credit").reduce((s, x) => s + x.amt, 0);
         return { entries: e, debit, credit, balanced: Math.abs(debit - credit) < 0.01 };
     }, [opType, amount, entityId, entityToId, bankId, bankToId, expCategory, custodyItems,
-        employees, suppliers, externals, banks, categories]);
+        employees, suppliers, externals, banks, categories,
+        paySource, custodyEmployeeId, custodySources]);
 
     const submit = async () => {
         const amt = Number(amount) || 0;
@@ -785,8 +851,30 @@ export default function UnifiedEntryScreen() {
                     break;
                 case "expense_record":
                     url = "/accounting/expenses";
-                    body = { amount: amt, expense_category: expCategory,
-                             paid_from_account_id: bankId, ...common };
+                    // Iter-250b · P1.5.q — Branch on pay source: either
+                    // a traditional bank/cash account OR an employee
+                    // custody wallet. Exactly one is sent.
+                    if (paySource === "custody") {
+                        if (!custodyEmployeeId) {
+                            toast.error("اختر موظفاً لديه رصيد عهدة");
+                            setBusy(false); return;
+                        }
+                        const src = (custodySources.sources || []).find(
+                            s => s.employee_id === custodyEmployeeId);
+                        const available = src ? Number(src.available_balance) : 0;
+                        if (amt > available + 0.001) {
+                            toast.error(
+                                `رصيد العهدة غير كافٍ. المتاح: ` +
+                                `${available.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`);
+                            setBusy(false); return;
+                        }
+                        body = { amount: amt, expense_category: expCategory,
+                                 custody_employee_id: custodyEmployeeId,
+                                 ...common };
+                    } else {
+                        body = { amount: amt, expense_category: expCategory,
+                                 paid_from_account_id: bankId, ...common };
+                    }
                     break;
                 case "bank_transfer":
                     url = "/accounting/bank-transfer";
@@ -899,7 +987,11 @@ export default function UnifiedEntryScreen() {
     const needsEmployeeTo = opType === "custody_transfer";
     const needsSupplier = ["supplier_invoice","supplier_pay"].includes(opType);
     const needsExternal = ["external_grant","external_collect"].includes(opType);
-    const needsBank = !isCodSettle && !["salary_accrual","custody_settle","supplier_invoice","custody_transfer"].includes(opType);
+    // Iter-250b · P1.5.q — `expense_record` paid from CUSTODY skips
+    // the bank picker entirely (custody is its own funding source).
+    const needsBank = !isCodSettle
+        && !["salary_accrual","custody_settle","supplier_invoice","custody_transfer"].includes(opType)
+        && !(opType === "expense_record" && paySource === "custody");
     const needsBankTo = opType === "bank_transfer";
     const needsCategory = ["supplier_invoice","expense_record"].includes(opType);
     const needsCourier = isCodSettle;

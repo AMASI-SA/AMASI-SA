@@ -105,6 +105,18 @@ export default function Iter245MovementForm({
     const [allowedAccountIds, setAllowedAccountIds] = useState(null);
     const [allowedMethods, setAllowedMethods] = useState(null);
 
+    // Iter-250b · P1.5.q — Custody pay-source (general_expense only).
+    //   paySource: "bank" (default) | "custody"
+    //   custodyEmployeeId: which employee custody to debit
+    //   custodySources:    list from /accounting/custody/spendable-sources
+    //                      respecting per-user permissions.
+    const isGeneralExpense = movementType === "general_expense";
+    const [paySource, setPaySource] = useState("bank");
+    const [custodyEmployeeId, setCustodyEmployeeId] = useState("");
+    const [custodySources, setCustodySources] = useState({
+        loaded: false, can_spend_any: false, sources: [],
+    });
+
     const [lineItems, setLineItems] = useState([
         { description: "", quantity: "", unit_price: "" },
     ]);
@@ -117,7 +129,40 @@ export default function Iter245MovementForm({
         setWithdrawal(""); setReference(""); setAttachment(null);
         setLineItems([{ description: "", quantity: "", unit_price: "" }]);
         setDocNumber(""); setNotes("");
+        // Iter-250b · P1.5.q — reset pay-source picker as well.
+        setPaySource("bank"); setCustodyEmployeeId("");
     }, [movementType]);
+
+    // Iter-250b · P1.5.q — Lazy-load spendable custody sources the
+    // first time the merchant flips the toggle to «عهدة موظف».
+    useEffect(() => {
+        if (!isGeneralExpense || paySource !== "custody") return;
+        let alive = true;
+        (async () => {
+            try {
+                const { data } = await api.get(
+                    "/accounting/custody/spendable-sources");
+                if (!alive) return;
+                setCustodySources({
+                    loaded: true,
+                    can_spend_any: !!data.can_spend_any,
+                    sources: Array.isArray(data.sources)
+                        ? data.sources : [],
+                });
+                if (!data.can_spend_any
+                    && Array.isArray(data.sources)
+                    && data.sources.length === 1) {
+                    setCustodyEmployeeId(data.sources[0].employee_id);
+                }
+            } catch (e) {
+                if (!alive) return;
+                setCustodySources({
+                    loaded: true, can_spend_any: false, sources: [],
+                });
+            }
+        })();
+        return () => { alive = false; };
+    }, [isGeneralExpense, paySource]);
 
     // ── Fetch categories filtered by op type + suppliers (when used) ─
     useEffect(() => {
@@ -332,6 +377,29 @@ export default function Iter245MovementForm({
         }
         if (total <= 0) return toast.error("الإجمالي مطلوب");
 
+        // Iter-250b · P1.5.q — When paying from custody, force
+        // payment_terms to "cash" (custody can't be آجل/partial) and
+        // route the credit leg through `custody_employee_id` instead
+        // of `paid_from_account_id`. Frontend pre-validation mirrors
+        // the backend guard for instant feedback.
+        const isCustody = isGeneralExpense && paySource === "custody";
+        if (isCustody) {
+            if (!custodyEmployeeId) {
+                setSaving(false);
+                return toast.error("اختر موظفاً لديه رصيد عهدة");
+            }
+            const src = (custodySources.sources || []).find(
+                s => s.employee_id === custodyEmployeeId);
+            const available = src ? Number(src.available_balance) : 0;
+            if (total > available + 0.001) {
+                setSaving(false);
+                return toast.error(
+                    `رصيد العهدة غير كافٍ. المتاح: ` +
+                    `${fmt(available)} ر.س`);
+            }
+        }
+
+        const effectiveTerms = isCustody ? "cash" : paymentTerms;
         const payload = {
             movement_type: movementType,
             doc_date: docDate,
@@ -339,15 +407,19 @@ export default function Iter245MovementForm({
             notes: notes || null,
             supplier_id: supplierId || null,
             category_id: categoryId,
-            payment_terms: paymentTerms,
+            payment_terms: effectiveTerms,
             total_amount: total,
-            paid_amount: paymentTerms === "partial"
+            paid_amount: effectiveTerms === "partial"
                 ? Number(paidAmount || 0) : 0,
-            paid_from_account_id: paymentTerms === "credit"
-                ? null : accountId || null,
-            withdrawal_method: isBank ? withdrawal || null : null,
+            paid_from_account_id: isCustody
+                ? null
+                : (effectiveTerms === "credit" ? null : accountId || null),
+            custody_employee_id: isCustody ? custodyEmployeeId : null,
+            withdrawal_method: (!isCustody && isBank)
+                ? (withdrawal || null) : null,
             reference_number: reference || null,
-            attachment: (withdrawal === "transfer" && attachment) || null,
+            attachment: (!isCustody && withdrawal === "transfer"
+                         && attachment) || null,
             line_items: movementType === "supplier_invoice"
                 ? lineItems
                     .filter((r) => (r.description || "").trim()
@@ -370,6 +442,21 @@ export default function Iter245MovementForm({
             setLineItems([
                 { description: "", quantity: "", unit_price: "" },
             ]);
+            // Iter-250b · P1.5.q — Reset custody picker & re-fetch
+            // sources so the next entry sees the updated balance.
+            if (isCustody) {
+                setCustodyEmployeeId("");
+                try {
+                    const { data: refreshed } = await api.get(
+                        "/accounting/custody/spendable-sources");
+                    setCustodySources({
+                        loaded: true,
+                        can_spend_any: !!refreshed.can_spend_any,
+                        sources: Array.isArray(refreshed.sources)
+                            ? refreshed.sources : [],
+                    });
+                } catch (_e) { /* non-fatal */ }
+            }
             onSaved?.(res.data);
         } catch (e) {
             toast.error(errMsg(e, "فشل الحفظ"));
@@ -614,7 +701,8 @@ export default function Iter245MovementForm({
                     <select
                         value={paymentTerms}
                         onChange={(e) => setPaymentTerms(e.target.value)}
-                        className="w-full border rounded px-3 py-2 text-sm"
+                        disabled={isGeneralExpense && paySource === "custody"}
+                        className={`w-full border rounded px-3 py-2 text-sm ${isGeneralExpense && paySource === "custody" ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""}`}
                         data-testid="iter245-mv-terms">
                         {TERMS.map((t) => (
                             <option key={t.value} value={t.value}>
@@ -622,6 +710,11 @@ export default function Iter245MovementForm({
                             </option>
                         ))}
                     </select>
+                    {isGeneralExpense && paySource === "custody" && (
+                        <p className="text-[11px] text-amber-700 mt-1">
+                            🔒 الدفع من العهدة نقدي فقط — لا يدعم آجل/جزئي.
+                        </p>
+                    )}
                 </Field>
                 {paymentTerms === "partial" && (
                     <Field label="المبلغ المدفوع">
@@ -636,8 +729,101 @@ export default function Iter245MovementForm({
                 )}
             </div>
 
+            {/* Iter-250b · P1.5.q — Pay-source toggle (general_expense only).
+                Lets the merchant choose to pay this expense from a
+                bank/cash account OR from an employee's open custody
+                wallet. ONLY one source per transaction. Selecting
+                "عهدة" forces payment_terms = cash (no آجل / partial). */}
+            {isGeneralExpense && paymentTerms !== "credit" && (
+                <Field label="مصدر السداد">
+                    <div className="flex gap-2 mb-2">
+                        <button type="button"
+                            onClick={() => setPaySource("bank")}
+                            className={`flex-1 px-3 py-2 rounded text-sm font-bold border transition ${paySource === "bank"
+                                ? "bg-indigo-600 text-white border-indigo-600"
+                                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"}`}
+                            data-testid="iter245-paysource-bank-btn">
+                            🏦 بنك / صندوق
+                        </button>
+                        <button type="button"
+                            onClick={() => setPaySource("custody")}
+                            className={`flex-1 px-3 py-2 rounded text-sm font-bold border transition ${paySource === "custody"
+                                ? "bg-amber-600 text-white border-amber-600"
+                                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"}`}
+                            data-testid="iter245-paysource-custody-btn">
+                            👤 عهدة موظف
+                        </button>
+                    </div>
+                    {paySource === "custody" && (
+                        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                            {!custodySources.loaded ? (
+                                <div className="text-xs text-slate-500">
+                                    ⏳ يتم تحميل قائمة العهد المتاحة...
+                                </div>
+                            ) : custodySources.sources.length === 0 ? (
+                                <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2 font-bold"
+                                     data-testid="iter245-custody-no-sources">
+                                    {custodySources.can_spend_any
+                                        ? "🚫 لا يوجد موظفون لديهم رصيد عهدة موجب حالياً."
+                                        : "🚫 لا توجد عهدة مرتبطة بحسابك حالياً، أو رصيدك = 0."}
+                                </div>
+                            ) : (
+                                <>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        اختر الموظف:
+                                    </label>
+                                    <select
+                                        value={custodyEmployeeId}
+                                        onChange={(e) => setCustodyEmployeeId(e.target.value)}
+                                        className="w-full px-3 py-2 border border-amber-300 bg-white rounded text-sm"
+                                        data-testid="iter245-custody-employee-select">
+                                        <option value="">— اختر موظفاً —</option>
+                                        {custodySources.sources.map(s => (
+                                            <option key={s.employee_id}
+                                                    value={s.employee_id}
+                                                    data-testid={`iter245-custody-opt-${s.employee_id}`}>
+                                                {s.name} · رصيد العهدة: {fmt(s.available_balance)} ر.س
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {custodyEmployeeId && (() => {
+                                        const sel = custodySources.sources.find(
+                                            s => s.employee_id === custodyEmployeeId);
+                                        if (!sel) return null;
+                                        const amt = Number(totalAmount) || 0;
+                                        const avail = Number(sel.available_balance);
+                                        const after = avail - amt;
+                                        const insufficient = amt > avail + 0.001;
+                                        return (
+                                            <div className={`mt-2 text-[12px] rounded px-3 py-2 ${insufficient
+                                                ? "bg-rose-100 border border-rose-300 text-rose-800 font-bold"
+                                                : "bg-emerald-50 border border-emerald-200 text-emerald-900"}`}
+                                                 data-testid="iter245-custody-balance-preview">
+                                                👤 <span className="font-bold">{sel.name}</span>
+                                                <div>الرصيد الحالي: {fmt(avail)} ر.س</div>
+                                                {amt > 0 && (
+                                                    <div>
+                                                        {insufficient
+                                                            ? `⚠️ الرصيد غير كافٍ (المطلوب: ${fmt(amt)} ر.س)`
+                                                            : `الرصيد بعد العملية: ${fmt(after)} ر.س`}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                    <p className="text-[11px] text-slate-500 mt-2 leading-tight">
+                                        💡 لن يتم خصم أي مبلغ من البنك أو الصندوق — يتم تخفيض رصيد العهدة فقط.
+                                    </p>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </Field>
+            )}
+
             {/* Account picker — only when cash leaves an account */}
-            {paymentTerms !== "credit" && (
+            {paymentTerms !== "credit"
+              && !(isGeneralExpense && paySource === "custody") && (
                 <Field label="الحساب الدافع">
                     <select
                         value={accountId}
@@ -670,7 +856,8 @@ export default function Iter245MovementForm({
             )}
 
             {/* Bank withdrawal method */}
-            {paymentTerms !== "credit" && isBank && (
+            {paymentTerms !== "credit" && isBank
+              && !(isGeneralExpense && paySource === "custody") && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
                     <Field label="طريقة السحب">
                         <select

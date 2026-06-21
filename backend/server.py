@@ -209,6 +209,10 @@ PERMISSIONS_CATALOGUE: dict[str, str] = {
     "product_costs.manage":   "إدارة تكاليف المنتجات",
     "operating_expenses.view":   "عرض المصروفات التشغيلية",
     "operating_expenses.manage": "إدارة المصروفات التشغيلية",
+    # Iter-250b · P1.5.q — Spend operating-expenses from ANY employee's
+    # custody. Without this perm a user may only spend from their own
+    # linked employee custody (via `users.linked_employee_id`).
+    "accounting.custody.spend_any": "الصرف من عهدة أي موظف (عرفات / مدير)",
     "daily_costs.view":       "عرض التكاليف اليومية",
     "daily_costs.manage":     "إدارة التكاليف اليومية",
     "ads.view":               "عرض الإعلانات (Meta/TikTok/Snap)",
@@ -231,6 +235,9 @@ ROLE_DEFAULT_PERMS: dict[str, list[str]] = {
         "operating_expenses.view", "operating_expenses.manage",
         "daily_costs.view", "daily_costs.manage",
         "ads.view",
+        # Iter-250b · P1.5.q — accountants regularly post entries on
+        # behalf of the owner, so they need spend_any too.
+        "accounting.custody.spend_any",
     ],
     "operations": [
         "dashboard.view", "orders.view", "orders.manage",

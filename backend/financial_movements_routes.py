@@ -68,6 +68,12 @@ class MovementCreate(BaseModel):
     total_amount: float  # invoice total (or = paid_amount for cash)
     paid_amount: float = 0.0
     paid_from_account_id: Optional[str] = None
+    # Iter-250b · P1.5.q — Alternative pay source: employee custody
+    # wallet. When set, the credit leg debits the employee's open
+    # custody balance instead of a bank/cash account. Only valid for
+    # `general_expense` in this Phase. Mutually exclusive with
+    # `paid_from_account_id`.
+    custody_employee_id: Optional[str] = None
     withdrawal_method: Optional[str] = None  # cash/transfer/pos
     reference_number: Optional[str] = None
     attachment: Optional[Attachment] = None
@@ -335,8 +341,77 @@ def make_financial_movements_router(db, current_user):
                     "السداد الجزئي يتطلب مبلغاً بين 0 والإجمالي")
         remaining = _r(total - paid)
 
+        # Iter-250b · P1.5.q — Custody pay-source guard rails.
+        # When the merchant pays from an employee custody wallet
+        # instead of a bank/cash account, several constraints apply.
+        is_custody_pay = bool(payload.custody_employee_id)
+        custody_emp_doc = None
+        custody_avail = 0.0
+        if is_custody_pay:
+            if payload.paid_from_account_id:
+                raise HTTPException(
+                    400,
+                    "اختر مصدر سداد واحد فقط: حساب بنكي/صندوق أو "
+                    "عهدة موظف.",
+                )
+            if payload.movement_type != "general_expense":
+                raise HTTPException(
+                    400,
+                    "الدفع من عهدة الموظف متاح حالياً فقط لعملية "
+                    "«مصروف عام».",
+                )
+            if payload.payment_terms != "cash":
+                raise HTTPException(
+                    400,
+                    "الدفع من العهدة يكون نقدياً فقط — لا يقبل آجل أو "
+                    "سداد جزئي.",
+                )
+            emp_id = payload.custody_employee_id
+            emp_query = {
+                "user_id": uid,
+                "$or": [
+                    {"id": emp_id}, {"employee_id": emp_id},
+                    {"external_id": emp_id}, {"legacy_id": emp_id},
+                ],
+                "archived":    {"$ne": True},
+                "is_archived": {"$ne": True},
+                "deleted":     {"$ne": True},
+                "is_deleted":  {"$ne": True},
+            }
+            custody_emp_doc = (
+                await db.operating_salaries.find_one(
+                    emp_query, {"_id": 0, "id": 1, "name": 1})
+                or await db.employees.find_one(
+                    emp_query, {"_id": 0, "id": 1, "name": 1})
+            )
+            if not custody_emp_doc:
+                raise HTTPException(
+                    404, "الموظف غير موجود أو غير نشط.")
+            # Authorisation — spend_any perm OR linked employee.
+            from universal_accounting_routes import _effective_perms_for
+            perms = _effective_perms_for(user)
+            if "accounting.custody.spend_any" not in perms:
+                linked_emp = (user.get("linked_employee_id") or "")
+                if not linked_emp or linked_emp != emp_id:
+                    raise HTTPException(
+                        403, "لا يمكنك الصرف من عهدة موظف آخر.")
+            # Balance check.
+            from ledger_core import compute_balance as _cb
+            cust = await _cb(
+                db, user_id=uid, entity_type="employee",
+                entity_id=emp_id, sub_account="custody",
+            )
+            custody_avail = float(cust.get("net_balance") or 0)
+            if total > custody_avail + 0.001:
+                raise HTTPException(
+                    400,
+                    f"رصيد العهدة غير كافٍ. "
+                    f"المتاح: {custody_avail:.2f} ر.س، "
+                    f"المطلوب: {total:.2f} ر.س.",
+                )
+
         paid_acc_snap = None
-        if paid > 0:
+        if paid > 0 and not is_custody_pay:
             if not payload.paid_from_account_id:
                 raise HTTPException(
                     400, "الحساب الدافع مطلوب")
@@ -400,6 +475,15 @@ def make_financial_movements_router(db, current_user):
             "remaining_amount": remaining,
             "paid_from_account_id": payload.paid_from_account_id,
             "paid_from_account_snapshot": paid_acc_snap,
+            # Iter-250b · P1.5.q — Record custody pay source for
+            # reporting / employee-ledger replays.
+            "custody_employee_id": payload.custody_employee_id,
+            "custody_employee_snapshot": (
+                {"id": custody_emp_doc["id"],
+                 "name": custody_emp_doc.get("name")}
+                if is_custody_pay and custody_emp_doc else None
+            ),
+            "pay_source": "custody" if is_custody_pay else "bank",
             "withdrawal_method": payload.withdrawal_method,
             "reference_number": payload.reference_number,
             "receipt_attachment": attach,
@@ -477,32 +561,61 @@ def make_financial_movements_router(db, current_user):
             "notes":       " > ".join(cat_path)[:280],
             "metadata":    {**meta_common, "leg": "expense"},
         })
-        # 7b) Bank / cash leg — Credit (only when something was paid)
+        # 7b) Bank / cash / CUSTODY leg — Credit (only when something
+        # was paid). Iter-250b · P1.5.q — when `is_custody_pay`, the
+        # credit lands on `employee.custody` instead of a bank/cash
+        # account; no `account_transactions` entry, no balance
+        # recompute (the employee custody balance is purely SSOT'd
+        # from `general_ledger`).
         remaining = _r(total - paid)
         if paid > 0:
-            entries.append({
-                "entity_type": "bank",
-                "entity_id":   payload.paid_from_account_id,
-                # Iter-246j — bank legs go to sub_account="main" to
-                # match the SSOT's `compute_balance(sub_account="main")`
-                # query, AND carry the `account_transaction_double_write`
-                # source tag so SSOT correctly nets out the double-
-                # counting with `accounts.current_balance` (which
-                # already reflects the cash deduction via
-                # `_recompute_balance`).
-                "sub_account": "main",
-                "side":        "credit",
-                "amount":      paid,
-                "entry_type":  gl_entry_type,
-                "notes": (
-                    f"دفعة من حساب {paid_acc_snap.get('name')}"
-                    if paid_acc_snap else "دفعة نقدية"
-                )[:280],
-                "metadata": {**meta_common, "leg": "cash",
-                             "source": "account_transaction_double_write",
-                             "withdrawal_method":
-                                 payload.withdrawal_method},
-            })
+            if is_custody_pay:
+                entries.append({
+                    "entity_type": "employee",
+                    "entity_id":   payload.custody_employee_id,
+                    "sub_account": "custody",
+                    "side":        "credit",
+                    "amount":      paid,
+                    "entry_type":  gl_entry_type,
+                    "notes": (
+                        f"دفعة من عهدة الموظف — "
+                        f"{(custody_emp_doc or {}).get('name') or ''}"
+                    )[:280],
+                    "metadata": {**meta_common, "leg": "custody",
+                                  "pay_source": "custody",
+                                  "custody_employee_id":
+                                      payload.custody_employee_id,
+                                  "custody_employee_name":
+                                      (custody_emp_doc or {}).get('name'),
+                                  "custody_balance_before":
+                                      round(custody_avail, 2),
+                                  "custody_balance_after":
+                                      round(custody_avail - paid, 2)},
+                })
+            else:
+                entries.append({
+                    "entity_type": "bank",
+                    "entity_id":   payload.paid_from_account_id,
+                    # Iter-246j — bank legs go to sub_account="main" to
+                    # match the SSOT's `compute_balance(sub_account="main")`
+                    # query, AND carry the `account_transaction_double_write`
+                    # source tag so SSOT correctly nets out the double-
+                    # counting with `accounts.current_balance` (which
+                    # already reflects the cash deduction via
+                    # `_recompute_balance`).
+                    "sub_account": "main",
+                    "side":        "credit",
+                    "amount":      paid,
+                    "entry_type":  gl_entry_type,
+                    "notes": (
+                        f"دفعة من حساب {paid_acc_snap.get('name')}"
+                        if paid_acc_snap else "دفعة نقدية"
+                    )[:280],
+                    "metadata": {**meta_common, "leg": "cash",
+                                  "source": "account_transaction_double_write",
+                                  "withdrawal_method":
+                                      payload.withdrawal_method},
+                })
         # 7c) Supplier / payable leg — Credit (only when something
         # remains unpaid).  Supplier_id is REQUIRED here; the route
         # already validates it for `supplier_invoice`, and for the
@@ -538,7 +651,9 @@ def make_financial_movements_router(db, current_user):
 
         # Write the cash leg into account_transactions FIRST so the
         # existing balance-recompute pipeline reflects the deduction.
-        if paid > 0 and payload.paid_from_account_id:
+        # Iter-250b · P1.5.q — skip entirely for custody-funded movements
+        # (no bank touched, custody is SSOT'd from general_ledger only).
+        if paid > 0 and payload.paid_from_account_id and not is_custody_pay:
             await db.account_transactions.insert_one({
                 "id": str(uuid.uuid4()),
                 "user_id": uid,

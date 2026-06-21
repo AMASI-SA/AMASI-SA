@@ -257,7 +257,15 @@ class CodSettleIn(BaseModel):
 class ExpenseRecordIn(BaseModel):
     amount: float = Field(..., gt=0)
     expense_category: str
-    paid_from_account_id: str
+    # Iter-250b · P1.5.q — Pay source is now polymorphic:
+    #   • `paid_from_account_id`  → traditional bank / cash / payment_platform
+    #   • `custody_employee_id`   → the employee's open custody (BNPL-style
+    #                                wallet inside the GL itself, no bank
+    #                                touched).
+    # EXACTLY ONE of the two must be provided. Validation lives in the
+    # route to keep error messages localised in Arabic.
+    paid_from_account_id: Optional[str] = None
+    custody_employee_id: Optional[str] = None
     payment_date: Optional[str] = None
     notes: Optional[str] = ""
     related_entity_type: Optional[str] = None
@@ -286,6 +294,36 @@ async def _ensure_default_expense_categories(db, user_id: str) -> None:
 
 async def _resolve_actor(user: dict) -> tuple[str, str]:
     return user["id"], (user.get("name") or user.get("email") or "")
+
+
+# Iter-250b · P1.5.q — Resolve a user's effective permission set.
+# Mirrors `server._effective_perms` but lives here to avoid an import
+# cycle. Owner ALWAYS has every permission. We re-import the catalogue
+# lazily so a server.py reload reflects without restart.
+#
+# Note: `role="user"` is the role assigned to every NEW account at
+# registration time (server.py:488). In practice, such a user is the
+# SOLE owner of their tenant data (there is no separate "owner above
+# them" in the data model). We therefore grant `role="user"` the same
+# `accounting.custody.spend_any` privilege as `role="owner"`, while
+# still respecting an explicit `denied_permissions` override.
+def _effective_perms_for(user: dict) -> set[str]:
+    from server import (
+        PERMISSIONS_CATALOGUE, ROLE_DEFAULT_PERMS,
+    )
+    role = (user.get("role") or "viewer").lower()
+    if role == "owner":
+        return set(PERMISSIONS_CATALOGUE.keys())
+    if role == "user":
+        # Primary tenant user — treat as full-perm unless explicitly
+        # denied.
+        base = set(PERMISSIONS_CATALOGUE.keys())
+    else:
+        base = set(ROLE_DEFAULT_PERMS.get(
+            role, ROLE_DEFAULT_PERMS["viewer"]))
+    base |= set(user.get("extra_permissions") or [])
+    base -= set(user.get("denied_permissions") or [])
+    return base
 
 
 # ── Iter-184 — Operation→Accounts binding enforcement ───────────────
@@ -1003,6 +1041,102 @@ def make_universal_router(db) -> APIRouter:
         return {"rows": rows, "total_open_balance": total_open}
 
     # ───────────────────────────────────────────────────────────────
+    # Iter-250b · P1.5.q — Spendable custody sources.
+    #
+    # Used by the new "Pay from custody" toggle in the Operating
+    # Expenses entry form. Returns ONLY employees the caller may
+    # legitimately spend from, with their CURRENT open custody
+    # balance from `general_ledger` (SSOT).
+    #
+    # Authorisation:
+    #   • Caller with `accounting.custody.spend_any` perm  → ALL
+    #     employees with custody > 0.
+    #   • Otherwise  → only `user.linked_employee_id` (if set AND
+    #     has custody > 0).
+    # ───────────────────────────────────────────────────────────────
+    @router.get("/custody/spendable-sources")
+    async def custody_spendable_sources(
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        perms = _effective_perms_for(user)
+        can_any = "accounting.custody.spend_any" in perms
+        linked_emp = (user.get("linked_employee_id") or "")
+
+        # Aggregate the SSOT custody balance per employee in one
+        # roundtrip.
+        pipeline = [
+            {"$match": {
+                "user_id": uid,
+                "entity_type": "employee",
+                "sub_account": "custody",
+                "status": "posted",
+            }},
+            {"$group": {
+                "_id": "$entity_id",
+                "debits":  {"$sum": {"$cond": [
+                    {"$eq": ["$side", "debit"]}, "$amount", 0]}},
+                "credits": {"$sum": {"$cond": [
+                    {"$eq": ["$side", "credit"]}, "$amount", 0]}},
+            }},
+        ]
+        balances: dict[str, float] = {}
+        async for row in db.general_ledger.aggregate(pipeline):
+            balances[row["_id"]] = round(
+                float(row["debits"]) - float(row["credits"]), 2)
+
+        positive = {
+            eid: bal for eid, bal in balances.items() if bal > 0.001
+        }
+        if not positive:
+            return {
+                "can_spend_any": can_any,
+                "linked_employee_id": linked_emp or None,
+                "sources": [],
+            }
+
+        # Resolve names from operating_salaries (modern) → employees
+        # (legacy). Skip archived/deleted.
+        emp_ids = list(positive.keys())
+        name_map: dict[str, str] = {}
+        async for e in db.operating_salaries.find(
+            {"user_id": uid, "id": {"$in": emp_ids},
+             "archived": {"$ne": True}, "is_archived": {"$ne": True},
+             "deleted":  {"$ne": True}, "is_deleted":  {"$ne": True}},
+            {"_id": 0, "id": 1, "name": 1},
+        ):
+            name_map[e["id"]] = e.get("name") or "(بدون اسم)"
+        missing = [e for e in emp_ids if e not in name_map]
+        if missing:
+            async for e in db.employees.find(
+                {"user_id": uid, "id": {"$in": missing},
+                 "archived": {"$ne": True}, "is_archived": {"$ne": True},
+                 "deleted":  {"$ne": True}, "is_deleted":  {"$ne": True}},
+                {"_id": 0, "id": 1, "name": 1},
+            ):
+                name_map[e["id"]] = e.get("name") or "(بدون اسم)"
+
+        # Apply the per-user filter.
+        rows: list[dict] = []
+        for eid, bal in positive.items():
+            if eid not in name_map:
+                # archived/deleted/legacy-orphan — never spendable
+                continue
+            if not can_any and eid != linked_emp:
+                continue
+            rows.append({
+                "employee_id": eid,
+                "name": name_map[eid],
+                "available_balance": bal,
+            })
+        rows.sort(key=lambda r: (-r["available_balance"], r["name"]))
+        return {
+            "can_spend_any": can_any,
+            "linked_employee_id": linked_emp or None,
+            "sources": rows,
+        }
+
+    # ───────────────────────────────────────────────────────────────
     # Iter-185 — Cash accounts with LIVE balance for UI freeze logic.
     # Returns every account the merchant can fund operations from
     # (bank / cash / payment_platform / courier) along with its true
@@ -1697,39 +1831,140 @@ def make_universal_router(db) -> APIRouter:
         )
         if not cat:
             raise HTTPException(400, "فئة المصاريف غير معتمدة")
-        acc = await db.accounts.find_one(
-            {"id": payload.paid_from_account_id, "user_id": user["id"]},
-            {"_id": 0, "name": 1},
-        )
-        if not acc:
-            raise HTTPException(404, "الحساب البنكي غير موجود")
-        await _enforce_account_binding(
-            db, user_id=user["id"], op_type="expense_record",
-            account_id=payload.paid_from_account_id,
-        )
-        await _enforce_sufficient_funds(
-            db, user_id=user["id"],
-            account_id=payload.paid_from_account_id,
-            amount=payload.amount,
-        )
+
+        # Iter-250b · P1.5.q — Resolve the payment SOURCE.
+        # EXACTLY ONE of {paid_from_account_id, custody_employee_id} is
+        # required.
+        has_bank = bool(payload.paid_from_account_id)
+        has_custody = bool(payload.custody_employee_id)
+        if has_bank == has_custody:   # both or neither
+            raise HTTPException(
+                400,
+                "يجب اختيار مصدر سداد واحد فقط: حساب بنكي/صندوق أو "
+                "عهدة موظف.",
+            )
+
         actor_id, actor_name = await _resolve_actor(user)
+
+        # ── Branch A: traditional bank / cash payment ──────────────
+        if has_bank:
+            acc = await db.accounts.find_one(
+                {"id": payload.paid_from_account_id,
+                 "user_id": user["id"]},
+                {"_id": 0, "name": 1},
+            )
+            if not acc:
+                raise HTTPException(404, "الحساب البنكي غير موجود")
+            await _enforce_account_binding(
+                db, user_id=user["id"], op_type="expense_record",
+                account_id=payload.paid_from_account_id,
+            )
+            await _enforce_sufficient_funds(
+                db, user_id=user["id"],
+                account_id=payload.paid_from_account_id,
+                amount=payload.amount,
+            )
+            credit_leg = {
+                "entity_type": "bank",
+                "entity_id": payload.paid_from_account_id,
+                "sub_account": "main", "side": "credit",
+                "amount": payload.amount,
+                "entry_type": "expense_record",
+            }
+            extra_meta = {}
+
+        # ── Branch B: pay from employee custody ────────────────────
+        else:
+            emp_id = payload.custody_employee_id
+            # (1) Employee must exist & not be archived/deleted, in
+            #     either modern or legacy collection.
+            emp_query = {
+                "user_id": user["id"],
+                "$or": [
+                    {"id": emp_id}, {"employee_id": emp_id},
+                    {"external_id": emp_id}, {"legacy_id": emp_id},
+                ],
+                "archived":    {"$ne": True},
+                "is_archived": {"$ne": True},
+                "deleted":     {"$ne": True},
+                "is_deleted":  {"$ne": True},
+            }
+            emp_doc = (
+                await db.operating_salaries.find_one(
+                    emp_query, {"_id": 0, "id": 1, "name": 1, "status": 1})
+                or await db.employees.find_one(
+                    emp_query, {"_id": 0, "id": 1, "name": 1, "status": 1})
+            )
+            if not emp_doc:
+                raise HTTPException(
+                    404,
+                    "الموظف غير موجود أو غير نشط.",
+                )
+
+            # (2) Authorisation:
+            #     • Users with `accounting.custody.spend_any` (owner /
+            #       admin / accountant by default) may spend from ANY
+            #       employee.
+            #     • Otherwise, the employee MUST equal the caller's own
+            #       `users.linked_employee_id`.
+            perms = _effective_perms_for(user)
+            if "accounting.custody.spend_any" not in perms:
+                linked_emp = (user.get("linked_employee_id") or "")
+                if not linked_emp or linked_emp != emp_id:
+                    raise HTTPException(
+                        403,
+                        "لا يمكنك الصرف من عهدة موظف آخر.",
+                    )
+
+            # (3) Custody balance must cover the amount.
+            cust = await compute_balance(
+                db, user_id=user["id"],
+                entity_type="employee",
+                entity_id=emp_id,
+                sub_account="custody",
+            )
+            available = float(cust.get("net_balance") or 0)
+            if payload.amount > available + 0.001:
+                raise HTTPException(
+                    400,
+                    f"رصيد العهدة غير كافٍ. "
+                    f"المتاح: {available:.2f} ر.س، "
+                    f"المطلوب: {payload.amount:.2f} ر.س.",
+                )
+
+            credit_leg = {
+                "entity_type": "employee",
+                "entity_id": emp_id,
+                "sub_account": "custody",
+                "side": "credit",
+                "amount": payload.amount,
+                "entry_type": "expense_record",
+            }
+            extra_meta = {
+                "pay_source": "custody",
+                "custody_employee_id": emp_id,
+                "custody_employee_name": emp_doc.get("name"),
+                "custody_balance_before": round(available, 2),
+                "custody_balance_after": round(
+                    available - payload.amount, 2),
+            }
+
         result = await post_txn_group(
-            db, user_id=user["id"], actor_id=actor_id, actor_name=actor_name,
+            db, user_id=user["id"], actor_id=actor_id,
+            actor_name=actor_name,
             txn_type="expense_record",
             notes=payload.notes or f"مصروف — {cat.get('name')}",
             metadata={"category_name": cat.get("name"),
                        "payment_date": payload.payment_date,
                        "related_entity_type": payload.related_entity_type,
-                       "related_entity_id": payload.related_entity_id},
+                       "related_entity_id": payload.related_entity_id,
+                       **extra_meta},
             entries=[
                 {"entity_type": "expense",
                  "entity_id": payload.expense_category,
                  "side": "debit", "amount": payload.amount,
                  "entry_type": "expense_record"},
-                {"entity_type": "bank",
-                 "entity_id": payload.paid_from_account_id,
-                 "sub_account": "main", "side": "credit",
-                 "amount": payload.amount, "entry_type": "expense_record"},
+                credit_leg,
             ],
         )
         return {"ok": True, **result}
