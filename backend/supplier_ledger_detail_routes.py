@@ -296,23 +296,47 @@ def make_supplier_ledger_detail_router(db, current_user):
                  and e.get("entry_type") == "supplier_invoice"),
                 None,
             )
+            # P1.5.s.fix.cash-roundtrip — Detect cash invoices that
+            # went through a same-group round-trip (Dr supplier /
+            # Cr supplier in the SAME txn_group_id). This is the
+            # canonical signature of a fully-paid cash purchase that
+            # still emits a supplier-payable leg.
+            same_group_settled = 0.0
+            for ge in gl_entries:
+                if (ge.get("txn_group_id") == tg
+                        and ge.get("side") == "debit"
+                        and ge.get("entity_type") == "supplier"
+                        and ge.get("sub_account") == "payable"):
+                    same_group_settled = _r(
+                        same_group_settled + _r(ge.get("amount")))
+            total_val = _r(fm.get("total_amount"))
+            fm_paid   = _r(fm.get("paid_amount"))
+            effective_paid = max(fm_paid, same_group_settled)
+            remaining = max(0.0, _r(total_val - effective_paid))
+            if effective_paid >= total_val - 0.01 and total_val > 0:
+                if same_group_settled >= total_val - 0.01:
+                    inv_status = "paid_cash"
+                else:
+                    inv_status = "paid"
+            elif effective_paid > 0:
+                inv_status = "partial"
+            else:
+                inv_status = "unpaid"
+
             invoices.append({
                 "movement_id":     fm.get("id"),
                 "txn_group_id":    tg,
                 "doc_number":      fm.get("doc_number"),
                 "doc_date":        fm.get("doc_date"),
-                "total_amount":    _r(fm.get("total_amount")),
-                "paid_amount":     _r(fm.get("paid_amount")),
-                "remaining":       _r(
-                    float(fm.get("total_amount") or 0)
-                    - float(fm.get("paid_amount") or 0)),
+                "total_amount":    total_val,
+                "paid_amount":     effective_paid,
+                "remaining":       remaining,
                 "payment_terms":   fm.get("payment_terms"),
-                "status": (
-                    "paid"     if _r(fm.get("paid_amount")) >=
-                                  _r(fm.get("total_amount")) else
-                    "partial"  if _r(fm.get("paid_amount")) > 0 else
-                    "unpaid"
-                ),
+                "status":          inv_status,
+                # `is_cash_only` is reserved for synthetic rows that
+                # had NO supplier-payable leg at all. Round-trip cash
+                # invoices DO have legs — we mark them separately.
+                "is_cash_roundtrip": (inv_status == "paid_cash"),
                 "category_name":   (fm.get("category_snapshot")
                                      or {}).get("name"),
                 "notes":           fm.get("notes"),

@@ -54,6 +54,10 @@ export default function SuppliersPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [linkFilter, setLinkFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("");
+  // P1.5.s.fix.activity — Daily-monitoring filters & sort.
+  const [txTypeFilter, setTxTypeFilter] = useState("all");
+  const [outstandingOnly, setOutstandingOnly] = useState(false);
+  const [sortKey, setSortKey] = useState("name");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [showForensic, setShowForensic] = useState(false);
@@ -92,11 +96,16 @@ export default function SuppliersPage() {
   }, [categories]);
 
   // Iter-250b · P1.5.ab — Client-side filter across unified list.
+  // P1.5.s.fix.activity — Adds transaction_type + outstanding-only
+  // filters and a quick-sort selector for daily payment monitoring.
   const filteredItems = useMemo(() => {
     const q = (search || "").trim().toLowerCase();
-    return items.filter((r) => {
+    const rows = items.filter((r) => {
       if (linkFilter !== "all" && r.link_status !== linkFilter) return false;
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (txTypeFilter !== "all"
+          && (r.transaction_type || "none") !== txTypeFilter) return false;
+      if (outstandingOnly && !(Number(r.outstanding_debt || 0) > 0)) return false;
       if (categoryFilter
           && !(r.category_ids || []).includes(categoryFilter)) return false;
       if (q) {
@@ -107,7 +116,42 @@ export default function SuppliersPage() {
       }
       return true;
     });
-  }, [items, search, linkFilter, statusFilter, categoryFilter]);
+    const sorters = {
+      name: (a, b) =>
+        (a.company_name || "").localeCompare(b.company_name || "", "ar"),
+      debt: (a, b) =>
+        Number(b.outstanding_debt || 0) - Number(a.outstanding_debt || 0),
+      last_invoice: (a, b) =>
+        (b.last_invoice_date || "").localeCompare(a.last_invoice_date || ""),
+      last_payment: (a, b) =>
+        (b.last_payment_date || "").localeCompare(a.last_payment_date || ""),
+      purchases: (a, b) =>
+        Number(b.total_period_purchases || 0)
+        - Number(a.total_period_purchases || 0),
+    };
+    return [...rows].sort(sorters[sortKey] || sorters.name);
+  }, [items, search, linkFilter, statusFilter, txTypeFilter,
+      outstandingOnly, sortKey, categoryFilter]);
+
+  // P1.5.s.fix.activity — Outstanding-debt totals for the new card.
+  const outstandingTotals = useMemo(() => {
+    const list = items.filter(r => Number(r.outstanding_debt || 0) > 0);
+    return {
+      count: list.length,
+      sum:   list.reduce((s, r) =>
+        s + Number(r.outstanding_debt || 0), 0),
+    };
+  }, [items]);
+
+  // P1.5.s.fix.activity — Counts per transaction_type for cards.
+  const txTypeCounts = useMemo(() => {
+    const c = { cash_only: 0, credit_only: 0, mixed: 0, none: 0 };
+    items.forEach(r => {
+      const k = r.transaction_type || "none";
+      if (c[k] != null) c[k] += 1;
+    });
+    return c;
+  }, [items]);
 
   function openCreate() {
     setEditing(null);
@@ -178,16 +222,63 @@ export default function SuppliersPage() {
         </div>
       </header>
 
-      {/* Iter-250b · P1.5.ab — Unification summary bar. */}
+      {/* Iter-250b · P1.5.ab — Unification summary bar.
+          P1.5.s.fix.activity — All cards are now CLICKABLE quick
+          filters. The "ذمم حالياً" card toggles outstanding-only. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3"
            data-testid="suppliers-unification-summary">
-        <SummaryCard label="الإجمالي"     value={totals.total ?? 0}     tone="slate" />
-        <SummaryCard label="مورد جديد"   value={totals.new_only ?? 0}  tone="emerald" />
-        <SummaryCard label="مربوط"       value={totals.linked ?? 0}    tone="indigo" />
-        <SummaryCard label="Ledger فقط" value={totals.ledger_only ?? 0} tone="amber" />
+        <SummaryCard label="الإجمالي"     value={totals.total ?? 0}     tone="slate"
+                     active={linkFilter === "all" && !outstandingOnly && txTypeFilter === "all"}
+                     onClick={() => { setLinkFilter("all"); setOutstandingOnly(false); setTxTypeFilter("all"); }}
+                     testid="card-all" />
+        <SummaryCard label="مورد جديد"   value={totals.new_only ?? 0}  tone="emerald"
+                     active={linkFilter === "new_only"}
+                     onClick={() => setLinkFilter(linkFilter === "new_only" ? "all" : "new_only")}
+                     testid="card-new_only" />
+        <SummaryCard label="مربوط"       value={totals.linked ?? 0}    tone="indigo"
+                     active={linkFilter === "linked"}
+                     onClick={() => setLinkFilter(linkFilter === "linked" ? "all" : "linked")}
+                     testid="card-linked" />
+        <SummaryCard label="Ledger فقط" value={totals.ledger_only ?? 0} tone="amber"
+                     active={linkFilter === "ledger_only"}
+                     onClick={() => setLinkFilter(linkFilter === "ledger_only" ? "all" : "ledger_only")}
+                     testid="card-ledger_only" />
       </div>
 
-      <div className="bg-white border rounded-lg p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+      {/* P1.5.s.fix.activity — Transaction-type quick filter cards. */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3"
+           data-testid="suppliers-txtype-cards">
+        <SummaryCard label="📒 موردون عليهم ذمم حالياً"
+                     value={outstandingTotals.count}
+                     sub={outstandingTotals.sum.toLocaleString("en-US",
+                       { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " ر.س"}
+                     tone="rose"
+                     active={outstandingOnly}
+                     onClick={() => setOutstandingOnly(v => !v)}
+                     testid="card-outstanding" />
+        <SummaryCard label="💵 نقدي فقط"
+                     value={txTypeCounts.cash_only}  tone="blue"
+                     active={txTypeFilter === "cash_only"}
+                     onClick={() => setTxTypeFilter(txTypeFilter === "cash_only" ? "all" : "cash_only")}
+                     testid="card-cash_only" />
+        <SummaryCard label="📒 آجل فقط"
+                     value={txTypeCounts.credit_only} tone="amber"
+                     active={txTypeFilter === "credit_only"}
+                     onClick={() => setTxTypeFilter(txTypeFilter === "credit_only" ? "all" : "credit_only")}
+                     testid="card-credit_only" />
+        <SummaryCard label="🔄 مختلط"
+                     value={txTypeCounts.mixed}     tone="purple"
+                     active={txTypeFilter === "mixed"}
+                     onClick={() => setTxTypeFilter(txTypeFilter === "mixed" ? "all" : "mixed")}
+                     testid="card-mixed" />
+        <SummaryCard label="💤 بلا نشاط"
+                     value={txTypeCounts.none}      tone="slate"
+                     active={txTypeFilter === "none"}
+                     onClick={() => setTxTypeFilter(txTypeFilter === "none" ? "all" : "none")}
+                     testid="card-none" />
+      </div>
+
+      <div className="bg-white border rounded-lg p-4 grid grid-cols-1 md:grid-cols-6 gap-3">
         <input
           placeholder="ابحث بالاسم أو الجوال أو البريد"
           value={search}
@@ -228,6 +319,19 @@ export default function SuppliersPage() {
               {(c.path || [c.name]).join(" / ")}
             </option>
           ))}
+        </select>
+        {/* P1.5.s.fix.activity — Quick sort selector. */}
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value)}
+          className="border rounded px-3 py-2 text-sm font-bold bg-indigo-50 border-indigo-200 text-indigo-800"
+          data-testid="supplier-sort-key"
+        >
+          <option value="name">↕ ترتيب: أبجدي</option>
+          <option value="debt">↕ ترتيب: الأعلى مديونية</option>
+          <option value="last_invoice">↕ ترتيب: أحدث فاتورة</option>
+          <option value="last_payment">↕ ترتيب: أحدث سداد</option>
+          <option value="purchases">↕ ترتيب: الأعلى شراءً</option>
         </select>
       </div>
 
@@ -482,21 +586,32 @@ function SupplierRow({ s, catMap, openEdit }) {
   );
 }
 
-function SummaryCard({ label, value, tone }) {
+function SummaryCard({ label, value, tone, sub, active, onClick, testid }) {
   const toneCls = {
     slate:   "bg-slate-50 border-slate-200 text-slate-700",
     emerald: "bg-emerald-50 border-emerald-200 text-emerald-800",
     indigo:  "bg-indigo-50 border-indigo-200 text-indigo-800",
     amber:   "bg-amber-50 border-amber-200 text-amber-800",
+    rose:    "bg-rose-50 border-rose-200 text-rose-800",
+    blue:    "bg-blue-50 border-blue-200 text-blue-800",
+    purple:  "bg-purple-50 border-purple-200 text-purple-800",
   }[tone] || "bg-slate-50 border-slate-200 text-slate-700";
+  const activeRing = active ? " ring-2 ring-offset-1 ring-indigo-500" : "";
+  const interactive = onClick ? " cursor-pointer hover:brightness-95 transition" : "";
+  const Tag = onClick ? "button" : "div";
   return (
-    <div
-      className={"rounded-lg border p-3 " + toneCls}
-      data-testid={"suppliers-summary-" + (label || "")}
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={"text-right rounded-lg border p-3 " + toneCls + activeRing + interactive}
+      data-testid={testid || ("suppliers-summary-" + (label || ""))}
     >
       <div className="text-xs font-semibold opacity-80">{label}</div>
       <div className="text-2xl font-extrabold mt-1">{value}</div>
-    </div>
+      {sub && (
+        <div className="text-[10px] font-mono opacity-70 mt-0.5">{sub}</div>
+      )}
+    </Tag>
   );
 }
 
