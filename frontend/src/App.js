@@ -174,7 +174,7 @@ function AppRoutes() {
             <Route path="/employee-corrections" element={<ProtectedRoute><Layout><EmployeeCorrections /></Layout></ProtectedRoute>} />
             <Route path="/salary-reversals" element={<ProtectedRoute><Layout><SalaryReversals /></Layout></ProtectedRoute>} />
             <Route path="/expense-reversals" element={<ProtectedRoute><Layout><ExpenseReversals /></Layout></ProtectedRoute>} />
-            <Route path="/suppliers-ledger" element={<ProtectedRoute><Layout><SuppliersLedger /></Layout></ProtectedRoute>} />
+            <Route path="/suppliers-ledger" element={<ProtectedRoute><Navigate to="/suppliers-new?tab=balances" replace /></ProtectedRoute>} />
             {/* Iter-250b · P1.5.s — Supplier Ledger Detail (the primary
                 target for "دفتر المورد" deep-links from reports). */}
             <Route path="/suppliers/:id/ledger-detail" element={<ProtectedRoute><Layout><SupplierLedgerDetailPage /></Layout></ProtectedRoute>} />

@@ -2,6 +2,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import api from "../lib/api";
+// Iter-250b · P1.5.z — Tabbed merge with /suppliers-ledger.
+// Second tab renders the financial ledger inline so we have a single
+// canonical page combining management + balances + drift diagnostics.
+import SuppliersLedger from "./SuppliersLedger";
 
 const errMsg = (e, fb) =>
   e?.response?.data?.detail || e?.message || fb;
@@ -29,6 +33,16 @@ function flattenCategories(items) {
 }
 
 export default function SuppliersPage() {
+  // Iter-250b · P1.5.z — Tab switcher. Default = management to match
+  // historical behaviour of `/suppliers-new`. The `?tab=` URL hint
+  // is honoured so `/suppliers-ledger` redirects can land directly
+  // on the balances view.
+  const initialTab = (() => {
+    if (typeof window === "undefined") return "management";
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get("tab") === "balances" ? "balances" : "management";
+  })();
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +96,37 @@ export default function SuppliersPage() {
 
   return (
     <div className="space-y-5" dir="rtl" data-testid="suppliers-page">
+      {/* Iter-250b · P1.5.z — Tab bar. One canonical /suppliers-new
+          page now hosts BOTH the management CRUD and the financial
+          ledger. */}
+      <div className="flex border-b border-slate-200 gap-1"
+           data-testid="suppliers-tabs">
+        <button type="button"
+          onClick={() => setActiveTab("management")}
+          className={`px-4 py-2 text-sm font-bold border-b-2 transition ${activeTab === "management"
+            ? "border-indigo-600 text-indigo-700"
+            : "border-transparent text-slate-500 hover:text-slate-700"}`}
+          data-testid="suppliers-tab-management">
+          🛠️ إدارة الموردين
+        </button>
+        <button type="button"
+          onClick={() => setActiveTab("balances")}
+          className={`px-4 py-2 text-sm font-bold border-b-2 transition ${activeTab === "balances"
+            ? "border-indigo-600 text-indigo-700"
+            : "border-transparent text-slate-500 hover:text-slate-700"}`}
+          data-testid="suppliers-tab-balances">
+          💰 الأرصدة والدفاتر
+        </button>
+      </div>
+
+      {activeTab === "balances" && (
+        <div data-testid="suppliers-balances-tab">
+          <SuppliersLedger />
+        </div>
+      )}
+
+      {activeTab === "management" && (
+      <>
       <header className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">الموردون</h1>
@@ -161,6 +206,8 @@ export default function SuppliersPage() {
             load();
           }}
         />
+      )}
+      </>
       )}
     </div>
   );
