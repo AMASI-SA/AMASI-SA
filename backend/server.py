@@ -3993,6 +3993,9 @@ from suppliers_unification_forensic_routes import (
 )
 api.include_router(
     make_suppliers_unification_forensic_router(db, current_user))
+# Iter-250b P2 — Products & Categories Excel import.
+from products_import_routes import make_products_import_router
+api.include_router(make_products_import_router(db, current_user))
 # Iter-250a — Post-deploy verification (READ-ONLY).
 from iter250a_verification_routes import (
     make_iter250a_verification_router,

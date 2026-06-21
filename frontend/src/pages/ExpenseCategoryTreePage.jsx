@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import api from "../lib/api";
+// Iter-250b P2 — Excel import modal for categories.
+import CategoriesImportExcelModal from
+  "../components/CategoriesImportExcelModal";
 
 const errMsg = (e, fb) =>
   e?.response?.data?.detail || e?.message || fb;
@@ -52,6 +55,8 @@ export default function ExpenseCategoryTreePage() {
   const [newName, setNewName] = useState("");
   // Iter-246 — movement_types editor (root only).
   const [mtEditing, setMtEditing] = useState(null);  // { id, name, selected: Set }
+  // Iter-250b P2 — Excel import modal toggle.
+  const [showImport, setShowImport] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -188,6 +193,15 @@ export default function ExpenseCategoryTreePage() {
           </p>
         </div>
         <div className="flex gap-2">
+          {/* Iter-250b P2 — Excel categories import. */}
+          <button
+            type="button"
+            onClick={() => setShowImport(true)}
+            className="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-semibold"
+            data-testid="cat-import-excel-btn"
+          >
+            📥 استيراد التصنيفات من Excel
+          </button>
           <button
             type="button"
             onClick={startAddRoot}
@@ -280,6 +294,16 @@ export default function ExpenseCategoryTreePage() {
           onToggle={toggleMt}
           onSave={commitMt}
           onCancel={() => setMtEditing(null)}
+        />
+      )}
+
+      {showImport && (
+        <CategoriesImportExcelModal
+          onClose={() => setShowImport(false)}
+          onImported={() => {
+            setShowImport(false);
+            load();
+          }}
         />
       )}
     </div>
