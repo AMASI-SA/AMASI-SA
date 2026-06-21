@@ -246,27 +246,49 @@ async def post_ledger_entry(
                 400, f"reason_code غير معتمد: {reason_code}",
             )
 
-    # Iter-226 — orphan-prevention guard. Any NEW ledger entry on an
-    # employee MUST reference a real employee record belonging to the
-    # current user. Without this, future writes (sync hooks, salary
-    # accruals, manual entries) could re-create the very orphans we
-    # just archived. Reversals are exempt because they may target an
-    # already-archived employee for symmetry.
+    # Iter-226 — orphan-prevention guard.
+    # Iter-250b · P1.5.p — Widened to check BOTH `operating_salaries`
+    # (modern primary storage) AND `employees` (legacy collection).
+    # The previous implementation checked only `employees`, which
+    # rejected EVERY employee created via the modern flow because
+    # those records live exclusively in `operating_salaries`.
+    #
+    # We additionally reject employees that have been explicitly
+    # marked `archived=true` or `deleted=true` — `status=active|stopped`
+    # is still allowed because a stopped employee can legitimately
+    # carry an open custody/advance/payable that needs settling.
+    #
+    # Reversals remain exempt (they may target an already-archived
+    # employee for symmetry).
     if (
         entity_type == "employee"
         and entry_type != "reversal"
         and entity_id
     ):
         eid_str = str(entity_id)
-        # Quick existence check across common ID fields.
-        emp = await db.employees.find_one(
-            {"user_id": user_id, "$or": [
-                {"id": eid_str},
-                {"employee_id": eid_str},
-                {"external_id": eid_str},
-                {"legacy_id": eid_str},
-            ]},
-            {"_id": 1, "id": 1},
+        id_or_clause = [
+            {"id": eid_str},
+            {"employee_id": eid_str},
+            {"external_id": eid_str},
+            {"legacy_id": eid_str},
+        ]
+        # Exclude archived / deleted records. A missing flag means
+        # "not archived / not deleted" — the absence of the field
+        # MUST be treated as falsy.
+        not_dead = {
+            "archived": {"$ne": True},
+            "is_archived": {"$ne": True},
+            "deleted": {"$ne": True},
+            "is_deleted": {"$ne": True},
+        }
+        query = {"user_id": user_id, "$or": id_or_clause, **not_dead}
+        proj = {"_id": 1, "id": 1, "name": 1, "status": 1}
+        # Prefer the modern collection. Fall back to the legacy one
+        # so historical employees that exist only in `employees`
+        # still pass (read-only — no copy / no migration).
+        emp = (
+            await db.operating_salaries.find_one(query, proj)
+            or await db.employees.find_one(query, proj)
         )
         if not emp:
             raise HTTPException(
