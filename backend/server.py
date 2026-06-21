@@ -3975,6 +3975,12 @@ from employee_lookup_diagnostic_routes import (
 )
 api.include_router(
     make_employee_lookup_diagnostic_router(db, current_user))
+# Iter-250b P1.5.s — Supplier Ledger Detail (READ-ONLY, SSOT-strict).
+from supplier_ledger_detail_routes import (
+    make_supplier_ledger_detail_router,
+)
+api.include_router(
+    make_supplier_ledger_detail_router(db, current_user))
 # Iter-250a — Post-deploy verification (READ-ONLY).
 from iter250a_verification_routes import (
     make_iter250a_verification_router,

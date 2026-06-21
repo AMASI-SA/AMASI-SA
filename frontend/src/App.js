@@ -78,6 +78,8 @@ import ExternalsLedger from "./pages/ExternalsLedger";
 import CouriersLedger from "./pages/CouriersLedger";
 // Iter-250b · P1.5.r — Deep-link wrapper for /entity-ledger/:type/:id
 import EntityLedgerByIdPage from "./pages/EntityLedgerByIdPage";
+// Iter-250b · P1.5.s — Supplier Ledger Detail (read-only, printable)
+import SupplierLedgerDetailPage from "./pages/SupplierLedgerDetailPage";
 import FinancialPositionLedger from "./pages/FinancialPositionLedger";
 import ReconciliationReport from "./pages/ReconciliationReport";
 import ApiPermissionsDiagnostic from "./pages/ApiPermissionsDiagnostic";
@@ -173,6 +175,9 @@ function AppRoutes() {
             <Route path="/salary-reversals" element={<ProtectedRoute><Layout><SalaryReversals /></Layout></ProtectedRoute>} />
             <Route path="/expense-reversals" element={<ProtectedRoute><Layout><ExpenseReversals /></Layout></ProtectedRoute>} />
             <Route path="/suppliers-ledger" element={<ProtectedRoute><Layout><SuppliersLedger /></Layout></ProtectedRoute>} />
+            {/* Iter-250b · P1.5.s — Supplier Ledger Detail (the primary
+                target for "دفتر المورد" deep-links from reports). */}
+            <Route path="/suppliers/:id/ledger-detail" element={<ProtectedRoute><Layout><SupplierLedgerDetailPage /></Layout></ProtectedRoute>} />
             {/* Iter-250b · P1.5.r — Deep-link: /entity-ledger/:type/:id
                 (supplier|external|external_person|courier).
                 Routes backend-generated `ledger_url` correctly. */}

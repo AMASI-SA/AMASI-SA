@@ -217,7 +217,7 @@ def make_suppliers_report_router(db, current_user):
                 "last_invoice_date": last_inv_date,
                 "last_invoice_doc_number": last_inv_doc,
                 "last_activity": last_activity,
-                "ledger_url": f"/entity-ledger/supplier/{row['id']}",
+                "ledger_url": f"/suppliers/{row['id']}/ledger-detail",
                 "source": row.get("source"),
             }
             if with_debt_only and outstanding <= 0:

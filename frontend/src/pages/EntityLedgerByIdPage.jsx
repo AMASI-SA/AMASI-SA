@@ -82,6 +82,13 @@ const FALLBACK_BY_TYPE = {
 
 export default function EntityLedgerByIdPage() {
     const { type, id } = useParams();
+    // Iter-250b · P1.5.s — Suppliers now have a dedicated, rich,
+    // printable ledger detail page. Redirect deep-links from any
+    // older `/entity-ledger/supplier/...` URL to the new path so
+    // existing bookmarks keep working.
+    if (type === "supplier") {
+        return <Navigate to={`/suppliers/${id}/ledger-detail`} replace />;
+    }
     const config = TYPE_CONFIGS[type];
 
     if (!config) {
