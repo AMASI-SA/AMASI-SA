@@ -94,6 +94,123 @@ async def _movements_referenced_supplier_ids(db, uid: str) -> set[str]:
     return ids
 
 
+async def _last_activity_bulk(
+    db, uid: str, supplier_ids: list[str],
+) -> dict[str, dict]:
+    """Compute the most recent activity timestamps PER supplier across
+    both GL and financial_movements in TWO bulk Mongo aggregations
+    (one per collection) — no N+1.
+
+    Returns: { supplier_id: { last_gl, last_fm } } as ISO strings or
+    None when absent.
+    """
+    if not supplier_ids:
+        return {}
+
+    out: dict[str, dict] = {sid: {"last_gl": None, "last_fm": None}
+                            for sid in supplier_ids}
+
+    # GL — prefer txn_date (business date) else created_at.
+    gl_pipeline = [
+        {"$match": {
+            "user_id": uid,
+            "entity_type": "supplier",
+            "entity_id": {"$in": supplier_ids},
+            "status": "posted",
+        }},
+        {"$group": {
+            "_id": "$entity_id",
+            "last_txn_date":   {"$max": "$txn_date"},
+            "last_created_at": {"$max": "$created_at"},
+        }},
+    ]
+    async for row in db.general_ledger.aggregate(gl_pipeline):
+        sid = row.get("_id")
+        if sid in out:
+            out[sid]["last_gl"] = (
+                row.get("last_txn_date") or row.get("last_created_at")
+            )
+
+    # FM — prefer entry_date else created_at.
+    fm_pipeline = [
+        {"$match": {
+            "user_id": uid,
+            "supplier_id": {"$in": supplier_ids},
+        }},
+        {"$group": {
+            "_id": "$supplier_id",
+            "last_entry_date": {"$max": "$entry_date"},
+            "last_created_at": {"$max": "$created_at"},
+        }},
+    ]
+    async for row in db.financial_movements.aggregate(fm_pipeline):
+        sid = row.get("_id")
+        if sid in out:
+            out[sid]["last_fm"] = (
+                row.get("last_entry_date") or row.get("last_created_at")
+            )
+
+    return out
+
+
+def _activity_summary(act: dict) -> dict:
+    """Derive `last_activity`, `activity_source` and the
+    active/inactive badge from the raw {last_gl, last_fm} pair.
+
+    A supplier is "active" when its most-recent activity (across either
+    source) is within the last 90 days. 90d is a soft threshold that
+    matches the user's request — easy to tune in one place.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    def _to_dt(v):
+        if not v:
+            return None
+        if isinstance(v, datetime):
+            return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+        try:
+            s = str(v)
+            # Mongo may store with `Z` suffix.
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            return datetime.fromisoformat(s)
+        except Exception:
+            return None
+
+    gl_dt = _to_dt(act.get("last_gl"))
+    fm_dt = _to_dt(act.get("last_fm"))
+
+    if gl_dt and fm_dt:
+        source = "both"
+        last_dt = max(gl_dt, fm_dt)
+    elif gl_dt:
+        source = "gl"
+        last_dt = gl_dt
+    elif fm_dt:
+        source = "fm"
+        last_dt = fm_dt
+    else:
+        source = "none"
+        last_dt = None
+
+    is_active = False
+    days_since = None
+    if last_dt:
+        now = datetime.now(timezone.utc)
+        delta = now - last_dt
+        days_since = delta.days
+        is_active = days_since <= 90
+
+    return {
+        "last_gl": (gl_dt.isoformat() if gl_dt else None),
+        "last_fm": (fm_dt.isoformat() if fm_dt else None),
+        "last_activity": (last_dt.isoformat() if last_dt else None),
+        "activity_source": source,
+        "is_active": is_active,
+        "days_since_last_activity": days_since,
+    }
+
+
 async def _drift_count_for_supplier(
     db, uid: str, supplier_id: str,
 ) -> tuple[int, float]:
@@ -171,6 +288,9 @@ def make_suppliers_unification_forensic_router(db, current_user):
                 entity_ids=all_visible_ids,
             )
 
+        # P1.5.ab.2 — Last-activity in bulk across GL + FM.
+        activity_raw = await _last_activity_bulk(db, uid, all_visible_ids)
+
         rows: list[dict] = []
 
         def _push(link_status: str, sid: str,
@@ -186,6 +306,7 @@ def make_suppliers_unification_forensic_router(db, current_user):
             status = (sup or {}).get("status") or \
                      (cp or {}).get("status") or "active"
             b = balances.get(sid, {})
+            act = _activity_summary(activity_raw.get(sid) or {})
             rows.append({
                 "id": sid,
                 "link_status": link_status,
@@ -203,6 +324,8 @@ def make_suppliers_unification_forensic_router(db, current_user):
                 "debits": b.get("debits", 0.0),
                 "credits": b.get("credits", 0.0),
                 "editable": link_status in ("new_only", "linked"),
+                # P1.5.ab.2 — activity meta.
+                **act,
             })
 
         for sid in linked_ids:
@@ -216,6 +339,7 @@ def make_suppliers_unification_forensic_router(db, current_user):
             # see them. They are flagged so the UI never tries to
             # "edit" them through /suppliers patch.
             b = balances.get(sid, {})
+            act = _activity_summary(activity_raw.get(sid) or {})
             rows.append({
                 "id": sid,
                 "link_status": "ledger_only",
@@ -233,6 +357,7 @@ def make_suppliers_unification_forensic_router(db, current_user):
                 "debits": b.get("debits", 0.0),
                 "credits": b.get("credits", 0.0),
                 "editable": False,
+                **act,
             })
 
         # Sort: linked + new_only first (alphabetical by name), then
@@ -252,6 +377,9 @@ def make_suppliers_unification_forensic_router(db, current_user):
             "ledger_only":   sum(1 for r in rows
                                  if r["link_status"] == "ledger_only"),
             "ghost":         len(ghost_ids),
+            # P1.5.ab.2 — activity roll-ups.
+            "active":        sum(1 for r in rows if r.get("is_active")),
+            "inactive":      sum(1 for r in rows if not r.get("is_active")),
         }
         return {"items": rows, "totals": totals}
 
@@ -286,6 +414,10 @@ def make_suppliers_unification_forensic_router(db, current_user):
         known_ids = set(sup_by_id) | set(cp_by_id)
         ghost_ids = (gl_ids | fm_ids) - known_ids
 
+        # P1.5.ab.2 — Bulk last-activity for everyone we'll surface.
+        all_ids = list(set(sup_by_id) | set(cp_by_id) | ghost_ids)
+        activity_raw = await _last_activity_bulk(db, uid, all_ids)
+
         def _strip(s: dict) -> dict:
             # Just the fields useful for the report.
             return {
@@ -298,17 +430,19 @@ def make_suppliers_unification_forensic_router(db, current_user):
                 "created_at": s.get("created_at"),
             }
 
-        # ----- Drift per visible supplier (where it matters) -----
+        # ----- Drift + Activity per visible supplier -----
         async def enrich(rows, link_status):
             out = []
             for r in rows:
                 sid = r.get("id")
                 cnt, tot = await _drift_count_for_supplier(db, uid, sid)
+                act = _activity_summary(activity_raw.get(sid) or {})
                 out.append({
                     **_strip(r),
                     "link_status": link_status,
                     "drift_count": cnt,
                     "drift_total": tot,
+                    **act,
                 })
             return out
 
@@ -322,12 +456,14 @@ def make_suppliers_unification_forensic_router(db, current_user):
         ghosts_list = []
         for gid in ghost_ids:
             cnt, tot = await _drift_count_for_supplier(db, uid, gid)
+            act = _activity_summary(activity_raw.get(gid) or {})
             ghosts_list.append({
                 "id": gid,
                 "drift_count": cnt,
                 "drift_total": tot,
                 "appears_in_gl": gid in gl_ids,
                 "appears_in_financial_movements": gid in fm_ids,
+                **act,
             })
 
         # ----- Duplicate suspects across the TWO sources -----
@@ -385,6 +521,11 @@ def make_suppliers_unification_forensic_router(db, current_user):
             "by_email": _dups(by_email, "email"),
         }
 
+        # P1.5.ab.2 — roll-ups for activity (across ALL surfaced rows).
+        _all_rows = new_only_list + linked_list + ledger_only_list \
+                    + ghosts_list
+        active_count = sum(1 for r in _all_rows if r.get("is_active"))
+
         return {
             "read_only": True,
             "summary": {
@@ -394,6 +535,9 @@ def make_suppliers_unification_forensic_router(db, current_user):
                 "new_only":    len(new_only_ids),
                 "ledger_only": len(ledger_only_ids),
                 "ghosts":      len(ghost_ids),
+                "active":      active_count,
+                "inactive":    len(_all_rows) - active_count,
+                "active_window_days": 90,
                 "duplicate_suspect_groups": (
                     len(duplicate_suspects["by_name"])
                     + len(duplicate_suspects["by_phone"])
@@ -410,6 +554,7 @@ def make_suppliers_unification_forensic_router(db, current_user):
                 "خالد يظهر هنا تحت new_only لأن قيوده غير مرحّلة لـ GL.",
                 "العنبري يظهر هنا تحت ledger_only لأنه غير موجود في "
                 "جدول الموردين الجديد.",
+                "نشط = آخر حركة (GL أو FM) خلال آخر 90 يوم.",
             ],
         }
 

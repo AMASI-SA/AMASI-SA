@@ -16,6 +16,61 @@ const STATUS_LABEL = {
   ledger_only: "Ledger فقط",
 };
 
+const SOURCE_LABEL = {
+  gl:   "GL",
+  fm:   "Financial Movements",
+  both: "Both",
+  none: "—",
+};
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  // YYYY-MM-DD (compact, RTL friendly)
+  return d.toISOString().slice(0, 10);
+}
+
+function ActivityBadge({ isActive, days }) {
+  if (isActive) {
+    return (
+      <span
+        className="inline-block text-[10px] px-1.5 py-0.5 rounded border font-bold bg-emerald-100 text-emerald-800 border-emerald-300"
+        data-testid="activity-badge-active"
+        title={"آخر حركة: " + (days ?? "?") + " يوم"}
+      >
+        🟢 نشط
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-block text-[10px] px-1.5 py-0.5 rounded border font-bold bg-slate-100 text-slate-600 border-slate-300"
+      data-testid="activity-badge-inactive"
+      title={days != null ? (days + " يوم منذ آخر حركة") : "لا توجد حركات"}
+    >
+      ⚪ {days != null ? "خامل" : "بلا حركة"}
+    </span>
+  );
+}
+
+function SourceBadge({ source }) {
+  const cfg = {
+    gl:   { cls: "bg-blue-50 text-blue-800 border-blue-300" },
+    fm:   { cls: "bg-amber-50 text-amber-800 border-amber-300" },
+    both: { cls: "bg-purple-50 text-purple-800 border-purple-300" },
+    none: { cls: "bg-gray-50 text-gray-500 border-gray-200" },
+  }[source] || { cls: "bg-gray-50 text-gray-500 border-gray-200" };
+  return (
+    <span
+      className={"inline-block text-[10px] px-1.5 py-0.5 rounded border font-semibold " + cfg.cls}
+      data-testid={"activity-source-" + (source || "none")}
+    >
+      {SOURCE_LABEL[source] || "—"}
+    </span>
+  );
+}
+
 export default function SuppliersUnificationForensicModal({ onClose }) {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -157,6 +212,8 @@ function Summary({ summary }) {
       <SummaryCell label="مورد جديد فقط" value={summary.new_only} tone="bg-emerald-50 border-emerald-200 text-emerald-800" />
       <SummaryCell label="Ledger فقط"   value={summary.ledger_only} tone="bg-amber-50 border-amber-200 text-amber-800" />
       <SummaryCell label="GL/FM أيتام"  value={summary.ghosts}      tone="bg-rose-50 border-rose-200 text-rose-800" />
+      <SummaryCell label="🟢 نشط (≤90 يوم)" value={summary.active} tone="bg-emerald-50 border-emerald-200 text-emerald-800" />
+      <SummaryCell label="⚪ خامل / بلا حركة" value={summary.inactive} tone="bg-slate-50 border-slate-200 text-slate-700" />
       <SummaryCell label="تكرارات مُشتبه بها" value={summary.duplicate_suspect_groups} tone="bg-purple-50 border-purple-200 text-purple-800" />
     </div>
   );
@@ -183,8 +240,10 @@ function SupplierList({ rows, empty }) {
             <th className="p-2">الاسم</th>
             <th className="p-2">شخص الاتصال</th>
             <th className="p-2">الجوال</th>
-            <th className="p-2">البريد</th>
             <th className="p-2">الحالة</th>
+            <th className="p-2">آخر حركة</th>
+            <th className="p-2">مصدر النشاط</th>
+            <th className="p-2">نشاط</th>
             <th className="p-2">فواتير بدون قيد</th>
             <th className="p-2">إجمالي بدون قيد</th>
             <th className="p-2">المصدر</th>
@@ -197,8 +256,13 @@ function SupplierList({ rows, empty }) {
               <td className="p-2 font-semibold">{r.company_name || "?"}</td>
               <td className="p-2">{r.contact_person || "—"}</td>
               <td className="p-2 font-mono">{r.phone || "—"}</td>
-              <td className="p-2 text-xs text-gray-600">{r.email || "—"}</td>
               <td className="p-2 text-xs">{r.status || "—"}</td>
+              <td className="p-2 text-xs font-mono">{fmtDate(r.last_activity)}</td>
+              <td className="p-2"><SourceBadge source={r.activity_source} /></td>
+              <td className="p-2">
+                <ActivityBadge isActive={r.is_active}
+                               days={r.days_since_last_activity} />
+              </td>
               <td className="p-2 text-xs font-bold text-amber-800">
                 {r.drift_count || 0}
               </td>
@@ -237,6 +301,9 @@ function GhostList({ rows }) {
             <th className="p-2">ID</th>
             <th className="p-2">في GL؟</th>
             <th className="p-2">في FM؟</th>
+            <th className="p-2">آخر حركة</th>
+            <th className="p-2">مصدر النشاط</th>
+            <th className="p-2">نشاط</th>
             <th className="p-2">فواتير بدون قيد</th>
             <th className="p-2">إجمالي بدون قيد</th>
           </tr>
@@ -247,6 +314,12 @@ function GhostList({ rows }) {
               <td className="p-2 font-mono text-xs">{r.id}</td>
               <td className="p-2">{r.appears_in_gl ? "✅" : "—"}</td>
               <td className="p-2">{r.appears_in_financial_movements ? "✅" : "—"}</td>
+              <td className="p-2 text-xs font-mono">{fmtDate(r.last_activity)}</td>
+              <td className="p-2"><SourceBadge source={r.activity_source} /></td>
+              <td className="p-2">
+                <ActivityBadge isActive={r.is_active}
+                               days={r.days_since_last_activity} />
+              </td>
               <td className="p-2 font-bold">{r.drift_count || 0}</td>
               <td className="p-2 font-mono">
                 {Number(r.drift_total || 0).toLocaleString("en-US",

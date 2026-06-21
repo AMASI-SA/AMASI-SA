@@ -329,7 +329,32 @@ function SupplierRow({ s, catMap, openEdit }) {
       className="border-t hover:bg-gray-50"
       data-testid={"supplier-row-" + s.id}
     >
-      <td className="p-3 font-semibold">{s.company_name}</td>
+      <td className="p-3 font-semibold">
+        {s.company_name}
+        {s.is_active != null && (
+          <span className="mr-2 inline-block align-middle">
+            {s.is_active ? (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded border font-bold bg-emerald-100 text-emerald-800 border-emerald-300"
+                data-testid={"supplier-active-" + s.id}
+                title={"آخر حركة: " + (s.days_since_last_activity ?? "?") + " يوم"}
+              >
+                🟢 نشط
+              </span>
+            ) : (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded border font-bold bg-slate-100 text-slate-600 border-slate-300"
+                data-testid={"supplier-inactive-" + s.id}
+                title={s.days_since_last_activity != null
+                  ? (s.days_since_last_activity + " يوم منذ آخر حركة")
+                  : "لا توجد حركات"}
+              >
+                ⚪ {s.days_since_last_activity != null ? "خامل" : "بلا حركة"}
+              </span>
+            )}
+          </span>
+        )}
+      </td>
       <td className="p-3">
         <LinkStatusBadge status={s.link_status} />
       </td>
