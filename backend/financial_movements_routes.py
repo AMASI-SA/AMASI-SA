@@ -47,6 +47,13 @@ class LineItem(BaseModel):
     # Future-ready (Phase 5 hooks)
     product_id: Optional[str] = None
     product_sku: Optional[str] = None
+    # Iter-250b · Phase 3.7 — per-line discount/tax/notes.
+    # Both monetary amounts are FIXED VALUES in SAR (not percentages).
+    # Server validates non-negativity AND that discount never exceeds
+    # the pre-tax line total. `notes` is a free-form per-line memo.
+    discount_amount: float = 0.0
+    tax_amount: float = 0.0
+    notes: Optional[str] = None
 
 
 class Attachment(BaseModel):
@@ -428,8 +435,26 @@ def make_financial_movements_router(db, current_user):
                     raise HTTPException(
                         400,
                         f"الصف #{idx}: سعر الوحدة يجب أن يكون > 0")
+                # Iter-250b · Phase 3.7 — Validate discount/tax.
+                if _r(li.discount_amount) < 0:
+                    raise HTTPException(
+                        400,
+                        f"الصف #{idx}: الخصم لا يقبل قيمة سالبة")
+                if _r(li.tax_amount) < 0:
+                    raise HTTPException(
+                        400,
+                        f"الصف #{idx}: الضريبة لا تقبل قيمة سالبة")
+                pre_tax = _r(_r(li.quantity) * _r(li.unit_price))
+                if _r(li.discount_amount) > pre_tax + 0.001:
+                    raise HTTPException(
+                        400,
+                        f"الصف #{idx}: الخصم ({_r(li.discount_amount)}) "
+                        f"يتجاوز إجمالي السطر قبل الضريبة ({pre_tax})")
+            # Iter-250b · Phase 3.7 — server-side total =
+            #   Σ (qty × unit_price − discount + tax)
             li_total = _r(sum(
-                _r(li.quantity) * _r(li.unit_price)
+                _r(_r(li.quantity) * _r(li.unit_price)
+                    - _r(li.discount_amount) + _r(li.tax_amount))
                 for li in payload.line_items
             ))
             # The frontend computes `total_amount` from line_items, but
@@ -607,7 +632,21 @@ def make_financial_movements_router(db, current_user):
                     "description": li.description,
                     "quantity": _r(li.quantity),
                     "unit_price": _r(li.unit_price),
+                    # Iter-250b · Phase 3.7 — per-line discount/tax/notes
+                    # plus the computed `line_total` so downstream views
+                    # don't have to recompute.
+                    "discount_amount": _r(li.discount_amount),
+                    "tax_amount":      _r(li.tax_amount),
+                    "notes":           (li.notes or "").strip() or None,
+                    # `total` is kept as the pre-tax line subtotal for
+                    # backwards-compatibility with old views that read it.
                     "total": _r(_r(li.quantity) * _r(li.unit_price)),
+                    # `line_total` is the post-discount + tax figure
+                    # that feeds invoice header `total_amount`.
+                    "line_total": _r(
+                        _r(li.quantity) * _r(li.unit_price)
+                        - _r(li.discount_amount) + _r(li.tax_amount)
+                    ),
                     "category_id": li.category_id or cat["id"],
                     "category_path": cat_path,
                     "product_id": li.product_id,

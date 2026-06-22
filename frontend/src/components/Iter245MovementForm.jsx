@@ -120,7 +120,8 @@ export default function Iter245MovementForm({
     });
 
     const [lineItems, setLineItems] = useState([
-        { description: "", quantity: "", unit_price: "" },
+        { description: "", quantity: "", unit_price: "",
+          discount_amount: "", tax_amount: "", notes: "" },
     ]);
     const [saving, setSaving] = useState(false);
 
@@ -129,7 +130,8 @@ export default function Iter245MovementForm({
         setSupplierId(""); setCategoryId(""); setShowAllCats(false);
         setTotalAmount(""); setPaidAmount(""); setAccountId("");
         setWithdrawal(""); setReference(""); setAttachment(null);
-        setLineItems([{ description: "", quantity: "", unit_price: "" }]);
+        setLineItems([{ description: "", quantity: "", unit_price: "",
+                        discount_amount: "", tax_amount: "", notes: "" }]);
         setDocNumber(""); setNotes("");
         // Iter-250b · P1.5.q — reset pay-source picker as well.
         setPaySource("bank"); setCustodyEmployeeId("");
@@ -298,16 +300,24 @@ export default function Iter245MovementForm({
     }
     function addLine() {
         setLineItems((rows) =>
-            [...rows, { description: "", quantity: "", unit_price: "" }]);
+            [...rows, { description: "", quantity: "", unit_price: "",
+                        discount_amount: "", tax_amount: "", notes: "" }]);
     }
     function removeLine(idx) {
         setLineItems((rows) =>
             rows.length <= 1 ? rows : rows.filter((_, i) => i !== idx));
     }
+    // Iter-250b · Phase 3.7 — line_total = (qty × unit_price)
+    //                          − discount_amount + tax_amount
+    function _lineTotal(r) {
+        const preTax = Number(r.quantity || 0) * Number(r.unit_price || 0);
+        return preTax
+            - Number(r.discount_amount || 0)
+            + Number(r.tax_amount || 0);
+    }
     const lineSum = useMemo(
-        () => lineItems.reduce(
-            (s, r) => s + Number(r.quantity || 0) * Number(r.unit_price || 0),
-            0), [lineItems]);
+        () => lineItems.reduce((s, r) => s + _lineTotal(r), 0),
+        [lineItems]);
 
     // Auto-fill totalAmount from line items when on a purchase invoice
     // so the merchant doesn't have to manually sync the two values.
@@ -370,12 +380,28 @@ export default function Iter245MovementForm({
                     return toast.error(
                         `الصف #${i + 1}: سعر الوحدة يجب أن يكون > 0`);
                 }
+                // Iter-250b · Phase 3.7 — discount/tax non-negativity
+                // + discount must not exceed pre-tax subtotal.
+                const disc = Number(r.discount_amount || 0);
+                const tax  = Number(r.tax_amount || 0);
+                if (disc < 0) {
+                    return toast.error(
+                        `الصف #${i + 1}: الخصم لا يقبل قيمة سالبة`);
+                }
+                if (tax < 0) {
+                    return toast.error(
+                        `الصف #${i + 1}: الضريبة لا تقبل قيمة سالبة`);
+                }
+                const preTax = Number(r.quantity) * Number(r.unit_price);
+                if (disc > preTax + 0.001) {
+                    return toast.error(
+                        `الصف #${i + 1}: الخصم (${fmt(disc)}) يتجاوز ` +
+                        `إجمالي السطر قبل الضريبة (${fmt(preTax)})`);
+                }
             }
             // Recompute server-side total from filled rows.
             total = filled.reduce(
-                (s, r) =>
-                    s + Number(r.quantity || 0) * Number(r.unit_price || 0),
-                0);
+                (s, r) => s + _lineTotal(r), 0);
         }
         if (total <= 0) return toast.error("الإجمالي مطلوب");
 
@@ -431,6 +457,9 @@ export default function Iter245MovementForm({
                         description: r.description.trim(),
                         quantity: Number(r.quantity),
                         unit_price: Number(r.unit_price),
+                        discount_amount: Number(r.discount_amount || 0),
+                        tax_amount: Number(r.tax_amount || 0),
+                        notes: (r.notes || "").trim() || null,
                         product_id: r.product_id || null,
                         product_sku: r.product_sku || null,
                     }))
@@ -444,7 +473,8 @@ export default function Iter245MovementForm({
             setDocNumber(""); setNotes(""); setTotalAmount("");
             setPaidAmount(""); setAttachment(null);
             setLineItems([
-                { description: "", quantity: "", unit_price: "" },
+                { description: "", quantity: "", unit_price: "",
+                  discount_amount: "", tax_amount: "", notes: "" },
             ]);
             // Iter-250b · P1.5.q — Reset custody picker & re-fetch
             // sources so the next entry sees the updated balance.
@@ -603,14 +633,16 @@ export default function Iter245MovementForm({
                                 <th className="p-2 text-right">الصنف / المنتج</th>
                                 <th className="p-2 text-right">الكمية</th>
                                 <th className="p-2 text-right">سعر الوحدة</th>
-                                <th className="p-2 text-right">الإجمالي</th>
+                                <th className="p-2 text-right">الخصم</th>
+                                <th className="p-2 text-right">الضريبة</th>
+                                <th className="p-2 text-right">ملاحظات</th>
+                                <th className="p-2 text-right">إجمالي السطر</th>
                                 <th className="p-2 w-12"></th>
                             </tr>
                         </thead>
                         <tbody data-testid="iter245-mv-lines-body">
                             {lineItems.map((r, i) => {
-                                const tot = Number(r.quantity || 0)
-                                    * Number(r.unit_price || 0);
+                                const tot = _lineTotal(r);
                                 return (
                                     <tr key={i} className="border-t border-amber-200">
                                         <td className="p-1">
@@ -678,25 +710,65 @@ export default function Iter245MovementForm({
                                             <input
                                                 type="number"
                                                 step="0.01"
+                                                min="0"
                                                 value={r.quantity}
                                                 onChange={(e) =>
                                                     updateLine(i, "quantity",
                                                         e.target.value)}
-                                                className="w-24 border rounded px-2 py-1 text-xs"
+                                                className="w-20 border rounded px-2 py-1 text-xs"
                                                 data-testid={`iter245-mv-line-qty-${i}`} />
                                         </td>
                                         <td className="p-1">
                                             <input
                                                 type="number"
                                                 step="0.01"
+                                                min="0"
                                                 value={r.unit_price}
                                                 onChange={(e) =>
                                                     updateLine(i, "unit_price",
                                                         e.target.value)}
-                                                className="w-28 border rounded px-2 py-1 text-xs"
+                                                className="w-24 border rounded px-2 py-1 text-xs"
                                                 data-testid={`iter245-mv-line-price-${i}`} />
                                         </td>
-                                        <td className="p-1 font-mono font-bold">
+                                        <td className="p-1">
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={r.discount_amount}
+                                                onChange={(e) =>
+                                                    updateLine(i, "discount_amount",
+                                                        e.target.value)}
+                                                placeholder="0"
+                                                className="w-20 border rounded px-2 py-1 text-xs text-rose-700 font-mono"
+                                                data-testid={`iter245-mv-line-disc-${i}`} />
+                                        </td>
+                                        <td className="p-1">
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={r.tax_amount}
+                                                onChange={(e) =>
+                                                    updateLine(i, "tax_amount",
+                                                        e.target.value)}
+                                                placeholder="0"
+                                                className="w-20 border rounded px-2 py-1 text-xs text-indigo-700 font-mono"
+                                                data-testid={`iter245-mv-line-tax-${i}`} />
+                                        </td>
+                                        <td className="p-1">
+                                            <input
+                                                type="text"
+                                                value={r.notes || ""}
+                                                onChange={(e) =>
+                                                    updateLine(i, "notes",
+                                                        e.target.value)}
+                                                placeholder="—"
+                                                className="w-36 border rounded px-2 py-1 text-xs"
+                                                data-testid={`iter245-mv-line-notes-${i}`} />
+                                        </td>
+                                        <td className="p-1 font-mono font-bold text-emerald-800"
+                                            data-testid={`iter245-mv-line-total-${i}`}>
                                             {fmt(tot)}
                                         </td>
                                         <td className="p-1 text-center">
