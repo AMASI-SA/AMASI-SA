@@ -642,6 +642,7 @@ export default function Dashboard() {
                     {/* iter-49 — Executive profit summary (sales → deductions → net) */}
                     <ProfitSummaryCard
                         totals={totals}
+                        shippingBreakdown={data?.shipping_breakdown || []}
                         fromDate={filters.from_date}
                         toDate={filters.to_date}
                     />

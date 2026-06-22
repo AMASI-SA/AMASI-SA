@@ -17,6 +17,7 @@ import {
 import { useState } from "react";
 import ExcludedOrdersModal from "./ExcludedOrdersModal";
 import AdsCostBreakdownModal from "./AdsCostBreakdownModal";
+import DailyProductCostModal from "./DailyProductCostModal";
 
 const fmtSar = (v) => {
     if (v == null || Number.isNaN(Number(v))) return "—";
@@ -80,7 +81,7 @@ function HeaderKpi({ icon: Icon, label, value, hint, tone = "emerald", testid, b
     );
 }
 
-function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false, onClick = null, testid = null }) {
+function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false, onClick = null, testid = null, tooltip = null }) {
     // Color palette for each row — tuned for clarity on a soft gradient bg.
     const palettes = {
         green:   { tile: "bg-emerald-600",      icon: "text-white",      amount: "text-emerald-700",   bar: "bg-emerald-200/60" },
@@ -93,7 +94,9 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
     const p = palettes[color] || palettes.amber;
     const interactive = typeof onClick === "function";
     const Comp = interactive ? "button" : "div";
+    const hasTooltip = !!tooltip;
     return (
+        <div className={`relative group ${hasTooltip ? "" : ""}`}>
         <Comp
             type={interactive ? "button" : undefined}
             onClick={interactive ? onClick : undefined}
@@ -104,7 +107,7 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
                 isFirst ? "rounded-t-xl" : "border-t border-white/60",
             ].join(" ")}
             data-testid={testid || undefined}
-            title={interactive ? "اضغط لعرض القيود التفصيلية للفترة" : undefined}
+            title={interactive && !hasTooltip ? "اضغط لعرض القيود التفصيلية للفترة" : undefined}
         >
             <div className="flex items-center gap-2.5 min-w-0">
                 <div className={`w-8 h-8 rounded-lg ${p.tile} ${p.icon} flex items-center justify-center flex-shrink-0`}>
@@ -132,13 +135,25 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
                 <span>{value}</span>
             </div>
         </Comp>
+        {hasTooltip && (
+            <div
+                className="absolute z-40 right-0 left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none"
+                style={{ minWidth: "320px" }}
+                data-testid={`${testid || "line"}-tooltip`}
+            >
+                {tooltip}
+            </div>
+        )}
+        </div>
     );
 }
 
-export default function ProfitSummaryCard({ totals, fromDate, toDate, periodLabel }) {
+export default function ProfitSummaryCard({ totals, shippingBreakdown = [], fromDate, toDate, periodLabel }) {
     const t = totals || {};
     const [excludedOpen, setExcludedOpen] = useState(false);
     const [adsBreakdownOpen, setAdsBreakdownOpen] = useState(false);
+    // iter-250b · Dashboard hover/click enhancements.
+    const [productCostOpen, setProductCostOpen] = useState(false);
     // Compose the deductions explicitly so each line is auditable and
     // matches the description on the KPI tooltips above.
     const sales            = Number(t.total_sales        || 0);
@@ -200,6 +215,125 @@ export default function ProfitSummaryCard({ totals, fromDate, toDate, periodLabe
         ? Number(t.net_profit)
         : sales - productCost - adsCost - shippingTotal - allPaymentFees - operatingExpenses;
 
+    // ── iter-250b · Dashboard tooltip data ─────────────────────────
+    // 1) Shipping companies breakdown — comes from /api/dashboard's
+    //    `shipping_breakdown` array (name, orders_count, cost_per_order,
+    //    total_cost, is_deferred).
+    const shippingRows = Array.isArray(shippingBreakdown)
+        ? shippingBreakdown.filter(r => Number(r.total_cost) > 0)
+        : [];
+    const shippingTooltip = (
+        <div data-testid="shipping-tooltip-content" dir="rtl">
+            <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-200">
+                <span className="text-xs font-extrabold text-sky-900">
+                    🚚 تفاصيل تكاليف الشحن
+                </span>
+                <span className="text-[10px] text-slate-500">
+                    {shippingRows.length} شركة
+                </span>
+            </div>
+            {shippingRows.length === 0 ? (
+                <div className="text-xs text-slate-500 py-2 text-center">
+                    لا توجد بيانات شحن في هذه الفترة
+                </div>
+            ) : (
+                <table className="w-full text-[11px]">
+                    <thead>
+                        <tr className="text-slate-500">
+                            <th className="text-right pb-1 font-semibold">الشركة</th>
+                            <th className="text-center pb-1 font-semibold">الشحنات</th>
+                            <th className="text-center pb-1 font-semibold">سعر الوحدة</th>
+                            <th className="text-left pb-1 font-semibold">الإجمالي</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {shippingRows.map((r, i) => (
+                            <tr key={i} className="border-t border-slate-100">
+                                <td className="py-1 font-bold text-slate-700">
+                                    {r.name}
+                                    {r.is_deferred && (
+                                        <span className="ms-1 text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700">
+                                            آجل
+                                        </span>
+                                    )}
+                                </td>
+                                <td className="text-center font-mono text-slate-600">
+                                    {fmtInt(r.orders_count)}
+                                </td>
+                                <td className="text-center font-mono text-slate-500">
+                                    {fmtSar(r.cost_per_order)}
+                                </td>
+                                <td className="text-left font-mono font-extrabold text-sky-700">
+                                    {fmtSar(r.total_cost)}
+                                </td>
+                            </tr>
+                        ))}
+                        <tr className="border-t-2 border-sky-200">
+                            <td colSpan={3} className="py-1 font-extrabold text-slate-800">
+                                الإجمالي
+                            </td>
+                            <td className="text-left font-mono font-extrabold text-sky-800">
+                                {fmtSar(shippingTotal)}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            )}
+        </div>
+    );
+
+    // 2) Operating expenses breakdown — sourced from `totals.operating_*`.
+    const opRows = [
+        { name: "رواتب الموظفين",
+          value: Number(t.operating_salaries_employee || 0) },
+        { name: "مصاريف منزلية",
+          value: Number(t.operating_salaries_household || 0) },
+        { name: "صدقات / زكاة",
+          value: Number(t.operating_salaries_charity || 0) },
+        { name: "إيجارات",
+          value: Number(t.operating_rentals_total || 0) },
+        { name: "مصاريف مدفوعة مقدماً",
+          value: Number(t.operating_prepaid_total || 0) },
+        { name: "مصاريف يومية أخرى",
+          value: Number(t.operating_daily_other_total || 0) },
+    ].filter(r => r.value > 0);
+    const opTooltip = (
+        <div data-testid="op-tooltip-content" dir="rtl">
+            <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-200">
+                <span className="text-xs font-extrabold text-amber-900">
+                    💼 تفاصيل المصروفات التشغيلية
+                </span>
+                <span className="text-[10px] text-slate-500">
+                    {opRows.length} بند
+                </span>
+            </div>
+            {opRows.length === 0 ? (
+                <div className="text-xs text-slate-500 py-2 text-center">
+                    لا توجد مصروفات تشغيلية في هذه الفترة
+                </div>
+            ) : (
+                <table className="w-full text-[11px]">
+                    <tbody>
+                        {opRows.map((r, i) => (
+                            <tr key={i} className="border-t border-slate-100">
+                                <td className="py-1 font-bold text-slate-700">{r.name}</td>
+                                <td className="text-left font-mono font-extrabold text-amber-700">
+                                    {fmtSar(r.value)}
+                                </td>
+                            </tr>
+                        ))}
+                        <tr className="border-t-2 border-amber-200">
+                            <td className="py-1 font-extrabold text-slate-800">الإجمالي</td>
+                            <td className="text-left font-mono font-extrabold text-amber-800">
+                                {fmtSar(operatingExpenses)}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            )}
+        </div>
+    );
+
     return (
         <div
             className="rounded-2xl bg-gradient-to-br from-emerald-50 via-white to-amber-50 border-2 border-emerald-200/60 shadow-sm overflow-hidden"
@@ -256,12 +390,12 @@ export default function ProfitSummaryCard({ totals, fromDate, toDate, periodLabe
             {/* Body */}
             <div className="p-3 space-y-0">
                 <Line icon={Coins}      label="المبيعات"                      value={fmtSar(sales)}          color="green"  isFirst />
-                <Line icon={Package}    label="− تكاليف المنتجات"             value={fmtSar(productCost)}    share={sharePct(productCost, sales)}     color="amber"  />
+                <Line icon={Package}    label="− تكاليف المنتجات"             value={fmtSar(productCost)}    share={sharePct(productCost, sales)}     color="amber"  onClick={() => setProductCostOpen(true)} testid="profit-line-product-cost" />
                 <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        share={sharePct(adsCost, sales)}         color="rose"   onClick={() => setAdsBreakdownOpen(true)} testid="profit-line-ads-cost" />
-                <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  share={sharePct(shippingTotal, sales)}   color="sky"    />
+                <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  share={sharePct(shippingTotal, sales)}   color="sky"    tooltip={shippingTooltip} testid="profit-line-shipping" />
                 <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} share={sharePct(allPaymentFees, sales)}  color="violet" />
                 {operatingExpenses > 0 && (
-                    <Line icon={Briefcase} label="− المصروفات التشغيلية (رواتب وإيجارات وغيرها)" value={fmtSar(operatingExpenses)} share={sharePct(operatingExpenses, sales)} color="amber" />
+                    <Line icon={Briefcase} label="− المصروفات التشغيلية (رواتب وإيجارات وغيرها)" value={fmtSar(operatingExpenses)} share={sharePct(operatingExpenses, sales)} color="amber" tooltip={opTooltip} testid="profit-line-operating" />
                 )}
 
                 {/* Net profit row — visually distinguished */}
@@ -305,6 +439,11 @@ export default function ProfitSummaryCard({ totals, fromDate, toDate, periodLabe
                 onClose={() => setAdsBreakdownOpen(false)}
                 fromDate={fromDate}
                 toDate={toDate}
+            />
+            <DailyProductCostModal
+                open={productCostOpen}
+                onClose={() => setProductCostOpen(false)}
+                onSaved={() => setProductCostOpen(false)}
             />
         </div>
     );
