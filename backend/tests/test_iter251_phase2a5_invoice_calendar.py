@@ -58,7 +58,7 @@ async def _seed_tamara(db, uid, dates):
 @pytest.mark.asyncio
 async def test_extract_real_invoice_dates_from_settlement_entries(db):
     uid = f"u_{uuid.uuid4().hex[:6]}"
-    # Real-world Tamara invoice dates from the user
+    # Real-world Tamara invoice dates from the user — all Saturdays
     real_dates = ["2026-05-23", "2026-05-30", "2026-06-06",
                   "2026-06-13", "2026-06-20"]
     await _seed_tamara(db, uid, real_dates)
@@ -66,14 +66,21 @@ async def test_extract_real_invoice_dates_from_settlement_entries(db):
         db, uid, "tamara")
     invoice_dates = [r["invoice_date"] for r in out]
     assert invoice_dates == real_dates
-    # First entry: no previous → period_start = invoice_date − 6 days
-    assert out[0]["period_start"] == "2026-05-17"
-    assert out[0]["period_end"] == "2026-05-23"
-    # Subsequent entries: period_start = previous_invoice_date + 1
-    assert out[1]["period_start"] == "2026-05-24"
-    assert out[1]["period_end"] == "2026-05-30"
-    # Transfer offset for Tamara = 2 days by default
-    assert out[1]["expected_transfer_date"] == "2026-06-01"
+    # Tamara layout = invoice_as_start (Saturday → Friday cycle).
+    # First invoice 2026-05-23 (Sat):
+    #     period_start = 2026-05-23 (Sat)
+    #     period_end   = 2026-05-29 (Fri)
+    assert out[0]["layout"] == "invoice_as_start"
+    assert out[0]["period_start"] == "2026-05-23"
+    assert out[0]["period_end"]   == "2026-05-29"
+    # Second invoice 2026-05-30 (Sat):
+    #     period_start = 2026-05-30
+    #     period_end   = 2026-06-05
+    assert out[1]["period_start"] == "2026-05-30"
+    assert out[1]["period_end"]   == "2026-06-05"
+    # Transfer offset for Tamara (invoice_as_start) = 9 days
+    #     2026-05-23 + 9 = 2026-06-01 (Mon)
+    assert out[0]["expected_transfer_date"] == "2026-06-01"
 
 
 @pytest.mark.asyncio
@@ -114,14 +121,23 @@ async def test_manual_entry_protected_from_rebuild(db):
 @pytest.mark.asyncio
 async def test_dry_run_uses_calendar_when_present(db):
     """End-to-end: after rebuild, /dry-run-details for tamara must
-    surface the EXACT real invoice dates — not ISO-week buckets."""
+    surface the EXACT real invoice dates — not ISO-week buckets.
+
+    Tamara cycle (invoice_as_start): Sat → next Fri.
+       Inv 2026-05-23: covers 2026-05-23 → 2026-05-29
+       Inv 2026-05-30: covers 2026-05-30 → 2026-06-05
+       Inv 2026-06-06: covers 2026-06-06 → 2026-06-12
+    """
     from settlement_engine_routes import make_settlement_engine_router
 
     uid = f"u_{uuid.uuid4().hex[:6]}"
     await _seed_tamara(db, uid,
                        ["2026-05-23", "2026-05-30", "2026-06-06"])
     await rebuild_calendar(db, uid, _user(uid), "tamara")
-    # Seed two orders in the second-invoice window (24/05 .. 30/05).
+    # Orders:
+    #  • 2026-05-25 → falls in invoice 23/05 cycle
+    #  • 2026-05-28 → falls in invoice 23/05 cycle
+    #  • 2026-06-02 → falls in invoice 30/05 cycle
     await db.unified_orders.insert_many([
         {"user_id": uid, "payment_method": "تمارا",
          "order_number": f"O-{uid}-1",
@@ -134,7 +150,7 @@ async def test_dry_run_uses_calendar_when_present(db):
         {"user_id": uid, "payment_method": "tamara",
          "order_number": f"O-{uid}-3",
          "order_date": "2026-06-02", "total_amount": 50.0,
-         "refund_amount": 0},  # → invoice 06-06
+         "refund_amount": 0},
     ])
 
     async def _dep():
@@ -151,12 +167,18 @@ async def test_dry_run_uses_calendar_when_present(db):
     prov_block = out["providers"]["tamara"]
     inv_dates = [i["invoice_date"] for i in prov_block["invoices"]]
     assert inv_dates == ["2026-05-23", "2026-05-30", "2026-06-06"]
-    # Second invoice should contain 2 orders, third should contain 1.
+    # First invoice (23/05) contains BOTH 25 + 28 May orders.
     by_inv = {i["invoice_date"]: i for i in prov_block["invoices"]}
-    assert by_inv["2026-05-30"]["orders_count"] == 2
-    assert by_inv["2026-05-30"]["gross_sales"] == 500.0
-    assert by_inv["2026-06-06"]["orders_count"] == 1
-    assert by_inv["2026-06-06"]["gross_sales"] == 50.0
+    assert by_inv["2026-05-23"]["orders_count"] == 2
+    assert by_inv["2026-05-23"]["gross_sales"] == 500.0
+    assert by_inv["2026-05-30"]["orders_count"] == 1
+    assert by_inv["2026-05-30"]["gross_sales"] == 50.0
+    assert by_inv["2026-06-06"]["orders_count"] == 0
+    # Period boundaries match Tamara reality (Sat → Fri).
+    assert by_inv["2026-05-23"]["period_from"] == "2026-05-23"
+    assert by_inv["2026-05-23"]["period_to"]   == "2026-05-29"
+    assert by_inv["2026-05-30"]["period_from"] == "2026-05-30"
+    assert by_inv["2026-05-30"]["period_to"]   == "2026-06-05"
     assert prov_block["cycle"]["uses_calendar"] is True
 
 

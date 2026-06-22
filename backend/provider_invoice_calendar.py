@@ -50,18 +50,53 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# Tamara/Tabby transfer typically lands 1–3 days after the invoice
-# date.  We expose a per-provider default the user can override
-# from settings later.
-_DEFAULT_TRANSFER_OFFSET = {
-    "tamara": 2,   # Sat invoice → Mon transfer (≈ 2 cal. days)
-    "tabby":  1,
-    "imkan":  1,
-    "salla":  0,   # Salla settles same-day in its reference
+# Iter-251 · Phase 2A.5 v2 — Period-layout convention per provider.
+#
+#  • "invoice_as_start" — issue_date = FIRST day of the cycle.
+#       Tamara reality: invoice issued on Saturday covers
+#       Saturday → next Friday (7 days).
+#  • "invoice_as_end"   — issue_date = LAST day of the cycle.
+#       Older convention; kept as fallback for providers we haven't
+#       confirmed yet.
+#
+# Overridable per-merchant via
+# ``settings.calendar_period_layout_<provider>``.
+_PERIOD_LAYOUTS = {
+    "tamara": "invoice_as_start",
+    "tabby":  "invoice_as_end",
+    "imkan":  "invoice_as_end",
+    "salla":  "invoice_as_end",
 }
 
 
-async def _transfer_offset(db, uid: str, provider: str) -> int:
+async def _period_layout(db, uid: str, provider: str) -> str:
+    s = await db.settings.find_one(
+        {"user_id": uid},
+        {"_id": 0, f"calendar_period_layout_{provider}": 1},
+    ) or {}
+    v = s.get(f"calendar_period_layout_{provider}")
+    if v in ("invoice_as_start", "invoice_as_end"):
+        return v
+    return _PERIOD_LAYOUTS.get(provider, "invoice_as_end")
+
+
+# Tamara/Tabby transfer typically lands 1–3 days after the invoice
+# date.  Default offset depends on the period layout (because the
+# starting reference point differs):
+#   * "invoice_as_start": transfer ≈ invoice + 9 (next Mon after Fri end)
+#   * "invoice_as_end":   transfer ≈ invoice + 2 (Mon after Sat issue)
+_DEFAULT_TRANSFER_OFFSET = {
+    ("tamara", "invoice_as_start"): 9,
+    ("tamara", "invoice_as_end"):   2,
+    ("tabby",  "invoice_as_end"):   1,
+    ("imkan",  "invoice_as_end"):   1,
+    ("salla",  "invoice_as_end"):   0,
+}
+
+
+async def _transfer_offset(
+    db, uid: str, provider: str, layout: str,
+) -> int:
     """Allow per-merchant overrides via
     ``settings.calendar_transfer_offset_<provider>``."""
     s = await db.settings.find_one(
@@ -70,11 +105,11 @@ async def _transfer_offset(db, uid: str, provider: str) -> int:
     ) or {}
     v = s.get(f"calendar_transfer_offset_{provider}")
     if v is None:
-        return _DEFAULT_TRANSFER_OFFSET.get(provider, 2)
+        return _DEFAULT_TRANSFER_OFFSET.get((provider, layout), 2)
     try:
         return max(0, int(v))
     except Exception:
-        return _DEFAULT_TRANSFER_OFFSET.get(provider, 2)
+        return _DEFAULT_TRANSFER_OFFSET.get((provider, layout), 2)
 
 
 def _add_days(d: str, n: int) -> str:
@@ -88,10 +123,18 @@ async def extract_calendar_from_settlement_entries(
     each row was booked by the provider) to discover real invoice
     dates.
 
+    Period boundaries depend on the provider's layout:
+      * ``invoice_as_start``: period_start = invoice_date,
+        period_end = invoice_date + 6  (Tamara: Sat → Fri).
+      * ``invoice_as_end``:   period_end = invoice_date,
+        period_start = previous_invoice_date + 1
+        (or invoice_date − 6 for the first one).
+
     Returns ascending-ordered list of:
         {invoice_date, period_start, period_end,
          expected_transfer_date, source, source_ref,
-         settlement_dates, orders_count_hint, net_hint}
+         settlement_dates, orders_count_hint, net_hint,
+         layout}
     """
     pipeline = [
         {"$match": {"user_id": uid, "provider": provider,
@@ -117,19 +160,41 @@ async def extract_calendar_from_settlement_entries(
     if not rows:
         return []
 
-    offset = await _transfer_offset(db, uid, provider)
+    layout = await _period_layout(db, uid, provider)
+    offset = await _transfer_offset(db, uid, provider, layout)
     out: list[dict] = []
-    # Derive period boundaries by walking the sorted list.
+
+    if layout == "invoice_as_start":
+        # invoice_date = first day of the 7-day cycle (Sat..Fri).
+        for row in rows:
+            inv = row["settlement_date"]
+            period_start = inv
+            period_end   = _add_days(inv, 6)
+            expected_transfer_date = _add_days(inv, offset)
+            ref = row["refs"][0] if row["refs"] else None
+            out.append({
+                "invoice_date":            inv,
+                "period_start":            period_start,
+                "period_end":              period_end,
+                "expected_transfer_date":  expected_transfer_date,
+                "source":                  "settlement_entries",
+                "source_ref":              ref,
+                "settlement_dates":        [inv],
+                "orders_count_hint":       row["orders_count"],
+                "net_hint":                row["net"],
+                "layout":                  layout,
+            })
+        return out
+
+    # Legacy: "invoice_as_end" — derive period_start by walking back
+    # from invoice_date (or from the previous row + 1).
     prev_inv: Optional[str] = None
-    for i, row in enumerate(rows):
+    for row in rows:
         inv = row["settlement_date"]
         if prev_inv:
             period_start = _add_days(prev_inv, 1)
         else:
-            # First invoice in history: assume a 7-day cycle as
-            # fallback for period_start.
             period_start = _add_days(inv, -6)
-        # Period covers all days up to and including the invoice day.
         period_end = inv
         expected_transfer_date = _add_days(inv, offset)
         ref = row["refs"][0] if row["refs"] else None
@@ -143,6 +208,7 @@ async def extract_calendar_from_settlement_entries(
             "settlement_dates":        [inv],
             "orders_count_hint":       row["orders_count"],
             "net_hint":                row["net"],
+            "layout":                  layout,
         })
         prev_inv = inv
     return out

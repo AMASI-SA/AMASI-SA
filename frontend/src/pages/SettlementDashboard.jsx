@@ -202,7 +202,7 @@ function CalendarPanel() {
         expected_transfer_date: "",
     });
 
-    async function load() {
+    const load = useCallback(async () => {
         try {
             const { data } = await api.get(
                 "/settlement-engine/calendar",
@@ -211,8 +211,15 @@ function CalendarPanel() {
         } catch (e) {
             toast.error("فشل تحميل التقويم");
         }
-    }
-    useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [provider]);
+    }, [provider]);
+    useEffect(() => { load(); }, [load]);
+
+    const currentLayout = items[0]?.layout || (
+        provider === "tamara" ? "invoice_as_start" : "invoice_as_end"
+    );
+    const layoutLabel = currentLayout === "invoice_as_start"
+        ? "📍 تاريخ الفاتورة = أول يوم الفترة (السبت → الجمعة)"
+        : "📍 تاريخ الفاتورة = آخر يوم الفترة";
 
     async function rebuild() {
         setBusy(true);
@@ -270,6 +277,10 @@ function CalendarPanel() {
                     تواريخ الفواتير الحقيقية المستخرجة من <code>settlement_entries</code>. يستخدمها
                     Dry-Run والـ Phase 2B لبناء الفترات بدلاً من تقسيم أسبوعي افتراضي.
                     أي تعديل هنا ينعكس مباشرة على المحاكاة والتوليد.
+                </div>
+                <div className="mt-2 inline-block px-2 py-1 rounded bg-white border border-violet-300 text-[10px] font-bold"
+                     data-testid="se-cal-layout-badge">
+                    {layoutLabel}
                 </div>
             </div>
 
