@@ -332,7 +332,7 @@ function RejectModal({ open, review, onClose, onDone }) {
     );
 }
 
-function CreateModal({ open, onClose, onDone, banks }) {
+function CreateModal({ open, onClose, onDone, banks, providerBanks }) {
     const SOURCE_DEFAULTS = {
         salla:             "محفظة سلة",
         tamara:            "محفظة تمارا",
@@ -366,17 +366,32 @@ function CreateModal({ open, onClose, onDone, banks }) {
     if (!open) return null;
 
     const upd = (k, v) => setForm((s) => ({ ...s, [k]: v }));
-    // Auto-fill source account name when the merchant changes the
-    // source type — provided he hasn't typed something custom yet.
+    // Auto-fill source account name AND default routing bank when the
+    // merchant changes the source type — provided he hasn't typed
+    // something custom yet.
     function onSourceTypeChange(v) {
         const def = SOURCE_DEFAULTS[v] || "";
+        // Look up the configured default bank for this provider.
+        const routing = (providerBanks || {})[v];
+        const hasDefault = routing && routing.configured
+            && routing.target_bank_id;
         setForm((s) => {
             const wasDefault = !s.source_account_name
                 || Object.values(SOURCE_DEFAULTS).includes(s.source_account_name);
+            // Replace bank only when it's empty OR was previously
+            // auto-filled from another provider — never overwrite a
+            // bank the merchant picked manually.
+            const wasAutoBank = !s.target_bank_id
+                || Object.values(providerBanks || {})
+                    .some((r) => r.target_bank_id === s.target_bank_id);
             return {
                 ...s,
                 source_type: v,
                 source_account_name: wasDefault ? def : s.source_account_name,
+                target_bank_id:   wasAutoBank && hasDefault
+                    ? routing.target_bank_id   : s.target_bank_id,
+                target_bank_name: wasAutoBank && hasDefault
+                    ? routing.target_bank_name : s.target_bank_name,
             };
         });
     }
@@ -391,6 +406,9 @@ function CreateModal({ open, onClose, onDone, banks }) {
     // For non-manual providers we hide the source-name field and
     // require only the upstream identifier (settlement number).
     const isProvider = form.source_type !== "manual";
+    const routing = (providerBanks || {})[form.source_type];
+    const usingDefaultBank = isProvider && routing?.configured
+        && routing.target_bank_id === form.target_bank_id;
 
     async function submit() {
         if (!form.source_id
@@ -484,6 +502,11 @@ function CreateModal({ open, onClose, onDone, banks }) {
                             {banks.map((b) =>
                                 <option key={b.id} value={b.id}>{b.name}</option>)}
                         </select>
+                        {usingDefaultBank && (
+                            <div className="text-[10px] text-emerald-700 mt-1 font-bold">
+                                ↳ تم التعبئة تلقائياً من إعدادات التوجيه للمزوّد. يمكنك تغييره يدوياً.
+                            </div>
+                        )}
                         {banks.length === 0 && (
                             <div className="text-[10px] text-rose-700 mt-1">
                                 لا توجد حسابات بنكية مُعرَّفة بعد. أضفها من شاشة «الأصول والحسابات».
@@ -922,6 +945,7 @@ export default function BankTransferReview() {
             <CreateModal
                 open={createOpen}
                 banks={bankAccounts}
+                providerBanks={providerBanks}
                 onClose={() => setCreateOpen(false)}
                 onDone={() => { setCreateOpen(false); reload(); }}
             />
