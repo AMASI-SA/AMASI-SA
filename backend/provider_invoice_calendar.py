@@ -161,6 +161,68 @@ def _add_days(d: str, n: int) -> str:
     return (date.fromisoformat(d) + timedelta(days=n)).isoformat()
 
 
+async def extract_calendar_from_registered_settlements(
+    db, uid: str, provider: str,
+) -> list[dict]:
+    """Read calendar entries directly from registered BNPL
+    settlements stored in ``general_ledger``.
+
+    Each registered settlement has the **exact** ``period_from`` and
+    ``period_to`` that was used in ``compute_settlement_for_provider``
+    when the merchant clicked "Register" on the BNPL settlements
+    page.  Those dates are the source of truth — Dry-Run periods
+    MUST match them so the merchant sees 1:1 parity with what they
+    actually saved.
+
+    Returns ascending list of:
+        {invoice_date, period_start, period_end,
+         expected_transfer_date, source, source_ref,
+         settlement_dates, orders_count_hint, net_hint,
+         layout}
+    """
+    pipeline = [
+        {"$match": {
+            "user_id":   uid,
+            "entry_type": "bnpl_settlement",
+            "status":    "posted",
+            "side":      "credit",
+            "entity_type": "payment_gateway",
+            "entity_id":  provider,
+            "metadata.period_from": {"$nin": [None, ""]},
+            "metadata.period_to":   {"$nin": [None, ""]},
+        }},
+        {"$sort": {"metadata.period_from": 1}},
+    ]
+    out: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    async for e in db.general_ledger.aggregate(pipeline):
+        meta = e.get("metadata") or {}
+        p_from = (meta.get("period_from") or "")[:10]
+        p_to   = (meta.get("period_to")   or "")[:10]
+        if not p_from or not p_to:
+            continue
+        if (p_from, p_to) in seen:
+            continue
+        seen.add((p_from, p_to))
+        sd = (meta.get("settlement_date") or p_to)[:10]
+        ref = meta.get("settlement_reference")
+        out.append({
+            "invoice_date":            p_from,  # matches BNPL page's
+                                                  # "from" anchor
+            "period_start":            p_from,
+            "period_end":              p_to,
+            "expected_transfer_date":  sd,
+            "source":                  "registered_settlement",
+            "source_ref":              ref,
+            "settlement_dates":        [sd] if sd else [],
+            "orders_count_hint":       None,
+            "net_hint":                round(float(
+                meta.get("transferred_amount") or 0), 2),
+            "layout":                  "registered",  # provenance flag
+        })
+    return out
+
+
 async def extract_calendar_from_settlement_entries(
     db, uid: str, provider: str,
 ) -> list[dict]:
@@ -299,18 +361,60 @@ async def rebuild_calendar(
     db, uid: str, user: dict, provider: str,
     *, dry_run: bool = False,
 ) -> dict:
-    """Re-extract calendar entries from ``settlement_entries`` and
-    upsert into ``provider_invoice_calendar``.
+    """Re-extract calendar entries and upsert into
+    ``provider_invoice_calendar``.
 
-    Idempotent: keyed on (user_id, provider, invoice_date).  Existing
-    rows have their period/transfer/refs **updated** to the latest
-    extraction (so re-running after a new file import refreshes
-    everything).  Manual rows (``source="manual"``) are left alone.
+    Two-pass extraction (registered settlements take priority):
+      1. Registered settlements in ``general_ledger`` — these carry
+         the EXACT ``period_from`` / ``period_to`` that the merchant
+         used when registering each settlement on the BNPL page.
+         Periods from this source override any derivation.
+      2. ``settlement_entries`` — derives invoice dates for windows
+         not yet registered (e.g. the latest cycle that's still
+         pending registration), using ``_PERIOD_LAYOUTS``.
+
+    Idempotent: keyed on (user_id, provider, invoice_date).  Manual
+    rows are left untouched.
     """
-    extracted = await extract_calendar_from_settlement_entries(
+    registered = await extract_calendar_from_registered_settlements(
         db, uid, provider)
+    derived = await extract_calendar_from_settlement_entries(
+        db, uid, provider)
+
+    # Build a span set from registered settlements so we can skip
+    # any derived row whose period overlaps a registered one — the
+    # registered ones are authoritative.
+    reg_spans = [
+        (e["period_start"], e["period_end"]) for e in registered
+    ]
+
+    def _overlaps(a_start: str, a_end: str) -> bool:
+        for b_start, b_end in reg_spans:
+            if not (a_end < b_start or a_start > b_end):
+                return True
+        return False
+
+    merged: list[dict] = []
+    seen_invoice_dates: set[str] = set()
+    for e in registered:
+        merged.append(e)
+        seen_invoice_dates.add(e["invoice_date"])
+    for e in derived:
+        if e["invoice_date"] in seen_invoice_dates:
+            continue
+        if _overlaps(e["period_start"], e["period_end"]):
+            continue
+        merged.append(e)
+        seen_invoice_dates.add(e["invoice_date"])
+    merged.sort(key=lambda x: x["period_start"])
+
     inserted, updated, skipped_manual = 0, 0, 0
-    for e in extracted:
+    from_registered, from_derived = 0, 0
+    for e in merged:
+        if e["source"] == "registered_settlement":
+            from_registered += 1
+        else:
+            from_derived += 1
         existing = await db.provider_invoice_calendar.find_one(
             {"user_id": uid, "provider": provider,
              "invoice_date": e["invoice_date"]},
@@ -332,9 +436,10 @@ async def rebuild_calendar(
                     "period_start":           e["period_start"],
                     "period_end":             e["period_end"],
                     "expected_transfer_date": e["expected_transfer_date"],
-                    "source":                 "settlement_entries",
+                    "source":                 e["source"],
                     "source_ref":             e["source_ref"],
                     "settlement_dates":       e["settlement_dates"],
+                    "layout":                 e.get("layout"),
                     "updated_at":             _now(),
                 }},
             )
@@ -349,6 +454,7 @@ async def rebuild_calendar(
                     "expected_transfer_date", "source", "source_ref",
                     "settlement_dates",
                 )},
+                "layout":      e.get("layout"),
                 "created_by":  user.get("id"),
                 "created_at":  _now(),
                 "updated_at":  _now(),
@@ -356,12 +462,14 @@ async def rebuild_calendar(
             await db.provider_invoice_calendar.insert_one(doc)
             inserted += 1
     return {
-        "provider":       provider,
-        "extracted":      len(extracted),
-        "inserted":       inserted,
-        "updated":        updated,
-        "skipped_manual": skipped_manual,
-        "dry_run":        dry_run,
+        "provider":         provider,
+        "extracted":        len(merged),
+        "from_registered":  from_registered,
+        "from_derived":     from_derived,
+        "inserted":         inserted,
+        "updated":          updated,
+        "skipped_manual":   skipped_manual,
+        "dry_run":          dry_run,
     }
 
 

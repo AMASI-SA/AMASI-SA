@@ -420,9 +420,13 @@ function CalendarPanel() {
                                     <span className={`px-2 py-0.5 rounded font-bold ${
                                         c.source === "manual"
                                             ? "bg-amber-100 text-amber-800"
-                                            : "bg-indigo-100 text-indigo-700"
+                                            : c.source === "registered_settlement"
+                                                ? "bg-emerald-100 text-emerald-800"
+                                                : "bg-indigo-100 text-indigo-700"
                                     }`}>
-                                        {c.source === "manual" ? "يدوي" : "من الملفات"}
+                                        {c.source === "manual" ? "يدوي"
+                                         : c.source === "registered_settlement" ? "📌 من تسوية مسجّلة"
+                                         : "من الملفات"}
                                     </span>
                                 </td>
                                 <td className="p-2 text-center font-mono">

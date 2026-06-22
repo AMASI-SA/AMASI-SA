@@ -56,6 +56,59 @@ async def _seed_tamara(db, uid, dates):
 
 
 @pytest.mark.asyncio
+async def test_registered_settlements_take_priority(db):
+    """The exact period_from/period_to stored on registered BNPL
+    settlements (general_ledger) MUST be the source of truth — Dry
+    Run periods must match them 1:1 regardless of what derivation
+    from settlement_entries would suggest."""
+    uid = f"u_{uuid.uuid4().hex[:6]}"
+    # Insert a registered Tabby settlement covering 2026-04-27 → 2026-05-04
+    await db.general_ledger.insert_many([
+        {
+            "id": str(uuid.uuid4()), "user_id": uid,
+            "txn_group_id": "tg-x", "entry_no": 1,
+            "entry_type": "bnpl_settlement", "status": "posted",
+            "side": "credit", "entity_type": "payment_gateway",
+            "entity_id": "tabby",
+            "amount": 100, "posted_at": "2026-05-05T10:00:00Z",
+            "metadata": {
+                "provider": "tabby",
+                "period_from": "2026-04-27",
+                "period_to":   "2026-05-04",
+                "settlement_date": "2026-05-04",
+                "settlement_reference": "TABBY-X",
+                "transferred_amount": 800.0,
+            },
+        },
+    ])
+    # Also insert a derivable settlement_entry that would normally
+    # produce a different boundary (Tue→Mon under invoice_as_end).
+    await _seed_tabby_entry(db, uid, "2026-05-04")
+
+    from provider_invoice_calendar import rebuild_calendar
+    res = await rebuild_calendar(db, uid, _user(uid), "tabby")
+    assert res["from_registered"] == 1
+    assert res["from_derived"]    == 0   # derivation suppressed
+                                          # by overlap with reg
+    cal = await get_calendar(db, uid, "tabby")
+    assert len(cal) == 1
+    assert cal[0]["period_start"] == "2026-04-27"
+    assert cal[0]["period_end"]   == "2026-05-04"
+    assert cal[0]["source"]       == "registered_settlement"
+
+
+async def _seed_tabby_entry(db, uid, date_str):
+    await db.settlement_entries.insert_one({
+        "user_id": uid, "provider": "tabby",
+        "settlement_reference": f"TBY-{date_str}",
+        "settlement_date": date_str,
+        "actual_gross_amount": 100, "actual_refund_amount": 0,
+        "actual_payment_fee": 7, "actual_payment_vat": 1,
+        "actual_net_amount": 92, "event_type": "sale",
+    })
+
+
+@pytest.mark.asyncio
 async def test_tamara_snaps_sunday_to_saturday(db):
     """When Tamara settlement_date is stored as Sunday (timezone
     drift from Saudi UTC+3 → UTC), we snap back to the previous
