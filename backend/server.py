@@ -3870,6 +3870,10 @@ api.include_router(make_ad_account_sync_diagnostic_router(db, current_user))
 api.include_router(make_expense_categories_router(db, current_user))
 api.include_router(make_suppliers_router(db, current_user))
 api.include_router(make_financial_movements_router(db, current_user))
+# Iter-251 · Phase 1 — Bank Transfer Review (independent layer).
+from bank_transfer_review_routes import make_bank_transfer_review_router
+api.include_router(
+    make_bank_transfer_review_router(db, current_user))
 # Iter-246 — Read-only audit of legacy screens still in use.
 from legacy_usage_report_routes import make_legacy_usage_report_router
 api.include_router(make_legacy_usage_report_router(db, current_user))

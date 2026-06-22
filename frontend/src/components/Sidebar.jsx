@@ -56,6 +56,7 @@ const SECTIONS = [
             { to: "/financial-position-ledger", label: "💰 المركز المالي (Ledger)", icon: PaperPlaneRight, testid: "nav-financial-position-ledger" },
             { to: "/accounting/reconciliation", label: "🔍 تقرير المطابقة", icon: ArrowsLeftRight, testid: "nav-reconciliation" },
             { to: "/payment-settlements", label: "فواتير وتسويات بوابات الدفع", icon: Receipt, testid: "nav-payment-settlements" },
+            { to: "/bank-transfer-review", label: "🏦 مراجعة التحويلات البنكية", icon: Receipt, testid: "nav-bank-transfer-review" },
             { to: "/bnpl-settlements", label: "تسويات Tabby و Tamara", icon: Receipt, testid: "nav-bnpl-settlements" },
             { to: "/bnpl-settlements/register", label: "📝 تسجيل تسويات Tabby و Tamara", icon: Receipt, testid: "nav-bnpl-register" },
             { to: "/audit/employee-orphans", label: "🩺 تشخيص قيود الموظفين اليتيمة", icon: Receipt, testid: "nav-employee-orphans" },

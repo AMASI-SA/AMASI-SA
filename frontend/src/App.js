@@ -23,6 +23,7 @@ import AdvertisingExpensesReport from "./pages/AdvertisingExpensesReport";
 import SnapchatAccounts from "./pages/SnapchatAccounts";
 import ProductCosts from "./pages/ProductCosts";
 import ProductsPage from "./pages/ProductsPage";
+import BankTransferReview from "./pages/BankTransferReview";
 import ProductPreparation from "./pages/ProductPreparation";
 import ImageCatalog from "./pages/ImageCatalog";
 import SallaIntegration from "./pages/SallaIntegration";
@@ -121,6 +122,7 @@ function AppRoutes() {
             <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatAccounts /></Layout></ProtectedRoute>} />
             <Route path="/product-costs" element={<ProtectedRoute><Layout><ProductCosts /></Layout></ProtectedRoute>} />
             <Route path="/products" element={<ProtectedRoute><Layout><ProductsPage /></Layout></ProtectedRoute>} />
+            <Route path="/bank-transfer-review" element={<ProtectedRoute><Layout><BankTransferReview /></Layout></ProtectedRoute>} />
             <Route path="/product-preparation" element={<ProtectedRoute><Layout><ProductPreparation /></Layout></ProtectedRoute>} />
             <Route path="/image-catalog" element={<ProtectedRoute><Layout><ImageCatalog /></Layout></ProtectedRoute>} />
             <Route path="/settings/salla" element={<ProtectedRoute><Layout><SallaIntegration /></Layout></ProtectedRoute>} />
