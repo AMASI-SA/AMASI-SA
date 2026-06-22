@@ -251,23 +251,32 @@ async def extract_calendar_from_registered_settlements(
 
 async def extract_calendar_from_settlement_entries(
     db, uid: str, provider: str,
+    *, template: Optional[dict] = None,
 ) -> list[dict]:
     """Group ``settlement_entries`` by ``settlement_date`` (the day
     each row was booked by the provider) to discover real invoice
     dates.
 
-    Period boundaries depend on the provider's layout:
+    Iter-251 v7 — When ``template`` is provided (learned from
+    registered settlements), it OVERRIDES the static
+    ``_PERIOD_LAYOUTS`` for this provider.  The template captures
+    the merchant's actual settlement cycle (anchor weekday + period
+    width) so derived rows use the SAME boundaries as registered
+    ones.
+
+    Template schema::
+
+        {
+          "anchor_weekday":  int  # weekday of period_from (0=Mon)
+          "period_width":    int  # period_to - period_from + 1
+        }
+
+    Period boundaries (without template):
       * ``invoice_as_start``: period_start = invoice_date,
         period_end = invoice_date + 6  (Tamara: Sat → Fri).
       * ``invoice_as_end``:   period_end = invoice_date,
         period_start = previous_invoice_date + 1
         (or invoice_date − 6 for the first one).
-
-    Returns ascending-ordered list of:
-        {invoice_date, period_start, period_end,
-         expected_transfer_date, source, source_ref,
-         settlement_dates, orders_count_hint, net_hint,
-         layout}
     """
     pipeline = [
         {"$match": {"user_id": uid, "provider": provider,
@@ -329,6 +338,45 @@ async def extract_calendar_from_settlement_entries(
             row.setdefault("raw_dates", [row["settlement_date"]])
 
     out: list[dict] = []
+
+    # Iter-251 v7 — Template override (learned from registered
+    # settlements).  Anchors the derived period to the merchant's
+    # actual settlement cycle.
+    if template and template.get("anchor_weekday") is not None \
+       and template.get("period_width"):
+        anchor_wd: int = int(template["anchor_weekday"])
+        width:     int = int(template["period_width"])  # inclusive
+        for row in rows:
+            sd = row["settlement_date"]
+            # Find the period_from = most recent occurrence of
+            # anchor_weekday that is ≤ settlement_date.
+            period_start = _snap_to_weekday_backward(sd, anchor_wd)
+            period_end   = _add_days(period_start, width - 1)
+            # If settlement_date falls AFTER period_end (e.g. invoice
+            # issued a day late), shift one cycle forward so it lands
+            # inside the period.
+            if sd > period_end:
+                period_start = _add_days(period_start, width)
+                period_end   = _add_days(period_start, width - 1)
+            expected_transfer_date = sd
+            ref = row["refs"][0] if row["refs"] else None
+            out.append({
+                "invoice_date":            period_start,
+                "period_start":            period_start,
+                "period_end":              period_end,
+                "expected_transfer_date":  expected_transfer_date,
+                "source":                  "settlement_entries",
+                "source_ref":              ref,
+                "settlement_dates":        row.get("raw_dates", [sd]),
+                "orders_count_hint":       row["orders_count"],
+                "net_hint":                row["net"],
+                "layout":                  "templated_from_registered",
+                "template_used":           {
+                    "anchor_weekday": anchor_wd,
+                    "period_width":   width,
+                },
+            })
+        return out
 
     if layout == "invoice_as_start":
         # invoice_date = first day of the 7-day cycle (Sat..Fri).
@@ -404,8 +452,26 @@ async def rebuild_calendar(
     """
     registered = await extract_calendar_from_registered_settlements(
         db, uid, provider)
+
+    # Iter-251 v7 — Learn the cycle template from the most recent
+    # registered settlement so derived rows align to the SAME
+    # period boundaries the merchant actually used.
+    template: Optional[dict] = None
+    if registered:
+        most_recent = registered[-1]
+        try:
+            ps = date.fromisoformat(most_recent["period_start"])
+            pe = date.fromisoformat(most_recent["period_end"])
+            template = {
+                "anchor_weekday": ps.weekday(),
+                "period_width":   (pe - ps).days + 1,
+                "source_invoice": most_recent["invoice_date"],
+            }
+        except Exception:
+            template = None
+
     derived = await extract_calendar_from_settlement_entries(
-        db, uid, provider)
+        db, uid, provider, template=template)
 
     # Build a span set from registered settlements so we can skip
     # any derived row whose period overlaps a registered one — the
@@ -527,6 +593,7 @@ async def rebuild_calendar(
         "updated":          updated,
         "skipped_manual":   skipped_manual,
         "deleted_stale":    deleted_stale,
+        "template":         template,
         "dry_run":          dry_run,
     }
 

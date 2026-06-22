@@ -11,6 +11,7 @@ Validates:
 import os
 import sys
 import uuid
+from datetime import date
 
 import pytest
 
@@ -53,6 +54,69 @@ async def _seed_tamara(db, uid, dates):
         })
     if docs:
         await db.settlement_entries.insert_many(docs)
+
+
+@pytest.mark.asyncio
+async def test_tabby_derived_rows_inherit_registered_template(db):
+    """Iter-251 v7 — When 1 Tabby settlement is registered with a
+    Mon→Mon 8-day cycle, all DERIVED rows from settlement_entries
+    must adopt the same template (Monday anchor, 8-day inclusive
+    width) — not the static `invoice_as_end` 7-day fallback.
+
+    Reproduces the user's exact scenario:
+      • 1 registered settlement: 2026-05-04 (Mon) → 2026-05-11 (Mon)
+      • settlement_entries with 5 derivable settlement_dates
+      • Expected: all 6 rows use Mon→Mon 8-day periods
+    """
+    uid = f"u_{uuid.uuid4().hex[:6]}"
+    # Registered: covers 2026-05-04 → 2026-05-11 (Mon → Mon, 8 days)
+    await db.general_ledger.insert_one({
+        "id": str(uuid.uuid4()), "user_id": uid,
+        "txn_group_id": "tg-r", "entry_no": 1,
+        "entry_type": "bnpl_settlement", "status": "posted",
+        "side": "credit", "entity_type": "payment_gateway",
+        "entity_id": "tabby",
+        "amount": 100, "posted_at": "2026-05-12T10:00:00Z",
+        "metadata": {
+            "provider": "tabby",
+            "period_from":   "2026-05-04",
+            "period_to":     "2026-05-11",
+            "settlement_date": "2026-05-11",
+            "settlement_reference": "TBY-REG",
+            "transferred_amount": 100.0,
+        },
+    })
+    # Earlier settlement_entries (still unregistered): 5 dates,
+    # each a Monday (real Tabby invoice issue weekday)
+    for d in ["2026-03-30", "2026-04-06", "2026-04-13",
+              "2026-04-20", "2026-04-27"]:
+        await db.settlement_entries.insert_one({
+            "user_id": uid, "provider": "tabby",
+            "settlement_reference": f"TBY-{d}",
+            "settlement_date": d,
+            "actual_gross_amount": 50, "actual_refund_amount": 0,
+            "actual_payment_fee": 3, "actual_payment_vat": 0.45,
+            "actual_net_amount": 46.55, "event_type": "sale",
+        })
+
+    from provider_invoice_calendar import rebuild_calendar
+    r = await rebuild_calendar(db, uid, _user(uid), "tabby")
+    assert r["from_registered"] == 1
+    # 5 derived dates but one overlaps the registered period and
+    # gets filtered out — leaving 4 derived rows.
+    assert r["from_derived"]    >= 4
+    assert r["template"]["anchor_weekday"] == 0   # Monday
+    assert r["template"]["period_width"]   == 8
+
+    cal = await get_calendar(db, uid, "tabby")
+    # All rows must have Mon→Mon 8-day periods
+    for c in cal:
+        ps = date.fromisoformat(c["period_start"])
+        pe = date.fromisoformat(c["period_end"])
+        assert ps.weekday() == 0, f"period_start not Mon: {c}"
+        assert (pe - ps).days == 7, f"width != 8 days: {c}"
+        if c["source"] == "settlement_entries":
+            assert c["layout"] == "templated_from_registered"
 
 
 @pytest.mark.asyncio

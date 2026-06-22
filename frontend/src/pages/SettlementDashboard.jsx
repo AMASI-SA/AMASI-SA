@@ -472,10 +472,13 @@ function CalendarPanel() {
                                             ? "bg-amber-100 text-amber-800"
                                             : c.source === "registered_settlement"
                                                 ? "bg-emerald-100 text-emerald-800"
-                                                : "bg-indigo-100 text-indigo-700"
+                                                : c.layout === "templated_from_registered"
+                                                    ? "bg-teal-100 text-teal-800"
+                                                    : "bg-indigo-100 text-indigo-700"
                                     }`}>
                                         {c.source === "manual" ? "يدوي"
                                          : c.source === "registered_settlement" ? "📌 من تسوية مسجّلة"
+                                         : c.layout === "templated_from_registered" ? "📐 من قالب مسجَّل"
                                          : "من الملفات"}
                                     </span>
                                 </td>
