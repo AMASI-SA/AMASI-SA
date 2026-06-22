@@ -633,9 +633,15 @@ export default function Iter245MovementForm({
                                 <th className="p-2 text-right">الصنف / المنتج</th>
                                 <th className="p-2 text-right">الكمية</th>
                                 <th className="p-2 text-right">سعر الوحدة</th>
-                                <th className="p-2 text-right">الخصم</th>
-                                <th className="p-2 text-right">الضريبة</th>
-                                <th className="p-2 text-right">ملاحظات</th>
+                                <th className="p-2 text-right text-slate-500 font-normal">
+                                    الخصم <span className="text-[9px]">(اختياري)</span>
+                                </th>
+                                <th className="p-2 text-right text-slate-500 font-normal">
+                                    الضريبة <span className="text-[9px]">(اختياري)</span>
+                                </th>
+                                <th className="p-2 text-right text-slate-500 font-normal">
+                                    ملاحظات <span className="text-[9px]">(اختياري)</span>
+                                </th>
                                 <th className="p-2 text-right">إجمالي السطر</th>
                                 <th className="p-2 w-12"></th>
                             </tr>
@@ -739,8 +745,8 @@ export default function Iter245MovementForm({
                                                 onChange={(e) =>
                                                     updateLine(i, "discount_amount",
                                                         e.target.value)}
-                                                placeholder="0"
-                                                className="w-20 border rounded px-2 py-1 text-xs text-rose-700 font-mono"
+                                                placeholder="—"
+                                                className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-rose-700 font-mono placeholder:text-slate-300 bg-slate-50/50"
                                                 data-testid={`iter245-mv-line-disc-${i}`} />
                                         </td>
                                         <td className="p-1">
@@ -752,8 +758,8 @@ export default function Iter245MovementForm({
                                                 onChange={(e) =>
                                                     updateLine(i, "tax_amount",
                                                         e.target.value)}
-                                                placeholder="0"
-                                                className="w-20 border rounded px-2 py-1 text-xs text-indigo-700 font-mono"
+                                                placeholder="—"
+                                                className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-indigo-700 font-mono placeholder:text-slate-300 bg-slate-50/50"
                                                 data-testid={`iter245-mv-line-tax-${i}`} />
                                         </td>
                                         <td className="p-1">
