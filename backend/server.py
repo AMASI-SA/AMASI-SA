@@ -468,6 +468,12 @@ class SettingsIn(BaseModel):
     default_bank_for_tamara: Optional[str] = None
     default_bank_for_tabby:  Optional[str] = None
     default_bank_for_imkan:  Optional[str] = None
+    # Iter-251 · Phase 2A — Settlement Engine feature flags.
+    # All default to False — actual automation stays disabled until
+    # the merchant explicitly toggles via /settlement-engine/feature-flags.
+    settlement_engine_enabled:             Optional[bool] = None
+    platform_settlement_to_review_enabled: Optional[bool] = None
+    bank_transfer_review_enabled:          Optional[bool] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -835,6 +841,13 @@ async def get_settings(user: dict = Depends(current_user)):
         "default_bank_for_tamara": s.get("default_bank_for_tamara") or None,
         "default_bank_for_tabby":  s.get("default_bank_for_tabby")  or None,
         "default_bank_for_imkan":  s.get("default_bank_for_imkan")  or None,
+        # Iter-251 · Phase 2A — Settlement Engine feature flags.
+        "settlement_engine_enabled":
+            bool(s.get("settlement_engine_enabled", False)),
+        "platform_settlement_to_review_enabled":
+            bool(s.get("platform_settlement_to_review_enabled", False)),
+        "bank_transfer_review_enabled":
+            bool(s.get("bank_transfer_review_enabled", False)),
         # Iter-182 — operation types hidden from "new transaction" picker.
         "hidden_transaction_types": s.get("hidden_transaction_types", []),
         # Iter-184 — operation→accounts binding (per-op allow-list).
@@ -3894,6 +3907,9 @@ api.include_router(make_financial_movements_router(db, current_user))
 from bank_transfer_review_routes import make_bank_transfer_review_router
 api.include_router(
     make_bank_transfer_review_router(db, current_user))
+# Iter-251 · Phase 2A — Settlement Dry-Run Engine (READ-ONLY analysis).
+from settlement_engine_routes import make_settlement_engine_router
+api.include_router(make_settlement_engine_router(db, current_user))
 # Iter-246 — Read-only audit of legacy screens still in use.
 from legacy_usage_report_routes import make_legacy_usage_report_router
 api.include_router(make_legacy_usage_report_router(db, current_user))
