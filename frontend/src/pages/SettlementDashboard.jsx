@@ -872,11 +872,13 @@ export default function SettlementDashboard() {
                                     <div className="bg-slate-50 rounded-lg p-3 mb-3 text-[11px] text-slate-600 flex items-center gap-2 flex-wrap">
                                         {detailsData.formula_source && (
                                             <span className={`px-2 py-0.5 rounded font-extrabold ${
-                                                detailsData.formula_source === "Actual Settlement Formula"
+                                                detailsData.formula_source === "BNPL Settlement Formula (Real)"
                                                     ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                                                    : detailsData.formula_source === "BNPL Settlement Formula"
-                                                        ? "bg-indigo-100 text-indigo-800 border border-indigo-300"
-                                                        : "bg-amber-100 text-amber-800 border border-amber-300"
+                                                    : detailsData.formula_source === "Actual Settlement Formula"
+                                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                                        : detailsData.formula_source === "BNPL Settlement Formula"
+                                                            ? "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                                                            : "bg-amber-100 text-amber-800 border border-amber-300"
                                             }`} data-testid="se-formula-source">
                                                 📐 {detailsData.formula_source}
                                             </span>
@@ -916,7 +918,9 @@ export default function SettlementDashboard() {
                                                 <th className="p-2 text-center">إجمالي</th>
                                                 <th className="p-2 text-center">مرتجعات</th>
                                                 <th className="p-2 text-center">العمولة</th>
-                                                <th className="p-2 text-center">VAT</th>
+                                                <th className="p-2 text-center">VAT عمولة</th>
+                                                <th className="p-2 text-center">رسوم التسوية</th>
+                                                <th className="p-2 text-center">VAT رسوم</th>
                                                 <th className="p-2 text-center">صافي التحويل</th>
                                             </tr>
                                         </thead>
@@ -938,6 +942,8 @@ export default function SettlementDashboard() {
                                                     <td className="p-2 text-center font-mono text-rose-700">{fmt(inv.refunds)}</td>
                                                     <td className="p-2 text-center font-mono text-amber-700">{fmt(inv.estimated_commission)}</td>
                                                     <td className="p-2 text-center font-mono text-violet-700">{fmt(inv.estimated_vat)}</td>
+                                                    <td className="p-2 text-center font-mono text-slate-600">{fmt(inv.settlement_fee || 0)}</td>
+                                                    <td className="p-2 text-center font-mono text-slate-500">{fmt(inv.settlement_fee_vat || 0)}</td>
                                                     <td className="p-2 text-center font-mono text-indigo-800 font-extrabold">{fmt(inv.expected_transfer)}</td>
                                                 </tr>
                                             ))}
