@@ -56,6 +56,65 @@ async def _seed_tamara(db, uid, dates):
 
 
 @pytest.mark.asyncio
+async def test_rebuild_cleans_up_stale_derived_rows_when_registered_arrives(db):
+    """Iter-251 v7 — Reproduces the bug the user hit:
+    1. First rebuild (only settlement_entries exists) → calendar has
+       a derived row with invoice_date = settlement_date.
+    2. Later, a BNPL settlement gets registered → registered row
+       arrives with a DIFFERENT invoice_date (= period_from).
+    3. Rebuild must DELETE the stale derived row, leaving only the
+       registered one.
+    """
+    uid = f"u_{uuid.uuid4().hex[:6]}"
+    # Step 1: only settlement_entries exists → derived row
+    await db.settlement_entries.insert_one({
+        "user_id": uid, "provider": "tabby",
+        "settlement_reference": "TBY-1",
+        "settlement_date": "2026-05-04",
+        "actual_gross_amount": 100, "actual_refund_amount": 0,
+        "actual_payment_fee": 7, "actual_payment_vat": 1,
+        "actual_net_amount": 92, "event_type": "sale",
+    })
+    from provider_invoice_calendar import rebuild_calendar
+    r1 = await rebuild_calendar(db, uid, _user(uid), "tabby")
+    assert r1["from_derived"] == 1
+    assert r1["from_registered"] == 0
+    cal_before = await get_calendar(db, uid, "tabby")
+    assert len(cal_before) == 1
+    assert cal_before[0]["invoice_date"] == "2026-05-04"
+    assert cal_before[0]["source"] == "settlement_entries"
+
+    # Step 2: registered settlement arrives
+    await db.general_ledger.insert_one({
+        "id": str(uuid.uuid4()), "user_id": uid,
+        "txn_group_id": "tg-1", "entry_no": 1,
+        "entry_type": "bnpl_settlement", "status": "posted",
+        "side": "credit", "entity_type": "payment_gateway",
+        "entity_id": "tabby",
+        "amount": 92, "posted_at": "2026-05-05T10:00:00Z",
+        "metadata": {
+            "provider": "tabby",
+            "period_from":   "2026-04-27",
+            "period_to":     "2026-05-04",
+            "settlement_date": "2026-05-04",
+            "settlement_reference": "TBY-1",
+            "transferred_amount": 92.0,
+        },
+    })
+
+    # Step 3: rebuild — stale derived row must be deleted
+    r2 = await rebuild_calendar(db, uid, _user(uid), "tabby")
+    assert r2["from_registered"] == 1
+    assert r2["deleted_stale"]   >= 1
+    cal_after = await get_calendar(db, uid, "tabby")
+    assert len(cal_after) == 1
+    assert cal_after[0]["invoice_date"] == "2026-04-27"
+    assert cal_after[0]["period_start"] == "2026-04-27"
+    assert cal_after[0]["period_end"]   == "2026-05-04"
+    assert cal_after[0]["source"]       == "registered_settlement"
+
+
+@pytest.mark.asyncio
 async def test_registered_settlements_take_priority(db):
     """The exact period_from/period_to stored on registered BNPL
     settlements (general_ledger) MUST be the source of truth — Dry

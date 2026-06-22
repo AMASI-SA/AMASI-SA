@@ -1151,4 +1151,143 @@ def make_settlement_engine_router(db, current_user):
             ],
         }
 
+    @router.get("/calendar/audit")
+    async def audit_calendar(
+        provider: str,
+        user: dict = Depends(current_user),
+    ):
+        """Iter-251 v7 — Per-invoice Read-Only audit.
+
+        For every calendar entry currently stored for ``provider``,
+        explains WHY it has its current source and whether a matching
+        ``general_ledger`` bnpl_settlement exists.  Pure diagnostic —
+        no database writes.
+        """
+        if provider not in PROVIDER_MATCHERS:
+            raise HTTPException(400, f"مزوّد غير معروف: {provider}")
+        uid = user["id"]
+
+        # 1. Pull current calendar
+        cal = []
+        async for c in db.provider_invoice_calendar.find(
+            {"user_id": uid, "provider": provider}, {"_id": 0},
+        ).sort("invoice_date", 1):
+            cal.append(c)
+
+        # 2. Pull ALL bnpl_settlement entries for this provider —
+        #    no status / side filter so we see everything that
+        #    exists.  We'll group by txn_group_id so each settlement
+        #    surfaces once.
+        all_gl: dict[str, dict] = {}  # txn_group_id → first entry
+        side_breakdown: dict[str, int] = {}
+        status_breakdown: dict[str, int] = {}
+        async for e in db.general_ledger.find(
+            {"user_id": uid, "entry_type": "bnpl_settlement"},
+            {"_id": 0, "entry_no": 1, "txn_group_id": 1, "side": 1,
+             "status": 1, "entity_type": 1, "entity_id": 1,
+             "amount": 1, "metadata": 1, "posted_at": 1, "notes": 1},
+        ):
+            meta = e.get("metadata") or {}
+            # Match by entity_id (case-insensitive) OR by metadata.provider
+            ent_match = (
+                (e.get("entity_id") or "").lower() == provider.lower()
+                or (meta.get("provider") or "").lower() == provider.lower()
+            )
+            if not ent_match:
+                continue
+            side_breakdown[e.get("side") or "?"] = (
+                side_breakdown.get(e.get("side") or "?", 0) + 1)
+            status_breakdown[e.get("status") or "?"] = (
+                status_breakdown.get(e.get("status") or "?", 0) + 1)
+            grp = e.get("txn_group_id") or e.get("entry_no")
+            if grp in all_gl:
+                continue
+            all_gl[grp] = {
+                "entry_no":           e.get("entry_no"),
+                "txn_group_id":       e.get("txn_group_id"),
+                "side":               e.get("side"),
+                "status":             e.get("status"),
+                "entity_type":        e.get("entity_type"),
+                "entity_id":          e.get("entity_id"),
+                "amount":             e.get("amount"),
+                "posted_at":          e.get("posted_at"),
+                "metadata_period_from": meta.get("period_from"),
+                "metadata_period_to":   meta.get("period_to"),
+                "metadata_period_nested": meta.get("period"),
+                "metadata_settlement_date": meta.get("settlement_date"),
+                "metadata_settlement_ref":  meta.get("settlement_reference"),
+                "metadata_provider":  meta.get("provider"),
+                "passes_strict_filter": (
+                    e.get("status") == "posted"
+                    and e.get("side") == "credit"
+                    and e.get("entity_type") == "payment_gateway"
+                    and (e.get("entity_id") or "").lower() == provider.lower()
+                ),
+            }
+
+        gl_groups = list(all_gl.values())
+
+        # 3. For each calendar row, find candidate GL match (by exact
+        #    period_from, then by period overlap, then by reference).
+        rows = []
+        for c in cal:
+            cf, ct = c.get("period_start"), c.get("period_end")
+            ref    = c.get("source_ref")
+            exact, overlap, by_ref = [], [], []
+            for g in gl_groups:
+                gf = (g.get("metadata_period_from") or "")[:10]
+                gt = (g.get("metadata_period_to")   or "")[:10]
+                gref = g.get("metadata_settlement_ref")
+                if gf == cf and gt == ct:
+                    exact.append(g)
+                    continue
+                # Overlap test
+                if gf and gt and cf and ct and not (gt < cf or gf > ct):
+                    overlap.append(g)
+                if ref and gref and gref == ref:
+                    by_ref.append(g)
+            best = exact[0] if exact else (
+                overlap[0] if overlap else (
+                    by_ref[0] if by_ref else None))
+            rows.append({
+                "invoice_date":   c.get("invoice_date"),
+                "period_from":    cf,
+                "period_to":      ct,
+                "source":         c.get("source"),
+                "layout":         c.get("layout"),
+                "match_type":     ("exact_period" if exact
+                                    else "overlap" if overlap
+                                    else "by_reference" if by_ref
+                                    else "none"),
+                "gl_match_count": len(exact) + len(overlap) + len(by_ref),
+                "gl_passes_strict_filter": (
+                    best.get("passes_strict_filter") if best else None),
+                "gl_side":        best.get("side") if best else None,
+                "gl_status":      best.get("status") if best else None,
+                "gl_entity_id":   best.get("entity_id") if best else None,
+                "gl_metadata_period_from":
+                    best.get("metadata_period_from") if best else None,
+                "gl_metadata_period_to":
+                    best.get("metadata_period_to") if best else None,
+                "gl_metadata_settlement_ref":
+                    best.get("metadata_settlement_ref") if best else None,
+            })
+
+        return {
+            "provider":             provider,
+            "calendar_rows":        len(cal),
+            "gl_groups_found":      len(gl_groups),
+            "gl_side_breakdown":    side_breakdown,
+            "gl_status_breakdown":  status_breakdown,
+            "rows":                 rows,
+            "note": (
+                "Read-only diagnostic. No data was modified. Use this "
+                "to understand why a calendar entry has its current "
+                "source — and whether the GL has matching settlements "
+                "that the strict filter (status=posted, side=credit, "
+                "entity_type=payment_gateway, entity_id=<provider>) "
+                "is excluding."
+            ),
+        }
+
     return router

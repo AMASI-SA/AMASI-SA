@@ -434,6 +434,37 @@ async def rebuild_calendar(
         seen_invoice_dates.add(e["invoice_date"])
     merged.sort(key=lambda x: x["period_start"])
 
+    # Iter-251 v7 — Clean up stale non-manual rows whose period
+    # now overlaps a registered-settlement period (so the rebuild
+    # truly converges).  Without this, an older row created when
+    # `invoice_date = settlement_date` (e.g. 2026-05-04 with period
+    # 2026-04-28 → 2026-05-04) would stay in the DB even after a
+    # new registered-settlement row with `invoice_date = period_from`
+    # (e.g. 2026-04-27 with period 2026-04-27 → 2026-05-04) is added.
+    deleted_stale = 0
+    if not dry_run and registered:
+        async for c in db.provider_invoice_calendar.find(
+            {"user_id": uid, "provider": provider,
+             "source": {"$ne": "manual"}},
+            {"_id": 0, "id": 1, "period_start": 1, "period_end": 1,
+             "invoice_date": 1, "source": 1},
+        ):
+            cf = c.get("period_start") or ""
+            ct = c.get("period_end")   or ""
+            inv = c.get("invoice_date")
+            # If this calendar row overlaps a registered period AND
+            # is NOT itself a registered_settlement covering the
+            # SAME period, drop it.
+            for rf, rt in reg_spans:
+                if not (ct < rf or cf > rt):
+                    # Keep only if THIS row is the registered one
+                    if cf == rf and ct == rt and inv == rf:
+                        break
+                    await db.provider_invoice_calendar.delete_one(
+                        {"id": c["id"], "user_id": uid})
+                    deleted_stale += 1
+                    break
+
     inserted, updated, skipped_manual = 0, 0, 0
     from_registered, from_derived = 0, 0
     for e in merged:
@@ -495,6 +526,7 @@ async def rebuild_calendar(
         "inserted":         inserted,
         "updated":          updated,
         "skipped_manual":   skipped_manual,
+        "deleted_stale":    deleted_stale,
         "dry_run":          dry_run,
     }
 

@@ -197,6 +197,8 @@ function CalendarPanel() {
     const [provider, setProvider] = useState("tamara");
     const [items, setItems] = useState([]);
     const [busy, setBusy] = useState(false);
+    const [auditOpen, setAuditOpen] = useState(false);
+    const [auditData, setAuditData] = useState(null);
     const [manual, setManual] = useState({
         invoice_date: "", period_start: "", period_end: "",
         expected_transfer_date: "",
@@ -307,6 +309,21 @@ function CalendarPanel() {
         }
     }
 
+    async function runAudit() {
+        setBusy(true);
+        try {
+            const { data } = await api.get(
+                "/settlement-engine/calendar/audit",
+                { params: { provider } });
+            setAuditData(data);
+            setAuditOpen(true);
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل التدقيق");
+        } finally {
+            setBusy(false);
+        }
+    }
+
     async function remove(id) {
         if (!window.confirm("حذف هذه الفاتورة من التقويم؟")) return;
         try {
@@ -362,6 +379,12 @@ function CalendarPanel() {
                             data-testid="se-cal-diagnose-btn"
                             title="يكشف مصدر التقويم الحالي وكم تسوية مسجلة موجودة">
                         🔍 تشخيص
+                    </button>
+                    <button onClick={runAudit} disabled={busy}
+                            className="text-xs font-bold px-3 py-1.5 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40"
+                            data-testid="se-cal-audit-btn"
+                            title="تقرير Read-Only لكل فاتورة: مصدرها، هل لها مطابق في GL، وقيم metadata">
+                        📋 تقرير تدقيق
                     </button>
                     <button onClick={load}
                             className="text-xs px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200"
@@ -474,6 +497,104 @@ function CalendarPanel() {
                     </tbody>
                 </table>
             </div>
+
+            {auditOpen && auditData && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+                     onClick={() => setAuditOpen(false)}
+                     data-testid="se-cal-audit-modal">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-auto"
+                         onClick={(e) => e.stopPropagation()}>
+                        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                            <div className="text-sm font-extrabold">
+                                📋 تقرير تدقيق Read-Only — {auditData.provider}
+                            </div>
+                            <button onClick={() => setAuditOpen(false)}
+                                    className="text-slate-400 hover:text-slate-700 text-xl">
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <div className="bg-slate-50 rounded-lg p-3 mb-3 text-[11px] flex items-center gap-3 flex-wrap">
+                                <span><b>صفوف التقويم:</b> {auditData.calendar_rows}</span>
+                                <span><b>BNPL settlements في GL:</b> {auditData.gl_groups_found}</span>
+                                {auditData.gl_side_breakdown && (
+                                    <span><b>side:</b> {JSON.stringify(auditData.gl_side_breakdown)}</span>
+                                )}
+                                {auditData.gl_status_breakdown && (
+                                    <span><b>status:</b> {JSON.stringify(auditData.gl_status_breakdown)}</span>
+                                )}
+                            </div>
+                            <table className="min-w-full text-[11px] border border-slate-200">
+                                <thead className="bg-slate-100 sticky top-0">
+                                    <tr className="text-right">
+                                        <th className="p-2">الفاتورة</th>
+                                        <th className="p-2">period_from</th>
+                                        <th className="p-2">period_to</th>
+                                        <th className="p-2">المصدر</th>
+                                        <th className="p-2">نوع المطابقة</th>
+                                        <th className="p-2 text-center">عدد المطابقات</th>
+                                        <th className="p-2">يجتاز الفلتر الصارم؟</th>
+                                        <th className="p-2">GL.side</th>
+                                        <th className="p-2">GL.status</th>
+                                        <th className="p-2">GL.entity_id</th>
+                                        <th className="p-2">GL.meta.period_from</th>
+                                        <th className="p-2">GL.meta.period_to</th>
+                                        <th className="p-2">GL.meta.ref</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {auditData.rows.map((r, i) => (
+                                        <tr key={i} className="border-t hover:bg-slate-50">
+                                            <td className="p-2 font-mono">{r.invoice_date}</td>
+                                            <td className="p-2 font-mono">{r.period_from}</td>
+                                            <td className="p-2 font-mono">{r.period_to}</td>
+                                            <td className="p-2 text-[10px]">
+                                                <span className={`px-1.5 py-0.5 rounded font-bold ${
+                                                    r.source === "registered_settlement"
+                                                        ? "bg-emerald-100 text-emerald-800"
+                                                        : r.source === "manual"
+                                                            ? "bg-amber-100 text-amber-800"
+                                                            : "bg-indigo-100 text-indigo-700"
+                                                }`}>
+                                                    {r.source}
+                                                </span>
+                                            </td>
+                                            <td className="p-2 text-[10px]">
+                                                <span className={`px-1.5 py-0.5 rounded font-bold ${
+                                                    r.match_type === "exact_period"
+                                                        ? "bg-emerald-100 text-emerald-800"
+                                                        : r.match_type === "overlap"
+                                                            ? "bg-amber-100 text-amber-800"
+                                                            : r.match_type === "by_reference"
+                                                                ? "bg-violet-100 text-violet-800"
+                                                                : "bg-rose-100 text-rose-700"
+                                                }`}>
+                                                    {r.match_type}
+                                                </span>
+                                            </td>
+                                            <td className="p-2 text-center font-mono">{r.gl_match_count}</td>
+                                            <td className="p-2 text-center">
+                                                {r.gl_passes_strict_filter === true ? "✅"
+                                                 : r.gl_passes_strict_filter === false ? "❌"
+                                                 : "—"}
+                                            </td>
+                                            <td className="p-2 font-mono">{r.gl_side || "—"}</td>
+                                            <td className="p-2 font-mono">{r.gl_status || "—"}</td>
+                                            <td className="p-2 font-mono">{r.gl_entity_id || "—"}</td>
+                                            <td className="p-2 font-mono text-emerald-700">{r.gl_metadata_period_from || "—"}</td>
+                                            <td className="p-2 font-mono text-emerald-700">{r.gl_metadata_period_to || "—"}</td>
+                                            <td className="p-2 font-mono text-[10px]">{r.gl_metadata_settlement_ref || "—"}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="mt-3 text-[11px] text-slate-500 leading-relaxed">
+                                {auditData.note}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
