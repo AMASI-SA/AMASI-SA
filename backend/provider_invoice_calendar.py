@@ -174,51 +174,77 @@ async def extract_calendar_from_registered_settlements(
     MUST match them so the merchant sees 1:1 parity with what they
     actually saved.
 
-    Returns ascending list of:
-        {invoice_date, period_start, period_end,
-         expected_transfer_date, source, source_ref,
-         settlement_dates, orders_count_hint, net_hint,
-         layout}
+    Robustness — legacy entries (pre iter-246x) may have an empty
+    ``metadata.period_from``.  For those we fall back to:
+      • ``metadata.period.from`` / ``metadata.period.to`` (older nesting)
+      • parsing the period out of ``settlement_reference``
+        (e.g.  ``TABBY-2026-06-15-AUTO`` → from=2026-06-15)
+      • deriving the 7-day window ending on ``settlement_date`` when
+        no period info exists at all.
     """
     pipeline = [
         {"$match": {
-            "user_id":   uid,
-            "entry_type": "bnpl_settlement",
-            "status":    "posted",
-            "side":      "credit",
+            "user_id":     uid,
+            "entry_type":  "bnpl_settlement",
+            "status":      "posted",
+            "side":        "credit",
             "entity_type": "payment_gateway",
-            "entity_id":  provider,
-            "metadata.period_from": {"$nin": [None, ""]},
-            "metadata.period_to":   {"$nin": [None, ""]},
+            "entity_id":   provider,
         }},
-        {"$sort": {"metadata.period_from": 1}},
+        {"$sort": {"posted_at": 1}},
     ]
     out: list[dict] = []
     seen: set[tuple[str, str]] = set()
     async for e in db.general_ledger.aggregate(pipeline):
         meta = e.get("metadata") or {}
+        # ── Resolve period_from / period_to ─────────────────────
         p_from = (meta.get("period_from") or "")[:10]
         p_to   = (meta.get("period_to")   or "")[:10]
-        if not p_from or not p_to:
+        if not (p_from and p_to):
+            nested = meta.get("period") or {}
+            p_from = p_from or (nested.get("from") or "")[:10]
+            p_to   = p_to   or (nested.get("to")   or "")[:10]
+        ref = meta.get("settlement_reference") or ""
+        if not p_from and ref:
+            # Patterns:  PROV-YYYY-MM-DD-...   or   PROV-YYYYMMDD-...
+            import re as _re
+            m = _re.search(r"(\d{4})-(\d{2})-(\d{2})", ref)
+            if m:
+                p_from = m.group(0)
+            else:
+                m2 = _re.search(r"(\d{4})(\d{2})(\d{2})", ref)
+                if m2:
+                    p_from = f"{m2.group(1)}-{m2.group(2)}-{m2.group(3)}"
+        sd = (meta.get("settlement_date") or "")[:10]
+        if not p_to and sd:
+            p_to = sd
+        if not p_from and sd:
+            # 7-day window ending on settlement_date
+            try:
+                p_from = (date.fromisoformat(sd) -
+                          timedelta(days=6)).isoformat()
+            except Exception:
+                pass
+        if not (p_from and p_to):
+            # Cannot resolve a period at all — skip with a warning
+            # the caller can surface in the rebuild summary.
             continue
         if (p_from, p_to) in seen:
             continue
         seen.add((p_from, p_to))
-        sd = (meta.get("settlement_date") or p_to)[:10]
-        ref = meta.get("settlement_reference")
         out.append({
             "invoice_date":            p_from,  # matches BNPL page's
                                                   # "from" anchor
             "period_start":            p_from,
             "period_end":              p_to,
-            "expected_transfer_date":  sd,
+            "expected_transfer_date":  sd or p_to,
             "source":                  "registered_settlement",
-            "source_ref":              ref,
+            "source_ref":              ref or None,
             "settlement_dates":        [sd] if sd else [],
             "orders_count_hint":       None,
             "net_hint":                round(float(
                 meta.get("transferred_amount") or 0), 2),
-            "layout":                  "registered",  # provenance flag
+            "layout":                  "registered",
         })
     return out
 

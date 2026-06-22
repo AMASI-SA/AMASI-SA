@@ -1084,4 +1084,71 @@ def make_settlement_engine_router(db, current_user):
             raise HTTPException(404, "السجل غير موجود")
         return {"ok": True, "deleted": entry_id}
 
+    @router.get("/calendar/diagnose")
+    async def diagnose_calendar(
+        provider: str,
+        user: dict = Depends(current_user),
+    ):
+        """Iter-251 v6 — Show *why* the calendar landed where it did
+        so the merchant can verify whether registered settlements
+        are being recognised."""
+        if provider not in PROVIDER_MATCHERS:
+            raise HTTPException(400, f"مزوّد غير معروف: {provider}")
+        uid = user["id"]
+        # Registered settlements found in general_ledger
+        from provider_invoice_calendar import (
+            extract_calendar_from_registered_settlements as _ext_reg,
+            extract_calendar_from_settlement_entries     as _ext_sen,
+        )
+        reg = await _ext_reg(db, uid, provider)
+        sen = await _ext_sen(db, uid, provider)
+        # Raw GL entries to confirm what's actually stored
+        raw_gl_count = await db.general_ledger.count_documents({
+            "user_id": uid,
+            "entry_type": "bnpl_settlement",
+            "status": "posted",
+            "side": "credit",
+            "entity_type": "payment_gateway",
+            "entity_id":  provider,
+        })
+        # Sample (up to 5) raw entries to inspect metadata fields
+        samples = []
+        async for e in db.general_ledger.find(
+            {
+                "user_id": uid,
+                "entry_type": "bnpl_settlement",
+                "status": "posted",
+                "side": "credit",
+                "entity_type": "payment_gateway",
+                "entity_id":  provider,
+            },
+            {"_id": 0, "entry_no": 1, "metadata": 1, "posted_at": 1,
+             "amount": 1},
+        ).sort("posted_at", -1).limit(5):
+            meta = e.get("metadata") or {}
+            samples.append({
+                "entry_no":           e.get("entry_no"),
+                "posted_at":          e.get("posted_at"),
+                "amount":             e.get("amount"),
+                "settlement_ref":     meta.get("settlement_reference"),
+                "settlement_date":    meta.get("settlement_date"),
+                "period_from":        meta.get("period_from"),
+                "period_to":          meta.get("period_to"),
+                "period_nested":      meta.get("period"),
+                "has_period_fields":  bool(meta.get("period_from")
+                                           and meta.get("period_to")),
+            })
+        return {
+            "provider":               provider,
+            "general_ledger_settlements_found": raw_gl_count,
+            "from_registered_extracted":        len(reg),
+            "from_settlement_entries_extracted": len(sen),
+            "samples":                          samples,
+            "extracted_registered_periods": [
+                {"invoice_date": r["invoice_date"],
+                 "period_start": r["period_start"],
+                 "period_end":   r["period_end"]} for r in reg[:10]
+            ],
+        }
+
     return router

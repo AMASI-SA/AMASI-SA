@@ -286,6 +286,27 @@ function CalendarPanel() {
         }
     }
 
+    async function diagnose() {
+        try {
+            const { data } = await api.get(
+                "/settlement-engine/calendar/diagnose",
+                { params: { provider } });
+            const sample = data.samples?.[0];
+            const msg = [
+                `📊 تشخيص ${provider}:`,
+                `GL: ${data.general_ledger_settlements_found} مسجّلة`,
+                `قابلة للاستخراج: ${data.from_registered_extracted}`,
+                `من ملفات: ${data.from_settlement_entries_extracted}`,
+                sample ? `period_from: ${sample.period_from || "—"}` : "",
+                sample ? `period_to: ${sample.period_to || "—"}` : "",
+            ].filter(Boolean).join(" · ");
+            toast.info(msg, { duration: 12000 });
+            console.log("Full diagnose:", data);
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل التشخيص");
+        }
+    }
+
     async function remove(id) {
         if (!window.confirm("حذف هذه الفاتورة من التقويم؟")) return;
         try {
@@ -335,6 +356,12 @@ function CalendarPanel() {
                             data-testid="se-cal-rebuild-all-btn"
                             title="يُعيد بناء التقويم لتمارا/تابي/إمكان/سلة دفعةً واحدة">
                         {busy ? "..." : "🌐 إعادة بناء الكل"}
+                    </button>
+                    <button onClick={diagnose} disabled={busy}
+                            className="text-xs font-bold px-3 py-1.5 rounded bg-slate-700 text-white hover:bg-slate-900 disabled:opacity-40"
+                            data-testid="se-cal-diagnose-btn"
+                            title="يكشف مصدر التقويم الحالي وكم تسوية مسجلة موجودة">
+                        🔍 تشخيص
                     </button>
                     <button onClick={load}
                             className="text-xs px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200"
