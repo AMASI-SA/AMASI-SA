@@ -161,6 +161,13 @@ async def test_dry_run_uses_calendar_when_present(db):
        Inv 2026-05-23: covers 2026-05-23 → 2026-05-29
        Inv 2026-05-30: covers 2026-05-30 → 2026-06-05
        Inv 2026-06-06: covers 2026-06-06 → 2026-06-12
+
+    Iter-251 v4 — BNPL providers (tamara/tabby/imkan) now read their
+    amounts from `payment_transactions` via
+    `compute_settlement_for_provider` (same source as the BNPL
+    settlements page).  This test focuses on the *boundary* outputs
+    that the calendar feature is responsible for; per-amount math is
+    covered by the BNPL service's own test-suite.
     """
     from settlement_engine_routes import make_settlement_engine_router
 
@@ -168,29 +175,10 @@ async def test_dry_run_uses_calendar_when_present(db):
     await _seed_tamara(db, uid,
                        ["2026-05-23", "2026-05-30", "2026-06-06"])
     await rebuild_calendar(db, uid, _user(uid), "tamara")
-    # Orders:
-    #  • 2026-05-25 → falls in invoice 23/05 cycle
-    #  • 2026-05-28 → falls in invoice 23/05 cycle
-    #  • 2026-06-02 → falls in invoice 30/05 cycle
-    await db.unified_orders.insert_many([
-        {"user_id": uid, "payment_method": "تمارا",
-         "order_number": f"O-{uid}-1",
-         "order_date": "2026-05-25", "total_amount": 200.0,
-         "refund_amount": 0},
-        {"user_id": uid, "payment_method": "tamara",
-         "order_number": f"O-{uid}-2",
-         "order_date": "2026-05-28", "total_amount": 300.0,
-         "refund_amount": 0},
-        {"user_id": uid, "payment_method": "tamara",
-         "order_number": f"O-{uid}-3",
-         "order_date": "2026-06-02", "total_amount": 50.0,
-         "refund_amount": 0},
-    ])
 
     async def _dep():
         return _user(uid)
     router = make_settlement_engine_router(db, _dep)
-
     handler = None
     for r in router.routes:
         if r.path.endswith("/dry-run-details") and "GET" in (r.methods or set()):
@@ -201,19 +189,15 @@ async def test_dry_run_uses_calendar_when_present(db):
     prov_block = out["providers"]["tamara"]
     inv_dates = [i["invoice_date"] for i in prov_block["invoices"]]
     assert inv_dates == ["2026-05-23", "2026-05-30", "2026-06-06"]
-    # First invoice (23/05) contains BOTH 25 + 28 May orders.
     by_inv = {i["invoice_date"]: i for i in prov_block["invoices"]}
-    assert by_inv["2026-05-23"]["orders_count"] == 2
-    assert by_inv["2026-05-23"]["gross_sales"] == 500.0
-    assert by_inv["2026-05-30"]["orders_count"] == 1
-    assert by_inv["2026-05-30"]["gross_sales"] == 50.0
-    assert by_inv["2026-06-06"]["orders_count"] == 0
     # Period boundaries match Tamara reality (Sat → Fri).
     assert by_inv["2026-05-23"]["period_from"] == "2026-05-23"
     assert by_inv["2026-05-23"]["period_to"]   == "2026-05-29"
     assert by_inv["2026-05-30"]["period_from"] == "2026-05-30"
     assert by_inv["2026-05-30"]["period_to"]   == "2026-06-05"
     assert prov_block["cycle"]["uses_calendar"] is True
+    # Iter-251 v4 — BNPL uses the real settlement service.
+    assert prov_block["cycle"]["computation"] == "real_bnpl"
 
 
 @pytest.mark.asyncio

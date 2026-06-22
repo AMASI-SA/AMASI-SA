@@ -489,30 +489,98 @@ def make_settlement_engine_router(db, current_user):
 
     # Helpers — pulled outside the router for testability.
     async def _simulate_weekly(uid, prov, cycle):
-        # Iter-251 · Phase 2A v3 — When a `provider_invoice_calendar`
-        # exists for this provider, use the REAL invoice dates (and
-        # the matching period boundaries / expected_transfer_date)
-        # instead of arbitrary ISO-week buckets.  This is what makes
-        # Tamara's Dry-Run align with the merchant's actual invoice
-        # series (e.g. 23/05, 30/05, 06/06, …).
+        # Iter-251 · Phase 2A v4 — Unify BNPL Dry-Run with the real
+        # `/bnpl-settlements/register` computation so simulated
+        # amounts match the merchant's actual BNPL invoices.
         #
-        # Rule resolution is delegated to the central
-        # `_resolve_provider_rules` helper, which reads from the
-        # same source as `/bnpl-settlements/register` for BNPL
-        # providers. Hard-coded rates removed.
+        #   • For Tamara/Tabby/Imkan we delegate per-period totals to
+        #     `compute_settlement_for_provider(period_start, period_end)`
+        #     — the SAME function used by the BNPL settlements page
+        #     (which reads from `payment_transactions` with all
+        #     per-order commission / VAT / fixed-fee rules).
+        #
+        #   • For Salla / fallback we keep the legacy
+        #     `unified_orders` bucket logic.
+        #
+        # Calendar entries (when present) govern the period
+        # boundaries — so Tamara's Saturday → Friday windows align
+        # with the merchant's actual invoice calendar.
         rules = await _resolve_provider_rules(db, uid, prov)
         commission_rate = rules["commission_rate"]
         vat_rate        = rules["vat_rate_on_commission"]
 
         calendar_entries = await _get_calendar(db, uid, prov)
-        matchers = PROVIDER_MATCHERS[prov]
-        or_clauses = [
-            {"payment_method": {"$regex": m, "$options": "i"}}
-            for m in matchers
-        ]
+
+        if prov in ("tamara", "tabby", "imkan") and calendar_entries:
+            # ── REAL BNPL computation per calendar entry ──
+            from bnpl.settlements_service import (
+                compute_settlement_for_provider,
+            )
+            invoices = []
+            for idx, c in enumerate(calendar_entries, start=1):
+                s = await compute_settlement_for_provider(
+                    db, uid, prov,
+                    c["period_start"], c["period_end"],
+                )
+                t = s.get("totals", {}) or {}
+                invoices.append({
+                    "dry_invoice_id":         f"DRY-{prov.upper()}-{idx:03d}",
+                    "invoice_date":           c["invoice_date"],
+                    "period_from":            c["period_start"],
+                    "period_to":              c["period_end"],
+                    "expected_transfer_date": c["expected_transfer_date"],
+                    "orders_count":           int(t.get("transactions_count") or 0),
+                    "gross_sales":            round(float(t.get("gross_sales") or 0), 2),
+                    "refunds":                round(float(t.get("total_refunds") or 0), 2),
+                    "net_sales":              round(float(t.get("net_sales") or 0), 2),
+                    "estimated_commission":   round(float(t.get("commission") or 0), 2),
+                    "estimated_vat":          round(float(t.get("commission_vat") or 0), 2),
+                    "settlement_fee":         round(float(t.get("settlement_fee") or 0), 2),
+                    "settlement_fee_vat":     round(float(t.get("settlement_fee_vat") or 0), 2),
+                    "expected_transfer":      round(float(t.get("net_payable") or 0), 2),
+                    "snap_applied":           c.get("snap_applied", False),
+                })
+            totals = {
+                "invoices_count":      len(invoices),
+                "orders_count":        sum(i["orders_count"]    for i in invoices),
+                "gross_sales":         round(sum(i["gross_sales"]
+                                                  for i in invoices), 2),
+                "refunds":             round(sum(i["refunds"]
+                                                  for i in invoices), 2),
+                "net_sales":           round(sum(i["net_sales"]
+                                                  for i in invoices), 2),
+                "estimated_commission":round(sum(i["estimated_commission"]
+                                                  for i in invoices), 2),
+                "estimated_vat":       round(sum(i["estimated_vat"]
+                                                  for i in invoices), 2),
+                "expected_transfer":   round(sum(i["expected_transfer"]
+                                                  for i in invoices), 2),
+            }
+            return {
+                "provider":       prov,
+                "provider_ar":    PROVIDER_AR[prov],
+                "source":         (
+                    "payment_transactions → compute_settlement_for_provider() "
+                    "[نفس مصدر صفحة BNPL]"
+                ),
+                "formula_source": "BNPL Settlement Formula (Real)",
+                "cycle":          {**cycle,
+                                    "uses_calendar": True,
+                                    "calendar_entries": len(invoices),
+                                    "computation": "real_bnpl"},
+                "rules":          rules,
+                "totals":         totals,
+                "invoices":       invoices,
+            }
 
         if calendar_entries:
-            # Bucket orders into calendar-defined periods.
+            # ── Non-BNPL provider with calendar (Salla): bucket
+            # unified_orders into calendar periods. ──
+            matchers = PROVIDER_MATCHERS[prov]
+            or_clauses = [
+                {"payment_method": {"$regex": m, "$options": "i"}}
+                for m in matchers
+            ]
             buckets: dict[str, dict] = {
                 c["invoice_date"]: {
                     "invoice_date":           c["invoice_date"],
@@ -523,8 +591,6 @@ def make_settlement_engine_router(db, current_user):
                 }
                 for c in calendar_entries
             }
-            # Sorted list of (invoice_date, period_from, period_to)
-            # so we can do a single linear walk on the orders cursor.
             sorted_invs = sorted(calendar_entries,
                                   key=lambda x: x["invoice_date"])
             cursor = db.unified_orders.find(
@@ -537,7 +603,6 @@ def make_settlement_engine_router(db, current_user):
                 d_iso = d_str[:10]
                 if not d_iso or len(d_iso) < 10:
                     continue
-                # Find the first calendar entry where period_start ≤ d ≤ period_end.
                 for c in sorted_invs:
                     if c["period_start"] <= d_iso <= c["period_end"]:
                         b = buckets[c["invoice_date"]]
@@ -591,7 +656,7 @@ def make_settlement_engine_router(db, current_user):
                                    f"({len(invoices)} entries) → "
                                    "unified_orders"),
                 "formula_source": (
-                    "BNPL Settlement Formula + Real Invoice Calendar"
+                    "Estimated Formula + Real Invoice Calendar"
                 ),
                 "cycle":          {**cycle,
                                     "uses_calendar": True,
@@ -602,6 +667,11 @@ def make_settlement_engine_router(db, current_user):
             }
 
         # ── No calendar yet: legacy ISO-week buckets ──
+        matchers = PROVIDER_MATCHERS[prov]
+        or_clauses = [
+            {"payment_method": {"$regex": m, "$options": "i"}}
+            for m in matchers
+        ]
         cursor = db.unified_orders.find(
             {"user_id": uid, "$or": or_clauses},
             {"_id": 0, "id": 1, "order_date": 1, "total_amount": 1,
