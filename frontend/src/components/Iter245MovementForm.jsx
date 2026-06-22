@@ -19,6 +19,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import api from "../lib/api";
+// Iter-250b · P2 (Phase 3) — Product autocomplete + quick-create.
+import ProductLineAutocomplete from "./ProductLineAutocomplete";
 
 const TERMS = [
     { value: "cash", label: "نقدي" },
@@ -610,14 +612,65 @@ export default function Iter245MovementForm({
                                 return (
                                     <tr key={i} className="border-t border-amber-200">
                                         <td className="p-1">
-                                            <input
-                                                value={r.description}
-                                                onChange={(e) =>
-                                                    updateLine(i, "description",
-                                                        e.target.value)}
-                                                placeholder="مثال: عباية كلوش"
-                                                className="w-full border rounded px-2 py-1 text-xs"
-                                                data-testid={`iter245-mv-line-desc-${i}`} />
+                                            {movementType === "supplier_invoice" ? (
+                                                <ProductLineAutocomplete
+                                                    value={r.product_id ? {
+                                                        product_id: r.product_id,
+                                                        name: r.description || r.product_name,
+                                                        image_url: r.image_url,
+                                                        category_paths: r.category_path ? [r.category_path] : [],
+                                                    } : null}
+                                                    onSelect={(p) => {
+                                                        const rows = [...lineItems];
+                                                        if (!p) {
+                                                            // Clearing — remove product link.
+                                                            rows[i] = {
+                                                                ...rows[i],
+                                                                product_id: null,
+                                                                product_name: null,
+                                                                image_url: null,
+                                                                category_ids: null,
+                                                                category_path: null,
+                                                                description: "",
+                                                            };
+                                                        } else {
+                                                            rows[i] = {
+                                                                ...rows[i],
+                                                                product_id:    p.product_id,
+                                                                product_name:  p.name,
+                                                                image_url:     p.image_url,
+                                                                category_ids:  p.category_ids,
+                                                                category_path: p.category_paths?.[0] || null,
+                                                                cost_current:  p.cost_current,
+                                                                cost_avg:      p.cost_avg,
+                                                                description:   p.name,
+                                                                // Pre-fill unit_price from last cost when empty.
+                                                                unit_price:    rows[i].unit_price || (p.cost_current ?? ""),
+                                                            };
+                                                        }
+                                                        setLineItems(rows);
+                                                    }}
+                                                />
+                                            ) : (
+                                                <input
+                                                    value={r.description}
+                                                    onChange={(e) =>
+                                                        updateLine(i, "description",
+                                                            e.target.value)}
+                                                    placeholder="مثال: عباية كلوش"
+                                                    className="w-full border rounded px-2 py-1 text-xs"
+                                                    data-testid={`iter245-mv-line-desc-${i}`} />
+                                            )}
+                                            {r.product_id && (r.cost_current != null || r.cost_avg != null) && (
+                                                <div className="text-[10px] text-slate-500 mt-1 font-mono">
+                                                    آخر: <b className="text-emerald-800">
+                                                        {Number(r.cost_current || 0).toFixed(2)}
+                                                    </b>
+                                                    {" "}· متوسط: <b className="text-indigo-800">
+                                                        {Number(r.cost_avg || 0).toFixed(2)}
+                                                    </b>
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="p-1">
                                             <input

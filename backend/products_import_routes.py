@@ -579,9 +579,15 @@ def make_products_router_phase2(db, current_user):
         skip:  int = 0,
         user: dict = Depends(current_user),
     ):
-        """READ-ONLY list with search + pagination. The autocomplete in
-        the supplier-invoice form (Phase 3) uses this same endpoint
-        with a smaller limit."""
+        """READ-ONLY list with search + ranking + pagination.
+
+        Ranking when `q` is provided (per the merchant's spec):
+          1. Name starts with the query
+          2. Name contains the query (anywhere)
+          3. Token-based similarity (any token of the name starts
+             with the query)
+          4. product_id / sku / barcode exact-ish match
+        """
         uid = user["id"]
         flt: dict = {"user_id": uid, "is_active": True}
         if needs_cost is True:
@@ -590,20 +596,50 @@ def make_products_router_phase2(db, current_user):
             flt["category_ids"] = category_id
         if q:
             qn = _norm_key(q)
-            # The compiled regex handles fuzzy substring matching on
-            # the lowercased name. Phase 3 will add a more advanced
-            # ranking; for now we accept basic LIKE-style filtering.
+            qr = re.escape(qn)
             flt["$or"] = [
-                {"name_lower": {"$regex": re.escape(qn)}},
+                {"name_lower": {"$regex": qr}},
                 {"product_id": {"$regex": re.escape(q.strip())}},
+                {"sku":        {"$regex": re.escape(q.strip())}},
+                {"barcode":    {"$regex": re.escape(q.strip())}},
             ]
-        total = await db.products.count_documents(flt)
         items: list[dict] = []
+        # Pull a generous page when we need to rank — ranking is
+        # cheaper than DB ordering across multiple priority buckets.
+        fetch_limit = min(limit * 5, 500) if q else min(limit, 200)
         async for d in db.products.find(flt, {"_id": 0}) \
-                .sort([("updated_at", -1)]).skip(skip).limit(min(limit, 200)):
+                .sort([("updated_at", -1)]).skip(skip).limit(fetch_limit):
             items.append(d)
-        # Build a name map for category_ids → joined path (cheap lookup
-        # constrained to the categories that appear in the result).
+
+        if q:
+            qn = _norm_key(q)
+            qd = q.strip()
+
+            def _rank(p: dict) -> tuple:
+                nl = p.get("name_lower") or ""
+                pid = p.get("product_id") or ""
+                sku = p.get("sku") or ""
+                bcd = p.get("barcode") or ""
+                if nl.startswith(qn):
+                    bucket = 0
+                elif qn in nl:
+                    bucket = 1
+                elif any(tok.startswith(qn) for tok in nl.split()):
+                    bucket = 2
+                elif qd and qd in pid:
+                    bucket = 3
+                elif qd and (sku and qd in sku):
+                    bucket = 4
+                elif qd and (bcd and qd in bcd):
+                    bucket = 5
+                else:
+                    bucket = 9
+                # Secondary: shorter names first (more relevant).
+                return (bucket, len(nl), nl)
+            items.sort(key=_rank)
+            items = items[: min(limit, 200)]
+
+        total = await db.products.count_documents(flt)
         all_cids: set = set()
         for it in items:
             for c in (it.get("category_ids") or []):
@@ -623,6 +659,81 @@ def make_products_router_phase2(db, current_user):
             it["category_paths"] = paths
         return {"items": items, "total": total,
                 "skip": skip, "limit": limit}
+
+    # ---------- Quick create (Phase 3 — from supplier invoice) ----------
+    @router.post("/quick-create")
+    async def products_quick_create(
+        payload: dict,
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        name = _norm(payload.get("name"))
+        if not name:
+            raise HTTPException(400, "اسم المنتج إلزامي")
+        product_id = _norm(payload.get("product_id")) or str(uuid.uuid4())[:8]
+        # Reject if product_id already exists for this user.
+        clash = await db.products.find_one(
+            {"user_id": uid, "product_id": product_id},
+            {"_id": 0, "id": 1, "name": 1})
+        if clash:
+            raise HTTPException(
+                409, f"رقم المنتج «{product_id}» مستخدم لمنتج آخر «"
+                + (clash.get("name") or "") + "»")
+        # Resolve category — falls back to "غير مصنف" when not given.
+        cat_id = _norm(payload.get("category_id"))
+        if not cat_id:
+            root = await _ensure_product_root(db, uid)
+            uncat = await _ensure_uncategorized(db, uid, root)
+            cat_id = uncat["id"]
+        else:
+            ok = await db.expense_categories.find_one(
+                {"user_id": uid, "id": cat_id, "kind": "product"},
+                {"_id": 0, "id": 1})
+            if not ok:
+                raise HTTPException(400, "التصنيف غير صالح")
+        cost_raw = payload.get("cost")
+        cost = None
+        if cost_raw not in (None, ""):
+            try:
+                cost = round(float(cost_raw), 2)
+                if cost <= 0:
+                    cost = None
+            except (TypeError, ValueError):
+                cost = None
+        now = _now()
+        image_url = _norm(payload.get("image_url")) or None
+        history = ([{"amount": cost, "source": "quick-create",
+                     "at": now}] if cost is not None else [])
+        doc = {
+            "id":           str(uuid.uuid4()),
+            "user_id":      uid,
+            "product_id":   product_id,
+            "name":         name,
+            "name_lower":   _norm_key(name),
+            "category_ids": [cat_id],
+            "image_url":    image_url,
+            "image_urls":   ([image_url] if image_url else []),
+            "cost_current": cost,
+            "cost_avg":     cost,
+            "cost_history": history,
+            "sku":          None,
+            "barcode":      None,
+            "needs_cost":   (cost is None),
+            "is_active":    True,
+            "imported": {"source": "quick-create", "at": now},
+            "notes":        _norm(payload.get("notes")) or None,
+            "created_at":   now,
+            "updated_at":   now,
+        }
+        await db.products.insert_one(doc)
+        # Strip the BSON `_id` Motor adds in-place after insert.
+        doc.pop("_id", None)
+        # Hydrate category_paths for immediate UI use.
+        cat = await db.expense_categories.find_one(
+            {"id": cat_id, "user_id": uid},
+            {"_id": 0, "path": 1})
+        doc["category_paths"] = [cat.get("path", []) if cat else []]
+        return {"ok": True, "product": doc}
 
     @router.post("/import/preview")
     async def products_import_preview(
