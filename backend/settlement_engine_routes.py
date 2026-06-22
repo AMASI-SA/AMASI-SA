@@ -43,6 +43,12 @@ from settlement_engine_generation import (
     PERIOD_STATUSES as _PERIOD_STATUSES,
     EXPECTED_TRANSFER_STATUSES as _XFER_STATUSES,
 )
+from provider_invoice_calendar import (
+    get_calendar as _get_calendar,
+    rebuild_calendar as _rebuild_calendar,
+    upsert_manual_entry as _upsert_manual_calendar,
+    delete_entry as _delete_calendar_entry,
+)
 
 
 # Provider → list of payment_method substrings that classify an order.
@@ -166,6 +172,20 @@ class GenerateIn(BaseModel):
 
 class CancelInvoiceIn(BaseModel):
     reason: str = Field(..., min_length=1, max_length=500)
+
+
+# ─── Iter-251 · Phase 2A.5 — Provider Invoice Calendar DTOs ───────
+class CalendarRebuildIn(BaseModel):
+    provider: str
+    dry_run:  bool = False
+
+
+class CalendarManualIn(BaseModel):
+    provider:               str
+    invoice_date:           str   # YYYY-MM-DD
+    period_start:           str
+    period_end:             str
+    expected_transfer_date: str
 
 
 def _now() -> str:
@@ -469,18 +489,119 @@ def make_settlement_engine_router(db, current_user):
 
     # Helpers — pulled outside the router for testability.
     async def _simulate_weekly(uid, prov, cycle):
-        # Iter-251 · Phase 2A v2 — Rule resolution is delegated to the
-        # central `_resolve_provider_rules` helper, which reads from
-        # the same source as `/bnpl-settlements/register` for BNPL
+        # Iter-251 · Phase 2A v3 — When a `provider_invoice_calendar`
+        # exists for this provider, use the REAL invoice dates (and
+        # the matching period boundaries / expected_transfer_date)
+        # instead of arbitrary ISO-week buckets.  This is what makes
+        # Tamara's Dry-Run align with the merchant's actual invoice
+        # series (e.g. 23/05, 30/05, 06/06, …).
+        #
+        # Rule resolution is delegated to the central
+        # `_resolve_provider_rules` helper, which reads from the
+        # same source as `/bnpl-settlements/register` for BNPL
         # providers. Hard-coded rates removed.
         rules = await _resolve_provider_rules(db, uid, prov)
         commission_rate = rules["commission_rate"]
         vat_rate        = rules["vat_rate_on_commission"]
+
+        calendar_entries = await _get_calendar(db, uid, prov)
         matchers = PROVIDER_MATCHERS[prov]
         or_clauses = [
             {"payment_method": {"$regex": m, "$options": "i"}}
             for m in matchers
         ]
+
+        if calendar_entries:
+            # Bucket orders into calendar-defined periods.
+            buckets: dict[str, dict] = {
+                c["invoice_date"]: {
+                    "invoice_date":           c["invoice_date"],
+                    "period_from":            c["period_start"],
+                    "period_to":              c["period_end"],
+                    "expected_transfer_date": c["expected_transfer_date"],
+                    "orders":  0, "gross": 0.0, "refunds": 0.0,
+                }
+                for c in calendar_entries
+            }
+            # Sorted list of (invoice_date, period_from, period_to)
+            # so we can do a single linear walk on the orders cursor.
+            sorted_invs = sorted(calendar_entries,
+                                  key=lambda x: x["invoice_date"])
+            cursor = db.unified_orders.find(
+                {"user_id": uid, "$or": or_clauses},
+                {"_id": 0, "order_date": 1, "total_amount": 1,
+                 "refund_amount": 1},
+            )
+            async for o in cursor:
+                d_str = o.get("order_date") or ""
+                d_iso = d_str[:10]
+                if not d_iso or len(d_iso) < 10:
+                    continue
+                # Find the first calendar entry where period_start ≤ d ≤ period_end.
+                for c in sorted_invs:
+                    if c["period_start"] <= d_iso <= c["period_end"]:
+                        b = buckets[c["invoice_date"]]
+                        b["orders"]  += 1
+                        b["gross"]   += float(o.get("total_amount") or 0)
+                        b["refunds"] += float(o.get("refund_amount") or 0)
+                        break
+
+            invoices = []
+            for idx, c in enumerate(sorted_invs, start=1):
+                b = buckets[c["invoice_date"]]
+                net_sales  = round(b["gross"] - b["refunds"], 2)
+                commission = round(net_sales * commission_rate, 2)
+                vat        = round(commission * vat_rate, 2)
+                expected_transfer = round(
+                    net_sales - commission - vat, 2)
+                invoices.append({
+                    "dry_invoice_id":         f"DRY-{prov.upper()}-{idx:03d}",
+                    "invoice_date":           b["invoice_date"],
+                    "period_from":            b["period_from"],
+                    "period_to":              b["period_to"],
+                    "expected_transfer_date": b["expected_transfer_date"],
+                    "orders_count":           b["orders"],
+                    "gross_sales":            round(b["gross"], 2),
+                    "refunds":                round(b["refunds"], 2),
+                    "net_sales":              net_sales,
+                    "estimated_commission":   commission,
+                    "estimated_vat":          vat,
+                    "expected_transfer":      expected_transfer,
+                })
+            totals = {
+                "invoices_count":      len(invoices),
+                "orders_count":        sum(i["orders_count"]   for i in invoices),
+                "gross_sales":         round(sum(i["gross_sales"]
+                                                  for i in invoices), 2),
+                "refunds":             round(sum(i["refunds"]
+                                                  for i in invoices), 2),
+                "net_sales":           round(sum(i["net_sales"]
+                                                  for i in invoices), 2),
+                "estimated_commission":round(sum(i["estimated_commission"]
+                                                  for i in invoices), 2),
+                "estimated_vat":       round(sum(i["estimated_vat"]
+                                                  for i in invoices), 2),
+                "expected_transfer":   round(sum(i["expected_transfer"]
+                                                  for i in invoices), 2),
+            }
+            return {
+                "provider":       prov,
+                "provider_ar":    PROVIDER_AR[prov],
+                "source":         (f"provider_invoice_calendar "
+                                   f"({len(invoices)} entries) → "
+                                   "unified_orders"),
+                "formula_source": (
+                    "BNPL Settlement Formula + Real Invoice Calendar"
+                ),
+                "cycle":          {**cycle,
+                                    "uses_calendar": True,
+                                    "calendar_entries": len(invoices)},
+                "rules":          rules,
+                "totals":         totals,
+                "invoices":       invoices,
+            }
+
+        # ── No calendar yet: legacy ISO-week buckets ──
         cursor = db.unified_orders.find(
             {"user_id": uid, "$or": or_clauses},
             {"_id": 0, "id": 1, "order_date": 1, "total_amount": 1,
@@ -549,12 +670,12 @@ def make_settlement_engine_router(db, current_user):
         return {
             "provider":       prov,
             "provider_ar":    PROVIDER_AR[prov],
-            "source":         "unified_orders → weekly buckets",
+            "source":         "unified_orders → weekly buckets (no calendar)",
             "formula_source": (
                 "BNPL Settlement Formula" if prov in ("tamara", "tabby")
                 else "Estimated Formula"
             ),
-            "cycle":          cycle,
+            "cycle":          {**cycle, "uses_calendar": False},
             "rules":          rules,
             "totals":         totals,
             "invoices":       invoices,
@@ -826,5 +947,71 @@ def make_settlement_engine_router(db, current_user):
                 "expected_amount": round(float(r.get("amount") or 0), 2),
             }
         return {"summary": out, "per_provider": per_provider}
+
+    # ═════════════════════════════════════════════════════════════════
+    # Iter-251 · Phase 2A.5 — Provider Invoice Calendar
+    # Real invoice dates extracted from settlement_entries (or hand-
+    # entered for forecasting). Used by Dry-Run + Phase 2B generation
+    # so simulated invoices align with the merchant's actual calendar
+    # (e.g. Tamara 23/05, 30/05, 06/06, …) — no arbitrary ISO weeks.
+    # ═════════════════════════════════════════════════════════════════
+    @router.get("/calendar")
+    async def get_calendar(
+        provider: str,
+        from_date: Optional[str] = Query(None),
+        to_date:   Optional[str] = Query(None),
+        user: dict = Depends(current_user),
+    ):
+        if provider not in PROVIDER_MATCHERS:
+            raise HTTPException(400, f"مزوّد غير معروف: {provider}")
+        items = await _get_calendar(
+            db, user["id"], provider,
+            from_date=from_date, to_date=to_date,
+        )
+        return {
+            "provider": provider,
+            "count":    len(items),
+            "items":    items,
+        }
+
+    @router.post("/calendar/rebuild")
+    async def rebuild_calendar(
+        payload: CalendarRebuildIn,
+        user: dict = Depends(current_user),
+    ):
+        if payload.provider not in PROVIDER_MATCHERS:
+            raise HTTPException(400, f"مزوّد غير معروف: {payload.provider}")
+        return await _rebuild_calendar(
+            db, user["id"], user, payload.provider,
+            dry_run=payload.dry_run,
+        )
+
+    @router.post("/calendar/manual")
+    async def add_calendar_manual(
+        payload: CalendarManualIn,
+        user: dict = Depends(current_user),
+    ):
+        if payload.provider not in PROVIDER_MATCHERS:
+            raise HTTPException(400, f"مزوّد غير معروف: {payload.provider}")
+        try:
+            return await _upsert_manual_calendar(
+                db, user["id"], user, payload.provider,
+                invoice_date=payload.invoice_date,
+                period_start=payload.period_start,
+                period_end=payload.period_end,
+                expected_transfer_date=payload.expected_transfer_date,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @router.delete("/calendar/{entry_id}")
+    async def remove_calendar_entry(
+        entry_id: str,
+        user: dict = Depends(current_user),
+    ):
+        ok = await _delete_calendar_entry(db, user["id"], entry_id)
+        if not ok:
+            raise HTTPException(404, "السجل غير موجود")
+        return {"ok": True, "deleted": entry_id}
 
     return router

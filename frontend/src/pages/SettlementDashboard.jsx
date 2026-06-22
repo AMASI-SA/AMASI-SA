@@ -193,6 +193,209 @@ function FeatureFlagsPanel({ flags, onChange }) {
     );
 }
 
+function CalendarPanel() {
+    const [provider, setProvider] = useState("tamara");
+    const [items, setItems] = useState([]);
+    const [busy, setBusy] = useState(false);
+    const [manual, setManual] = useState({
+        invoice_date: "", period_start: "", period_end: "",
+        expected_transfer_date: "",
+    });
+
+    async function load() {
+        try {
+            const { data } = await api.get(
+                "/settlement-engine/calendar",
+                { params: { provider } });
+            setItems(data.items || []);
+        } catch (e) {
+            toast.error("فشل تحميل التقويم");
+        }
+    }
+    useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [provider]);
+
+    async function rebuild() {
+        setBusy(true);
+        try {
+            const { data } = await api.post(
+                "/settlement-engine/calendar/rebuild",
+                { provider, dry_run: false });
+            toast.success(
+                `جديد: ${data.inserted} · محدّث: ${data.updated} `
+                + `· مستخرج: ${data.extracted}`,
+            );
+            await load();
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل البناء");
+        } finally {
+            setBusy(false);
+        }
+    }
+    async function addManual() {
+        if (!manual.invoice_date || !manual.period_start
+            || !manual.period_end || !manual.expected_transfer_date) {
+            toast.error("جميع التواريخ مطلوبة");
+            return;
+        }
+        try {
+            await api.post(
+                "/settlement-engine/calendar/manual",
+                { provider, ...manual });
+            toast.success("تمت إضافة الفاتورة");
+            setManual({
+                invoice_date: "", period_start: "", period_end: "",
+                expected_transfer_date: "",
+            });
+            await load();
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل");
+        }
+    }
+    async function remove(id) {
+        if (!window.confirm("حذف هذه الفاتورة من التقويم؟")) return;
+        try {
+            await api.delete(`/settlement-engine/calendar/${id}`);
+            toast.success("تم الحذف");
+            await load();
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل الحذف");
+        }
+    }
+
+    return (
+        <div data-testid="se-calendar-panel">
+            <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 mb-4 text-xs text-violet-900">
+                <div className="font-extrabold mb-1">📅 تقويم فواتير المزوّد</div>
+                <div className="text-[11px] leading-relaxed">
+                    تواريخ الفواتير الحقيقية المستخرجة من <code>settlement_entries</code>. يستخدمها
+                    Dry-Run والـ Phase 2B لبناء الفترات بدلاً من تقسيم أسبوعي افتراضي.
+                    أي تعديل هنا ينعكس مباشرة على المحاكاة والتوليد.
+                </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-3 mb-4">
+                <div className="flex items-center gap-2 flex-wrap mb-3">
+                    <label className="text-[11px] font-bold">المزوّد
+                        <select value={provider}
+                                onChange={(e) => setProvider(e.target.value)}
+                                className="me-2 ms-1 border rounded p-1.5"
+                                data-testid="se-cal-provider">
+                            <option value="tamara">تمارا</option>
+                            <option value="tabby">تابي</option>
+                            <option value="salla">سلة</option>
+                            <option value="imkan">إمكان</option>
+                        </select>
+                    </label>
+                    <button onClick={rebuild} disabled={busy}
+                            className="text-xs font-bold px-3 py-1.5 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40"
+                            data-testid="se-cal-rebuild-btn">
+                        {busy ? "..." : "🔄 إعادة بناء من settlement_entries"}
+                    </button>
+                    <button onClick={load}
+                            className="text-xs px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200"
+                            data-testid="se-cal-reload">
+                        ↻ تحديث
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end pt-2 border-t border-slate-100">
+                    <label className="text-[11px]">إضافة يدوية: تاريخ الفاتورة
+                        <input type="date" value={manual.invoice_date}
+                               onChange={(e) => setManual(m => ({ ...m, invoice_date: e.target.value }))}
+                               className="w-full border rounded p-1.5 mt-0.5"
+                               data-testid="se-cal-m-inv" />
+                    </label>
+                    <label className="text-[11px]">بداية الفترة
+                        <input type="date" value={manual.period_start}
+                               onChange={(e) => setManual(m => ({ ...m, period_start: e.target.value }))}
+                               className="w-full border rounded p-1.5 mt-0.5"
+                               data-testid="se-cal-m-ps" />
+                    </label>
+                    <label className="text-[11px]">نهاية الفترة
+                        <input type="date" value={manual.period_end}
+                               onChange={(e) => setManual(m => ({ ...m, period_end: e.target.value }))}
+                               className="w-full border rounded p-1.5 mt-0.5"
+                               data-testid="se-cal-m-pe" />
+                    </label>
+                    <label className="text-[11px]">تاريخ التحويل المتوقع
+                        <input type="date" value={manual.expected_transfer_date}
+                               onChange={(e) => setManual(m => ({ ...m, expected_transfer_date: e.target.value }))}
+                               className="w-full border rounded p-1.5 mt-0.5"
+                               data-testid="se-cal-m-tx" />
+                    </label>
+                    <button onClick={addManual}
+                            className="text-xs font-bold px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-700"
+                            data-testid="se-cal-m-add">
+                        ➕ إضافة فاتورة
+                    </button>
+                </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden"
+                 data-testid="se-cal-table">
+                <div className="px-3 py-2 border-b border-slate-200 text-xs font-extrabold">
+                    📋 الفواتير ({items.length})
+                </div>
+                <table className="min-w-full text-xs">
+                    <thead className="bg-slate-50">
+                        <tr className="text-right">
+                            <th className="p-2">تاريخ الفاتورة</th>
+                            <th className="p-2">بداية الفترة</th>
+                            <th className="p-2">نهاية الفترة</th>
+                            <th className="p-2">تاريخ التحويل المتوقع</th>
+                            <th className="p-2 text-center">المصدر</th>
+                            <th className="p-2 text-center">الطلبات</th>
+                            <th className="p-2 text-center">صافي</th>
+                            <th className="p-2 text-center">حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.length === 0 ? (
+                            <tr><td colSpan={8} className="p-6 text-center text-slate-400">
+                                لا توجد فواتير في التقويم — اضغط «إعادة البناء».
+                            </td></tr>
+                        ) : items.map((c) => (
+                            <tr key={c.id} className="border-t hover:bg-slate-50"
+                                data-testid={`se-cal-row-${c.invoice_date}`}>
+                                <td className="p-2 font-mono font-extrabold text-violet-700">
+                                    {c.invoice_date}
+                                </td>
+                                <td className="p-2 font-mono">{c.period_start}</td>
+                                <td className="p-2 font-mono">{c.period_end}</td>
+                                <td className="p-2 font-mono text-emerald-700">
+                                    {c.expected_transfer_date}
+                                </td>
+                                <td className="p-2 text-center text-[10px]">
+                                    <span className={`px-2 py-0.5 rounded font-bold ${
+                                        c.source === "manual"
+                                            ? "bg-amber-100 text-amber-800"
+                                            : "bg-indigo-100 text-indigo-700"
+                                    }`}>
+                                        {c.source === "manual" ? "يدوي" : "من الملفات"}
+                                    </span>
+                                </td>
+                                <td className="p-2 text-center font-mono">
+                                    {c.orders_count_hint ?? "—"}
+                                </td>
+                                <td className="p-2 text-center font-mono text-slate-600">
+                                    {c.net_hint != null ? fmt(c.net_hint) : "—"}
+                                </td>
+                                <td className="p-2 text-center">
+                                    <button onClick={() => remove(c.id)}
+                                            className="text-[10px] text-rose-600 hover:underline"
+                                            data-testid={`se-cal-del-${c.invoice_date}`}>
+                                        حذف
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
 function GeneratedPanel({
     flags, stats, invoices, provider, setProvider,
     dateFrom, setDateFrom, dateTo, setDateTo,
@@ -525,6 +728,17 @@ export default function SettlementDashboard() {
                     🔬 Dry-Run
                 </button>
                 <button
+                    onClick={() => setActiveTab("calendar")}
+                    className={`px-4 py-2 text-xs font-extrabold border-b-2 -mb-px ${
+                        activeTab === "calendar"
+                            ? "border-violet-500 text-violet-700"
+                            : "border-transparent text-slate-500 hover:text-slate-700"
+                    }`}
+                    data-testid="se-tab-calendar"
+                >
+                    📅 تقويم الفواتير
+                </button>
+                <button
                     onClick={() => setActiveTab("generated")}
                     className={`px-4 py-2 text-xs font-extrabold border-b-2 -mb-px ${
                         activeTab === "generated"
@@ -536,6 +750,10 @@ export default function SettlementDashboard() {
                     📦 الفواتير المولّدة (Phase 2B)
                 </button>
             </div>
+
+            {activeTab === "calendar" && (
+                <CalendarPanel />
+            )}
 
             {activeTab === "generated" && (
                 <GeneratedPanel
@@ -673,11 +891,13 @@ export default function SettlementDashboard() {
                                     <table className="min-w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
                                         <thead className="bg-slate-100">
                                             <tr className="text-right">
-                                                <th className="p-2">رقم الفاتورة</th>
+                                                <th className="p-2">رقم</th>
+                                                <th className="p-2">تاريخ الفاتورة</th>
                                                 <th className="p-2">الفترة</th>
+                                                <th className="p-2">تاريخ التحويل المتوقع</th>
                                                 <th className="p-2 text-center">الطلبات</th>
-                                                <th className="p-2 text-center">إجمالي المبيعات</th>
-                                                <th className="p-2 text-center">المرتجعات</th>
+                                                <th className="p-2 text-center">إجمالي</th>
+                                                <th className="p-2 text-center">مرتجعات</th>
                                                 <th className="p-2 text-center">العمولة</th>
                                                 <th className="p-2 text-center">VAT</th>
                                                 <th className="p-2 text-center">صافي التحويل</th>
@@ -687,8 +907,14 @@ export default function SettlementDashboard() {
                                             {detailsData.invoices.map((inv, i) => (
                                                 <tr key={i} className="border-t hover:bg-slate-50">
                                                     <td className="p-2 font-mono font-bold">{inv.dry_invoice_id}</td>
+                                                    <td className="p-2 font-mono font-extrabold text-violet-700">
+                                                        {inv.invoice_date || "—"}
+                                                    </td>
                                                     <td className="p-2 font-mono text-slate-600">
                                                         {inv.period_from} → {inv.period_to}
+                                                    </td>
+                                                    <td className="p-2 font-mono text-emerald-700">
+                                                        {inv.expected_transfer_date || "—"}
                                                     </td>
                                                     <td className="p-2 text-center font-mono">{fmtInt(inv.orders_count)}</td>
                                                     <td className="p-2 text-center font-mono text-emerald-700">{fmt(inv.gross_sales)}</td>

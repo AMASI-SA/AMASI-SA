@@ -89,6 +89,33 @@ Backend: `supplier_ledger_detail_routes.py` reconciliation block now classifies 
 Period block exposes `total_cash_purchases` + `cash_invoices_count`. `drift_detected` no longer fires on cash invoices.
 Frontend: `SupplierLedgerDetailPage.jsx` now renders 3 separate sections (📗 / 🟠 / 🔴) instead of one «orphan» bucket. New summary card «إجمالي مشتريات نقدية». Excel export splits to 3 sheets.
 
+## Phase 2A.5 — Provider Invoice Calendar (2026-02 · CORE FIX)
+**Problem solved:** Tamara Dry-Run used arbitrary ISO-week buckets from order_date, so simulated invoice_date diverged from real Tamara dates (23/05, 30/05, 06/06, 13/06, 20/06).
+
+Backend:
+  - New module `provider_invoice_calendar.py`:
+      • `extract_calendar_from_settlement_entries(uid, provider)` — distinct `settlement_date` values become canonical invoice dates. period_start = prev_invoice+1 (or invoice−6 for first), period_end = invoice_date, expected_transfer_date = invoice + offset (Tamara=2d default, overrideable via `settings.calendar_transfer_offset_<provider>`).
+      • `rebuild_calendar` (idempotent upsert, preserves manual entries).
+      • `upsert_manual_entry` (forecast future invoices).
+      • `delete_entry`.
+  - New collection: `provider_invoice_calendar` with `(user_id, provider, invoice_date)` unique key.
+  - Modified `_simulate_weekly` (Dry-Run): when calendar exists → uses calendar periods exactly; orders bucket by `period_start ≤ order_date ≤ period_end`. Surfaces `invoice_date` + `expected_transfer_date` per invoice. Falls back to ISO-week buckets only when calendar is empty.
+  - Modified `_build_bnpl_periods` (Phase 2B): identical change — calendar → `compute_settlement_for_provider(period_start, period_end)` per entry. Hard-coded weekly cycles replaced.
+  - Rule resolution (commission/VAT) **still** comes from `_merchant_fee_rates` — calendar only governs period boundaries.
+
+Endpoints:
+  - `GET    /api/settlement-engine/calendar?provider=&from_date=&to_date=`
+  - `POST   /api/settlement-engine/calendar/rebuild` body `{provider, dry_run}`
+  - `POST   /api/settlement-engine/calendar/manual` body `{provider, invoice_date, period_start, period_end, expected_transfer_date}`
+  - `DELETE /api/settlement-engine/calendar/{id}`
+
+Frontend: `SettlementDashboard.jsx`
+  - New tab "📅 تقويم الفواتير" — provider picker, rebuild button, manual-add form, per-invoice table (source badge: من الملفات / يدوي), delete action.
+  - Dry-Run modal table now shows columns: تاريخ الفاتورة + تاريخ التحويل المتوقع (real calendar dates).
+
+Tests: `tests/test_iter251_phase2a5_invoice_calendar.py` — 5/5 PASS.
+  - Real invoice-date extraction, idempotent rebuild, manual-entry protection, end-to-end Dry-Run uses calendar, delete.
+
 ## Phase 2B — Settlement Engine Generation (2026-02 · FEATURE-FLAG GATED)
 Backend:
   - New module `settlement_engine_generation.py` — pure generation logic that delegates rule resolution to:

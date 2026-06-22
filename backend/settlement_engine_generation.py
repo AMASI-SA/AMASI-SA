@@ -103,17 +103,65 @@ async def _build_bnpl_periods(
     db, uid: str, provider: str,
     date_from: Optional[str], date_to: Optional[str],
 ) -> tuple[list[dict], dict]:
-    """Return (period_rows, rules_snapshot) for tamara/tabby by
-    delegating to ``compute_weekly_settlements`` — the canonical
-    pipeline used by ``/bnpl-settlements/register``."""
-    # Local import to avoid a circular import at module load time —
-    # ``bnpl.settlements_service`` imports ``tz_utils`` and other heavy
-    # modules.  This keeps the engine module lightweight.
+    """Return (period_rows, rules_snapshot) for tamara/tabby.
+
+    When a ``provider_invoice_calendar`` exists for this provider we
+    walk the calendar entries one-by-one and call
+    ``compute_settlement_for_provider(date_from=period_start,
+    date_to=period_end)``.  This guarantees that Phase 2B-generated
+    invoices use the SAME real invoice dates surfaced by the Dry-Run
+    panel (e.g. Tamara 23/05, 30/05, 06/06, …).
+
+    When no calendar exists we fall back to the legacy
+    ``compute_weekly_settlements`` (weekday-based weekly cycle from
+    ``bnpl_settings``).  All rules (commission, VAT, settlement fee)
+    still come from ``_merchant_fee_rates`` — never hard-coded.
+    """
     from bnpl.settlements_service import (
-        compute_weekly_settlements, _merchant_fee_rates,
+        compute_settlement_for_provider, compute_weekly_settlements,
+        _merchant_fee_rates,
     )
+    from provider_invoice_calendar import get_calendar as _cal
 
     rules = await _merchant_fee_rates(db, uid, provider)
+    calendar = await _cal(
+        db, uid, provider,
+        from_date=date_from, to_date=date_to,
+    )
+
+    if calendar:
+        rows: list[dict] = []
+        for idx, c in enumerate(calendar, start=1):
+            s = await compute_settlement_for_provider(
+                db, uid, provider,
+                c["period_start"], c["period_end"],
+            )
+            t = s.get("totals", {}) or {}
+            rows.append({
+                "invoice_no":             idx,
+                "from":                   c["period_start"],
+                "to":                     c["period_end"],
+                "issue_date":             c["invoice_date"],
+                "expected_transfer_date": c["expected_transfer_date"],
+                "transactions_count":     t.get("transactions_count", 0),
+                "refunds_count":          t.get("refunds_count", 0),
+                "gross_sales":            t.get("gross_sales", 0),
+                "total_refunds":          t.get("total_refunds", 0),
+                "net_sales":              t.get("net_sales", 0),
+                "commission":             t.get("commission", 0),
+                "commission_vat":         t.get("commission_vat", 0),
+                "settlement_fee":         t.get("settlement_fee", 0),
+                "settlement_fee_vat":     t.get("settlement_fee_vat", 0),
+                "net_payable":            t.get("net_payable", 0),
+                "data_source":            s.get("data_source", "computed"),
+            })
+        # Mark rules snapshot with calendar provenance.
+        rules = {**rules,
+                 "calendar_source": "provider_invoice_calendar",
+                 "calendar_entries": len(calendar)}
+        return rows, rules
+
+    # Legacy weekday cycle.
     rows = await compute_weekly_settlements(
         db, uid, provider, date_from, date_to,
     )
