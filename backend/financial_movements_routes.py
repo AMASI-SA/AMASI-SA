@@ -176,6 +176,119 @@ def _requires_line_items(cat_path: list[str]) -> bool:
     return bool(cat_path) and cat_path[0] in PURCHASE_ROOTS
 
 
+# ── Iter-250b · Phase 4 — Product cost auto-update on supplier-invoice
+#
+# When a `supplier_invoice` movement is successfully posted to the GL,
+# walk every line item that carries a `product_id` and append a new
+# cost-history record on the corresponding `products` document.  The
+# logic is STRICTLY APPEND-ONLY:
+#   • Never overwrite or delete previous `cost_history` entries.
+#   • `cost_current` becomes the unit_cost of the latest processed line.
+#   • `cost_avg` is recomputed as the quantity-weighted average across
+#     all history entries that carry both `quantity` AND `unit_cost`
+#     (which is the convention for supplier-invoice records).  Entries
+#     without quantity (legacy excel-import / quick-create seeds) are
+#     ignored in the weighted average, but seed `cost_current` & `avg`
+#     when no supplier history exists yet.
+#   • `needs_cost` flips to False once a valid cost is recorded.
+#
+# Failures here are logged but never break the invoice creation — the
+# GL post is the source of truth, the product catalogue is enrichment.
+async def _apply_product_cost_updates(
+    db,
+    uid: str,
+    mv: dict,
+) -> dict:
+    if mv.get("movement_type") != "supplier_invoice":
+        return {"updated": 0, "skipped": 0, "errors": []}
+
+    line_items = mv.get("line_items") or []
+    supplier_id = mv.get("supplier_id")
+    mv_id = mv.get("id")
+    doc_date = mv.get("doc_date")
+    now = _now()
+
+    updated = 0
+    skipped = 0
+    errors: list[str] = []
+
+    for li in line_items:
+        pid = (li.get("product_id") or "").strip()
+        if not pid:
+            skipped += 1
+            continue
+        qty = _r(li.get("quantity"))
+        unit_cost = _r(li.get("unit_price"))
+        total_cost = _r(qty * unit_cost)
+        if qty <= 0 or unit_cost <= 0:
+            skipped += 1
+            continue
+
+        # Resolve product by internal `id` first then by `product_id`
+        # (both are valid identifiers in the catalogue).
+        prod = await db.products.find_one(
+            {"user_id": uid,
+             "$or": [{"id": pid}, {"product_id": pid}]},
+            {"_id": 0, "id": 1, "cost_history": 1},
+        )
+        if not prod:
+            errors.append(f"product {pid} not found")
+            continue
+
+        history = prod.get("cost_history") or []
+
+        # Build the new (append-only) history record.
+        new_entry = {
+            "amount":              unit_cost,
+            "source":              "supplier-invoice",
+            "at":                  now,
+            "supplier_id":         supplier_id,
+            "supplier_invoice_id": mv_id,
+            "invoice_date":        doc_date,
+            "quantity":            qty,
+            "unit_cost":           unit_cost,
+            "total_cost":          total_cost,
+        }
+
+        # Weighted-avg over supplier-invoice entries (those carry qty).
+        # Include the new entry so the average stays in sync.
+        weighted_entries = [
+            h for h in (history + [new_entry])
+            if isinstance(h, dict)
+            and h.get("quantity") is not None
+            and h.get("unit_cost") is not None
+            and _r(h.get("quantity")) > 0
+        ]
+        if weighted_entries:
+            tot_qty = sum(_r(h["quantity"]) for h in weighted_entries)
+            tot_val = sum(
+                _r(h["quantity"]) * _r(h["unit_cost"])
+                for h in weighted_entries
+            )
+            cost_avg = round(tot_val / tot_qty, 2) if tot_qty else unit_cost
+        else:
+            cost_avg = unit_cost
+
+        try:
+            await db.products.update_one(
+                {"id": prod["id"], "user_id": uid},
+                {
+                    "$push": {"cost_history": new_entry},
+                    "$set": {
+                        "cost_current": unit_cost,
+                        "cost_avg":     cost_avg,
+                        "needs_cost":   False,
+                        "updated_at":   now,
+                    },
+                },
+            )
+            updated += 1
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{pid}: {e}")
+
+    return {"updated": updated, "skipped": skipped, "errors": errors}
+
+
 # ── Router ──────────────────────────────────────────────────────────
 
 def make_financial_movements_router(db, current_user):
@@ -713,6 +826,26 @@ def make_financial_movements_router(db, current_user):
                 500,
                 f"فشل ترحيل القيد المحاسبي: {e}",
             )
+
+        # Iter-250b · Phase 4 — Auto-update product catalogue costs
+        # after the GL has been posted successfully. Append-only; any
+        # failures are logged but never break the invoice creation.
+        try:
+            mv_fresh = await db.financial_movements.find_one(
+                {"id": mv_id, "user_id": uid}, {"_id": 0})
+            if mv_fresh:
+                cost_result = await _apply_product_cost_updates(
+                    db, uid, mv_fresh)
+                if cost_result.get("errors"):
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "Phase4 product-cost partial errors for mv %s: %s",
+                        mv_id, cost_result["errors"])
+        except Exception as e:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception(
+                "Phase4 product-cost update failed for mv %s: %s",
+                mv_id, e)
 
         out = await db.financial_movements.find_one(
             {"id": mv_id, "user_id": uid}, {"_id": 0})

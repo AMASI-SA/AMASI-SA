@@ -431,6 +431,8 @@ export default function Iter245MovementForm({
                         description: r.description.trim(),
                         quantity: Number(r.quantity),
                         unit_price: Number(r.unit_price),
+                        product_id: r.product_id || null,
+                        product_sku: r.product_sku || null,
                     }))
                 : [],
         };

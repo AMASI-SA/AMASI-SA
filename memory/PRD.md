@@ -111,6 +111,20 @@ Frontend:
   - `SuppliersUnificationForensicModal.jsx` — modal with 6 tabs (نظرة عامة، مورد جديد، Ledger فقط، مربوط، GL/FM أيتام، تكرارات مُشتبه بها)
 Tests: `tests/test_p15ab_suppliers_unification_forensic.py` — 3/3 PASS
 
+## Phase 4 — Product Cost Auto-Update on Supplier Invoice (2026-02)
+Backend: `financial_movements_routes._apply_product_cost_updates`
+  - Hook fires after a `supplier_invoice` movement is successfully posted to GL.
+  - Walks every `line_items[i].product_id`; for each match:
+    - Appends a new `cost_history` record with `{supplier_id, supplier_invoice_id, invoice_date, quantity, unit_cost, total_cost, source: "supplier-invoice", amount, at}`.
+    - Sets `cost_current = unit_cost` (latest).
+    - Recomputes `cost_avg` as quantity-weighted average across all history entries that carry `quantity`+`unit_cost`.
+    - Sets `needs_cost = false`.
+  - APPEND-ONLY: never deletes or overwrites prior history entries (excel-import / quick-create seeds preserved).
+  - Failures are logged but never break invoice creation.
+Frontend: `Iter245MovementForm.jsx` payload now sends `product_id` + `product_sku` per line item.
+Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-end curl verified weighted avg ((10×15 + 30×7) / 40 = 9.0).
+
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
