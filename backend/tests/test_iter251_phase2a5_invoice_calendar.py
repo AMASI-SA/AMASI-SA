@@ -56,6 +56,40 @@ async def _seed_tamara(db, uid, dates):
 
 
 @pytest.mark.asyncio
+async def test_tamara_snaps_sunday_to_saturday(db):
+    """When Tamara settlement_date is stored as Sunday (timezone
+    drift from Saudi UTC+3 → UTC), we snap back to the previous
+    Saturday and merge rows that collapse onto the same Saturday."""
+    uid = f"u_{uuid.uuid4().hex[:6]}"
+    # 2026-04-26 is Sunday; real Tamara invoice is Saturday 2026-04-25
+    await _seed_tamara(db, uid, ["2026-04-26"])
+    out = await extract_calendar_from_settlement_entries(
+        db, uid, "tamara")
+    assert len(out) == 1
+    assert out[0]["invoice_date"]  == "2026-04-25"  # snapped to Sat
+    assert out[0]["period_start"]  == "2026-04-25"
+    assert out[0]["period_end"]    == "2026-05-01"  # Fri
+    assert out[0]["snap_applied"]  is True
+    # Original date preserved for audit
+    assert "2026-04-26" in out[0]["settlement_dates"]
+
+
+@pytest.mark.asyncio
+async def test_tamara_snap_merges_split_rows(db):
+    """If a Saturday invoice has some rows stamped Sat and some
+    stamped Sun (mixed-timezone import), snapping merges them into
+    a single Saturday invoice."""
+    uid = f"u_{uuid.uuid4().hex[:6]}"
+    await _seed_tamara(db, uid, ["2026-04-25", "2026-04-26"])
+    out = await extract_calendar_from_settlement_entries(
+        db, uid, "tamara")
+    # Both rows collapse onto Sat 25/04
+    assert len(out) == 1
+    assert out[0]["invoice_date"] == "2026-04-25"
+    assert out[0]["orders_count_hint"] == 2
+
+
+@pytest.mark.asyncio
 async def test_extract_real_invoice_dates_from_settlement_entries(db):
     uid = f"u_{uuid.uuid4().hex[:6]}"
     # Real-world Tamara invoice dates from the user — all Saturdays

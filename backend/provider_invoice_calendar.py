@@ -69,6 +69,51 @@ _PERIOD_LAYOUTS = {
 }
 
 
+# Iter-251 · Phase 2A.5 v3 — Snap-to-weekday.
+#
+# Some providers (Tamara) ALWAYS issue invoices on a specific
+# weekday (Saturday for Tamara).  But imports often shift the date
+# by one day because the source file was timestamped at end-of-day
+# in Saudi time (UTC+3) and stored as UTC — so a Saturday invoice
+# lands in the DB as Sunday.
+#
+# When the layout is "invoice_as_start", we snap `settlement_date`
+# BACKWARD to the most recent occurrence of the target weekday.
+# Overridable via ``settings.calendar_snap_to_weekday_<provider>``:
+#     null   → disabled
+#     0..6   → Monday..Sunday (Python weekday convention)
+_DEFAULT_SNAP_WEEKDAY = {
+    "tamara": 5,  # Saturday
+}
+
+
+async def _snap_weekday(
+    db, uid: str, provider: str,
+) -> Optional[int]:
+    s = await db.settings.find_one(
+        {"user_id": uid},
+        {"_id": 0, f"calendar_snap_to_weekday_{provider}": 1},
+    ) or {}
+    raw = s.get(f"calendar_snap_to_weekday_{provider}", "__UNSET__")
+    if raw == "__UNSET__":
+        return _DEFAULT_SNAP_WEEKDAY.get(provider)
+    if raw is None:
+        return None
+    try:
+        v = int(raw)
+        return v if 0 <= v <= 6 else None
+    except Exception:
+        return _DEFAULT_SNAP_WEEKDAY.get(provider)
+
+
+def _snap_to_weekday_backward(d: str, target: int) -> str:
+    """Return the most recent date ≤ ``d`` whose weekday equals
+    ``target`` (Python convention, Monday=0)."""
+    dt = date.fromisoformat(d)
+    delta = (dt.weekday() - target) % 7
+    return (dt - timedelta(days=delta)).isoformat()
+
+
 async def _period_layout(db, uid: str, provider: str) -> str:
     s = await db.settings.find_one(
         {"user_id": uid},
@@ -162,6 +207,39 @@ async def extract_calendar_from_settlement_entries(
 
     layout = await _period_layout(db, uid, provider)
     offset = await _transfer_offset(db, uid, provider, layout)
+
+    # Iter-251 v3 — snap raw settlement_date to the configured
+    # weekday (e.g. Saturday for Tamara) and merge rows that collide
+    # after snapping (handles the +1d timezone drift).
+    snap_target = None
+    if layout == "invoice_as_start":
+        snap_target = await _snap_weekday(db, uid, provider)
+    if snap_target is not None:
+        merged: dict[str, dict] = {}
+        for row in rows:
+            snapped = _snap_to_weekday_backward(
+                row["settlement_date"], snap_target)
+            m = merged.setdefault(snapped, {
+                "settlement_date":  snapped,
+                "orders_count":     0,
+                "net":              0.0,
+                "refs":             [],
+                "raw_dates":        [],
+            })
+            m["orders_count"] += row["orders_count"]
+            m["net"]          += row["net"]
+            m["refs"]         += row["refs"]
+            if row["settlement_date"] not in m["raw_dates"]:
+                m["raw_dates"].append(row["settlement_date"])
+        rows = [
+            {**v, "net": round(v["net"], 2)}
+            for v in sorted(merged.values(),
+                            key=lambda x: x["settlement_date"])
+        ]
+    else:
+        for row in rows:
+            row.setdefault("raw_dates", [row["settlement_date"]])
+
     out: list[dict] = []
 
     if layout == "invoice_as_start":
@@ -179,10 +257,13 @@ async def extract_calendar_from_settlement_entries(
                 "expected_transfer_date":  expected_transfer_date,
                 "source":                  "settlement_entries",
                 "source_ref":              ref,
-                "settlement_dates":        [inv],
+                "settlement_dates":        row.get("raw_dates", [inv]),
                 "orders_count_hint":       row["orders_count"],
                 "net_hint":                row["net"],
                 "layout":                  layout,
+                "snap_applied":            snap_target is not None
+                                            and row.get("raw_dates",
+                                                       [inv]) != [inv],
             })
         return out
 

@@ -370,6 +370,12 @@ function CalendarPanel() {
                                 data-testid={`se-cal-row-${c.invoice_date}`}>
                                 <td className="p-2 font-mono font-extrabold text-violet-700">
                                     {c.invoice_date}
+                                    {c.snap_applied && (
+                                        <span className="ms-2 text-[9px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded"
+                                              title={`الأصلي: ${(c.settlement_dates || []).join(", ")}`}>
+                                            🔧 معدّل
+                                        </span>
+                                    )}
                                 </td>
                                 <td className="p-2 font-mono">{c.period_start}</td>
                                 <td className="p-2 font-mono">{c.period_end}</td>
