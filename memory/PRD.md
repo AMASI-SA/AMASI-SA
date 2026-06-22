@@ -89,6 +89,36 @@ Backend: `supplier_ledger_detail_routes.py` reconciliation block now classifies 
 Period block exposes `total_cash_purchases` + `cash_invoices_count`. `drift_detected` no longer fires on cash invoices.
 Frontend: `SupplierLedgerDetailPage.jsx` now renders 3 separate sections (📗 / 🟠 / 🔴) instead of one «orphan» bucket. New summary card «إجمالي مشتريات نقدية». Excel export splits to 3 sheets.
 
+## Phase 2B — Settlement Engine Generation (2026-02 · FEATURE-FLAG GATED)
+Backend:
+  - New module `settlement_engine_generation.py` — pure generation logic that delegates rule resolution to:
+      • `bnpl.settlements_service.compute_weekly_settlements` + `_merchant_fee_rates` for Tamara/Tabby (same source as `/bnpl-settlements/register`).
+      • `db.settlement_entries` grouped by `settlement_reference` for Salla.
+      • `imkan` returns `rule_source_missing` (no central rules yet — no hard-coded fallback).
+  - New collections: `settlement_periods`, `settlement_invoices`, `expected_transfers` (linked via FK ids).
+  - Invoice lifecycle: draft / generated / waiting_transfer / pending_review / confirmed / confirmed_with_difference / cancelled.
+  - All writes gated by `settings.settlement_engine_enabled` (defaults OFF). 403 returned when disabled.
+  - `dry_run=true` ALWAYS allowed (no persistence) — for the merchant to preview output safely.
+  - Idempotent on `(user_id, provider, period_from, period_to)`: re-runs reuse existing ids.
+  - No GL writes, no bank_transfer_review creation here. Phase 2C will wire those in.
+
+Endpoints (under `/api/settlement-engine`):
+  - `POST /generate` — body `{provider, date_from, date_to, dry_run}` → counts + ids
+  - `GET  /periods?provider=&status=&from_date=&to_date=`
+  - `GET  /invoices?provider=&status=&from_date=&to_date=`
+  - `GET  /invoices/{id}` → invoice + period + expected_transfer
+  - `POST /invoices/{id}/cancel` body `{reason}`
+  - `GET  /expected-transfers?provider=&status=`
+  - `GET  /stats` → totals + per-provider counts
+
+Frontend: `SettlementDashboard.jsx`
+  - Two tabs: 🔬 Dry-Run | 📦 Generated Invoices (Phase 2B)
+  - Generated tab shows: feature-flag banner (ON / OFF), counts, generation form (provider, date range, Dry-Run / Generate buttons), invoices table with status badges, cancel action.
+  - "Generate" button disabled when `settlement_engine_enabled` flag is OFF.
+
+Tests: `tests/test_iter251_phase2b_settlement_generation.py` — 6/6 PASS.
+  - Block when flag OFF, dry-run persistence-free, Salla persistence + linking, idempotency, cancel transitions, unknown-provider rule_source_missing.
+
 ## Pending / Backlog
 - [P0] Analyze Tamara settlement JSON (26,279.64 vs 10,509.12 SAR discrepancy) — waiting for user to re-paste
 - [P1] Analyze Production drift report from P1.5.t (waiting for user output)

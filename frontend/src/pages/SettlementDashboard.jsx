@@ -193,12 +193,270 @@ function FeatureFlagsPanel({ flags, onChange }) {
     );
 }
 
+function GeneratedPanel({
+    flags, stats, invoices, provider, setProvider,
+    dateFrom, setDateFrom, dateTo, setDateTo,
+    busy, onGenerate, onCancel, onReload,
+}) {
+    const engineOn = !!flags?.settlement_engine_enabled;
+    const STATUS_COLORS = {
+        draft: "bg-slate-100 text-slate-700",
+        generated: "bg-indigo-100 text-indigo-700",
+        waiting_transfer: "bg-amber-100 text-amber-800",
+        pending_review: "bg-violet-100 text-violet-800",
+        confirmed: "bg-emerald-100 text-emerald-800",
+        confirmed_with_difference: "bg-yellow-100 text-yellow-800",
+        cancelled: "bg-rose-100 text-rose-700",
+    };
+    return (
+        <div data-testid="se-generated-panel">
+            {/* Flag warning */}
+            <div className={`rounded-lg p-3 mb-3 border ${
+                engineOn
+                    ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                    : "bg-rose-50 border-rose-200 text-rose-900"
+            }`}>
+                <div className="text-xs font-extrabold">
+                    {engineOn
+                        ? "✅ محرّك التسويات مفعَّل — التوليد يحفظ في القاعدة."
+                        : "🚫 محرّك التسويات معطّل — يمكن تنفيذ Dry-Run فقط."}
+                </div>
+                <div className="text-[11px] mt-0.5 opacity-80">
+                    Feature Flag: <code>settlement_engine_enabled</code>
+                    {!engineOn && " — فعّله من تبويب Dry-Run > Feature Flags."}
+                </div>
+            </div>
+
+            {/* Stats */}
+            {stats && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                    <StatTile label="فترات تسوية"
+                              value={fmtInt(stats.summary?.periods?.total)}
+                              color="indigo"
+                              testid="se-gen-stats-periods" />
+                    <StatTile label="فواتير مولّدة"
+                              value={fmtInt(stats.summary?.invoices?.total)}
+                              color="emerald"
+                              testid="se-gen-stats-invoices" />
+                    <StatTile label="تحويلات متوقعة"
+                              value={fmtInt(stats.summary?.expected_transfers?.total)}
+                              color="amber"
+                              testid="se-gen-stats-xfers" />
+                </div>
+            )}
+
+            {/* Generation form */}
+            <div className="bg-white border border-slate-200 rounded-xl p-3 mb-4"
+                 data-testid="se-gen-form">
+                <div className="text-xs font-extrabold mb-2">
+                    🛠️ توليد فواتير وتسويات
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                    <label className="text-[11px]">
+                        المزوّد
+                        <select value={provider}
+                                onChange={(e) => setProvider(e.target.value)}
+                                className="w-full border rounded p-1.5 mt-0.5"
+                                data-testid="se-gen-provider">
+                            <option value="salla">سلة</option>
+                            <option value="tamara">تمارا</option>
+                            <option value="tabby">تابي</option>
+                            <option value="imkan">إمكان</option>
+                        </select>
+                    </label>
+                    <label className="text-[11px]">
+                        من تاريخ
+                        <input type="date" value={dateFrom}
+                               onChange={(e) => setDateFrom(e.target.value)}
+                               className="w-full border rounded p-1.5 mt-0.5"
+                               data-testid="se-gen-from" />
+                    </label>
+                    <label className="text-[11px]">
+                        إلى تاريخ
+                        <input type="date" value={dateTo}
+                               onChange={(e) => setDateTo(e.target.value)}
+                               className="w-full border rounded p-1.5 mt-0.5"
+                               data-testid="se-gen-to" />
+                    </label>
+                    <div className="flex gap-2">
+                        <button onClick={() => onGenerate(true)}
+                                disabled={busy}
+                                className="flex-1 text-xs font-bold px-3 py-1.5 rounded bg-slate-700 text-white hover:bg-slate-900 disabled:opacity-40"
+                                data-testid="se-gen-dry-btn">
+                            {busy ? "..." : "Dry-Run"}
+                        </button>
+                        <button onClick={() => onGenerate(false)}
+                                disabled={busy || !engineOn}
+                                className="flex-1 text-xs font-bold px-3 py-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"
+                                title={engineOn ? "" : "فعّل Feature Flag أولاً"}
+                                data-testid="se-gen-real-btn">
+                            {busy ? "..." : "توليد فعلي"}
+                        </button>
+                    </div>
+                </div>
+                <div className="text-[10px] text-slate-500 mt-2">
+                    📐 تستخدم نفس قواعد <code>_merchant_fee_rates</code> المركزية لـ BNPL،
+                    وملفات <code>settlement_entries</code> لسلة. لا يوجد أي قيمة hard-coded.
+                </div>
+            </div>
+
+            {/* Invoices table */}
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden"
+                 data-testid="se-gen-invoices-table">
+                <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
+                    <div className="text-xs font-extrabold">
+                        📦 الفواتير المولّدة ({invoices.length})
+                    </div>
+                    <button onClick={onReload}
+                            className="text-[10px] px-2 py-1 rounded bg-slate-100 hover:bg-slate-200"
+                            data-testid="se-gen-reload-btn">
+                        🔄 تحديث
+                    </button>
+                </div>
+                <table className="min-w-full text-xs">
+                    <thead className="bg-slate-50">
+                        <tr className="text-right">
+                            <th className="p-2">المزوّد</th>
+                            <th className="p-2">رقم الفاتورة</th>
+                            <th className="p-2">الفترة</th>
+                            <th className="p-2 text-center">طلبات</th>
+                            <th className="p-2 text-center">المتوقع تحويله</th>
+                            <th className="p-2 text-center">البنك</th>
+                            <th className="p-2 text-center">الحالة</th>
+                            <th className="p-2 text-center">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {invoices.length === 0 ? (
+                            <tr>
+                                <td colSpan={8} className="p-6 text-center text-slate-400">
+                                    لا توجد فواتير مولّدة بعد — استخدم النموذج أعلاه.
+                                </td>
+                            </tr>
+                        ) : invoices.map((inv) => (
+                            <tr key={inv.id} className="border-t hover:bg-slate-50"
+                                data-testid={`se-gen-inv-${inv.id}`}>
+                                <td className="p-2 font-mono">{inv.provider_name}</td>
+                                <td className="p-2 font-mono text-[10px]">{inv.id.slice(0, 8)}…</td>
+                                <td className="p-2 font-mono text-[11px] text-slate-600">
+                                    {inv.period_from} → {inv.period_to}
+                                </td>
+                                <td className="p-2 text-center font-mono">
+                                    {fmtInt(inv.source_orders_count)}
+                                </td>
+                                <td className="p-2 text-center font-mono text-indigo-700 font-extrabold">
+                                    {fmt(inv.expected_transfer_amount)}
+                                </td>
+                                <td className="p-2 text-center text-[10px] text-slate-500">
+                                    —
+                                </td>
+                                <td className="p-2 text-center">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${STATUS_COLORS[inv.status] || "bg-slate-100"}`}>
+                                        {inv.status}
+                                    </span>
+                                </td>
+                                <td className="p-2 text-center">
+                                    {!["confirmed", "confirmed_with_difference", "cancelled"].includes(inv.status) && (
+                                        <button onClick={() => onCancel(inv.id)}
+                                                className="text-[10px] text-rose-600 hover:underline"
+                                                data-testid={`se-gen-cancel-${inv.id}`}>
+                                            إلغاء
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
 export default function SettlementDashboard() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [detailsProvider, setDetailsProvider] = useState(null);
     const [detailsData, setDetailsData] = useState(null);
     const [detailsLoading, setDetailsLoading] = useState(false);
+    // Iter-251 · Phase 2B — generated documents
+    const [activeTab, setActiveTab] = useState("dry_run");
+    const [genStats, setGenStats] = useState(null);
+    const [genInvoices, setGenInvoices] = useState([]);
+    const [genProvider, setGenProvider] = useState("salla");
+    const [genFrom, setGenFrom] = useState("");
+    const [genTo, setGenTo] = useState("");
+    const [genBusy, setGenBusy] = useState(false);
+
+    async function loadGenStats() {
+        try {
+            const { data: s } = await api.get("/settlement-engine/stats");
+            setGenStats(s);
+        } catch (e) { /* silent */ }
+    }
+    async function loadGenInvoices(providerFilter = null) {
+        try {
+            const params = {};
+            if (providerFilter) params.provider = providerFilter;
+            const { data: r } = await api.get(
+                "/settlement-engine/invoices", { params });
+            setGenInvoices(r.items || []);
+        } catch (e) {
+            toast.error("فشل تحميل الفواتير المولّدة");
+        }
+    }
+    async function runGenerate(dryRun = false) {
+        if (!genProvider) return;
+        setGenBusy(true);
+        try {
+            const { data: r } = await api.post(
+                "/settlement-engine/generate",
+                { provider: genProvider,
+                  date_from: genFrom || null,
+                  date_to:   genTo || null,
+                  dry_run:   dryRun });
+            const c = r.counts || {};
+            if (dryRun) {
+                toast.success(
+                    `محاكاة: ${c.invoices_new || 0} فاتورة جديدة `
+                    + `+ ${c.expected_transfers_new || 0} تحويل متوقع`,
+                );
+            } else if (r.rule_source_missing) {
+                toast.warning(
+                    "هذا المزوّد لا يحوي مصدر قواعد مركزي بعد. "
+                    + (r.note || ""));
+            } else {
+                toast.success(
+                    `تم التوليد: ${c.invoices_new || 0} جديدة، `
+                    + `${c.invoices_reused || 0} موجودة مسبقاً.`,
+                );
+                await Promise.all([loadGenStats(), loadGenInvoices()]);
+            }
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل التوليد");
+        } finally {
+            setGenBusy(false);
+        }
+    }
+    async function cancelInvoice(invId) {
+        const reason = window.prompt("سبب إلغاء الفاتورة؟");
+        if (!reason) return;
+        try {
+            await api.post(
+                `/settlement-engine/invoices/${invId}/cancel`,
+                { reason });
+            toast.success("تم الإلغاء");
+            await Promise.all([loadGenStats(), loadGenInvoices()]);
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل الإلغاء");
+        }
+    }
+    useEffect(() => {
+        if (activeTab === "generated") {
+            loadGenStats();
+            loadGenInvoices();
+        }
+    }, [activeTab]);
 
     async function showDetails(prov) {
         setDetailsProvider(prov);
@@ -245,7 +503,7 @@ export default function SettlementDashboard() {
         <div className="p-4" dir="rtl" data-testid="settlement-dashboard-page">
             <div className="mb-4">
                 <h1 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
-                    🔬 لوحة محرّك التسويات — Dry Run
+                    🔬 لوحة محرّك التسويات
                 </h1>
                 <p className="text-xs text-slate-500 max-w-3xl mt-1">
                     تحليل قراءة فقط لما سيتم توليده عند تفعيل محرّك التسويات للمزودين الأربعة
@@ -253,7 +511,48 @@ export default function SettlementDashboard() {
                 </p>
             </div>
 
-            {loading ? (
+            {/* ─── Tabs ─── */}
+            <div className="flex items-center gap-2 mb-4 border-b border-slate-200">
+                <button
+                    onClick={() => setActiveTab("dry_run")}
+                    className={`px-4 py-2 text-xs font-extrabold border-b-2 -mb-px ${
+                        activeTab === "dry_run"
+                            ? "border-indigo-500 text-indigo-700"
+                            : "border-transparent text-slate-500 hover:text-slate-700"
+                    }`}
+                    data-testid="se-tab-dryrun"
+                >
+                    🔬 Dry-Run
+                </button>
+                <button
+                    onClick={() => setActiveTab("generated")}
+                    className={`px-4 py-2 text-xs font-extrabold border-b-2 -mb-px ${
+                        activeTab === "generated"
+                            ? "border-emerald-500 text-emerald-700"
+                            : "border-transparent text-slate-500 hover:text-slate-700"
+                    }`}
+                    data-testid="se-tab-generated"
+                >
+                    📦 الفواتير المولّدة (Phase 2B)
+                </button>
+            </div>
+
+            {activeTab === "generated" && (
+                <GeneratedPanel
+                    flags={data?.feature_flags}
+                    stats={genStats}
+                    invoices={genInvoices}
+                    provider={genProvider} setProvider={setGenProvider}
+                    dateFrom={genFrom} setDateFrom={setGenFrom}
+                    dateTo={genTo} setDateTo={setGenTo}
+                    busy={genBusy}
+                    onGenerate={runGenerate}
+                    onCancel={cancelInvoice}
+                    onReload={() => { loadGenStats(); loadGenInvoices(); }}
+                />
+            )}
+
+            {activeTab === "dry_run" && (loading ? (
                 <div className="text-center text-slate-500 py-16">جارٍ التحميل...</div>
             ) : !data ? (
                 <div className="text-center text-rose-500 py-16">تعذّر تحميل التقرير</div>
@@ -311,7 +610,7 @@ export default function SettlementDashboard() {
                         </ul>
                     </div>
                 </>
-            )}
+            ))}
 
             {/* Dry-Run Details Modal */}
             {detailsProvider && (
@@ -335,12 +634,30 @@ export default function SettlementDashboard() {
                                 <div className="text-center text-rose-500 py-12">تعذّر التحميل</div>
                             ) : (
                                 <>
-                                    <div className="bg-slate-50 rounded-lg p-3 mb-3 text-[11px] text-slate-600">
+                                    <div className="bg-slate-50 rounded-lg p-3 mb-3 text-[11px] text-slate-600 flex items-center gap-2 flex-wrap">
+                                        {detailsData.formula_source && (
+                                            <span className={`px-2 py-0.5 rounded font-extrabold ${
+                                                detailsData.formula_source === "Actual Settlement Formula"
+                                                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                                    : detailsData.formula_source === "BNPL Settlement Formula"
+                                                        ? "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                                                        : "bg-amber-100 text-amber-800 border border-amber-300"
+                                            }`} data-testid="se-formula-source">
+                                                📐 {detailsData.formula_source}
+                                            </span>
+                                        )}
                                         <b>المصدر:</b> {detailsData.source}
-                                        {detailsData.cycle?.period === "weekly" && (
-                                            <> • <b>الدورة:</b> أسبوعية •
-                                            <b className="ms-1">العمولة:</b> {(detailsData.cycle.commission_rate*100).toFixed(1)}% •
-                                            <b className="ms-1">VAT:</b> {(detailsData.cycle.vat_rate_on_commission*100).toFixed(1)}%</>
+                                        {detailsData.rules && (
+                                            <>
+                                                {" • "}
+                                                <b>العمولة:</b> {(detailsData.rules.commission_rate*100).toFixed(2)}%
+                                                {" • "}
+                                                <b>VAT:</b> {(detailsData.rules.vat_rate_on_commission*100).toFixed(2)}%
+                                                {" • "}
+                                                <span className="text-[10px] text-slate-500">
+                                                    (fee_source: <code>{detailsData.rules.fee_source}</code>)
+                                                </span>
+                                            </>
                                         )}
                                     </div>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">

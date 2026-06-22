@@ -33,8 +33,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from settlement_engine_generation import (
+    generate_for_provider as _generate_for_provider,
+    cancel_invoice as _cancel_invoice,
+    INVOICE_STATUSES as _INVOICE_STATUSES,
+    PERIOD_STATUSES as _PERIOD_STATUSES,
+    EXPECTED_TRANSFER_STATUSES as _XFER_STATUSES,
+)
 
 
 # Provider → list of payment_method substrings that classify an order.
@@ -73,10 +81,91 @@ PROVIDER_AR = {
 }
 
 
+async def _resolve_provider_rules(db, uid: str, provider: str) -> dict:
+    """Single source of truth for provider settlement rules.
+
+    Reads from the SAME pipeline used by `/bnpl-settlements/register`
+    via `bnpl.settlements_service._merchant_fee_rates`. Falls back to
+    sensible defaults only when the provider isn't BNPL.
+    """
+    src = "estimated_default"
+    rate = {"commission_pct": 0.0, "vat_pct": 0.0,
+            "fixed_fee_per_order": 0.0}
+    if provider in ("tamara", "tabby"):
+        try:
+            from bnpl.settlements_service import _merchant_fee_rates
+            r = await _merchant_fee_rates(db, uid, provider) or {}
+            rate["commission_pct"] = float(r.get("commission_pct") or 0)
+            rate["vat_pct"]        = float(r.get("vat_pct") or 0)
+            src = r.get("fee_source") or "bnpl_settlements_service"
+        except Exception:
+            pass
+    # Cycle metadata still comes from PROVIDER_CYCLES for now (Phase 2B
+    # will move it to a dedicated `provider_settlement_rules`
+    # collection that the Settings page edits).
+    cycle = PROVIDER_CYCLES.get(provider, {})
+    return {
+        "provider":            provider,
+        "commission_rate":     rate["commission_pct"] / 100.0,
+        "vat_rate_on_commission": rate["vat_pct"] / 100.0,
+        "fixed_fee_per_order": rate.get("fixed_fee_per_order", 0.0),
+        "period":              cycle.get("period", "weekly"),
+        "anchor_weekday":      cycle.get("anchor_weekday", 7),
+        "fee_source":          src,
+    }
+
+
+# Iter-251 · Phase 2A — Page/endpoint dependency registry.
+# Static map of every UI page and backend endpoint that depends on
+# provider settlement rules / formulas, so refactors stay coordinated.
+PROVIDER_DEPENDENCIES = [
+    {"page": "/bnpl-settlements/register",
+     "endpoint": "/api/bnpl/settlements/*",
+     "uses": ["commission_pct", "vat_pct"],
+     "role": "primary — actual settlement creation + GL post"},
+    {"page": "/settlement-engine",
+     "endpoint": "/api/settlement-engine/dry-run-details",
+     "uses": ["commission_pct", "vat_pct", "cycle"],
+     "role": "simulation — read-only"},
+    {"page": "/bank-transfer-review",
+     "endpoint": "/api/bank-transfer-review",
+     "uses": ["default_bank_for_<provider>"],
+     "role": "review queue for incoming transfers"},
+    {"page": "/dashboard",
+     "endpoint": "/api/dashboard",
+     "uses": ["commission_pct", "vat_pct"],
+     "role": "exec profit summary (BNPL deductions)"},
+    {"page": "/tamara",
+     "endpoint": "/api/tamara/forensic & /apply",
+     "uses": ["_merchant_fee_rates(tamara)"],
+     "role": "provider page — Tamara health & repair"},
+    {"page": "/tabby",
+     "endpoint": "/api/tabby/*",
+     "uses": ["_merchant_fee_rates(tabby)"],
+     "role": "provider page — Tabby health"},
+    {"page": "/financial-position",
+     "endpoint": "/api/financial-position",
+     "uses": ["GL balances (post-settlement)"],
+     "role": "consolidated financial position report"},
+]
+
+
 class FeatureFlagsIn(BaseModel):
     settlement_engine_enabled:           Optional[bool] = None
     platform_settlement_to_review_enabled: Optional[bool] = None
     bank_transfer_review_enabled:         Optional[bool] = None
+
+
+# ─── Iter-251 · Phase 2B — Generation DTOs ────────────────────────
+class GenerateIn(BaseModel):
+    provider:  str
+    date_from: Optional[str] = None
+    date_to:   Optional[str] = None
+    dry_run:   bool = False
+
+
+class CancelInvoiceIn(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
 
 
 def _now() -> str:
@@ -313,6 +402,39 @@ def make_settlement_engine_router(db, current_user):
             ],
         }
 
+    # ─────────── Provider rules (central SSOT lookup) ───────────
+    # Surfaces what `_resolve_provider_rules` returns for each provider
+    # so the merchant can verify Settlement Engine uses the SAME
+    # numbers as the BNPL Settlement page.
+    @router.get("/rules")
+    async def get_rules(user: dict = Depends(current_user)):
+        uid = user["id"]
+        out = {}
+        for prov in PROVIDER_MATCHERS:
+            out[prov] = await _resolve_provider_rules(db, uid, prov)
+        return {
+            "rules": out,
+            "notes": [
+                "تمارا/تابي يقرآن من نفس مصدر صفحة "
+                "/bnpl-settlements/register عبر _merchant_fee_rates.",
+                "إمكان/سلة يستخدمان defaults حتى نضيف إعداداتهما لاحقاً.",
+                "أي تعديل في commission_pct/vat_pct من صفحة الإعدادات "
+                "ينعكس تلقائياً هنا وفي Dry-Run والتقارير الأخرى.",
+            ],
+        }
+
+    # ─────────── Dependencies registry (page/endpoint map) ───────────
+    @router.get("/dependencies")
+    async def get_dependencies(_: dict = Depends(current_user)):
+        return {
+            "dependencies": PROVIDER_DEPENDENCIES,
+            "explanation":  (
+                "خريطة الصفحات والـ endpoints التي تعتمد على معادلات "
+                "تسوية المزودين. أي تعديل في مصدر القاعدة يجب اختباره "
+                "ضد كل صفحة هنا."
+            ),
+        }
+
     # ─────────── Dry-Run Details (per-invoice simulation) ───────────
     # Read-only simulation that groups orders into virtual invoices
     # following each provider's settlement cycle.  No DB writes.
@@ -347,6 +469,13 @@ def make_settlement_engine_router(db, current_user):
 
     # Helpers — pulled outside the router for testability.
     async def _simulate_weekly(uid, prov, cycle):
+        # Iter-251 · Phase 2A v2 — Rule resolution is delegated to the
+        # central `_resolve_provider_rules` helper, which reads from
+        # the same source as `/bnpl-settlements/register` for BNPL
+        # providers. Hard-coded rates removed.
+        rules = await _resolve_provider_rules(db, uid, prov)
+        commission_rate = rules["commission_rate"]
+        vat_rate        = rules["vat_rate_on_commission"]
         matchers = PROVIDER_MATCHERS[prov]
         or_clauses = [
             {"payment_method": {"$regex": m, "$options": "i"}}
@@ -385,10 +514,8 @@ def make_settlement_engine_router(db, current_user):
         for idx, (_, b) in enumerate(
                 sorted(buckets.items(), key=lambda x: x[0]), start=1):
             net_sales  = round(b["gross"] - b["refunds"], 2)
-            commission = round(
-                net_sales * cycle.get("commission_rate", 0), 2)
-            vat        = round(
-                commission * cycle.get("vat_rate_on_commission", 0), 2)
+            commission = round(net_sales * commission_rate, 2)
+            vat        = round(commission * vat_rate, 2)
             expected_transfer = round(
                 net_sales - commission - vat, 2)
             invoices.append({
@@ -423,7 +550,12 @@ def make_settlement_engine_router(db, current_user):
             "provider":       prov,
             "provider_ar":    PROVIDER_AR[prov],
             "source":         "unified_orders → weekly buckets",
+            "formula_source": (
+                "BNPL Settlement Formula" if prov in ("tamara", "tabby")
+                else "Estimated Formula"
+            ),
             "cycle":          cycle,
+            "rules":          rules,
             "totals":         totals,
             "invoices":       invoices,
         }
@@ -481,9 +613,218 @@ def make_settlement_engine_router(db, current_user):
             "provider":       prov,
             "provider_ar":    PROVIDER_AR[prov],
             "source":         "settlement_entries (real data)",
+            "formula_source": "Actual Settlement Formula",
             "cycle":          PROVIDER_CYCLES.get(prov, {}),
             "totals":         totals,
             "invoices":       invoices,
         }
+
+    # ═════════════════════════════════════════════════════════════════
+    # Iter-251 · Phase 2B — Generation endpoints (FLAG-GATED writes)
+    # ═════════════════════════════════════════════════════════════════
+    async def _require_flag(uid: str):
+        """Block writes unless `settlement_engine_enabled` is True."""
+        flags = await _get_flags(uid)
+        if not flags.get("settlement_engine_enabled"):
+            raise HTTPException(
+                403,
+                "محرّك التسويات معطّل. فعّل feature flag "
+                "settlement_engine_enabled من نفس الصفحة قبل التوليد.",
+            )
+
+    @router.post("/generate")
+    async def generate(
+        payload: GenerateIn,
+        user: dict = Depends(current_user),
+    ):
+        """Generate settlement_periods + settlement_invoices +
+        expected_transfers for ``payload.provider`` over the requested
+        window.
+
+        Rules:
+          • Writes are blocked unless ``settlement_engine_enabled``.
+          • ``dry_run=True`` simulates the inserts without persisting.
+          • Idempotent on (provider, period_from, period_to).
+          • NO GL writes, NO bank_transfer_review creation here —
+            those happen in later phases.
+        """
+        uid = user["id"]
+        if not payload.dry_run:
+            await _require_flag(uid)
+        if payload.provider not in PROVIDER_MATCHERS:
+            raise HTTPException(
+                400, f"مزوّد غير معروف: {payload.provider}")
+        try:
+            result = await _generate_for_provider(
+                db, uid, user, payload.provider,
+                payload.date_from, payload.date_to,
+                dry_run=payload.dry_run,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(
+                500,
+                f"فشل التوليد: {type(e).__name__}: {e}",
+            )
+        return {"generated_at": _now(), **result}
+
+    @router.get("/periods")
+    async def list_periods(
+        provider: Optional[str] = Query(None),
+        status:   Optional[str] = Query(None),
+        from_date: Optional[str] = Query(None),
+        to_date:   Optional[str] = Query(None),
+        skip: int = 0,
+        limit: int = 100,
+        user: dict = Depends(current_user),
+    ):
+        q: dict = {"user_id": user["id"]}
+        if provider:
+            q["provider"] = provider
+        if status:
+            sts = [s for s in status.split(",") if s in _PERIOD_STATUSES]
+            if sts:
+                q["status"] = {"$in": sts}
+        if from_date or to_date:
+            rng: dict = {}
+            if from_date:
+                rng["$gte"] = from_date
+            if to_date:
+                rng["$lte"] = to_date
+            q["period_from"] = rng
+        total = await db.settlement_periods.count_documents(q)
+        items = []
+        async for d in (db.settlement_periods.find(q, {"_id": 0})
+                        .sort([("period_from", -1)])
+                        .skip(max(0, skip))
+                        .limit(max(1, min(limit, 500)))):
+            items.append(d)
+        return {"items": items, "total": total,
+                "skip": skip, "limit": limit}
+
+    @router.get("/invoices")
+    async def list_invoices(
+        provider: Optional[str] = Query(None),
+        status:   Optional[str] = Query(None),
+        from_date: Optional[str] = Query(None),
+        to_date:   Optional[str] = Query(None),
+        skip: int = 0,
+        limit: int = 100,
+        user: dict = Depends(current_user),
+    ):
+        q: dict = {"user_id": user["id"]}
+        if provider:
+            q["provider_name"] = provider
+        if status:
+            sts = [s for s in status.split(",") if s in _INVOICE_STATUSES]
+            if sts:
+                q["status"] = {"$in": sts}
+        if from_date or to_date:
+            rng: dict = {}
+            if from_date:
+                rng["$gte"] = from_date
+            if to_date:
+                rng["$lte"] = to_date
+            q["period_from"] = rng
+        total = await db.settlement_invoices.count_documents(q)
+        items = []
+        async for d in (db.settlement_invoices.find(q, {"_id": 0})
+                        .sort([("period_from", -1), ("invoice_no", 1)])
+                        .skip(max(0, skip))
+                        .limit(max(1, min(limit, 500)))):
+            items.append(d)
+        return {"items": items, "total": total,
+                "skip": skip, "limit": limit}
+
+    @router.get("/invoices/{invoice_id}")
+    async def get_invoice(
+        invoice_id: str,
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        inv = await db.settlement_invoices.find_one(
+            {"id": invoice_id, "user_id": uid}, {"_id": 0})
+        if not inv:
+            raise HTTPException(404, "الفاتورة غير موجودة")
+        period = await db.settlement_periods.find_one(
+            {"id": inv["settlement_period_id"], "user_id": uid},
+            {"_id": 0},
+        )
+        xfer = None
+        if inv.get("expected_transfer_id"):
+            xfer = await db.expected_transfers.find_one(
+                {"id": inv["expected_transfer_id"], "user_id": uid},
+                {"_id": 0},
+            )
+        return {"invoice": inv, "period": period,
+                "expected_transfer": xfer}
+
+    @router.post("/invoices/{invoice_id}/cancel")
+    async def cancel_invoice_route(
+        invoice_id: str,
+        payload: CancelInvoiceIn,
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        res = await _cancel_invoice(
+            db, uid, user, invoice_id, payload.reason)
+        if res.get("error") == "not_found":
+            raise HTTPException(404, "الفاتورة غير موجودة")
+        if res.get("error") == "cannot_cancel_after_confirm":
+            raise HTTPException(
+                400,
+                f"لا يمكن إلغاء فاتورة بحالة «{res.get('status')}».",
+            )
+        return res
+
+    @router.get("/expected-transfers")
+    async def list_expected_transfers(
+        provider: Optional[str] = Query(None),
+        status:   Optional[str] = Query(None),
+        user: dict = Depends(current_user),
+    ):
+        q: dict = {"user_id": user["id"]}
+        if provider:
+            q["provider_name"] = provider
+        if status:
+            sts = [s for s in status.split(",") if s in _XFER_STATUSES]
+            if sts:
+                q["status"] = {"$in": sts}
+        items = []
+        async for d in (db.expected_transfers.find(q, {"_id": 0})
+                        .sort([("expected_transfer_date", -1)])
+                        .limit(500)):
+            items.append(d)
+        return {"items": items, "total": len(items)}
+
+    @router.get("/stats")
+    async def stats(user: dict = Depends(current_user)):
+        uid = user["id"]
+        out: dict[str, dict] = {}
+        for coll, key in (("settlement_periods",   "periods"),
+                          ("settlement_invoices",  "invoices"),
+                          ("expected_transfers",   "expected_transfers")):
+            buckets: dict[str, int] = {}
+            async for r in db[coll].aggregate([
+                {"$match": {"user_id": uid}},
+                {"$group": {"_id": "$status",
+                            "n": {"$sum": 1}}},
+            ]):
+                buckets[r["_id"] or "unknown"] = r["n"]
+            total = sum(buckets.values())
+            out[key] = {"total": total, "by_status": buckets}
+        per_provider: dict[str, dict] = {}
+        async for r in db.settlement_invoices.aggregate([
+            {"$match": {"user_id": uid}},
+            {"$group": {
+                "_id": "$provider_name",
+                "n":   {"$sum": 1},
+                "amount": {"$sum": "$expected_transfer_amount"},
+            }},
+        ]):
+            per_provider[r["_id"]] = {
+                "invoices": r["n"],
+                "expected_amount": round(float(r.get("amount") or 0), 2),
+            }
+        return {"summary": out, "per_provider": per_provider}
 
     return router
