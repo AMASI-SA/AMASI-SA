@@ -48,6 +48,8 @@ function flattenTree(items, expandedMap) {
 
 export default function ExpenseCategoryTreePage() {
   const [items, setItems] = useState([]);
+  // P2 Phase 3 fix — Visible kind filter: all | expense | product.
+  const [kindFilter, setKindFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});
   const [editing, setEditing] = useState(null);
@@ -76,7 +78,17 @@ export default function ExpenseCategoryTreePage() {
     load();
   }, []);
 
-  const rows = useMemo(() => flattenTree(items, expanded), [items, expanded]);
+  const rows = useMemo(() => {
+    // P2 Phase 3 fix — Filter root branches by `kind`. Product
+    // categories may carry kind="product" (we treat absent kind as
+    // "expense" to stay backward-compatible).
+    const visible = (items || []).filter((root) => {
+      const k = root.kind || "expense";
+      if (kindFilter === "all") return true;
+      return k === kindFilter;
+    });
+    return flattenTree(visible, expanded);
+  }, [items, expanded, kindFilter]);
   const isEmpty = items.length === 0;
 
   async function seedTemplate() {
@@ -231,6 +243,32 @@ export default function ExpenseCategoryTreePage() {
           </button>
         </div>
       </header>
+
+      {/* P2 Phase 3 fix — Kind filter chips so the merchant can
+          isolate expense vs product trees. */}
+      <div className="flex items-center gap-2 text-xs"
+           data-testid="cat-kind-filter">
+        <span className="text-slate-600 font-bold">عرض:</span>
+        {[
+          { id: "all",     label: "الكل" },
+          { id: "expense", label: "تصنيفات المصروفات" },
+          { id: "product", label: "تصنيفات المنتجات" },
+        ].map(opt => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => setKindFilter(opt.id)}
+            className={
+              "px-3 py-1.5 rounded-full border font-bold transition " +
+              (kindFilter === opt.id
+                ? "bg-indigo-600 text-white border-indigo-600"
+                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50")}
+            data-testid={"cat-kind-" + opt.id}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
 
       {addingUnder === "__root__" && (
         <AddInline

@@ -21,7 +21,7 @@ Pipeline:
 
 READ-ONLY for ALL existing data:
   * no expense category is renamed, moved, or deleted.
-  * we ONLY upsert into `db.expense_categories` with `kind="product"`.
+  * we ONLY upsert into `db.expense_category_tree` with `kind="product"`.
 
 Two endpoints in this file. Phase 2 (products import) will live in
 the same module under different prefixes.
@@ -128,7 +128,7 @@ async def _existing_product_keys(db, uid: str, root_id: str) -> dict[str, str]:
     that descend from the root. We rely on the `path` field to detect
     membership of the subtree without recursive queries."""
     out: dict[str, str] = {}
-    async for c in db.expense_categories.find(
+    async for c in db.expense_category_tree.find(
         {"user_id": uid, "kind": "product"},
         {"_id": 0, "id": 1, "name": 1, "path": 1, "parent_id": 1},
     ):
@@ -138,7 +138,7 @@ async def _existing_product_keys(db, uid: str, root_id: str) -> dict[str, str]:
 
 async def _ensure_product_root(db, uid: str) -> dict:
     """Upsert the dedicated `kind=product` root once per user."""
-    existing = await db.expense_categories.find_one(
+    existing = await db.expense_category_tree.find_one(
         {"user_id": uid, "kind": "product",
          "parent_id": None, "name": ROOT_NAME},
         {"_id": 0},
@@ -163,7 +163,7 @@ async def _ensure_product_root(db, uid: str) -> dict:
     }
     doc["path_ids"] = [doc["id"]]
     doc["code"]     = doc["id"]   # honour stale unique index
-    await db.expense_categories.insert_one(doc)
+    await db.expense_category_tree.insert_one(doc)
     return doc
 
 
@@ -189,7 +189,7 @@ def make_products_import_router(db, current_user):
 
         # We DON'T modify anything during preview. We just classify each
         # row against the current product subtree.
-        root = await db.expense_categories.find_one(
+        root = await db.expense_category_tree.find_one(
             {"user_id": uid, "kind": "product",
              "parent_id": None, "name": ROOT_NAME},
             {"_id": 0, "id": 1, "name": 1},
@@ -326,13 +326,13 @@ def make_products_import_router(db, current_user):
                     "at":     now,
                 },
             }
-            await db.expense_categories.insert_one(doc)
+            await db.expense_category_tree.insert_one(doc)
             existing_map[_norm_key(name)] = new_id
             return new_id
 
         # Pre-fetch by id for parents we'll need.
         def _doc_by_id(cid: str):
-            return db.expense_categories.find_one(
+            return db.expense_category_tree.find_one(
                 {"id": cid, "user_id": uid}, {"_id": 0})
 
         # Roots
@@ -485,7 +485,7 @@ def _parse_products_xlsx(raw: bytes) -> dict:
 
 async def _ensure_uncategorized(db, uid: str, root: dict) -> dict:
     """Ensure a single "غير مصنف" category exists directly under root."""
-    existing = await db.expense_categories.find_one(
+    existing = await db.expense_category_tree.find_one(
         {"user_id": uid, "kind": "product",
          "parent_id": root["id"], "name": UNCAT_NAME},
         {"_id": 0},
@@ -510,7 +510,7 @@ async def _ensure_uncategorized(db, uid: str, root: dict) -> dict:
         "updated_at": now,
         "system":     True,
     }
-    await db.expense_categories.insert_one(doc)
+    await db.expense_category_tree.insert_one(doc)
     return doc
 
 
@@ -528,10 +528,10 @@ async def _resolve_path_to_cat_id(
         key_prefix = key_prefix + (norm,)
         if key_prefix in cache:
             cur_id = cache[key_prefix]
-            cur_parent = await db.expense_categories.find_one(
+            cur_parent = await db.expense_category_tree.find_one(
                 {"id": cur_id, "user_id": uid}, {"_id": 0})
             continue
-        existing = await db.expense_categories.find_one(
+        existing = await db.expense_category_tree.find_one(
             {"user_id": uid, "kind": "product",
              "parent_id": cur_parent["id"], "name": tok},
             {"_id": 0},
@@ -560,7 +560,7 @@ async def _resolve_path_to_cat_id(
             "imported": {"source": "excel-products-auto",
                          "at": now},
         }
-        await db.expense_categories.insert_one(doc)
+        await db.expense_category_tree.insert_one(doc)
         cache[key_prefix] = new_id
         cur_parent = doc
     return cur_parent["id"]
@@ -646,7 +646,7 @@ def make_products_router_phase2(db, current_user):
                 all_cids.add(c)
         cat_paths: dict[str, list[str]] = {}
         if all_cids:
-            async for c in db.expense_categories.find(
+            async for c in db.expense_category_tree.find(
                 {"user_id": uid, "id": {"$in": list(all_cids)}},
                 {"_id": 0, "id": 1, "path": 1},
             ):
@@ -686,7 +686,7 @@ def make_products_router_phase2(db, current_user):
             uncat = await _ensure_uncategorized(db, uid, root)
             cat_id = uncat["id"]
         else:
-            ok = await db.expense_categories.find_one(
+            ok = await db.expense_category_tree.find_one(
                 {"user_id": uid, "id": cat_id, "kind": "product"},
                 {"_id": 0, "id": 1})
             if not ok:
@@ -729,7 +729,7 @@ def make_products_router_phase2(db, current_user):
         # Strip the BSON `_id` Motor adds in-place after insert.
         doc.pop("_id", None)
         # Hydrate category_paths for immediate UI use.
-        cat = await db.expense_categories.find_one(
+        cat = await db.expense_category_tree.find_one(
             {"id": cat_id, "user_id": uid},
             {"_id": 0, "path": 1})
         doc["category_paths"] = [cat.get("path", []) if cat else []]
@@ -843,7 +843,7 @@ def make_products_router_phase2(db, current_user):
         updated    = 0
         uncat_used = 0
         cats_auto_created = 0
-        cats_before = await db.expense_categories.count_documents(
+        cats_before = await db.expense_category_tree.count_documents(
             {"user_id": uid, "kind": "product"})
 
         for r in rows:
@@ -939,7 +939,7 @@ def make_products_router_phase2(db, current_user):
                     )
                 updated += 1
 
-        cats_after = await db.expense_categories.count_documents(
+        cats_after = await db.expense_category_tree.count_documents(
             {"user_id": uid, "kind": "product"})
         cats_auto_created = max(0, cats_after - cats_before)
 
