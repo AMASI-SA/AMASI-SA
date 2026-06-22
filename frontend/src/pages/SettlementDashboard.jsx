@@ -258,6 +258,34 @@ function CalendarPanel() {
             toast.error(e?.response?.data?.detail || "فشل");
         }
     }
+    async function rebuildAll() {
+        if (!window.confirm(
+            "سيتم إعادة بناء التقويم لجميع المزودين (تمارا/تابي/إمكان/سلة) "
+            + "من settlement_entries. الإدخالات اليدوية محمية. متابعة؟",
+        )) return;
+        setBusy(true);
+        const providers = ["tamara", "tabby", "imkan", "salla"];
+        const results = [];
+        try {
+            for (const p of providers) {
+                try {
+                    const { data } = await api.post(
+                        "/settlement-engine/calendar/rebuild",
+                        { provider: p, dry_run: false });
+                    results.push(
+                        `${p}: جديد ${data.inserted} / محدّث ${data.updated}`,
+                    );
+                } catch (e) {
+                    results.push(`${p}: ❌ ${e?.response?.data?.detail || "فشل"}`);
+                }
+            }
+            toast.success(results.join(" • "), { duration: 8000 });
+            await load();
+        } finally {
+            setBusy(false);
+        }
+    }
+
     async function remove(id) {
         if (!window.confirm("حذف هذه الفاتورة من التقويم؟")) return;
         try {
@@ -301,6 +329,12 @@ function CalendarPanel() {
                             className="text-xs font-bold px-3 py-1.5 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40"
                             data-testid="se-cal-rebuild-btn">
                         {busy ? "..." : "🔄 إعادة بناء من settlement_entries"}
+                    </button>
+                    <button onClick={rebuildAll} disabled={busy}
+                            className="text-xs font-bold px-3 py-1.5 rounded bg-fuchsia-600 text-white hover:bg-fuchsia-700 disabled:opacity-40"
+                            data-testid="se-cal-rebuild-all-btn"
+                            title="يُعيد بناء التقويم لتمارا/تابي/إمكان/سلة دفعةً واحدة">
+                        {busy ? "..." : "🌐 إعادة بناء الكل"}
                     </button>
                     <button onClick={load}
                             className="text-xs px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200"
@@ -869,6 +903,21 @@ export default function SettlementDashboard() {
                                 <div className="text-center text-rose-500 py-12">تعذّر التحميل</div>
                             ) : (
                                 <>
+                                    {detailsData.cycle && detailsData.cycle.uses_calendar === false
+                                     && ["tamara","tabby","imkan"].includes(detailsData.provider) && (
+                                        <div className="bg-rose-50 border-2 border-rose-300 rounded-lg p-3 mb-3"
+                                             data-testid="se-no-calendar-warning">
+                                            <div className="text-rose-900 font-extrabold text-xs mb-1">
+                                                ⚠️ لا يوجد تقويم لهذا المزوّد — الأرقام تقريبية!
+                                            </div>
+                                            <div className="text-rose-800 text-[11px] leading-relaxed">
+                                                هذه المحاكاة تستخدم <code>unified_orders</code> × عمولة مسطّحة (وضع fallback).
+                                                للحصول على نفس أرقام صفحة BNPL الفعلية، اذهب إلى تبويب
+                                                <b> «📅 تقويم الفواتير»</b> واضغط
+                                                <b> «🌐 إعادة بناء الكل»</b>، ثم أعِد فتح هذه المحاكاة.
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="bg-slate-50 rounded-lg p-3 mb-3 text-[11px] text-slate-600 flex items-center gap-2 flex-wrap">
                                         {detailsData.formula_source && (
                                             <span className={`px-2 py-0.5 rounded font-extrabold ${
