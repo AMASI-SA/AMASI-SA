@@ -58,6 +58,10 @@ const STATUS_LABELS = {
         ar: "مؤكد سابقاً (قديم)", color: "slate",
         icon: "📦",
     },
+    missing_target_bank: {
+        ar: "بدون بنك مستلم", color: "rose",
+        icon: "🏦",
+    },
 };
 
 const STATUS_CHIP_CLASSES = {
@@ -467,6 +471,79 @@ function CreateModal({ open, onClose, onDone }) {
     );
 }
 
+function AssignBankModal({ open, review, banks, onClose, onDone }) {
+    const [bankId, setBankId] = useState("");
+    const [note, setNote] = useState("");
+    const [busy, setBusy] = useState(false);
+    useEffect(() => {
+        if (open) { setBankId(""); setNote(""); }
+    }, [open]);
+    if (!open || !review) return null;
+    const bank = banks.find((b) => b.id === bankId);
+    async function submit() {
+        if (!bankId || !bank) {
+            return toast.error("اختر بنكاً");
+        }
+        setBusy(true);
+        try {
+            const { data } = await api.post(
+                `/bank-transfer-review/${review.id}/assign-bank`,
+                {
+                    target_bank_id:   bank.id,
+                    target_bank_name: bank.name,
+                    review_note: note || null,
+                },
+            );
+            toast.success("تم تعيين البنك ✓");
+            onDone(data);
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || "فشل التعيين");
+        } finally { setBusy(false); }
+    }
+    return (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+             onClick={onClose} data-testid="btr-assignbank-modal">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5"
+                 onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-base font-extrabold mb-2">
+                    🏦 تعيين البنك المستلم
+                </h3>
+                <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg p-2 mb-3">
+                    هذا السجل وارد من <b>{SOURCE_LABELS[review.source_type]?.ar || review.source_type}</b>
+                    {" "}بدون تحديد البنك المستلم. اختر البنك قبل المتابعة للتأكيد.
+                </div>
+                <label className="text-xs font-bold block mb-1">البنك المستلم *</label>
+                <select
+                    value={bankId}
+                    onChange={(e) => setBankId(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm mb-3"
+                    data-testid="btr-assignbank-select"
+                >
+                    <option value="">— اختر —</option>
+                    {banks.map((b) =>
+                        <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                <label className="text-xs font-bold block mb-1">ملاحظة (اختياري)</label>
+                <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    rows={2}
+                    className="w-full border rounded-lg px-3 py-2 text-xs mb-4"
+                />
+                <div className="flex gap-2">
+                    <button onClick={onClose}
+                            className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-bold">إلغاء</button>
+                    <button onClick={submit} disabled={busy || !bankId}
+                            className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-extrabold disabled:opacity-40"
+                            data-testid="btr-assignbank-submit">
+                        {busy ? "..." : "تعيين البنك"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ──────────────────────────────── Page ───────────────────────────────
 
 export default function BankTransferReview() {
@@ -481,12 +558,31 @@ export default function BankTransferReview() {
 
     const [confirmReview, setConfirmReview] = useState(null);
     const [rejectReview, setRejectReview] = useState(null);
+    const [assignReview, setAssignReview] = useState(null);
     const [createOpen, setCreateOpen] = useState(false);
+    // Iter-251 · Phase 1.5 — provider→bank routing config.
+    const [providerBanks, setProviderBanks] = useState({});
+    const [bankAccounts, setBankAccounts] = useState([]);
+
+    useEffect(() => {
+        let alive = true;
+        Promise.all([
+            api.get("/bank-transfer-review/config/provider-banks"),
+            api.get("/accounts", { params: { account_type: "bank" } }),
+        ]).then(([cfg, accs]) => {
+            if (!alive) return;
+            setProviderBanks(cfg.data || {});
+            const list = Array.isArray(accs.data) ? accs.data
+                : (accs.data?.items || []);
+            setBankAccounts(list.filter((a) => a.account_type === "bank"));
+        }).catch(() => { /* ignore */ });
+        return () => { alive = false; };
+    }, []);
 
     const reload = useCallback(async () => {
         setLoading(true);
         try {
-            const [listResp, sumResp] = await Promise.all([
+            const [listResp, sumResp, cfgResp] = await Promise.all([
                 api.get("/bank-transfer-review", {
                     params: {
                         status: filterStatus || undefined,
@@ -496,10 +592,12 @@ export default function BankTransferReview() {
                     },
                 }),
                 api.get("/bank-transfer-review/summary"),
+                api.get("/bank-transfer-review/config/provider-banks"),
             ]);
             setItems(listResp.data.items || []);
             setTotal(listResp.data.total || 0);
             setSummary(sumResp.data);
+            setProviderBanks(cfgResp.data || {});
         } catch (e) {
             toast.error("فشل تحميل البيانات");
         } finally {
@@ -511,6 +609,8 @@ export default function BankTransferReview() {
 
     const filterChips = useMemo(() => [
         { key: "",                          label: "الكل",                count: total },
+        { key: "missing_target_bank",       label: "بدون بنك مستلم",
+          count: summary?.by_status?.missing_target_bank?.count || 0 },
         { key: "pending",                   label: "بانتظار التأكيد",
           count: summary?.by_status?.pending?.count || 0 },
         { key: "confirmed",                 label: "مؤكد",
@@ -522,6 +622,16 @@ export default function BankTransferReview() {
         { key: "legacy_confirmed",          label: "مؤكد سابقاً (قديم)",
           count: summary?.by_status?.legacy_confirmed?.count || 0 },
     ], [summary, total]);
+
+    // Iter-251 · Phase 1.5 — Unconfigured providers banner.
+    const unconfiguredProviders = useMemo(
+        () => Object.entries(providerBanks || {})
+            .filter(([_, v]) => !v.configured)
+            .map(([k]) => k),
+        [providerBanks],
+    );
+    const PROV_AR = { salla: "سلة", tamara: "تمارا",
+                       tabby: "تابي", imkan: "إمكان" };
 
     return (
         <div className="p-4" dir="rtl" data-testid="bank-transfer-review-page">
@@ -545,6 +655,45 @@ export default function BankTransferReview() {
             </div>
 
             <SummaryCards summary={summary} />
+
+            {/* Iter-251 · Phase 1.5 — Provider routing health banner. */}
+            {unconfiguredProviders.length > 0 && (
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-4 flex items-start gap-3"
+                     data-testid="btr-unconfigured-banner">
+                    <span className="text-2xl leading-none">⚠️</span>
+                    <div className="flex-1">
+                        <div className="text-xs font-extrabold text-amber-900 mb-1">
+                            مزودون بدون بنك مستلم افتراضي
+                        </div>
+                        <div className="text-[11px] text-amber-800 leading-relaxed">
+                            أي تسوية واردة من هؤلاء المزودين ستبقى بحالة
+                            «<b>بدون بنك مستلم</b>» في القائمة أدناه
+                            حتى يختار الموظف البنك يدوياً.
+                            اذهب إلى <a href="/settings"
+                                className="underline font-bold hover:text-amber-950"
+                                data-testid="btr-banner-settings-link">
+                                الإعدادات
+                            </a> لتحديد البنك:
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                            {unconfiguredProviders.map((p) => {
+                                const stuck = providerBanks[p]?.missing_target_bank_count || 0;
+                                return (
+                                    <span key={p}
+                                          className="text-[10px] px-2 py-1 rounded-full bg-amber-200 text-amber-900 font-bold border border-amber-300">
+                                        {PROV_AR[p] || p}
+                                        {stuck > 0 && (
+                                            <span className="ms-1 text-rose-700">
+                                                ({stuck} عالقة)
+                                            </span>
+                                        )}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-2 mb-3 bg-slate-50 rounded-xl p-3">
                 {filterChips.map(({ key, label, count }) => (
@@ -622,7 +771,13 @@ export default function BankTransferReview() {
                                         </div>
                                     )}
                                 </td>
-                                <td className="p-2 font-bold text-slate-700">{r.target_bank_name}</td>
+                                <td className="p-2 font-bold text-slate-700">
+                                    {r.target_bank_name || (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300 font-bold">
+                                            ⚠ غير محدد
+                                        </span>
+                                    )}
+                                </td>
                                 <td className="p-2 font-mono text-[11px] text-slate-600">
                                     {r.provider_reference || r.bank_reference || r.source_id || "—"}
                                 </td>
@@ -650,7 +805,14 @@ export default function BankTransferReview() {
                                     )}
                                 </td>
                                 <td className="p-2 text-center">
-                                    {r.status === "pending" ? (
+                                    {r.status === "missing_target_bank" ? (
+                                        <button
+                                            onClick={() => setAssignReview(r)}
+                                            className="text-rose-700 hover:bg-rose-100 text-[11px] font-bold px-2 py-1 rounded border border-rose-300"
+                                            data-testid={`btr-assignbank-btn-${r.id}`}
+                                            title="تعيين البنك المستلم"
+                                        >🏦 تعيين بنك</button>
+                                    ) : r.status === "pending" ? (
                                         <div className="flex gap-1 justify-center">
                                             <button
                                                 onClick={() => setConfirmReview(r)}
@@ -687,6 +849,13 @@ export default function BankTransferReview() {
                 review={rejectReview}
                 onClose={() => setRejectReview(null)}
                 onDone={() => { setRejectReview(null); reload(); }}
+            />
+            <AssignBankModal
+                open={!!assignReview}
+                review={assignReview}
+                banks={bankAccounts}
+                onClose={() => setAssignReview(null)}
+                onDone={() => { setAssignReview(null); reload(); }}
             />
             <CreateModal
                 open={createOpen}

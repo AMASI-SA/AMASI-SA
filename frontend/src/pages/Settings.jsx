@@ -42,6 +42,25 @@ export default function Settings() {
     const [supInvShowDiscount, setSupInvShowDiscount] = useState(false);
     const [supInvShowTax,      setSupInvShowTax]      = useState(false);
     const [supInvShowNotes,    setSupInvShowNotes]    = useState(false);
+    // Iter-251 · Phase 1.5 — default receiving bank per payment provider.
+    const [bankForSalla,  setBankForSalla]  = useState("");
+    const [bankForTamara, setBankForTamara] = useState("");
+    const [bankForTabby,  setBankForTabby]  = useState("");
+    const [bankForImkan,  setBankForImkan]  = useState("");
+    const [bankAccounts,  setBankAccounts]  = useState([]);
+    useEffect(() => {
+        let alive = true;
+        api.get("/accounts", { params: { account_type: "bank" } })
+            .then(({ data }) => {
+                if (!alive) return;
+                const items = Array.isArray(data) ? data
+                    : (data?.items || []);
+                setBankAccounts(items.filter(
+                    (a) => a.account_type === "bank"));
+            })
+            .catch(() => { /* ignore */ });
+        return () => { alive = false; };
+    }, []);
     // iter-45 — Electronic Net status filter overrides
     const [electronicNetExcluded, setElectronicNetExcluded] = useState([]);
     const [sallaElectronicNetRef, setSallaElectronicNetRef] = useState("");
@@ -197,6 +216,11 @@ export default function Settings() {
                 setSupInvShowDiscount(!!settings.supplier_invoice_show_discount);
                 setSupInvShowTax(!!settings.supplier_invoice_show_tax);
                 setSupInvShowNotes(!!settings.supplier_invoice_show_notes);
+                // Iter-251 · Phase 1.5 — provider→bank routing.
+                setBankForSalla(settings.default_bank_for_salla   || "");
+                setBankForTamara(settings.default_bank_for_tamara || "");
+                setBankForTabby(settings.default_bank_for_tabby   || "");
+                setBankForImkan(settings.default_bank_for_imkan   || "");
                 // iter-45 — Electronic Net status overrides
                 setElectronicNetExcluded(settings.electronic_net_excluded_statuses || []);
                 setSallaElectronicNetRef(
@@ -571,6 +595,11 @@ export default function Settings() {
                 supplier_invoice_show_discount: supInvShowDiscount,
                 supplier_invoice_show_tax:      supInvShowTax,
                 supplier_invoice_show_notes:    supInvShowNotes,
+                // Iter-251 · Phase 1.5 — default bank per provider.
+                default_bank_for_salla:  bankForSalla   || null,
+                default_bank_for_tamara: bankForTamara  || null,
+                default_bank_for_tabby:  bankForTabby   || null,
+                default_bank_for_imkan:  bankForImkan   || null,
                 // iter-45 — Electronic Net overrides
                 electronic_net_excluded_statuses: electronicNetExcluded,
                 salla_electronic_net_reference: sallaElectronicNetRef.trim()
@@ -1130,6 +1159,58 @@ export default function Settings() {
                     </label>
                 </div>
             </div>
+            {/* Iter-251 · Phase 1.5 — Default receiving bank per
+                payment provider. */}
+            <div className="rounded-xl border border-border bg-white p-6"
+                 data-testid="provider-default-bank-section">
+                <div className="mb-3">
+                    <h2 className="text-xl font-bold" style={{ fontFamily: "Tajawal" }}>
+                        🏦 الحساب البنكي المستلم لكل مزود دفع
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-1">
+                        يُستخدم في صفحة <b>مراجعة التحويلات البنكية</b> لتوجيه التسويات الواردة تلقائياً.
+                        إذا تركت أي مزوّد فارغاً، أي تسوية واردة منه ستبقى بحالة <b>missing_target_bank</b>
+                        حتى يختار الموظف البنك يدوياً.
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {[
+                        { key: "salla",  label: "سلة",   value: bankForSalla,  setter: setBankForSalla  },
+                        { key: "tamara", label: "تمارا", value: bankForTamara, setter: setBankForTamara },
+                        { key: "tabby",  label: "تابي",  value: bankForTabby,  setter: setBankForTabby  },
+                        { key: "imkan",  label: "إمكان", value: bankForImkan,  setter: setBankForImkan  },
+                    ].map((p) => (
+                        <div key={p.key}
+                             className={`border rounded-lg p-3 transition-colors ${p.value ? "border-emerald-300 bg-emerald-50/40" : "border-amber-300 bg-amber-50/30"}`}>
+                            <div className="text-xs font-bold mb-1 flex items-center gap-2">
+                                <span>{p.label}</span>
+                                {!p.value && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-extrabold">
+                                        ⚠ بدون بنك
+                                    </span>
+                                )}
+                                {p.value && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 font-extrabold">
+                                        ✓ مفعَّل
+                                    </span>
+                                )}
+                            </div>
+                            <select
+                                value={p.value}
+                                onChange={(e) => p.setter(e.target.value)}
+                                className="w-full border rounded-lg px-2 py-2 text-xs bg-white"
+                                data-testid={`bank-for-${p.key}`}
+                            >
+                                <option value="">— لم يتم التحديد —</option>
+                                {bankAccounts.map((b) => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
             <div className="rounded-xl border border-border bg-white p-6" data-testid="dashboard-cards-section">
                 <div className="mb-5 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-brand text-white flex items-center justify-center">

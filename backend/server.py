@@ -459,6 +459,15 @@ class SettingsIn(BaseModel):
     supplier_invoice_show_discount: Optional[bool] = None
     supplier_invoice_show_tax:      Optional[bool] = None
     supplier_invoice_show_notes:    Optional[bool] = None
+    # Iter-251 · Phase 1.5 — Default receiving bank per payment
+    # provider. When an auto-created BankTransferReview is missing a
+    # target_bank_id, the system tries to resolve from these fields.
+    # If still empty → status `missing_target_bank` until a Reviewer
+    # assigns a bank manually. NO GL post happens until then.
+    default_bank_for_salla:  Optional[str] = None
+    default_bank_for_tamara: Optional[str] = None
+    default_bank_for_tabby:  Optional[str] = None
+    default_bank_for_imkan:  Optional[str] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -821,6 +830,11 @@ async def get_settings(user: dict = Depends(current_user)):
         "supplier_invoice_show_discount": bool(s.get("supplier_invoice_show_discount", False)),
         "supplier_invoice_show_tax":      bool(s.get("supplier_invoice_show_tax", False)),
         "supplier_invoice_show_notes":    bool(s.get("supplier_invoice_show_notes", False)),
+        # Iter-251 · Phase 1.5 — default receiving bank per provider.
+        "default_bank_for_salla":  s.get("default_bank_for_salla")  or None,
+        "default_bank_for_tamara": s.get("default_bank_for_tamara") or None,
+        "default_bank_for_tabby":  s.get("default_bank_for_tabby")  or None,
+        "default_bank_for_imkan":  s.get("default_bank_for_imkan")  or None,
         # Iter-182 — operation types hidden from "new transaction" picker.
         "hidden_transaction_types": s.get("hidden_transaction_types", []),
         # Iter-184 — operation→accounts binding (per-op allow-list).
@@ -875,6 +889,12 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["supplier_invoice_show_tax"] = bool(payload.supplier_invoice_show_tax)
     if payload.supplier_invoice_show_notes is not None:
         update_doc["supplier_invoice_show_notes"] = bool(payload.supplier_invoice_show_notes)
+    # Iter-251 · Phase 1.5 — default receiving bank per provider.
+    for _prov in ("salla", "tamara", "tabby", "imkan"):
+        _val = getattr(payload, f"default_bank_for_{_prov}", None)
+        if _val is not None:
+            update_doc[f"default_bank_for_{_prov}"] = (
+                (_val or "").strip() or None)
     # Iter-182 — hidden transaction types in the unified entry picker.
     if payload.hidden_transaction_types is not None:
         update_doc["hidden_transaction_types"] = [

@@ -123,7 +123,15 @@ SOURCE_TYPES = {"salla", "tamara", "tabby", "imkan",
 LIFECYCLE_STATUSES = {
     "pending", "confirmed", "confirmed_with_difference",
     "rejected", "legacy_confirmed",
+    # Iter-251 · Phase 1.5 — auto-created review when the provider
+    # has no `default_bank_for_<provider>` mapped in /settings.  The
+    # row is held in this status until a Reviewer manually assigns a
+    # bank via /assign-bank.  Never reaches GL until then.
+    "missing_target_bank",
 }
+
+# Allowed provider keys that can be auto-routed to a default bank.
+ROUTABLE_PROVIDERS = ("salla", "tamara", "tabby", "imkan")
 
 
 # ─────────────────────────────── DTOs ─────────────────────────────────
@@ -133,8 +141,12 @@ class ReviewCreateIn(BaseModel):
     source_external_id:  Optional[str] = None
     source_account_id:   Optional[str] = None
     source_account_name: str
-    target_bank_id:      str
-    target_bank_name:    str
+    # Iter-251 · Phase 1.5 — both target bank fields are optional now.
+    # Auto-created entries can omit them and the system will try to
+    # resolve via `default_bank_for_<provider>` setting. If still
+    # missing, the row lands in `missing_target_bank` status.
+    target_bank_id:      Optional[str] = None
+    target_bank_name:    Optional[str] = None
     expected_amount:     float
     transfer_date:       str        # ISO date
     due_date:            Optional[str] = None
@@ -146,6 +158,12 @@ class ReviewCreateIn(BaseModel):
     # Auto-created entries from future webhooks pass a payload blob.
     auto_created:        bool = False
     provider_payload:    Optional[dict] = None
+
+
+class AssignBankIn(BaseModel):
+    target_bank_id:   str
+    target_bank_name: str
+    review_note:      Optional[str] = None
 
 
 class ReviewConfirmIn(BaseModel):
@@ -212,6 +230,28 @@ def make_bank_transfer_review_router(db, current_user):
         if not doc:
             raise HTTPException(404, "سجل المراجعة غير موجود")
         return doc
+
+    # Iter-251 · Phase 1.5 — Resolve `default_bank_for_<provider>` from
+    # user settings → returns (bank_id, bank_name) or (None, None).
+    async def _resolve_default_bank(
+        uid: str, provider: str,
+    ) -> tuple[Optional[str], Optional[str]]:
+        if provider not in ROUTABLE_PROVIDERS:
+            return None, None
+        s = await db.settings.find_one(
+            {"user_id": uid},
+            {"_id": 0, f"default_bank_for_{provider}": 1},
+        ) or {}
+        bank_id = s.get(f"default_bank_for_{provider}")
+        if not bank_id:
+            return None, None
+        acc = await db.accounts.find_one(
+            {"user_id": uid, "id": bank_id},
+            {"_id": 0, "id": 1, "name": 1},
+        )
+        if not acc:
+            return None, None
+        return acc["id"], acc.get("name") or ""
 
     async def _post_gl_for_confirm(
         uid: str,
@@ -284,18 +324,43 @@ def make_bank_transfer_review_router(db, current_user):
         _validate_source_type(payload.source_type)
         if _r(payload.expected_amount) <= 0:
             raise HTTPException(400, "المبلغ المتوقع يجب أن يكون > 0")
-        if not payload.source_account_name or not payload.target_bank_name:
-            raise HTTPException(400, "اسم المصدر واسم البنك مطلوبان")
+        if not payload.source_account_name:
+            raise HTTPException(400, "اسم الحساب المصدر مطلوب")
+
+        # Iter-251 · Phase 1.5 — Resolve target bank.
+        #   1. If caller passed both target_bank_id + target_bank_name
+        #      → use as-is (manual mode).
+        #   2. Else try `default_bank_for_<provider>` from settings.
+        #   3. Else mark the row `missing_target_bank` and require a
+        #      Reviewer to assign via /assign-bank.
+        target_bank_id   = (payload.target_bank_id   or "").strip() or None
+        target_bank_name = (payload.target_bank_name or "").strip() or None
+        if not target_bank_id:
+            resolved_id, resolved_name = await _resolve_default_bank(
+                user["id"], payload.source_type)
+            if resolved_id:
+                target_bank_id   = resolved_id
+                target_bank_name = resolved_name
+
+        # For manual entries the merchant MUST provide a bank.
+        if payload.source_type == "manual" and not target_bank_id:
+            raise HTTPException(
+                400,
+                "للسجلات اليدوية يجب تحديد البنك المستلم.",
+            )
 
         # Idempotency: respect the unique index — only enforced for
         # provider-sourced entries (the partial filter exempts manual).
+        # When target_bank_id is still missing we use a sentinel so
+        # duplicates from the same provider still collide.
+        dedup_target = target_bank_id or "__missing__"
         if payload.source_type != "manual":
             existing = await db.bank_transfer_reviews.find_one(
                 {
                     "user_id":        user["id"],
                     "source_type":    payload.source_type,
                     "source_id":      payload.source_id,
-                    "target_bank_id": payload.target_bank_id,
+                    "target_bank_id": dedup_target,
                 },
                 {"_id": 0, "id": 1, "status": 1},
             )
@@ -306,6 +371,10 @@ def make_bank_transfer_review_router(db, current_user):
                     f"(id={existing['id']}, status={existing['status']})",
                 )
 
+        initial_status = (
+            "pending" if target_bank_id else "missing_target_bank"
+        )
+
         doc = {
             "id":                  str(uuid.uuid4()),
             "user_id":             user["id"],
@@ -314,8 +383,8 @@ def make_bank_transfer_review_router(db, current_user):
             "source_external_id":  payload.source_external_id,
             "source_account_id":   payload.source_account_id,
             "source_account_name": payload.source_account_name.strip(),
-            "target_bank_id":      payload.target_bank_id,
-            "target_bank_name":    payload.target_bank_name.strip(),
+            "target_bank_id":      target_bank_id or dedup_target,
+            "target_bank_name":    target_bank_name,
             "expected_amount":     _r(payload.expected_amount),
             "received_amount":     None,
             "difference":          None,
@@ -325,7 +394,7 @@ def make_bank_transfer_review_router(db, current_user):
             "bank_reference":      payload.bank_reference,
             "transfer_date":       payload.transfer_date,
             "due_date":            payload.due_date,
-            "status":              "pending",
+            "status":              initial_status,
             "reviewed_by":         None,
             "reviewed_by_name":    None,
             "reviewed_at":         None,
@@ -444,6 +513,72 @@ def make_bank_transfer_review_router(db, current_user):
     @router.get("/{rid}")
     async def get_review(rid: str, user: dict = Depends(current_user)):
         return await _fetch_or_404(user["id"], rid)
+
+    # ─────────── Provider → Bank mapping (Iter-251 · Phase 1.5) ───
+    # Returns the current routing configuration so the frontend can
+    # render an inline alert ("لم يتم تحديد بنك لـ تمارا") and link
+    # the merchant directly to the right Settings section.
+    @router.get("/config/provider-banks")
+    async def provider_banks(user: dict = Depends(current_user)):
+        uid = user["id"]
+        s = await db.settings.find_one({"user_id": uid}, {"_id": 0}) or {}
+        out: dict = {}
+        for prov in ROUTABLE_PROVIDERS:
+            bid = s.get(f"default_bank_for_{prov}")
+            bank_id, bank_name = None, None
+            if bid:
+                acc = await db.accounts.find_one(
+                    {"user_id": uid, "id": bid},
+                    {"_id": 0, "id": 1, "name": 1},
+                )
+                if acc:
+                    bank_id, bank_name = acc["id"], acc.get("name")
+            out[prov] = {
+                "configured":      bool(bank_id),
+                "target_bank_id":  bank_id,
+                "target_bank_name": bank_name,
+            }
+        # Count reviews currently stuck on each provider.
+        stuck_cursor = db.bank_transfer_reviews.aggregate([
+            {"$match": {"user_id": uid,
+                        "status": "missing_target_bank"}},
+            {"$group": {"_id": "$source_type", "count": {"$sum": 1}}},
+        ])
+        async for row in stuck_cursor:
+            if row["_id"] in out:
+                out[row["_id"]]["missing_target_bank_count"] = row["count"]
+        for prov in ROUTABLE_PROVIDERS:
+            out[prov].setdefault("missing_target_bank_count", 0)
+        return out
+
+    # ─────────── Assign bank to a missing_target_bank row ─────────
+    @router.post("/{rid}/assign-bank")
+    async def assign_bank(
+        rid: str,
+        payload: AssignBankIn,
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        doc = await _fetch_or_404(uid, rid)
+        if doc["status"] != "missing_target_bank":
+            raise HTTPException(
+                400,
+                "تخصيص البنك متاح فقط للسجلات بحالة missing_target_bank",
+            )
+        if not payload.target_bank_id or not payload.target_bank_name:
+            raise HTTPException(400, "معرّف البنك واسم البنك مطلوبان")
+        now = _now()
+        update = {
+            "target_bank_id":   payload.target_bank_id.strip(),
+            "target_bank_name": payload.target_bank_name.strip(),
+            "status":           "pending",
+            "review_note":      payload.review_note or doc.get("review_note"),
+            "updated_at":       now,
+        }
+        await db.bank_transfer_reviews.update_one(
+            {"id": rid, "user_id": uid}, {"$set": update},
+        )
+        return {**doc, **update}
 
     # ─────────── CONFIRM (exact) ───────────
     @router.post("/{rid}/confirm")
