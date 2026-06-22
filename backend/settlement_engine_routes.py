@@ -51,6 +51,22 @@ PROVIDER_MATCHERS: dict[str, list[str]] = {
     ],
 }
 
+# Default settlement cycle (ISO weekday → end of cycle).
+# 1 = Mon ... 7 = Sun. Convention: Tamara/Tabby/Emkan close weekly
+# on Sunday (ISO weekday 7); Salla relies on actual settlement files.
+PROVIDER_CYCLES: dict[str, dict] = {
+    "tamara": {"period": "weekly", "anchor_weekday": 7,
+                "commission_rate": 0.06,
+                "vat_rate_on_commission": 0.15},
+    "tabby":  {"period": "weekly", "anchor_weekday": 7,
+                "commission_rate": 0.06,
+                "vat_rate_on_commission": 0.15},
+    "imkan":  {"period": "weekly", "anchor_weekday": 7,
+                "commission_rate": 0.05,
+                "vat_rate_on_commission": 0.15},
+    "salla":  {"period": "settlement_entries"},
+}
+
 PROVIDER_AR = {
     "tamara": "تمارا", "tabby": "تابي",
     "imkan":  "إمكان", "salla":  "سلة",
@@ -295,6 +311,179 @@ def make_settlement_engine_router(db, current_user):
                 "حتى تفعيل feature flag «settlement_engine_enabled» لن "
                 "يحدث أي توليد فعلي.",
             ],
+        }
+
+    # ─────────── Dry-Run Details (per-invoice simulation) ───────────
+    # Read-only simulation that groups orders into virtual invoices
+    # following each provider's settlement cycle.  No DB writes.
+    @router.get("/dry-run-details")
+    async def dry_run_details(
+        provider: Optional[str] = None,
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        out: dict[str, dict] = {}
+        targets = (
+            [provider] if provider in PROVIDER_MATCHERS
+            else list(PROVIDER_MATCHERS.keys())
+        )
+        for prov in targets:
+            cycle = PROVIDER_CYCLES.get(prov, {})
+            if cycle.get("period") == "settlement_entries":
+                out[prov] = await _simulate_from_settlements(uid, prov)
+            else:
+                out[prov] = await _simulate_weekly(uid, prov, cycle)
+        return {
+            "generated_at": _now(),
+            "providers":    out,
+            "notes": [
+                "هذي محاكاة بحتة — لا فواتير حقيقية تُنشأ.",
+                "أرقام العمولة و VAT اقتراحات افتراضية. اضبطها من "
+                "إعدادات المزود لاحقاً.",
+                "السلَّة تستخدم settlement_entries الفعلية كأساس "
+                "(لا تخمين).",
+            ],
+        }
+
+    # Helpers — pulled outside the router for testability.
+    async def _simulate_weekly(uid, prov, cycle):
+        matchers = PROVIDER_MATCHERS[prov]
+        or_clauses = [
+            {"payment_method": {"$regex": m, "$options": "i"}}
+            for m in matchers
+        ]
+        cursor = db.unified_orders.find(
+            {"user_id": uid, "$or": or_clauses},
+            {"_id": 0, "id": 1, "order_date": 1, "total_amount": 1,
+             "status": 1, "refund_amount": 1},
+        )
+        # Bucket by ISO week.
+        buckets: dict[str, dict] = {}
+        async for o in cursor:
+            d_str = o.get("order_date") or ""
+            try:
+                d = datetime.strptime(d_str[:10], "%Y-%m-%d").date()
+            except Exception:
+                continue
+            # Snap to the Monday of the week.
+            from datetime import timedelta
+            monday = d - timedelta(days=d.weekday())
+            sunday = monday + timedelta(days=6)
+            key = monday.isoformat()
+            b = buckets.setdefault(key, {
+                "period_from": monday.isoformat(),
+                "period_to":   sunday.isoformat(),
+                "orders":      0,
+                "gross":       0.0,
+                "refunds":     0.0,
+            })
+            b["orders"]  += 1
+            b["gross"]   += float(o.get("total_amount") or 0)
+            b["refunds"] += float(o.get("refund_amount") or 0)
+
+        invoices = []
+        for idx, (_, b) in enumerate(
+                sorted(buckets.items(), key=lambda x: x[0]), start=1):
+            net_sales  = round(b["gross"] - b["refunds"], 2)
+            commission = round(
+                net_sales * cycle.get("commission_rate", 0), 2)
+            vat        = round(
+                commission * cycle.get("vat_rate_on_commission", 0), 2)
+            expected_transfer = round(
+                net_sales - commission - vat, 2)
+            invoices.append({
+                "dry_invoice_id":   f"DRY-{prov.upper()}-{idx:03d}",
+                "period_from":      b["period_from"],
+                "period_to":        b["period_to"],
+                "orders_count":     b["orders"],
+                "gross_sales":      round(b["gross"], 2),
+                "refunds":          round(b["refunds"], 2),
+                "net_sales":        net_sales,
+                "estimated_commission": commission,
+                "estimated_vat":    vat,
+                "expected_transfer": expected_transfer,
+            })
+        totals = {
+            "invoices_count":      len(invoices),
+            "orders_count":        sum(i["orders_count"]   for i in invoices),
+            "gross_sales":         round(sum(i["gross_sales"]
+                                              for i in invoices), 2),
+            "refunds":             round(sum(i["refunds"]
+                                              for i in invoices), 2),
+            "net_sales":           round(sum(i["net_sales"]
+                                              for i in invoices), 2),
+            "estimated_commission":round(sum(i["estimated_commission"]
+                                              for i in invoices), 2),
+            "estimated_vat":       round(sum(i["estimated_vat"]
+                                              for i in invoices), 2),
+            "expected_transfer":   round(sum(i["expected_transfer"]
+                                              for i in invoices), 2),
+        }
+        return {
+            "provider":       prov,
+            "provider_ar":    PROVIDER_AR[prov],
+            "source":         "unified_orders → weekly buckets",
+            "cycle":          cycle,
+            "totals":         totals,
+            "invoices":       invoices,
+        }
+
+    async def _simulate_from_settlements(uid, prov):
+        # Group existing settlement_entries by settlement_reference.
+        cursor = db.settlement_entries.aggregate([
+            {"$match": {"user_id": uid, "provider": prov}},
+            {"$group": {
+                "_id": "$settlement_reference",
+                "orders_count": {"$sum": 1},
+                "gross":        {"$sum": {"$ifNull":
+                    ["$actual_gross_amount", 0]}},
+                "refunds":      {"$sum": {"$ifNull":
+                    ["$actual_refund_amount", 0]}},
+                "fee":          {"$sum": {"$ifNull":
+                    ["$actual_payment_fee", 0]}},
+                "net":          {"$sum": {"$ifNull":
+                    ["$actual_net_amount", 0]}},
+                "min_date":     {"$min": "$settlement_date"},
+                "max_date":     {"$max": "$settlement_date"},
+            }},
+            {"$sort": {"min_date": 1}},
+        ])
+        invoices = []
+        idx = 0
+        async for r in cursor:
+            idx += 1
+            invoices.append({
+                "dry_invoice_id":     f"DRY-{prov.upper()}-{idx:03d}",
+                "settlement_reference": r["_id"],
+                "period_from":        r.get("min_date"),
+                "period_to":          r.get("max_date"),
+                "orders_count":       r["orders_count"],
+                "gross_sales":        round(r.get("gross", 0)   or 0, 2),
+                "refunds":            round(r.get("refunds", 0) or 0, 2),
+                "estimated_commission": round(r.get("fee", 0)   or 0, 2),
+                "estimated_vat":      0.0,
+                "expected_transfer":  round(r.get("net", 0)     or 0, 2),
+            })
+        totals = {
+            "invoices_count":      len(invoices),
+            "orders_count":        sum(i["orders_count"]   for i in invoices),
+            "gross_sales":         round(sum(i["gross_sales"]
+                                              for i in invoices), 2),
+            "refunds":             round(sum(i["refunds"]
+                                              for i in invoices), 2),
+            "estimated_commission":round(sum(i["estimated_commission"]
+                                              for i in invoices), 2),
+            "estimated_vat":       0.0,
+            "expected_transfer":   round(sum(i["expected_transfer"]
+                                              for i in invoices), 2),
+        }
+        return {
+            "provider":       prov,
+            "provider_ar":    PROVIDER_AR[prov],
+            "source":         "settlement_entries (real data)",
+            "cycle":          PROVIDER_CYCLES.get(prov, {}),
+            "totals":         totals,
+            "invoices":       invoices,
         }
 
     return router

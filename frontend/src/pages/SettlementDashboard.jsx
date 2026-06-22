@@ -65,7 +65,7 @@ function StatTile({ label, value, color = "slate", suffix = "", testid }) {
     );
 }
 
-function ProviderCard({ p }) {
+function ProviderCard({ p, onShowDetails }) {
     const c = PROVIDER_COLORS[p.provider] || PROVIDER_COLORS.salla;
     const ready = p.readiness.has_default_bank;
     return (
@@ -81,9 +81,16 @@ function ProviderCard({ p }) {
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => onShowDetails(p.provider)}
+                        className="text-[10px] px-3 py-1 rounded-full bg-slate-900 text-white font-bold hover:bg-slate-700"
+                        data-testid={`se-details-btn-${p.provider}`}
+                    >
+                        🔍 محاكاة الفواتير
+                    </button>
                     {ready ? (
                         <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
-                            ✓ البنك مُحدَّد: {p.default_bank.name}
+                            ✓ البنك: {p.default_bank.name}
                         </span>
                     ) : (
                         <span className="text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-800 font-bold border border-rose-300">
@@ -189,6 +196,25 @@ function FeatureFlagsPanel({ flags, onChange }) {
 export default function SettlementDashboard() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [detailsProvider, setDetailsProvider] = useState(null);
+    const [detailsData, setDetailsData] = useState(null);
+    const [detailsLoading, setDetailsLoading] = useState(false);
+
+    async function showDetails(prov) {
+        setDetailsProvider(prov);
+        setDetailsLoading(true);
+        setDetailsData(null);
+        try {
+            const { data: d } = await api.get(
+                "/settlement-engine/dry-run-details",
+                { params: { provider: prov } });
+            setDetailsData(d.providers[prov]);
+        } catch (e) {
+            toast.error("فشل تحميل التفاصيل");
+        } finally {
+            setDetailsLoading(false);
+        }
+    }
 
     const reload = useCallback(async () => {
         setLoading(true);
@@ -273,7 +299,8 @@ export default function SettlementDashboard() {
                     {/* Per-provider cards */}
                     <div data-testid="se-per-provider">
                         {data.per_provider.map((p) =>
-                            <ProviderCard key={p.provider} p={p} />)}
+                            <ProviderCard key={p.provider} p={p}
+                                          onShowDetails={showDetails} />)}
                     </div>
 
                     {/* Notes / disclaimers */}
@@ -284,6 +311,88 @@ export default function SettlementDashboard() {
                         </ul>
                     </div>
                 </>
+            )}
+
+            {/* Dry-Run Details Modal */}
+            {detailsProvider && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                     onClick={() => setDetailsProvider(null)}
+                     data-testid="se-details-modal">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto"
+                         onClick={(e) => e.stopPropagation()}>
+                        <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex items-center justify-between">
+                            <h3 className="text-base font-extrabold">
+                                🔍 محاكاة الفواتير — {detailsData?.provider_ar || detailsProvider}
+                            </h3>
+                            <button onClick={() => setDetailsProvider(null)}
+                                    className="text-slate-400 hover:text-slate-700 text-xl"
+                                    data-testid="se-details-close">✕</button>
+                        </div>
+                        <div className="p-4">
+                            {detailsLoading ? (
+                                <div className="text-center text-slate-500 py-12">جارٍ المحاكاة...</div>
+                            ) : !detailsData ? (
+                                <div className="text-center text-rose-500 py-12">تعذّر التحميل</div>
+                            ) : (
+                                <>
+                                    <div className="bg-slate-50 rounded-lg p-3 mb-3 text-[11px] text-slate-600">
+                                        <b>المصدر:</b> {detailsData.source}
+                                        {detailsData.cycle?.period === "weekly" && (
+                                            <> • <b>الدورة:</b> أسبوعية •
+                                            <b className="ms-1">العمولة:</b> {(detailsData.cycle.commission_rate*100).toFixed(1)}% •
+                                            <b className="ms-1">VAT:</b> {(detailsData.cycle.vat_rate_on_commission*100).toFixed(1)}%</>
+                                        )}
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                                        <StatTile label="عدد الفواتير المتوقعة"
+                                                  value={fmtInt(detailsData.totals.invoices_count)} color="indigo" />
+                                        <StatTile label="إجمالي الطلبات"
+                                                  value={fmtInt(detailsData.totals.orders_count)} color="slate" />
+                                        <StatTile label="إجمالي المبيعات"
+                                                  value={fmt(detailsData.totals.gross_sales)} suffix=" ر.س" color="emerald" />
+                                        <StatTile label="صافي التحويل المتوقع"
+                                                  value={fmt(detailsData.totals.expected_transfer)} suffix=" ر.س" color="amber" />
+                                    </div>
+                                    <table className="min-w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                                        <thead className="bg-slate-100">
+                                            <tr className="text-right">
+                                                <th className="p-2">رقم الفاتورة</th>
+                                                <th className="p-2">الفترة</th>
+                                                <th className="p-2 text-center">الطلبات</th>
+                                                <th className="p-2 text-center">إجمالي المبيعات</th>
+                                                <th className="p-2 text-center">المرتجعات</th>
+                                                <th className="p-2 text-center">العمولة</th>
+                                                <th className="p-2 text-center">VAT</th>
+                                                <th className="p-2 text-center">صافي التحويل</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {detailsData.invoices.map((inv, i) => (
+                                                <tr key={i} className="border-t hover:bg-slate-50">
+                                                    <td className="p-2 font-mono font-bold">{inv.dry_invoice_id}</td>
+                                                    <td className="p-2 font-mono text-slate-600">
+                                                        {inv.period_from} → {inv.period_to}
+                                                    </td>
+                                                    <td className="p-2 text-center font-mono">{fmtInt(inv.orders_count)}</td>
+                                                    <td className="p-2 text-center font-mono text-emerald-700">{fmt(inv.gross_sales)}</td>
+                                                    <td className="p-2 text-center font-mono text-rose-700">{fmt(inv.refunds)}</td>
+                                                    <td className="p-2 text-center font-mono text-amber-700">{fmt(inv.estimated_commission)}</td>
+                                                    <td className="p-2 text-center font-mono text-violet-700">{fmt(inv.estimated_vat)}</td>
+                                                    <td className="p-2 text-center font-mono text-indigo-800 font-extrabold">{fmt(inv.expected_transfer)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    {detailsData.invoices.length === 0 && (
+                                        <div className="text-center text-slate-500 py-6">
+                                            لا توجد فواتير محاكاة لهذا المزود.
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
