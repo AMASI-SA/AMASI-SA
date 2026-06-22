@@ -332,7 +332,16 @@ function RejectModal({ open, review, onClose, onDone }) {
     );
 }
 
-function CreateModal({ open, onClose, onDone }) {
+function CreateModal({ open, onClose, onDone, banks }) {
+    const SOURCE_DEFAULTS = {
+        salla:             "محفظة سلة",
+        tamara:            "محفظة تمارا",
+        tabby:             "محفظة تابي",
+        imkan:             "محفظة إمكان",
+        shipping_cod:      "تحصيلات شركة الشحن (COD)",
+        customer_transfer: "تحويل بنكي من عميل",
+        manual:            "",
+    };
     const [form, setForm] = useState({
         source_type: "manual",
         source_id: "",
@@ -355,11 +364,39 @@ function CreateModal({ open, onClose, onDone }) {
         });
     }, [open]);
     if (!open) return null;
+
     const upd = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+    // Auto-fill source account name when the merchant changes the
+    // source type — provided he hasn't typed something custom yet.
+    function onSourceTypeChange(v) {
+        const def = SOURCE_DEFAULTS[v] || "";
+        setForm((s) => {
+            const wasDefault = !s.source_account_name
+                || Object.values(SOURCE_DEFAULTS).includes(s.source_account_name);
+            return {
+                ...s,
+                source_type: v,
+                source_account_name: wasDefault ? def : s.source_account_name,
+            };
+        });
+    }
+    function onBankChange(v) {
+        const b = banks.find((x) => x.id === v);
+        setForm((s) => ({
+            ...s,
+            target_bank_id: v,
+            target_bank_name: b?.name || "",
+        }));
+    }
+    // For non-manual providers we hide the source-name field and
+    // require only the upstream identifier (settlement number).
+    const isProvider = form.source_type !== "manual";
 
     async function submit() {
-        if (!form.source_id || !form.source_account_name
-            || !form.target_bank_id || !form.target_bank_name
+        if (!form.source_id
+            || !form.source_account_name
+            || !form.target_bank_id
+            || !form.target_bank_name
             || !(Number(form.expected_amount) > 0)
             || !form.transfer_date) {
             return toast.error("الحقول الأساسية مطلوبة (مع المبلغ > 0)");
@@ -386,47 +423,72 @@ function CreateModal({ open, onClose, onDone }) {
                     للحركات اليدوية/التجريبية. الـ webhooks الإنتاجية ستملأ هذي الصفحة تلقائياً في المرحلة 2.
                 </p>
                 <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
+                    <div className={isProvider ? "" : "col-span-2"}>
                         <label className="font-bold block mb-1">نوع المصدر</label>
                         <select value={form.source_type}
-                                onChange={(e) => upd("source_type", e.target.value)}
+                                onChange={(e) => onSourceTypeChange(e.target.value)}
                                 className="w-full border rounded-lg px-2 py-2"
                                 data-testid="btr-create-source-type">
                             {Object.entries(SOURCE_LABELS).map(([k, v]) =>
                                 <option key={k} value={k}>{v.ar}</option>)}
                         </select>
                     </div>
-                    <div>
-                        <label className="font-bold block mb-1">معرّف المصدر *</label>
-                        <input value={form.source_id}
-                               onChange={(e) => upd("source_id", e.target.value)}
-                               placeholder="مثال: SETTLEMENT-001"
-                               className="w-full border rounded-lg px-2 py-2"
-                               data-testid="btr-create-source-id" />
-                    </div>
+                    {isProvider ? (
+                        <div>
+                            <label className="font-bold block mb-1">
+                                رقم التسوية / المرجع *
+                            </label>
+                            <input value={form.source_id}
+                                   onChange={(e) => upd("source_id", e.target.value)}
+                                   placeholder="مثال: SETTLEMENT-001"
+                                   className="w-full border rounded-lg px-2 py-2"
+                                   data-testid="btr-create-source-id" />
+                        </div>
+                    ) : (
+                        <div>
+                            <label className="font-bold block mb-1">معرّف المصدر *</label>
+                            <input value={form.source_id}
+                                   onChange={(e) => upd("source_id", e.target.value)}
+                                   placeholder="مثال: MANUAL-001"
+                                   className="w-full border rounded-lg px-2 py-2"
+                                   data-testid="btr-create-source-id" />
+                        </div>
+                    )}
+                    {/* Source account name auto-filled for known
+                        providers; user can still tweak if needed. */}
+                    {!isProvider && (
+                        <div className="col-span-2">
+                            <label className="font-bold block mb-1">اسم الحساب المصدر *</label>
+                            <input value={form.source_account_name}
+                                   onChange={(e) => upd("source_account_name", e.target.value)}
+                                   placeholder="محفظة سلة"
+                                   className="w-full border rounded-lg px-2 py-2"
+                                   data-testid="btr-create-source-name" />
+                        </div>
+                    )}
+                    {isProvider && (
+                        <div className="col-span-2 bg-slate-50 rounded-lg p-2 text-[11px] text-slate-600 flex items-center gap-2">
+                            <span className="text-slate-400">↳</span>
+                            <span>المصدر:</span>
+                            <b className="text-slate-800">{form.source_account_name}</b>
+                            <span className="text-slate-400 text-[10px]">(تلقائي)</span>
+                        </div>
+                    )}
                     <div className="col-span-2">
-                        <label className="font-bold block mb-1">اسم الحساب المصدر *</label>
-                        <input value={form.source_account_name}
-                               onChange={(e) => upd("source_account_name", e.target.value)}
-                               placeholder="محفظة سلة"
-                               className="w-full border rounded-lg px-2 py-2"
-                               data-testid="btr-create-source-name" />
-                    </div>
-                    <div>
-                        <label className="font-bold block mb-1">معرّف البنك *</label>
-                        <input value={form.target_bank_id}
-                               onChange={(e) => upd("target_bank_id", e.target.value)}
-                               placeholder="BANK-INMA-1"
-                               className="w-full border rounded-lg px-2 py-2"
-                               data-testid="btr-create-bank-id" />
-                    </div>
-                    <div>
-                        <label className="font-bold block mb-1">اسم البنك *</label>
-                        <input value={form.target_bank_name}
-                               onChange={(e) => upd("target_bank_name", e.target.value)}
-                               placeholder="بنك الإنماء"
-                               className="w-full border rounded-lg px-2 py-2"
-                               data-testid="btr-create-bank-name" />
+                        <label className="font-bold block mb-1">البنك المستلم *</label>
+                        <select value={form.target_bank_id}
+                                onChange={(e) => onBankChange(e.target.value)}
+                                className="w-full border rounded-lg px-2 py-2"
+                                data-testid="btr-create-bank-dropdown">
+                            <option value="">— اختر بنكاً —</option>
+                            {banks.map((b) =>
+                                <option key={b.id} value={b.id}>{b.name}</option>)}
+                        </select>
+                        {banks.length === 0 && (
+                            <div className="text-[10px] text-rose-700 mt-1">
+                                لا توجد حسابات بنكية مُعرَّفة بعد. أضفها من شاشة «الأصول والحسابات».
+                            </div>
+                        )}
                     </div>
                     <div>
                         <label className="font-bold block mb-1">المبلغ المتوقع *</label>
@@ -859,6 +921,7 @@ export default function BankTransferReview() {
             />
             <CreateModal
                 open={createOpen}
+                banks={bankAccounts}
                 onClose={() => setCreateOpen(false)}
                 onDone={() => { setCreateOpen(false); reload(); }}
             />
