@@ -2,7 +2,9 @@
 // Read-only list backed by `db.products` (imported from Excel).
 // The autocomplete inside the supplier-invoice form (Phase 3) will
 // hit the same /api/products/list endpoint.
-import { useEffect, useState } from "react";
+// Phase 4 — Visual audit: click a row to reveal the last 5 cost
+// history records (supplier, invoice, qty, unit price, total).
+import { useEffect, useState, Fragment } from "react";
 import { toast } from "sonner";
 import api from "../lib/api";
 import ProductsImportExcelModal from
@@ -12,6 +14,126 @@ const fmt = (v) => v == null ? "—" :
   Number(v).toLocaleString("en-US", {
     minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const fmtDate = (v) => {
+  if (!v) return "—";
+  try {
+    return new Date(v).toLocaleDateString("en-CA");
+  } catch (_e) { return v; }
+};
+
+function CostHistoryPanel({ productId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    api.get(`/products/${productId}/cost-history`, {
+      params: { limit: 5 },
+    })
+      .then((r) => { if (alive) setData(r.data); })
+      .catch(() => { if (alive) toast.error("فشل تحميل سجل التكلفة"); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [productId]);
+
+  if (loading) {
+    return (
+      <div className="p-4 text-center text-xs text-slate-500"
+           data-testid="cost-history-loading">
+        جارٍ تحميل سجل التكلفة…
+      </div>
+    );
+  }
+  if (!data) return null;
+  const items = data.items || [];
+  return (
+    <div className="bg-slate-50 border-t-2 border-emerald-200 p-4"
+         data-testid={`cost-history-${productId}`}>
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="font-bold text-sm text-emerald-900">
+          📜 آخر {items.length} سجل تكلفة
+        </h4>
+        <span className="text-[11px] text-slate-500">
+          إجمالي السجلات: {data.total_count} •
+          آخر: <b className="text-emerald-700 font-mono">
+            {fmt(data.product?.cost_current)}
+          </b> •
+          متوسط مرجح: <b className="text-indigo-700 font-mono">
+            {fmt(data.product?.cost_avg)}
+          </b>
+        </span>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-slate-500 p-2"
+           data-testid="cost-history-empty">
+          لا يوجد سجل تكلفة بعد لهذا المنتج.
+        </p>
+      ) : (
+        <div className="overflow-x-auto bg-white rounded border border-slate-200">
+          <table className="min-w-full text-xs">
+            <thead className="bg-slate-100">
+              <tr className="text-right">
+                <th className="p-2">التاريخ</th>
+                <th className="p-2">المورد</th>
+                <th className="p-2">رقم فاتورة المورد</th>
+                <th className="p-2 text-center">الكمية</th>
+                <th className="p-2 text-center">سعر الوحدة</th>
+                <th className="p-2 text-center">إجمالي السطر</th>
+                <th className="p-2">المصدر</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((h, idx) => (
+                <tr key={idx} className="border-t border-slate-200"
+                    data-testid={`cost-history-row-${idx}`}>
+                  <td className="p-2 font-mono">
+                    {fmtDate(h.invoice_date || h.at)}
+                  </td>
+                  <td className="p-2">
+                    {h.supplier_name || (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
+                  <td className="p-2 font-mono text-slate-600">
+                    {h.doc_number || (
+                      <span className="text-slate-400">
+                        {h.supplier_invoice_id
+                          ? `#${h.supplier_invoice_id.slice(0,8)}`
+                          : "—"}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-2 text-center font-mono">
+                    {h.quantity != null ? fmt(h.quantity) : "—"}
+                  </td>
+                  <td className="p-2 text-center font-mono text-emerald-800">
+                    {fmt(h.unit_cost)}
+                  </td>
+                  <td className="p-2 text-center font-mono text-indigo-800 font-bold">
+                    {h.total_cost != null ? fmt(h.total_cost) : "—"}
+                  </td>
+                  <td className="p-2 text-[10px]">
+                    <span className={`px-1.5 py-0.5 rounded border ${
+                      h.source === "supplier-invoice"
+                        ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                        : "bg-slate-100 text-slate-700 border-slate-300"
+                    }`}>
+                      {h.source === "supplier-invoice" ? "فاتورة مورد"
+                       : h.source === "excel-import" ? "استيراد Excel"
+                       : h.source === "quick-create" ? "إنشاء سريع"
+                       : (h.source || "—")}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProductsPage() {
   const [items, setItems]   = useState([]);
   const [total, setTotal]   = useState(0);
@@ -19,6 +141,7 @@ export default function ProductsPage() {
   const [q, setQ]           = useState("");
   const [needsCost, setNeedsCost] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -103,7 +226,13 @@ export default function ProductsPage() {
             </thead>
             <tbody>
               {items.map((p) => (
-                <tr key={p.id} className="border-t hover:bg-gray-50"
+                <Fragment key={p.id}>
+                <tr
+                    className={`border-t hover:bg-emerald-50 cursor-pointer ${
+                      expandedId === p.id ? "bg-emerald-50" : ""
+                    }`}
+                    onClick={() =>
+                      setExpandedId(expandedId === p.id ? null : p.id)}
                     data-testid={"prod-row-" + p.id}>
                   <td className="p-3">
                     {p.image_url ? (
@@ -115,7 +244,12 @@ export default function ProductsPage() {
                     )}
                   </td>
                   <td className="p-3 font-bold max-w-[280px]">
-                    <div className="truncate" title={p.name}>{p.name}</div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-emerald-600 text-xs">
+                        {expandedId === p.id ? "▼" : "◀"}
+                      </span>
+                      <span className="truncate" title={p.name}>{p.name}</span>
+                    </div>
                   </td>
                   <td className="p-3 font-mono text-xs text-slate-500">
                     #{p.product_id}
@@ -144,6 +278,14 @@ export default function ProductsPage() {
                     )}
                   </td>
                 </tr>
+                {expandedId === p.id && (
+                  <tr>
+                    <td colSpan={7} className="p-0">
+                      <CostHistoryPanel productId={p.id} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

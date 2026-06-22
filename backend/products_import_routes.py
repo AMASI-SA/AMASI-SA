@@ -660,6 +660,94 @@ def make_products_router_phase2(db, current_user):
         return {"items": items, "total": total,
                 "skip": skip, "limit": limit}
 
+    # ---------- Iter-250b · Phase 4 visual audit ----------
+    # GET /api/products/{pid}/cost-history?limit=5
+    # Returns the most recent `cost_history` entries enriched with the
+    # supplier company name and the invoice doc_number so the merchant
+    # can visually verify that each invoice was logged as a separate
+    # record. Sorted newest-first.
+    @router.get("/{pid}/cost-history")
+    async def product_cost_history(
+        pid: str,
+        limit: int = 5,
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        prod = await db.products.find_one(
+            {"user_id": uid, "$or": [{"id": pid}, {"product_id": pid}]},
+            {"_id": 0, "id": 1, "product_id": 1, "name": 1,
+             "cost_current": 1, "cost_avg": 1, "cost_history": 1},
+        )
+        if not prod:
+            raise HTTPException(404, "المنتج غير موجود")
+
+        hist = prod.get("cost_history") or []
+        # Newest-first, then take only what the caller asked for.
+        sorted_hist = sorted(
+            hist, key=lambda h: h.get("at") or "", reverse=True
+        )[: max(1, min(limit, 50))]
+
+        # Resolve supplier names + invoice doc_numbers in two roundtrips.
+        sup_ids = list({h.get("supplier_id") for h in sorted_hist
+                        if h.get("supplier_id")})
+        inv_ids = list({h.get("supplier_invoice_id") for h in sorted_hist
+                        if h.get("supplier_invoice_id")})
+
+        sup_map: dict[str, str] = {}
+        if sup_ids:
+            async for s in db.suppliers.find(
+                {"user_id": uid, "id": {"$in": sup_ids}},
+                {"_id": 0, "id": 1, "company_name": 1, "name": 1},
+            ):
+                sup_map[s["id"]] = (
+                    s.get("company_name") or s.get("name") or "")
+            # Fallback to counterparties for legacy IDs.
+            missing = [sid for sid in sup_ids if sid not in sup_map]
+            if missing:
+                async for c in db.counterparties.find(
+                    {"user_id": uid, "id": {"$in": missing}},
+                    {"_id": 0, "id": 1, "name": 1, "company_name": 1},
+                ):
+                    sup_map[c["id"]] = (
+                        c.get("company_name") or c.get("name") or "")
+
+        inv_map: dict[str, str] = {}
+        if inv_ids:
+            async for m in db.financial_movements.find(
+                {"user_id": uid, "id": {"$in": inv_ids}},
+                {"_id": 0, "id": 1, "doc_number": 1},
+            ):
+                inv_map[m["id"]] = m.get("doc_number") or ""
+
+        enriched = []
+        for h in sorted_hist:
+            sid = h.get("supplier_id")
+            iid = h.get("supplier_invoice_id")
+            enriched.append({
+                "at":                  h.get("at"),
+                "source":              h.get("source"),
+                "supplier_id":         sid,
+                "supplier_name":       sup_map.get(sid) if sid else None,
+                "supplier_invoice_id": iid,
+                "doc_number":          inv_map.get(iid) if iid else None,
+                "invoice_date":        h.get("invoice_date"),
+                "quantity":            h.get("quantity"),
+                "unit_cost":           h.get("unit_cost") or h.get("amount"),
+                "total_cost":          h.get("total_cost"),
+            })
+
+        return {
+            "product": {
+                "id":           prod.get("id"),
+                "product_id":   prod.get("product_id"),
+                "name":         prod.get("name"),
+                "cost_current": prod.get("cost_current"),
+                "cost_avg":     prod.get("cost_avg"),
+            },
+            "items":       enriched,
+            "total_count": len(hist),
+        }
+
     # ---------- Quick create (Phase 3 — from supplier invoice) ----------
     @router.post("/quick-create")
     async def products_quick_create(
