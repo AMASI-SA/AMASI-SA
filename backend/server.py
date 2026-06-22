@@ -452,6 +452,13 @@ class SettingsIn(BaseModel):
     # accidentally delete an active counterparty. The DELETE endpoint
     # itself still blocks deletion when balance>0 or open debt exists.
     ad_account_allow_delete: Optional[bool] = None
+    # Iter-250b · Phase 3.7 — visibility toggles for the supplier-
+    # invoice line-item columns (discount / tax / notes). Hidden by
+    # default to keep the form clean for merchants who don't apply
+    # per-line VAT or discounts. Can be enabled from /settings.
+    supplier_invoice_show_discount: Optional[bool] = None
+    supplier_invoice_show_tax:      Optional[bool] = None
+    supplier_invoice_show_notes:    Optional[bool] = None
 
 
 class DailyCostsIn(BaseModel):
@@ -809,6 +816,11 @@ async def get_settings(user: dict = Depends(current_user)):
         "settlements_allow_delete": bool(s.get("settlements_allow_delete", False)),
         # Iter-110 — ad-account delete-button visibility
         "ad_account_allow_delete": bool(s.get("ad_account_allow_delete", False)),
+        # Iter-250b · Phase 3.7 — supplier-invoice line-item columns
+        # (hidden by default).
+        "supplier_invoice_show_discount": bool(s.get("supplier_invoice_show_discount", False)),
+        "supplier_invoice_show_tax":      bool(s.get("supplier_invoice_show_tax", False)),
+        "supplier_invoice_show_notes":    bool(s.get("supplier_invoice_show_notes", False)),
         # Iter-182 — operation types hidden from "new transaction" picker.
         "hidden_transaction_types": s.get("hidden_transaction_types", []),
         # Iter-184 — operation→accounts binding (per-op allow-list).
@@ -856,6 +868,13 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(current_user
         update_doc["settlements_allow_delete"] = bool(payload.settlements_allow_delete)
     if payload.ad_account_allow_delete is not None:
         update_doc["ad_account_allow_delete"] = bool(payload.ad_account_allow_delete)
+    # Iter-250b · Phase 3.7 — supplier-invoice line-item column visibility.
+    if payload.supplier_invoice_show_discount is not None:
+        update_doc["supplier_invoice_show_discount"] = bool(payload.supplier_invoice_show_discount)
+    if payload.supplier_invoice_show_tax is not None:
+        update_doc["supplier_invoice_show_tax"] = bool(payload.supplier_invoice_show_tax)
+    if payload.supplier_invoice_show_notes is not None:
+        update_doc["supplier_invoice_show_notes"] = bool(payload.supplier_invoice_show_notes)
     # Iter-182 — hidden transaction types in the unified entry picker.
     if payload.hidden_transaction_types is not None:
         update_doc["hidden_transaction_types"] = [

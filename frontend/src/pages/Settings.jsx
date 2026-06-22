@@ -38,6 +38,10 @@ export default function Settings() {
     const [hideInferred, setHideInferred] = useState(false);
     const [settlementsAllowDelete, setSettlementsAllowDelete] = useState(false);
     const [adAccountAllowDelete, setAdAccountAllowDelete] = useState(false);
+    // Iter-250b · Phase 3.7 — supplier-invoice column visibility.
+    const [supInvShowDiscount, setSupInvShowDiscount] = useState(false);
+    const [supInvShowTax,      setSupInvShowTax]      = useState(false);
+    const [supInvShowNotes,    setSupInvShowNotes]    = useState(false);
     // iter-45 — Electronic Net status filter overrides
     const [electronicNetExcluded, setElectronicNetExcluded] = useState([]);
     const [sallaElectronicNetRef, setSallaElectronicNetRef] = useState("");
@@ -189,6 +193,10 @@ export default function Settings() {
                 setHideInferred(!!settings.hide_inferred_date_orders);
                 setSettlementsAllowDelete(!!settings.settlements_allow_delete);
                 setAdAccountAllowDelete(!!settings.ad_account_allow_delete);
+                // Iter-250b · Phase 3.7 — supplier-invoice column visibility.
+                setSupInvShowDiscount(!!settings.supplier_invoice_show_discount);
+                setSupInvShowTax(!!settings.supplier_invoice_show_tax);
+                setSupInvShowNotes(!!settings.supplier_invoice_show_notes);
                 // iter-45 — Electronic Net status overrides
                 setElectronicNetExcluded(settings.electronic_net_excluded_statuses || []);
                 setSallaElectronicNetRef(
@@ -559,6 +567,10 @@ export default function Settings() {
                 hide_inferred_date_orders: hideInferred,
                 settlements_allow_delete: settlementsAllowDelete,
                 ad_account_allow_delete: adAccountAllowDelete,
+                // Iter-250b · Phase 3.7 — supplier-invoice column visibility.
+                supplier_invoice_show_discount: supInvShowDiscount,
+                supplier_invoice_show_tax:      supInvShowTax,
+                supplier_invoice_show_notes:    supInvShowNotes,
                 // iter-45 — Electronic Net overrides
                 electronic_net_excluded_statuses: electronicNetExcluded,
                 salla_electronic_net_reference: sallaElectronicNetRef.trim()
@@ -1053,9 +1065,71 @@ export default function Settings() {
                         </div>
                     </div>
                 </label>
+                {/* Iter-250b · Phase 3.7 — supplier-invoice line-item
+                    column visibility. Hidden by default to keep the
+                    form clean. Toggle here to show in the form. */}
+                <div className="mt-4 pt-3 border-t border-slate-200">
+                    <div className="text-sm font-bold text-slate-700 mb-2">
+                        🧾 إظهار/إخفاء أعمدة فاتورة المورد
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-3">
+                        تتحكم في ظهور أعمدة إضافية اختيارية داخل جدول
+                        أصناف فاتورة المورد (الخصم، الضريبة، الملاحظات).
+                        مخفية افتراضياً لتبسيط النموذج.
+                    </div>
+                    <label
+                        className={`flex items-start gap-3 px-4 py-2.5 rounded-lg cursor-pointer transition-colors border ${supInvShowDiscount ? "border-emerald-300 bg-emerald-50/60" : "border-border bg-white"}`}
+                        data-testid="toggle-supinv-show-discount"
+                    >
+                        <input
+                            type="checkbox"
+                            className="w-4 h-4 mt-1 accent-brand"
+                            checked={supInvShowDiscount}
+                            onChange={(e) => setSupInvShowDiscount(e.target.checked)}
+                        />
+                        <div className="flex-1">
+                            <div className="text-sm font-semibold">إظهار عمود «الخصم» لكل سطر</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                                مبلغ ثابت بالريال يُخصم من إجمالي السطر قبل احتساب الضريبة.
+                            </div>
+                        </div>
+                    </label>
+                    <label
+                        className={`flex items-start gap-3 px-4 py-2.5 rounded-lg cursor-pointer transition-colors border mt-2 ${supInvShowTax ? "border-emerald-300 bg-emerald-50/60" : "border-border bg-white"}`}
+                        data-testid="toggle-supinv-show-tax"
+                    >
+                        <input
+                            type="checkbox"
+                            className="w-4 h-4 mt-1 accent-brand"
+                            checked={supInvShowTax}
+                            onChange={(e) => setSupInvShowTax(e.target.checked)}
+                        />
+                        <div className="flex-1">
+                            <div className="text-sm font-semibold">إظهار عمود «الضريبة» لكل سطر</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                                مبلغ ضريبة ثابت بالريال يُضاف إلى إجمالي السطر بعد الخصم.
+                            </div>
+                        </div>
+                    </label>
+                    <label
+                        className={`flex items-start gap-3 px-4 py-2.5 rounded-lg cursor-pointer transition-colors border mt-2 ${supInvShowNotes ? "border-emerald-300 bg-emerald-50/60" : "border-border bg-white"}`}
+                        data-testid="toggle-supinv-show-notes"
+                    >
+                        <input
+                            type="checkbox"
+                            className="w-4 h-4 mt-1 accent-brand"
+                            checked={supInvShowNotes}
+                            onChange={(e) => setSupInvShowNotes(e.target.checked)}
+                        />
+                        <div className="flex-1">
+                            <div className="text-sm font-semibold">إظهار عمود «الملاحظات» لكل سطر</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                                حقل نصي حر لكل سطر داخل فاتورة المورد.
+                            </div>
+                        </div>
+                    </label>
+                </div>
             </div>
-
-            {/* NEW: Dashboard cards visibility (Phase 5) */}
             <div className="rounded-xl border border-border bg-white p-6" data-testid="dashboard-cards-section">
                 <div className="mb-5 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-brand text-white flex items-center justify-center">

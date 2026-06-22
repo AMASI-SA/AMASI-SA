@@ -125,6 +125,26 @@ export default function Iter245MovementForm({
     ]);
     const [saving, setSaving] = useState(false);
 
+    // Iter-250b · Phase 3.7 — fetch user-level UI settings to decide
+    // whether the optional supplier-invoice columns (discount / tax /
+    // notes) should be rendered.  Defaults to hidden so a fresh
+    // merchant sees the clean 4-column layout.
+    const [colShowDiscount, setColShowDiscount] = useState(false);
+    const [colShowTax,      setColShowTax]      = useState(false);
+    const [colShowNotes,    setColShowNotes]    = useState(false);
+    useEffect(() => {
+        let alive = true;
+        api.get("/settings")
+            .then(({ data }) => {
+                if (!alive) return;
+                setColShowDiscount(!!data?.supplier_invoice_show_discount);
+                setColShowTax(!!data?.supplier_invoice_show_tax);
+                setColShowNotes(!!data?.supplier_invoice_show_notes);
+            })
+            .catch(() => { /* keep defaults */ });
+        return () => { alive = false; };
+    }, []);
+
     // ── Reset on movementType change ─────────────────────────────
     useEffect(() => {
         setSupplierId(""); setCategoryId(""); setShowAllCats(false);
@@ -633,15 +653,21 @@ export default function Iter245MovementForm({
                                 <th className="p-2 text-right">الصنف / المنتج</th>
                                 <th className="p-2 text-right">الكمية</th>
                                 <th className="p-2 text-right">سعر الوحدة</th>
-                                <th className="p-2 text-right text-slate-500 font-normal">
-                                    الخصم <span className="text-[9px]">(اختياري)</span>
-                                </th>
-                                <th className="p-2 text-right text-slate-500 font-normal">
-                                    الضريبة <span className="text-[9px]">(اختياري)</span>
-                                </th>
-                                <th className="p-2 text-right text-slate-500 font-normal">
-                                    ملاحظات <span className="text-[9px]">(اختياري)</span>
-                                </th>
+                                {colShowDiscount && (
+                                    <th className="p-2 text-right text-slate-500 font-normal">
+                                        الخصم <span className="text-[9px]">(اختياري)</span>
+                                    </th>
+                                )}
+                                {colShowTax && (
+                                    <th className="p-2 text-right text-slate-500 font-normal">
+                                        الضريبة <span className="text-[9px]">(اختياري)</span>
+                                    </th>
+                                )}
+                                {colShowNotes && (
+                                    <th className="p-2 text-right text-slate-500 font-normal">
+                                        ملاحظات <span className="text-[9px]">(اختياري)</span>
+                                    </th>
+                                )}
                                 <th className="p-2 text-right">إجمالي السطر</th>
                                 <th className="p-2 w-12"></th>
                             </tr>
@@ -736,6 +762,7 @@ export default function Iter245MovementForm({
                                                 className="w-24 border rounded px-2 py-1 text-xs"
                                                 data-testid={`iter245-mv-line-price-${i}`} />
                                         </td>
+                                        {colShowDiscount && (
                                         <td className="p-1">
                                             <input
                                                 type="number"
@@ -749,6 +776,8 @@ export default function Iter245MovementForm({
                                                 className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-rose-700 font-mono placeholder:text-slate-300 bg-slate-50/50"
                                                 data-testid={`iter245-mv-line-disc-${i}`} />
                                         </td>
+                                        )}
+                                        {colShowTax && (
                                         <td className="p-1">
                                             <input
                                                 type="number"
@@ -762,6 +791,8 @@ export default function Iter245MovementForm({
                                                 className="w-20 border border-slate-200 rounded px-2 py-1 text-xs text-indigo-700 font-mono placeholder:text-slate-300 bg-slate-50/50"
                                                 data-testid={`iter245-mv-line-tax-${i}`} />
                                         </td>
+                                        )}
+                                        {colShowNotes && (
                                         <td className="p-1">
                                             <input
                                                 type="text"
@@ -773,6 +804,7 @@ export default function Iter245MovementForm({
                                                 className="w-36 border rounded px-2 py-1 text-xs"
                                                 data-testid={`iter245-mv-line-notes-${i}`} />
                                         </td>
+                                        )}
                                         <td className="p-1 font-mono font-bold text-emerald-800"
                                             data-testid={`iter245-mv-line-total-${i}`}>
                                             {fmt(tot)}
