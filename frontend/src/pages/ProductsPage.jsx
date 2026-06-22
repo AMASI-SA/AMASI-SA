@@ -84,7 +84,8 @@ function CostHistoryPanel({ productId }) {
             </thead>
             <tbody>
               {items.map((h, idx) => (
-                <tr key={idx} className="border-t border-slate-200"
+                <tr key={idx}
+                    className={`border-t border-slate-200 ${h.status === "reversed" ? "bg-rose-50/60 line-through opacity-70" : ""}`}
                     data-testid={`cost-history-row-${idx}`}>
                   <td className="p-2 font-mono">
                     {fmtDate(h.invoice_date || h.at)}
@@ -113,16 +114,22 @@ function CostHistoryPanel({ productId }) {
                     {h.total_cost != null ? fmt(h.total_cost) : "—"}
                   </td>
                   <td className="p-2 text-[10px]">
-                    <span className={`px-1.5 py-0.5 rounded border ${
-                      h.source === "supplier-invoice"
-                        ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                        : "bg-slate-100 text-slate-700 border-slate-300"
-                    }`}>
-                      {h.source === "supplier-invoice" ? "فاتورة مورد"
-                       : h.source === "excel-import" ? "استيراد Excel"
-                       : h.source === "quick-create" ? "إنشاء سريع"
-                       : (h.source || "—")}
-                    </span>
+                    {h.status === "reversed" ? (
+                      <span className="px-1.5 py-0.5 rounded border bg-rose-100 text-rose-800 border-rose-300 font-bold no-underline">
+                        ⊘ معكوس
+                      </span>
+                    ) : (
+                      <span className={`px-1.5 py-0.5 rounded border ${
+                        h.source === "supplier-invoice"
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                          : "bg-slate-100 text-slate-700 border-slate-300"
+                      }`}>
+                        {h.source === "supplier-invoice" ? "فاتورة مورد"
+                         : h.source === "excel-import" ? "استيراد Excel"
+                         : h.source === "quick-create" ? "إنشاء سريع"
+                         : (h.source || "—")}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

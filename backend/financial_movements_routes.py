@@ -187,20 +187,110 @@ def _requires_line_items(cat_path: list[str]) -> bool:
 #
 # When a `supplier_invoice` movement is successfully posted to the GL,
 # walk every line item that carries a `product_id` and append a new
-# cost-history record on the corresponding `products` document.  The
-# logic is STRICTLY APPEND-ONLY:
-#   • Never overwrite or delete previous `cost_history` entries.
-#   • `cost_current` becomes the unit_cost of the latest processed line.
-#   • `cost_avg` is recomputed as the quantity-weighted average across
-#     all history entries that carry both `quantity` AND `unit_cost`
-#     (which is the convention for supplier-invoice records).  Entries
-#     without quantity (legacy excel-import / quick-create seeds) are
-#     ignored in the weighted average, but seed `cost_current` & `avg`
-#     when no supplier history exists yet.
-#   • `needs_cost` flips to False once a valid cost is recorded.
+# cost-history record on the corresponding `products` document.
 #
-# Failures here are logged but never break the invoice creation — the
-# GL post is the source of truth, the product catalogue is enrichment.
+# Iter-250b · Phase 4.5 — Reversal-aware cost engine.
+# Every cost_history entry now carries a `status` field:
+#   • "active"   → counts towards cost_current / cost_avg
+#   • "reversed" → kept for audit trail, IGNORED in calculations
+# Entries with no `status` field are legacy and treated as active.
+#
+# The single source of truth for recomputing a product's cost numbers
+# lives in `recalculate_product_cost(db, uid, product_id, dry_run)` —
+# every place that mutates cost_history (new invoice, reversal, edit)
+# MUST call it afterwards.
+
+def _is_active_entry(h: dict) -> bool:
+    if not isinstance(h, dict):
+        return False
+    return (h.get("status") or "").lower() != "reversed"
+
+
+def _entry_sort_key(h: dict) -> str:
+    return str(h.get("at") or h.get("invoice_date") or "")
+
+
+async def recalculate_product_cost(
+    db, uid: str, product_id: str, dry_run: bool = False,
+) -> dict:
+    """Recompute cost_current / cost_avg / needs_cost for a product.
+    Only `status != "reversed"` entries are considered.
+    """
+    prod = await db.products.find_one(
+        {"user_id": uid, "$or": [{"id": product_id},
+                                  {"product_id": product_id}]},
+        {"_id": 0, "id": 1, "product_id": 1, "name": 1,
+         "cost_current": 1, "cost_avg": 1,
+         "needs_cost": 1, "cost_history": 1},
+    )
+    if not prod:
+        return {"ok": False, "error": "product_not_found"}
+
+    history = prod.get("cost_history") or []
+    active  = [h for h in history if _is_active_entry(h)]
+
+    if not active:
+        new_current, new_avg, new_needs = 0.0, 0.0, True
+    else:
+        latest = sorted(active, key=_entry_sort_key, reverse=True)[0]
+        new_current = _r(latest.get("unit_cost") or latest.get("amount") or 0)
+        qty_entries = [
+            h for h in active
+            if h.get("quantity") is not None
+            and h.get("unit_cost") is not None
+            and _r(h.get("quantity")) > 0
+        ]
+        if qty_entries:
+            tot_qty = sum(_r(h["quantity"]) for h in qty_entries)
+            tot_val = sum(_r(h["quantity"]) * _r(h["unit_cost"])
+                          for h in qty_entries)
+            new_avg = round(tot_val / tot_qty, 2) if tot_qty else 0.0
+        else:
+            amts = [_r(h.get("amount") or h.get("unit_cost") or 0)
+                    for h in active
+                    if (h.get("amount") or h.get("unit_cost"))]
+            new_avg = round(sum(amts) / len(amts), 2) if amts else 0.0
+        new_needs = new_current <= 0 and new_avg <= 0
+
+    before = {
+        "cost_current": prod.get("cost_current"),
+        "cost_avg":     prod.get("cost_avg"),
+        "needs_cost":   prod.get("needs_cost"),
+    }
+    after = {
+        "cost_current": new_current,
+        "cost_avg":     new_avg,
+        "needs_cost":   bool(new_needs),
+    }
+    changed = (
+        _r(before.get("cost_current") or 0) != _r(after["cost_current"])
+        or _r(before.get("cost_avg") or 0)  != _r(after["cost_avg"])
+        or bool(before.get("needs_cost"))   != after["needs_cost"]
+    )
+    if changed and not dry_run:
+        await db.products.update_one(
+            {"id": prod["id"], "user_id": uid},
+            {"$set": {
+                "cost_current": after["cost_current"],
+                "cost_avg":     after["cost_avg"],
+                "needs_cost":   after["needs_cost"],
+                "updated_at":   _now(),
+            }},
+        )
+    return {
+        "ok": True,
+        "product_id":      prod["id"],
+        "product_code":    prod.get("product_id"),
+        "name":            prod.get("name"),
+        "before":          before,
+        "after":           after,
+        "changed":         changed,
+        "active_entries":  len(active),
+        "total_entries":   len(history),
+        "applied":         changed and not dry_run,
+    }
+
+
 async def _apply_product_cost_updates(
     db,
     uid: str,
@@ -236,15 +326,14 @@ async def _apply_product_cost_updates(
         prod = await db.products.find_one(
             {"user_id": uid,
              "$or": [{"id": pid}, {"product_id": pid}]},
-            {"_id": 0, "id": 1, "cost_history": 1},
+            {"_id": 0, "id": 1},
         )
         if not prod:
             errors.append(f"product {pid} not found")
             continue
 
-        history = prod.get("cost_history") or []
-
-        # Build the new (append-only) history record.
+        # Build the new (append-only) history record with explicit
+        # lifecycle status so the reversal hook can flip it cleanly.
         new_entry = {
             "amount":              unit_cost,
             "source":              "supplier-invoice",
@@ -255,45 +344,94 @@ async def _apply_product_cost_updates(
             "quantity":            qty,
             "unit_cost":           unit_cost,
             "total_cost":          total_cost,
+            "status":              "active",
         }
-
-        # Weighted-avg over supplier-invoice entries (those carry qty).
-        # Include the new entry so the average stays in sync.
-        weighted_entries = [
-            h for h in (history + [new_entry])
-            if isinstance(h, dict)
-            and h.get("quantity") is not None
-            and h.get("unit_cost") is not None
-            and _r(h.get("quantity")) > 0
-        ]
-        if weighted_entries:
-            tot_qty = sum(_r(h["quantity"]) for h in weighted_entries)
-            tot_val = sum(
-                _r(h["quantity"]) * _r(h["unit_cost"])
-                for h in weighted_entries
-            )
-            cost_avg = round(tot_val / tot_qty, 2) if tot_qty else unit_cost
-        else:
-            cost_avg = unit_cost
 
         try:
             await db.products.update_one(
                 {"id": prod["id"], "user_id": uid},
-                {
-                    "$push": {"cost_history": new_entry},
-                    "$set": {
-                        "cost_current": unit_cost,
-                        "cost_avg":     cost_avg,
-                        "needs_cost":   False,
-                        "updated_at":   now,
-                    },
-                },
+                {"$push": {"cost_history": new_entry}},
             )
+            await recalculate_product_cost(db, uid, prod["id"])
             updated += 1
         except Exception as e:  # noqa: BLE001
             errors.append(f"{pid}: {e}")
 
     return {"updated": updated, "skipped": skipped, "errors": errors}
+
+
+# ── Iter-250b · Phase 4.5 — Mark cost-history entries as reversed
+# when the supplier-invoice movement is reversed via
+# /api/ledger/groups/{group_id}/reverse. Append-only: flips `status`
+# and stamps reversal metadata, then recomputes affected products.
+async def mark_supplier_invoice_cost_reversed(
+    db, uid: str, txn_group_id: str,
+) -> dict:
+    if not txn_group_id:
+        return {"reversed_lines": 0, "products_recomputed": 0,
+                "affected_products": [], "errors": ["empty_group_id"]}
+
+    mv = await db.financial_movements.find_one(
+        {"user_id": uid,
+         "ledger_txn_group_id": txn_group_id,
+         "movement_type": "supplier_invoice"},
+        {"_id": 0, "id": 1, "line_items": 1},
+    )
+    if not mv:
+        return {"reversed_lines": 0, "products_recomputed": 0,
+                "affected_products": [], "errors": []}
+
+    mv_id = mv["id"]
+    affected_products: set[str] = set()
+    reversed_count = 0
+    now = _now()
+
+    for li in (mv.get("line_items") or []):
+        pid = (li.get("product_id") or "").strip()
+        if not pid:
+            continue
+        prod = await db.products.find_one(
+            {"user_id": uid,
+             "$or": [{"id": pid}, {"product_id": pid}]},
+            {"_id": 0, "id": 1},
+        )
+        if not prod:
+            continue
+        res = await db.products.update_one(
+            {"id": prod["id"], "user_id": uid},
+            {"$set": {
+                "cost_history.$[elem].status":                "reversed",
+                "cost_history.$[elem].reversed_at":           now,
+                "cost_history.$[elem].reversal_txn_group_id": txn_group_id,
+            }},
+            array_filters=[{
+                "elem.supplier_invoice_id": mv_id,
+                "$or": [
+                    {"elem.status": {"$exists": False}},
+                    {"elem.status": "active"},
+                ],
+            }],
+        )
+        if res.modified_count > 0:
+            reversed_count += res.modified_count
+        affected_products.add(prod["id"])
+
+    recomputed = 0
+    errors: list[str] = []
+    for pid in affected_products:
+        try:
+            r = await recalculate_product_cost(db, uid, pid)
+            if r.get("applied"):
+                recomputed += 1
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{pid}: {e}")
+
+    return {
+        "reversed_lines":      reversed_count,
+        "products_recomputed": recomputed,
+        "affected_products":   list(affected_products),
+        "errors":              errors,
+    }
 
 
 # ── Router ──────────────────────────────────────────────────────────

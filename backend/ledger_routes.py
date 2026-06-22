@@ -152,8 +152,34 @@ def make_ledger_router(db) -> APIRouter:
             )
             rev.pop("_id", None)
             reversals.append(rev)
+
+        # Iter-250b · Phase 4.5 — Product-cost reversal hook.
+        # If the reversed group backs a `supplier_invoice` movement,
+        # flip every linked cost_history entry to status="reversed"
+        # and recompute affected products. Failures are logged but
+        # never roll back the GL reversal (the GL is the SSOT).
+        cost_result = None
+        try:
+            from financial_movements_routes import (
+                mark_supplier_invoice_cost_reversed,
+            )
+            cost_result = await mark_supplier_invoice_cost_reversed(
+                db, user["id"], group_id,
+            )
+            if cost_result.get("errors"):
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Phase4.5 cost-reversal partial errors for group %s: %s",
+                    group_id, cost_result["errors"])
+        except Exception as e:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception(
+                "Phase4.5 cost-reversal hook failed for group %s: %s",
+                group_id, e)
+
         return {"ok": True, "reversed_count": len(reversals),
-                "group_id": group_id}
+                "group_id": group_id,
+                "product_cost_impact": cost_result}
 
     # ── POST /admin/iter215/cleanup-backfill ────────────────────────
     # Iter-215c (Feb 15 2026) — one-shot reversal of any historical

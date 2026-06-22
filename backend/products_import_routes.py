@@ -734,6 +734,10 @@ def make_products_router_phase2(db, current_user):
                 "quantity":            h.get("quantity"),
                 "unit_cost":           h.get("unit_cost") or h.get("amount"),
                 "total_cost":          h.get("total_cost"),
+                # Iter-250b · Phase 4.5 — lifecycle status surface.
+                "status":              (h.get("status") or "active"),
+                "reversed_at":         h.get("reversed_at"),
+                "reversal_txn_group_id": h.get("reversal_txn_group_id"),
             })
 
         return {
@@ -747,6 +751,178 @@ def make_products_router_phase2(db, current_user):
             "items":       enriched,
             "total_count": len(hist),
         }
+
+    # ---------- Iter-250b · Phase 4.5 — Cost-health diagnostics ----------
+    # Read-only forensic report exposing every product whose cost
+    # numbers are out of sync with their `cost_history`.  Pure analysis:
+    # no DB writes, safe to call from production.
+    #
+    # Categories surfaced:
+    #   • current_from_reversed       — cost_current came from a row
+    #                                    whose status == "reversed"
+    #   • avg_contains_reversed       — at least one reversed entry
+    #                                    is being averaged in (legacy
+    #                                    pre-Phase-4.5 documents)
+    #   • needs_cost_false_no_active  — needs_cost = False but no
+    #                                    active history rows exist
+    #   • current_not_latest_active   — cost_current ≠ the newest
+    #                                    active entry's unit_cost
+    @router.get("/cost-health")
+    async def products_cost_health(
+        limit: int = 1000,
+        user: dict = Depends(current_user),
+    ):
+        uid = user["id"]
+        from financial_movements_routes import (
+            _is_active_entry, _entry_sort_key,
+        )
+
+        def _r2(x):
+            try:
+                return round(float(x or 0), 2)
+            except Exception:
+                return 0.0
+
+        cur_from_rev:  list = []
+        avg_has_rev:   list = []
+        needs_no_act:  list = []
+        cur_not_latest: list = []
+
+        cursor = db.products.find(
+            {"user_id": uid},
+            {"_id": 0, "id": 1, "product_id": 1, "name": 1,
+             "cost_current": 1, "cost_avg": 1, "needs_cost": 1,
+             "cost_history": 1},
+        )
+        async for p in cursor:
+            hist = p.get("cost_history") or []
+            active = [h for h in hist if _is_active_entry(h)]
+            reversed_entries = [h for h in hist if not _is_active_entry(h)]
+            cost_current = _r2(p.get("cost_current"))
+            stub = {
+                "id":           p["id"],
+                "product_id":   p.get("product_id"),
+                "name":         p.get("name"),
+                "cost_current": cost_current,
+                "cost_avg":     _r2(p.get("cost_avg")),
+                "needs_cost":   bool(p.get("needs_cost")),
+                "active_entries":   len(active),
+                "reversed_entries": len(reversed_entries),
+                "total_entries":    len(hist),
+            }
+
+            # (1) cost_current came from a reversed row?
+            if reversed_entries:
+                latest_any = sorted(hist, key=_entry_sort_key,
+                                    reverse=True)[0] if hist else None
+                if latest_any and not _is_active_entry(latest_any):
+                    if _r2(latest_any.get("unit_cost")
+                           or latest_any.get("amount")) == cost_current \
+                       and cost_current > 0:
+                        cur_from_rev.append({
+                            **stub,
+                            "latest_entry": {
+                                "supplier_invoice_id":
+                                    latest_any.get("supplier_invoice_id"),
+                                "at":         latest_any.get("at"),
+                                "unit_cost":  latest_any.get("unit_cost"),
+                                "status":     latest_any.get("status"),
+                            },
+                        })
+
+            # (2) needs_cost=False but no active rows?
+            if not active and not p.get("needs_cost"):
+                needs_no_act.append(stub)
+
+            # (3) cost_current ≠ newest active entry's unit_cost
+            if active:
+                latest_active = sorted(active, key=_entry_sort_key,
+                                       reverse=True)[0]
+                latest_uc = _r2(latest_active.get("unit_cost")
+                                or latest_active.get("amount"))
+                if latest_uc > 0 and latest_uc != cost_current:
+                    cur_not_latest.append({
+                        **stub,
+                        "expected_cost_current": latest_uc,
+                        "delta": round(cost_current - latest_uc, 2),
+                    })
+
+            # (4) Pre-4.5 legacy doc whose avg implicitly absorbed
+            #     a reversed entry — only possible if the doc has at
+            #     least one reversed row WITH qty AND the current avg
+            #     no longer matches the avg-over-active.  We detect
+            #     this by recomputing the active-only weighted avg
+            #     and comparing to stored cost_avg.
+            if reversed_entries and active:
+                qty_rows = [h for h in active
+                            if h.get("quantity") and h.get("unit_cost")
+                            and _r2(h["quantity"]) > 0]
+                if qty_rows:
+                    tot_q = sum(_r2(h["quantity"]) for h in qty_rows)
+                    tot_v = sum(_r2(h["quantity"]) * _r2(h["unit_cost"])
+                                for h in qty_rows)
+                    expected_avg = round(tot_v / tot_q, 2) if tot_q else 0
+                    if expected_avg > 0 and \
+                       expected_avg != _r2(p.get("cost_avg")):
+                        avg_has_rev.append({
+                            **stub,
+                            "expected_cost_avg": expected_avg,
+                            "delta": round(_r2(p.get("cost_avg"))
+                                            - expected_avg, 2),
+                        })
+
+        return {
+            "summary": {
+                "current_from_reversed":      len(cur_from_rev),
+                "avg_contains_reversed":      len(avg_has_rev),
+                "needs_cost_false_no_active": len(needs_no_act),
+                "current_not_latest_active":  len(cur_not_latest),
+            },
+            "current_from_reversed":      cur_from_rev[:limit],
+            "avg_contains_reversed":      avg_has_rev[:limit],
+            "needs_cost_false_no_active": needs_no_act[:limit],
+            "current_not_latest_active":  cur_not_latest[:limit],
+        }
+
+    # ---------- Iter-250b · Phase 4.5 — Cost recompute (preview / confirm) ----
+    # Walks every product and runs `recalculate_product_cost` in
+    # dry-run mode (preview) or apply mode (confirm).  Returns a
+    # before/after diff per product that actually changed.  Safe and
+    # idempotent — products already in sync are left untouched.
+    async def _do_recompute(uid: str, dry_run: bool):
+        from financial_movements_routes import recalculate_product_cost
+        changed_rows: list = []
+        scanned = 0
+        async for p in db.products.find(
+            {"user_id": uid}, {"_id": 0, "id": 1},
+        ):
+            scanned += 1
+            try:
+                r = await recalculate_product_cost(
+                    db, uid, p["id"], dry_run=dry_run)
+                if r.get("ok") and r.get("changed"):
+                    changed_rows.append(r)
+            except Exception as e:  # noqa: BLE001
+                changed_rows.append({
+                    "ok": False, "product_id": p["id"], "error": str(e)})
+        return {
+            "scanned":       scanned,
+            "changed_count": len(changed_rows),
+            "changes":       changed_rows,
+            "dry_run":       dry_run,
+        }
+
+    @router.post("/cost-recompute/preview")
+    async def products_cost_recompute_preview(
+        user: dict = Depends(current_user),
+    ):
+        return await _do_recompute(user["id"], dry_run=True)
+
+    @router.post("/cost-recompute/confirm")
+    async def products_cost_recompute_confirm(
+        user: dict = Depends(current_user),
+    ):
+        return await _do_recompute(user["id"], dry_run=False)
 
     # ---------- Quick create (Phase 3 — from supplier invoice) ----------
     @router.post("/quick-create")
