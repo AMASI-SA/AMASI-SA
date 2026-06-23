@@ -1095,6 +1095,23 @@ def make_settlement_engine_router(db, current_user):
         if provider not in PROVIDER_MATCHERS:
             raise HTTPException(400, f"مزوّد غير معروف: {provider}")
         uid = user["id"]
+        # Iter-251 v8 — Multi-field match (consistent with the
+        # extractor): entity_id OR metadata.provider OR
+        # metadata.provider_id (all case-insensitive).
+        prov_q = {
+            "user_id":     uid,
+            "entry_type":  "bnpl_settlement",
+            "status":      "posted",
+            "side":        "credit",
+            "$or": [
+                {"entity_id":            {"$regex": f"^{provider}$",
+                                            "$options": "i"}},
+                {"metadata.provider":    {"$regex": f"^{provider}$",
+                                            "$options": "i"}},
+                {"metadata.provider_id": {"$regex": f"^{provider}$",
+                                            "$options": "i"}},
+            ],
+        }
         # Registered settlements found in general_ledger
         from provider_invoice_calendar import (
             extract_calendar_from_registered_settlements as _ext_reg,
@@ -1102,39 +1119,27 @@ def make_settlement_engine_router(db, current_user):
         )
         reg = await _ext_reg(db, uid, provider)
         sen = await _ext_sen(db, uid, provider)
-        # Raw GL entries to confirm what's actually stored
-        raw_gl_count = await db.general_ledger.count_documents({
-            "user_id": uid,
-            "entry_type": "bnpl_settlement",
-            "status": "posted",
-            "side": "credit",
-            "entity_type": "payment_gateway",
-            "entity_id":  provider,
-        })
+        raw_gl_count = await db.general_ledger.count_documents(prov_q)
         # Sample (up to 5) raw entries to inspect metadata fields
         samples = []
         async for e in db.general_ledger.find(
-            {
-                "user_id": uid,
-                "entry_type": "bnpl_settlement",
-                "status": "posted",
-                "side": "credit",
-                "entity_type": "payment_gateway",
-                "entity_id":  provider,
-            },
+            prov_q,
             {"_id": 0, "entry_no": 1, "metadata": 1, "posted_at": 1,
-             "amount": 1},
+             "amount": 1, "entity_id": 1, "side": 1},
         ).sort("posted_at", -1).limit(5):
             meta = e.get("metadata") or {}
             samples.append({
                 "entry_no":           e.get("entry_no"),
                 "posted_at":          e.get("posted_at"),
+                "entity_id":          e.get("entity_id"),
+                "side":               e.get("side"),
                 "amount":             e.get("amount"),
                 "settlement_ref":     meta.get("settlement_reference"),
                 "settlement_date":    meta.get("settlement_date"),
                 "period_from":        meta.get("period_from"),
                 "period_to":          meta.get("period_to"),
                 "period_nested":      meta.get("period"),
+                "metadata_provider":  meta.get("provider"),
                 "has_period_fields":  bool(meta.get("period_from")
                                            and meta.get("period_to")),
             })
