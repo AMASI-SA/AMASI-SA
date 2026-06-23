@@ -57,6 +57,106 @@ async def _seed_tamara(db, uid, dates):
 
 
 @pytest.mark.asyncio
+async def test_v8_real_world_uuid_entity_and_missing_period_metadata(db):
+    """Iter-251 v8 — Reproduces the user's actual production data:
+      • entity_id = UUID (not "tabby" string)
+      • metadata.provider = "tabby"
+      • metadata.period_from / period_to = MISSING
+      • metadata.settlement_reference = "TABBY-YYYY-MM-DD-AUTO"
+    The new extractor must:
+      1. Match by metadata.provider (case-insensitive, despite UUID
+         entity_id).
+      2. Extract period_from from settlement_reference via regex.
+      3. Infer period_to from next_period_from − 1 day (cross-row).
+      4. Yield contiguous, non-overlapping periods.
+    """
+    uid = f"u_{uuid.uuid4().hex[:6]}"
+    pg_uuid = str(uuid.uuid4())
+    # Two registered Tabby settlements, both with UUID entity_id
+    # and EMPTY period metadata.
+    base = {
+        "user_id": uid,
+        "entry_type":  "bnpl_settlement",
+        "status":      "posted",
+        "side":        "credit",
+        "entity_type": "payment_gateway",
+        "entity_id":   pg_uuid,        # UUID, not "tabby"
+        "amount":      100.0,
+    }
+    await db.general_ledger.insert_many([
+        {**base, "id": str(uuid.uuid4()), "txn_group_id": "g1",
+         "entry_no": 1, "posted_at": "2026-06-08T10:00:00Z",
+         "metadata": {
+             "provider": "tabby",                 # ← matched here
+             "settlement_reference": "TABBY-2026-06-08-AUTO",
+             # NO period_from / period_to
+             "settlement_date": "2026-06-16",
+             "transferred_amount": 1000,
+         }},
+        {**base, "id": str(uuid.uuid4()), "txn_group_id": "g2",
+         "entry_no": 2, "posted_at": "2026-06-15T10:00:00Z",
+         "metadata": {
+             "provider": "tabby",
+             "settlement_reference": "TABBY-2026-06-15-AUTO",
+             "settlement_date": "2026-06-23",
+             "transferred_amount": 1500,
+         }},
+    ])
+
+    from provider_invoice_calendar import (
+        extract_calendar_from_registered_settlements as _ext_reg,
+    )
+    rows = await _ext_reg(db, uid, "tabby")
+    assert len(rows) == 2
+
+    # First: period_from from regex (06-08), period_to inferred from
+    # next row's start − 1 day → 2026-06-14 (Sun).  This gives a
+    # CONTIGUOUS Mon→Sun cycle — the merchant's real cycle.
+    r0 = rows[0]
+    assert r0["period_start"] == "2026-06-08"
+    assert r0["period_end"]   == "2026-06-14"  # 2026-06-15 − 1
+    assert r0["source"] == "registered_settlement"
+
+    # Second (last) row: derive width from previous gap (7 days).
+    r1 = rows[1]
+    assert r1["period_start"] == "2026-06-15"
+    # Previous gap: 06-15 − 06-08 = 7 days → period_end = 06-15 + 6
+    assert r1["period_end"]   == "2026-06-21"
+    # No period overlap
+    assert r0["period_end"] < r1["period_start"]
+
+
+@pytest.mark.asyncio
+async def test_v8_match_via_uuid_entity_with_metadata_provider(db):
+    """Even when entity_id is unrelated UUID, a matching
+    metadata.provider must trigger inclusion."""
+    uid = f"u_{uuid.uuid4().hex[:6]}"
+    await db.general_ledger.insert_one({
+        "id": str(uuid.uuid4()), "user_id": uid,
+        "txn_group_id": "g-uuid-test", "entry_no": 1,
+        "entry_type": "bnpl_settlement", "status": "posted",
+        "side": "credit", "entity_type": "payment_gateway",
+        "entity_id": str(uuid.uuid4()),  # totally unrelated UUID
+        "amount": 50,
+        "posted_at": "2026-07-06T10:00:00Z",
+        "metadata": {
+            "provider": "tabby",
+            "settlement_reference": "TABBY-2026-07-06-X",
+            "settlement_date": "2026-07-13",
+            "period_from":   "2026-06-29",
+            "period_to":     "2026-07-05",
+        },
+    })
+    from provider_invoice_calendar import (
+        extract_calendar_from_registered_settlements as _ext_reg,
+    )
+    rows = await _ext_reg(db, uid, "tabby")
+    assert len(rows) == 1
+    assert rows[0]["period_start"] == "2026-06-29"
+    assert rows[0]["period_end"]   == "2026-07-05"
+
+
+@pytest.mark.asyncio
 async def test_tabby_derived_rows_inherit_registered_template(db):
     """Iter-251 v7 — When 1 Tabby settlement is registered with a
     Mon→Mon 8-day cycle, all DERIVED rows from settlement_entries

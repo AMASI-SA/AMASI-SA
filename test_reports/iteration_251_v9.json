@@ -1,0 +1,37 @@
+{
+  "summary": "Iter-251 v8 calendar extractor — Backend-only retest. All 23 existing pytests pass with no regressions, including the 2 newest v8-specific tests. Added 2 HTTP integration tests against the public API (login as admin → seed real-world UUID-entity settlements in Mongo → POST /calendar/rebuild → assert contiguous Mon→Sun cycles → audit + diagnose). 25/25 total pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/settlement-engine/calendar/diagnose", "issue": "The `samples` and `general_ledger_settlements_found` fields still use the STRICT `entity_id == provider` match, so when entity_id is a UUID those diagnostic blocks return [] / 0 even though `from_registered_extracted` correctly returns 2. The end-user assertions (`from_registered_extracted` and the calendar rows themselves) are unaffected, but the diagnostic samples will look misleading on real production data. Suggest reusing the same multi-field match in the samples query for consistency with /audit and /calendar."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter251_phase2a5_invoice_calendar.py",
+    "/app/backend/tests/test_iter251_phase2b_settlement_generation.py",
+    "/app/backend/tests/test_iter251_phase1_bank_transfer_review.py",
+    "/app/backend/tests/test_iter251_v8_http_endpoints.py",
+    "/app/test_reports/pytest/iter251_v8_full_retest.xml",
+    "/app/test_reports/pytest/iter251_v8_http_retest.xml"
+  ],
+  "action_items": [
+    "Optional polish: align the diagnose endpoint's `samples` & `general_ledger_settlements_found` to use the v8 multi-field provider match (currently strict on entity_id), so the diagnostic block agrees with `from_registered_extracted` when entity_id is a UUID."
+  ],
+  "critical_code_review_comments": [
+    "extract_calendar_from_registered_settlements correctly extracts period_from from settlement_reference via regex and infers missing period_to from next-row's period_from − 1, producing contiguous non-overlapping cycles. Verified with both the unit test (Mon→Sun 06-08..06-14 / 06-15..06-21) and the live HTTP call.",
+    "Pre-filled metadata.period_from/period_to are honoured verbatim — the cross-row inference only fires when had_period_to=false. Edge case covered by test_v8_match_via_uuid_entity_with_metadata_provider and test_v8_http_prefilled_period_metadata_preserved.",
+    "Provider match is case-insensitive on entity_id, metadata.provider, AND metadata.provider_id — robust to production data shape variations.",
+    "Minor: /calendar/diagnose `samples` block still uses entity_id strict-equality; non-blocking but worth aligning."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter251_v8_http_endpoints.py (new HTTP integration test, 2 cases)"
+  ],
+  "success_rate": {"backend": "100% (25/25 pytests)", "frontend": "N/A (backend-only request)"},
+  "test_credentials": "admin@hesab.app / admin123 (used for HTTP test login)",
+  "seed_data_creation": "Per-test, seeded under admin's user_id with `_test_marker` field, cleaned up in finally blocks. No persistent test data left in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-251 v8 fully covered. The new HTTP test (test_iter251_v8_http_endpoints.py) is the canonical end-to-end check for the calendar extraction story — run alongside the 3 existing iter251 pytest files for any future regression check. All 25 tests run in ~1.4s.",
+  "rca of the issue": "Original bug (period overlap, missing 2026-04-27 invoice on production) was rooted in the extractor requiring metadata.period_from/period_to AND a literal 'tabby' entity_id. Real production data has UUID entity_id and empty period metadata — only metadata.provider and settlement_reference are reliable. v8 patch: (1) multi-field provider matching (entity_id | metadata.provider | metadata.provider_id), (2) regex period_from from settlement_reference, (3) cross-row inference of period_to = next_period_from − 1 (contiguous), (4) last-row width from previous gap. Verified end-to-end both at the function level and via the public HTTP API."
+}

@@ -167,37 +167,46 @@ async def extract_calendar_from_registered_settlements(
     """Read calendar entries directly from registered BNPL
     settlements stored in ``general_ledger``.
 
-    Each registered settlement has the **exact** ``period_from`` and
-    ``period_to`` that was used in ``compute_settlement_for_provider``
-    when the merchant clicked "Register" on the BNPL settlements
-    page.  Those dates are the source of truth — Dry-Run periods
-    MUST match them so the merchant sees 1:1 parity with what they
-    actually saved.
-
-    Robustness — legacy entries (pre iter-246x) may have an empty
-    ``metadata.period_from``.  For those we fall back to:
-      • ``metadata.period.from`` / ``metadata.period.to`` (older nesting)
-      • parsing the period out of ``settlement_reference``
-        (e.g.  ``TABBY-2026-06-15-AUTO`` → from=2026-06-15)
-      • deriving the 7-day window ending on ``settlement_date`` when
-        no period info exists at all.
+    Iter-251 v8 — Real-world flexibility:
+      • Match by ``metadata.provider`` (string) when ``entity_id``
+        is a UUID pointing at a payment_gateway document.
+      • De-duplicate by ``txn_group_id``.
+      • Period extraction priority:
+          1. ``metadata.period_from`` / ``period_to``
+          2. Nested ``metadata.period.{from,to}``
+          3. Regex pull from ``metadata.settlement_reference``
+          4. 7-day window ending on ``settlement_date``.
+      • **Cross-row inference**: when periods are extracted from
+        references and ``period_to`` is missing, derive it as
+        ``next_period_from − 1 day`` so consecutive periods are
+        contiguous and non-overlapping.  For the LAST registered
+        settlement we infer width from the gap to the previous one
+        (or fall back to settlement_date / placeholder).
     """
     pipeline = [
         {"$match": {
             "user_id":     uid,
             "entry_type":  "bnpl_settlement",
             "status":      "posted",
-            "side":        "credit",
-            "entity_type": "payment_gateway",
-            "entity_id":   provider,
         }},
         {"$sort": {"posted_at": 1}},
     ]
-    out: list[dict] = []
-    seen: set[tuple[str, str]] = set()
+    raw: list[dict] = []
+    seen_groups: set[str] = set()
     async for e in db.general_ledger.aggregate(pipeline):
         meta = e.get("metadata") or {}
-        # ── Resolve period_from / period_to ─────────────────────
+        prov_l = provider.lower()
+        if not (
+            (e.get("entity_id") or "").lower() == prov_l
+            or (meta.get("provider")    or "").lower() == prov_l
+            or (meta.get("provider_id") or "").lower() == prov_l
+        ):
+            continue
+        grp = e.get("txn_group_id") or e.get("entry_no")
+        if not grp or grp in seen_groups:
+            continue
+        seen_groups.add(grp)
+
         p_from = (meta.get("period_from") or "")[:10]
         p_to   = (meta.get("period_to")   or "")[:10]
         if not (p_from and p_to):
@@ -205,8 +214,8 @@ async def extract_calendar_from_registered_settlements(
             p_from = p_from or (nested.get("from") or "")[:10]
             p_to   = p_to   or (nested.get("to")   or "")[:10]
         ref = meta.get("settlement_reference") or ""
+        sd = (meta.get("settlement_date") or "")[:10]
         if not p_from and ref:
-            # Patterns:  PROV-YYYY-MM-DD-...   or   PROV-YYYYMMDD-...
             import re as _re
             m = _re.search(r"(\d{4})-(\d{2})-(\d{2})", ref)
             if m:
@@ -214,37 +223,88 @@ async def extract_calendar_from_registered_settlements(
             else:
                 m2 = _re.search(r"(\d{4})(\d{2})(\d{2})", ref)
                 if m2:
-                    p_from = f"{m2.group(1)}-{m2.group(2)}-{m2.group(3)}"
-        sd = (meta.get("settlement_date") or "")[:10]
-        if not p_to and sd:
-            p_to = sd
+                    p_from = (f"{m2.group(1)}-{m2.group(2)}"
+                              f"-{m2.group(3)}")
         if not p_from and sd:
-            # 7-day window ending on settlement_date
             try:
                 p_from = (date.fromisoformat(sd) -
                           timedelta(days=6)).isoformat()
             except Exception:
                 pass
-        if not (p_from and p_to):
-            # Cannot resolve a period at all — skip with a warning
-            # the caller can surface in the rebuild summary.
+        if not p_from:
             continue
-        if (p_from, p_to) in seen:
+        had_period_to = bool(p_to)
+        raw.append({
+            "p_from":               p_from,
+            "p_to":                 p_to,
+            "had_period_to":        had_period_to,
+            "ref":                  ref or None,
+            "sd":                   sd,
+            "txn_group_id":         grp,
+            "entity_id":            e.get("entity_id"),
+            "side":                 e.get("side"),
+            "meta_provider":        meta.get("provider"),
+            "transferred_amount":   meta.get("transferred_amount"),
+            "had_period_metadata":  bool(
+                meta.get("period_from")
+                or (meta.get("period") or {}).get("from")),
+        })
+
+    raw.sort(key=lambda x: x["p_from"])
+
+    # Cross-row inference of missing period_to to ensure contiguous
+    # non-overlapping periods.
+    for i, r in enumerate(raw):
+        if r["had_period_to"]:
             continue
-        seen.add((p_from, p_to))
+        # Use next row's period_from − 1 day when available.
+        nxt = raw[i + 1] if i + 1 < len(raw) else None
+        if nxt:
+            try:
+                r["p_to"] = _add_days(nxt["p_from"], -1)
+                continue
+            except Exception:
+                pass
+        # Last row: infer from previous gap (cycle width).
+        prv = raw[i - 1] if i > 0 else None
+        if prv:
+            try:
+                gap_days = (date.fromisoformat(r["p_from"]) -
+                            date.fromisoformat(prv["p_from"])).days
+                if gap_days > 0:
+                    r["p_to"] = _add_days(r["p_from"], gap_days - 1)
+                    continue
+            except Exception:
+                pass
+        # Fall back to settlement_date or +6 placeholder.
+        r["p_to"] = (r["sd"] if r["sd"] and r["sd"] >= r["p_from"]
+                     else _add_days(r["p_from"], 6))
+
+    out: list[dict] = []
+    seen_periods: set[tuple[str, str]] = set()
+    for r in raw:
+        if (r["p_from"], r["p_to"]) in seen_periods:
+            continue
+        seen_periods.add((r["p_from"], r["p_to"]))
         out.append({
-            "invoice_date":            p_from,  # matches BNPL page's
-                                                  # "from" anchor
-            "period_start":            p_from,
-            "period_end":              p_to,
-            "expected_transfer_date":  sd or p_to,
+            "invoice_date":            r["p_from"],
+            "period_start":            r["p_from"],
+            "period_end":              r["p_to"],
+            "expected_transfer_date":  r["sd"] or r["p_to"],
             "source":                  "registered_settlement",
-            "source_ref":              ref or None,
-            "settlement_dates":        [sd] if sd else [],
+            "source_ref":              r["ref"],
+            "settlement_dates":        [r["sd"]] if r["sd"] else [],
             "orders_count_hint":       None,
             "net_hint":                round(float(
-                meta.get("transferred_amount") or 0), 2),
+                r["transferred_amount"] or 0), 2),
             "layout":                  "registered",
+            "txn_group_id":            r["txn_group_id"],
+            "_raw_match": {
+                "entity_id":     r["entity_id"],
+                "side":          r["side"],
+                "meta_provider": r["meta_provider"],
+                "had_period_metadata": r["had_period_metadata"],
+            },
         })
     return out
 
