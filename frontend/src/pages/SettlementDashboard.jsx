@@ -268,6 +268,7 @@ function CalendarPanel() {
         setBusy(true);
         const providers = ["tamara", "tabby", "imkan", "salla"];
         const results = [];
+        const warnings = [];
         try {
             for (const p of providers) {
                 try {
@@ -277,11 +278,15 @@ function CalendarPanel() {
                     results.push(
                         `${p}: جديد ${data.inserted} / محدّث ${data.updated}`,
                     );
+                    if (data.template_warning) {
+                        warnings.push(`${p}: ${data.template_warning}`);
+                    }
                 } catch (e) {
                     results.push(`${p}: ❌ ${e?.response?.data?.detail || "فشل"}`);
                 }
             }
             toast.success(results.join(" • "), { duration: 8000 });
+            warnings.forEach(w => toast.warning(w, { duration: 14000 }));
             await load();
         } finally {
             setBusy(false);

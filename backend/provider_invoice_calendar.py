@@ -453,22 +453,49 @@ async def rebuild_calendar(
     registered = await extract_calendar_from_registered_settlements(
         db, uid, provider)
 
-    # Iter-251 v7 — Learn the cycle template from the most recent
-    # registered settlement so derived rows align to the SAME
-    # period boundaries the merchant actually used.
+    # Iter-251 v8 — Learn the cycle template from ALL registered
+    # settlements using median statistics (robust to outliers /
+    # inconsistent metadata).  If widths vary by > 1 day across
+    # registrations, surface a warning so the merchant can review.
     template: Optional[dict] = None
+    template_warning: Optional[str] = None
     if registered:
-        most_recent = registered[-1]
-        try:
-            ps = date.fromisoformat(most_recent["period_start"])
-            pe = date.fromisoformat(most_recent["period_end"])
+        widths: list[int] = []
+        anchors: list[int] = []
+        for r in registered:
+            try:
+                ps = date.fromisoformat(r["period_start"])
+                pe = date.fromisoformat(r["period_end"])
+                w  = (pe - ps).days + 1
+                if 1 <= w <= 14:  # sanity guard
+                    widths.append(w)
+                    anchors.append(ps.weekday())
+            except Exception:
+                continue
+        if widths:
+            widths_sorted = sorted(widths)
+            median_width = widths_sorted[len(widths_sorted) // 2]
+            # Most common anchor weekday
+            from collections import Counter
+            anchor_mode = Counter(anchors).most_common(1)[0][0]
             template = {
-                "anchor_weekday": ps.weekday(),
-                "period_width":   (pe - ps).days + 1,
-                "source_invoice": most_recent["invoice_date"],
+                "anchor_weekday":  anchor_mode,
+                "period_width":    median_width,
+                "registered_count": len(widths),
+                "all_widths":      widths_sorted,
+                "all_anchors":     sorted(set(anchors)),
             }
-        except Exception:
-            template = None
+            if max(widths) - min(widths) > 1:
+                template_warning = (
+                    f"⚠️ التسويات المسجَّلة ذات أطوال فترة متضاربة "
+                    f"({min(widths)} – {max(widths)} يوماً). تم اعتماد "
+                    f"الوسيط = {median_width} يوماً. راجع تقرير التدقيق."
+                )
+            if len(set(anchors)) > 1:
+                template_warning = (template_warning or "") + (
+                    f" · أيام بداية مختلفة بين التسويات: "
+                    f"{sorted(set(anchors))}"
+                )
 
     derived = await extract_calendar_from_settlement_entries(
         db, uid, provider, template=template)
@@ -585,16 +612,17 @@ async def rebuild_calendar(
             await db.provider_invoice_calendar.insert_one(doc)
             inserted += 1
     return {
-        "provider":         provider,
-        "extracted":        len(merged),
-        "from_registered":  from_registered,
-        "from_derived":     from_derived,
-        "inserted":         inserted,
-        "updated":          updated,
-        "skipped_manual":   skipped_manual,
-        "deleted_stale":    deleted_stale,
-        "template":         template,
-        "dry_run":          dry_run,
+        "provider":           provider,
+        "extracted":          len(merged),
+        "from_registered":    from_registered,
+        "from_derived":       from_derived,
+        "inserted":           inserted,
+        "updated":            updated,
+        "skipped_manual":     skipped_manual,
+        "deleted_stale":      deleted_stale,
+        "template":           template,
+        "template_warning":   template_warning,
+        "dry_run":            dry_run,
     }
 
 
@@ -673,7 +701,7 @@ async def upsert_manual_entry(
         "updated_at":             now,
     }
     await db.provider_invoice_calendar.insert_one(doc)
-    return doc
+    return {k: v for k, v in doc.items() if k != "_id"}
 
 
 async def delete_entry(db, uid: str, entry_id: str) -> bool:
