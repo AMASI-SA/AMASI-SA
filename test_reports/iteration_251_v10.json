@@ -1,0 +1,48 @@
+{
+  "summary": "Validated the new GET /api/settlement-engine/calendar/raw-ledger-dump (Iter-251 v9) pure read-only RCA endpoint with 4 new HTTP integration tests. Full regression of the 34 pre-existing related tests (phase2a5 calendar 12, phase2b settlement 6, phase1 bank transfer 5, v8 HTTP endpoints 2, v8 HTTP calendar 9) passes. Total 38/38 = 100% green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter251_v9_raw_ledger_dump.py",
+    "/app/test_reports/pytest/iter251_v9_dump.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "settlement_engine_routes.py is 1485 lines — well above the 700-line guideline. Recommend splitting the file into sub-modules per route family (calendar, dry-run, invoices, rebuild, dump) for maintainability.",
+    "Date filter in raw_ledger_dump uses string $gte/$lte on ISO posted_at/created_at. This is boundary-inclusive on the low end at 00:00:00 and inclusive of the entire 'to' day (T23:59:59Z) — verified working. However entries WITHOUT a 'T' separator (e.g. raw 'YYYY-MM-DD') would still match by lexicographic compare; acceptable but worth a docstring note.",
+    "The endpoint sorts groups by `first_posted` but uses `sort('posted_at', 1)` only on the raw cursor; if a single group spans multiple posted_at values the ordering inside `groups[].legs` follows DB insertion-order — fine, but tests confirmed top-level group ordering is correct.",
+    "Provider matching uses $regex with $options='i' anchored ^...$ — correct case-insensitive exact match. Verified with entity_id='Tabby' (capital T) being included.",
+    "No filter on `entry_type`, `side`, `status`, or `entity_type` — confirmed by debit legs (commission, vat) appearing in the dump. This is the intended RCA behaviour."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter251_v9_raw_ledger_dump.py (new file, 4 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (38/38)",
+    "frontend": "n/a (backend-only request)"
+  },
+  "test_credentials": "admin@hesab.app / admin123 (from /app/memory/test_credentials.md) — login succeeded, JWT bearer flow works.",
+  "seed_data_creation": "All seeded GL entries and calendar rows are tagged with `_test_marker=iter251v9_*` and cleaned up in a try/finally block. Verified by snapshot comparison (count_documents pre vs post call) that the /raw-ledger-dump endpoint does NOT mutate general_ledger, provider_invoice_calendar, or settlement_invoices.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iter251_v9_raw_ledger_dump.py covers 4 scenarios: invalid provider (400), empty window, full RCA dump with 5 seeded GL entries (UUID+metadata, direct entity_id case-insensitive, mixed credit+debit txn_group, provider_id-only metadata, out-of-window exclusion) + 2 calendar rows for rca_per_calendar, and date-boundary inclusivity. All read-only guarantees verified via pre/post DB snapshots. Endpoint is at /api/settlement-engine/calendar/raw-ledger-dump?provider=&from=&to= with Bearer auth.",
+  "verified_behaviours": [
+    "Top-level keys present: provider, window, total_legs, total_groups, by_side, by_entry_type, by_entity_type, by_status, groups, rca_per_calendar, note.",
+    "Per-leg keys present: entry_no, entry_type, side, amount, status, entity_type, entity_id, sub_account, notes, posted_at, created_at, metadata (full dict).",
+    "Per-group keys: txn_group_id, first_posted, last_posted, txn_type, settlement_reference, settlement_date, period_from, period_to, transferred_amount, metadata_provider, legs[].",
+    "Provider matching paths (3): entity_id == provider (case-insensitive regex), metadata.provider == provider, metadata.provider_id == provider — all three verified by seed scenarios A/B/PID.",
+    "Mixed credit+debit legs in same txn_group are returned with no filter on side or entry_type — by_side shows both credit (>=3) and debit (>=2).",
+    "Out-of-window entry (posted_at='2027-01-15') excluded; boundary entries at 'from'T00:00:00Z and 'to'T23:59:00Z both included; 'to+1'T00:00:00Z excluded.",
+    "rca_per_calendar returns one row per provider_invoice_calendar entry with `by` ∈ {reference, period_overlap, posted_in_period}.",
+    "Invalid provider returns HTTP 400 with Arabic detail containing 'مزو'.",
+    "READ-ONLY guarantee: count_documents on general_ledger / provider_invoice_calendar / settlement_invoices identical pre vs post endpoint call (asserted via _snapshot_counts helper)."
+  ],
+  "rca of the issue": "Not a bug fix run — this is a feature-validation run for the new diagnostic endpoint the user will use on production to investigate why their Tabby May 2026 calendar rows show ZERO GL matches and June rows match with side=debit only. The endpoint now exposes the raw GL data so the user can determine: (a) whether May settlements are stored at all, (b) what entry_type/side the bridge stored, (c) whether the calendar extractor's credit-only filter excludes legitimate entries. Endpoint behaviour fully matches the spec."
+}

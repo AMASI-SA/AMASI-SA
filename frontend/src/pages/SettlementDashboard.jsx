@@ -391,6 +391,57 @@ function CalendarPanel() {
                             title="تقرير Read-Only لكل فاتورة: مصدرها، هل لها مطابق في GL، وقيم metadata">
                         📋 تقرير تدقيق
                     </button>
+                    <button onClick={async () => {
+                        setBusy(true);
+                        try {
+                            const fromD = window.prompt(
+                                "من تاريخ (YYYY-MM-DD)?",
+                                "2026-04-27");
+                            if (!fromD) return;
+                            const toD = window.prompt(
+                                "إلى تاريخ (YYYY-MM-DD)?",
+                                "2026-06-30");
+                            if (!toD) return;
+                            const { data } = await api.get(
+                                "/settlement-engine/calendar/raw-ledger-dump",
+                                { params: { provider,
+                                    "from": fromD, "to": toD } });
+                            console.group(`🧬 RCA: ${provider} ${fromD} → ${toD}`);
+                            console.log("Summary:", {
+                                total_legs: data.total_legs,
+                                total_groups: data.total_groups,
+                                by_side: data.by_side,
+                                by_entry_type: data.by_entry_type,
+                                by_entity_type: data.by_entity_type,
+                                by_status: data.by_status,
+                            });
+                            console.table((data.groups || []).map(g => ({
+                                ref: g.settlement_reference,
+                                date: g.settlement_date,
+                                period: `${g.period_from || "—"} → ${g.period_to || "—"}`,
+                                txn_type: g.txn_type,
+                                meta_provider: g.metadata_provider,
+                                legs: g.legs.length,
+                                amount: g.transferred_amount,
+                            })));
+                            console.log("Per-calendar RCA:", data.rca_per_calendar);
+                            console.log("Full groups:", data.groups);
+                            console.groupEnd();
+                            toast.info(
+                                `🧬 RCA: ${data.total_groups} مجموعات / `
+                                + `${data.total_legs} قيود · `
+                                + `side: ${JSON.stringify(data.by_side)} · `
+                                + `entry_type: ${JSON.stringify(data.by_entry_type)}`,
+                                { duration: 18000 });
+                        } catch (e) {
+                            toast.error(e?.response?.data?.detail || "فشل RCA");
+                        } finally { setBusy(false); }
+                    }} disabled={busy}
+                       className="text-xs font-bold px-3 py-1.5 rounded bg-rose-700 text-white hover:bg-rose-800 disabled:opacity-40"
+                       data-testid="se-cal-rca-btn"
+                       title="Read-Only: كل قيود GL لهذا المزوّد في الفترة (debit + credit، كل metadata) — للتشخيص فقط">
+                        🧬 RCA دفتر اليومية
+                    </button>
                     <button onClick={load}
                             className="text-xs px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200"
                             data-testid="se-cal-reload">

@@ -1295,4 +1295,191 @@ def make_settlement_engine_router(db, current_user):
             ),
         }
 
+    @router.get("/calendar/raw-ledger-dump")
+    async def raw_ledger_dump(
+        provider: str,
+        from_date: str = Query(..., alias="from",
+                               description="YYYY-MM-DD"),
+        to_date:   str = Query(..., alias="to",
+                               description="YYYY-MM-DD"),
+        user: dict = Depends(current_user),
+    ):
+        """Iter-251 v9 — Pure Read-Only RCA dump.
+
+        Returns EVERY general_ledger entry that mentions the
+        ``provider`` (via entity_id, metadata.provider, or
+        metadata.provider_id) within the requested date window —
+        with ALL legs (debit AND credit), full metadata, no filter
+        on entry_type, side, status, or entity_type.
+
+        Use this to answer:
+          • Are there entries for May invoices at all?
+          • What entry_type/side/entity_type did the bridge store?
+          • Are there entries OUTSIDE bnpl_settlement that we miss?
+        """
+        if provider not in PROVIDER_MATCHERS:
+            raise HTTPException(400, f"مزوّد غير معروف: {provider}")
+        uid = user["id"]
+        # Build the date filter — try posted_at AND created_at
+        # (some legacy entries may only have created_at).
+        date_q = {"$or": [
+            {"posted_at":  {"$gte": from_date,
+                            "$lte": f"{to_date}T23:59:59Z"}},
+            {"created_at": {"$gte": from_date,
+                            "$lte": f"{to_date}T23:59:59Z"}},
+        ]}
+        prov_l = provider.lower()  # noqa: F841 — useful for trace
+        # 1. Find all entries that mention `provider` ANYWHERE
+        match_q = {
+            "user_id": uid,
+            "$and": [
+                date_q,
+                {"$or": [
+                    {"entity_id": {"$regex": f"^{provider}$",
+                                    "$options": "i"}},
+                    {"metadata.provider": {"$regex": f"^{provider}$",
+                                            "$options": "i"}},
+                    {"metadata.provider_id":
+                       {"$regex": f"^{provider}$", "$options": "i"}},
+                ]},
+            ],
+        }
+
+        entries: list[dict] = []
+        async for e in db.general_ledger.find(
+            match_q, {"_id": 0},
+        ).sort("posted_at", 1):
+            entries.append(e)
+
+        # 2. Group by txn_group_id so the merchant sees a SINGLE
+        # transaction's full leg breakdown.
+        groups: dict[str, dict] = {}
+        for e in entries:
+            grp = e.get("txn_group_id") or f"_no_group_{e.get('entry_no')}"
+            g = groups.setdefault(grp, {
+                "txn_group_id":  e.get("txn_group_id"),
+                "first_posted":  e.get("posted_at"),
+                "last_posted":   e.get("posted_at"),
+                "txn_type":      None,
+                "settlement_reference": None,
+                "settlement_date": None,
+                "period_from":   None,
+                "period_to":     None,
+                "transferred_amount": None,
+                "metadata_provider": None,
+                "legs":          [],
+            })
+            meta = e.get("metadata") or {}
+            g["legs"].append({
+                "entry_no":     e.get("entry_no"),
+                "entry_type":   e.get("entry_type"),
+                "side":         e.get("side"),
+                "amount":       e.get("amount"),
+                "status":       e.get("status"),
+                "entity_type":  e.get("entity_type"),
+                "entity_id":    e.get("entity_id"),
+                "sub_account":  e.get("sub_account"),
+                "notes":        e.get("notes"),
+                "posted_at":    e.get("posted_at"),
+                "created_at":   e.get("created_at"),
+                "metadata":     meta,
+            })
+            # Pull common metadata to the group level for quick scan
+            for fld in ("settlement_reference", "settlement_date",
+                        "period_from", "period_to",
+                        "transferred_amount"):
+                if g[fld] is None and meta.get(fld):
+                    g[fld] = meta[fld]
+            if g["txn_type"] is None and meta.get("txn_type"):
+                g["txn_type"] = meta["txn_type"]
+            if g["metadata_provider"] is None and meta.get("provider"):
+                g["metadata_provider"] = meta["provider"]
+            if e.get("posted_at"):
+                if e["posted_at"] < g["first_posted"]:
+                    g["first_posted"] = e["posted_at"]
+                if e["posted_at"] > g["last_posted"]:
+                    g["last_posted"] = e["posted_at"]
+
+        # Build summary stats
+        total_legs = sum(len(g["legs"]) for g in groups.values())
+        side_counts:  dict[str, int] = {}
+        type_counts:  dict[str, int] = {}
+        ent_counts:   dict[str, int] = {}
+        status_counts: dict[str, int] = {}
+        for g in groups.values():
+            for leg in g["legs"]:
+                side_counts[leg["side"] or "?"] = (
+                    side_counts.get(leg["side"] or "?", 0) + 1)
+                type_counts[leg["entry_type"] or "?"] = (
+                    type_counts.get(leg["entry_type"] or "?", 0) + 1)
+                ent_counts[leg["entity_type"] or "?"] = (
+                    ent_counts.get(leg["entity_type"] or "?", 0) + 1)
+                status_counts[leg["status"] or "?"] = (
+                    status_counts.get(leg["status"] or "?", 0) + 1)
+
+        # Identify which calendar periods overlap a group's period.
+        cal_rows: list[dict] = []
+        async for c in db.provider_invoice_calendar.find(
+            {"user_id": uid, "provider": provider},
+            {"_id": 0, "invoice_date": 1, "period_start": 1,
+             "period_end": 1, "source": 1, "source_ref": 1},
+        ).sort("invoice_date", 1):
+            cal_rows.append(c)
+
+        rca_per_calendar = []
+        for c in cal_rows:
+            cf, ct = c.get("period_start"), c.get("period_end")
+            ref    = c.get("source_ref")
+            matches = []
+            for g in groups.values():
+                gref = g.get("settlement_reference") or ""
+                gf   = (g.get("period_from") or "")[:10]
+                gt   = (g.get("period_to")   or "")[:10]
+                # Reference match
+                if ref and gref == ref:
+                    matches.append({"by": "reference",
+                                     "txn": g["txn_group_id"]})
+                    continue
+                # Period overlap test
+                if gf and gt and cf and ct and not (gt < cf or gf > ct):
+                    matches.append({"by": "period_overlap",
+                                     "txn": g["txn_group_id"]})
+                    continue
+                # First posted date inside calendar period
+                fp = (g.get("first_posted") or "")[:10]
+                if fp and cf and ct and cf <= fp <= ct:
+                    matches.append({"by": "posted_in_period",
+                                     "txn": g["txn_group_id"]})
+            rca_per_calendar.append({
+                "invoice_date":  c.get("invoice_date"),
+                "period_from":   cf,
+                "period_to":     ct,
+                "calendar_source": c.get("source"),
+                "matches_found": len(matches),
+                "match_details": matches,
+            })
+
+        return {
+            "provider":              provider,
+            "window":                {"from": from_date, "to": to_date},
+            "total_legs":            total_legs,
+            "total_groups":          len(groups),
+            "by_side":               side_counts,
+            "by_entry_type":         type_counts,
+            "by_entity_type":        ent_counts,
+            "by_status":             status_counts,
+            "groups": list(sorted(
+                groups.values(),
+                key=lambda g: g.get("first_posted") or "")),
+            "rca_per_calendar":      rca_per_calendar,
+            "note": (
+                "Read-only RCA dump.  No filter applied beyond date "
+                "+ provider mention.  Use this to verify (a) whether "
+                "missing-month invoices are registered AT ALL, (b) "
+                "what entry_type / side the bridge actually stored, "
+                "(c) whether legs are split debit vs credit so the "
+                "calendar extractor's filter aligns with reality."
+            ),
+        }
+
     return router
