@@ -1,0 +1,51 @@
+{
+  "summary": "Validated the new GET /api/ad-spend-rca?date=YYYY-MM-DD&providers=meta,snapchat read-only RCA endpoint with 11 new HTTP integration tests covering every requirement in the review spec. All 38 pre-existing related iter251 tests still pass. Total: 49/49 (100%).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter251_v10_ad_spend_rca.py",
+    "/app/test_reports/pytest/iter251_v10_rca.xml",
+    "/app/test_reports/pytest/iter251_v10_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ad_spend_rca_routes.py is clean (~354 lines, under 700-line guideline) and pure read-only.",
+    "Lines 232-240: the fallback when no debit leg is caught computes `gl_total_sar += amount` then `= -gl_total_sar` then `= abs(...)` — the negation is a no-op (abs of negative equals abs of positive). Cosmetic only; result is correct but the two intermediate statements can be removed. Not a functional bug.",
+    "Line 166-171: the previous-day scope lookup walks the entire sources[] list via `any(s['scope'] for s in sources)` then re-fetches from the SAME source_used collection — this is correct but slightly indirect; could pass scope directly from the chosen source.",
+    "FX defaults dict hard-codes USD=3.75 / EUR=4.10 / GBP=4.78 — fine as a safety net but worth noting that ads_currency_settings is the merchant-overridable source-of-truth and is correctly preferred (verified by test_ads_currency_settings_fx_override).",
+    "Endpoint correctly excludes mongo _id via `{'_id': 0}` projection on every cursor (counterparties, sources, general_ledger, ads_currency_settings) — no ObjectId serialization issues."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter251_v10_ad_spend_rca.py (new file, 11 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (49/49 — 11 new RCA endpoint tests + 38 iter251 regression tests)",
+    "frontend": "n/a (backend-only request)"
+  },
+  "test_credentials": "Used dynamically registered fresh test users (POST /api/auth/register) for isolation. admin@hesab.app/admin123 from /app/memory/test_credentials.md was available but not needed.",
+  "seed_data_creation": "Each test module run creates a fresh isolated user via /api/auth/register, then seeds counterparties (meta + snapchat USD), meta_ads_daily, snapchat_account_daily, snapchat_ads_daily (unscoped other-account row for leak test), 4 general_ledger ad_spend entries (one per OR-match path: entity_id, metadata.ad_account_id, metadata.account_id, metadata.counterparty_id), and an ads_currency_settings override. All tagged with _test_marker=iter251v10_<hash>. Module-scope teardown removes ALL records for the isolated test user across counterparties / meta_ads_daily / snapchat_account_daily / snapchat_ads_daily / general_ledger / ads_currency_settings.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iter251_v10_ad_spend_rca.py covers all 11 spec items: (1) top-level shape, (2) per-account keys nested, (3) Meta delta_api_vs_gl=215.95, (4) Snapchat USD 770 * 3.75 = 2887.50 vs GL 2455.42 = delta 432.08, (5) providers parameter parsing (meta / snapchat / both), (6) totals_per_provider aggregation, (7) READ-ONLY snapshot verification across 6 collections, (8) empty-state 200 with [], (9) cross-account leak prevention for unscoped snapchat_ads_daily, (10) ads_currency_settings FX override, (11) all 4 GL OR-match paths. Counterparties require name_lower field (cp_unique_name index) and GL entries need a unique entry_no (user_id_1_entry_no_1 index) — already handled in fixture.",
+  "verified_behaviours": [
+    "Endpoint returns 200 with keys: date, providers, timezone='Asia/Riyadh', accounts[], totals_per_provider, note",
+    "Each account record exposes: provider, internal_account_id, external_account_id, account_name, date_used, timezone_used, currency, fx_rate_used, fx_source, api{source_collection,rows_found,spend_native,spend_sar,raw_documents}, previous_stored{date,spend_native}, general_ledger{legs_count,total_sar,period_keys,computation_mode,legs[]}, reconciliation{api_spend_sar,gl_total_sar,ui_balance_sar,delta_api_vs_gl,delta_api_vs_ui,delta_gl_vs_ui}",
+    "FX: SAR is identity (rate=1.0). USD with no ads_currency_settings falls back to default 3.75 with fx_source='default'. With ads_currency_settings present, rate_to_sar=3.80 was used and fx_source contained 'ads_currency_settings'.",
+    "Meta scenario: 726.22 SAR API vs 510.27 SAR GL → delta_api_vs_gl=215.95 ✓",
+    "Snapchat scenario: 770 USD × 3.75 = 2887.50 SAR API vs 2455.42 SAR GL (sum of 1200+800+455.42 across the 3 metadata match paths) → delta_api_vs_gl=432.08 ✓",
+    "Providers param: ?providers=meta returns only meta (1 account); ?providers=snapchat returns only snapchat (1 account); ?providers=meta,snapchat returns both",
+    "Read-only: counterparties/meta_ads_daily/snapchat_account_daily/snapchat_ads_daily/general_ledger/ads_currency_settings counts identical before & after 3 endpoint calls",
+    "Empty state: brand-new user with no counterparties → 200 with accounts=[] and totals_per_provider={}",
+    "No cross-account leak: snap_OTHER_999 row in snapchat_ads_daily did not pollute snap_acct_222's spend_native (stayed at 770.0)",
+    "All 4 GL OR-match paths populate legs: entity_id (meta), metadata.ad_account_id, metadata.account_id, metadata.counterparty_id (snapchat)",
+    "period_keys correctly extracted (AM_00_12, PM_12_24, PM_12_24_CORRECTION:1) and computation_mode='windowed (AM/PM/corrections)' when windowed period_keys present"
+  ],
+  "rca of the issue": "n/a — pure backend verification. The endpoint implementation in /app/backend/ad_spend_rca_routes.py is correct and matches the merchant's spec for diagnosing the Meta/Snapchat spend gaps. The 432.08 SAR Snapchat delta is reproducible end-to-end via the FX rate path (770 USD × 3.75 = 2887.50, GL holds 2455.42)."
+}

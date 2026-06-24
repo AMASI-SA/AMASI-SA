@@ -3910,6 +3910,10 @@ api.include_router(
 # Iter-251 · Phase 2A — Settlement Dry-Run Engine (READ-ONLY analysis).
 from settlement_engine_routes import make_settlement_engine_router
 api.include_router(make_settlement_engine_router(db, current_user))
+
+# Iter-251 v10 — Ad-spend RCA (Read-Only) for Meta/Snapchat
+from ad_spend_rca_routes import make_ad_spend_rca_router
+api.include_router(make_ad_spend_rca_router(db, current_user))
 # Iter-246 — Read-only audit of legacy screens still in use.
 from legacy_usage_report_routes import make_legacy_usage_report_router
 api.include_router(make_legacy_usage_report_router(db, current_user))
