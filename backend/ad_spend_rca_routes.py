@@ -138,19 +138,38 @@ def make_ad_spend_rca_router(db, current_user):
         # 6 + 9 — Raw API spend rows for this date (source-of-truth)
         source_docs: list[dict] = []
         api_spend_native = 0.0
+        api_spend_sar_from_source = 0.0
+        embedded_fx_rates: set[float] = set()
+        embedded_native_currencies: set[str] = set()
         source_used: Optional[str] = None
         for src in sources:
             q: dict = {"user_id": uid, "date": date_str}
             if src["scope"] and ext_id:
                 q[src["scope"]] = ext_id
             elif src["scope"] and not ext_id:
-                # cannot scope ⇒ skip to next source
                 continue
             cursor = db[src["collection"]].find(q, {"_id": 0})
             collected = []
             async for r in cursor:
                 collected.append(r)
-                api_spend_native += float(r.get("spend") or 0)
+                # `spend_native` (if present) is the raw API value
+                # in the ad account's NATIVE currency.  `spend` is
+                # already FX-converted to SAR by the cron.  When
+                # `spend_native` is absent (Meta accounts in SAR),
+                # `spend` IS the native amount in SAR.
+                if r.get("spend_native") is not None:
+                    api_spend_native           += float(r["spend_native"])
+                    api_spend_sar_from_source  += float(r.get("spend") or 0)
+                    if r.get("fx_rate") is not None:
+                        embedded_fx_rates.add(float(r["fx_rate"]))
+                    if r.get("native_currency"):
+                        embedded_native_currencies.add(
+                            r["native_currency"])
+                else:
+                    # No spend_native field → `spend` is the native
+                    # value in the counterparty's currency.  We don't
+                    # have a cron-converted SAR; compute it later.
+                    api_spend_native          += float(r.get("spend") or 0)
             if collected:
                 source_docs = collected
                 source_used = src["collection"]
@@ -246,9 +265,21 @@ def make_ad_spend_rca_router(db, current_user):
         ui_balance_sar = await _ui_balance(db, uid, cp_id)
 
         # FX conversion for API_native → SAR
-        fx_rate, fx_source = await _fx_rate(
-            db, uid, currency or "SAR", date_str)
-        api_spend_sar = round(api_spend_native * fx_rate, 2)
+        # Prefer the FX rate EMBEDDED in source documents (which is
+        # what the cron actually used).  Fall back to settings then
+        # to a hard default.
+        if embedded_fx_rates and len(embedded_fx_rates) == 1:
+            fx_rate = embedded_fx_rates.pop()
+            fx_source = "source_document"
+        else:
+            fx_rate, fx_source = await _fx_rate(
+                db, uid, currency or "SAR", date_str)
+        # `api_spend_sar_from_source` is the cron-recorded SAR.
+        # `api_spend_native * fx_rate` is what we'd compute now.
+        api_spend_sar_computed = round(api_spend_native * fx_rate, 2)
+        # Authoritative SAR for reconciliation = what the cron wrote.
+        api_spend_sar = round(api_spend_sar_from_source or
+                                api_spend_sar_computed, 2)
 
         # 10 — Cumulative vs daily classification (derived from
         # window_key on GL legs).
@@ -282,8 +313,15 @@ def make_ad_spend_rca_router(db, current_user):
                 "source_collection": source_used,
                 "rows_found":        len(source_docs),
                 "spend_native":      round(api_spend_native, 4),
-                "spend_native_currency": currency or "—",
+                "spend_native_currency":
+                    (next(iter(embedded_native_currencies), None)
+                     or currency or "—"),
                 "spend_sar":         api_spend_sar,
+                "spend_sar_from_cron":
+                                     round(api_spend_sar_from_source, 2),
+                "spend_sar_recomputed":
+                                     api_spend_sar_computed,
+                "embedded_fx_rates": sorted(embedded_fx_rates),
                 "raw_documents":     source_docs,
             },
             "previous_stored": {
