@@ -191,7 +191,24 @@ Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
+## Iter-251 v12 — Ad-Spend Scheduler Diagnostics (2026-06-24, READ-ONLY)
+Backend:
+  - `ad_spend_scheduler_diagnostics.py` — new `/api/ad-spend-rca/scheduler-diagnostics`
+    endpoint returning: (1) heartbeat history from `cron_runs` filtered by
+    iter-215 types, (2) per-counterparty dry-run preview computing
+    cumulative_spend / would-be AM & PM amounts / skip reasons WITHOUT
+    writing to GL, (3) selected snapchat ad accounts state,
+    (4) ads_currency_settings snapshot, (5) raw source row samples.
+  - `server.py` — instrumented `_ad_spend_window_post_loop` to persist
+    heartbeat rows into `cron_runs` on every loop tick (types:
+    `ad_spend_window_post_loop_start`, `ad_spend_window_catchup`,
+    `ad_spend_window_post`) with per-row `skipped_reasons` histogram.
+Tests: `tests/test_iter251_v12_scheduler_diagnostics.py` — 3/3 PASS
+Purpose: Conclusively determine WHY iter-215 is skipping all 486
+counterparties in Production (per-account blocker / reason histogram).
+
 ## Tests
 - `/app/backend/tests/test_p15L_bnpl_transfer_block.py` — 11/11 PASS
 - `/app/backend/tests/test_p15p_employee_guard_widened.py` — 7/7 PASS
 - `/app/backend/tests/test_p15ab_suppliers_unification_forensic.py` — 3/3 PASS
+- `/app/backend/tests/test_iter251_v12_scheduler_diagnostics.py` — 3/3 PASS

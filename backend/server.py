@@ -3914,6 +3914,12 @@ api.include_router(make_settlement_engine_router(db, current_user))
 # Iter-251 v10 — Ad-spend RCA (Read-Only) for Meta/Snapchat
 from ad_spend_rca_routes import make_ad_spend_rca_router
 api.include_router(make_ad_spend_rca_router(db, current_user))
+
+from ad_spend_scheduler_diagnostics import (
+    make_ad_spend_scheduler_diagnostics_router,
+)
+api.include_router(
+    make_ad_spend_scheduler_diagnostics_router(db, current_user))
 # Iter-246 — Read-only audit of legacy screens still in use.
 from legacy_usage_report_routes import make_legacy_usage_report_router
 api.include_router(make_legacy_usage_report_router(db, current_user))
@@ -4260,8 +4266,28 @@ async def on_startup():
         from tz_utils import riyadh_now_aware as _r_now
         from datetime import timedelta as _td2
         await _asyncio.sleep(120)  # let the half-hour cron seed data
+        # Iter-251 v12 — record loop-start event so the scheduler
+        # diagnostics endpoint can prove the task actually launched.
+        try:
+            await db.cron_runs.insert_one({
+                "id":      str(uuid.uuid4()),
+                "type":    "ad_spend_window_post_loop_start",
+                "ran_at":  datetime.now(timezone.utc).isoformat(),
+                "note":    "iter-215 ad_spend window post loop started",
+            })
+        except Exception:
+            pass
         last_catchup_hour = -1
         last_posted_key = None
+
+        def _aggregate_reasons(items: list) -> dict:
+            """Bucket skipped items by `reason` for the heartbeat."""
+            out: dict[str, int] = {}
+            for it in items or []:
+                reason = (it or {}).get("reason") or "unknown"
+                out[reason] = out.get(reason, 0) + 1
+            return out
+
         while True:
             try:
                 # 7-day catch-up scan once per hour.
@@ -4270,12 +4296,32 @@ async def on_startup():
                     last_catchup_hour = hour_now
                     res = await catch_up_window_posts(db)
                     posted = res.get("summary", {}).get("posted", 0)
+                    skipped = res.get("summary", {}).get("skipped", 0)
                     if posted:
                         logger.info(
                             "iter-215: catch-up posted=%d skipped=%d",
-                            posted,
-                            res.get("summary", {}).get("skipped", 0),
+                            posted, skipped,
                         )
+                    # Iter-251 v12 — persist catch-up heartbeat so the
+                    # diagnostics endpoint can show last-ran time +
+                    # skip-reason histogram.
+                    try:
+                        await db.cron_runs.insert_one({
+                            "id":               str(uuid.uuid4()),
+                            "type":             "ad_spend_window_catchup",
+                            "ran_at":           datetime.now(
+                                timezone.utc).isoformat(),
+                            "posted_count":     posted,
+                            "skipped_count":    skipped,
+                            "skipped_reasons":  _aggregate_reasons(
+                                res.get("skipped") or []),
+                            "posted_sample":    (
+                                res.get("posted") or [])[:10],
+                            "skipped_sample":   (
+                                res.get("skipped") or [])[:10],
+                        })
+                    except Exception:
+                        pass
                 # Current window post.
                 w = current_window()
                 if w is not None:
@@ -4296,6 +4342,26 @@ async def on_startup():
                             result["summary"]["posted"],
                             result["summary"]["skipped"],
                         )
+                        # Iter-251 v12 — persist window-post heartbeat.
+                        try:
+                            await db.cron_runs.insert_one({
+                                "id":              str(uuid.uuid4()),
+                                "type":            "ad_spend_window_post",
+                                "ran_at":          datetime.now(
+                                    timezone.utc).isoformat(),
+                                "period":          period,
+                                "target_date":     target_date,
+                                "posted_count":    result["summary"]["posted"],
+                                "skipped_count":   result["summary"]["skipped"],
+                                "skipped_reasons": _aggregate_reasons(
+                                    result.get("skipped") or []),
+                                "posted_sample":   (
+                                    result.get("posted") or [])[:10],
+                                "skipped_sample":  (
+                                    result.get("skipped") or [])[:10],
+                            })
+                        except Exception:
+                            pass
                         # In AM window we additionally apply yesterday's
                         # PM_CORRECTION sweep (catches late Meta data).
                         if period == PERIOD_AM:
@@ -4311,6 +4377,25 @@ async def on_startup():
                                     "iter-215: yesterday-correction "
                                     "posted=%d", corr_posted,
                                 )
+                            try:
+                                await db.cron_runs.insert_one({
+                                    "id":             str(uuid.uuid4()),
+                                    "type":           "ad_spend_window_post",
+                                    "ran_at":         datetime.now(
+                                        timezone.utc).isoformat(),
+                                    "period":         "AM_FOLLOWING_CORRECTION",
+                                    "target_date":    yest,
+                                    "posted_count":   corr["summary"]["posted"],
+                                    "skipped_count":  corr["summary"]["skipped"],
+                                    "skipped_reasons": _aggregate_reasons(
+                                        corr.get("skipped") or []),
+                                    "posted_sample":   (
+                                        corr.get("posted") or [])[:10],
+                                    "skipped_sample":  (
+                                        corr.get("skipped") or [])[:10],
+                                })
+                            except Exception:
+                                pass
             except Exception as e:
                 logger.exception(
                     "iter-215: window post loop failed: %s", e,
