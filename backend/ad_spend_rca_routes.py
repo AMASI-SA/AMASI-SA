@@ -87,10 +87,11 @@ def make_ad_spend_rca_router(db, current_user):
             if provider not in PROVIDER_SOURCES:
                 continue
             # 1. List the merchant's ad-account counterparties of
-            # this provider.
+            # this provider.  The field is ``ad_provider`` (not
+            # ``provider``) in this app's counterparties schema.
             async for cp in db.counterparties.find(
                 {"user_id": uid, "kind": "ad_account",
-                 "provider": provider},
+                 "ad_provider": provider},
                 {"_id": 0},
             ):
                 record = await _build_account_record(
@@ -128,7 +129,8 @@ def make_ad_spend_rca_router(db, current_user):
         sources: list,
     ) -> dict:
         cp_id     = cp.get("id")
-        ext_id    = cp.get("external_id")
+        ext_id    = (cp.get("external_account_id") or
+                     cp.get("external_id"))  # legacy fallback
         name      = cp.get("name")
         currency  = (cp.get("currency") or
                      cp.get("ad_account_currency") or "").upper()

@@ -87,8 +87,8 @@ def _cp(uid, provider, ext_id, name, currency="SAR"):
         "id": str(uuid.uuid4()),
         "user_id": uid,
         "kind": "ad_account",
-        "provider": provider,
-        "external_id": ext_id,
+        "ad_provider": provider,
+        "external_account_id": ext_id,
         "name": name,
         "name_lower": (name or "").strip().lower(),  # required by cp_unique_name index
         "currency": currency,
