@@ -139,6 +139,7 @@ const SECTIONS = [
             { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
             { to: "/snapchat-accounts", label: "حسابات Snapchat", icon: Ghost, testid: "nav-snapchat-accounts" },
             { to: "/ads-v2/settings", label: "📐 إعدادات الإعلانات V2", icon: Gear, testid: "nav-ads-v2-settings" },
+            { to: "/ads-v2/report", label: "📊 تقرير الإعلانات V2", icon: ChartPieSlice, testid: "nav-ads-v2-report" },
             { to: "/products", label: "المنتجات", icon: Package, testid: "nav-products" },
             { to: "/product-costs", label: "تكاليف المنتجات", icon: Package, testid: "nav-product-costs" },
             { to: "/product-preparation", label: "تجهيز المنتجات", icon: Package, testid: "nav-product-preparation" },

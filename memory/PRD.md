@@ -191,6 +191,34 @@ Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
+## Ads V2 — Phase 1 (2026-06-24)
+Backend (new):
+  - `ads_v2/sync/adapters.py` — Meta/Snap/TikTok day-fetchers (read-only,
+    use V1 access_token via v1_token_ref). Snap uses TZ-anchored TOTAL
+    granularity; Meta uses level=account `time_increment=1`.
+  - `ads_v2/sync/core.py` — `run_sync_for_account()` and
+    `run_sync_user()`. Idempotent upsert into `ads_daily` keyed by
+    `idempotency_key`. Reconciliation drift + anomaly flags embedded
+    on the same row. Tracks `sources_count` (re-sync increments).
+  - `ads_v2/data_layer/reports.py` — SSOT readers
+    (`get_spend_by_day`, `get_spend_by_account`, `get_spend_by_provider`,
+    `get_daily_rows`, `get_reconciliation_report`, `get_sync_health`).
+    Every response carries `meta.source_layer` + `meta.ssot`.
+  - `ads_v2/routes.py` — `/sync/run`, `/sync/account/{id}/day/{date}`,
+    `/sync/health`, `/report?group_by=day|account|provider`,
+    `/report/reconciliation`, `/report/daily`.
+Frontend (new):
+  - `pages/AdsV2Report.jsx` — 4 tabs (by day/account/provider/
+    reconciliation) + "مزامنة الفترة الآن" trigger + SSOT footer
+    badge.
+  - UI fixes: `FInput`/`FLabel`/`FSelect*` wrappers enforce white text
+    on dark backgrounds across all Ads V2 forms.
+Tests: `tests/test_ads_v2_phase1.py` — 10/10 PASS.
+Verified: 5 days of Meta data fetched, totals match across all three
+groupings (3203.9 SAR), idempotency holds, V1 untouched, no GL writes.
+Pending: Snap & TikTok sync — Snap token on preview is `token_invalid`
+so live verification awaits production deploy.
+
 ## Ads V2 — Phase 0 (2026-06-24)
 Approved design: `/app/memory/ADS_V2_FINAL_DESIGN.md` (simplified, 4-collection).
 Backend (new):

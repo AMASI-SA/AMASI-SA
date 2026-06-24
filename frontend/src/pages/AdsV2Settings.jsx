@@ -24,6 +24,60 @@ import {
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 // ──────────────────────────────────────────────────────────────────────
+// Styled input wrappers — enforce white text on dark backgrounds across
+// all Ads V2 forms. Centralized so a single edit fixes every field.
+// ──────────────────────────────────────────────────────────────────────
+const FIELD_CLS =
+  "bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 " +
+  "focus-visible:ring-zinc-700";
+
+const LABEL_CLS = "text-zinc-300 text-xs font-medium";
+
+const FInput = React.forwardRef((props, ref) => (
+  <Input
+    ref={ref}
+    {...props}
+    className={`${FIELD_CLS} ${props.className || ""}`}
+  />
+));
+FInput.displayName = "FInput";
+
+const FLabel = ({ children, className = "", ...rest }) => (
+  <Label className={`${LABEL_CLS} ${className}`} {...rest}>
+    {children}
+  </Label>
+);
+
+const FSelectTrigger = React.forwardRef(({ children, ...props }, ref) => (
+  <SelectTrigger
+    ref={ref}
+    {...props}
+    className={`${FIELD_CLS} ${props.className || ""}`}
+  >
+    {children}
+  </SelectTrigger>
+));
+FSelectTrigger.displayName = "FSelectTrigger";
+
+const FSelectContent = ({ children, ...props }) => (
+  <SelectContent
+    {...props}
+    className={`bg-zinc-950 border-zinc-800 text-zinc-100 ${props.className || ""}`}
+  >
+    {children}
+  </SelectContent>
+);
+
+const FSelectItem = ({ children, ...props }) => (
+  <SelectItem
+    {...props}
+    className={`text-zinc-100 focus:bg-zinc-800 focus:text-zinc-100 ${props.className || ""}`}
+  >
+    {children}
+  </SelectItem>
+);
+
+// ──────────────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────────────
 const PROVIDER_LABEL = {
@@ -556,10 +610,10 @@ function FxRow({ a, onPatch }) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
-            <Label className="text-zinc-400 text-xs">
+            <FLabel className="text-zinc-400 text-xs">
               سعر الصرف ({a.currency_native} → SAR)
-            </Label>
-            <Input
+            </FLabel>
+            <FInput
               type="number"
               step="0.0001"
               value={rate}
@@ -568,8 +622,8 @@ function FxRow({ a, onPatch }) {
             />
           </div>
           <div>
-            <Label className="text-zinc-400 text-xs">سارٍ من</Label>
-            <Input
+            <FLabel className="text-zinc-400 text-xs">سارٍ من</FLabel>
+            <FInput
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
@@ -577,8 +631,8 @@ function FxRow({ a, onPatch }) {
             />
           </div>
           <div className="md:col-span-2">
-            <Label className="text-zinc-400 text-xs">المصدر/ملاحظة</Label>
-            <Input
+            <FLabel className="text-zinc-400 text-xs">المصدر/ملاحظة</FLabel>
+            <FInput
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="مثال: SAMA reference June 2026"
@@ -659,7 +713,7 @@ function BankFeeRow({ a, onPatch }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Label className="text-zinc-400 text-xs">مفعَّلة</Label>
+            <FLabel className="text-zinc-400 text-xs">مفعَّلة</FLabel>
             <Switch
               checked={enabled}
               onCheckedChange={setEnabled}
@@ -671,25 +725,25 @@ function BankFeeRow({ a, onPatch }) {
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div>
-                <Label className="text-zinc-400 text-xs">الطريقة</Label>
+                <FLabel className="text-zinc-400 text-xs">الطريقة</FLabel>
                 <Select value={method} onValueChange={setMethod}>
-                  <SelectTrigger data-testid={`bank-fee-method-${a.id}`}>
+                  <FSelectTrigger data-testid={`bank-fee-method-${a.id}`}>
                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">لا شيء</SelectItem>
-                    <SelectItem value="pct">نسبة %</SelectItem>
-                    <SelectItem value="flat">مبلغ ثابت</SelectItem>
-                    <SelectItem value="pct_plus_flat">
+                  </FSelectTrigger>
+                  <FSelectContent>
+                    <FSelectItem value="none">لا شيء</FSelectItem>
+                    <FSelectItem value="pct">نسبة %</FSelectItem>
+                    <FSelectItem value="flat">مبلغ ثابت</FSelectItem>
+                    <FSelectItem value="pct_plus_flat">
                       نسبة + مبلغ ثابت
-                    </SelectItem>
-                  </SelectContent>
+                    </FSelectItem>
+                  </FSelectContent>
                 </Select>
               </div>
               {(method === "pct" || method === "pct_plus_flat") && (
                 <div>
-                  <Label className="text-zinc-400 text-xs">النسبة %</Label>
-                  <Input
+                  <FLabel className="text-zinc-400 text-xs">النسبة %</FLabel>
+                  <FInput
                     type="number"
                     step="0.01"
                     value={pct}
@@ -701,10 +755,10 @@ function BankFeeRow({ a, onPatch }) {
               )}
               {(method === "flat" || method === "pct_plus_flat") && (
                 <div>
-                  <Label className="text-zinc-400 text-xs">
+                  <FLabel className="text-zinc-400 text-xs">
                     مبلغ ثابت (SAR)
-                  </Label>
-                  <Input
+                  </FLabel>
+                  <FInput
                     type="number"
                     step="0.01"
                     value={flat}
@@ -715,8 +769,8 @@ function BankFeeRow({ a, onPatch }) {
                 </div>
               )}
               <div>
-                <Label className="text-zinc-400 text-xs">ملاحظة</Label>
-                <Input
+                <FLabel className="text-zinc-400 text-xs">ملاحظة</FLabel>
+                <FInput
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="مثال: Visa cross-border"
@@ -797,10 +851,10 @@ function ReviewSettingsRow({ a, onPatch }) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <Label className="text-zinc-400 text-xs">
+            <FLabel className="text-zinc-400 text-xs">
               Auto-approve تحت (SAR)
-            </Label>
-            <Input
+            </FLabel>
+            <FInput
               type="number"
               step="0.01"
               value={autoApproveUnder}
@@ -812,10 +866,10 @@ function ReviewSettingsRow({ a, onPatch }) {
             </p>
           </div>
           <div>
-            <Label className="text-zinc-400 text-xs">
+            <FLabel className="text-zinc-400 text-xs">
               تحذير drift عند (%)
-            </Label>
-            <Input
+            </FLabel>
+            <FInput
               type="number"
               step="0.1"
               value={warnPct}
@@ -824,10 +878,10 @@ function ReviewSettingsRow({ a, onPatch }) {
             />
           </div>
           <div>
-            <Label className="text-zinc-400 text-xs">
+            <FLabel className="text-zinc-400 text-xs">
               حجب drift عند (%)
-            </Label>
-            <Input
+            </FLabel>
+            <FInput
               type="number"
               step="0.1"
               value={blockPct}

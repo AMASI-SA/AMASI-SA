@@ -22,6 +22,7 @@ import AdsReport from "./pages/AdsReport";
 import AdvertisingExpensesReport from "./pages/AdvertisingExpensesReport";
 import SnapchatAccounts from "./pages/SnapchatAccounts";
 import AdsV2Settings from "./pages/AdsV2Settings";
+import AdsV2Report from "./pages/AdsV2Report";
 import ProductCosts from "./pages/ProductCosts";
 import ProductsPage from "./pages/ProductsPage";
 import BankTransferReview from "./pages/BankTransferReview";
@@ -123,6 +124,7 @@ function AppRoutes() {
             <Route path="/reports/advertising-expenses" element={<ProtectedRoute><Layout><AdvertisingExpensesReport /></Layout></ProtectedRoute>} />
             <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatAccounts /></Layout></ProtectedRoute>} />
             <Route path="/ads-v2/settings" element={<ProtectedRoute><Layout><AdsV2Settings /></Layout></ProtectedRoute>} />
+            <Route path="/ads-v2/report" element={<ProtectedRoute><Layout><AdsV2Report /></Layout></ProtectedRoute>} />
             <Route path="/product-costs" element={<ProtectedRoute><Layout><ProductCosts /></Layout></ProtectedRoute>} />
             <Route path="/products" element={<ProtectedRoute><Layout><ProductsPage /></Layout></ProtectedRoute>} />
             <Route path="/bank-transfer-review" element={<ProtectedRoute><Layout><BankTransferReview /></Layout></ProtectedRoute>} />
