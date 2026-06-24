@@ -3915,6 +3915,11 @@ api.include_router(make_settlement_engine_router(db, current_user))
 from ad_spend_rca_routes import make_ad_spend_rca_router
 api.include_router(make_ad_spend_rca_router(db, current_user))
 
+# ── Ads V2 (Phase 0) ────────────────────────────────────────────────
+from ads_v2.routes import make_ads_v2_router
+from ads_v2.models import ensure_indexes as _ads_v2_ensure_indexes
+api.include_router(make_ads_v2_router(db, current_user))
+
 from ad_spend_scheduler_diagnostics import (
     make_ad_spend_scheduler_diagnostics_router,
 )
@@ -4180,6 +4185,8 @@ async def on_startup():
     # Iter-160 — Universal Ledger + Audit Log indexes
     from ledger_core import ensure_indexes as ensure_ledger_indexes
     await ensure_ledger_indexes(db)
+    # Ads V2 (Phase 0) — create indexes on the 3 new collections.
+    await _ads_v2_ensure_indexes(db)
     # Iter-139 — half-hourly ad-account sync (replaces the previous
     # 23:55 daily cron).  Runs every 30 minutes, syncs TODAY only,
     # uses force=True so each pass reverses prior cron rows for the

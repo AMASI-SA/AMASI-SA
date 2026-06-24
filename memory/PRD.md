@@ -191,8 +191,28 @@ Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
+## Ads V2 — Phase 0 (2026-06-24)
+Approved design: `/app/memory/ADS_V2_FINAL_DESIGN.md` (simplified, 4-collection).
+Backend (new):
+  - `ads_v2/__init__.py` · `ads_v2/models.py` · `ads_v2/routes.py`
+  - `ads_v2/data_layer/discovery.py` — reads V1 tokens read-only,
+    lists Meta/Snap/TikTok ad accounts; falls back to V1 cached
+    collections when token call fails.
+  - `ads_v2/data_layer/settings.py` — CRUD for `ads_accounts`, FX
+    & bank_fee patches, audit log to `ads_sync_logs`.
+  - `server.py` — `_ads_v2_ensure_indexes()` on startup; mounts
+    `/api/ads-v2/*` router.
+Frontend (new):
+  - `pages/AdsV2Settings.jsx` — 4 tabs (الحسابات/العملة/العمولات/المراجعة)
+  - `App.js` route `/ads-v2/settings`, `Sidebar.jsx` entry under
+    "إدارة التشغيل".
+Collections created (Phase 0): `ads_accounts`, `ads_daily`, `ads_sync_logs`.
+Invariants (verified by tests): NO writes to general_ledger, NO writes
+to ads_daily, NO modification to snapchat_connections / meta_connections,
+NO OAuth flow triggered.
+Tests: `tests/test_ads_v2_phase0.py` — 11/11 PASS.
+
 ## Iter-251 v12 — Ad-Spend Scheduler Diagnostics (2026-06-24, READ-ONLY)
-Backend:
   - `ad_spend_scheduler_diagnostics.py` — new `/api/ad-spend-rca/scheduler-diagnostics`
     endpoint returning: (1) heartbeat history from `cron_runs` filtered by
     iter-215 types, (2) per-counterparty dry-run preview computing
