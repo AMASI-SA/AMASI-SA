@@ -391,4 +391,215 @@ def make_ad_spend_rca_router(db, current_user):
         defaults = {"USD": 3.75, "EUR": 4.10, "GBP": 4.78}
         return defaults.get(currency, 1.0), "default"
 
+    @router.get("/forensic")
+    async def forensic(
+        date: str = Query(..., description="YYYY-MM-DD"),
+        providers: str = Query("meta,snapchat,tiktok,google"),
+        user: dict = Depends(current_user),
+    ):
+        """Iter-251 v11 — Comprehensive Read-Only forensic for ad-spend
+        ledger gaps.  Pulls from EVERY relevant collection without
+        date filter (then filters in-memory) to answer:
+          • Why are GL entries missing for `date`?
+          • Were they posted under a different date?
+          • Blocked by ad_spend_idempotency?
+          • Is currency setting actually applied?
+          • Is bank_fee applied?
+          • Where did Snapchat 'الرياض' rows go?
+        """
+        uid = user["id"]
+        provider_list = [p.strip().lower() for p in
+                          (providers or "").split(",") if p.strip()]
+
+        # 1. Counterparties config snapshot
+        cps = []
+        async for cp in db.counterparties.find(
+            {"user_id": uid, "kind": "ad_account"},
+            {"_id": 0},
+        ):
+            if cp.get("ad_provider") not in provider_list:
+                continue
+            cps.append({
+                "id":                 cp.get("id"),
+                "name":                cp.get("name"),
+                "ad_provider":         cp.get("ad_provider"),
+                "external_account_id": cp.get("external_account_id"),
+                "currency":            cp.get("currency"),
+                "ad_account_currency": cp.get("ad_account_currency"),
+                "bank_fee_enabled":    cp.get("bank_fee_enabled"),
+                "bank_fee_rate":       cp.get("bank_fee_rate"),
+                "platform_account_ids":
+                                       cp.get("platform_account_ids"),
+                "is_active":           cp.get("is_active"),
+                "last_sync_at":        cp.get("last_sync_at"),
+            })
+
+        # 2. ALL ad_spend GL entries for this user (no date filter)
+        gl_entries: list[dict] = []
+        async for e in db.general_ledger.find(
+            {"user_id": uid, "entry_type": "ad_spend"},
+            {"_id": 0, "entry_no": 1, "txn_group_id": 1, "side": 1,
+             "amount": 1, "status": 1, "entity_type": 1,
+             "entity_id": 1, "sub_account": 1, "posted_at": 1,
+             "created_at": 1, "metadata": 1, "notes": 1},
+        ).sort("posted_at", -1).limit(200):
+            gl_entries.append(e)
+
+        # Bucket GL entries by their metadata date / posted date
+        gl_for_target_date = []
+        gl_idempotency_keys = set()
+        for e in gl_entries:
+            meta = e.get("metadata") or {}
+            target_d = (
+                meta.get("spend_date") or meta.get("target_date")
+                or meta.get("ad_spend_date") or
+                (e.get("posted_at") or "")[:10]
+            )
+            if target_d == date:
+                gl_for_target_date.append(e)
+            if meta.get("idempotency_key"):
+                gl_idempotency_keys.add(meta["idempotency_key"])
+
+        # 3. ad_spend_idempotency collection — what keys were marked
+        idemp_for_date = []
+        async for r in db.ad_spend_idempotency.find(
+            {"user_id": uid}, {"_id": 0}
+        ).sort("created_at", -1).limit(300):
+            key = r.get("key") or r.get("idempotency_key") or ""
+            if date in key or (r.get("spend_date") == date):
+                idemp_for_date.append(r)
+
+        # 4. financial_movements for ad_spend
+        fin_movs = []
+        async for r in db.financial_movements.find(
+            {"user_id": uid,
+             "$or": [
+                 {"category": {"$regex": "ad", "$options": "i"}},
+                 {"kind":     {"$regex": "ad_spend", "$options": "i"}},
+                 {"metadata.entry_type": "ad_spend"},
+             ]},
+            {"_id": 0, "id": 1, "kind": 1, "category": 1,
+             "amount": 1, "date": 1, "metadata": 1,
+             "created_at": 1, "status": 1},
+        ).sort("created_at", -1).limit(50):
+            fin_movs.append(r)
+
+        # 5. Per-provider source documents for the date
+        per_provider: dict[str, Any] = {}
+        for prov in provider_list:
+            block: dict = {"source_rows": {}, "raw_totals": 0.0,
+                            "raw_native_totals": 0.0}
+            for src_name in ("meta_ads_daily", "snapchat_account_daily",
+                              "snapchat_ads_daily", "tiktok_ads_daily"):
+                if prov not in src_name and prov != "google":
+                    continue
+                rows = []
+                async for r in db[src_name].find(
+                    {"user_id": uid, "date": date}, {"_id": 0},
+                ):
+                    rows.append(r)
+                    block["raw_totals"] += float(r.get("spend") or 0)
+                    block["raw_native_totals"] += float(
+                        r.get("spend_native") or r.get("spend") or 0)
+                if rows:
+                    block["source_rows"][src_name] = {
+                        "rows":  len(rows),
+                        "spend_sum": round(
+                            sum(float(r.get("spend") or 0)
+                                for r in rows), 4),
+                        "spend_native_sum": round(
+                            sum(float(r.get("spend_native") or 0)
+                                for r in rows), 4),
+                        "unique_account_ids": list({
+                            r.get("account_id") or r.get("ad_account_id")
+                            for r in rows
+                            if r.get("account_id") or
+                               r.get("ad_account_id")
+                        }),
+                        "sample":  rows[:2],
+                    }
+            per_provider[prov] = block
+
+        # 6. ads_currency_settings snapshot
+        currency_settings = []
+        async for r in db.ads_currency_settings.find(
+            {"user_id": uid}, {"_id": 0},
+        ):
+            currency_settings.append(r)
+
+        # 7. Diagnostics summary
+        gl_dates_present = sorted({
+            (e.get("metadata", {}).get("spend_date") or
+             (e.get("posted_at") or "")[:10])
+            for e in gl_entries
+        })
+        diagnostics = {
+            "gl_entries_total_recent":    len(gl_entries),
+            "gl_entries_for_target_date": len(gl_for_target_date),
+            "gl_dates_present_in_recent": gl_dates_present[-20:],
+            "idempotency_keys_for_date":  len(idemp_for_date),
+            "currency_settings_present":  len(currency_settings),
+            "questions": {
+                "why_meta_missing_amount": (
+                    "Compare per_provider.meta.raw_totals "
+                    "(meta_ads_daily.spend) vs the merchant's Meta "
+                    "Ads Manager total for the date.  Gap = missing "
+                    "campaigns / paginated rows / timezone "
+                    "exclusion."
+                ),
+                "why_no_gl_entries_for_date": (
+                    "Check gl_dates_present_in_recent — were "
+                    "entries posted under a NEIGHBOURING date? "
+                    "Also check idempotency_keys_for_date — if "
+                    ">0, the window job DID run but produced no "
+                    "new posts (likely zero-delta or pre-existing "
+                    "key)."
+                ),
+                "why_snapchat_riyadh_empty": (
+                    "Look at counterparties[provider=snapchat].  "
+                    "Does 'الرياض' have external_account_id set? "
+                    "Does that ID appear in any "
+                    "per_provider.snapchat.source_rows[*]"
+                    ".unique_account_ids list? If not, the cron "
+                    "never targeted it (credential mismatch or "
+                    "deactivated mapping)."
+                ),
+                "are_currency_settings_applied": (
+                    "Cross-check currency_settings.rate_to_sar vs "
+                    "the fx_rate embedded in snapchat_account_daily "
+                    "rows (see /api/ad-spend-rca?date=… output)."
+                ),
+                "are_bank_fees_applied": (
+                    "Search per_provider entries for "
+                    "metadata.bank_fee_amount.  If absent on all "
+                    "GL entries despite counterparties[bank_fee_"
+                    "enabled]=true, fees aren't computed at "
+                    "ledger time."
+                ),
+            },
+        }
+
+        return {
+            "date":            date,
+            "providers":       provider_list,
+            "counterparties":  cps,
+            "per_provider":    per_provider,
+            "general_ledger": {
+                "recent_total":   len(gl_entries),
+                "for_target_date": gl_for_target_date,
+                "all_dates_seen": gl_dates_present[-30:],
+                "raw_entries_sample": gl_entries[:20],
+            },
+            "ad_spend_idempotency_for_date": idemp_for_date,
+            "financial_movements_recent": fin_movs,
+            "currency_settings":           currency_settings,
+            "diagnostics":                 diagnostics,
+            "note": (
+                "Pure read-only forensic. No filter on entity/side/"
+                "status. Use to locate where the 23/6 GL entries "
+                "ended up (if anywhere) and why current-day "
+                "ledgering is silent."
+            ),
+        }
+
     return router

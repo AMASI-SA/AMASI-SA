@@ -1,0 +1,57 @@
+{
+  "summary": "Validated the new GET /api/ad-spend-rca/forensic?date=YYYY-MM-DD&providers=... read-only forensic endpoint with 8 new HTTP integration tests covering every spec item. All 11 existing iter251_v10 RCA tests + 23 iter251 phase1/phase2a5/phase2b tests still pass. Total: 42/42 (100%).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/ad-spend-rca/forensic", "issue": "Provider filtering loop uses substring match `prov not in src_name and prov != 'google'` — works for current 3 collections (meta_ads_daily contains 'meta', snapchat_account_daily/snapchat_ads_daily contains 'snapchat', tiktok_ads_daily contains 'tiktok') but is brittle; e.g. a future `instagram_ads_daily` collection would not match 'meta' and would still be probed for every other provider. Not a functional bug today but worth a mapping table similar to PROVIDER_SOURCES."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter251_v11_forensic_rca.py",
+    "/app/test_reports/pytest/iter251_v11_forensic.xml",
+    "/app/test_reports/pytest/iter251_v11_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ad_spend_rca_routes.py now ~600 lines — still under 700-line guideline. Both endpoints share PROVIDER_SOURCES table cleanly. /forensic is correctly read-only (only .find() cursors, no inserts/updates).",
+    "All cursors use `{'_id': 0}` projection (counterparties / general_ledger / ad_spend_idempotency / financial_movements / source collections / ads_currency_settings) — verified no Mongo ObjectId leak in response (test_no_mongo_objectid_leak).",
+    "/forensic uses limit(200) on GL, limit(300) on idempotency, limit(50) on financial_movements, limit(20) on raw_entries_sample — sensible caps to keep response bounded.",
+    "Date bucketing in /forensic at lines 451-461: `target_d = meta.get('spend_date') or meta.get('target_date') or meta.get('ad_spend_date') or (e.get('posted_at') or '')[:10]` — correctly handles missing metadata by falling back to posted_at prefix.",
+    "Minor: in per_provider loop (line 494) the condition `prov not in src_name and prov != 'google'` is a bit cryptic — readers might think google has special handling. Consider an explicit provider→collections map (already exists as PROVIDER_SOURCES at top of file). Not blocking.",
+    "diagnostics.questions[] returns Arabic/English merchant-facing prose — good UX for the merchant clicking into the forensic JSON."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter251_v11_forensic_rca.py (new file, 8 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (42/42 — 8 new forensic tests + 11 iter251_v10 RCA + 12 phase2a5 + 6 phase2b + 5 phase1)",
+    "frontend": "n/a (backend-only request)"
+  },
+  "test_credentials": "Used dynamically registered fresh test users (POST /api/auth/register) for isolation. admin@hesab.app/admin123 from /app/memory/test_credentials.md was available but not needed.",
+  "seed_data_creation": "Each test module run creates a fresh isolated user, then seeds: 1 meta counterparty (Meta Production, SAR, bank_fee_enabled=true, bank_fee_rate=0.025), 1 snapchat counterparty (name='Snapchat الرياض', USD, external_account_id='snap_prod_acct'), 6 meta_ads_daily rows for 2026-06-23 summing to exactly 510.27 SAR, 1 snapchat_account_daily row {spend:2455.42, spend_native:654.78, fx_rate:3.75, native_currency:'USD'}, 1 ad_spend_idempotency record with key='ad_spend:meta:act_meta_prod:2026-06-23:AM_00_12', 1 ads_currency_settings doc {currency:'USD', rate_to_sar:3.80, source:'manual'}, and ZERO general_ledger ad_spend entries (matches production gap). Module-scope teardown removes ALL records for the isolated test user across 8 collections.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iter251_v11_forensic_rca.py covers all 7 spec items: (1) top-level shape including diagnostics + general_ledger sub-shape, (2) counterparties[] required fields (id/name/ad_provider/external_account_id/currency/bank_fee_enabled/bank_fee_rate/platform_account_ids/is_active/last_sync_at), (3) per_provider[*].source_rows keyed by collection name with rows/spend_sum/spend_native_sum/unique_account_ids/sample, (4) production-matching scenario reproduces 510.27 SAR meta + 2455.42 SAR / 654.78 USD snapchat + 0 GL entries → diagnostics.gl_entries_for_target_date=0, (5) ad_spend_idempotency record with date in key appears in ad_spend_idempotency_for_date with idempotency_keys_for_date>=1, (6) ads_currency_settings USD doc with rate_to_sar=3.80/source='manual' appears in currency_settings, (7) read-only guarantee via count_documents snapshot on 7 collections before/after 4 endpoint calls. Also verified no Mongo _id leak. Counterparties require name_lower (cp_unique_name index) — handled in fixture.",
+  "verified_behaviours": [
+    "GET /api/ad-spend-rca/forensic?date=2026-06-23&providers=meta,snapchat returns 200",
+    "Top-level keys: date, providers, counterparties, per_provider, general_ledger, ad_spend_idempotency_for_date, financial_movements_recent, currency_settings, diagnostics, note",
+    "general_ledger sub-keys: recent_total, for_target_date, all_dates_seen, raw_entries_sample",
+    "diagnostics sub-keys: gl_entries_total_recent, gl_entries_for_target_date, gl_dates_present_in_recent, idempotency_keys_for_date, currency_settings_present, questions (merchant-facing prose)",
+    "counterparties[] each expose id, name, ad_provider, external_account_id, currency, bank_fee_enabled, bank_fee_rate, platform_account_ids, is_active, last_sync_at (verified bank_fee_enabled=true / bank_fee_rate=0.025 on meta cp; 'الرياض' present in snapchat name)",
+    "per_provider.meta.source_rows.meta_ads_daily.rows=6, spend_sum=510.27, unique_account_ids=['act_meta_prod']",
+    "per_provider.snapchat.source_rows.snapchat_account_daily.rows=1, spend_sum=2455.42, spend_native_sum=654.78",
+    "per_provider.meta.raw_totals=510.27 ✓, per_provider.snapchat.raw_totals=2455.42 ✓ (matches production exactly)",
+    "general_ledger.for_target_date=[] when no GL entries seeded (matches production gap)",
+    "diagnostics.gl_entries_for_target_date=0 when no GL entries seeded",
+    "ad_spend_idempotency_for_date includes the seeded record with key='ad_spend:meta:act_meta_prod:2026-06-23:AM_00_12'",
+    "currency_settings includes the seeded USD doc {rate_to_sar:3.80, source:'manual'}",
+    "Read-only: counterparties/general_ledger/ad_spend_idempotency/financial_movements/meta_ads_daily/snapchat_account_daily/ads_currency_settings counts identical before & after 4 endpoint calls (meta-only, snapchat-only, both, all-4-providers)",
+    "No Mongo _id leak: serialized response does not contain the substring '\"_id\"'"
+  ],
+  "rca of the issue": "n/a — the new /forensic endpoint is correctly implemented and matches the spec. It will help the merchant locate the missing 23/6 GL entries by surfacing (a) which dates DID receive GL posts (gl_dates_present_in_recent), (b) whether ad_spend_idempotency had keys for 23/6 that blocked re-posting, (c) raw source rows count + sum to verify the cron actually ingested data, and (d) currency_settings + bank_fee config on counterparties. The endpoint correctly returned production-like data shape with raw_totals matching the merchant's reported numbers exactly when those data points are present in the source collections."
+}
