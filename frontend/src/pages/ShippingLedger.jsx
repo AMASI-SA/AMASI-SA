@@ -22,6 +22,7 @@ export default function ShippingLedger() {
     const [rows, setRows] = useState([]);
     const [totals, setTotals] = useState({});
     const [perCompany, setPerCompany] = useState([]);
+    const [warnings, setWarnings] = useState([]);
     const [filters, setFilters] = useState({
         date_from: "", date_to: "", courier: "",
         payment_mode: "", payment_method: "",
@@ -39,6 +40,7 @@ export default function ShippingLedger() {
             setRows(r.data?.rows || []);
             setTotals(r.data?.totals || {});
             setPerCompany(r.data?.per_company || []);
+            setWarnings(r.data?.warnings || []);
         } catch (e) {
             toast.error("فشل تحميل دفتر الشحن");
         } finally {
@@ -127,6 +129,38 @@ export default function ShippingLedger() {
                     <SummaryCard label="إجمالي المتبقي" value={totals.total_unsettled} color="amber" />
                 </div>
 
+                {/* Warning banner — companies using Salla fallback price */}
+                {warnings && warnings.length > 0 && (
+                    <div className="mb-4 border-2 border-amber-400 bg-amber-50 rounded-lg p-3"
+                         data-testid="shipping-cost-warning">
+                        <div className="flex items-start gap-2">
+                            <span className="text-2xl leading-none">⚠️</span>
+                            <div className="flex-1">
+                                <p className="font-extrabold text-amber-900 text-sm mb-1">
+                                    تنبيه: شركات شحن تعتمد حالياً على سعر سلة
+                                </p>
+                                <ul className="text-xs text-amber-900 space-y-1 list-disc list-inside font-medium leading-relaxed">
+                                    {warnings.map((w, i) => (
+                                        <li key={i} data-testid={`warning-${w.shipping_company}`}>
+                                            {w.message}
+                                            <span className="ms-1 text-amber-700">
+                                                ({intf(w.orders_affected)} طلب متأثر)
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <a
+                                    href="/shipping/settings"
+                                    className="inline-block mt-2 text-xs font-extrabold text-amber-900 underline"
+                                    data-testid="warning-goto-settings"
+                                >
+                                    الانتقال إلى إعدادات شركات الشحن ↗
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Per-company shipping cost breakdown — base / tax / total */}
                 {perCompany.length > 0 && (
                     <div className="mb-4 bg-white border border-slate-200 rounded-xl p-3"
@@ -148,9 +182,17 @@ export default function ShippingLedger() {
                                 </thead>
                                 <tbody>
                                     {perCompany.map((c) => (
-                                        <tr key={c.shipping_company} className="border-t border-slate-100"
+                                        <tr key={c.shipping_company}
+                                            className={`border-t border-slate-100 ${c.uses_salla_fallback ? "bg-amber-50/50" : ""}`}
                                             data-testid={`pc-${c.shipping_company}`}>
-                                            <td className="p-2 font-bold">{c.shipping_company}</td>
+                                            <td className="p-2 font-bold">
+                                                {c.shipping_company}
+                                                {c.uses_salla_fallback && (
+                                                    <span className="ms-2 text-[9px] px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-extrabold">
+                                                        من سلة (مؤقت)
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="p-2 text-center font-bold">{intf(c.orders_count)}</td>
                                             <td className="p-2 text-left num">{fmt(c.cost_per_unit)}</td>
                                             <td className="p-2 text-left num text-violet-700">

@@ -1,0 +1,24 @@
+{
+  "summary": "SSOT priority-flip verified end-to-end. Company-config now ALWAYS wins over Salla's per-order shipping_cost; Salla used only as fallback when cost_per_order=0/missing in /shipping/settings. 15 pre-existing SSOT unit tests + 4 new live integration tests on amasi.jewelery@gmail.com all green. Frontend ledger renders SSOT values, no warning banner (correctly empty for this user since all 4 companies have configured cost), no Salla-fallback badges.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_shipping_cost_ssot.py",
+    "/app/backend/tests/test_shipping_ledger_live.py",
+    "/app/test_reports/pytest/iter254_ssot.xml",
+    "/app/test_reports/pytest/iter254_live.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "shipping_accounts.compute_owed_per_company (line ~243-263) still uses the OLD priority (Salla first when order_cost>0). It does not go through shipping_cost_ssot.shipping_breakdown(). This is the legacy deferred-liability accrual used by /api/shipping-accounts (list_accounts) and /api/liabilities/summary. The SSOT-aware path /api/shipping-accounts/ledger DOES use SSOT correctly, but the simpler list_accounts/deferred-owed accrual on the main /shipping-accounts dashboard still flips priority back. Recommend routing compute_owed_per_company through the SSOT helper to fully unify the policy across ALL 4 consumers as the PR promised.",
+    "shipping_cost_ssot.aggregate_breakdown still groups by raw order.shipping_company name. Two seeded company names in this account are stored with literal single-quotes ('iMile للتوصيل', 'مندوب الرياض'). The ledger handles it via normalize_shipping_company keys, but aggregate_breakdown will treat the quoted form as a separate company if a caller forgets to canonicalize first. Low-risk but worth documenting."
+  ],
+  "updated_files": ["/app/backend/tests/test_shipping_ledger_live.py"],
+  "success_rate": {"backend": "100% (19/19 tests)", "frontend": "100%"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917",
+  "seed_data_creation": "None — used real test merchant data (1844 delivered orders across 4 configured companies).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Live ledger response shape verified: top-level keys {rows, totals, per_company, warnings, delivered_only, limit}. Each row has shipping_base / shipping_tax / shipping_cost / shipping_vat_rate / shipping_cost_source ∈ {company_config, salla, none}. Per-company has uses_salla_fallback flag + from_salla_count / from_company_settings_count / none_count + configured_cost. For amasi user, all 1844 rows resolve to company_config (0 Salla fallbacks); warnings=[]. iMile/سمسا/أرامكس at 15% VAT, مندوب الرياض at 0% VAT (no default fabricated). Settings stores 2 company names with embedded quotes ('iMile للتوصيل', 'مندوب الرياض') — SSOT helper handles this correctly via quote-stripping.",
+  "rca_of_the_issue": "Original bug: shipping_breakdown() in shipping_cost_ssot.py preferred order.shipping_cost (Salla) over cfg.cost_per_order. Fix flipped the if/else: try company-config first, fall back to Salla only when cfg_base<=0. Adjacent change in shipping_ledger_routes.py adds the warnings list emitted when any row uses Salla AND configured_cost<=0. balances.compute_balances now accepts optional company_cfgs and shipping_ledger_routes wires SSOT cfg map into the per-order breakdown. Verified by running 999 SAR Salla price in tests — base correctly resolved to cfg's 20/25 SAR."
+}

@@ -164,28 +164,13 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                       or "الاستلام" in method
                       or "الدفع عند" in method)
 
+            # SSOT — compute base / tax / total exactly once. The SSOT
+            # helper applies the priority: company-config first, Salla
+            # only as fallback. So we pass the raw Salla shipping_cost
+            # and let SSOT resolve everything.
             ship_cost_from_order = float(o.get("shipping_cost") or 0)
-            # Iter-235 — fallback to per-company configured cost when
-            # Salla didn't disclose shipping_cost on the order (common
-            # for COD / BNPL flows). Mirrors the logic already used by
-            # `/api/shipping-accounts` so both pages stay consistent.
-            if ship_cost_from_order > 0:
-                ship_base = ship_cost_from_order
-                cost_source = "salla"
-            else:
-                fallback = (
-                    cost_map.get(comp_key)
-                    or cost_map.get(comp_display.lower())
-                    or cost_map.get(comp_raw.lower())
-                    or 0.0
-                )
-                ship_base = float(fallback)
-                cost_source = (
-                    "company_settings" if ship_base > 0 else "none"
-                )
-            # SSOT — compute base / tax / total exactly once.
             bd_order = {"shipping_company": comp_display,
-                         "shipping_cost": ship_base}
+                         "shipping_cost": ship_cost_from_order}
             bd_cfgs = {comp_display: ssot_cfgs_by_key.get(comp_key)
                                        or ssot_cfgs_by_key.get(comp_display)
                                        or {}}
@@ -193,6 +178,7 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             ship_base = bd["base"]
             ship_tax = bd["tax"]
             ship_cost = bd["total"]    # base + tax (the unified figure)
+            cost_source = bd["source"]  # company_config | salla | none
             cod_amt = float(o.get("cod_amount") or
                             (o.get("total_amount") or 0) if is_cod else 0)
             if not is_cod:
@@ -267,8 +253,7 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             if isinstance(totals[k], float):
                 totals[k] = round(totals[k], 2)
 
-        # Iter-235 — Per-company breakdown so the UI can show the
-        # effective cost being used for each shipping carrier.
+        # Per-company breakdown + warning detection.
         by_company: dict[str, dict] = {}
         for r in rows:
             name = r["shipping_company"]
@@ -294,12 +279,13 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             src = r.get("shipping_cost_source") or "none"
             if src == "salla":
                 entry["from_salla_count"] += 1
-            elif src == "company_settings":
+            elif src == "company_config":
                 entry["from_company_settings_count"] += 1
             else:
                 entry["none_count"] += 1
-        # Round + add per-unit averages (base / tax / total).
+        # Round + add per-unit averages + warning flag.
         per_company = []
+        warnings: list[dict] = []     # surfaced at top of UI
         for v in by_company.values():
             oc = max(v["orders_count"], 1)
             v["total_shipping_base"] = round(v["total_shipping_base"], 2)
@@ -308,8 +294,24 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             v["cost_per_unit"]  = round(v["total_shipping_base"] / oc, 2)
             v["tax_per_unit"]   = round(v["total_shipping_tax"]  / oc, 2)
             v["total_per_unit"] = round(v["total_shipping_cost"] / oc, 2)
-            # Keep `effective_cost_per_order` as alias for back-compat
             v["effective_cost_per_order"] = v["total_per_unit"]
+            # Warning: this company has rows priced from Salla because
+            # no `cost_per_order` is configured in /shipping/settings.
+            uses_salla = (v["from_salla_count"] > 0
+                          and v["configured_cost"] <= 0)
+            v["uses_salla_fallback"] = uses_salla
+            if uses_salla:
+                warnings.append({
+                    "shipping_company": v["shipping_company"],
+                    "orders_affected":  v["from_salla_count"],
+                    "reason":           "missing_cost_in_settings",
+                    "message":          (
+                        f"شركة الشحن «{v['shipping_company']}» لا يوجد لها "
+                        "سعر في إعدادات شركات الشحن، لذلك تم الاعتماد مؤقتاً "
+                        "على سعر الشحن القادم من سلة. يرجى إضافتها في إعدادات "
+                        "الشحن مع السعر الصحيح."
+                    ),
+                })
             per_company.append(v)
         per_company.sort(key=lambda x: x["total_shipping_cost"],
                          reverse=True)
@@ -317,6 +319,7 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
         rows.sort(key=lambda r: r["order_date"] or "", reverse=True)
         return {"rows": rows, "totals": totals,
                 "per_company": per_company,
+                "warnings": warnings,
                 "delivered_only": True, "limit": limit}
 
     parent_router.include_router(router)

@@ -31,17 +31,16 @@ from __future__ import annotations
 def shipping_breakdown(order: dict, company_cfgs: dict) -> dict:
     """Return the cost split for ONE order.
 
-    Args:
-      order: an order dict (must have `shipping_company`,
-             optionally `shipping_cost`).
-      company_cfgs: {company_name: cfg_doc} mapping returned by
-             get_company_configs().
+    Priority (per merchant accounting policy):
+      1. Company-config `cost_per_order` (or legacy `cost`) — the
+         pre-negotiated rate the merchant maintains in
+         /shipping/settings.
+      2. Only if the company is unknown OR has no cost configured
+         → fall back to the order-level shipping_cost from Salla
+         (temporary; the UI surfaces a warning so the merchant adds it).
 
-    Returns: dict with keys:
-      base, tax, total, vat_rate, source
-        - source ∈ {"order", "company_config", "none"} so callers can
-          decide how to surface the figure in the UI ("from Salla" vs
-          "from manual company cost" vs "unknown").
+    Returns: {base, tax, total, vat_rate, source}
+      source ∈ {"company_config", "salla", "none"}.
     """
     company = (order.get("shipping_company") or "").strip()
     cfg = (
@@ -52,24 +51,30 @@ def shipping_breakdown(order: dict, company_cfgs: dict) -> dict:
         or {}
     )
 
-    order_ship = order.get("shipping_cost")
+    # Try company-config first
+    cfg_cost = cfg.get("cost_per_order")
+    if cfg_cost is None:
+        cfg_cost = cfg.get("cost")
     try:
-        order_ship_f = float(order_ship) if order_ship is not None else 0.0
+        cfg_base = float(cfg_cost or 0)
     except (TypeError, ValueError):
-        order_ship_f = 0.0
+        cfg_base = 0.0
 
-    if order_ship_f > 0:
-        base = order_ship_f
-        source = "order"
+    if cfg_base > 0:
+        base = cfg_base
+        source = "company_config"
     else:
-        cfg_cost = cfg.get("cost_per_order")
-        if cfg_cost is None:
-            cfg_cost = cfg.get("cost")
+        # Fall back to Salla's per-order shipping_cost
         try:
-            base = float(cfg_cost or 0)
+            salla_ship = float(order.get("shipping_cost") or 0)
         except (TypeError, ValueError):
+            salla_ship = 0.0
+        if salla_ship > 0:
+            base = salla_ship
+            source = "salla"
+        else:
             base = 0.0
-        source = "company_config" if base > 0 else "none"
+            source = "none"
 
     try:
         # Accept either decimal (vat_rate: 0.15) OR percentage

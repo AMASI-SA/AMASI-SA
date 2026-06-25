@@ -21,18 +21,39 @@ from shipping_cost_ssot import (
 # ─────────────────────────────────────────────────────────────────────
 # 1. shipping_breakdown — pure logic
 # ─────────────────────────────────────────────────────────────────────
-def test_breakdown_uses_order_shipping_cost_as_base():
-    order = {"shipping_company": "Aramex", "shipping_cost": 20}
-    cfgs = {"Aramex": {"vat_rate": 0.15, "cost_per_order": 999}}
+def test_breakdown_prefers_company_config_over_salla():
+    """NEW PRIORITY: company config wins. Salla is fallback only."""
+    order = {"shipping_company": "Aramex", "shipping_cost": 999}
+    cfgs = {"Aramex": {"vat_rate": 0.15, "cost_per_order": 20}}
     bd = shipping_breakdown(order, cfgs)
-    assert bd["base"] == 20.0
+    assert bd["base"] == 20.0      # config beats Salla's 999
     assert bd["tax"] == 3.0
     assert bd["total"] == 23.0
-    assert bd["source"] == "order"
-    assert bd["vat_rate"] == 0.15
+    assert bd["source"] == "company_config"
 
 
-def test_breakdown_falls_back_to_company_cost_when_order_has_no_value():
+def test_breakdown_falls_back_to_salla_when_no_company_cost():
+    """If the company exists in config but has cost_per_order = 0,
+    the Salla shipping_cost is used as a temporary value."""
+    order = {"shipping_company": "Aramex", "shipping_cost": 25}
+    cfgs = {"Aramex": {"cost_per_order": 0, "vat_percent": 15}}
+    bd = shipping_breakdown(order, cfgs)
+    assert bd["base"] == 25.0       # Salla fallback
+    assert bd["source"] == "salla"
+    # VAT still applied from the company's setting
+    assert bd["tax"] == 3.75
+    assert bd["total"] == 28.75
+
+
+def test_breakdown_falls_back_to_salla_when_company_unknown():
+    """Company not in cfgs at all → Salla price is used."""
+    order = {"shipping_company": "Unknown", "shipping_cost": 30}
+    bd = shipping_breakdown(order, {})
+    assert bd["base"] == 30.0
+    assert bd["source"] == "salla"
+
+
+def test_breakdown_uses_company_cost_when_salla_missing():
     order = {"shipping_company": "SMSA", "shipping_cost": 0}
     cfgs = {"SMSA": {"cost_per_order": 18, "vat_rate": 0.15}}
     bd = shipping_breakdown(order, cfgs)
@@ -53,32 +74,33 @@ def test_breakdown_no_vat_means_zero_tax_no_default_applied():
     assert bd["vat_rate"] == 0.0
 
 
-def test_breakdown_unknown_company_returns_none_source():
+def test_breakdown_unknown_company_with_no_salla_returns_zero():
     order = {"shipping_company": "Unknown", "shipping_cost": 0}
     bd = shipping_breakdown(order, {})
     assert bd["base"] == 0.0
-    assert bd["tax"] == 0.0
     assert bd["total"] == 0.0
     assert bd["source"] == "none"
 
 
-def test_breakdown_order_cost_overrides_company_cost():
-    """The merchant may negotiate a per-shipment cost (sent from Salla
-    on the order); this should beat the static company config."""
-    order = {"shipping_company": "Aramex", "shipping_cost": 30}
+def test_breakdown_order_cost_overrides_company_cost_DEPRECATED():
+    """OLD test renamed — order/Salla price NEVER beats a configured
+    company price. This locks in the new policy."""
+    order = {"shipping_company": "Aramex", "shipping_cost": 999}
     cfgs = {"Aramex": {"cost_per_order": 25, "vat_rate": 0.15}}
     bd = shipping_breakdown(order, cfgs)
-    assert bd["base"] == 30.0
-    assert bd["total"] == 34.5   # 30 + (30 * 0.15)
-    assert bd["source"] == "order"
+    assert bd["base"] == 25.0     # config wins
+    assert bd["total"] == 28.75
+    assert bd["source"] == "company_config"
 
 
-def test_breakdown_handles_string_shipping_cost():
+def test_breakdown_handles_string_shipping_cost_as_fallback():
+    """If company has no cost configured but Salla sent a string."""
     order = {"shipping_company": "Aramex", "shipping_cost": "20.50"}
-    cfgs = {"Aramex": {"vat_rate": 0.15}}
+    cfgs = {"Aramex": {"vat_rate": 0.15}}    # no cost_per_order
     bd = shipping_breakdown(order, cfgs)
     assert bd["base"] == 20.5
-    assert bd["tax"] in (3.07, 3.08)  # banker's-round can yield 3.07
+    assert bd["source"] == "salla"
+    assert bd["tax"] in (3.07, 3.08)
     assert abs(bd["total"] - (20.5 + bd["tax"])) < 0.01
 
 
