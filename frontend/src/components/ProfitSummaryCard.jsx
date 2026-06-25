@@ -81,7 +81,7 @@ function HeaderKpi({ icon: Icon, label, value, hint, tone = "emerald", testid, b
     );
 }
 
-function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false, onClick = null, testid = null, tooltip = null }) {
+function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false, onClick = null, testid = null, tooltip = null, expanded = false, expandable = false }) {
     // Color palette for each row — tuned for clarity on a soft gradient bg.
     const palettes = {
         green:   { tile: "bg-emerald-600",      icon: "text-white",      amount: "text-emerald-700",   bar: "bg-emerald-200/60" },
@@ -94,9 +94,8 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
     const p = palettes[color] || palettes.amber;
     const interactive = typeof onClick === "function";
     const Comp = interactive ? "button" : "div";
-    const hasTooltip = !!tooltip;
     return (
-        <div className={`relative group ${hasTooltip ? "" : ""}`}>
+        <div className="relative">
         <Comp
             type={interactive ? "button" : undefined}
             onClick={interactive ? onClick : undefined}
@@ -107,7 +106,8 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
                 isFirst ? "rounded-t-xl" : "border-t border-white/60",
             ].join(" ")}
             data-testid={testid || undefined}
-            title={interactive && !hasTooltip ? "اضغط لعرض القيود التفصيلية للفترة" : undefined}
+            aria-expanded={expandable ? expanded : undefined}
+            title={interactive && !expandable ? "اضغط لعرض القيود التفصيلية للفترة" : undefined}
         >
             <div className="flex items-center gap-2.5 min-w-0">
                 <div className={`w-8 h-8 rounded-lg ${p.tile} ${p.icon} flex items-center justify-center flex-shrink-0`}>
@@ -115,9 +115,17 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
                 </div>
                 <span className="text-sm font-bold text-slate-700 truncate">
                     {label}
-                    {interactive && (
+                    {interactive && !expandable && (
                         <span className="ms-1 text-[10px] text-rose-600 font-bold">
                             🔍
+                        </span>
+                    )}
+                    {expandable && (
+                        <span
+                            className={`ms-1 inline-block text-[10px] text-slate-500 font-bold transition-transform ${expanded ? "rotate-180" : ""}`}
+                            aria-hidden="true"
+                        >
+                            ▾
                         </span>
                     )}
                 </span>
@@ -135,11 +143,13 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
                 <span>{value}</span>
             </div>
         </Comp>
-        {hasTooltip && (
+        {/* iter-256 — Inline expandable accordion section. Stays
+            within the card flow so the rest of the summary remains
+            visible and the user doesn't lose context. */}
+        {expandable && expanded && tooltip && (
             <div
-                className="absolute z-40 right-0 left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none"
-                style={{ minWidth: "320px" }}
-                data-testid={`${testid || "line"}-tooltip`}
+                className="mx-2 mb-2 rounded-xl bg-white/95 border border-slate-200 shadow-sm p-3"
+                data-testid={`${testid || "line"}-accordion`}
             >
                 {tooltip}
             </div>
@@ -154,6 +164,10 @@ export default function ProfitSummaryCard({ totals, shippingBreakdown = [], from
     const [adsBreakdownOpen, setAdsBreakdownOpen] = useState(false);
     // iter-250b · Dashboard hover/click enhancements.
     const [productCostOpen, setProductCostOpen] = useState(false);
+    // iter-256 · Inline accordion expanders (replaces hover tooltips so
+    // the user reads details without losing the rest of the summary).
+    const [shippingExpanded, setShippingExpanded] = useState(false);
+    const [opExpanded, setOpExpanded] = useState(false);
     // Compose the deductions explicitly so each line is auditable and
     // matches the description on the KPI tooltips above.
     const sales            = Number(t.total_sales        || 0);
@@ -226,10 +240,10 @@ export default function ProfitSummaryCard({ totals, shippingBreakdown = [], from
         <div data-testid="shipping-tooltip-content" dir="rtl">
             <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-200">
                 <span className="text-xs font-extrabold text-sky-900">
-                    🚚 تفاصيل تكاليف الشحن
+                    🚚 تفاصيل تكاليف الشحن (لكل شركة)
                 </span>
                 <span className="text-[10px] text-slate-500">
-                    {shippingRows.length} شركة
+                    {shippingRows.length} شركة · المصدر: shipping_cost_ssot
                 </span>
             </div>
             {shippingRows.length === 0 ? (
@@ -237,28 +251,41 @@ export default function ProfitSummaryCard({ totals, shippingBreakdown = [], from
                     لا توجد بيانات شحن في هذه الفترة
                 </div>
             ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full text-[11px]">
-                    <thead>
-                        <tr className="text-slate-500">
-                            <th className="text-right pb-1 font-semibold">الشركة</th>
-                            <th className="text-center pb-1 font-semibold">عدد الشحنات</th>
-                            <th className="text-center pb-1 font-semibold">سعر الوحدة<br/><span className="text-[9px] text-slate-400">(بدون الضريبة)</span></th>
-                            <th className="text-center pb-1 font-semibold">ضريبة الوحدة</th>
-                            <th className="text-center pb-1 font-semibold">إجمالي الوحدة<br/><span className="text-[9px] text-slate-400">(سعر + ضريبة)</span></th>
-                            <th className="text-left pb-1 font-semibold">الإجمالي</th>
+                    <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                            <th className="text-right p-1.5 font-extrabold">الشركة</th>
+                            <th className="text-center p-1.5 font-extrabold">الشحنات</th>
+                            <th className="text-left p-1.5 font-extrabold">سعر الوحدة<br/><span className="text-[9px] text-slate-400">(بدون الضريبة)</span></th>
+                            <th className="text-left p-1.5 font-extrabold">ضريبة الوحدة<br/><span className="text-[9px] text-slate-400">(VAT)</span></th>
+                            <th className="text-left p-1.5 font-extrabold">إجمالي الوحدة<br/><span className="text-[9px] text-slate-400">(سعر + ضريبة)</span></th>
+                            <th className="text-left p-1.5 font-extrabold">الإجمالي</th>
                         </tr>
                     </thead>
                     <tbody>
                         {shippingRows.map((r, i) => {
                             const oc = Number(r.orders_count) || 0;
-                            const baseUnit = Number(r.cost_per_order) || 0;
-                            const taxUnit = oc > 0
-                                ? Number((Number(r.vat_amount) || 0) / oc)
-                                : 0;
-                            const totalUnit = baseUnit + taxUnit;
+                            // Prefer SSOT-canonical per-unit fields when
+                            // present; fall back to recomputing from
+                            // legacy (cost_per_order / vat_amount).
+                            const baseUnit = r.cost_per_unit != null
+                                ? Number(r.cost_per_unit)
+                                : Number(r.cost_per_order) || 0;
+                            const taxUnit = r.tax_per_unit != null
+                                ? Number(r.tax_per_unit)
+                                : (oc > 0
+                                    ? Number((Number(r.vat_amount) || 0) / oc)
+                                    : 0);
+                            const totalUnit = r.total_per_unit != null
+                                ? Number(r.total_per_unit)
+                                : baseUnit + taxUnit;
+                            const vatPct = r.vat_rate != null
+                                ? Number(r.vat_rate) * 100
+                                : Number(r.vat_percent) || 0;
                             return (
                                 <tr key={i} className="border-t border-slate-100">
-                                    <td className="py-1 font-bold text-slate-700">
+                                    <td className="p-1.5 font-bold text-slate-700">
                                         {r.name}
                                         {r.is_deferred && (
                                             <span className="ms-1 text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700">
@@ -266,40 +293,45 @@ export default function ProfitSummaryCard({ totals, shippingBreakdown = [], from
                                             </span>
                                         )}
                                     </td>
-                                    <td className="text-center font-mono font-bold text-slate-700">
+                                    <td className="p-1.5 text-center font-mono font-bold text-slate-700">
                                         {fmtInt(r.orders_count)}
                                     </td>
-                                    <td className="text-center font-mono text-slate-600">
+                                    <td className="p-1.5 text-left font-mono text-slate-600">
                                         {fmtSar(baseUnit)}
                                     </td>
-                                    <td className="text-center font-mono text-violet-700">
+                                    <td className="p-1.5 text-left font-mono text-violet-700">
                                         {fmtSar(taxUnit)}
-                                        {Number(r.vat_percent) > 0 && (
+                                        {vatPct > 0 && (
                                             <span className="ms-1 text-[9px] text-slate-400">
-                                                ({Number(r.vat_percent).toFixed(0)}%)
+                                                ({vatPct.toFixed(0)}%)
                                             </span>
                                         )}
                                     </td>
-                                    <td className="text-center font-mono font-bold text-emerald-700">
+                                    <td className="p-1.5 text-left font-mono font-bold text-emerald-700">
                                         {fmtSar(totalUnit)}
                                     </td>
-                                    <td className="text-left font-mono font-extrabold text-sky-700">
+                                    <td className="p-1.5 text-left font-mono font-extrabold text-sky-700">
                                         {fmtSar(r.total_cost)}
                                     </td>
                                 </tr>
                             );
                         })}
-                        <tr className="border-t-2 border-sky-200">
-                            <td colSpan={5} className="py-1 font-extrabold text-slate-800">
+                        <tr className="border-t-2 border-sky-200 bg-sky-50/60">
+                            <td colSpan={5} className="p-1.5 font-extrabold text-slate-800">
                                 الإجمالي
                             </td>
-                            <td className="text-left font-mono font-extrabold text-sky-800">
+                            <td className="p-1.5 text-left font-mono font-extrabold text-sky-800">
                                 {fmtSar(shippingTotal)}
                             </td>
                         </tr>
                     </tbody>
                 </table>
+                </div>
             )}
+            <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                القاعدة الموحدة: <strong>إجمالي تكلفة الشحنة = سعر الشحنة + ضريبة الشحنة</strong>.
+                نفس مصدر دفتر الشحن التفصيلي (<code>shipping_cost_ssot.py</code>).
+            </p>
         </div>
     );
 
@@ -413,10 +445,10 @@ export default function ProfitSummaryCard({ totals, shippingBreakdown = [], from
                 <Line icon={Coins}      label="المبيعات"                      value={fmtSar(sales)}          color="green"  isFirst />
                 <Line icon={Package}    label="− تكاليف المنتجات"             value={fmtSar(productCost)}    share={sharePct(productCost, sales)}     color="amber"  onClick={() => setProductCostOpen(true)} testid="profit-line-product-cost" />
                 <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        share={sharePct(adsCost, sales)}         color="rose"   onClick={() => setAdsBreakdownOpen(true)} testid="profit-line-ads-cost" />
-                <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  share={sharePct(shippingTotal, sales)}   color="sky"    tooltip={shippingTooltip} testid="profit-line-shipping" />
+                <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  share={sharePct(shippingTotal, sales)}   color="sky"    tooltip={shippingTooltip} testid="profit-line-shipping" expandable expanded={shippingExpanded} onClick={() => setShippingExpanded(v => !v)} />
                 <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} share={sharePct(allPaymentFees, sales)}  color="violet" />
                 {operatingExpenses > 0 && (
-                    <Line icon={Briefcase} label="− المصروفات التشغيلية (رواتب وإيجارات وغيرها)" value={fmtSar(operatingExpenses)} share={sharePct(operatingExpenses, sales)} color="amber" tooltip={opTooltip} testid="profit-line-operating" />
+                    <Line icon={Briefcase} label="− المصروفات التشغيلية (رواتب وإيجارات وغيرها)" value={fmtSar(operatingExpenses)} share={sharePct(operatingExpenses, sales)} color="amber" tooltip={opTooltip} testid="profit-line-operating" expandable expanded={opExpanded} onClick={() => setOpExpanded(v => !v)} />
                 )}
 
                 {/* Net profit row — visually distinguished */}

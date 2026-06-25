@@ -1943,6 +1943,55 @@ async def dashboard(
         settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
     )
 
+    # ── iter-256 — Shipping cost SSOT consolidation ───────────────────
+    # Replace match_settings' shipping breakdown with the canonical
+    # `shipping_cost_ssot.aggregate_breakdown()` so the dashboard
+    # ALWAYS agrees with /api/shipping-ledger (same per-order/per-company
+    # math: total = base + tax). Payment breakdown is unrelated and stays
+    # on match_settings.
+    from shipping_cost_ssot import (
+        aggregate_breakdown as _ssot_agg,
+        get_company_configs as _ssot_cfgs,
+    )
+    _ssot_company_cfgs = await _ssot_cfgs(db, user["id"])
+    _ssot_agg_result = _ssot_agg(all_orders, _ssot_company_cfgs)
+    _ssot_breakdown = []
+    _ssot_deferred = 0.0
+    for pc in _ssot_agg_result["per_company"].values():
+        cfg = _ssot_company_cfgs.get(pc["name"]) or {}
+        is_deferred = bool(cfg.get("is_deferred", False))
+        cfg_has_cost = (
+            cfg.get("cost_per_order") is not None
+            or cfg.get("cost") is not None
+        )
+        row = {
+            "name":           pc["name"],
+            "orders_count":   pc["orders_count"],
+            # Dashboard-legacy fields (kept for backward-compat with
+            # /api/dashboard consumers and _merge_breakdown):
+            "cost_per_order": pc["cost_per_unit"],
+            "base_cost":      pc["base"],
+            "vat_amount":     pc["tax"],
+            "vat_percent":    round(pc["vat_rate"] * 100, 2),
+            "total_cost":     pc["total"],
+            "matched":        cfg_has_cost,
+            "is_deferred":    is_deferred,
+            # SSOT canonical per-unit fields — used by the new unified
+            # breakdown table in ProfitSummaryCard:
+            "cost_per_unit":  pc["cost_per_unit"],
+            "tax_per_unit":   pc["tax_per_unit"],
+            "total_per_unit": pc["total_per_unit"],
+            "vat_rate":       pc["vat_rate"],
+        }
+        if is_deferred:
+            _ssot_deferred += pc["total"]
+        _ssot_breakdown.append(row)
+    # Authoritative shipping numbers (SSOT-driven):
+    matched_all["shipping_breakdown"]      = _ssot_breakdown
+    matched_all["total_shipping_cost"]     = round(
+        _ssot_agg_result["total_with_tax"], 2)
+    matched_all["deferred_shipping_cost"]  = round(_ssot_deferred, 2)
+
     total_sales = parsed_all["total_sales"]
     total_orders = parsed_all["total_orders"]
     total_fees = matched_all["total_payment_fees"]

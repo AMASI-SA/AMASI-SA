@@ -29,6 +29,52 @@
 - `financial_movements` is detail-enrichment layer, never balance source
 - Drift detected MUST be surfaced, never hidden
 
+## Dashboard Shipping SSOT Consolidation + Accordion UX (2026-06-25 · iter-256)
+**User report:** ProfitSummaryCard's "إجمالي تكاليف الشحن" total included VAT
+but the inline table only showed unit price WITHOUT tax (e.g. iMile 21×15 was
+shown but total was 362.25). Also: clicking operating-expenses tooltip felt
+like content jumped below the page.
+
+**Fix — Backend (`/app/backend/server.py` ~line 1939):**
+- `/api/dashboard` now passes `all_orders` through
+  `shipping_cost_ssot.aggregate_breakdown()` and OVERRIDES
+  `matched_all["shipping_breakdown"]` / `["total_shipping_cost"]` /
+  `["deferred_shipping_cost"]` with the SSOT result.
+- Each shipping row now carries SSOT-canonical per-unit fields:
+  `cost_per_unit`, `tax_per_unit`, `total_per_unit`, `vat_rate`
+  (alongside the legacy fields kept for backward-compat).
+- Net effect: the dashboard and `/api/shipping-ledger` now use the
+  SAME math source — never any drift.
+
+**Fix — Frontend (`/app/frontend/src/components/ProfitSummaryCard.jsx`):**
+- Replaced the hover-only tooltips on الشحن & المصروفات التشغيلية with
+  **inline accordion sections** (`expandable`/`expanded` props on `Line`).
+- Click the row → accordion expands inline directly below the row.
+  Click again → collapses. The rest of the summary stays visible.
+- Shipping table columns are now identical to ShippingLedger:
+  الشركة · الشحنات · سعر الوحدة (بدون الضريبة) · ضريبة الوحدة (VAT) ·
+  إجمالي الوحدة (سعر + ضريبة) · الإجمالي.
+- Footer reads: "نفس مصدر دفتر الشحن التفصيلي (shipping_cost_ssot.py)".
+
+**Regression tests** (`/app/backend/tests/test_dashboard_shipping_ssot.py` — 3/3 ✅):
+- Verifies SSOT per-unit math matches the user-reported numbers (21 × 15
+  → 362.25; 2 × 15 → 34.50).
+- Asserts the dashboard source code contains the consolidation block and
+  all SSOT canonical fields.
+- Verifies `is_deferred` summation stays correct after SSOT consolidation.
+
+**Smoke verified on PREVIEW:**
+- `/api/dashboard` returns rows with `cost_per_unit`, `tax_per_unit`,
+  `total_per_unit`, `vat_rate` populated. Example:
+  سمسا (2040 oc, cpu=25.0, tpu=3.75, total_per_unit=28.75, total=58,539.60).
+- Clicking the shipping line in ProfitSummaryCard expands the breakdown
+  inline directly below.
+
+**Note for user:** PREVIEW only. Redeploy via Emergent to push to
+`mezansalla.com`.
+
+
+
 ## Snapchat Adapter Bug Fixes (2026-06-25)
 **Reported by user via Diagnose UI on two Snapchat accounts:**
 1. `efcdd251 (Self Service)` → API error:
