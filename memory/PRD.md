@@ -191,7 +191,54 @@ Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
-## Ads V2 — Phase 1 (2026-06-24)
+## Ads V2 — Phase 1 (Final, post-rejection fix) (2026-06-25)
+**Resolved User Rejection (3 demands):**
+1. ✅ **Full Arabic UI** — Replaced all English UI terms (Reconciliation,
+   Drift, Flags, Confidence, Status, Pending, Provisional, Final, Source,
+   Layer, Sync, Token, OK, active, paused, discovered) with proper Arabic
+   via dictionaries in `AdsV2Report.jsx` (PROVIDER_AR, REVIEW_STATUS_AR,
+   CONFIDENCE_AR, ANOMALY_AR, DRIFT_CAUSE_AR) and `AdsV2Settings.jsx`
+   (`statusAr()` helper). Only platform names (Meta/Snapchat/TikTok)
+   remain in English.
+2. ✅ **Contrast & font-weight upgrade** — Stat cards: `text-3xl
+   font-extrabold tabular-nums text-zinc-50` (was text-2xl font-bold
+   text-zinc-100). Table cells: `text-zinc-50 font-semibold`. Backgrounds
+   stay zinc-900/950. Verified by test agent.
+3. ✅ **Meta discrepancy 36.06 SAR** — Adopted "merchant-as-ground-truth"
+   model:
+   - **POST /api/ads-v2/report/manual-value** `{account_id, date,
+     manual_value_native, note?}` → records the Ads Manager value
+     entered by the merchant and **recomputes drift instantly** (no
+     provider re-fetch). Audit row appended to `ads_sync_logs`.
+   - Reconciliation rows now expose `platform_manual_value_native/_sar`,
+     `has_manual_value`, `drift_pct_vs_manual`, and structured
+     `drift_reason.likely_causes` (sync_before_close,
+     late_reporting_window, ads_manager_value_differs,
+     post_close_provider_update, missing_fx_rate).
+   - `_compute_anomaly_flags` returns **`None` (not 0.0)** for drift
+     when there is no comparison anchor → frontend renders "—".
+     Eliminates the "false 0% drift" issue.
+   - Meta adapter (`adapters.py`) upgraded with
+     `use_account_attribution_setting=true`,
+     `use_unified_attribution_setting=true`, `limit=500`,
+     `account_currency` & `date_start/date_stop` echoed back, ensuring
+     numbers track Ads Manager's stated attribution.
+**Frontend additions:**
+   - `ManualValueDialog` component — Per-row "إدخال قيمة Ads Manager"
+     button → modal entry with native-currency value + optional note;
+     on save calls the new endpoint and refreshes recon view.
+   - `ReconRow` shows colored drift % (emerald/amber/red) ONLY when a
+     comparison exists; em-dash otherwise; likely-causes printed as
+     Arabic captions beneath the % value.
+**Tests:** `tests/test_ads_v2_drift_logic.py` — 7/7 PASS (drift NULL
+   when no anchor, manual-value endpoint persistence, reconciliation
+   field exposure, no_drift_inflation invariant). Phase 1 regression
+   `tests/test_ads_v2_phase1.py` — 10/10 still PASS.
+**Verified by testing_agent_v3_fork (iter-252):** Backend 100%
+   (17/17), Frontend 95% (all flows pass). Phase 1 ready for user
+   sign-off.
+
+## Ads V2 — Phase 1 (2026-06-24) — superseded by post-rejection fix above
 Backend (new):
   - `ads_v2/sync/adapters.py` — Meta/Snap/TikTok day-fetchers (read-only,
     use V1 access_token via v1_token_ref). Snap uses TZ-anchored TOTAL
@@ -256,6 +303,9 @@ Purpose: Conclusively determine WHY iter-215 is skipping all 486
 counterparties in Production (per-account blocker / reason histogram).
 
 ## Tests
+- `/app/backend/tests/test_ads_v2_drift_logic.py` — 7/7 PASS (Phase 1 post-rejection fix)
+- `/app/backend/tests/test_ads_v2_phase1.py` — 10/10 PASS
+- `/app/backend/tests/test_ads_v2_phase0.py` — 11/11 PASS
 - `/app/backend/tests/test_p15L_bnpl_transfer_block.py` — 11/11 PASS
 - `/app/backend/tests/test_p15p_employee_guard_widened.py` — 7/7 PASS
 - `/app/backend/tests/test_p15ab_suppliers_unification_forensic.py` — 3/3 PASS

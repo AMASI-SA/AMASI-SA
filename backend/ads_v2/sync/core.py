@@ -437,24 +437,6 @@ async def run_sync_for_account(
     }
 
 
-    return {
-        "ok":              True,
-        "sync_run_id":     sync_run_id,
-        "account_id":      account_id,
-        "date":            date_iso,
-        "spend_native":    spend_native,
-        "spend_sar":       spend_sar,
-        "gross_sar":       gross_sar,
-        "drift_pct":       display_drift_pct,
-        "drift_pct_vs_previous_sync": drift_prev,
-        "drift_pct_vs_manual": drift_manual,
-        "drift_reason":    drift_reason,
-        "anomaly_flags":   flags,
-        "review_status":   final_review_status,
-        "api_status":      status.get("code"),
-    }
-
-
 # ─────────────────────────────────────────────────────────────────────
 # Recompute drift when the merchant enters an Ads Manager value
 # ─────────────────────────────────────────────────────────────────────

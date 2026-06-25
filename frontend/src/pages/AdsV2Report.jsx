@@ -167,7 +167,7 @@ export default function AdsV2Report() {
           </div>
           <p className="text-sm text-zinc-300 mt-1 font-medium">
             جميع الأرقام مصدرها <code className="text-zinc-50 bg-zinc-800 px-1.5 py-0.5 rounded">ads_daily</code>{" "}
-            فقط — مصدر بيانات موحّد (Single Source of Truth).
+            فقط — مصدر بيانات موحّد للنظام بأكمله.
           </p>
         </div>
       </div>
