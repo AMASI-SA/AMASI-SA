@@ -29,6 +29,63 @@
 - `financial_movements` is detail-enrichment layer, never balance source
 - Drift detected MUST be surfaced, never hidden
 
+## Recompute Freshness — No Stale Drift / match_status (2026-06-25 · iter-261)
+
+**Bug reported by user:** After updating "قيمة المنصة الآن" in the
+reconciliation report, the row showed `ads_daily=542.03 = platform=542.03`
+(matching) yet the report still displayed:
+  • drift = 14.91% / 26.24%
+  • match_status = "يحتاج مراجعة"
+  • non-zero diff_sar
+
+**Root cause:** `recompute_drift_for_day` updated `platform_manual_value_*`
+and `drift_pct_vs_manual` only. It did NOT touch:
+  • `match_status` (stale from a previous sync)
+  • `diff_native` / `diff_sar`  (stale platform-vs-ssot delta)
+  • `drift_pct_vs_platform`  (stale)
+  • `platform_authoritative_native` / `_sar` (still old auto_reconcile values)
+
+So even though the user just stated "the platform value equals my SSOT",
+the report continued to read those stale figures.
+
+**Fix (display-layer + recompute path — sync/FX untouched):**
+- Every manual-value entry now re-derives the full drift family from
+  the freshly entered value:
+    diff_native = manual − spend_native
+    diff_sar    = manual_sar − spend_sar
+    drift_pct_vs_platform = |diff_native| / spend_native × 100
+- Manual entry is treated as the platform-authoritative value:
+  `platform_authoritative_native/sar` and `platform_last_checked_at`
+  are also updated. This guarantees the report shows ONE
+  consistent "platform value now" across the screen.
+- `match_status` is recomputed by calling `_compute_match_status()`
+  with the fresh drift / confidence / has_data inputs.
+- FX precision guard: when the entered native value EQUALS
+  spend_native (within 1e-9), reuse `spend_sar` directly instead of
+  recomputing via `manual_value × fx_rate`. This prevents 1-cent
+  rounding artefacts (e.g. 144.54 × 3.75 = 542.025 banker-rounding
+  to 542.02 while the stored spend_sar was 542.03) from showing
+  a non-zero diff when the user clearly meant "they match".
+
+**Tests** (`tests/test_ads_v2_recompute_freshness.py` — 4/4 ✅,
+full suite 28/28 ✅):
+- Matching manual value: diff_sar=0, drift=0, match_status="matched",
+  platform_authoritative mirrors the entered value.
+- Real-drift manual value (9.09% diff): match_status="drift_review"
+  (no longer stuck on the previous "matched").
+- Stale diff_sar=9999 + drift_pct=9999 are completely overwritten on
+  recompute.
+- Source inspection confirms `_compute_match_status` is invoked and
+  `match_status` is written inside `recompute_drift_for_day`.
+
+**Architectural invariant added:**
+Any function that mutates ads_daily values (sync, auto_reconcile,
+manual entry) MUST recompute the complete drift family + match_status
+from the resulting state. No caller may leave stale derived values
+sitting next to fresh inputs.
+
+
+
 ## ARCHITECTURAL INVARIANT (LOCKED) — Orthogonal Data State vs Connection State (2026-06-25 · iter-260)
 
 **This is a permanent, non-negotiable architectural rule for Ads V2.**

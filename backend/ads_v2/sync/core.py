@@ -532,11 +532,16 @@ async def recompute_drift_for_day(
         return {"ok": False, "error": "account_not_found"}
 
     spend_native = float(daily.get("spend_native") or 0)
-    has_fx = float(daily.get("fx_rate") or 0) > 0
+    fx_rate = float(daily.get("fx_rate") or 1)
+    spend_sar = float(daily.get("spend_sar") or 0)
+    has_fx = fx_rate > 0
     hours_after_close = _compute_hours_after_close(
         date_iso, account.get("timezone") or "Asia/Riyadh",
     )
-    # prev_spend_native: keep the same drift_pct_vs_previous_sync
+    # iter-261 — Always recompute drift and match_status from the LATEST
+    # values. Stale cached numbers are unacceptable; if ads_daily and the
+    # entered manual value match exactly, drift must read as 0 and
+    # match_status must read as "matched" (subject to confidence/hours).
     flags, drift_prev, drift_manual, init_status, drift_reason = _compute_anomaly_flags(
         new_spend_native=spend_native,
         prev_spend_native=daily.get("spend_native"),
@@ -548,10 +553,53 @@ async def recompute_drift_for_day(
     # Keep old drift_prev (not relevant here — comparing to itself yields 0)
     drift_prev = daily.get("drift_pct_vs_previous_sync")
 
-    manual_sar = round(manual_value_native * float(daily.get("fx_rate") or 1), 2)
-    display = drift_manual if drift_manual is not None else drift_prev
+    # iter-261 — When the merchant enters a value identical to the
+    # native SSOT spend, treat it as an exact match. Avoid 1-cent
+    # rounding artefacts caused by recomputing via fx_rate (the stored
+    # spend_sar may have been rounded slightly differently when first
+    # written). Equality of native values is the canonical "no drift"
+    # signal — never let banker-rounding fake a tiny diff.
+    if (manual_value_native is not None
+            and abs(manual_value_native - spend_native) < 1e-9):
+        manual_sar = spend_sar
+    else:
+        manual_sar = round(manual_value_native * fx_rate, 2)
 
-    # Status: only update if previously open (pending / held_*)
+    # iter-261 — Compute platform-vs-SSOT diff & drift on the SAME
+    # anchor the merchant just entered. The "قيمة المنصة الآن" the user
+    # types IS the platform's authoritative value, so we must:
+    #   • update platform_authoritative_* to match
+    #   • recompute diff_native / diff_sar  = platform − ssot
+    #   • recompute drift_pct_vs_platform
+    # so the report can never show a "drift" when the two amounts equal.
+    diff_native = round(manual_value_native - spend_native, 2)
+    diff_sar    = round(manual_sar - spend_sar, 2)
+    if spend_native > 0:
+        drift_platform = round(abs(diff_native) / spend_native * 100.0, 2)
+    elif manual_value_native > 0:
+        drift_platform = 100.0
+    else:
+        drift_platform = 0.0
+
+    # The displayed drift the user sees in the column is now firmly
+    # "stored vs the platform value they just entered".
+    display = drift_manual if drift_manual is not None else drift_platform
+    if display == 0 and spend_native == 0 and manual_value_native == 0:
+        display = None
+
+    # iter-261 — Recompute match_status from fresh values. NEVER preserve
+    # a stale status when the inputs have changed.
+    confidence = daily.get("confidence") or "provisional"
+    new_match_status = _compute_match_status(
+        drift_pct=display,
+        review_settings=account.get("review_settings") or {},
+        confidence=confidence,
+        hours_after_close=hours_after_close,
+        sync_failed=False,
+        has_data=spend_native > 0,
+    )
+
+    # Status: only update review_status if previously open (pending / held_*)
     prev_status = daily.get("review_status") or "pending"
     if prev_status in ("approved", "rejected", "reopened"):
         final_status = prev_status
@@ -566,13 +614,23 @@ async def recompute_drift_for_day(
             "platform_manual_entered_at":   now_iso,
             "platform_manual_entered_by":   actor_email or "user",
             "platform_manual_note":         note or "",
-            "drift_pct":                    display,
-            "drift_pct_vs_manual":          drift_manual,
-            "drift_reason":                 drift_reason,
-            "anomaly_flags":                flags,
-            "review_status":                final_status,
-            "last_recomputed_at":           now_iso,
-            "updated_at":                   now_iso,
+            # iter-261 — Manual entry is treated as platform-authoritative
+            # so the row's "current platform value" mirrors what the user
+            # just typed. This keeps reports consistent in one read.
+            "platform_authoritative_native": manual_value_native,
+            "platform_authoritative_sar":    manual_sar,
+            "platform_last_checked_at":      now_iso,
+            "diff_native":                   diff_native,
+            "diff_sar":                      diff_sar,
+            "drift_pct_vs_platform":         drift_platform,
+            "drift_pct":                     display,
+            "drift_pct_vs_manual":           drift_manual,
+            "drift_reason":                  drift_reason,
+            "anomaly_flags":                 flags,
+            "review_status":                 final_status,
+            "match_status":                  new_match_status,
+            "last_recomputed_at":            now_iso,
+            "updated_at":                    now_iso,
         }},
     )
 
@@ -603,10 +661,14 @@ async def recompute_drift_for_day(
         "spend_native":          spend_native,
         "manual_value_native":   manual_value_native,
         "manual_value_sar":      manual_sar,
+        "diff_native":           diff_native,
+        "diff_sar":              diff_sar,
+        "drift_pct_vs_platform": drift_platform,
         "drift_pct_vs_manual":   drift_manual,
         "drift_pct":             display,
         "drift_reason":          drift_reason,
         "anomaly_flags":         flags,
+        "match_status":          new_match_status,
         "review_status":         final_status,
     }
 
