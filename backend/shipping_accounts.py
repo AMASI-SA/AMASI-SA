@@ -231,6 +231,8 @@ async def compute_owed_per_company(db, user_id: str) -> dict[str, dict]:
         orders_query["received_at"] = {"$gte": cod_cutoff + "T00:00:00"}
 
     out: dict[str, dict] = {}
+    # Hoist SSOT import once per request (instead of per order).
+    from shipping_cost_ssot import shipping_breakdown
 
     async for o in db.unified_orders.find(
         orders_query,
@@ -242,8 +244,7 @@ async def compute_owed_per_company(db, user_id: str) -> dict[str, dict]:
         if not cfg or not cfg.get("is_deferred"):
             continue
         # SSOT — same priority as the rest of the app: settings first,
-        # Salla only when no settings cost. Wraps `shipping_breakdown`.
-        from shipping_cost_ssot import shipping_breakdown
+        # Salla only when no settings cost.
         bd = shipping_breakdown(
             {"shipping_company": canonical,
              "shipping_cost": float(o.get("shipping_cost") or 0)},

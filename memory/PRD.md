@@ -191,6 +191,55 @@ Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
+## Shipping Cost SSOT — Priority Flip + Warning Banner (2026-06-25, iter-254/255)
+**Bug fix:** User reported that the detailed shipping ledger was using
+Salla's per-order shipping_cost even for companies that had a
+configured `cost_per_order` in `/shipping/settings`. The new policy:
+
+**Priority 1 — company-config `cost_per_order`** (the rate the merchant
+maintains in `/shipping/settings`).
+**Priority 2 — Salla `shipping_cost`** ONLY when no system cost is
+configured (temporary fallback; UI surfaces a warning).
+
+**SSOT change** (`shipping_cost_ssot.py::shipping_breakdown`):
+   The `if order_ship>0 else cfg_cost` branch was flipped to
+   `if cfg_cost>0 else salla_ship`. Source field now reports
+   `company_config | salla | none`.
+
+**Warning system** (`shipping_ledger_routes.py`):
+   Per-company breakdown now sets `uses_salla_fallback = (
+   from_salla_count > 0 AND configured_cost <= 0)`. Each affected
+   company yields a structured warning emitted in the top-level
+   `warnings` array:
+       {shipping_company, orders_affected, reason,
+        message: "شركة الشحن … لا يوجد لها سعر في إعدادات شركات الشحن…"}
+   The frontend renders an amber banner above the per-company table
+   with a "الانتقال إلى إعدادات شركات الشحن" link.
+
+**Coverage** — all 4 consumers now go through SSOT:
+   1. ✅ `/api/shipping-ledger` (detailed orders + per-company)
+   2. ✅ `/api/shipping-accounts` (deferred-liability accrual) —
+        `compute_owed_per_company` rewritten to call
+        `shipping_breakdown` per order (replacing the inline
+        `cost*(1+vat)` formula that bypassed SSOT priority).
+   3. ✅ `/api/balances` (Phase-1 splits via `compute_balances`)
+   4. ✅ `/api/financial-position` (same balances wiring)
+
+**Frontend** (`ShippingLedger.jsx`):
+   - Amber warning banner with per-company message + settings link
+   - "من سلة (مؤقت)" badge on Salla-fallback rows
+   - Per-company row gets amber tint when fallback active
+
+**Tests:**
+   - `test_shipping_cost_ssot.py` — 15/15 PASS (priority flip
+     verified in unit tests).
+   - `test_shipping_accounts_ssot_iter255.py` — 6/6 PASS
+     (legacy `/shipping-accounts` path now SSOT-consistent).
+   - Verified by `testing_agent_v3_fork` iter-254 (100% backend +
+     frontend) and iter-255 (100% backend, 21/21 tests). Critical
+     proof scenario: Salla=999, settings=20 @ 15% VAT → owed=23.00
+     per order (not 1148.85).
+
 ## Shipping Cost SSOT — Base + Tax + Total (2026-06-25)
 **User mandate:** every shipping-cost figure in the app uses
 `total = base + tax`, with the three values visible separately. No
@@ -537,7 +586,8 @@ Purpose: Conclusively determine WHY iter-215 is skipping all 486
 counterparties in Production (per-account blocker / reason histogram).
 
 ## Tests
-- `/app/backend/tests/test_shipping_cost_ssot.py` — 13/13 PASS (shipping cost SSOT base+tax+total)
+- `/app/backend/tests/test_shipping_accounts_ssot_iter255.py` — 6/6 PASS (priority flip + accrual SSOT)
+- `/app/backend/tests/test_shipping_cost_ssot.py` — 15/15 PASS
 - `/app/backend/tests/test_ads_v2_snapchat_relink.py` — 8/8 PASS (safe re-link flow)
 - `/app/backend/tests/test_ads_v2_account_diagnose.py` — 8/8 PASS (3-tier status + diagnose)
 - `/app/backend/tests/test_ads_v2_auto_reconcile.py` — 6/6 PASS (Phase 1 auto-reconcile)
