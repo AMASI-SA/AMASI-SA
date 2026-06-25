@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from .data_layer import discovery, settings as settings_dl
 from .data_layer import reports as reports_dl
+from .data_layer.settings import diagnose_account
 from .sync.core import (
     run_sync_for_account, run_sync_user, recompute_drift_for_day,
     auto_reconcile_for_day, auto_reconcile_user,
@@ -180,6 +181,23 @@ def make_ads_v2_router(db, current_user_dep):
             "at":           settings_dl.utc_now_iso(),
         })
         return {"ok": True, "data": health}
+
+    # ── POST /settings/accounts/{id}/diagnose ───────────────────────
+    @router.post("/settings/accounts/{account_id}/diagnose")
+    async def diagnose(
+        account_id: str, user: dict = Depends(_user),
+    ):
+        """Comprehensive read-only diagnostic for a single account.
+
+        Returns a 3-tier status (token / connection / sync_run) plus
+        a live API probe + ads_daily stats + last 10 events. Used by
+        the "تشخيص" button on the settings page so the merchant sees
+        the real reason instead of a bare "خطأ".
+        """
+        res = await diagnose_account(db, user["id"], account_id)
+        if not res.get("ok"):
+            raise HTTPException(404, res.get("error") or "diagnose_failed")
+        return {"ok": True, "data": res}
 
     # ── GET /settings/activity ──────────────────────────────────────
     @router.get("/settings/activity")

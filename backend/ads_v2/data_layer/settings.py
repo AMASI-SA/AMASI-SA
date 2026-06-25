@@ -34,13 +34,42 @@ ALLOWED_PATCH_FIELDS = {
 
 
 async def get_settings_snapshot(db, user_id: str) -> dict:
-    """Single-payload snapshot for the settings page."""
+    """Single-payload snapshot for the settings page.
+
+    Each account row is enriched with `_status` containing the 3-tier
+    status (token / connection / sync_run) + `_status_reason` carrying
+    the actual machine-readable cause from the latest activity, so the
+    UI never has to show a bare "خطأ".
+    """
     # Accounts (active only by default; UI can opt to show soft_deleted)
     accounts: list[dict] = []
     async for doc in db.ads_accounts.find(
         {"user_id": user_id, "soft_deleted": False}, {"_id": 0},
     ).sort("provider", 1):
         accounts.append(doc)
+
+    # Pre-fetch last 50 events per account so we can summarize quickly
+    if accounts:
+        ids = [a["id"] for a in accounts]
+        recent_by_acct: dict[str, list[dict]] = {a_id: [] for a_id in ids}
+        async for ev in db.ads_sync_logs.find(
+            {"user_id": user_id, "account_id": {"$in": ids}}, {"_id": 0},
+        ).sort("at", -1).limit(500):
+            lst = recent_by_acct.get(ev["account_id"])
+            if lst is not None and len(lst) < 5:
+                lst.append(ev)
+        # Days-with-data count per account (last 30 days)
+        from datetime import date, timedelta as _td
+        cutoff = (date.today() - _td(days=30)).isoformat()
+        for acct in accounts:
+            count = await db.ads_daily.count_documents({
+                "user_id": user_id, "account_id": acct["id"],
+                "date": {"$gte": cutoff},
+            })
+            acct["_days_with_data_30d"] = count
+            acct["_status"] = _compute_account_status(
+                acct, recent_by_acct.get(acct["id"]) or [], count,
+            )
 
     # Last 10 events from sync_logs (for diagnostic strip in UI)
     activity: list[dict] = []
@@ -64,9 +93,257 @@ async def get_settings_snapshot(db, user_id: str) -> dict:
         },
         "_meta": {
             "source_layer": "ads_v2.data_layer.settings.get_settings_snapshot",
-            "ssot": "ads_accounts + ads_sync_logs",
+            "ssot": "ads_accounts + ads_sync_logs + ads_daily",
             "computed_at": utc_now_iso(),
         },
+    }
+
+
+def _compute_account_status(
+    account: dict, recent_events: list[dict], days_with_data_30d: int,
+) -> dict:
+    """Return a 3-tier status object + structured `reason` for the row.
+
+    {
+      token:      ok | expired | needs_relink | missing
+      connection: connected | unreachable | api_error | unknown
+      sync_run:   synced | awaiting_first | no_data | last_failed | disabled
+      reason:     specific machine-readable code (see UI translation)
+    }
+    """
+    # ── Token tier ───────────────────────────────────────────────
+    ref = account.get("v1_token_ref") or {}
+    if not ref.get("collection"):
+        token_status = "missing"
+    else:
+        # we only have last_token_check_status on the ref + the last
+        # sync_log unauthorized events — combine them.
+        last_check = ref.get("last_token_check_status")
+        recent_unauth = next(
+            (e for e in recent_events
+             if (e.get("details") or {}).get("api_status") == "token_invalid"
+             or e.get("event") == "token_expired"),
+            None,
+        )
+        if recent_unauth and recent_unauth.get("event") == "token_expired":
+            token_status = "expired"
+        elif recent_unauth:
+            token_status = "needs_relink"
+        elif last_check == "missing":
+            token_status = "missing"
+        elif last_check == "expired":
+            token_status = "expired"
+        else:
+            token_status = "ok"
+
+    # ── Connection tier ──────────────────────────────────────────
+    # Look at the latest sync_run / sync_failed / reconciliation_checked
+    last_call = next(
+        (e for e in recent_events
+         if e.get("event") in (
+             "sync_run", "sync_failed", "reconciliation_checked",
+         )),
+        None,
+    )
+    if not last_call:
+        connection_status = "unknown"
+        connection_reason = "no_call_yet"
+    else:
+        api_status = (last_call.get("details") or {}).get("api_status")
+        result = (last_call.get("details") or {}).get("result")
+        if api_status == "ok" or result == "ok":
+            connection_status = "connected"
+            connection_reason = "ok"
+        elif api_status == "rate_limited":
+            connection_status = "api_error"
+            connection_reason = "api_rate_limit"
+        elif api_status == "not_found":
+            connection_status = "api_error"
+            connection_reason = "account_not_found"
+        elif api_status == "token_invalid":
+            connection_status = "api_error"
+            connection_reason = "token_no_access_to_account"
+        elif api_status == "http_error":
+            connection_status = "api_error"
+            connection_reason = "api_http_error"
+        elif api_status == "exception":
+            connection_status = "unreachable"
+            connection_reason = "network_or_timeout"
+        elif api_status == "empty":
+            connection_status = "connected"
+            connection_reason = "no_data_for_date"
+        else:
+            connection_status = "unknown"
+            connection_reason = api_status or "unknown"
+
+    # ── Sync-run tier ────────────────────────────────────────────
+    if not account.get("sync_enabled"):
+        sync_run_status = "disabled"
+    elif account.get("sync_status") == "error" or account.get("sync_status") == "unauthorized":
+        sync_run_status = "last_failed"
+    elif not account.get("last_synced_date"):
+        sync_run_status = "awaiting_first"
+    elif days_with_data_30d == 0:
+        sync_run_status = "no_data"
+    else:
+        sync_run_status = "synced"
+
+    # ── Aggregate primary reason ─────────────────────────────────
+    # Priority: token issues > connection errors > sync state
+    if token_status in ("expired", "needs_relink", "missing"):
+        primary_reason = f"token_{token_status}"
+    elif connection_status in ("api_error", "unreachable"):
+        primary_reason = connection_reason
+    elif sync_run_status == "awaiting_first":
+        primary_reason = "awaiting_first_sync"
+    elif sync_run_status == "no_data":
+        primary_reason = "no_data_for_account"
+    elif sync_run_status == "last_failed":
+        primary_reason = "last_sync_failed"
+    elif sync_run_status == "disabled":
+        primary_reason = "sync_disabled"
+    else:
+        primary_reason = "ok"
+
+    return {
+        "token":              token_status,
+        "connection":         connection_status,
+        "connection_reason":  connection_reason,
+        "sync_run":           sync_run_status,
+        "days_with_data_30d": days_with_data_30d,
+        "reason":             primary_reason,
+        "last_sync_finished_at": account.get("last_sync_finished_at"),
+        "last_sync_error":    account.get("sync_error_message"),
+    }
+
+
+# ── Live diagnostics — pings the provider's API (READ-ONLY) ──────────
+async def diagnose_account(
+    db, user_id: str, account_id: str,
+) -> dict:
+    """Run a comprehensive read-only diagnostic against one account.
+
+    Returns a dict with:
+      • token_check       — V1 token doc presence
+      • api_probe         — a fresh fetch_day call against yesterday
+      • stats             — counts from ads_daily + ads_sync_logs
+      • last_events       — last 10 events for this account
+      • status            — same 3-tier object as snapshot, recomputed
+    """
+    from ..sync import adapters
+    from datetime import date, timedelta
+
+    account = await db.ads_accounts.find_one(
+        {"user_id": user_id, "id": account_id, "soft_deleted": False},
+        {"_id": 0},
+    )
+    if not account:
+        return {"ok": False, "error": "account_not_found"}
+
+    # ── Token check (read V1 doc only) ──
+    token_check = await check_v1_token_health(db, user_id, account)
+
+    # ── Live API probe with yesterday's date ──
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    api_probe: dict
+    fetched_native: Optional[float] = None
+    if token_check.get("ok"):
+        ref = account.get("v1_token_ref") or {}
+        v1_doc = await db[ref["collection"]].find_one(
+            {"user_id": ref.get("user_id") or user_id},
+            {"_id": 0, "access_token": 1},
+        )
+        access_token = (v1_doc or {}).get("access_token")
+        fetched, status = await adapters.fetch_day(
+            provider=account["provider"],
+            access_token=access_token,
+            external_account_id=account["external_account_id"],
+            date_iso=yesterday,
+            account_timezone=account.get("timezone") or "Asia/Riyadh",
+        )
+        api_probe = {
+            "called_at":   utc_now_iso(),
+            "date_tested": yesterday,
+            "status":      status,
+            "ok":          fetched is not None,
+        }
+        if fetched is not None:
+            fetched_native = float(fetched.get("spend_native") or 0)
+            api_probe["fetched_spend_native"] = fetched_native
+            api_probe["currency_native"] = fetched.get("currency_native")
+    else:
+        api_probe = {
+            "called_at":   utc_now_iso(),
+            "date_tested": yesterday,
+            "status":      {"code": "skipped_no_token"},
+            "ok":          False,
+        }
+
+    # ── Stats from ads_daily ──
+    cutoff_30 = (date.today() - timedelta(days=30)).isoformat()
+    days_30 = await db.ads_daily.count_documents({
+        "user_id": user_id, "account_id": account_id,
+        "date": {"$gte": cutoff_30},
+    })
+    days_with_spend = await db.ads_daily.count_documents({
+        "user_id": user_id, "account_id": account_id,
+        "date": {"$gte": cutoff_30}, "spend_native": {"$gt": 0},
+    })
+    total_records = await db.ads_daily.count_documents({
+        "user_id": user_id, "account_id": account_id,
+    })
+
+    # ── Last events ──
+    last_events: list[dict] = []
+    async for ev in db.ads_sync_logs.find(
+        {"user_id": user_id, "account_id": account_id}, {"_id": 0},
+    ).sort("at", -1).limit(10):
+        last_events.append(ev)
+
+    # ── Recompute 3-tier status with the live result mixed in ──
+    status = _compute_account_status(
+        account, last_events, days_30,
+    )
+    # Override connection based on the LIVE probe
+    if api_probe["ok"]:
+        status["connection"] = "connected"
+        status["connection_reason"] = (
+            "no_data_for_date" if (fetched_native or 0) == 0 else "ok"
+        )
+    elif api_probe["status"].get("code") == "rate_limited":
+        status["connection"] = "api_error"
+        status["connection_reason"] = "api_rate_limit"
+    elif api_probe["status"].get("code") == "token_invalid":
+        status["connection"] = "api_error"
+        status["connection_reason"] = "token_no_access_to_account"
+        status["token"] = "needs_relink"
+    elif api_probe["status"].get("code") == "not_found":
+        status["connection"] = "api_error"
+        status["connection_reason"] = "account_not_found"
+    elif api_probe["status"].get("code") == "exception":
+        status["connection"] = "unreachable"
+        status["connection_reason"] = "network_or_timeout"
+
+    return {
+        "ok":              True,
+        "account_id":      account_id,
+        "provider":        account["provider"],
+        "external_account_id": account["external_account_id"],
+        "display_name":    account.get("display_name"),
+        "status":          status,
+        "token_check":     token_check,
+        "api_probe":       api_probe,
+        "stats": {
+            "days_in_last_30d":  days_30,
+            "days_with_spend":   days_with_spend,
+            "total_daily_rows":  total_records,
+            "last_synced_date":  account.get("last_synced_date"),
+            "last_sync_started_at":  account.get("last_sync_started_at"),
+            "last_sync_finished_at": account.get("last_sync_finished_at"),
+            "last_sync_error":   account.get("sync_error_message"),
+        },
+        "last_events":     last_events,
+        "diagnosed_at":    utc_now_iso(),
     }
 
 

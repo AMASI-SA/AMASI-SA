@@ -191,6 +191,55 @@ Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
+## Ads V2 — Phase 1 (3-Tier Status + Diagnostics) (2026-06-25)
+**User complaint resolved:** Snapchat row showed "Token: OK" but
+"Status: خطأ" — paradoxical and uninformative. Replaced with a
+3-tier per-account status model + a Diagnose button.
+
+**Backend:**
+   - `data_layer/settings.py::_compute_account_status()` — returns
+     `{token, connection, connection_reason, sync_run, reason,
+       days_with_data_30d, last_sync_finished_at, last_sync_error}`
+     where each tier has its own controlled vocabulary:
+       - **token:** ok / expired / needs_relink / missing
+       - **connection:** connected / unreachable / timeout / api_error / unknown
+       - **sync_run:** synced / awaiting_first / no_data / last_failed / disabled
+   - `_compute_account_status` mixes V1 token health + recent sync_logs
+     api_status + ads_daily row count to produce a structured `reason`
+     code (e.g. `token_no_access_to_account`, `no_data_for_account`,
+     `awaiting_first_sync`, `api_rate_limit`). Translated to Arabic
+     in the UI dictionary `REASON_AR`.
+   - `data_layer/settings.py::diagnose_account()` — comprehensive
+     read-only diagnostic. Includes:
+       - Token check (V1 doc presence)
+       - **Live API probe** — calls `adapters.fetch_day` for yesterday
+         and records the result (code, body excerpt, fetched spend)
+       - ads_daily stats: days_in_last_30d, days_with_spend,
+         total_daily_rows, last_synced_date, last sync started/finished
+       - Last 10 ads_sync_logs events for the account
+   - **POST /api/ads-v2/settings/accounts/{id}/diagnose** — Returns
+     the full diagnostic in one payload.
+
+**Frontend (AdsV2Settings.jsx):**
+   - Accounts table replaced bare "Status / Token" columns with:
+     **حالة التوكن / حالة الاتصال / حالة المزامنة / السبب الحقيقي**
+     (4 columns, colored badges, never says bare "خطأ").
+   - New **"تشخيص"** button per account → opens a Dialog displaying:
+     3-tier badges, primary reason callout, stats grid, live API probe
+     result + raw response body excerpt, last 10 events.
+   - `EVENT_AR` dictionary translates event names (sync_run → "مزامنة
+     ناجحة", reconciliation_checked → "مطابقة من المنصة", etc.).
+   - `ActivityRow` component renders each event as a clean Arabic
+     summary instead of raw JSON dump.
+   - `REASON_AR` translates 17 specific reason codes (e.g.
+     `token_no_access_to_account` → "التوكن لا يملك صلاحية هذا الحساب",
+     `no_data_for_account` → "الحساب لا يحتوي على بيانات صرف").
+
+**Tests:** `tests/test_ads_v2_account_diagnose.py` — 8/8 PASS,
+   including the exact "Token OK + no data" case the user described,
+   which now produces `reason='no_data_for_account'` instead of
+   bare "error". Total 31/31 ads_v2 tests pass.
+
 ## Ads V2 — Phase 1 (Auto-Reconcile, Final) (2026-06-25)
 **Resolved User 5-point Conditional Approval:**
 1. ✅ **API-driven auto-fetch, manual demoted to fallback** —
@@ -362,6 +411,7 @@ Purpose: Conclusively determine WHY iter-215 is skipping all 486
 counterparties in Production (per-account blocker / reason histogram).
 
 ## Tests
+- `/app/backend/tests/test_ads_v2_account_diagnose.py` — 8/8 PASS (3-tier status + diagnose)
 - `/app/backend/tests/test_ads_v2_auto_reconcile.py` — 6/6 PASS (Phase 1 auto-reconcile)
 - `/app/backend/tests/test_ads_v2_auto_reconcile_invariants_iter253.py` — 5/5 PASS
 - `/app/backend/tests/test_ads_v2_drift_logic.py` — 7/7 PASS
