@@ -75,10 +75,14 @@ def test_report_layer_returns_new_fields():
     assert '"spend_native"' in src, "spend_native should appear in reports.py"
     # Per-account must derive effective bank_fee_pct
     assert "bank_fee_pct" in src
-    # Provider aggregation now groups by currency for USD totals
-    assert '"currency_native": "$currency_native"' in src
+    # iter-258: currency SSOT now sourced from ads_accounts, not ads_daily.
+    # The provider aggregation must NOT group by ads_daily.currency_native.
+    assert '"currency_native": "$currency_native"' not in src, \
+        "iter-258 regression: reports must not key by ads_daily.currency_native"
     # Multi-currency aggregation key for totals
     assert "spend_native_by_currency" in src
+    # Currency comes from the ads_accounts join (SSOT).
+    assert "_acct.currency_native" in src
 
 
 if __name__ == "__main__":

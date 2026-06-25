@@ -94,19 +94,31 @@ async def get_spend_by_account(
     db, user_id: str, date_from: str, date_to: str,
     provider: Optional[str] = None,
 ) -> dict:
+    """Per-account spend report.
+
+    Currency SSOT: `ads_accounts.currency_native` (the user-configured
+    billing currency). We DO NOT trust `ads_daily.currency_native` —
+    that value is whatever the platform API happened to return (e.g.
+    Snap always reports USD micros even for SAR-billed KSA accounts).
+
+    Native spend (`spend_native` column / USD totals) is suppressed
+    for accounts where the configured currency is SAR, since SAR-billed
+    accounts have no meaningful "native foreign" amount to show.
+    """
     match = _base_match(user_id, date_from, date_to, None, provider)
     pipeline = [
         {"$match": match},
+        # Group strictly by account — no currency split.
         {"$group": {
-            "_id": {"account_id": "$account_id", "provider": "$provider",
-                    "currency_native": "$currency_native"},
-            "spend_native": {"$sum": "$spend_native"},
-            "spend_sar":    {"$sum": "$spend_sar"},
-            "bank_fee_sar": {"$sum": "$bank_fee_sar"},
-            "gross_sar":    {"$sum": "$gross_sar"},
-            "days_count":   {"$sum": 1},
-            "latest_date":  {"$max": "$date"},
+            "_id": {"account_id": "$account_id", "provider": "$provider"},
+            "spend_native_raw": {"$sum": "$spend_native"},
+            "spend_sar":        {"$sum": "$spend_sar"},
+            "bank_fee_sar":     {"$sum": "$bank_fee_sar"},
+            "gross_sar":        {"$sum": "$gross_sar"},
+            "days_count":       {"$sum": 1},
+            "latest_date":      {"$max": "$date"},
         }},
+        # Pull the canonical currency_native from ads_accounts (SSOT).
         {"$lookup": {
             "from": "ads_accounts",
             "let": {"a": "$_id.account_id", "u": user_id},
@@ -118,12 +130,18 @@ async def get_spend_by_account(
                 {"$project": {"_id": 0, "display_name": 1,
                               "external_account_id": 1,
                               "currency_native": 1,
-                              # iter-257 — expose configured bank_fee for
-                              # the report UI (display only, never used
-                              # for recomputation — ads_daily is SSOT).
                               "bank_fee": 1}},
             ],
             "as": "_acct",
+        }},
+        {"$addFields": {
+            "_currency": {
+                # Default to SAR when the account has no explicit setting.
+                "$toUpper": {"$ifNull": [
+                    {"$arrayElemAt": ["$_acct.currency_native", 0]},
+                    "SAR",
+                ]},
+            },
         }},
         {"$project": {
             "_id": 0,
@@ -132,15 +150,22 @@ async def get_spend_by_account(
             "display_name": {"$arrayElemAt": ["$_acct.display_name", 0]},
             "external_account_id": {
                 "$arrayElemAt": ["$_acct.external_account_id", 0]},
-            "currency_native": "$_id.currency_native",
-            "spend_native": {"$round": ["$spend_native", 2]},
+            "currency_native": "$_currency",
+            # spend_native is null for SAR-billed accounts — meaningless
+            # to display "USD micros" for a SAR account. Frontend renders
+            # this as "—".
+            "spend_native": {
+                "$cond": [
+                    {"$eq": ["$_currency", "SAR"]},
+                    None,
+                    {"$round": ["$spend_native_raw", 2]},
+                ],
+            },
             "spend_sar":    {"$round": ["$spend_sar", 2]},
             "bank_fee_sar": {"$round": ["$bank_fee_sar", 2]},
             "gross_sar":    {"$round": ["$gross_sar", 2]},
             "days_count":   1,
             "latest_date":  1,
-            # Effective bank-fee % observed in the data — derived from
-            # SSOT (bank_fee_sar / spend_sar). Falls back to 0 if no spend.
             "bank_fee_pct": {
                 "$cond": [
                     {"$gt": ["$spend_sar", 0]},
@@ -153,7 +178,6 @@ async def get_spend_by_account(
                     0.0,
                 ],
             },
-            # Configured rate from settings (display-only audit value).
             "configured_bank_fee_pct": {
                 "$round": [
                     {"$multiply": [
@@ -169,18 +193,20 @@ async def get_spend_by_account(
         {"$sort": {"gross_sar": -1}},
     ]
     rows = await db.ads_daily.aggregate(pipeline).to_list(None)
-    # Multi-currency totals for the USD column (Snap accounts vs SAR-native).
+    # Native-currency totals exclude SAR-billed accounts entirely.
     by_ccy: dict[str, float] = {}
     for r in rows:
         ccy = (r.get("currency_native") or "").upper()
-        by_ccy[ccy] = round(by_ccy.get(ccy, 0.0) + r.get("spend_native", 0.0), 2)
+        if ccy == "SAR" or r.get("spend_native") is None:
+            continue
+        by_ccy[ccy] = round(
+            by_ccy.get(ccy, 0.0) + float(r.get("spend_native") or 0.0), 2)
     totals = {
         "spend_sar":    round(sum(r["spend_sar"] for r in rows), 2),
         "bank_fee_sar": round(sum(r["bank_fee_sar"] for r in rows), 2),
         "gross_sar":    round(sum(r["gross_sar"] for r in rows), 2),
         "spend_native_by_currency": by_ccy,
     }
-    # Effective overall %: total commission / total spend.
     totals["bank_fee_pct"] = (
         round((totals["bank_fee_sar"] / totals["spend_sar"]) * 100.0, 3)
         if totals["spend_sar"] > 0 else 0.0
@@ -195,26 +221,51 @@ async def get_spend_by_provider(
     match = _base_match(user_id, date_from, date_to)
     pipeline = [
         {"$match": match},
+        # Stage 1: per-account aggregation so we can join with
+        # ads_accounts.currency_native (SSOT) for currency classification.
         {"$group": {
-            "_id": {"provider": "$provider", "currency_native": "$currency_native"},
+            "_id": {"provider": "$provider", "account_id": "$account_id"},
             "spend_native": {"$sum": "$spend_native"},
             "spend_sar":    {"$sum": "$spend_sar"},
             "bank_fee_sar": {"$sum": "$bank_fee_sar"},
             "gross_sar":    {"$sum": "$gross_sar"},
-            "accounts":     {"$addToSet": "$account_id"},
             "days_count":   {"$sum": 1},
         }},
-        # Roll up multi-currency rows per provider:
+        {"$lookup": {
+            "from": "ads_accounts",
+            "let": {"a": "$_id.account_id", "u": user_id},
+            "pipeline": [
+                {"$match": {"$expr": {"$and": [
+                    {"$eq": ["$id", "$$a"]},
+                    {"$eq": ["$user_id", "$$u"]},
+                ]}}},
+                {"$project": {"_id": 0, "currency_native": 1}},
+            ],
+            "as": "_acct",
+        }},
+        {"$addFields": {
+            "_currency": {"$toUpper": {"$ifNull": [
+                {"$arrayElemAt": ["$_acct.currency_native", 0]},
+                "SAR",
+            ]}},
+        }},
+        # Stage 2: roll up per provider, dropping SAR-billed amounts
+        # from the native currency totals (they're already counted in
+        # spend_sar; foreign-native columns would be misleading).
         {"$group": {
             "_id": "$_id.provider",
             "spend_native_by_currency": {"$push": {
-                "currency": "$_id.currency_native",
-                "amount":   "$spend_native",
+                "currency": "$_currency",
+                "amount": {
+                    "$cond": [
+                        {"$eq": ["$_currency", "SAR"]}, 0, "$spend_native",
+                    ],
+                },
             }},
             "spend_sar":    {"$sum": "$spend_sar"},
             "bank_fee_sar": {"$sum": "$bank_fee_sar"},
             "gross_sar":    {"$sum": "$gross_sar"},
-            "accounts":     {"$push": "$accounts"},
+            "accounts":     {"$addToSet": "$_id.account_id"},
             "days_count":   {"$sum": "$days_count"},
         }},
         {"$project": {
@@ -223,11 +274,19 @@ async def get_spend_by_provider(
             "spend_sar":    {"$round": ["$spend_sar", 2]},
             "bank_fee_sar": {"$round": ["$bank_fee_sar", 2]},
             "gross_sar":    {"$round": ["$gross_sar", 2]},
-            "spend_native_by_currency": 1,
-            "accounts_count": {"$size": {"$reduce": {
-                "input": "$accounts", "initialValue": [],
-                "in": {"$setUnion": ["$$value", "$$this"]},
-            }}},
+            "spend_native_by_currency": {
+                "$filter": {
+                    "input": "$spend_native_by_currency",
+                    "as":    "x",
+                    # Hide SAR & zero-amount entries from the per-provider
+                    # native breakdown (only foreign currencies remain).
+                    "cond":  {"$and": [
+                        {"$ne": ["$$x.currency", "SAR"]},
+                        {"$gt": ["$$x.amount", 0]},
+                    ]},
+                },
+            },
+            "accounts_count": {"$size": "$accounts"},
             "days_count":   1,
             "bank_fee_pct": {
                 "$cond": [

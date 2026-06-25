@@ -29,6 +29,55 @@
 - `financial_movements` is detail-enrichment layer, never balance source
 - Drift detected MUST be surfaced, never hidden
 
+## Currency SSOT Fix — ads_accounts is Authoritative (2026-06-25 · iter-258)
+
+**Bug reported by user:** Account "متجر أماسي سعودي" is configured as
+SAR in settings, but the Ads V2 report showed it as USD with a value
+of 721.61 USD. Two screens, two different currencies for the same
+account — a classic SSOT violation.
+
+**Root cause (introduced by me in iter-257):**
+`get_spend_by_account` was grouping by `ads_daily.currency_native` and
+reading it back in projection. But `ads_daily.currency_native` is
+whatever the platform adapter wrote — Snapchat's API always returns
+USD micros, so Snap-sourced rows have `currency_native="USD"`
+regardless of how the account is configured.
+
+The user's SSOT rule (made explicit in this iteration):
+- All ACCOUNT-LEVEL settings (currency, bank fee, FX policy) → `ads_accounts`
+- All DAILY-SPEND numbers → `ads_daily`
+- Reports JOIN the two. They must never duplicate or override.
+
+**Fix (display layer only — sync untouched, ads_daily untouched):**
+- `get_spend_by_account` now groups strictly by `(account_id, provider)`,
+  joins with `ads_accounts.currency_native`, and uses that as the
+  authoritative currency.
+- `spend_native` field is set to `null` for SAR-billed accounts (no
+  meaningful foreign value exists).
+- `totals.spend_native_by_currency` excludes SAR-billed accounts entirely.
+- `get_spend_by_provider` was restructured: stage-1 per-account
+  aggregation + join with ads_accounts, stage-2 roll-up per provider
+  with SAR amounts dropped from `spend_native_by_currency`.
+- Frontend `ReportTable.renderCell()` renders `null` `spend_native`
+  as "—" with `text-zinc-500`.
+
+**Architectural rules the user codified for Ads V2 going forward:**
+1. No duplication in code.
+2. No duplication in storage.
+3. No more than one source of truth.
+4. All account settings come from `ads_accounts`.
+5. All daily spend numbers come from `ads_daily`.
+6. All reports flow through the unified reports layer.
+7. Any material accounting change must be reflected structurally,
+   not as a side-fix or duplicated field.
+
+**Tests** (`tests/test_ads_v2_currency_ssot.py` — 3/3 ✅, full suite 14/14 ✅):
+- SAR-billed Snap account: USD hidden, totals exclude it.
+- USD-billed account: USD shows + totals include it.
+- Mixed SAR+USD accounts: isolated cleanly.
+
+
+
 ## Ads V2 Bank Commission Display (2026-06-25 · iter-257)
 **User directive (strict):** FREEZE the Snapchat spend sync logic — current
 USD spend + FX conversion is canonical. NO changes to:

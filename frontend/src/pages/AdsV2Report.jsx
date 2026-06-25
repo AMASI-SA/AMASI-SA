@@ -459,10 +459,16 @@ function ReportTable({ rows, cols, headers, providerCol }) {
       );
     }
     // Native USD/EUR spend with currency badge.
+    // For SAR-billed accounts the backend returns `null` (SSOT-aware):
+    // we render "—" so the user sees there is no foreign-currency value
+    // to display for this account.
     if (c === "spend_native") {
-      const v = Number(r[c] || 0);
+      if (r[c] === null || r[c] === undefined) {
+        return <span className="text-zinc-500">—</span>;
+      }
+      const v = Number(r[c]);
       const ccy = (r.currency_native || "").toUpperCase();
-      if (!ccy || ccy === "SAR") return "—";
+      if (!ccy || ccy === "SAR") return <span className="text-zinc-500">—</span>;
       return (
         <span>
           <span className="font-mono">{v.toFixed(2)}</span>
