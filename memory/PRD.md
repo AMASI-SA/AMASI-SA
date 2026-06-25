@@ -191,6 +191,61 @@ Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
+## Shipping Cost SSOT — Base + Tax + Total (2026-06-25)
+**User mandate:** every shipping-cost figure in the app uses
+`total = base + tax`, with the three values visible separately. No
+default VAT% is fabricated for historical data; the actual configured
+`vat_percent` per shipping company in `/shipping/settings` is the only
+source of truth.
+
+**New module:** `/app/backend/shipping_cost_ssot.py` exposes:
+   - `shipping_breakdown(order, company_cfgs) → {base, tax, total,
+     vat_rate, source}`  – one shipment.
+   - `aggregate_breakdown(orders, company_cfgs)` – list aggregation
+     with per-company stats (cost_per_unit, tax_per_unit,
+     total_per_unit).
+   - `get_company_configs(db, user_id)` – reads from the canonical
+     `settings.shipping_companies[]` array and accepts BOTH
+     `vat_rate` (decimal) AND `vat_percent` (0–100). Name lookup is
+     resilient to casing + accidental quoting (`'مندوب الرياض'`).
+
+**Latent bug fixed:** previous `shipping_accounts.py` read
+`cfg.get("vat_rate")` but settings stored `vat_percent`. So VAT was
+silently treated as 0 everywhere. Now both fields are recognised.
+
+**Refactored consumers (all calls go through SSOT):**
+   - `balances.py::compute_balances` — new optional `company_cfgs`
+     param. Without it, no fake default VAT (legacy callers unchanged).
+   - `shipping_accounts.py::compute_owed_per_company` — returns
+     `shipping_base`, `shipping_tax`, `shipping_cost` (= base+tax)
+     per company + totals.
+   - `shipping_ledger_routes.py::shipping_ledger` — rows now expose
+     `shipping_base`, `shipping_tax`, `shipping_cost`,
+     `shipping_vat_rate`. Per-company block adds `cost_per_unit`,
+     `tax_per_unit`, `total_per_unit`.
+   - `server.py` — both `/balances` and `/financial-position` callers
+     pass `company_cfgs` so FP, P&L, executive summary, and balances
+     align with the rule.
+
+**Frontend:**
+   - **Shipping Ledger detail page** (`ShippingLedger.jsx`): 6-column
+     per-company table — الشركة · عدد الشحنات · سعر الوحدة (بدون الضريبة)
+     · ضريبة الوحدة (مع %) · إجمالي الوحدة (سعر + ضريبة) · الإجمالي.
+     Order rows split shipping_base / shipping_tax / shipping_cost.
+     Summary cards split: "إجمالي سعر الشحن" + "إجمالي ضريبة الشحن"
+     + "إجمالي تكلفة الشحن (شامل الضريبة)".
+   - **Profit Executive Summary** (`ProfitSummaryCard.jsx`): same
+     6-column table for the analysis-report shipping breakdown.
+
+**Historical-data preservation:** the SSOT helper recomputes live
+reports from the current `vat_percent` setting. POSTED `general_ledger`
+entries are never mutated — they keep whatever VAT was applied when
+they were originally written. Reports = dynamic, journal = immutable.
+
+**Tests:** `tests/test_shipping_cost_ssot.py` — 13/13 PASS,
+   including the bug-fix cases (`vat_percent` recognised, malformed
+   inputs, historical preservation when no cfg present).
+
 ## Ads V2 — Snapchat Safe Re-link Flow (2026-06-25)
 **Resolved user request:** "زر إعادة ربط Snapchat داخل تقرير التشخيص"
 with 7 explicit safety constraints. All 7 are enforced + tested.
@@ -482,6 +537,7 @@ Purpose: Conclusively determine WHY iter-215 is skipping all 486
 counterparties in Production (per-account blocker / reason histogram).
 
 ## Tests
+- `/app/backend/tests/test_shipping_cost_ssot.py` — 13/13 PASS (shipping cost SSOT base+tax+total)
 - `/app/backend/tests/test_ads_v2_snapchat_relink.py` — 8/8 PASS (safe re-link flow)
 - `/app/backend/tests/test_ads_v2_account_diagnose.py` — 8/8 PASS (3-tier status + diagnose)
 - `/app/backend/tests/test_ads_v2_auto_reconcile.py` — 6/6 PASS (Phase 1 auto-reconcile)

@@ -42,12 +42,18 @@ def _match_status(status: str, approved: Iterable[str]) -> bool:
 
 
 def compute_balances(orders: list[dict], shipping_approved: list[str],
-                     cod_approved: list[str]) -> dict:
+                     cod_approved: list[str],
+                     company_cfgs: dict | None = None) -> dict:
     """Return {shipping: {...}, cod: {...}} accounting splits.
 
-    Each side has: total_approved, total_unapproved, by_company {name: {...}},
-    by_status {name: {...}}.
+    `company_cfgs` is the mapping {company_name: cfg_doc} produced by
+    `shipping_cost_ssot.get_company_configs(db, user_id)`. When supplied
+    the shipping cost = base + tax (the unified figure). When omitted
+    we fall back to the raw order.shipping_cost (legacy callers).
     """
+    from shipping_cost_ssot import shipping_breakdown
+    cfgs = company_cfgs or {}
+
     shipping = {
         "total_approved": 0.0,
         "total_unapproved": 0.0,
@@ -79,7 +85,9 @@ def compute_balances(orders: list[dict], shipping_approved: list[str],
         )
 
         company = (o.get("shipping_company") or "—").strip() or "—"
-        ship_cost = float(o.get("shipping_cost") or 0)
+        # SSOT: total = base + tax (per shipment)
+        bd = shipping_breakdown(o, cfgs)
+        ship_cost = bd["total"]
 
         # Shipping bucket
         cbucket = shipping["by_company"].setdefault(

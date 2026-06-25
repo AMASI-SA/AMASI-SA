@@ -241,35 +241,56 @@ export default function ProfitSummaryCard({ totals, shippingBreakdown = [], from
                     <thead>
                         <tr className="text-slate-500">
                             <th className="text-right pb-1 font-semibold">الشركة</th>
-                            <th className="text-center pb-1 font-semibold">الشحنات</th>
-                            <th className="text-center pb-1 font-semibold">سعر الوحدة</th>
+                            <th className="text-center pb-1 font-semibold">عدد الشحنات</th>
+                            <th className="text-center pb-1 font-semibold">سعر الوحدة<br/><span className="text-[9px] text-slate-400">(بدون الضريبة)</span></th>
+                            <th className="text-center pb-1 font-semibold">ضريبة الوحدة</th>
+                            <th className="text-center pb-1 font-semibold">إجمالي الوحدة<br/><span className="text-[9px] text-slate-400">(سعر + ضريبة)</span></th>
                             <th className="text-left pb-1 font-semibold">الإجمالي</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {shippingRows.map((r, i) => (
-                            <tr key={i} className="border-t border-slate-100">
-                                <td className="py-1 font-bold text-slate-700">
-                                    {r.name}
-                                    {r.is_deferred && (
-                                        <span className="ms-1 text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700">
-                                            آجل
-                                        </span>
-                                    )}
-                                </td>
-                                <td className="text-center font-mono text-slate-600">
-                                    {fmtInt(r.orders_count)}
-                                </td>
-                                <td className="text-center font-mono text-slate-500">
-                                    {fmtSar(r.cost_per_order)}
-                                </td>
-                                <td className="text-left font-mono font-extrabold text-sky-700">
-                                    {fmtSar(r.total_cost)}
-                                </td>
-                            </tr>
-                        ))}
+                        {shippingRows.map((r, i) => {
+                            const oc = Number(r.orders_count) || 0;
+                            const baseUnit = Number(r.cost_per_order) || 0;
+                            const taxUnit = oc > 0
+                                ? Number((Number(r.vat_amount) || 0) / oc)
+                                : 0;
+                            const totalUnit = baseUnit + taxUnit;
+                            return (
+                                <tr key={i} className="border-t border-slate-100">
+                                    <td className="py-1 font-bold text-slate-700">
+                                        {r.name}
+                                        {r.is_deferred && (
+                                            <span className="ms-1 text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700">
+                                                آجل
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="text-center font-mono font-bold text-slate-700">
+                                        {fmtInt(r.orders_count)}
+                                    </td>
+                                    <td className="text-center font-mono text-slate-600">
+                                        {fmtSar(baseUnit)}
+                                    </td>
+                                    <td className="text-center font-mono text-violet-700">
+                                        {fmtSar(taxUnit)}
+                                        {Number(r.vat_percent) > 0 && (
+                                            <span className="ms-1 text-[9px] text-slate-400">
+                                                ({Number(r.vat_percent).toFixed(0)}%)
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="text-center font-mono font-bold text-emerald-700">
+                                        {fmtSar(totalUnit)}
+                                    </td>
+                                    <td className="text-left font-mono font-extrabold text-sky-700">
+                                        {fmtSar(r.total_cost)}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                         <tr className="border-t-2 border-sky-200">
-                            <td colSpan={3} className="py-1 font-extrabold text-slate-800">
+                            <td colSpan={5} className="py-1 font-extrabold text-slate-800">
                                 الإجمالي
                             </td>
                             <td className="text-left font-mono font-extrabold text-sky-800">

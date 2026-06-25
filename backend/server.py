@@ -1570,7 +1570,11 @@ async def balances_endpoint(
             vv = (v or "").strip().lower()
             return any(a.strip().lower() in vv or vv in a.strip().lower() for a in allowed if a.strip())
         orders = [o for o in orders if _any2(o.get("order_status", ""), included_statuses)]
-    return compute_balances(orders, shipping_approved, cod_approved)
+    # SSOT — pass company VAT configs so shipping balance = base + tax.
+    from shipping_cost_ssot import get_company_configs
+    company_cfgs = await get_company_configs(db, user["id"])
+    return compute_balances(orders, shipping_approved, cod_approved,
+                              company_cfgs=company_cfgs)
 
 
 # ── Daily Costs ───────────────────────────────────────────────────────────────
@@ -2118,10 +2122,13 @@ async def dashboard(
                 total_vat += float(sh.get("vat_amount", 0) or 0)
 
     # ── Shipping & COD balance splits (Phase 1) ──────────────────────────────
+    from shipping_cost_ssot import get_company_configs as _ssot_get_cfgs
+    _ssot_cfgs = await _ssot_get_cfgs(db, user["id"])
     balances = compute_balances(
         all_orders,
         settings.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
         settings.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
+        company_cfgs=_ssot_cfgs,
     )
     shipping_balance_approved = balances["shipping"]["total_approved"]
     shipping_balance_unapproved = balances["shipping"]["total_unapproved"]

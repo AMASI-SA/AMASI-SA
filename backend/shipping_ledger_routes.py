@@ -110,6 +110,17 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
         fee_map = await _cod_fee_map(uid)
         cost_map = await _cost_map(uid)
 
+        # SSOT shipping-cost helper (single source for base/tax/total).
+        from shipping_cost_ssot import get_company_configs, shipping_breakdown
+        ssot_cfgs = await get_company_configs(db, uid)
+        # Build a key-normalized lookup so we can resolve aliases too.
+        ssot_cfgs_by_key: dict = {}
+        for nm, cfg in ssot_cfgs.items():
+            k, disp = normalize_shipping_company(nm)
+            ssot_cfgs_by_key[k] = cfg
+            ssot_cfgs_by_key[disp] = cfg
+            ssot_cfgs_by_key[nm] = cfg
+
         q: dict = {"user_id": uid, "is_pre_accounting": {"$ne": True}}
         if date_from or date_to:
             q["order_date"] = {}
@@ -121,7 +132,9 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
         rows: list[dict] = []
         totals = {
             "delivered_count": 0,
-            "total_shipping_cost": 0.0,
+            "total_shipping_base": 0.0,
+            "total_shipping_tax":  0.0,
+            "total_shipping_cost": 0.0,   # = base + tax (SSOT)
             "total_cod": 0.0,
             "total_cod_fees": 0.0,
             "total_settled": 0.0,
@@ -157,7 +170,7 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             # for COD / BNPL flows). Mirrors the logic already used by
             # `/api/shipping-accounts` so both pages stay consistent.
             if ship_cost_from_order > 0:
-                ship_cost = ship_cost_from_order
+                ship_base = ship_cost_from_order
                 cost_source = "salla"
             else:
                 fallback = (
@@ -166,10 +179,20 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                     or cost_map.get(comp_raw.lower())
                     or 0.0
                 )
-                ship_cost = float(fallback)
+                ship_base = float(fallback)
                 cost_source = (
-                    "company_settings" if ship_cost > 0 else "none"
+                    "company_settings" if ship_base > 0 else "none"
                 )
+            # SSOT — compute base / tax / total exactly once.
+            bd_order = {"shipping_company": comp_display,
+                         "shipping_cost": ship_base}
+            bd_cfgs = {comp_display: ssot_cfgs_by_key.get(comp_key)
+                                       or ssot_cfgs_by_key.get(comp_display)
+                                       or {}}
+            bd = shipping_breakdown(bd_order, bd_cfgs)
+            ship_base = bd["base"]
+            ship_tax = bd["tax"]
+            ship_cost = bd["total"]    # base + tax (the unified figure)
             cod_amt = float(o.get("cod_amount") or
                             (o.get("total_amount") or 0) if is_cod else 0)
             if not is_cod:
@@ -214,7 +237,11 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                 "payment_mode": mode,
                 "payment_method": method,
                 "order_status": raw_status,
-                "shipping_cost": round(ship_cost, 2),
+                # SSOT — base + tax + total fields exposed for the new UI
+                "shipping_base":  round(ship_base, 2),
+                "shipping_tax":   round(ship_tax, 2),
+                "shipping_cost":  round(ship_cost, 2),    # = base + tax
+                "shipping_vat_rate": bd["vat_rate"],
                 # Iter-235 — provenance flag for the new UI column.
                 "shipping_cost_source": cost_source,
                 "prepaid_shipping": mode == "prepaid",
@@ -225,6 +252,8 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                 "settlement_type": "—",
             })
             totals["delivered_count"] += 1
+            totals["total_shipping_base"] += ship_base
+            totals["total_shipping_tax"]  += ship_tax
             totals["total_shipping_cost"] += ship_cost
             totals["total_cod"] += cod_amt
             totals["total_cod_fees"] += cod_fee
@@ -246,16 +275,21 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             entry = by_company.setdefault(name, {
                 "shipping_company": name,
                 "orders_count": 0,
-                "total_shipping_cost": 0.0,
+                "total_shipping_base": 0.0,
+                "total_shipping_tax":  0.0,
+                "total_shipping_cost": 0.0,     # = base + tax (SSOT)
                 "from_salla_count": 0,
                 "from_company_settings_count": 0,
                 "none_count": 0,
                 "configured_cost": cost_map.get(
                     r["shipping_company_key"]) or cost_map.get(
                     name.lower()) or 0.0,
+                "vat_rate": r.get("shipping_vat_rate", 0.0),
                 "payment_mode": r["payment_mode"],
             })
             entry["orders_count"] += 1
+            entry["total_shipping_base"] += r["shipping_base"]
+            entry["total_shipping_tax"]  += r["shipping_tax"]
             entry["total_shipping_cost"] += r["shipping_cost"]
             src = r.get("shipping_cost_source") or "none"
             if src == "salla":
@@ -264,13 +298,18 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                 entry["from_company_settings_count"] += 1
             else:
                 entry["none_count"] += 1
-        # Round + add an effective_cost_per_order quick stat.
+        # Round + add per-unit averages (base / tax / total).
         per_company = []
         for v in by_company.values():
+            oc = max(v["orders_count"], 1)
+            v["total_shipping_base"] = round(v["total_shipping_base"], 2)
+            v["total_shipping_tax"]  = round(v["total_shipping_tax"], 2)
             v["total_shipping_cost"] = round(v["total_shipping_cost"], 2)
-            v["effective_cost_per_order"] = round(
-                v["total_shipping_cost"] / v["orders_count"], 2,
-            ) if v["orders_count"] > 0 else 0.0
+            v["cost_per_unit"]  = round(v["total_shipping_base"] / oc, 2)
+            v["tax_per_unit"]   = round(v["total_shipping_tax"]  / oc, 2)
+            v["total_per_unit"] = round(v["total_shipping_cost"] / oc, 2)
+            # Keep `effective_cost_per_order` as alias for back-compat
+            v["effective_cost_per_order"] = v["total_per_unit"]
             per_company.append(v)
         per_company.sort(key=lambda x: x["total_shipping_cost"],
                          reverse=True)

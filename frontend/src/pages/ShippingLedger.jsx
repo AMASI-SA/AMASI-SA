@@ -118,34 +118,32 @@ export default function ShippingLedger() {
                 {/* Summary cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 sm:gap-2 mb-4">
                     <SummaryCard label="عدد الطلبات الموصلة" value={totals.delivered_count || 0} suffix="" color="emerald" />
-                    <SummaryCard label="إجمالي تكلفة الشحن" value={totals.total_shipping_cost} color="slate" />
+                    <SummaryCard label="إجمالي سعر الشحن (بدون الضريبة)" value={totals.total_shipping_base} color="slate" />
+                    <SummaryCard label="إجمالي ضريبة الشحن" value={totals.total_shipping_tax} color="violet" />
+                    <SummaryCard label="إجمالي تكلفة الشحن (شامل الضريبة)" value={totals.total_shipping_cost} color="emerald" />
                     <SummaryCard label="إجمالي COD" value={totals.total_cod} color="amber" />
                     <SummaryCard label="إجمالي رسوم COD" value={totals.total_cod_fees} color="rose" />
                     <SummaryCard label="إجمالي المسوى" value={totals.total_settled} color="emerald" />
                     <SummaryCard label="إجمالي المتبقي" value={totals.total_unsettled} color="amber" />
-                    <SummaryCard label="شحن Prepaid (مدفوع مسبقاً)" value={totals.total_prepaid_shipping} color="emerald" />
-                    <SummaryCard label="شحن Deferred (آجل)" value={totals.total_deferred_shipping} color="amber" />
                 </div>
 
-                {/* Iter-235 — Per-company effective shipping cost summary */}
+                {/* Per-company shipping cost breakdown — base / tax / total */}
                 {perCompany.length > 0 && (
                     <div className="mb-4 bg-white border border-slate-200 rounded-xl p-3"
                          data-testid="per-company-cost-summary">
                         <h3 className="text-sm font-extrabold text-slate-800 mb-2">
-                            تكلفة الشحن المعتمدة لكل شركة (للطلبات المعروضة)
+                            تفاصيل تكاليف الشحن لكل شركة (للطلبات المعروضة)
                         </h3>
                         <div className="overflow-x-auto">
                             <table className="w-full text-xs">
                                 <thead className="bg-slate-100 text-slate-700">
                                     <tr>
-                                        <th className="text-right p-2 font-extrabold">شركة الشحن</th>
-                                        <th className="text-center p-2 font-extrabold">عدد الطلبات</th>
-                                        <th className="text-left p-2 font-extrabold">تكلفة الشركة المُعدّة</th>
-                                        <th className="text-left p-2 font-extrabold">متوسط التكلفة الفعلية / طلب</th>
-                                        <th className="text-left p-2 font-extrabold">إجمالي التكلفة</th>
-                                        <th className="text-center p-2 font-extrabold">من سلة</th>
-                                        <th className="text-center p-2 font-extrabold">من إعدادات الشركة</th>
-                                        <th className="text-center p-2 font-extrabold">بدون قيمة</th>
+                                        <th className="text-right p-2 font-extrabold">الشركة</th>
+                                        <th className="text-center p-2 font-extrabold">عدد الشحنات</th>
+                                        <th className="text-left p-2 font-extrabold">سعر الوحدة<br/><span className="text-[10px] text-slate-500">(بدون الضريبة)</span></th>
+                                        <th className="text-left p-2 font-extrabold">ضريبة الوحدة<br/><span className="text-[10px] text-slate-500">(VAT)</span></th>
+                                        <th className="text-left p-2 font-extrabold">إجمالي الوحدة<br/><span className="text-[10px] text-slate-500">(سعر + ضريبة)</span></th>
+                                        <th className="text-left p-2 font-extrabold">الإجمالي</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -153,22 +151,40 @@ export default function ShippingLedger() {
                                         <tr key={c.shipping_company} className="border-t border-slate-100"
                                             data-testid={`pc-${c.shipping_company}`}>
                                             <td className="p-2 font-bold">{c.shipping_company}</td>
-                                            <td className="p-2 text-center">{intf(c.orders_count)}</td>
+                                            <td className="p-2 text-center font-bold">{intf(c.orders_count)}</td>
+                                            <td className="p-2 text-left num">{fmt(c.cost_per_unit)}</td>
                                             <td className="p-2 text-left num text-violet-700">
-                                                {c.configured_cost > 0 ? fmt(c.configured_cost) : "—"}
+                                                {fmt(c.tax_per_unit)}
+                                                {c.vat_rate > 0 && (
+                                                    <span className="ms-1 text-[10px] text-slate-400">
+                                                        ({(c.vat_rate*100).toFixed(0)}%)
+                                                    </span>
+                                                )}
                                             </td>
-                                            <td className="p-2 text-left num font-extrabold">
-                                                {fmt(c.effective_cost_per_order)}
+                                            <td className="p-2 text-left num font-extrabold text-emerald-700">
+                                                {fmt(c.total_per_unit)}
                                             </td>
-                                            <td className="p-2 text-left num">{fmt(c.total_shipping_cost)}</td>
-                                            <td className="p-2 text-center text-sky-700">{intf(c.from_salla_count)}</td>
-                                            <td className="p-2 text-center text-violet-700">{intf(c.from_company_settings_count)}</td>
-                                            <td className="p-2 text-center text-rose-700">{intf(c.none_count)}</td>
+                                            <td className="p-2 text-left num font-extrabold">{fmt(c.total_shipping_cost)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
+                                {/* Footer totals */}
+                                <tfoot>
+                                    <tr className="bg-slate-50 border-t-2 border-slate-300 font-extrabold">
+                                        <td className="p-2 text-right">المجموع</td>
+                                        <td className="p-2 text-center">{intf(totals.delivered_count)}</td>
+                                        <td className="p-2 text-left num">—</td>
+                                        <td className="p-2 text-left num text-violet-800">{fmt(totals.total_shipping_tax)}</td>
+                                        <td className="p-2 text-left num text-emerald-800">—</td>
+                                        <td className="p-2 text-left num">{fmt(totals.total_shipping_cost)}</td>
+                                    </tr>
+                                </tfoot>
                             </table>
                         </div>
+                        <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                            القاعدة الموحدة: <strong>إجمالي تكلفة الشحنة = سعر الشحنة + ضريبة الشحنة</strong>.
+                            الضريبة محسوبة بناءً على نسبة VAT المضبوطة لكل شركة في صفحة الإعدادات.
+                        </p>
                     </div>
                 )}
 
@@ -235,7 +251,9 @@ export default function ShippingLedger() {
                                 <th className="text-center p-2 font-extrabold">طريقة السداد</th>
                                 <th className="text-right p-2 font-extrabold">طريقة الدفع</th>
                                 <th className="text-right p-2 font-extrabold">حالة الطلب</th>
-                                <th className="text-left p-2 font-extrabold">تكلفة الشحن</th>
+                                <th className="text-left p-2 font-extrabold">سعر الشحن<br/><span className="text-[9px] text-slate-500">(بدون ضريبة)</span></th>
+                                <th className="text-left p-2 font-extrabold">ضريبة الشحن</th>
+                                <th className="text-left p-2 font-extrabold">إجمالي الشحن<br/><span className="text-[9px] text-slate-500">(سعر + ضريبة)</span></th>
                                 <th className="text-center p-2 font-extrabold">مصدر التكلفة</th>
                                 <th className="text-left p-2 font-extrabold">COD</th>
                                 <th className="text-left p-2 font-extrabold">رسوم COD</th>
@@ -245,10 +263,10 @@ export default function ShippingLedger() {
                         </thead>
                         <tbody>
                             {loading && (
-                                <tr><td colSpan={12} className="text-center p-6 text-slate-500">جاري التحميل…</td></tr>
+                                <tr><td colSpan={14} className="text-center p-6 text-slate-500">جاري التحميل…</td></tr>
                             )}
                             {!loading && rows.length === 0 && (
-                                <tr><td colSpan={12} className="text-center p-6 text-slate-500"
+                                <tr><td colSpan={14} className="text-center p-6 text-slate-500"
                                        data-testid="ledger-empty">لا توجد طلبات موصلة مطابقة للفلاتر.</td></tr>
                             )}
                             {!loading && rows.map((r) => (
@@ -263,10 +281,16 @@ export default function ShippingLedger() {
                                     <td className="p-2 text-slate-600">{r.payment_method}</td>
                                     <td className="p-2 text-slate-600">{r.order_status}</td>
                                     <td className="p-2 text-left num">
-                                        {fmt(r.shipping_cost)}
+                                        {fmt(r.shipping_base)}
                                         {r.prepaid_shipping && (
                                             <div className="text-[9px] text-emerald-700 font-bold">مدفوع مسبقاً</div>
                                         )}
+                                    </td>
+                                    <td className="p-2 text-left num text-violet-700">
+                                        {fmt(r.shipping_tax)}
+                                    </td>
+                                    <td className="p-2 text-left num font-extrabold text-emerald-700">
+                                        {fmt(r.shipping_cost)}
                                     </td>
                                     <td className="p-2 text-center"
                                         data-testid={`ledger-cost-source-${r.order_id}`}>
