@@ -4243,6 +4243,13 @@ async def on_startup():
     await ensure_ledger_indexes(db)
     # Ads V2 (Phase 0) — create indexes on the 3 new collections.
     await _ads_v2_ensure_indexes(db)
+    # ── Qoyod Invoice MVP (Day 1) — create indexes on the 5 new
+    # `qoyod_*` collections. Idempotent — safe to call on every boot.
+    # See ADR-001 (architecture principles) and integrations/qoyod/models.py.
+    from integrations.qoyod.models import (
+        ensure_qoyod_indexes as _qoyod_ensure_indexes,
+    )
+    await _qoyod_ensure_indexes(db)
     # Iter-139 — half-hourly ad-account sync (replaces the previous
     # 23:55 daily cron).  Runs every 30 minutes, syncs TODAY only,
     # uses force=True so each pass reverses prior cron rows for the
