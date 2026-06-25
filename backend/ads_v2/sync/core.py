@@ -258,6 +258,15 @@ async def run_sync_for_account(
     finished_at = datetime.now(timezone.utc).isoformat()
 
     if fetched is None:
+        # Mark daily row (if exists) as sync_failed for visibility
+        await db.ads_daily.update_one(
+            {"user_id": user_id, "account_id": account_id, "date": date_iso},
+            {"$set": {
+                "match_status":            "sync_failed",
+                "platform_check_error":    (status.get("code") or "")[:200],
+                "platform_last_checked_at": finished_at,
+            }},
+        )
         await _log_sync_event(db, user_id, account_id, "sync_failed",
                                 date_iso, sync_run_id,
                                 {"status": status})
@@ -332,6 +341,16 @@ async def run_sync_for_account(
     #   • Else → None (UI must show "—", not "0%")
     display_drift_pct = drift_manual if drift_manual is not None else drift_prev
 
+    # Compute match_status (initial state right after sync).
+    initial_match_status = _compute_match_status(
+        drift_pct=display_drift_pct,
+        review_settings=account.get("review_settings") or {},
+        confidence=confidence,
+        hours_after_close=hours_after_close,
+        sync_failed=False,
+        has_data=True,
+    )
+
     set_doc = {
         "user_id":          user_id,
         "account_id":       account_id,
@@ -357,6 +376,7 @@ async def run_sync_for_account(
         "drift_reason":     drift_reason,
         "anomaly_flags":    flags,
         "review_status":    final_review_status,
+        "match_status":     initial_match_status,
         "last_synced_at":   finished_at,
         "last_recomputed_at": finished_at,
         "confidence":       confidence,
@@ -627,3 +647,249 @@ async def _record_token_issue(
         "details":      {"reason": reason, "sync_run_id": sync_run_id},
         "at":           datetime.now(timezone.utc).isoformat(),
     })
+
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Auto-Reconciliation — fetch current provider value WITHOUT touching the
+# SSOT (`spend_native`). Stores the freshly-fetched figure in the shadow
+# fields `platform_authoritative_*` so the merchant can SEE platform drift
+# in real time, while the audit-trail `ads_daily` row remains stable until
+# Phase 2 review/posting.
+# ═══════════════════════════════════════════════════════════════════════
+def _compute_match_status(
+    drift_pct: Optional[float],
+    review_settings: dict,
+    confidence: str,
+    hours_after_close: float,
+    sync_failed: bool,
+    has_data: bool,
+) -> str:
+    """One of: matched | pending_platform | drift_review | sync_failed | no_data.
+
+    Priority order:
+      1. sync_failed   → 🔴
+      2. no_data       → ⚪ (never synced)
+      3. drift > warn  → 🟠
+      4. provisional + hours_after_close < 24 → 🟡
+      5. otherwise     → 🟢
+    """
+    if sync_failed:
+        return "sync_failed"
+    if not has_data:
+        return "no_data"
+    warn = float(review_settings.get("drift_warning_threshold_pct", 5.0))
+    if drift_pct is not None and drift_pct >= warn:
+        return "drift_review"
+    if confidence == "provisional" and hours_after_close < 24:
+        return "pending_platform"
+    return "matched"
+
+
+async def auto_reconcile_for_day(
+    db, user_id: str, account_id: str, date_iso: str,
+    actor_email: Optional[str] = None,
+) -> dict:
+    """Re-query the provider API and store the result in shadow fields
+    `platform_authoritative_*` on the existing ads_daily row. Does NOT
+    modify `spend_native` (the SSOT). Recomputes drift + match_status.
+
+    Returns: {ok, drift_pct_vs_platform, match_status, ...}
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    daily = await db.ads_daily.find_one(
+        {"user_id": user_id, "account_id": account_id, "date": date_iso},
+        {"_id": 0},
+    )
+    if not daily:
+        return {"ok": False, "error": "no_ads_daily_row_for_date",
+                "hint": "Run a sync for this date first."}
+
+    account = await db.ads_accounts.find_one(
+        {"user_id": user_id, "id": account_id, "soft_deleted": False},
+    )
+    if not account:
+        return {"ok": False, "error": "account_not_found"}
+
+    # ── Resolve token & call provider (READ-ONLY) ──
+    token, token_status = await _resolve_access_token(db, account)
+    if not token:
+        await db.ads_daily.update_one(
+            {"user_id": user_id, "account_id": account_id, "date": date_iso},
+            {"$set": {
+                "platform_check_error": token_status.get("code"),
+                "platform_last_checked_at": now_iso,
+                "match_status": "sync_failed",
+                "updated_at": now_iso,
+            }},
+        )
+        return {"ok": False, "error": "no_token",
+                "token_status": token_status,
+                "match_status": "sync_failed"}
+
+    fetched, status = await adapters.fetch_day(
+        provider=account["provider"],
+        access_token=token,
+        external_account_id=account["external_account_id"],
+        date_iso=date_iso,
+        account_timezone=account.get("timezone") or "Asia/Riyadh",
+    )
+    if fetched is None:
+        await db.ads_daily.update_one(
+            {"user_id": user_id, "account_id": account_id, "date": date_iso},
+            {"$set": {
+                "platform_check_error":    (status.get("code") or "")[:200],
+                "platform_last_checked_at": now_iso,
+                "match_status":            "sync_failed",
+                "updated_at":              now_iso,
+            }},
+        )
+        await _log_sync_event(
+            db, user_id, account_id, "reconciliation_checked", date_iso,
+            uuid.uuid4().hex,
+            {"result": "failed", "api_status": status.get("code"),
+             "actor": actor_email},
+        )
+        return {"ok": False, "error": status,
+                "match_status": "sync_failed"}
+
+    # ── Compute platform-authoritative figures (shadow only) ──
+    plat_native = float(fetched.get("spend_native") or 0)
+    fx_rate = float(daily.get("fx_rate") or 1)
+    plat_sar = round(plat_native * fx_rate, 2)
+    ssot_native = float(daily.get("spend_native") or 0)
+    diff_native = round(plat_native - ssot_native, 2)
+    diff_sar = round(plat_sar - float(daily.get("spend_sar") or 0), 2)
+    if ssot_native > 0:
+        drift_platform = round(
+            abs(diff_native) / ssot_native * 100.0, 2,
+        )
+    elif plat_native > 0:
+        drift_platform = 100.0
+    else:
+        drift_platform = 0.0
+
+    # Rebuild flags + reason (manual value still takes precedence if set)
+    has_fx = fx_rate > 0
+    hours_after_close = _compute_hours_after_close(
+        date_iso, account.get("timezone") or "Asia/Riyadh",
+    )
+    manual_native = daily.get("platform_manual_value_native")
+    # Use platform_authoritative as new comparison anchor if no manual entered
+    flags, drift_prev, drift_manual, init_status, drift_reason = _compute_anomaly_flags(
+        new_spend_native=ssot_native,
+        prev_spend_native=plat_native,        # platform is the "ground truth"
+        has_fx=has_fx,
+        review_settings=account.get("review_settings") or {},
+        hours_after_close=hours_after_close,
+        manual_value_native=manual_native,
+    )
+    # The drift the user cares about is "stored vs current platform"
+    display_drift = drift_manual if drift_manual is not None else drift_platform
+    if display_drift == 0 and plat_native == 0 and ssot_native == 0:
+        display_drift = None
+
+    confidence = daily.get("confidence") or "provisional"
+    match_status = _compute_match_status(
+        drift_pct=display_drift,
+        review_settings=account.get("review_settings") or {},
+        confidence=confidence,
+        hours_after_close=hours_after_close,
+        sync_failed=False,
+        has_data=True,
+    )
+
+    # Preserve approved/rejected decisions
+    prev_status = daily.get("review_status") or "pending"
+    final_review_status = (
+        prev_status if prev_status in ("approved", "rejected", "reopened")
+        else init_status
+    )
+
+    await db.ads_daily.update_one(
+        {"user_id": user_id, "account_id": account_id, "date": date_iso},
+        {"$set": {
+            "platform_authoritative_native":   plat_native,
+            "platform_authoritative_sar":      plat_sar,
+            "platform_authoritative_currency": fetched.get("currency_native"),
+            "platform_last_checked_at":        now_iso,
+            "platform_check_error":            None,
+            "diff_native":                     diff_native,
+            "diff_sar":                        diff_sar,
+            "drift_pct_vs_platform":           drift_platform,
+            "drift_pct":                       display_drift,
+            "drift_reason":                    drift_reason,
+            "anomaly_flags":                   flags,
+            "review_status":                   final_review_status,
+            "match_status":                    match_status,
+            "last_recomputed_at":              now_iso,
+            "updated_at":                      now_iso,
+        }},
+    )
+
+    await _log_sync_event(
+        db, user_id, account_id, "reconciliation_checked", date_iso,
+        uuid.uuid4().hex,
+        {
+            "result":                   "ok",
+            "actor":                    actor_email,
+            "platform_native":          plat_native,
+            "platform_sar":             plat_sar,
+            "ssot_native":              ssot_native,
+            "diff_native":              diff_native,
+            "diff_sar":                 diff_sar,
+            "drift_pct_vs_platform":    drift_platform,
+            "match_status":             match_status,
+        },
+    )
+
+    return {
+        "ok":                       True,
+        "account_id":               account_id,
+        "date":                     date_iso,
+        "ssot_spend_native":        ssot_native,
+        "platform_authoritative_native": plat_native,
+        "platform_authoritative_sar":    plat_sar,
+        "diff_native":              diff_native,
+        "diff_sar":                 diff_sar,
+        "drift_pct_vs_platform":    drift_platform,
+        "drift_pct":                display_drift,
+        "drift_reason":             drift_reason,
+        "anomaly_flags":            flags,
+        "match_status":             match_status,
+        "review_status":            final_review_status,
+    }
+
+
+async def auto_reconcile_user(
+    db, user_id: str, dates: list[str],
+    account_ids: Optional[list[str]] = None,
+    actor_email: Optional[str] = None,
+) -> dict:
+    """Run auto-reconciliation for every sync-enabled account × date."""
+    q: dict = {"user_id": user_id, "soft_deleted": False,
+                "sync_enabled": True}
+    if account_ids:
+        q["id"] = {"$in": account_ids}
+    accounts = [a async for a in db.ads_accounts.find(q, {"id": 1, "_id": 0})]
+    results: list[dict] = []
+    for a in accounts:
+        for d in dates:
+            r = await auto_reconcile_for_day(
+                db, user_id, a["id"], d, actor_email=actor_email,
+            )
+            results.append(r)
+    matched = sum(1 for r in results if r.get("match_status") == "matched")
+    drift = sum(1 for r in results if r.get("match_status") == "drift_review")
+    pending = sum(1 for r in results if r.get("match_status") == "pending_platform")
+    failed = sum(1 for r in results if r.get("match_status") == "sync_failed")
+    return {
+        "accounts_processed": len(accounts),
+        "dates":              dates,
+        "checked_count":      len(results),
+        "matched_count":      matched,
+        "drift_count":        drift,
+        "pending_count":      pending,
+        "failed_count":       failed,
+        "results":            results,
+    }

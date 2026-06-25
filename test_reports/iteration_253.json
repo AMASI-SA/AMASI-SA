@@ -1,0 +1,43 @@
+{
+  "summary": "Iter253 — Full validation of Ads V2 Phase 1 auto-reconcile feature (Mezan demand #1). Backend: 21/22 pytest passing (1 skipped — no snap/tiktok accounts on test user). 6 new auto-reconcile tests + 4 invariant tests confirm SSOT preservation, no GL writes, no V1 mutation, ads_sync_logs event correctness, and proper match_status computation. Frontend: All Arabic UI labels render correctly, new 5-card legend (4/2/1/0/0), new blue 'إعادة المطابقة من المنصات' button, 6 new columns (الحالة / قيمة المنصة الآن / الفرق (SAR) / سبب الفرق / آخر مزامنة / آخر فحص للمنصة), 7 colored emoji badges in table, manual button correctly labeled 'إدخال يدوي (احتياطي)'. Stat cards retain text-3xl bold tabular-nums on dark background.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/ads-v2/report/auto-reconcile/account/{id}/day/{date} (snap/tiktok)", "issue": "Test was skipped because no Snapchat/TikTok accounts are sync_enabled for the test user — code path for token_invalid → sync_failed (instead of 500) is implemented in core.py auto_reconcile_for_day() but not live-validated. Confirmed by code review in /app/backend/ads_v2/sync/core.py L716-728 (token-missing branch sets match_status='sync_failed' and returns ok=False without raising)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/ads-v2/report header subtitle", "issues": ["A small inline code-style label 'ads_daily' is rendered as part of the SSOT explanation. This is a system identifier (acceptable per problem statement: 'Meta/Snapchat/TikTok platform names are allowed') but consider replacing with Arabic phrase like 'النظام' for full Arabic consistency."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ads_v2_auto_reconcile.py",
+    "/app/backend/tests/test_ads_v2_auto_reconcile_invariants_iter253.py",
+    "/app/backend/tests/test_ads_v2_phase1.py",
+    "/app/backend/tests/test_ads_v2_drift_logic.py",
+    "/app/test_reports/pytest/iter253_auto_reconcile.xml",
+    "/app/test_reports/pytest/iter253_combined.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "auto_reconcile_for_day() in /app/backend/ads_v2/sync/core.py correctly preserves SSOT: only writes platform_authoritative_*, diff_*, drift_pct_vs_platform, match_status and never touches spend_native — verified by test_auto_reconcile_single_day_does_not_modify_spend_native (PASS).",
+    "_compute_match_status() handles all 5 branches correctly with correct priority (sync_failed > no_data > drift_review > pending_platform > matched) — verified by test_compute_match_status_all_branches (PASS).",
+    "Phase 2 boundary holds: 0 general_ledger entries with source=ads_v2 after auto-reconcile, 0 ads_daily rows with ledger_txn_group_id set.",
+    "ads_sync_logs.reconciliation_checked event captures platform_native, ssot_native, diff_native, diff_sar, match_status, actor email — full audit trail intact.",
+    "Cross-provider dispatcher: same auto_reconcile_user() loops over enabled accounts regardless of provider (Meta/Snapchat/TikTok), and token-missing path correctly degrades to match_status='sync_failed' rather than throwing 500.",
+    "FRONTEND: Default tab is recon ✓, blue 'إعادة المطابقة من المنصات' button placed next to green 'مزامنة الفترة الآن' ✓, 5-card legend with counts 4/2/1/0/0 sums to 7 matching 7 table rows ✓, manual button label demoted to 'إدخال يدوي (احتياطي)' ✓."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ads_v2_auto_reconcile_invariants_iter253.py (new — 5 invariant tests)"
+  ],
+  "success_rate": {"backend": "100% (21/21 executed; 1 skipped due to missing test data)", "frontend": "100% (all 5 demands verified: auto-reconcile button, 5-card legend, 6 new columns, status badges with emojis, demoted manual button)"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917 (Meta-linked, sync_enabled, has ads_daily rows for 2026-06-19..2026-06-25)",
+  "seed_data_creation": "Triggered auto-reconcile on dates 2026-06-22 (and full 2026-06-19..25 range via UI). Result: 4 matched, 2 pending_platform, 1 drift_review, 0 sync_failed, 0 no_data across 7 (account×date) combinations.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 1 auto-reconcile fully validated end-to-end. SSOT invariant (spend_native unchanged) is the most important guarantee — it has a dedicated test test_auto_reconcile_single_day_does_not_modify_spend_native. Phase 2 boundary (no GL writes) is enforced and tested. The only gap is live multi-provider testing (Snap/TikTok) — would need a test user with non-Meta accounts to verify token_invalid → sync_failed path empirically. Code path is correct by inspection (core.py L716-728).",
+  "rca_of_the_issue": "N/A — this iteration is a feature-add, not a bug fix. All 5 Mezan demands are satisfied: (1) auto-fetch via API is the default with new endpoint /report/auto-reconcile, (2) reconciliation report exposes platform_authoritative_native/sar, diff_native/sar, drift_pct_vs_platform, match_status, platform_last_checked_at, last_synced_at, confidence, (3) unified provider dispatcher in auto_reconcile_user, (4) Phase 2 boundary held — 0 GL writes confirmed, (5) all 5 status badges (🟢🟡🟠🔴⚪) visible in UI per row."
+}

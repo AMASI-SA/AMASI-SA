@@ -230,15 +230,22 @@ async def get_reconciliation_report(
         "platform_reported_native": 1, "platform_reported_sar": 1,
         "platform_manual_value_native": 1, "platform_manual_value_sar": 1,
         "platform_manual_entered_at": 1, "platform_manual_entered_by": 1,
+        "platform_authoritative_native": 1, "platform_authoritative_sar": 1,
+        "platform_authoritative_currency": 1, "platform_last_checked_at": 1,
+        "platform_check_error": 1,
+        "diff_native": 1, "diff_sar": 1,
         "platform_checked_at": 1,
         "drift_pct": 1, "drift_pct_vs_manual": 1,
+        "drift_pct_vs_platform": 1,
         "drift_pct_vs_previous_sync": 1, "drift_reason": 1,
         "anomaly_flags": 1,
-        "review_status": 1, "fx_rate": 1, "fx_source": 1,
+        "review_status": 1, "match_status": 1,
+        "fx_rate": 1, "fx_source": 1,
         "confidence": 1, "last_synced_at": 1,
     }).sort([("date", -1), ("account_id", 1)]).limit(2000):
         # Attach a flag the UI uses to render "—" vs "0%".
         r["has_manual_value"] = r.get("platform_manual_value_native") is not None
+        r["has_platform_check"] = r.get("platform_last_checked_at") is not None
         rows.append(r)
 
     # Enrich rows with display_name for nicer UI
@@ -270,6 +277,17 @@ async def get_reconciliation_report(
             1 for r in rows if r.get("has_manual_value")),
         "rows_pending_manual":    sum(
             1 for r in rows if not r.get("has_manual_value")),
+        # Match-status histogram (the user-facing 🟢/🟡/🟠/🔴 indicators)
+        "match_matched":          sum(
+            1 for r in rows if r.get("match_status") == "matched"),
+        "match_pending_platform": sum(
+            1 for r in rows if r.get("match_status") == "pending_platform"),
+        "match_drift_review":     sum(
+            1 for r in rows if r.get("match_status") == "drift_review"),
+        "match_sync_failed":      sum(
+            1 for r in rows if r.get("match_status") == "sync_failed"),
+        "match_no_data":          sum(
+            1 for r in rows if r.get("match_status") in (None, "no_data")),
     }
     return {"data": rows, "summary": summary,
             "meta": _meta("get_reconciliation_report")}

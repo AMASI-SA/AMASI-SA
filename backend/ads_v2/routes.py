@@ -27,7 +27,10 @@ from pydantic import BaseModel, Field
 
 from .data_layer import discovery, settings as settings_dl
 from .data_layer import reports as reports_dl
-from .sync.core import run_sync_for_account, run_sync_user, recompute_drift_for_day
+from .sync.core import (
+    run_sync_for_account, run_sync_user, recompute_drift_for_day,
+    auto_reconcile_for_day, auto_reconcile_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -323,5 +326,45 @@ def make_ads_v2_router(db, current_user_dep):
             actor_email=user.get("email"), note=body.get("note"),
         )
         return {"ok": True, "data": res}
+
+    # ── POST /report/auto-reconcile — refresh from platform APIs ──────
+    @router.post("/report/auto-reconcile")
+    async def auto_reconcile_endpoint(
+        body: dict = Body(...), user: dict = Depends(_user),
+    ):
+        """Re-query each enabled (account × date) from its provider API
+        and store the result in shadow fields `platform_authoritative_*`.
+
+        Does NOT modify `spend_native` (the SSOT). Updates `match_status`
+        (matched/pending_platform/drift_review/sync_failed) so the report
+        can show the 🟢/🟡/🟠/🔴 indicators.
+
+        Body: {dates: ['YYYY-MM-DD',...], account_ids?: [...]}
+        """
+        dates = body.get("dates") or []
+        account_ids = body.get("account_ids")
+        if not dates:
+            raise HTTPException(
+                status_code=400,
+                detail="dates list required (e.g. ['2026-06-23'])",
+            )
+        res = await auto_reconcile_user(
+            db, user["id"], dates,
+            account_ids=account_ids,
+            actor_email=user.get("email"),
+        )
+        return {"ok": True, "data": res}
+
+    @router.post("/report/auto-reconcile/account/{account_id}/day/{date_iso}")
+    async def auto_reconcile_one(
+        account_id: str, date_iso: str,
+        user: dict = Depends(_user),
+    ):
+        """Single (account, date) reconciliation refresh."""
+        res = await auto_reconcile_for_day(
+            db, user_id=user["id"], account_id=account_id,
+            date_iso=date_iso, actor_email=user.get("email"),
+        )
+        return {"ok": res.get("ok", False), "data": res}
 
     return router
