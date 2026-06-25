@@ -28,6 +28,42 @@
 - All balances from `general_ledger` only
 - `financial_movements` is detail-enrichment layer, never balance source
 - Drift detected MUST be surfaced, never hidden
+
+## Snapchat Adapter Bug Fixes (2026-06-25)
+**Reported by user via Diagnose UI on two Snapchat accounts:**
+1. `efcdd251 (Self Service)` → API error:
+   `Unsupported Stats Query: Only field 'spend' should be used when querying AdAccount stats.`
+2. `cf8ea7c9 (السعودي)` → API error:
+   `Invalid query parameters in request URL: [Invalid StartDateTime, 2026-06-24T00:00:00.000 03:00]`
+   (the '+' in the +03:00 timezone offset became a space)
+
+**Root cause (both bugs in `/app/backend/ads_v2/sync/adapters.py::fetch_snapchat_day`):**
+- The Snapchat API endpoint `/adaccounts/{id}/stats` ONLY accepts the
+  `spend` field at the account level. Asking for impressions/swipes is rejected.
+- The URL was built with f-string interpolation
+  (`f"...&start_time={start_iso}&end_time={end_iso}..."`), so the
+  `+03:00` timezone offset stayed as a literal `+` in the URL — which
+  is decoded by HTTP servers as a space character (RFC 3986 query rules).
+
+**Fix:**
+- Removed `impressions,swipes` from the field list; account-level
+  endpoint now requests `fields=spend` only.
+- Switched from f-string URL to httpx `params=` dict so `start_time`
+  and `end_time` are URL-encoded correctly (`+` → `%2B`).
+- `impressions`/`clicks` set to `0` in the returned row (Snapchat does
+  not expose those at account level — would need campaign-level later).
+
+**Regression tests:**
+- `/app/backend/tests/test_snapchat_adapter_fix.py` (3 tests, all PASS):
+  - asserts source no longer has the buggy URL shape
+  - end-to-end captures the final httpx URL and verifies `%2B` encoding
+  - verifies spend parsing from a stub response works
+
+**Note for user:** This fix is on PREVIEW. To apply on PRODUCTION
+(`mezansalla.com`), the app must be redeployed from the Emergent
+platform.
+
+
 - Arabic-only UX (RTL)
 
 ## Implemented in this Session (Iter-250b · P1.5)

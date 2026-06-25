@@ -296,6 +296,7 @@ export default function ShippingLedger() {
                                 <th className="text-left p-2 font-extrabold">سعر الشحن<br/><span className="text-[9px] text-slate-500">(بدون ضريبة)</span></th>
                                 <th className="text-left p-2 font-extrabold">ضريبة الشحن</th>
                                 <th className="text-left p-2 font-extrabold">إجمالي الشحن<br/><span className="text-[9px] text-slate-500">(سعر + ضريبة)</span></th>
+                                <th className="text-left p-2 font-extrabold text-slate-500">الفرق مع سلة<br/><span className="text-[9px] text-slate-400 font-normal">(للمراجعة فقط)</span></th>
                                 <th className="text-center p-2 font-extrabold">مصدر التكلفة</th>
                                 <th className="text-left p-2 font-extrabold">COD</th>
                                 <th className="text-left p-2 font-extrabold">رسوم COD</th>
@@ -305,10 +306,10 @@ export default function ShippingLedger() {
                         </thead>
                         <tbody>
                             {loading && (
-                                <tr><td colSpan={14} className="text-center p-6 text-slate-500">جاري التحميل…</td></tr>
+                                <tr><td colSpan={15} className="text-center p-6 text-slate-500">جاري التحميل…</td></tr>
                             )}
                             {!loading && rows.length === 0 && (
-                                <tr><td colSpan={14} className="text-center p-6 text-slate-500"
+                                <tr><td colSpan={15} className="text-center p-6 text-slate-500"
                                        data-testid="ledger-empty">لا توجد طلبات موصلة مطابقة للفلاتر.</td></tr>
                             )}
                             {!loading && rows.map((r) => (
@@ -333,6 +334,26 @@ export default function ShippingLedger() {
                                     </td>
                                     <td className="p-2 text-left num font-extrabold text-emerald-700">
                                         {fmt(r.shipping_cost)}
+                                    </td>
+                                    <td className="p-2 text-left num">
+                                        {r.diff_vs_salla === null || r.diff_vs_salla === undefined ? (
+                                            <span className="text-slate-400">—</span>
+                                        ) : Math.abs(r.diff_vs_salla) < 0.01 ? (
+                                            <span className="text-emerald-600 font-bold">0.00</span>
+                                        ) : r.diff_vs_salla > 0 ? (
+                                            <span className="text-sky-600 font-bold" title="إعدادات النظام أعلى من سلة">
+                                                +{fmt(r.diff_vs_salla)}
+                                            </span>
+                                        ) : (
+                                            <span className="text-rose-600 font-bold" title="إعدادات النظام أقل من سلة">
+                                                {fmt(r.diff_vs_salla)}
+                                            </span>
+                                        )}
+                                        {r.salla_shipping_native > 0 && (
+                                            <div className="text-[9px] text-slate-400 font-mono">
+                                                سلة: {fmt(r.salla_shipping_native)}
+                                            </div>
+                                        )}
                                     </td>
                                     <td className="p-2 text-center"
                                         data-testid={`ledger-cost-source-${r.order_id}`}>

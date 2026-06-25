@@ -179,6 +179,13 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
             ship_tax = bd["tax"]
             ship_cost = bd["total"]    # base + tax (the unified figure)
             cost_source = bd["source"]  # company_config | salla | none
+            # Audit-only diff vs Salla (does NOT affect any computation).
+            # Positive = settings cheaper than Salla; negative = settings dearer.
+            salla_ship_native = round(ship_cost_from_order, 2)
+            if cost_source == "salla" or salla_ship_native == 0:
+                diff_vs_salla = None      # nothing to compare against
+            else:
+                diff_vs_salla = round(ship_base - salla_ship_native, 2)
             cod_amt = float(o.get("cod_amount") or
                             (o.get("total_amount") or 0) if is_cod else 0)
             if not is_cod:
@@ -228,6 +235,9 @@ def attach_shipping_ledger_routes(parent_router: APIRouter, db,
                 "shipping_tax":   round(ship_tax, 2),
                 "shipping_cost":  round(ship_cost, 2),    # = base + tax
                 "shipping_vat_rate": bd["vat_rate"],
+                # Audit-only fields (never used in totals/balances/GL).
+                "salla_shipping_native": salla_ship_native,
+                "diff_vs_salla":         diff_vs_salla,
                 # Iter-235 — provenance flag for the new UI column.
                 "shipping_cost_source": cost_source,
                 "prepaid_shipping": mode == "prepaid",

@@ -154,14 +154,23 @@ async def fetch_snapchat_day(
         return None, {"code": "tz_error", "message": str(exc)[:200]}
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    url = (
-        f"{SNAP_BASE}/adaccounts/{external_account_id}/stats"
-        f"?granularity=TOTAL&start_time={start_iso}&end_time={end_iso}"
-        f"&fields=spend,impressions,swipes"
-    )
+    url = f"{SNAP_BASE}/adaccounts/{external_account_id}/stats"
+    # NOTE: Snapchat's AdAccount /stats endpoint ONLY supports the
+    # 'spend' field. Requesting impressions/swipes here is rejected:
+    #   "Unsupported Stats Query: Only field 'spend' should be used
+    #    when querying AdAccount stats."
+    # Impressions/clicks at the account-level are not retrievable.
+    # Also: time params MUST be url-encoded (the '+' in '+03:00' is
+    # decoded as a space if passed raw in the URL).
+    params = {
+        "granularity": "TOTAL",
+        "start_time":  start_iso,
+        "end_time":    end_iso,
+        "fields":      "spend",
+    }
     try:
         async with httpx.AsyncClient(timeout=30.0) as http:
-            resp = await http.get(url, headers=headers)
+            resp = await http.get(url, headers=headers, params=params)
             if resp.status_code == 401:
                 return None, {"code": "token_invalid"}
             if resp.status_code == 404:
@@ -191,11 +200,12 @@ async def fetch_snapchat_day(
             return {
                 "spend_native":    spend,
                 "currency_native": "USD",  # Snap reports in USD
-                "impressions":     int(stat.get("impressions") or 0),
-                "clicks":          int(stat.get("swipes") or 0),
+                "impressions":     0,  # Not available at account-level
+                "clicks":          0,  # Not available at account-level
                 "purchases":       0,  # Snap conversion fetching is separate
                 "raw_excerpt":     {"granularity": "TOTAL",
-                                     "spend_micros": spend_micros},
+                                     "spend_micros": spend_micros,
+                                     "note": "account-level: spend only"},
             }, {"code": "ok"}
     except Exception as exc:
         return None, {"code": "exception", "message": str(exc)[:200]}
