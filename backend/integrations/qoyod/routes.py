@@ -34,6 +34,9 @@ from integrations.qoyod.credentials import (
 from integrations.qoyod.models import (
     QoyodSettings, QoyodCapabilityFlags,
 )
+from integrations.qoyod.compliance import (
+    list_orphan_orders, compliance_summary,
+)
 
 
 # MVP runs single-tenant; we still derive user_id from the auth layer
@@ -237,5 +240,64 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             "last_invoice":       last_invoice,
             "failed_count":       failed_count,
         }
+
+    # ── GET /invoices — Data Grid feed (Pre-Day 3 placeholder) ───────
+    @router.get("/invoices")
+    async def list_invoices(
+        user=Depends(current_user),
+        status_filter: Optional[str] = None,
+        eligibility: Optional[str]   = None,
+        limit: int = 100,
+    ):
+        tenant = _tenant_id(user)
+        q: dict = {"user_id": tenant}
+        if status_filter:
+            q["status"] = status_filter
+        if eligibility:
+            q["eligibility_status"] = eligibility
+        cursor = db.qoyod_invoices.find(
+            q, {"_id": 0}).sort("updated_at", -1).limit(max(1, min(limit, 500)))
+        rows = []
+        async for r in cursor:
+            rows.append(r)
+        return {"ok": True, "count": len(rows), "items": rows}
+
+    # ── GET /invoices/{order_id} — full record + timeline ────────────
+    @router.get("/invoices/{order_id}")
+    async def get_invoice(order_id: str, user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        row = await db.qoyod_invoices.find_one(
+            {"user_id": tenant, "salla_order_id": order_id},
+            {"_id": 0},
+        )
+        if not row:
+            raise HTTPException(404, "invoice_not_found")
+        # Also pull the matching inbox row's history so the Timeline UI
+        # shows the full pipeline (inbox-side + invoice-side merged).
+        inbox = await db.integration_inbox.find_one(
+            {"user_id": tenant, "salla_order_id": order_id},
+            {"_id": 0, "stage_history": 1, "pipeline_stage": 1,
+             "pipeline_error": 1, "attempts": 1, "trace_id": 1,
+             "received_at": 1, "connector_key": 1},
+            sort=[("received_at", -1)],
+        )
+        return {"ok": True, "invoice": row, "inbox": inbox}
+
+    # ── GET /compliance/orphan-orders — Compliance Watch table ───────
+    @router.get("/compliance/orphan-orders")
+    async def compliance_orphans(
+        user=Depends(current_user),
+        limit: int = 200,
+    ):
+        tenant = _tenant_id(user)
+        items = await list_orphan_orders(
+            db, tenant, limit=max(1, min(limit, 1000)))
+        return {"ok": True, "count": len(items), "items": items}
+
+    # ── GET /compliance/summary — Dashboard Alert counts ─────────────
+    @router.get("/compliance/summary")
+    async def compliance_summary_endpoint(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        return {"ok": True, "summary": await compliance_summary(db, tenant)}
 
     return router

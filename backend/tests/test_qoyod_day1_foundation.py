@@ -186,7 +186,9 @@ def test_inbox_is_generic_with_connector_key_discriminator():
         idempotency_key="salla:order:1", raw_payload={"x": 1},
     )
     assert row.connector_key == "make_com_qoyod"
-    assert row.pipeline_stage == "received"
+    # Default initial state after the Pre-Day 3 state-machine refactor.
+    assert row.pipeline_stage == "NEW"
+    assert row.stage_history == []
 
 
 # ─────────────────────────────────────────────────────────────────────

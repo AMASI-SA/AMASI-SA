@@ -1,5 +1,56 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Qoyod MVP — Pre-Day 3 Refinements (2026-06-25 · State Machine + Compliance Watch + UI Placeholders)
+**User mandate before starting Day 3 webhook work:**
+1. ✅ **State Machine** — canonical UPPERCASE vocabulary, allowed transitions, RETRYING transient stage,
+   six failure stages (`FAILED_VALIDATION/CUSTOMER/PRODUCT/INVOICE/RECEIPT` + `DEAD_LETTER`),
+   append-only `stage_history[]`, attempts counter bumped only on RETRY → resume.
+2. ✅ **Compliance Watch** — eligibility classification with 5 statuses
+   (`not_eligible / eligible_pending / sent_to_qoyod / failed_before_qoyod / invoice_sent_receipt_failed`)
+   and 7 reasons. Dashboard Alert lives ONLY on Qoyod page (no scope creep into main Dashboard).
+3. ✅ **UI Placeholders** — Invoices Data Grid, Timeline Drawer, 6 disabled Manual Action buttons,
+   Compliance Alert card. No premature wiring; Day 4-5 will add real behaviour.
+
+**New backend modules:**
+- `/app/backend/integrations/qoyod/state_machine.py` — pure transition logic + `transition()`/`can_transition()`/`resume_target()`.
+- `/app/backend/integrations/qoyod/compliance.py` — `classify_eligibility()`, `list_orphan_orders()`, `compliance_summary()`.
+
+**Model extensions** (`integrations/qoyod/models.py`):
+- `IntegrationInbox.pipeline_stage` default flipped to `"NEW"` (canonical) + new `stage_history[]` field.
+- `QoyodInvoiceRecord` extended with `pipeline_stage`, `stage_history[]`, `eligibility_status`, `eligibility_reason`.
+- New tuples `ELIGIBILITY_STATUSES`, `ELIGIBILITY_REASONS` + index `qoyod_invoices_eligibility`.
+- Legacy lowercase `PIPELINE_STAGES` kept for backwards compat.
+
+**New API endpoints** (under `/api/integrations/qoyod`):
+- `GET /invoices` — Data Grid feed (status/eligibility filters, limit ≤500).
+- `GET /invoices/{order_id}` — full record + matching inbox row + merged `stage_history` (timeline source).
+- `GET /compliance/orphan-orders` — Salla "تم التنفيذ" orders missing from / failed in Qoyod.
+- `GET /compliance/summary` — Dashboard Alert counts + closed vocabularies for UI.
+
+**New frontend page:** `/app/frontend/src/pages/QoyodInvoices.jsx`
+- Route `/integrations/qoyod/invoices`, sidebar entry `nav-qoyod-invoices`.
+- Compliance Alert card (5 stat cells, oldest pending note).
+- Orphan Orders table (eligibility badge + reason + drilldown).
+- Invoices Data Grid (status / pipeline stage / Qoyod refs / attempts).
+- Timeline Drawer with reversed `stage_history`, color-coded transitions, raw JSON details.
+- 6 disabled Manual Action buttons (Retry / Recreate Customer/Products/Invoice/Receipt / Sync This Order)
+  with `title="قريباً — المرحلة 4-5"`.
+
+**Tests:**
+- `tests/test_qoyod_state_machine.py` — 18/18 PASS (vocabulary lock, graph correctness, transition side-effects,
+  retry loop end-to-end, terminal stages have no outbound edges).
+- `tests/test_qoyod_compliance.py` —  9/9 PASS (classification scenarios, live orphan listing, summary aggregates,
+  closed vocabularies enforced).
+- `tests/test_qoyod_day1_foundation.py` — 28/28 still PASS (default `pipeline_stage = "NEW"` updated).
+- Live curl on PREVIEW with the merchant token confirms `/compliance/summary`, `/orphan-orders`, `/invoices`
+  and `/health` all return 200 with the expected shape.
+
+**Outstanding for Day 3 (waiting on user sign-off):**
+- `POST /api/integrations/qoyod/webhook` — receive Make.com payload, idempotent insert into `integration_inbox` in NEW state.
+- Validation step → VALIDATED / FAILED_VALIDATION.
+- Normalization step → NORMALIZED canonical SalesOrder DTO.
+
+
 ## Original Problem Statement
 بناء تطبيق محاسبي ذكي للتجارة الإلكترونية (MEZAN) يحلل ملفات Excel من سلة، يستقبل بيانات Make.com، يتتبع التسويات، ويدير الأصول والالتزامات.
 

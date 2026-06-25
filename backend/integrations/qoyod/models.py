@@ -39,9 +39,10 @@ import pymongo
 PRODUCT_TYPE_MODES = ("service", "inventory", "per_product")
 PRODUCT_TYPES      = ("service", "inventory")
 
-# Pipeline stages for `qoyod_inbox.pipeline_stage`. Movement is strictly
-# forward; the only "loops" are explicit retries that bump `attempts`
-# but keep the row pointing at the failed stage.
+# Pipeline stages — LEGACY lowercase tuple kept for backwards compat with
+# the Day-1 lock-in tests. The canonical Pre-Day 3 state machine uses the
+# UPPERCASE vocabulary defined in `state_machine.py` (HAPPY_PATH +
+# failure stages + RETRYING/SKIPPED). New code MUST use those.
 PIPELINE_STAGES = (
     "received",        # raw webhook stored, nothing else
     "normalized",      # canonical_payload filled
@@ -63,6 +64,29 @@ INVOICE_STATUSES = (
     "failed",                       # terminal — needs intervention
     "retrying",                     # transient — background worker active
     "skipped",                      # business rule decided not to send
+)
+
+# ─── Compliance Watch — eligibility vocabulary (Pre-Day 3 spec) ──────
+# Computed live for every order with status "تم التنفيذ" so the UI can
+# show: "is this order supposed to be in Qoyod yet? where is it stuck?"
+ELIGIBILITY_STATUSES = (
+    "not_eligible",                  # order not "تم التنفيذ" yet
+    "eligible_pending",              # ready to send, not yet sent
+    "sent_to_qoyod",                 # invoice + receipt both done
+    "failed_before_qoyod",           # failed somewhere before invoice
+    "invoice_sent_receipt_failed",   # invoice succeeded, receipt failed
+)
+
+# Reason codes — one Arabic-friendly label per cause. Keep the list
+# closed so the UI can map every code to a translated string.
+ELIGIBILITY_REASONS = (
+    "order_status_not_completed",      # status ≠ تم التنفيذ
+    "order_completed_ready_to_send",   # eligible, nothing wrong
+    "missing_customer_data",           # buyer name/phone missing
+    "missing_product_mapping",         # SKU has no Qoyod mapping
+    "payment_method_mapping_missing",  # payment method not mapped
+    "qoyod_api_error",                 # Qoyod API rejected
+    "already_sent",                    # invoice already exists
 )
 
 # Send trigger — per user directive: only when Salla status = "تم التنفيذ".
@@ -207,11 +231,21 @@ class IntegrationInbox(BaseModel):
     idempotency_key: str                            # unique per (connector_key, key)
 
     # Pipeline state (the only mutable section)
-    pipeline_stage: str = "received"
+    # Stage tokens are canonical UPPERCASE per the Pre-Day 3 state
+    # machine. Initial value `"NEW"` is set when the row is first
+    # created; transitions go strictly through
+    # `integrations.qoyod.state_machine.transition()`.
+    pipeline_stage: str = "NEW"
     pipeline_error: Optional[dict[str, Any]] = None
     attempts:       int = 0
     next_retry_at:  Optional[datetime] = None
     processed_at:   Optional[datetime] = None
+
+    # Append-only timeline of every state transition. Each entry:
+    #   {from_stage, to_stage, at, actor, note?, error?}
+    # Written ONLY by `state_machine.transition()` so the format
+    # stays consistent for the Timeline UI.
+    stage_history:  list[dict[str, Any]] = Field(default_factory=list)
 
     # Stage-3 output (canonical DTO)
     canonical_payload: Optional[dict[str, Any]] = None
@@ -259,10 +293,21 @@ class QoyodInvoiceRecord(BaseModel):
 
     # Status & error
     status:        str = "pending"      # one of INVOICE_STATUSES
+    # Pipeline stage mirror — kept in sync with the matching inbox row
+    # so the Invoices Data Grid can render the precise stage without a
+    # join. Values come from the UPPERCASE canonical state machine.
+    pipeline_stage: str = "NEW"
+    # Compliance Watch (Pre-Day 3 spec)
+    eligibility_status: str = "not_eligible"     # one of ELIGIBILITY_STATUSES
+    eligibility_reason: str = "order_status_not_completed"  # one of ELIGIBILITY_REASONS
     attempts:      int = 0
     last_error:    Optional[dict[str, Any]] = None
     last_attempt_at: Optional[datetime] = None
     sent_at:       Optional[datetime] = None
+
+    # Append-only timeline (mirrors the inbox row's history so the
+    # invoice view stays self-contained for the operator).
+    stage_history: list[dict[str, Any]] = Field(default_factory=list)
 
     created_at:    datetime = Field(default_factory=_now)
     updated_at:    datetime = Field(default_factory=_now)
@@ -364,6 +409,14 @@ async def ensure_qoyod_indexes(db) -> None:
     await db.qoyod_invoices.create_index(
         [("trace_id", pymongo.ASCENDING)],
         name="qoyod_invoices_trace",
+    )
+    # Compliance Watch lookup — surfaces orders that ARE eligible
+    # but haven't reached "sent_to_qoyod" yet.
+    await db.qoyod_invoices.create_index(
+        [("user_id", pymongo.ASCENDING),
+         ("eligibility_status", pymongo.ASCENDING),
+         ("updated_at", pymongo.DESCENDING)],
+        name="qoyod_invoices_eligibility",
     )
 
     # --- qoyod_products_mapping ---
