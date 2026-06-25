@@ -22,6 +22,12 @@ from typing import Any, Optional
 import httpx
 
 
+# Version identifier sent with every Qoyod request (Day-1 review).
+# Bump whenever the Qoyod payload contract changes — helps trace the
+# exact Mezan build that produced a payload in case of incident.
+MEZAN_VERSION = os.environ.get("MEZAN_VERSION", "1.0.0-qoyod-mvp")
+
+
 class QoyodAPIError(Exception):
     """Raised for any non-2xx response. Carries the parsed body so the
     orchestrator can classify it (transient vs. permanent vs. config)."""
@@ -108,11 +114,16 @@ class QoyodAPIClient:
         return f"QoyodAPIClient(base_url={self._base_url!r}, api_key=***)"
 
     def _headers(self, idempotency_key: Optional[str] = None) -> dict:
+        # `X-Mezan-Version` is a diagnostic header per Day-1 review.
+        # Lets Qoyod-side support match a request to a Mezan release
+        # without exposing internal details.
         h = {
-            "API-KEY":      self._api_key,
-            "Accept":       "application/json",
-            "Content-Type": "application/json",
-            "User-Agent":   "mezan-qoyod-mvp/1.0",
+            "API-KEY":          self._api_key,
+            "Accept":           "application/json",
+            "Content-Type":     "application/json",
+            "User-Agent":       f"mezan-qoyod/{MEZAN_VERSION}",
+            "X-Mezan-Version":  MEZAN_VERSION,
+            "X-Mezan-Module":   "qoyod-mvp",
         }
         if idempotency_key:
             h["Idempotency-Key"] = idempotency_key

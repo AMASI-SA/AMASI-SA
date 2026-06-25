@@ -30,6 +30,7 @@ import SettlementDashboard from "./pages/SettlementDashboard";
 import ProductPreparation from "./pages/ProductPreparation";
 import ImageCatalog from "./pages/ImageCatalog";
 import SallaIntegration from "./pages/SallaIntegration";
+import QoyodSettings from "./pages/QoyodSettings";
 import SallaSourceComparison from "./pages/SallaSourceComparison";
 import PaymentSettlements from "./pages/PaymentSettlements";
 import Profile from "./pages/Profile";
@@ -156,6 +157,7 @@ function AppRoutes() {
             <Route path="/receivables" element={<ProtectedRoute><Layout><Receivables /></Layout></ProtectedRoute>} />
             <Route path="/operations-dashboard" element={<ProtectedRoute><Layout><OperationsDashboard /></Layout></ProtectedRoute>} />
             <Route path="/integrations/custom-app" element={<ProtectedRoute><Layout><CustomAppIntegration /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/settings" element={<ProtectedRoute><Layout><QoyodSettings /></Layout></ProtectedRoute>} />
             <Route path="/ad-accounts" element={<ProtectedRoute><Layout><AdAccounts /></Layout></ProtectedRoute>} />
             <Route path="/integrations/bnpl" element={<ProtectedRoute><Layout><BnplIntegrations /></Layout></ProtectedRoute>} />
             <Route path="/integrations/bnpl/diagnostics" element={<ProtectedRoute><Layout><BnplDiagnostics /></Layout></ProtectedRoute>} />

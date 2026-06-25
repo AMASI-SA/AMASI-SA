@@ -3976,6 +3976,15 @@ from ads_v2.routes import make_ads_v2_router
 from ads_v2.models import ensure_indexes as _ads_v2_ensure_indexes
 api.include_router(make_ads_v2_router(db, current_user))
 
+# ── Qoyod Invoice MVP — Day 2 (Settings + Catalogs + Health) ───────
+# Pipeline (webhook, normalization, push) lands in Day 3-4. Today we
+# expose only the merchant-facing config surface so a real API key can
+# be plugged in and verified against Qoyod. See
+# /app/docs/adr/ADR-001-architecture-principles.md and
+# /app/backend/integrations/qoyod/README.md.
+from integrations.qoyod.routes import make_qoyod_router as _make_qoyod_router
+api.include_router(_make_qoyod_router(db, current_user))
+
 from ad_spend_scheduler_diagnostics import (
     make_ad_spend_scheduler_diagnostics_router,
 )

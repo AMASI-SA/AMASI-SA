@@ -17,11 +17,12 @@ from integrations.qoyod.credentials import (
 )
 from integrations.qoyod.models import (
     ensure_qoyod_indexes,
-    QoyodSettings, QoyodInbox, QoyodInvoiceRecord,
+    QoyodSettings, IntegrationInbox, QoyodInvoiceRecord,
+    QoyodCapabilityFlags,
     PIPELINE_STAGES, INVOICE_STATUSES, PRODUCT_TYPE_MODES,
 )
 from integrations.qoyod.api_client import (
-    QoyodAPIClient, QoyodAPIError, _classify,
+    QoyodAPIClient, QoyodAPIError, _classify, MEZAN_VERSION,
 )
 
 
@@ -107,10 +108,38 @@ async def test_save_rejects_empty(db):
 def test_settings_defaults_are_safe():
     s = QoyodSettings()
     assert s.enabled is False                  # ADR-001 #3 feature flag default OFF
-    assert s.send_only_completed is True       # user spec
+    assert s.auto_send is True
+    assert s.auto_receipt is True
+    assert s.invoice_trigger_status == "completed"  # = Salla "تم التنفيذ"
+    assert s.invoice_date_source == "completed_at"
     assert s.default_product_type == "service" # user spec: Amasi default
     assert s.user_id == "main"                 # single-tenant
     assert s.schema_version == 1
+
+
+def test_settings_capability_flags_default_all_on():
+    # Day-1-review feedback: capability flags must be present and ON.
+    s = QoyodSettings()
+    assert s.capabilities.create_customers is True
+    assert s.capabilities.create_products  is True
+    assert s.capabilities.create_invoices  is True
+    assert s.capabilities.create_receipts  is True
+
+
+def test_settings_capabilities_can_be_partially_disabled():
+    s = QoyodSettings(capabilities=QoyodCapabilityFlags(create_receipts=False))
+    assert s.capabilities.create_invoices is True
+    assert s.capabilities.create_receipts is False
+
+
+def test_settings_has_forward_compat_placeholders():
+    # These keep the schema stable when we later add refund/cancel flows.
+    s = QoyodSettings()
+    assert hasattr(s, "auto_credit_note_on_refund")
+    assert hasattr(s, "auto_cancel_on_salla_cancel")
+    assert hasattr(s, "invoice_number_prefix")
+    assert hasattr(s, "custom_metadata")
+    assert s.auto_credit_note_on_refund is False    # safe default
 
 
 def test_settings_supports_three_product_modes():
@@ -145,7 +174,19 @@ def test_invoice_statuses_include_split_state():
 def test_inbox_requires_idempotency_key():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
-        QoyodInbox(id="x", trace_id="t", raw_payload={})  # missing idem
+        # missing idempotency_key, trace_id, connector_key
+        IntegrationInbox(id="x", raw_payload={})
+
+
+def test_inbox_is_generic_with_connector_key_discriminator():
+    """The inbox is reusable across connectors; `connector_key`
+    discriminates rows of different sources."""
+    row = IntegrationInbox(
+        id="a", trace_id="t", connector_key="make_com_qoyod",
+        idempotency_key="salla:order:1", raw_payload={"x": 1},
+    )
+    assert row.connector_key == "make_com_qoyod"
+    assert row.pipeline_stage == "received"
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -161,7 +202,7 @@ async def test_indexes_created_and_idempotent(db):
     expected = {
         "qoyod_settings":            "qoyod_settings_user_unique",
         "qoyod_credentials":         "qoyod_credentials_user_unique",
-        "qoyod_inbox":               "qoyod_inbox_idem_unique",
+        "integration_inbox":         "integration_inbox_idem_unique",
         "qoyod_invoices":            "qoyod_invoices_order_unique",
         "qoyod_products_mapping":    "qoyod_products_sku_unique",
         "qoyod_customers_mapping":   "qoyod_customers_lookup_unique",
@@ -174,29 +215,52 @@ async def test_indexes_created_and_idempotent(db):
 
 @pytest.mark.asyncio
 async def test_inbox_idempotency_enforced_by_index(db):
-    """Two inbox rows with the same (user_id, idempotency_key) must
-    fail at the DB layer — protects against duplicate webhook delivery
-    even if application logic regresses (ADR-001 #10)."""
+    """Two inbox rows with the same (user_id, connector_key,
+    idempotency_key) must fail at the DB layer — protects against
+    duplicate webhook delivery (ADR-001 #10)."""
     await ensure_qoyod_indexes(db)
     user_id = f"test_day1_{uuid.uuid4().hex[:8]}"
     key = f"salla:order:{uuid.uuid4().hex[:6]}"
     try:
-        await db.qoyod_inbox.insert_one({
+        await db.integration_inbox.insert_one({
             "id": uuid.uuid4().hex, "user_id": user_id,
+            "connector_key": "make_com_qoyod",
             "trace_id": uuid.uuid4().hex,
             "idempotency_key": key,
             "raw_payload": {"a": 1}, "pipeline_stage": "received",
         })
         from pymongo.errors import DuplicateKeyError
         with pytest.raises(DuplicateKeyError):
-            await db.qoyod_inbox.insert_one({
+            await db.integration_inbox.insert_one({
                 "id": uuid.uuid4().hex, "user_id": user_id,
+                "connector_key": "make_com_qoyod",
                 "trace_id": uuid.uuid4().hex,
                 "idempotency_key": key,
                 "raw_payload": {"a": 2}, "pipeline_stage": "received",
             })
+        # Same idempotency_key under a DIFFERENT connector_key MUST succeed,
+        # proving the inbox is genuinely reusable across connectors.
+        await db.integration_inbox.insert_one({
+            "id": uuid.uuid4().hex, "user_id": user_id,
+            "connector_key": "salla_direct",   # different source
+            "trace_id": uuid.uuid4().hex,
+            "idempotency_key": key,             # same key
+            "raw_payload": {"a": 3}, "pipeline_stage": "received",
+        })
     finally:
-        await db.qoyod_inbox.delete_many({"user_id": user_id})
+        await db.integration_inbox.delete_many({"user_id": user_id})
+
+
+def test_api_client_sends_mezan_version_header():
+    # Day-1-review: X-Mezan-Version + diagnostic User-Agent must be set.
+    c = QoyodAPIClient("test_key")
+    headers = c._headers()
+    assert headers.get("X-Mezan-Version") == MEZAN_VERSION
+    assert headers.get("X-Mezan-Module") == "qoyod-mvp"
+    assert "mezan-qoyod" in headers.get("User-Agent", "")
+    # API key is in headers (where it should be) but never in repr.
+    assert headers.get("API-KEY") == "test_key"
+    assert "test_key" not in repr(c)
 
 
 # ─────────────────────────────────────────────────────────────────────
