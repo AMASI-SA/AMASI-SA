@@ -258,18 +258,37 @@ async def run_sync_for_account(
     finished_at = datetime.now(timezone.utc).isoformat()
 
     if fetched is None:
-        # Mark daily row (if exists) as sync_failed for visibility
-        await db.ads_daily.update_one(
+        # iter-259 — Per user's SSOT classification rule: `sync_failed`
+        # MUST only appear when no valid data exists in ads_daily for
+        # this (account, date). If a row already has a valid spend
+        # number from a previous successful sync, the platform-fetch
+        # hiccup is NOT a sync failure — the data is still trustworthy.
+        # We only record the API error in shadow fields and preserve
+        # the previously-computed `match_status` (matched / drift_review
+        # / pending_platform / etc.).
+        existing = await db.ads_daily.find_one(
             {"user_id": user_id, "account_id": account_id, "date": date_iso},
-            {"$set": {
-                "match_status":            "sync_failed",
-                "platform_check_error":    (status.get("code") or "")[:200],
-                "platform_last_checked_at": finished_at,
-            }},
+            {"_id": 0, "spend_native": 1, "match_status": 1},
         )
+        has_valid_data = bool(
+            existing and (float(existing.get("spend_native") or 0) > 0)
+        )
+        update_set: dict = {
+            "platform_check_error":    (status.get("code") or "")[:200],
+            "platform_last_checked_at": finished_at,
+        }
+        if not has_valid_data:
+            # No prior data → this IS a true sync failure for visibility.
+            update_set["match_status"] = "sync_failed"
+        if existing:
+            await db.ads_daily.update_one(
+                {"user_id": user_id, "account_id": account_id, "date": date_iso},
+                {"$set": update_set},
+            )
         await _log_sync_event(db, user_id, account_id, "sync_failed",
                                 date_iso, sync_run_id,
-                                {"status": status})
+                                {"status": status,
+                                 "preserved_existing_data": has_valid_data})
         # If token_invalid bubble it up to account state
         if status.get("code") == "token_invalid":
             await db.ads_accounts.update_one(
@@ -714,18 +733,28 @@ async def auto_reconcile_for_day(
     # ── Resolve token & call provider (READ-ONLY) ──
     token, token_status = await _resolve_access_token(db, account)
     if not token:
+        # iter-259 — Preserve existing valid match_status on token error.
+        # Token failure during a re-check is NOT a sync_failure when
+        # ads_daily already holds valid SSOT data.
+        ssot_has_data = float(daily.get("spend_native") or 0) > 0
+        update_set: dict = {
+            "platform_check_error": token_status.get("code"),
+            "platform_last_checked_at": now_iso,
+            "updated_at": now_iso,
+        }
+        if not ssot_has_data:
+            update_set["match_status"] = "sync_failed"
         await db.ads_daily.update_one(
             {"user_id": user_id, "account_id": account_id, "date": date_iso},
-            {"$set": {
-                "platform_check_error": token_status.get("code"),
-                "platform_last_checked_at": now_iso,
-                "match_status": "sync_failed",
-                "updated_at": now_iso,
-            }},
+            {"$set": update_set},
         )
         return {"ok": False, "error": "no_token",
                 "token_status": token_status,
-                "match_status": "sync_failed"}
+                "preserved_existing_data": ssot_has_data,
+                "match_status": (
+                    daily.get("match_status") if ssot_has_data
+                    else "sync_failed"
+                )}
 
     fetched, status = await adapters.fetch_day(
         provider=account["provider"],
@@ -735,23 +764,35 @@ async def auto_reconcile_for_day(
         account_timezone=account.get("timezone") or "Asia/Riyadh",
     )
     if fetched is None:
+        # iter-259 — Same SSOT-aware classification: if ads_daily already
+        # has valid spend data, a transient platform-check failure is
+        # NOT a sync_failed. We only annotate the error; the row keeps
+        # whatever match_status was previously computed.
+        ssot_has_data = float(daily.get("spend_native") or 0) > 0
+        update_set = {
+            "platform_check_error":    (status.get("code") or "")[:200],
+            "platform_last_checked_at": now_iso,
+            "updated_at":              now_iso,
+        }
+        if not ssot_has_data:
+            update_set["match_status"] = "sync_failed"
         await db.ads_daily.update_one(
             {"user_id": user_id, "account_id": account_id, "date": date_iso},
-            {"$set": {
-                "platform_check_error":    (status.get("code") or "")[:200],
-                "platform_last_checked_at": now_iso,
-                "match_status":            "sync_failed",
-                "updated_at":              now_iso,
-            }},
+            {"$set": update_set},
         )
         await _log_sync_event(
             db, user_id, account_id, "reconciliation_checked", date_iso,
             uuid.uuid4().hex,
             {"result": "failed", "api_status": status.get("code"),
-             "actor": actor_email},
+             "actor": actor_email,
+             "preserved_existing_data": ssot_has_data},
         )
         return {"ok": False, "error": status,
-                "match_status": "sync_failed"}
+                "preserved_existing_data": ssot_has_data,
+                "match_status": (
+                    daily.get("match_status") if ssot_has_data
+                    else "sync_failed"
+                )}
 
     # ── Compute platform-authoritative figures (shadow only) ──
     plat_native = float(fetched.get("spend_native") or 0)

@@ -399,6 +399,34 @@ async def get_reconciliation_report(
         r["display_name"] = a.get("display_name")
         r["external_account_id"] = a.get("external_account_id")
 
+    # iter-259 — Display-layer reclassification of legacy rows.
+    #
+    # Earlier sync code wrote `match_status="sync_failed"` onto rows that
+    # ALREADY contained valid SSOT spend (when a subsequent platform-check
+    # API call hiccupped). Per the SSOT rule, `sync_failed` must only
+    # appear when ads_daily holds no valid data. We do NOT mutate the
+    # DB here — we just expose a corrected status to the UI so legacy
+    # rows display the correct indicator until the next successful
+    # sync overwrites them naturally.
+    for r in rows:
+        if r.get("match_status") != "sync_failed":
+            continue
+        ssot_spend = float(r.get("spend_native") or 0)
+        if ssot_spend <= 0:
+            continue   # truly no data → keep sync_failed
+        # Reclassify based on the data that IS in ads_daily:
+        drift = r.get("drift_pct")
+        # Default to a "needs review" amber when drift is present, else
+        # "pending platform completion" (the row exists but the latest
+        # platform comparison didn't succeed).
+        if drift is not None and float(drift) >= 5.0:
+            r["match_status"] = "drift_review"
+        else:
+            r["match_status"] = "pending_platform"
+        r["match_status_reason"] = (
+            "platform_check_error_with_valid_ssot"
+        )
+
     summary = {
         "rows_total":             len(rows),
         "rows_with_anomalies":    sum(1 for r in rows if r.get("anomaly_flags")),

@@ -29,6 +29,62 @@
 - `financial_movements` is detail-enrichment layer, never balance source
 - Drift detected MUST be surfaced, never hidden
 
+## match_status SSOT Classification Fix (2026-06-25 · iter-259)
+
+**Bug reported by user:** After iter-258 currency fix, several Snapchat
+rows in the reconciliation report were shown as "فشل في المزامنة" even
+though the data was clearly present in ads_daily:
+- spend_sar = 471.71 SAR
+- platform value = 437.01 SAR
+- drift = 7.94%
+- reason = "مزامنة قبل إغلاق اليوم"
+
+**Root cause:** Two failure paths in `sync/core.py` were unconditionally
+writing `match_status="sync_failed"` to existing rows when the platform
+API call hiccupped — even when `ads_daily.spend_native` already held
+valid SSOT data from a previous successful sync. This violated the
+user's classification rule:
+
+> "فشل في المزامنة" must appear ONLY when:
+>  * API actually failed
+>  * No response / HTTP error
+>  * **AND no data saved to ads_daily**
+
+**Fix (classification-only — sync/FX/spend logic untouched):**
+1. `sync_account_day` (line ~260): when `fetched is None`, check if
+   the existing row has `spend_native > 0`. If yes → record only
+   `platform_check_error` + `platform_last_checked_at`; preserve the
+   prior `match_status`.
+2. `auto_reconcile_for_day` (two token/fetch failure paths): same
+   conditional pattern. Token failures and adapter `None` results no
+   longer overwrite a valid match_status.
+3. `get_reconciliation_report` (display layer): reclassify legacy
+   rows on the fly — if `match_status="sync_failed"` but
+   `spend_native > 0`, surface as `drift_review` (when drift ≥ 5%) or
+   `pending_platform` (when drift < 5%). No DB writes — the row will
+   be properly reclassified the next time a successful sync runs.
+4. Added `match_status_reason="platform_check_error_with_valid_ssot"`
+   annotation so the UI can still surface "API check failed but data
+   is valid" if desired.
+
+**Tests** (`tests/test_ads_v2_match_status_ssot.py` — 4/4 ✅;
+full suite 18/18 ✅):
+- Legacy `sync_failed` + valid data + 7.94% drift → reclassified
+  to `drift_review`. Summary counts updated accordingly.
+- Truly failed (no SSOT data) → stays `sync_failed`.
+- Valid data + small drift (<5%) → reclassified to `pending_platform`.
+- Source inspection: confirms iter-259 markers in sync/core.py + the
+  `ssot_has_data` gate is present in both failure paths.
+
+**Untouched (per user directive):**
+- ❌ Snapchat sync code
+- ❌ FX rate fetching
+- ❌ Spend calculation
+- ❌ Adapter API call logic
+- ❌ `ads_daily.spend_native` / `spend_sar` / `bank_fee_sar` values
+
+
+
 ## Currency SSOT Fix — ads_accounts is Authoritative (2026-06-25 · iter-258)
 
 **Bug reported by user:** Account "متجر أماسي سعودي" is configured as
