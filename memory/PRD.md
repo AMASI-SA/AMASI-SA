@@ -29,6 +29,95 @@
 - `financial_movements` is detail-enrichment layer, never balance source
 - Drift detected MUST be surfaced, never hidden
 
+## ARCHITECTURAL INVARIANT (LOCKED) — Orthogonal Data State vs Connection State (2026-06-25 · iter-260)
+
+**This is a permanent, non-negotiable architectural rule for Ads V2.**
+Approved by the user as the closing principle of Ads V2 Phase 1.
+Any future code in Ads V2 must respect this separation.
+
+### Rule
+
+```
+ads_daily holds TWO orthogonal status fields:
+
+  • match_status            → DATA STATE only (accounting)
+      values: matched | pending_platform | drift_review | no_data
+              (sync_failed deprecated; kept only for legacy rows)
+
+  • platform_check_status   → CONNECTION STATE only (technical)
+      values: ok | last_check_failed | token_expired
+            | rate_limited | api_error
+
+An API failure may update ONLY platform_check_status.
+It must NEVER mutate match_status, spend_native, spend_sar,
+bank_fee_sar, fx_rate, or any accounting field, when valid SSOT
+data already exists in ads_daily.
+```
+
+### Priority order
+
+1. Data in `ads_daily` is the Single Source of Truth.
+2. Live API checks are verification tools, never truth-sources.
+3. If an API check fails but `ads_daily` data is valid:
+   - Do NOT change match_status.
+   - Do NOT touch the row's spend numbers.
+   - Do NOT drop the report.
+   - Only update platform_check_status + platform_check_error.
+
+### Implementation
+
+- **`models.py`** declares `MATCH_STATUSES` and `PLATFORM_CHECK_STATUSES`
+  as separate tuples. `AdsDaily` has both `match_status` and
+  `platform_check_status` as distinct fields.
+- **`sync/core.py::_map_check_status()`** — the single mapping point
+  from adapter `status.code` → `platform_check_status` value. Used
+  by all 3 failure paths (sync_account_day + 2 in auto_reconcile_for_day).
+- **`sync/core.py`** success paths write `platform_check_status="ok"`
+  and `platform_check_error=None`. Failure paths only write the
+  connection-state field; they touch `match_status` only when SSOT
+  is empty.
+- **`data_layer/reports.py::get_reconciliation_report`** exposes
+  `platform_check_status` per row, synthesises it for legacy rows,
+  and returns a separate `check_*` histogram alongside `match_*`.
+- **Frontend `AdsV2Report.jsx`** renders TWO badges per row
+  (data + connection) and TWO histogram strips in the summary,
+  visually labeled "حالة البيانات (محاسبياً)" and "حالة الاتصال
+  بالمنصة (تقنياً)".
+
+### Architectural tests (6/6 ✅ — permanent lock-in)
+
+`tests/test_ads_v2_orthogonal_states.py`:
+1. `_map_check_status` canonical mapping table.
+2. `models.py` declares both status tuples + AdsDaily field.
+3. `auto_reconcile_for_day` token-failure path leaves `match_status`
+   = "matched" untouched while flipping `platform_check_status` to
+   the corresponding error code.
+4. Report summary exposes both `match_*` AND `check_*` histograms.
+5. Legacy rows without `platform_check_status` get it synthesised
+   on read (no DB writes).
+6. `sync/core.py` source inspection asserts iter-260 markers,
+   `platform_check_status` writes in all relevant paths, and
+   `_map_check_status` usage.
+
+### Allowed future changes
+
+- Adding new connection-state values (e.g. `degraded`, `partial`)
+  requires extending `PLATFORM_CHECK_STATUSES` AND `_map_check_status`
+  in one place.
+- Adding new data-state values (e.g. `held_review`) requires extending
+  `MATCH_STATUSES` AND `_compute_match_status`.
+- **Forbidden**: writing to `match_status` from any function that
+  inspects API responses or HTTP errors without first verifying
+  SSOT data emptiness.
+
+### Phase 2 entry condition
+
+This architectural rule MUST be in force before Phase 2 (review +
+GL posting) begins. The review UI will operate on `match_status`
+exclusively; GL postings will never depend on `platform_check_status`.
+
+
+
 ## match_status SSOT Classification Fix (2026-06-25 · iter-259)
 
 **Bug reported by user:** After iter-258 currency fix, several Snapchat

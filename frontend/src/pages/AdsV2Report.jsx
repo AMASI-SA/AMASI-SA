@@ -535,6 +535,9 @@ function ReconciliationView({ recon, onSaveManual }) {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="text-xs font-extrabold text-zinc-200 mb-2 uppercase tracking-wider">
+            حالة البيانات (محاسبياً)
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
             <MatchStatCard
               icon="🟢" label="متطابق"
@@ -560,6 +563,37 @@ function ReconciliationView({ recon, onSaveManual }) {
               icon="⚪" label="لا توجد بيانات"
               value={s.match_no_data}
               tone="bg-zinc-700/40 border-zinc-600/40 text-zinc-100"
+            />
+          </div>
+          {/* iter-260 — Connection-state summary (separate from data state). */}
+          <div className="text-xs font-extrabold text-zinc-200 mt-5 mb-2 uppercase tracking-wider">
+            حالة الاتصال بالمنصة (تقنياً)
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+            <MatchStatCard
+              icon="🔵" label="الاتصال ناجح"
+              value={s.check_ok}
+              tone="bg-sky-500/15 border-sky-500/40 text-sky-50"
+            />
+            <MatchStatCard
+              icon="⚠️" label="فشل آخر فحص"
+              value={s.check_last_check_failed}
+              tone="bg-amber-500/10 border-amber-500/40 text-amber-50"
+            />
+            <MatchStatCard
+              icon="🔑" label="Token يحتاج إعادة ربط"
+              value={s.check_token_expired}
+              tone="bg-rose-500/15 border-rose-500/40 text-rose-50"
+            />
+            <MatchStatCard
+              icon="⏱️" label="Rate Limit"
+              value={s.check_rate_limited}
+              tone="bg-purple-500/15 border-purple-500/40 text-purple-50"
+            />
+            <MatchStatCard
+              icon="🛑" label="API Error"
+              value={s.check_api_error}
+              tone="bg-red-500/10 border-red-500/40 text-red-50"
             />
           </div>
           <p className="text-xs text-zinc-400 mt-4 font-medium leading-relaxed">
@@ -629,8 +663,21 @@ function MatchStatCard({ icon, label, value, tone }) {
   );
 }
 
+// iter-260 — Connection-state vocabulary (separate from MATCH_STATUS_AR).
+// Hard rule: these two never share semantics — match_status is
+// accounting health; platform_check_status is API connectivity.
+const CHECK_STATUS_AR = {
+  ok:                 { icon: "🔵", label: "الاتصال ناجح",          cls: "bg-sky-500/20 text-sky-100 border-sky-500/40" },
+  last_check_failed:  { icon: "⚠️",  label: "فشل آخر فحص",            cls: "bg-amber-500/15 text-amber-100 border-amber-500/40" },
+  token_expired:      { icon: "🔑", label: "Token يحتاج إعادة ربط",  cls: "bg-rose-500/20 text-rose-100 border-rose-500/40" },
+  rate_limited:       { icon: "⏱️", label: "Rate Limit",              cls: "bg-purple-500/20 text-purple-100 border-purple-500/40" },
+  api_error:          { icon: "🛑", label: "API Error",                cls: "bg-red-500/15 text-red-100 border-red-500/40" },
+};
+
 function ReconRow({ r, onSaveManual }) {
   const ms = MATCH_STATUS_AR[r.match_status] || MATCH_STATUS_AR.no_data;
+  // iter-260 — Always derive an explicit connection-state badge.
+  const cs = CHECK_STATUS_AR[r.platform_check_status] || CHECK_STATUS_AR.ok;
   const hasManual = r.has_manual_value;
   const hasPlatformCheck = r.has_platform_check;
   const driftDisplay = r.drift_pct;
@@ -647,13 +694,24 @@ function ReconRow({ r, onSaveManual }) {
   return (
     <TableRow className="border-zinc-800 hover:bg-zinc-800/40 align-top">
       <TableCell>
-        <Badge
-          className={`${ms.cls} font-semibold whitespace-nowrap`}
-          data-testid={`match-status-${r.account_id}-${r.date}`}
-        >
-          <span className="me-1">{ms.icon}</span>
-          {ms.label}
-        </Badge>
+        <div className="flex flex-col gap-1">
+          <Badge
+            className={`${ms.cls} font-semibold whitespace-nowrap`}
+            data-testid={`match-status-${r.account_id}-${r.date}`}
+            title="حالة البيانات (محاسبياً)"
+          >
+            <span className="me-1">{ms.icon}</span>
+            {ms.label}
+          </Badge>
+          <Badge
+            className={`${cs.cls} font-semibold whitespace-nowrap text-[10px]`}
+            data-testid={`check-status-${r.account_id}-${r.date}`}
+            title="حالة الاتصال بالمنصة (تقنياً)"
+          >
+            <span className="me-1">{cs.icon}</span>
+            {cs.label}
+          </Badge>
+        </div>
       </TableCell>
       <TableCell className="text-zinc-50 font-bold tabular-nums">{r.date}</TableCell>
       <TableCell className="text-zinc-100 font-semibold">

@@ -370,6 +370,8 @@ async def get_reconciliation_report(
         "platform_authoritative_native": 1, "platform_authoritative_sar": 1,
         "platform_authoritative_currency": 1, "platform_last_checked_at": 1,
         "platform_check_error": 1,
+        # iter-260 — Connection-state field (separate from match_status).
+        "platform_check_status": 1,
         "diff_native": 1, "diff_sar": 1,
         "platform_checked_at": 1,
         "drift_pct": 1, "drift_pct_vs_manual": 1,
@@ -399,33 +401,41 @@ async def get_reconciliation_report(
         r["display_name"] = a.get("display_name")
         r["external_account_id"] = a.get("external_account_id")
 
-    # iter-259 — Display-layer reclassification of legacy rows.
+    # iter-259 / iter-260 — Display-layer reclassification & connection-
+    # state synthesis for legacy rows.
     #
-    # Earlier sync code wrote `match_status="sync_failed"` onto rows that
-    # ALREADY contained valid SSOT spend (when a subsequent platform-check
-    # API call hiccupped). Per the SSOT rule, `sync_failed` must only
-    # appear when ads_daily holds no valid data. We do NOT mutate the
-    # DB here — we just expose a corrected status to the UI so legacy
-    # rows display the correct indicator until the next successful
-    # sync overwrites them naturally.
+    # ARCHITECTURAL INVARIANT (iter-260):
+    #   • `match_status`         = DATA STATE only (accounting).
+    #   • `platform_check_status` = CONNECTION STATE only (technical).
+    # The two are NEVER conflated. An API hiccup may change only the
+    # latter. Legacy rows from before iter-260 either lack the field
+    # entirely OR carry `sync_failed` in match_status — we correct
+    # both on the fly without mutating the DB.
     for r in rows:
-        if r.get("match_status") != "sync_failed":
-            continue
-        ssot_spend = float(r.get("spend_native") or 0)
-        if ssot_spend <= 0:
-            continue   # truly no data → keep sync_failed
-        # Reclassify based on the data that IS in ads_daily:
-        drift = r.get("drift_pct")
-        # Default to a "needs review" amber when drift is present, else
-        # "pending platform completion" (the row exists but the latest
-        # platform comparison didn't succeed).
-        if drift is not None and float(drift) >= 5.0:
-            r["match_status"] = "drift_review"
-        else:
-            r["match_status"] = "pending_platform"
-        r["match_status_reason"] = (
-            "platform_check_error_with_valid_ssot"
-        )
+        # 1) Reclassify legacy match_status="sync_failed" rows that
+        #    actually hold valid SSOT data.
+        if r.get("match_status") == "sync_failed":
+            ssot_spend = float(r.get("spend_native") or 0)
+            if ssot_spend > 0:
+                drift = r.get("drift_pct")
+                if drift is not None and float(drift) >= 5.0:
+                    r["match_status"] = "drift_review"
+                else:
+                    r["match_status"] = "pending_platform"
+                r["match_status_reason"] = (
+                    "platform_check_error_with_valid_ssot"
+                )
+                # If legacy rows ALSO lack platform_check_status, infer
+                # that this row most likely failed its last platform check.
+                if not r.get("platform_check_status"):
+                    r["platform_check_status"] = "last_check_failed"
+        # 2) Synthesise a sensible `platform_check_status` when the
+        #    field is missing on legacy rows.
+        if not r.get("platform_check_status"):
+            if r.get("platform_check_error"):
+                r["platform_check_status"] = "last_check_failed"
+            else:
+                r["platform_check_status"] = "ok"
 
     summary = {
         "rows_total":             len(rows),
@@ -442,7 +452,7 @@ async def get_reconciliation_report(
             1 for r in rows if r.get("has_manual_value")),
         "rows_pending_manual":    sum(
             1 for r in rows if not r.get("has_manual_value")),
-        # Match-status histogram (the user-facing 🟢/🟡/🟠/🔴 indicators)
+        # Match-status histogram (DATA STATE — accounting indicators).
         "match_matched":          sum(
             1 for r in rows if r.get("match_status") == "matched"),
         "match_pending_platform": sum(
@@ -453,6 +463,19 @@ async def get_reconciliation_report(
             1 for r in rows if r.get("match_status") == "sync_failed"),
         "match_no_data":          sum(
             1 for r in rows if r.get("match_status") in (None, "no_data")),
+        # iter-260 — Platform-check histogram (CONNECTION STATE only).
+        # Strictly orthogonal to match_*; counts how the last API check
+        # went, never reflects accounting health.
+        "check_ok":               sum(
+            1 for r in rows if r.get("platform_check_status") == "ok"),
+        "check_last_check_failed": sum(
+            1 for r in rows if r.get("platform_check_status") == "last_check_failed"),
+        "check_token_expired":    sum(
+            1 for r in rows if r.get("platform_check_status") == "token_expired"),
+        "check_rate_limited":     sum(
+            1 for r in rows if r.get("platform_check_status") == "rate_limited"),
+        "check_api_error":        sum(
+            1 for r in rows if r.get("platform_check_status") == "api_error"),
     }
     return {"data": rows, "summary": summary,
             "meta": _meta("get_reconciliation_report")}

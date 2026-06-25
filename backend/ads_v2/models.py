@@ -27,6 +27,39 @@ REVIEW_STATUSES = (
     "pending", "approved", "rejected", "reopened",
     "held_needs_fx", "held_anomaly", "held_unauthorized", "held_drift",
 )
+
+# iter-260 — Architectural separation of TWO orthogonal concerns:
+#
+#   A) DATA STATE (accounting)  → field `match_status` on ads_daily
+#      Describes the trustworthiness of the SSOT spend numbers.
+#      Values: matched | pending_platform | drift_review | no_data
+#      Notes:  Never reflects API connectivity. `sync_failed` is
+#              DEPRECATED here and kept only for read-time
+#              reclassification of legacy rows.
+#
+#   B) CONNECTION STATE (technical)  → field `platform_check_status`
+#      Describes whether the last API call to the platform succeeded.
+#      Values: ok | last_check_failed | token_expired
+#            | rate_limited | api_error
+#      Notes:  Lives on ads_daily so the report can show it row-by-row.
+#              Updating it MUST NEVER mutate accounting numbers in
+#              `spend_native` / `spend_sar` / `bank_fee_sar`.
+#
+# Hard rule: an API hiccup may only change `platform_check_status`,
+# never `match_status`, when valid SSOT data already exists.
+MATCH_STATUSES = (
+    "matched", "pending_platform", "drift_review",
+    "no_data",
+    "sync_failed",   # deprecated, retained for legacy rows
+)
+PLATFORM_CHECK_STATUSES = (
+    "ok",                  # last fetch succeeded
+    "last_check_failed",   # generic transient error
+    "token_expired",       # auth issue
+    "rate_limited",        # provider quota hit
+    "api_error",           # HTTP/protocol error
+)
+
 SYNC_LOG_EVENTS = (
     "sync_run", "sync_failed",
     "review_approved", "review_rejected", "review_reopened",
@@ -155,6 +188,13 @@ class AdsDaily(BaseModel):
     platform_checked_at: Optional[str] = None
     drift_pct: float = 0.0
     anomaly_flags: list[str] = Field(default_factory=list)
+
+    # iter-260 — Connection state (B) — orthogonal to match_status (A).
+    # API failures NEVER alter `match_status` when valid SSOT data
+    # exists; they only update this field + platform_check_error.
+    platform_check_status: str = "ok"      # one of PLATFORM_CHECK_STATUSES
+    platform_check_error: Optional[str] = None
+    platform_last_checked_at: Optional[str] = None
 
     review_status: str = "pending"
     review_decided_at: Optional[str] = None

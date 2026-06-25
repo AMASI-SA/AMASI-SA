@@ -135,12 +135,16 @@ async def test_low_drift_with_valid_data_classified_pending_platform(db):
 
 def test_sync_core_preserves_existing_match_status_on_api_hiccup():
     """Inspect sync/core.py to confirm both failure paths now
-    conditionally update match_status only when SSOT data is missing."""
+    conditionally update match_status only when SSOT data is missing.
+    (iter-259 → superseded by the iter-260 orthogonal-states refactor;
+    we accept either marker so older comments remain valid.)"""
     with open("/app/backend/ads_v2/sync/core.py", "r") as f:
         src = f.read()
-    # iter-259 markers must be in both failure handlers
-    assert src.count("iter-259") >= 3, \
-        f"expected ≥3 iter-259 markers in sync/core.py, got {src.count('iter-259')}"
+    # Either iteration marker is acceptable — both describe the same
+    # invariant ("don't flip sync_failed when SSOT data is valid").
+    marker_count = src.count("iter-259") + src.count("iter-260")
+    assert marker_count >= 3, \
+        f"expected ≥3 iter-259/iter-260 markers in sync/core.py, got {marker_count}"
     # The phrase that gates the write must be present.
     assert "preserved_existing_data" in src
     # Must NOT unconditionally set match_status=sync_failed any more
