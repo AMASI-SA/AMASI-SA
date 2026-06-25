@@ -191,6 +191,65 @@ Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
+## Ads V2 — Phase 1 (Auto-Reconcile, Final) (2026-06-25)
+**Resolved User 5-point Conditional Approval:**
+1. ✅ **API-driven auto-fetch, manual demoted to fallback** —
+   New endpoint **POST /api/ads-v2/report/auto-reconcile** body
+   `{dates:[...], account_ids?:[...]}` re-queries every enabled
+   (account × date) from its provider API and stores the freshly-
+   fetched figure in **shadow** fields `platform_authoritative_native`,
+   `platform_authoritative_sar`, `platform_last_checked_at` — without
+   touching `spend_native` (the SSOT row stays stable for Phase 2
+   review). Manual entry endpoint kept but UI button renamed
+   "إدخال يدوي (احتياطي)".
+2. ✅ **Enhanced reconciliation report fields** — Per (account, date):
+   `spend_native/sar` (ads_daily), `platform_authoritative_*` (current
+   API), `diff_native`, `diff_sar` (signed), `drift_pct_vs_platform`,
+   `drift_reason.likely_causes` (Arabic), `confidence`,
+   `last_synced_at`, `platform_last_checked_at`, `match_status`.
+3. ✅ **Unified Meta/Snapchat/TikTok** — Single `auto_reconcile_user()`
+   loop dispatches through `adapters.fetch_day()`. Token-missing path
+   degrades to `match_status='sync_failed'` (no 500).
+4. ✅ **Phase 2 boundary intact** — Zero writes to `general_ledger` and
+   zero `ledger_txn_group_id` on any ads_daily row. Verified by
+   dedicated invariant tests post auto-reconcile.
+5. ✅ **Status indicators 🟢🟡🟠🔴⚪** — New `_compute_match_status()`
+   returns one of `matched / pending_platform / drift_review /
+   sync_failed / no_data` (priority order: failed > no_data >
+   drift_review > pending_platform > matched). UI renders 5-card
+   legend at top of reconciliation tab + colored badge per row with
+   emoji icon.
+
+**Backend additions:**
+   - `core.py`: `_compute_match_status`, `auto_reconcile_for_day`,
+     `auto_reconcile_user`. `run_sync_for_account` now also sets
+     `match_status` on every sync (and `sync_failed` when fetch fails).
+   - `reports.py`: reconciliation rows expose new fields + summary
+     histogram (`match_matched`, `match_pending_platform`,
+     `match_drift_review`, `match_sync_failed`, `match_no_data`).
+   - `routes.py`: POST `/report/auto-reconcile` (bulk) and
+     `/report/auto-reconcile/account/{id}/day/{date}` (single).
+
+**Frontend (AdsV2Report.jsx):**
+   - Blue button "إعادة المطابقة من المنصات" beside green sync button.
+   - Default tab is now "المطابقة" (recon).
+   - 5-card legend (MatchStatCard) showing counts per status with
+     colored borders matching the indicator color.
+   - 6 new table columns: الحالة (with emoji badge), قيمة المنصة الآن,
+     قيمة Ads Manager (يدوي), الفرق (SAR), سبب الفرق, آخر مزامنة,
+     آخر فحص للمنصة.
+   - Dictionary `MATCH_STATUS_AR` maps backend status → icon + Arabic
+     label + Tailwind color classes.
+   - Manual dialog re-labeled "إدخال يدوي (احتياطي)" + explanatory
+     banner pointing users to the auto-reconcile button.
+
+**Tests:** `tests/test_ads_v2_auto_reconcile.py` — 6/6 PASS;
+   `tests/test_ads_v2_auto_reconcile_invariants_iter253.py` — 5/5 PASS;
+   Phase 1 + drift regressions — 17/17 still PASS. Total 28/28.
+**Verified by testing_agent_v3_fork (iter-253):** Backend 100%,
+   Frontend 100%, all 5 demands satisfied. **Phase 1 ready for final
+   user sign-off.**
+
 ## Ads V2 — Phase 1 (Final, post-rejection fix) (2026-06-25)
 **Resolved User Rejection (3 demands):**
 1. ✅ **Full Arabic UI** — Replaced all English UI terms (Reconciliation,
@@ -303,7 +362,9 @@ Purpose: Conclusively determine WHY iter-215 is skipping all 486
 counterparties in Production (per-account blocker / reason histogram).
 
 ## Tests
-- `/app/backend/tests/test_ads_v2_drift_logic.py` — 7/7 PASS (Phase 1 post-rejection fix)
+- `/app/backend/tests/test_ads_v2_auto_reconcile.py` — 6/6 PASS (Phase 1 auto-reconcile)
+- `/app/backend/tests/test_ads_v2_auto_reconcile_invariants_iter253.py` — 5/5 PASS
+- `/app/backend/tests/test_ads_v2_drift_logic.py` — 7/7 PASS
 - `/app/backend/tests/test_ads_v2_phase1.py` — 10/10 PASS
 - `/app/backend/tests/test_ads_v2_phase0.py` — 11/11 PASS
 - `/app/backend/tests/test_p15L_bnpl_transfer_block.py` — 11/11 PASS
