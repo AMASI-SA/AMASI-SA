@@ -29,6 +29,61 @@
 - `financial_movements` is detail-enrichment layer, never balance source
 - Drift detected MUST be surfaced, never hidden
 
+## Ads V2 Bank Commission Display (2026-06-25 · iter-257)
+**User directive (strict):** FREEZE the Snapchat spend sync logic — current
+USD spend + FX conversion is canonical. NO changes to:
+- FX rate fetching
+- Spend calculation
+- Snapchat API call (post the recent adapter fix)
+- Sync mechanism
+
+**What user needs visible in the report:**
+1. الصرف بالدولار (Spend USD)
+2. الصرف بالريال قبل العمولة (Spend SAR pre-commission)
+3. نسبة العمولة البنكية (Bank commission %)
+4. قيمة العمولة البنكية (Bank commission SAR)
+5. إجمالي التكلفة بعد العمولة (Total after commission)
+
+**Implementation (display-only — sync untouched):**
+- `/app/backend/ads_v2/data_layer/reports.py`:
+  - `get_spend_by_account` now exposes `spend_native`, `bank_fee_pct`
+    (derived = bank_fee_sar / spend_sar × 100), and `configured_bank_fee_pct`
+    (from settings, audit-only). `totals.spend_native_by_currency` for
+    multi-currency aggregation.
+  - `get_spend_by_provider` similarly extended with `bank_fee_pct` and
+    per-currency native breakdown.
+  - All derived from `ads_daily` SSOT — no recomputation, no new
+    sync paths.
+- `/app/frontend/src/pages/AdsV2Report.jsx`:
+  - 5 StatCards (USD card auto-hides when no USD spend).
+  - Per-account table: 10 columns including `spend_native` (USD/native)
+    and `bank_fee_pct` (effective %).
+  - Per-provider table: includes `bank_fee_pct`.
+  - `ReportTable` now has `renderCell()` that formats pct and native
+    currency with proper suffixes and tooltips.
+
+**Verified scenario (user-provided Snapchat numbers):**
+Given `spend_native=105.41 USD`, `spend_sar=395.76`, `bank_fee.rate_pct=0.023`:
+- `bank_fee_sar` = round(395.76 × 0.023, 2) = **9.10** ✅
+- `gross_sar`    = 395.76 + 9.10        = **404.86** ✅
+- Effective `bank_fee_pct` derived from SSOT = **2.299** ≈ 2.30% ✅
+
+**Tests** (`/app/backend/tests/test_ads_v2_bank_fee_report.py` — 5/5 ✅):
+- `test_snapchat_bank_fee_matches_user_scenario`
+- `test_effective_bank_fee_pct_matches_configured_rate`
+- `test_bank_fee_disabled_returns_zero`
+- `test_pct_plus_flat_method`
+- `test_report_layer_returns_new_fields`
+
+**Live aggregation curl test:** Inserted a temp `ads_daily` row matching
+the user scenario; `get_spend_by_account` returned exactly the 6
+required fields with the correct numbers.
+
+**⚠️ Sync code is frozen — any future change to spend or FX requires
+explicit user approval.**
+
+
+
 ## Dashboard Shipping SSOT Consolidation + Accordion UX (2026-06-25 · iter-256)
 **User report:** ProfitSummaryCard's "إجمالي تكاليف الشحن" total included VAT
 but the inline table only showed unit price WITHOUT tax (e.g. iMile 21×15 was

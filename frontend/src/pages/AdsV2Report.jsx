@@ -304,10 +304,37 @@ export default function AdsV2Report() {
       </Card>
 
       {/* Totals */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <StatCard label="إجمالي الصرف" value={`${fmtSAR(totals.spend_sar)} SAR`} />
-        <StatCard label="إجمالي العمولة البنكية" value={`${fmtSAR(totals.bank_fee_sar)} SAR`} />
-        <StatCard label="الإجمالي مع العمولة" value={`${fmtSAR(totals.gross_sar)} SAR`} accent />
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        {(() => {
+          // iter-257 — Show USD spend total when present (mainly Snap).
+          const byCcy = totals.spend_native_by_currency || {};
+          const usd = Number(byCcy.USD || 0);
+          const cards = [];
+          if (usd > 0) {
+            cards.push(
+              <StatCard key="usd"
+                label="إجمالي الصرف بالدولار"
+                value={`${fmtSAR(usd)} USD`}
+                testid="report-total-spend-usd"
+              />
+            );
+          }
+          cards.push(
+            <StatCard key="sar" label="الصرف بالريال (قبل العمولة)"
+              value={`${fmtSAR(totals.spend_sar)} SAR`}
+              testid="report-total-spend-sar" />,
+            <StatCard key="pct" label="نسبة العمولة البنكية"
+              value={`${(Number(totals.bank_fee_pct) || 0).toFixed(2)} %`}
+              testid="report-total-bank-fee-pct" />,
+            <StatCard key="fee" label="قيمة العمولة البنكية"
+              value={`${fmtSAR(totals.bank_fee_sar)} SAR`}
+              testid="report-total-bank-fee" />,
+            <StatCard key="gross" label="الإجمالي بعد العمولة"
+              value={`${fmtSAR(totals.gross_sar)} SAR`} accent
+              testid="report-total-gross" />,
+          );
+          return cards;
+        })()}
       </div>
 
       <Tabs defaultValue="recon" className="w-full">
@@ -357,8 +384,8 @@ export default function AdsV2Report() {
         <TabsContent value="account">
           <ReportTable
             rows={report.account?.data || []}
-            cols={["display_name", "provider", "currency_native", "spend_sar", "bank_fee_sar", "gross_sar", "days_count", "latest_date"]}
-            headers={["الحساب", "المنصة", "العملة", "الصرف (SAR)", "العمولة (SAR)", "الإجمالي (SAR)", "عدد الأيام", "آخر تاريخ"]}
+            cols={["display_name", "provider", "currency_native", "spend_native", "spend_sar", "bank_fee_pct", "bank_fee_sar", "gross_sar", "days_count", "latest_date"]}
+            headers={["الحساب", "المنصة", "العملة", "الصرف (USD/Native)", "الصرف (SAR)", "نسبة العمولة %", "العمولة (SAR)", "الإجمالي (SAR)", "عدد الأيام", "آخر تاريخ"]}
             providerCol="provider"
           />
         </TabsContent>
@@ -366,8 +393,8 @@ export default function AdsV2Report() {
         <TabsContent value="provider">
           <ReportTable
             rows={report.provider?.data || []}
-            cols={["provider", "accounts_count", "days_count", "spend_sar", "bank_fee_sar", "gross_sar"]}
-            headers={["المنصة", "عدد الحسابات", "عدد الأيام", "الصرف (SAR)", "العمولة (SAR)", "الإجمالي (SAR)"]}
+            cols={["provider", "accounts_count", "days_count", "spend_sar", "bank_fee_pct", "bank_fee_sar", "gross_sar"]}
+            headers={["المنصة", "عدد الحسابات", "عدد الأيام", "الصرف (SAR)", "نسبة العمولة %", "العمولة (SAR)", "الإجمالي (SAR)"]}
             providerCol="provider"
           />
         </TabsContent>
@@ -382,12 +409,13 @@ export default function AdsV2Report() {
   );
 }
 
-function StatCard({ label, value, accent }) {
+function StatCard({ label, value, accent, testid }) {
   return (
     <Card
       className={accent
         ? "bg-emerald-600/15 border-emerald-500/40"
         : "bg-zinc-900 border-zinc-800"}
+      data-testid={testid || undefined}
     >
       <CardContent className="py-5">
         <p
@@ -408,6 +436,46 @@ function StatCard({ label, value, accent }) {
 }
 
 function ReportTable({ rows, cols, headers, providerCol }) {
+  // iter-257 — Column-specific renderers for the new fields.
+  const renderCell = (c, r) => {
+    if (c === providerCol) {
+      return PROVIDER_AR[r[c]] || r[c] || "—";
+    }
+    // Bank-fee percentage — always shown with 2 decimals and a % suffix.
+    if (c === "bank_fee_pct") {
+      const v = Number(r[c] || 0);
+      const cfg = Number(r.configured_bank_fee_pct || 0);
+      // Display effective % (computed from SSOT) with the configured
+      // setting as a tooltip — auditable but never recomputed here.
+      return (
+        <span
+          title={
+            cfg > 0 ? `نسبة العمولة المُعَدَّة في الإعدادات: ${cfg.toFixed(2)}%` : undefined
+          }
+        >
+          <span className="font-mono">{v.toFixed(2)}</span>
+          <span className="text-xs text-zinc-400 ms-1">%</span>
+        </span>
+      );
+    }
+    // Native USD/EUR spend with currency badge.
+    if (c === "spend_native") {
+      const v = Number(r[c] || 0);
+      const ccy = (r.currency_native || "").toUpperCase();
+      if (!ccy || ccy === "SAR") return "—";
+      return (
+        <span>
+          <span className="font-mono">{v.toFixed(2)}</span>
+          <span className="text-xs text-zinc-400 ms-1">{ccy}</span>
+        </span>
+      );
+    }
+    if (typeof r[c] === "number") {
+      return r[c].toLocaleString("ar-SA", { maximumFractionDigits: 2 });
+    }
+    return r[c] || "—";
+  };
+
   return (
     <Card className="bg-zinc-900 border-zinc-800">
       <CardContent className="p-0">
@@ -433,12 +501,9 @@ function ReportTable({ rows, cols, headers, providerCol }) {
                     <TableCell
                       key={c}
                       className="text-zinc-50 font-semibold tabular-nums"
+                      data-testid={`report-row-${i}-${c}`}
                     >
-                      {c === providerCol
-                        ? (PROVIDER_AR[r[c]] || r[c] || "—")
-                        : typeof r[c] === "number"
-                        ? r[c].toLocaleString("ar-SA", { maximumFractionDigits: 2 })
-                        : (r[c] || "—")}
+                      {renderCell(c, r)}
                     </TableCell>
                   ))}
                 </TableRow>

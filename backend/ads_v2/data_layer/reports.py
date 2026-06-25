@@ -98,7 +98,9 @@ async def get_spend_by_account(
     pipeline = [
         {"$match": match},
         {"$group": {
-            "_id": {"account_id": "$account_id", "provider": "$provider"},
+            "_id": {"account_id": "$account_id", "provider": "$provider",
+                    "currency_native": "$currency_native"},
+            "spend_native": {"$sum": "$spend_native"},
             "spend_sar":    {"$sum": "$spend_sar"},
             "bank_fee_sar": {"$sum": "$bank_fee_sar"},
             "gross_sar":    {"$sum": "$gross_sar"},
@@ -115,7 +117,11 @@ async def get_spend_by_account(
                 ]}}},
                 {"$project": {"_id": 0, "display_name": 1,
                               "external_account_id": 1,
-                              "currency_native": 1}},
+                              "currency_native": 1,
+                              # iter-257 — expose configured bank_fee for
+                              # the report UI (display only, never used
+                              # for recomputation — ads_daily is SSOT).
+                              "bank_fee": 1}},
             ],
             "as": "_acct",
         }},
@@ -126,22 +132,59 @@ async def get_spend_by_account(
             "display_name": {"$arrayElemAt": ["$_acct.display_name", 0]},
             "external_account_id": {
                 "$arrayElemAt": ["$_acct.external_account_id", 0]},
-            "currency_native": {
-                "$arrayElemAt": ["$_acct.currency_native", 0]},
+            "currency_native": "$_id.currency_native",
+            "spend_native": {"$round": ["$spend_native", 2]},
             "spend_sar":    {"$round": ["$spend_sar", 2]},
             "bank_fee_sar": {"$round": ["$bank_fee_sar", 2]},
             "gross_sar":    {"$round": ["$gross_sar", 2]},
             "days_count":   1,
             "latest_date":  1,
+            # Effective bank-fee % observed in the data — derived from
+            # SSOT (bank_fee_sar / spend_sar). Falls back to 0 if no spend.
+            "bank_fee_pct": {
+                "$cond": [
+                    {"$gt": ["$spend_sar", 0]},
+                    {"$round": [
+                        {"$multiply": [
+                            {"$divide": ["$bank_fee_sar", "$spend_sar"]},
+                            100.0,
+                        ]}, 3,
+                    ]},
+                    0.0,
+                ],
+            },
+            # Configured rate from settings (display-only audit value).
+            "configured_bank_fee_pct": {
+                "$round": [
+                    {"$multiply": [
+                        {"$ifNull": [
+                            {"$arrayElemAt": ["$_acct.bank_fee.rate_pct", 0]},
+                            0,
+                        ]},
+                        100.0,
+                    ]}, 3,
+                ],
+            },
         }},
         {"$sort": {"gross_sar": -1}},
     ]
     rows = await db.ads_daily.aggregate(pipeline).to_list(None)
+    # Multi-currency totals for the USD column (Snap accounts vs SAR-native).
+    by_ccy: dict[str, float] = {}
+    for r in rows:
+        ccy = (r.get("currency_native") or "").upper()
+        by_ccy[ccy] = round(by_ccy.get(ccy, 0.0) + r.get("spend_native", 0.0), 2)
     totals = {
         "spend_sar":    round(sum(r["spend_sar"] for r in rows), 2),
         "bank_fee_sar": round(sum(r["bank_fee_sar"] for r in rows), 2),
         "gross_sar":    round(sum(r["gross_sar"] for r in rows), 2),
+        "spend_native_by_currency": by_ccy,
     }
+    # Effective overall %: total commission / total spend.
+    totals["bank_fee_pct"] = (
+        round((totals["bank_fee_sar"] / totals["spend_sar"]) * 100.0, 3)
+        if totals["spend_sar"] > 0 else 0.0
+    )
     return {"data": rows, "totals": totals,
             "meta": _meta("get_spend_by_account")}
 
@@ -153,12 +196,26 @@ async def get_spend_by_provider(
     pipeline = [
         {"$match": match},
         {"$group": {
-            "_id": "$provider",
+            "_id": {"provider": "$provider", "currency_native": "$currency_native"},
+            "spend_native": {"$sum": "$spend_native"},
             "spend_sar":    {"$sum": "$spend_sar"},
             "bank_fee_sar": {"$sum": "$bank_fee_sar"},
             "gross_sar":    {"$sum": "$gross_sar"},
             "accounts":     {"$addToSet": "$account_id"},
             "days_count":   {"$sum": 1},
+        }},
+        # Roll up multi-currency rows per provider:
+        {"$group": {
+            "_id": "$_id.provider",
+            "spend_native_by_currency": {"$push": {
+                "currency": "$_id.currency_native",
+                "amount":   "$spend_native",
+            }},
+            "spend_sar":    {"$sum": "$spend_sar"},
+            "bank_fee_sar": {"$sum": "$bank_fee_sar"},
+            "gross_sar":    {"$sum": "$gross_sar"},
+            "accounts":     {"$push": "$accounts"},
+            "days_count":   {"$sum": "$days_count"},
         }},
         {"$project": {
             "_id": 0,
@@ -166,17 +223,38 @@ async def get_spend_by_provider(
             "spend_sar":    {"$round": ["$spend_sar", 2]},
             "bank_fee_sar": {"$round": ["$bank_fee_sar", 2]},
             "gross_sar":    {"$round": ["$gross_sar", 2]},
-            "accounts_count": {"$size": "$accounts"},
+            "spend_native_by_currency": 1,
+            "accounts_count": {"$size": {"$reduce": {
+                "input": "$accounts", "initialValue": [],
+                "in": {"$setUnion": ["$$value", "$$this"]},
+            }}},
             "days_count":   1,
+            "bank_fee_pct": {
+                "$cond": [
+                    {"$gt": ["$spend_sar", 0]},
+                    {"$round": [
+                        {"$multiply": [
+                            {"$divide": ["$bank_fee_sar", "$spend_sar"]},
+                            100.0,
+                        ]}, 3,
+                    ]},
+                    0.0,
+                ],
+            },
         }},
         {"$sort": {"gross_sar": -1}},
     ]
     rows = await db.ads_daily.aggregate(pipeline).to_list(None)
-    return {"data": rows, "totals": {
+    totals = {
         "spend_sar":    round(sum(r["spend_sar"] for r in rows), 2),
         "bank_fee_sar": round(sum(r["bank_fee_sar"] for r in rows), 2),
         "gross_sar":    round(sum(r["gross_sar"] for r in rows), 2),
-    }, "meta": _meta("get_spend_by_provider")}
+    }
+    totals["bank_fee_pct"] = (
+        round((totals["bank_fee_sar"] / totals["spend_sar"]) * 100.0, 3)
+        if totals["spend_sar"] > 0 else 0.0
+    )
+    return {"data": rows, "totals": totals, "meta": _meta("get_spend_by_provider")}
 
 
 async def get_daily_rows(
