@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 
 from .data_layer import discovery, settings as settings_dl
 from .data_layer import reports as reports_dl
-from .sync.core import run_sync_for_account, run_sync_user
+from .sync.core import run_sync_for_account, run_sync_user, recompute_drift_for_day
 
 logger = logging.getLogger(__name__)
 
@@ -288,5 +288,40 @@ def make_ads_v2_router(db, current_user_dep):
             limit=limit,
         )
         return {"ok": True, "data": data}
+
+    # ── POST /report/manual-value — merchant enters Ads Manager value ─
+    @router.post("/report/manual-value")
+    async def set_manual_value(
+        body: dict = Body(...), user: dict = Depends(_user),
+    ):
+        """Record the merchant's manual Ads Manager value for one
+        (account_id, date) and immediately recompute drift_pct + flags.
+
+        Body: {account_id, date, manual_value_native, note?}
+        """
+        account_id = body.get("account_id")
+        date_iso = body.get("date")
+        try:
+            manual_value = float(body.get("manual_value_native"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "manual_value_native must be a number")
+        if not account_id or not date_iso:
+            raise HTTPException(400, "account_id and date are required")
+        if manual_value < 0:
+            raise HTTPException(400, "manual_value_native must be >= 0")
+
+        # Verify account belongs to the user
+        acct = await db.ads_accounts.find_one(
+            {"user_id": user["id"], "id": account_id, "soft_deleted": False},
+        )
+        if not acct:
+            raise HTTPException(404, "account_not_found")
+
+        res = await recompute_drift_for_day(
+            db, user_id=user["id"], account_id=account_id,
+            date_iso=date_iso, manual_value_native=manual_value,
+            actor_email=user.get("email"), note=body.get("note"),
+        )
+        return {"ok": True, "data": res}
 
     return router

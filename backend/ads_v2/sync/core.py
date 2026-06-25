@@ -117,38 +117,88 @@ def _compute_anomaly_flags(
     has_fx: bool,
     review_settings: dict,
     hours_after_close: float,
-) -> tuple[list[str], float, str]:
-    """Returns (anomaly_flags, drift_pct, initial_review_status)."""
+    manual_value_native: Optional[float] = None,
+) -> tuple[list[str], Optional[float], Optional[float], str, dict]:
+    """Returns (anomaly_flags, drift_pct_vs_previous_sync,
+    drift_pct_vs_manual, initial_review_status, drift_reason).
+
+    Drift handling rules:
+      • drift_pct is ONLY meaningful when there's something to compare to.
+        - No previous sync → drift_pct_vs_previous_sync = None
+        - No manual value  → drift_pct_vs_manual        = None
+      • The displayed drift_pct (in ads_daily) MUST be None when there is
+        no comparison anchor — UI shows "—" instead of misleading "0%".
+      • drift_reason is a structured object explaining the most likely
+        cause for any non-zero drift the merchant sees in reports.
+    """
     flags: list[str] = []
-    drift_pct = 0.0
+    drift_prev: Optional[float] = None
+    drift_manual: Optional[float] = None
 
     if prev_spend_native is not None and prev_spend_native > 0:
         delta = new_spend_native - prev_spend_native
-        drift_pct = abs(delta / prev_spend_native) * 100.0
-        warn = float(review_settings.get(
-            "drift_warning_threshold_pct", 5.0))
-        block = float(review_settings.get(
-            "drift_block_threshold_pct", 15.0))
-        if drift_pct >= block:
+        drift_prev = round(abs(delta / prev_spend_native) * 100.0, 2)
+
+    if manual_value_native is not None and manual_value_native > 0:
+        delta_m = new_spend_native - manual_value_native
+        drift_manual = round(abs(delta_m / manual_value_native) * 100.0, 2)
+
+    warn = float(review_settings.get("drift_warning_threshold_pct", 5.0))
+    block = float(review_settings.get("drift_block_threshold_pct", 15.0))
+
+    # Manual drift takes priority (it compares against ground truth)
+    primary_drift = drift_manual if drift_manual is not None else drift_prev
+
+    if primary_drift is not None:
+        if primary_drift >= block:
             flags.append("drift_above_15pct")
-        elif drift_pct >= warn:
+        elif primary_drift >= warn:
             flags.append("drift_above_5pct")
-        if hours_after_close > 24 and drift_pct >= warn:
-            flags.append("late_reporting")
+    if hours_after_close > 24 and (drift_prev or 0) >= warn:
+        flags.append("late_reporting")
+    if manual_value_native and (drift_manual or 0) >= warn:
+        flags.append("mismatch_vs_ads_manager")
 
     if not has_fx and new_spend_native > 0:
         flags.append("missing_fx")
 
-    # Initial review status
     initial = "pending"
     if "missing_fx" in flags:
         initial = "held_needs_fx"
     elif "drift_above_15pct" in flags:
         initial = "held_anomaly"
-    elif "drift_above_5pct" in flags or "late_reporting" in flags:
+    elif "drift_above_5pct" in flags or "late_reporting" in flags or "mismatch_vs_ads_manager" in flags:
         initial = "held_drift"
 
-    return flags, round(drift_pct, 2), initial
+    # ── Structured drift_reason ────────────────────────────────────
+    drift_reason: dict = {
+        "has_manual_value":   manual_value_native is not None,
+        "compared_against":   (
+            "ads_manager_manual" if manual_value_native is not None
+            else ("previous_sync" if prev_spend_native is not None else "none")),
+        "hours_after_close":  round(hours_after_close, 1),
+        "likely_causes":      [],
+    }
+    if primary_drift is None or primary_drift == 0:
+        drift_reason["likely_causes"] = []
+    else:
+        causes: list[str] = []
+        if hours_after_close < 24:
+            causes.append("sync_before_close")  # day still ongoing
+        if 24 <= hours_after_close <= 72:
+            causes.append("late_reporting_window")  # Meta 24-72h settling
+        if "mismatch_vs_ads_manager" in flags:
+            causes.append("ads_manager_value_differs")
+        if "late_reporting" in flags:
+            causes.append("post_close_provider_update")
+        if "missing_fx" in flags:
+            causes.append("missing_fx_rate")
+        if not causes:
+            # Drift exists but we couldn't classify → unknown
+            causes.append("unclassified_drift")
+        drift_reason["likely_causes"] = causes
+
+    return flags, drift_prev, drift_manual, initial, drift_reason
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -245,18 +295,22 @@ async def run_sync_for_account(
     # ── Reconciliation: drift vs previous ads_daily row ──
     prev = await db.ads_daily.find_one(
         {"user_id": user_id, "account_id": account_id, "date": date_iso},
-        {"_id": 0, "spend_native": 1, "review_status": 1},
+        {"_id": 0, "spend_native": 1, "review_status": 1,
+         "platform_manual_value_native": 1, "platform_manual_value_sar": 1,
+         "platform_manual_entered_at": 1, "platform_manual_entered_by": 1},
     )
     prev_spend = prev.get("spend_native") if prev else None
+    manual_native = prev.get("platform_manual_value_native") if prev else None
     hours_after_close = _compute_hours_after_close(
         date_iso, account.get("timezone") or "Asia/Riyadh",
     )
-    flags, drift_pct, computed_initial_status = _compute_anomaly_flags(
+    flags, drift_prev, drift_manual, computed_initial_status, drift_reason = _compute_anomaly_flags(
         new_spend_native=spend_native,
         prev_spend_native=prev_spend,
         has_fx=has_fx,
         review_settings=account.get("review_settings") or {},
         hours_after_close=hours_after_close,
+        manual_value_native=manual_native,
     )
 
     # ── Decide final review_status ──
@@ -271,6 +325,12 @@ async def run_sync_for_account(
     confidence = "final" if _days_old(date_iso) >= 3 else "provisional"
 
     idempotency_key = f"ads_v2:{user_id}:{account_id}:{date_iso}"
+
+    # The displayed drift_pct reflects the MOST MEANINGFUL comparison:
+    #   • If merchant entered an Ads Manager value → drift vs manual
+    #   • Else if we have a previous sync         → drift vs previous
+    #   • Else → None (UI must show "—", not "0%")
+    display_drift_pct = drift_manual if drift_manual is not None else drift_prev
 
     set_doc = {
         "user_id":          user_id,
@@ -291,13 +351,17 @@ async def run_sync_for_account(
         "platform_reported_native": spend_native,
         "platform_reported_sar":    spend_sar,
         "platform_checked_at":      finished_at,
-        "drift_pct":        drift_pct,
+        "drift_pct":        display_drift_pct,
+        "drift_pct_vs_previous_sync": drift_prev,
+        "drift_pct_vs_manual": drift_manual,
+        "drift_reason":     drift_reason,
         "anomaly_flags":    flags,
         "review_status":    final_review_status,
         "last_synced_at":   finished_at,
         "last_recomputed_at": finished_at,
         "confidence":       confidence,
         "updated_at":       finished_at,
+        "raw_excerpt":      fetched.get("raw_excerpt") or {},
     }
     set_on_insert = {
         "id":                uuid.uuid4().hex,
@@ -345,7 +409,11 @@ async def run_sync_for_account(
         "gross_sar": gross_sar,
         "fx_rate": fx_rate,
         "fx_source": fx_source,
-        "drift_pct": drift_pct,
+        "drift_pct": display_drift_pct,
+        "drift_pct_vs_previous_sync": drift_prev,
+        "drift_pct_vs_manual": drift_manual,
+        "drift_reason": drift_reason,
+        "manual_value_native": manual_native,
         "anomaly_flags": flags,
         "review_status": final_review_status,
         "api_status": status.get("code"),
@@ -359,10 +427,140 @@ async def run_sync_for_account(
         "spend_native":    spend_native,
         "spend_sar":       spend_sar,
         "gross_sar":       gross_sar,
-        "drift_pct":       drift_pct,
+        "drift_pct":       display_drift_pct,
+        "drift_pct_vs_previous_sync": drift_prev,
+        "drift_pct_vs_manual": drift_manual,
+        "drift_reason":    drift_reason,
         "anomaly_flags":   flags,
         "review_status":   final_review_status,
         "api_status":      status.get("code"),
+    }
+
+
+    return {
+        "ok":              True,
+        "sync_run_id":     sync_run_id,
+        "account_id":      account_id,
+        "date":            date_iso,
+        "spend_native":    spend_native,
+        "spend_sar":       spend_sar,
+        "gross_sar":       gross_sar,
+        "drift_pct":       display_drift_pct,
+        "drift_pct_vs_previous_sync": drift_prev,
+        "drift_pct_vs_manual": drift_manual,
+        "drift_reason":    drift_reason,
+        "anomaly_flags":   flags,
+        "review_status":   final_review_status,
+        "api_status":      status.get("code"),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Recompute drift when the merchant enters an Ads Manager value
+# ─────────────────────────────────────────────────────────────────────
+async def recompute_drift_for_day(
+    db, user_id: str, account_id: str, date_iso: str,
+    manual_value_native: float, actor_email: Optional[str] = None,
+    note: Optional[str] = None,
+) -> dict:
+    """Store the merchant-entered Ads Manager value and recompute drift,
+    anomaly flags, and review status for that (account, date). Does NOT
+    re-fetch from the provider — uses the existing spend_native.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    daily = await db.ads_daily.find_one(
+        {"user_id": user_id, "account_id": account_id, "date": date_iso},
+        {"_id": 0},
+    )
+    if not daily:
+        return {"ok": False, "error": "no_ads_daily_row_for_date",
+                "hint": "Run a sync for this date first."}
+
+    account = await db.ads_accounts.find_one(
+        {"user_id": user_id, "id": account_id, "soft_deleted": False},
+        {"_id": 0, "review_settings": 1, "timezone": 1,
+         "fx_to_sar": 1, "currency_native": 1, "bank_fee": 1},
+    )
+    if not account:
+        return {"ok": False, "error": "account_not_found"}
+
+    spend_native = float(daily.get("spend_native") or 0)
+    has_fx = float(daily.get("fx_rate") or 0) > 0
+    hours_after_close = _compute_hours_after_close(
+        date_iso, account.get("timezone") or "Asia/Riyadh",
+    )
+    # prev_spend_native: keep the same drift_pct_vs_previous_sync
+    flags, drift_prev, drift_manual, init_status, drift_reason = _compute_anomaly_flags(
+        new_spend_native=spend_native,
+        prev_spend_native=daily.get("spend_native"),
+        has_fx=has_fx,
+        review_settings=account.get("review_settings") or {},
+        hours_after_close=hours_after_close,
+        manual_value_native=manual_value_native,
+    )
+    # Keep old drift_prev (not relevant here — comparing to itself yields 0)
+    drift_prev = daily.get("drift_pct_vs_previous_sync")
+
+    manual_sar = round(manual_value_native * float(daily.get("fx_rate") or 1), 2)
+    display = drift_manual if drift_manual is not None else drift_prev
+
+    # Status: only update if previously open (pending / held_*)
+    prev_status = daily.get("review_status") or "pending"
+    if prev_status in ("approved", "rejected", "reopened"):
+        final_status = prev_status
+    else:
+        final_status = init_status
+
+    await db.ads_daily.update_one(
+        {"user_id": user_id, "account_id": account_id, "date": date_iso},
+        {"$set": {
+            "platform_manual_value_native": manual_value_native,
+            "platform_manual_value_sar":    manual_sar,
+            "platform_manual_entered_at":   now_iso,
+            "platform_manual_entered_by":   actor_email or "user",
+            "platform_manual_note":         note or "",
+            "drift_pct":                    display,
+            "drift_pct_vs_manual":          drift_manual,
+            "drift_reason":                 drift_reason,
+            "anomaly_flags":                flags,
+            "review_status":                final_status,
+            "last_recomputed_at":           now_iso,
+            "updated_at":                   now_iso,
+        }},
+    )
+
+    await db.ads_sync_logs.insert_one({
+        "id":            uuid.uuid4().hex,
+        "user_id":       user_id,
+        "account_id":    account_id,
+        "date":          date_iso,
+        "event":         "reconciliation_checked",
+        "actor_email":   actor_email,
+        "details":       {
+            "manual_value_native":   manual_value_native,
+            "manual_value_sar":      manual_sar,
+            "drift_pct_vs_manual":   drift_manual,
+            "anomaly_flags":         flags,
+            "drift_reason":          drift_reason,
+            "review_status_before":  prev_status,
+            "review_status_after":   final_status,
+            "note":                  note,
+        },
+        "at":            now_iso,
+    })
+
+    return {
+        "ok":                    True,
+        "account_id":            account_id,
+        "date":                  date_iso,
+        "spend_native":          spend_native,
+        "manual_value_native":   manual_value_native,
+        "manual_value_sar":      manual_sar,
+        "drift_pct_vs_manual":   drift_manual,
+        "drift_pct":             display,
+        "drift_reason":          drift_reason,
+        "anomaly_flags":         flags,
+        "review_status":         final_status,
     }
 
 

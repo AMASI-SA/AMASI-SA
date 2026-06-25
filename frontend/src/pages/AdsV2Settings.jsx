@@ -87,22 +87,36 @@ const PROVIDER_LABEL = {
   google_ads: "Google Ads",
 };
 
-const STATUS_TONE = {
-  active: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  paused: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
-  error: "bg-red-500/15 text-red-300 border-red-500/30",
-  token_expired:
-    "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  unauthorized:
-    "bg-red-500/15 text-red-300 border-red-500/30",
-  discovered:
-    "bg-blue-500/15 text-blue-300 border-blue-500/30",
-  missing: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
-  token_invalid:
-    "bg-red-500/15 text-red-300 border-red-500/30",
+// Arabic labels for sync_status / connection_status / token health
+const STATUS_AR = {
+  active: "نشط",
+  paused: "موقوف مؤقتاً",
+  error: "خطأ",
+  token_expired: "انتهت صلاحية التوكن",
+  unauthorized: "توكن غير صالح",
+  discovered: "مُكتشف",
+  missing: "غير مربوط",
+  token_invalid: "توكن غير صالح",
+  ok: "سليم",
 };
 
-const tone = (s) => STATUS_TONE[s] || "bg-zinc-500/15 text-zinc-300 border-zinc-500/30";
+const STATUS_TONE = {
+  active: "bg-emerald-500/20 text-emerald-100 border-emerald-500/40",
+  paused: "bg-zinc-500/20 text-zinc-100 border-zinc-500/40",
+  error: "bg-red-500/20 text-red-100 border-red-500/40",
+  token_expired:
+    "bg-amber-500/20 text-amber-100 border-amber-500/40",
+  unauthorized:
+    "bg-red-500/20 text-red-100 border-red-500/40",
+  discovered:
+    "bg-blue-500/20 text-blue-100 border-blue-500/40",
+  missing: "bg-zinc-500/20 text-zinc-100 border-zinc-500/40",
+  token_invalid:
+    "bg-red-500/20 text-red-100 border-red-500/40",
+};
+
+const tone = (s) => STATUS_TONE[s] || "bg-zinc-500/20 text-zinc-100 border-zinc-500/40";
+const statusAr = (s) => STATUS_AR[s] || s || "—";
 
 // ──────────────────────────────────────────────────────────────────────
 // Main component
@@ -220,11 +234,11 @@ export default function AdsV2Settings() {
             <h1 className="text-3xl font-bold text-zinc-100">
               إعدادات الإعلانات
             </h1>
-            <Badge className="bg-blue-500/15 text-blue-300 border-blue-500/30">
-              V2 · Phase 0
+            <Badge className="bg-blue-500/20 text-blue-100 border-blue-500/40 font-semibold">
+              الإصدار V2 · المرحلة 0
             </Badge>
           </div>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-zinc-300 mt-1 font-medium">
             كل إعدادات منصات الإعلانات في مكان واحد. لا تأثير على V1.
           </p>
         </div>
@@ -247,10 +261,10 @@ export default function AdsV2Settings() {
       </div>
 
       {/* Phase-0 invariant banner */}
-      <div className="mb-6 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-200 text-sm">
-        <span className="font-semibold">إشعار المرحلة 0:</span>{" "}
+      <div className="mb-6 p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-100 text-sm font-medium">
+        <span className="font-bold">تنبيه المرحلة 0:</span>{" "}
         هذه الصفحة قراءة وتجهيز فقط. لا يتم إنشاء قيود محاسبية، ولا
-        تعديل على V1، ولا حذف لأي token.
+        تعديل على V1، ولا حذف لأي توكن.
       </div>
 
       <Tabs defaultValue="accounts" className="w-full">
@@ -369,14 +383,14 @@ function AccountsTab({ accounts, discovery, onLink, onPatch, onDelete }) {
             <Table>
               <TableHeader>
                 <TableRow className="border-zinc-800">
-                  <TableHead className="text-zinc-400">المنصة</TableHead>
-                  <TableHead className="text-zinc-400">الحساب</TableHead>
-                  <TableHead className="text-zinc-400">المنظمة</TableHead>
-                  <TableHead className="text-zinc-400">العملة</TableHead>
-                  <TableHead className="text-zinc-400">الحالة</TableHead>
-                  <TableHead className="text-zinc-400">Token</TableHead>
-                  <TableHead className="text-zinc-400">Sync</TableHead>
-                  <TableHead className="text-zinc-400 text-end">
+                  <TableHead className="text-zinc-200 font-semibold">المنصة</TableHead>
+                  <TableHead className="text-zinc-200 font-semibold">الحساب</TableHead>
+                  <TableHead className="text-zinc-200 font-semibold">المنظمة</TableHead>
+                  <TableHead className="text-zinc-200 font-semibold">العملة</TableHead>
+                  <TableHead className="text-zinc-200 font-semibold">الحالة</TableHead>
+                  <TableHead className="text-zinc-200 font-semibold">حالة التوكن</TableHead>
+                  <TableHead className="text-zinc-200 font-semibold">المزامنة</TableHead>
+                  <TableHead className="text-zinc-200 font-semibold text-end">
                     إجراء
                   </TableHead>
                 </TableRow>
@@ -388,32 +402,32 @@ function AccountsTab({ accounts, discovery, onLink, onPatch, onDelete }) {
                     className="border-zinc-800"
                     data-testid={`account-row-${a.id}`}
                   >
-                    <TableCell className="text-zinc-200">
+                    <TableCell className="text-zinc-50 font-semibold">
                       {PROVIDER_LABEL[a.provider] || a.provider}
                     </TableCell>
-                    <TableCell className="text-zinc-300">
-                      <div>{a.display_name}</div>
-                      <div className="text-xs text-zinc-500 font-mono">
+                    <TableCell className="text-zinc-100">
+                      <div className="font-semibold">{a.display_name}</div>
+                      <div className="text-xs text-zinc-400 font-mono">
                         {a.external_account_id}
                       </div>
                     </TableCell>
-                    <TableCell className="text-zinc-400">
+                    <TableCell className="text-zinc-300">
                       {a.organization_name || "—"}
                     </TableCell>
-                    <TableCell className="text-zinc-300">
+                    <TableCell className="text-zinc-100 font-semibold">
                       {a.currency_native}
                     </TableCell>
                     <TableCell>
-                      <Badge className={tone(a.sync_status)}>
-                        {a.sync_status}
+                      <Badge className={`${tone(a.sync_status)} font-semibold`}>
+                        {statusAr(a.sync_status)}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       {a._v1_token_health?.ok ? (
-                        <Badge className={tone("active")}>OK</Badge>
+                        <Badge className={`${tone("active")} font-semibold`}>سليم</Badge>
                       ) : (
-                        <Badge className={tone("error")}>
-                          {a._v1_token_health?.reason || "غير متاح"}
+                        <Badge className={`${tone("error")} font-semibold`}>
+                          {statusAr(a._v1_token_health?.reason) || "غير متاح"}
                         </Badge>
                       )}
                     </TableCell>
@@ -476,30 +490,32 @@ function ProviderDiscoveryBlock({ provider, block, onLink }) {
     <div className="border border-zinc-800 rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-zinc-100 font-semibold">
+          <h3 className="text-zinc-50 font-bold text-base">
             {PROVIDER_LABEL[provider] || provider}
           </h3>
-          <Badge className={tone(status)}>{status}</Badge>
+          <Badge className={`${tone(status)} font-semibold`}>
+            {statusAr(status)}
+          </Badge>
         </div>
-        <span className="text-xs text-zinc-500">
+        <span className="text-xs text-zinc-300 font-semibold">
           {accounts.length} حساب متاح
         </span>
       </div>
       {block.error && (
-        <div className="text-xs text-red-300 mb-2">
-          خطأ: {block.error.reason || "غير معروف"}
+        <div className="text-xs text-red-200 mb-2 font-semibold">
+          خطأ: {statusAr(block.error.reason) || "غير معروف"}
           {block.error.body && (
-            <div className="text-zinc-500 mt-1 font-mono">
+            <div className="text-zinc-400 mt-1 font-mono">
               {String(block.error.body).slice(0, 200)}
             </div>
           )}
         </div>
       )}
       {accounts.length === 0 ? (
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-zinc-300 font-medium">
           {status === "missing"
-            ? "لا يوجد token مربوط في V1. لن نطلب OAuth — أبلغني إذا تريد ربطه."
-            : "لا توجد حسابات متاحة من هذا المزود."}
+            ? "لا يوجد توكن مربوط في V1. لن نطلب صلاحيات جديدة — أبلغني إذا تريد ربطه."
+            : "لا توجد حسابات متاحة من هذه المنصة."}
         </p>
       ) : (
         <div className="space-y-2">
@@ -510,28 +526,29 @@ function ProviderDiscoveryBlock({ provider, block, onLink }) {
               data-testid={`discovered-${a.provider}-${a.external_account_id}`}
             >
               <div>
-                <div className="text-zinc-200 text-sm font-medium">
+                <div className="text-zinc-50 text-sm font-bold">
                   {a.display_name}
                 </div>
-                <div className="text-xs text-zinc-500 font-mono">
+                <div className="text-xs text-zinc-400 font-mono">
                   {a.external_account_id}
                   {a.organization_name && ` · ${a.organization_name}`}
                   {a._from_cache && (
-                    <span className="ml-2 text-amber-400">
-                      (من V1 cache — Token قد لا يدعم هذه المنظمة)
+                    <span className="ms-2 text-amber-300 font-semibold">
+                      (من ذاكرة V1 — قد لا يدعم التوكن هذه المنظمة)
                     </span>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className="bg-zinc-800 text-zinc-300 border-zinc-700">
+                <Badge className="bg-zinc-800 text-zinc-100 border-zinc-700 font-semibold">
                   {a.currency_native}
                 </Badge>
                 {a._linked ? (
-                  <Badge className={tone("active")}>مربوط</Badge>
+                  <Badge className={`${tone("active")} font-semibold`}>مربوط</Badge>
                 ) : (
                   <Button
                     size="sm"
+                    className="font-semibold"
                     onClick={() => onLink(a, block)}
                     data-testid={`link-btn-${a.external_account_id}`}
                   >
@@ -564,9 +581,9 @@ function CurrencyTab({ accounts, onPatch }) {
   }
   return (
     <div className="space-y-4">
-      <p className="text-xs text-zinc-400">
-        لكل حساب سعر صرف خاص (إلى SAR). لا fallback ثابت 3.75 — لو الحساب
-        بـ SAR، السعر = 1.0.
+      <p className="text-xs text-zinc-300 font-medium">
+        لكل حساب سعر صرف خاص (إلى SAR). لا يوجد سعر افتراضي ثابت — إذا كانت
+        عملة الحساب SAR فإن السعر = 1.0.
       </p>
       {accounts.map((a) => (
         <FxRow key={a.id} a={a} onPatch={onPatch} />
@@ -671,9 +688,9 @@ function BankFeesTab({ accounts, onPatch }) {
   }
   return (
     <div className="space-y-4">
-      <p className="text-xs text-zinc-400">
-        العمولة البنكية تُضاف كقيد منفصل في GL (بعد اعتماد المراجعة). يدعم:
-        نسبة، مبلغ ثابت، أو الاثنين معاً.
+      <p className="text-xs text-zinc-300 font-medium">
+        العمولة البنكية تُضاف كقيد منفصل في دفتر الأستاذ (بعد اعتماد المراجعة). تدعم:
+        نسبة مئوية، أو مبلغ ثابت، أو الاثنين معاً.
       </p>
       {accounts.map((a) => (
         <BankFeeRow key={a.id} a={a} onPatch={onPatch} />
@@ -811,8 +828,8 @@ function ReviewSettingsTab({ accounts, onPatch }) {
   }
   return (
     <div className="space-y-4">
-      <p className="text-xs text-zinc-400">
-        إعدادات المراجعة تتحكم بمتى يحتاج القيد اعتماد، ومتى يُحجب بسبب drift.
+      <p className="text-xs text-zinc-300 font-medium">
+        إعدادات المراجعة تتحكم بمتى يحتاج القيد اعتماداً يدوياً، ومتى يُحجب بسبب نسبة الفرق.
       </p>
       {accounts.map((a) => (
         <ReviewSettingsRow key={a.id} a={a} onPatch={onPatch} />
@@ -851,8 +868,8 @@ function ReviewSettingsRow({ a, onPatch }) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <FLabel className="text-zinc-400 text-xs">
-              Auto-approve تحت (SAR)
+            <FLabel className="text-zinc-300 text-xs font-semibold">
+              اعتماد تلقائي تحت قيمة (SAR)
             </FLabel>
             <FInput
               type="number"
@@ -861,13 +878,13 @@ function ReviewSettingsRow({ a, onPatch }) {
               onChange={(e) => setAutoApproveUnder(e.target.value)}
               data-testid={`auto-approve-${a.id}`}
             />
-            <p className="text-xs text-zinc-600 mt-1">
-              0 = اعتماد يدوي دائماً
+            <p className="text-xs text-zinc-400 mt-1 font-medium">
+              0 = يتطلب اعتماد يدوي دائماً
             </p>
           </div>
           <div>
-            <FLabel className="text-zinc-400 text-xs">
-              تحذير drift عند (%)
+            <FLabel className="text-zinc-300 text-xs font-semibold">
+              تنبيه عند نسبة فرق (%)
             </FLabel>
             <FInput
               type="number"
@@ -878,8 +895,8 @@ function ReviewSettingsRow({ a, onPatch }) {
             />
           </div>
           <div>
-            <FLabel className="text-zinc-400 text-xs">
-              حجب drift عند (%)
+            <FLabel className="text-zinc-300 text-xs font-semibold">
+              حجب عند نسبة فرق (%)
             </FLabel>
             <FInput
               type="number"

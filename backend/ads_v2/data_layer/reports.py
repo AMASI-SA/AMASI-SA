@@ -211,11 +211,15 @@ async def get_reconciliation_report(
     """Reconciliation report: per (account, date) show spend_daily and
     last sync_run details so the merchant can compare with Ads Manager.
 
-    Drift fields included (already computed during sync):
-      • drift_pct
-      • anomaly_flags
-      • platform_reported_native / platform_reported_sar
-      • last_synced_at
+    For each row we expose:
+      • spend_native / spend_sar — what V2 SSOT holds
+      • platform_manual_value_native / platform_manual_value_sar — what
+        the merchant said Ads Manager shows (ground truth)
+      • drift_pct_vs_manual — primary drift figure if manual entered
+      • drift_pct_vs_previous_sync — drift between consecutive syncs
+      • drift_pct — the most meaningful one (manual if present, else prev)
+      • drift_reason — structured explanation of why drift exists
+      • anomaly_flags + review_status + confidence
     """
     q = _base_match(user_id, date_from, date_to, account_id)
     rows: list[dict] = []
@@ -224,11 +228,32 @@ async def get_reconciliation_report(
         "spend_native": 1, "currency_native": 1,
         "spend_sar": 1, "bank_fee_sar": 1, "gross_sar": 1,
         "platform_reported_native": 1, "platform_reported_sar": 1,
-        "platform_checked_at": 1, "drift_pct": 1, "anomaly_flags": 1,
+        "platform_manual_value_native": 1, "platform_manual_value_sar": 1,
+        "platform_manual_entered_at": 1, "platform_manual_entered_by": 1,
+        "platform_checked_at": 1,
+        "drift_pct": 1, "drift_pct_vs_manual": 1,
+        "drift_pct_vs_previous_sync": 1, "drift_reason": 1,
+        "anomaly_flags": 1,
         "review_status": 1, "fx_rate": 1, "fx_source": 1,
         "confidence": 1, "last_synced_at": 1,
     }).sort([("date", -1), ("account_id", 1)]).limit(2000):
+        # Attach a flag the UI uses to render "—" vs "0%".
+        r["has_manual_value"] = r.get("platform_manual_value_native") is not None
         rows.append(r)
+
+    # Enrich rows with display_name for nicer UI
+    acct_ids = list({r["account_id"] for r in rows})
+    acct_map: dict[str, dict] = {}
+    async for a in db.ads_accounts.find(
+        {"user_id": user_id, "id": {"$in": acct_ids}},
+        {"_id": 0, "id": 1, "display_name": 1, "external_account_id": 1,
+         "currency_native": 1},
+    ):
+        acct_map[a["id"]] = a
+    for r in rows:
+        a = acct_map.get(r["account_id"]) or {}
+        r["display_name"] = a.get("display_name")
+        r["external_account_id"] = a.get("external_account_id")
 
     summary = {
         "rows_total":             len(rows),
@@ -241,6 +266,10 @@ async def get_reconciliation_report(
             1 for r in rows if "drift_above_15pct" in (r.get("anomaly_flags") or [])),
         "rows_missing_fx":        sum(
             1 for r in rows if "missing_fx" in (r.get("anomaly_flags") or [])),
+        "rows_with_manual_value": sum(
+            1 for r in rows if r.get("has_manual_value")),
+        "rows_pending_manual":    sum(
+            1 for r in rows if not r.get("has_manual_value")),
     }
     return {"data": rows, "summary": summary,
             "meta": _meta("get_reconciliation_report")}

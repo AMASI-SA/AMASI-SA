@@ -49,11 +49,24 @@ async def fetch_meta_day(
         external_account_id = f"act_{external_account_id}"
 
     url = f"{META_BASE}/{external_account_id}/insights"
+    # Important Meta API params for accuracy:
+    #   • level=account → includes ALL campaigns (active+paused+deleted+archived)
+    #   • use_account_attribution_setting=true → uses the account's chosen
+    #       attribution window so numbers match Ads Manager exactly.
+    #   • use_unified_attribution_setting=true → Meta's newer unified window.
+    #   • time_increment=1 + time_range(since==until) → single daily bucket.
+    #   • Date is interpreted in the account timezone Meta has configured.
     params = {
-        "fields": "spend,impressions,clicks,actions,action_values",
+        "fields": (
+            "spend,impressions,clicks,actions,action_values,"
+            "account_currency,date_start,date_stop"
+        ),
         "time_range": '{"since":"' + date_iso + '","until":"' + date_iso + '"}',
         "time_increment": 1,
         "level": "account",
+        "use_account_attribution_setting": "true",
+        "use_unified_attribution_setting": "true",
+        "limit": 500,
         "access_token": access_token,
     }
     try:
@@ -85,6 +98,7 @@ async def fetch_meta_day(
             spend = float(r.get("spend") or 0)
             impr = int(r.get("impressions") or 0)
             clk = int(r.get("clicks") or 0)
+            account_currency = r.get("account_currency") or "SAR"
             purchases = 0
             for act in (r.get("actions") or []):
                 if act.get("action_type") == "purchase":
@@ -92,12 +106,16 @@ async def fetch_meta_day(
                     break
             return {
                 "spend_native":    spend,
-                "currency_native": "SAR",  # Meta returns in account ccy
+                "currency_native": account_currency,
                 "impressions":     impr,
                 "clicks":          clk,
                 "purchases":       purchases,
                 "raw_excerpt": {
                     "actions_count": len(r.get("actions") or []),
+                    "date_start":    r.get("date_start"),
+                    "date_stop":     r.get("date_stop"),
+                    "account_currency": account_currency,
+                    "attribution": "use_account_attribution_setting+unified",
                 },
             }, {"code": "ok"}
     except Exception as exc:
