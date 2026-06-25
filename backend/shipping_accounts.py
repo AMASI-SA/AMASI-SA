@@ -241,22 +241,22 @@ async def compute_owed_per_company(db, user_id: str) -> dict[str, dict]:
         canonical, cfg = _resolve_company_sync(o.get("shipping_company", ""), cfg_map)
         if not cfg or not cfg.get("is_deferred"):
             continue
-        order_cost = float(o.get("shipping_cost") or 0)
-        # Iter-236b — prefer `cost_per_order` (the field actually edited
-        # in /shipping/settings), fall back to legacy `cost`.
-        cfg_cost = float(
-            cfg.get("cost_per_order")
-            if cfg.get("cost_per_order") is not None
-            else (cfg.get("cost") or 0)
+        # SSOT — same priority as the rest of the app: settings first,
+        # Salla only when no settings cost. Wraps `shipping_breakdown`.
+        from shipping_cost_ssot import shipping_breakdown
+        bd = shipping_breakdown(
+            {"shipping_company": canonical,
+             "shipping_cost": float(o.get("shipping_cost") or 0)},
+            {canonical: cfg},
         )
-        vat = float(cfg.get("vat_rate") or 0)
-        cost = order_cost if order_cost > 0 else cfg_cost
+        cost = bd["base"]    # the unit cost going INTO the liability
+        total = bd["total"]  # base + tax
         entry = out.setdefault(canonical, {
             "owed": 0.0,
             "orders_count": 0,
             "cost_per_order": cost,
         })
-        entry["owed"] += round(cost * (1 + vat), 4)
+        entry["owed"] += round(total, 4)
         entry["orders_count"] += 1
         if cost > 0:
             entry["cost_per_order"] = cost

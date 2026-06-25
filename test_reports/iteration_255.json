@@ -1,0 +1,26 @@
+{
+  "summary": "Verified the legacy /api/shipping-accounts code path now routes through shipping_cost_ssot.shipping_breakdown (compute_owed_per_company replaced the inline `cost*(1+vat)` formula with a per-order SSOT call). New file tests/test_shipping_accounts_ssot_iter255.py (6 tests, all pass) + 15 pre-existing SSOT regression tests = 21/21 green. Critical proof: the synthetic scenario from the PR description (Salla shipping_cost=999 vs company cost_per_order=20 @ 15% VAT) now produces owed=23.00 per order — NOT 1148.85 — proving the priority flip reached the deferred-liability accrual path used by /api/shipping-accounts, /api/liabilities/summary, and the financial-position card.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_shipping_accounts_ssot_iter255.py",
+    "/app/backend/tests/test_shipping_cost_ssot.py",
+    "/app/test_reports/pytest/iter255_full.xml",
+    "/app/test_reports/pytest/iter255_ssot.xml",
+    "/app/test_reports/pytest/iter255_accounts.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "shipping_accounts.compute_owed_per_company now imports shipping_breakdown INSIDE the orders loop (line 246). Tiny perf miss — hoist the import above the `async for` so it runs once per request, not once per order. Doesn't affect correctness.",
+    "Both shipping_accounts.compute_owed_per_company and shipping_accounts._build_router define their own `_shipping_config_map` / `_resolve_company` / `_matches_any` — same logic copy-pasted. After this SSOT unification it would be worth deleting the inner duplicates and reusing the module-level helpers (low priority cleanup).",
+    "For the amasi test merchant all 4 shipping companies have is_deferred=false, so /api/shipping-accounts returns {accounts:[], totals:{total_owed:0}}. This is correct behaviour (deferred-only dashboard) but the live cross-route assertion can only check the deferred subset. Worth seeding at least ONE deferred company in QA to exercise the live path end-to-end (current coverage relies on the mocked unit test instead)."
+  ],
+  "updated_files": ["/app/backend/tests/test_shipping_accounts_ssot_iter255.py"],
+  "success_rate": {"backend": "100% (21/21 tests — 6 new + 15 SSOT regression)", "frontend": "N/A (backend-only review)"},
+  "test_credentials": "amasi.jewelery@gmail.com / 10201917",
+  "seed_data_creation": "None — used live merchant data + an in-memory FakeDB to assert SSOT priority directly on compute_owed_per_company.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "amasi merchant has all 4 shipping companies set to is_deferred=false in /api/settings. /api/shipping-accounts therefore returns empty accounts list and totals=0 by design. /api/shipping-ledger (orders ledger, all companies) shows total_shipping_cost ≈ 33607 SAR. Cross-route SSOT consistency was therefore verified on the DEFERRED SUBSET (currently empty for this user) AND via a direct unit test against compute_owed_per_company with a mocked DB. To exercise the live path end-to-end, set is_deferred=true on at least one company before re-running.",
+  "rca_of_the_issue": "Before this iteration, shipping_accounts.compute_owed_per_company computed per-order liability with an inline formula `cost * (1 + vat_rate)` and prioritised order.shipping_cost (Salla) over cfg.cost_per_order — opposite of the SSOT policy. The fix replaces that block with a call to shipping_breakdown(order, {canonical: cfg}) and uses bd['base']/bd['total'], unifying the priority across all 4 consumers (shipping-accounts dashboard, shipping-ledger, balances, financial-position). Verified by the new test_compute_owed_per_company_uses_ssot_priority test."
+}
