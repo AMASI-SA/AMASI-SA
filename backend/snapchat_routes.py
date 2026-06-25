@@ -245,6 +245,20 @@ def _build_router(db) -> APIRouter:
         if not code or not state:
             return RedirectResponse(url=f"{frontend}/settings?snapchat=error&msg=missing_code_or_state")
 
+        # ── Dispatch: V2 re-link flow stamps the state with a distinct
+        # purpose. We peek at the JWT payload — if it's a V2 re-link we
+        # hand off to the V2 handler (which writes to
+        # ads_v2_pending_tokens and NEVER mutates snapchat_connections).
+        try:
+            peek = jwt.decode(state, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+            if peek.get("purpose") == "ads_v2_snapchat_relink":
+                from ads_v2.relink import handle_v2_relink_callback
+                redirect_url = await handle_v2_relink_callback(db, code, state)
+                return RedirectResponse(url=redirect_url)
+        except jwt.PyJWTError:
+            # fall through to legacy error handling below
+            pass
+
         user_id = _decode_state(state)
         conn = await _get_conn(user_id)
         if not conn:

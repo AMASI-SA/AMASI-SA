@@ -560,6 +560,15 @@ function DiagnosticReport({ report }) {
         </p>
       </div>
 
+      {/* Snapchat re-link CTA — only shown when provider=snapchat AND
+          the token tier indicates the merchant should reconnect. The
+          flow stores the new token in ads_v2_pending_tokens; V1 is
+          NEVER touched until the merchant approves on the review screen. */}
+      {report.provider === "snapchat" &&
+        ["needs_relink", "expired", "missing"].includes(s.token) && (
+          <RelinkSnapchatPanel />
+        )}
+
       {/* Stats */}
       <Card className="bg-zinc-950 border-zinc-800">
         <CardHeader className="pb-2">
@@ -1253,5 +1262,411 @@ function ReviewSettingsRow({ a, onPatch }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+
+
+// ──────────────────────────────────────────────────────────────────────
+// Snapchat Re-link — safe two-token comparison + approval
+// ──────────────────────────────────────────────────────────────────────
+function RelinkSnapchatPanel() {
+  const [pendingId, setPendingId] = useState(null);
+  const [phase, setPhase] = useState("idle");
+  // idle | starting | awaiting_callback | comparing | reviewing |
+  // approving | discarding
+  const [comparison, setComparison] = useState(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualToken, setManualToken] = useState("");
+  const [manualRefresh, setManualRefresh] = useState("");
+
+  const authHeaders = () => ({
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+  });
+
+  // Detect ?relink_pending_id=... in URL after OAuth round-trip
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const pid = url.searchParams.get("relink_pending_id");
+    const err = url.searchParams.get("relink_error");
+    if (err) {
+      toast.error(`فشل OAuth: ${err}`);
+      url.searchParams.delete("relink_error");
+      window.history.replaceState({}, "", url.toString());
+    }
+    if (pid) {
+      setPendingId(pid);
+      url.searchParams.delete("relink_pending_id");
+      url.searchParams.delete("relink");
+      window.history.replaceState({}, "", url.toString());
+      runCompare(pid);
+    }
+  }, []);
+
+  const startOAuth = async () => {
+    setPhase("starting");
+    try {
+      const r = await axios.post(
+        `${API}/ads-v2/settings/snapchat/relink/start`,
+        {},
+        { headers: authHeaders() },
+      );
+      setPendingId(r.data.pending_id);
+      setPhase("awaiting_callback");
+      // Open Snapchat OAuth in a NEW tab so the user keeps the
+      // settings page open; on return, Snapchat will redirect back
+      // here with ?relink_pending_id=... which the useEffect picks up.
+      window.location.href = r.data.oauth_url;
+    } catch (e) {
+      setPhase("idle");
+      toast.error(
+        e?.response?.data?.detail || "تعذّر بدء OAuth — راجع إعدادات V1",
+      );
+    }
+  };
+
+  const submitManual = async () => {
+    if (!manualToken.trim()) {
+      toast.error("الصق access_token الجديد");
+      return;
+    }
+    setPhase("comparing");
+    try {
+      const r = await axios.post(
+        `${API}/ads-v2/settings/snapchat/relink/manual`,
+        { access_token: manualToken, refresh_token: manualRefresh },
+        { headers: authHeaders() },
+      );
+      const pid = r.data.pending_id;
+      setPendingId(pid);
+      setManualOpen(false);
+      setManualToken("");
+      setManualRefresh("");
+      await runCompare(pid);
+    } catch (e) {
+      setPhase("idle");
+      toast.error("فشل حفظ التوكن اليدوي");
+    }
+  };
+
+  const runCompare = async (pid) => {
+    setPhase("comparing");
+    try {
+      const r = await axios.post(
+        `${API}/ads-v2/settings/snapchat/relink/${pid}/compare`,
+        {},
+        { headers: authHeaders() },
+      );
+      setComparison(r.data);
+      setPhase("reviewing");
+    } catch (e) {
+      setPhase("idle");
+      toast.error("فشلت المقارنة");
+    }
+  };
+
+  const approve = async () => {
+    if (!pendingId) return;
+    setPhase("approving");
+    try {
+      await axios.post(
+        `${API}/ads-v2/settings/snapchat/relink/${pendingId}/approve`,
+        {},
+        { headers: authHeaders() },
+      );
+      toast.success("تم اعتماد التوكن الجديد. القديم محفوظ كنسخة احتياطية.");
+      setPhase("idle");
+      setPendingId(null);
+      setComparison(null);
+      // Reload settings to reflect new state
+      setTimeout(() => window.location.reload(), 800);
+    } catch (e) {
+      setPhase("reviewing");
+      toast.error("فشل الاعتماد");
+    }
+  };
+
+  const discard = async () => {
+    if (!pendingId) return;
+    setPhase("discarding");
+    try {
+      await axios.post(
+        `${API}/ads-v2/settings/snapchat/relink/${pendingId}/discard`,
+        {},
+        { headers: authHeaders() },
+      );
+      toast.success("تم تجاهل التوكن الجديد. V1 لم يتغيّر.");
+      setPhase("idle");
+      setPendingId(null);
+      setComparison(null);
+    } catch (e) {
+      setPhase("reviewing");
+      toast.error("فشل التجاهل");
+    }
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────
+  if (phase === "reviewing" && comparison) {
+    return (
+      <RelinkComparisonView
+        comparison={comparison}
+        onApprove={approve}
+        onDiscard={discard}
+      />
+    );
+  }
+  return (
+    <Card className="bg-blue-500/10 border-blue-500/40">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-blue-100 text-sm font-bold flex items-center gap-2">
+          إعادة ربط Snapchat — آمن وبدون مساس بـ V1
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-xs text-blue-50 mb-3 leading-relaxed font-medium">
+          سيتم فتح Snapchat OAuth في تبويب جديد وحفظ التوكن الجديد كـ
+          <span className="font-bold"> pending</span>. لن يُلمس التوكن
+          القديم حتى تراجع المقارنة وتعتمد التوكن الجديد بنفسك. القديم
+          سيُحفظ في <code className="text-blue-100 bg-blue-900/40 px-1 rounded">legacy_versions[]</code>{" "}
+          عند الاعتماد كنسخة احتياطية.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            disabled={phase !== "idle"}
+            onClick={startOAuth}
+            className="font-semibold"
+            data-testid="relink-start-oauth-btn"
+          >
+            {phase === "starting" ? "جاري التحضير..." : "بدء OAuth"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={phase !== "idle"}
+            onClick={() => setManualOpen(true)}
+            className="border-blue-500/40 text-blue-100 hover:bg-blue-500/10 font-semibold"
+            data-testid="relink-manual-btn"
+          >
+            إدخال يدوي (احتياطي)
+          </Button>
+        </div>
+      </CardContent>
+
+      {/* Manual paste dialog */}
+      <Dialog open={manualOpen} onOpenChange={setManualOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-50" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-zinc-50 font-bold">
+              لصق توكن Snapchat الجديد يدوياً
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-zinc-300 leading-relaxed bg-zinc-950 p-2 rounded border border-zinc-800">
+              للحالات الاستثنائية فقط. التوكن سيُحفظ كـ <strong>pending</strong>{" "}
+              ولن يستبدل V1 إلا بعد اعتمادك.
+            </p>
+            <div>
+              <Label className="text-zinc-200 text-xs font-semibold">
+                Access Token الجديد
+              </Label>
+              <input
+                value={manualToken}
+                onChange={(e) => setManualToken(e.target.value)}
+                className="w-full mt-1 bg-zinc-950 border border-zinc-800 text-zinc-50 placeholder:text-zinc-500 px-3 py-2 rounded font-mono text-xs"
+                placeholder="eyJhbGc..."
+                data-testid="manual-relink-access-token"
+              />
+            </div>
+            <div>
+              <Label className="text-zinc-200 text-xs font-semibold">
+                Refresh Token (اختياري)
+              </Label>
+              <input
+                value={manualRefresh}
+                onChange={(e) => setManualRefresh(e.target.value)}
+                className="w-full mt-1 bg-zinc-950 border border-zinc-800 text-zinc-50 placeholder:text-zinc-500 px-3 py-2 rounded font-mono text-xs"
+                placeholder="refresh_..."
+                data-testid="manual-relink-refresh-token"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setManualOpen(false)}
+              className="border-zinc-700 text-zinc-100 hover:bg-zinc-800 hover:text-zinc-50 font-semibold"
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={submitManual}
+              className="font-semibold"
+              data-testid="manual-relink-submit"
+            >
+              فحص التوكن
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+function RelinkComparisonView({ comparison, onApprove, onDiscard }) {
+  const old = comparison.old || {};
+  const newT = comparison.new || {};
+  const diff = comparison.diff || {};
+
+  return (
+    <Card className="bg-zinc-950 border-amber-500/40">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-amber-100 text-base font-bold">
+          مقارنة التوكن القديم مع الجديد — لم يُلمس V1 بعد
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Side-by-side identity */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <TokenColumn title="التوكن القديم (V1 الحالي)" snap={old} accent="zinc" />
+          <TokenColumn title="التوكن الجديد (Pending)" snap={newT} accent="emerald" />
+        </div>
+
+        {/* Diff summary */}
+        <div className="bg-zinc-900 rounded p-3 border border-zinc-800">
+          <p className="text-sm font-bold text-zinc-100 mb-2">الفروقات</p>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <DiffList label="منظمات مُضافة في الجديد" items={diff.orgs_added} tone="emerald" />
+            <DiffList label="منظمات مفقودة من الجديد" items={diff.orgs_removed} tone="red" />
+            <DiffList label="حسابات مُضافة في الجديد" items={diff.accounts_added} tone="emerald" />
+            <DiffList label="حسابات مفقودة من الجديد" items={diff.accounts_removed} tone="red" />
+          </div>
+        </div>
+
+        {/* Risk callout — if new token loses any account */}
+        {((diff.orgs_removed?.length || 0)
+          + (diff.accounts_removed?.length || 0)) > 0 && (
+          <div className="bg-red-500/15 border border-red-500/40 rounded p-3">
+            <p className="text-sm text-red-100 font-semibold">
+              ⚠️ تنبيه: التوكن الجديد يفقد بعض الحسابات/المنظمات المتاحة في القديم.
+              راجع جيداً قبل الاعتماد.
+            </p>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button
+            variant="outline"
+            onClick={onDiscard}
+            className="border-zinc-700 text-zinc-100 hover:bg-zinc-800 hover:text-zinc-50 font-semibold"
+            data-testid="relink-discard-btn"
+          >
+            تجاهل التوكن الجديد
+          </Button>
+          <Button
+            onClick={onApprove}
+            disabled={!newT.valid}
+            className="font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+            data-testid="relink-approve-btn"
+          >
+            اعتماد التوكن الجديد (مع حفظ القديم كنسخة احتياطية)
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TokenColumn({ title, snap, accent }) {
+  const borderCls = accent === "emerald"
+    ? "border-emerald-500/40 bg-emerald-500/5"
+    : "border-zinc-700 bg-zinc-900";
+  return (
+    <div className={`rounded p-3 border ${borderCls}`}>
+      <p className="text-xs font-bold text-zinc-100 mb-2">{title}</p>
+      <div className="space-y-1.5 text-xs">
+        <p className="text-zinc-200 font-medium">
+          الحالة:{" "}
+          <span className={snap.valid ? "text-emerald-200 font-bold" : "text-red-200 font-bold"}>
+            {snap.valid ? "صالح ✓" : "غير صالح ✗"}
+          </span>
+        </p>
+        {snap.error && (
+          <p className="text-red-200 font-mono text-[10px]">
+            خطأ: {snap.error}
+          </p>
+        )}
+        <p className="text-zinc-200 font-medium">
+          User ID:{" "}
+          <span className="text-zinc-50 font-mono">{snap.user_id || "—"}</span>
+        </p>
+        <p className="text-zinc-200 font-medium">
+          الاسم: <span className="text-zinc-50">{snap.display_name || "—"}</span>
+        </p>
+        <p className="text-zinc-200 font-medium">
+          الوصول لـ Self Service:{" "}
+          <span className={snap.can_access_self_service ? "text-emerald-200 font-bold" : "text-zinc-400"}>
+            {snap.can_access_self_service ? "نعم ✓" : "لا"}
+          </span>
+        </p>
+        <p className="text-zinc-200 font-medium">
+          الوصول لحساب الرياض:{" "}
+          <span className={snap.can_access_riyadh ? "text-emerald-200 font-bold" : "text-zinc-400"}>
+            {snap.can_access_riyadh ? "نعم ✓" : "لا"}
+          </span>
+        </p>
+        <div>
+          <p className="text-zinc-200 font-medium mt-2">
+            المنظمات ({(snap.organizations || []).length}):
+          </p>
+          <ul className="ms-2 list-disc list-inside">
+            {(snap.organizations || []).map((o) => (
+              <li key={o.id} className="text-zinc-100 text-[11px]">
+                {o.name}{" "}
+                <span className="text-zinc-500 font-mono">({o.id})</span>
+              </li>
+            ))}
+            {(snap.organizations || []).length === 0 && (
+              <li className="text-zinc-500">لا توجد منظمات</li>
+            )}
+          </ul>
+        </div>
+        <div>
+          <p className="text-zinc-200 font-medium mt-2">
+            الحسابات الإعلانية ({(snap.ad_accounts || []).length}):
+          </p>
+          <ul className="ms-2 list-disc list-inside max-h-32 overflow-y-auto">
+            {(snap.ad_accounts || []).map((a) => (
+              <li key={a.id} className="text-zinc-100 text-[11px]">
+                {a.name}{" "}
+                <span className="text-zinc-500 font-mono">({a.currency})</span>
+              </li>
+            ))}
+            {(snap.ad_accounts || []).length === 0 && (
+              <li className="text-zinc-500">لا توجد حسابات إعلانية</li>
+            )}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DiffList({ label, items, tone }) {
+  const cls = tone === "emerald" ? "text-emerald-200" : "text-red-200";
+  return (
+    <div>
+      <p className="text-zinc-300 font-semibold mb-1">{label}</p>
+      {(items || []).length === 0 ? (
+        <p className="text-zinc-500">لا شيء</p>
+      ) : (
+        <ul className={`list-disc list-inside ${cls}`}>
+          {items.map((i) => (
+            <li key={i} className="font-mono text-[10px]">{i}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

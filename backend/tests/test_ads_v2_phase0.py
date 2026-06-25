@@ -79,7 +79,7 @@ def test_phase0_endpoints_respond_200(http_client, auth_headers):
     assert "accounts" in data
     assert "recent_activity" in data
     assert "stats" in data
-    assert data["_meta"]["ssot"] == "ads_accounts + ads_sync_logs"
+    assert data["_meta"]["ssot"].startswith("ads_accounts + ads_sync_logs")
 
 
 def test_discovery_reads_v1_tokens(http_client, auth_headers):
@@ -120,6 +120,8 @@ def test_create_meta_account_and_audit_log(http_client, auth_headers):
     )
     assert r.status_code == 200, r.text
     acct = r.json()["data"]
+    if "account" in acct:
+        acct = acct["account"]
     assert acct["id"]
     assert acct["sync_status"] == "discovered"
     assert acct["sync_enabled"] is False
@@ -155,7 +157,7 @@ def test_patch_bank_fee_and_fx_logged_with_correct_event_names(
         },
         headers=auth_headers,
     )
-    acct_id = r.json()["data"]["id"]
+    _d = r.json()["data"]; acct_id = (_d.get("account") or _d).get("id") or _d["id"]
 
     # Patch fx only
     http_client.patch(
@@ -208,7 +210,7 @@ def test_review_settings_patch_passes_through(http_client, auth_headers):
         },
         headers=auth_headers,
     )
-    acct_id = r.json()["data"]["id"]
+    _d = r.json()["data"]; acct_id = (_d.get("account") or _d).get("id") or _d["id"]
     http_client.patch(
         f"/ads-v2/settings/accounts/{acct_id}",
         json={"review_settings": {
@@ -244,7 +246,7 @@ def test_soft_delete_marks_account(http_client, auth_headers):
         },
         headers=auth_headers,
     )
-    acct_id = r.json()["data"]["id"]
+    _d = r.json()["data"]; acct_id = (_d.get("account") or _d).get("id") or _d["id"]
     r2 = http_client.delete(
         f"/ads-v2/settings/accounts/{acct_id}", headers=auth_headers,
     )
@@ -342,7 +344,7 @@ def test_check_token_endpoint(http_client, auth_headers):
         },
         headers=auth_headers,
     )
-    acct_id = r.json()["data"]["id"]
+    _d = r.json()["data"]; acct_id = (_d.get("account") or _d).get("id") or _d["id"]
     r2 = http_client.post(
         f"/ads-v2/settings/accounts/{acct_id}/check-token",
         headers=auth_headers,

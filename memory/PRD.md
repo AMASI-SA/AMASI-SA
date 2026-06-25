@@ -191,6 +191,77 @@ Tests: `tests/test_iter250b_phase4_product_cost_update.py` — 5/5 PASS. End-to-
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
+## Ads V2 — Snapchat Safe Re-link Flow (2026-06-25)
+**Resolved user request:** "زر إعادة ربط Snapchat داخل تقرير التشخيص"
+with 7 explicit safety constraints. All 7 are enforced + tested.
+
+**New collection:** `ads_v2_pending_tokens`
+   - Stores new tokens in isolation from V1 until the merchant
+     explicitly approves them. Schema: `{id, user_id, provider,
+     status (awaiting_callback|pending|approved|discarded),
+     access_token, refresh_token, expires_at, source (oauth|
+     manual_paste), comparison_snapshot, created_at, updated_at}`.
+
+**New backend module:** `/app/backend/ads_v2/relink.py`
+   Routes (all under `/api/ads-v2/settings/snapchat/relink`):
+   - `POST /start` → returns Snapchat OAuth URL (state JWT carries the
+     V2 purpose marker `ads_v2_snapchat_relink`).
+   - `POST /manual` → fallback path for pasting tokens directly.
+   - `GET /pending` → list (never returns the secret tokens).
+   - `POST /{id}/compare` → live probes both old V1 token and new
+     pending token; returns side-by-side identity + organizations +
+     ad_accounts + can_access_self_service + can_access_riyadh + diff.
+   - `POST /{id}/approve` → backs up V1 doc into `legacy_versions[]`
+     array, then atomically swaps `access_token`/`refresh_token` to
+     the new pending values. Audit logged in `ads_sync_logs` as
+     event `account_relinked_v1`.
+   - `POST /{id}/discard` → soft-marks discarded (kept for audit).
+
+**OAuth handshake (zero new redirect URI needed):**
+   The V2 flow reuses V1's `client_id`/`client_secret`/`redirect_uri`.
+   The V1 OAuth callback (`/api/snapchat/oauth/callback`) was extended
+   with a single dispatch check: if the JWT state has
+   `purpose=ads_v2_snapchat_relink`, the request is handed off to
+   `relink.handle_v2_relink_callback()` which writes ONLY to
+   `ads_v2_pending_tokens`. V1 callback's existing logic untouched
+   for legacy states.
+
+**Snapchat API probe (`_probe_snapchat_token`):**
+   Queries `/me`, `/me/organizations`, `/organizations/{id}/adaccounts`.
+   Heuristically detects "Self Service" and "Riyadh" access by
+   matching name patterns. Returns a normalized snapshot used by
+   both `/compare` and the cached `comparison_snapshot` field.
+
+**Frontend (`AdsV2Settings.jsx`):**
+   - `RelinkSnapchatPanel` — shown inside the Diagnose dialog
+     only when `provider==='snapchat' && token in
+     ['needs_relink','expired','missing']`. Two CTAs: "بدء OAuth"
+     and "إدخال يدوي (احتياطي)".
+   - `RelinkComparisonView` — two-column side-by-side compare with
+     org/account lists, Self Service / Riyadh access indicators,
+     diff summary (added/removed orgs and accounts), red callout if
+     the new token loses any access, then "اعتماد" / "تجاهل"
+     buttons. The approve button is disabled if new token isn't
+     valid (probe returned `unauthorized`).
+   - `useEffect` reads `?relink_pending_id=...` from URL after OAuth
+     round-trip and auto-loads comparison.
+
+**Safety invariants (all in pytest):**
+   1. ✅ V1 NOT touched by `/start` — verified `test_relink_start_does_not_touch_v1`
+   2. ✅ V1 NOT touched by `/manual` — verified `test_relink_manual_stores_pending_v1_untouched`
+   3. ✅ V1 NOT touched by `/compare` — verified `test_compare_does_not_modify_v1`
+   4. ✅ V1 NOT touched by `/discard` — soft-discard only — verified `test_relink_discard_is_soft`
+   5. ✅ `/approve` appends `legacy_versions[]` AND atomically swaps —
+        verified `test_approve_appends_legacy_and_swaps`
+   6. ✅ Pending without access_token CANNOT be approved (returns 404)
+        — verified `test_approve_awaiting_callback_returns_404`
+   7. ✅ Tokens never leak in list endpoints — verified
+        `test_relink_pending_omits_secrets`
+
+**Tests:** `/app/backend/tests/test_ads_v2_snapchat_relink.py` — 8/8 PASS.
+   Total ads_v2 tests: 39/39 passing (relink + diagnose + auto-reconcile
+   + drift + phase1).
+
 ## Ads V2 — Phase 1 (3-Tier Status + Diagnostics) (2026-06-25)
 **User complaint resolved:** Snapchat row showed "Token: OK" but
 "Status: خطأ" — paradoxical and uninformative. Replaced with a
@@ -411,6 +482,7 @@ Purpose: Conclusively determine WHY iter-215 is skipping all 486
 counterparties in Production (per-account blocker / reason histogram).
 
 ## Tests
+- `/app/backend/tests/test_ads_v2_snapchat_relink.py` — 8/8 PASS (safe re-link flow)
 - `/app/backend/tests/test_ads_v2_account_diagnose.py` — 8/8 PASS (3-tier status + diagnose)
 - `/app/backend/tests/test_ads_v2_auto_reconcile.py` — 6/6 PASS (Phase 1 auto-reconcile)
 - `/app/backend/tests/test_ads_v2_auto_reconcile_invariants_iter253.py` — 5/5 PASS

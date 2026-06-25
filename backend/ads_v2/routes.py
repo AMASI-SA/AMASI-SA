@@ -385,4 +385,10 @@ def make_ads_v2_router(db, current_user_dep):
         )
         return {"ok": res.get("ok", False), "data": res}
 
+    # ── Mount the Snapchat re-link sub-router (safe, V1-preserving) ──
+    from .relink import build_relink_router
+    router.include_router(
+        build_relink_router(db, current_user_dep=current_user_dep)
+    )
+
     return router
