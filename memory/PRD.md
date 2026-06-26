@@ -1,5 +1,88 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Qoyod MVP — Day 3 — Reliable Webhook Reception Layer (2026-06-26)
+**User-locked scope (8 steps, nothing else):**
+1. Receive webhook  ·  2. Verify token  ·  3. Idempotency  ·
+4. Save raw event  ·  5. Validation  ·  6. Normalization  ·
+7. Canonical SalesOrderDTO  ·  8. STOP.
+
+NO business rules, NO Qoyod output, NO sync-log activation — those land in Day 4-5.
+
+### New modules
+- `/app/backend/integrations/qoyod/dto.py` — `SalesOrderDTO`, `CustomerDTO`, `LineItemDTO`,
+  `AddressDTO`. Pure Pydantic, `extra="forbid"`, `schema_version=1`.
+- `/app/backend/integrations/qoyod/normalizer.py` — `validate()` returns closed-set error codes
+  (`invalid_payload_type`, `missing_data_object`, `missing_order_id`, `missing_order_status`,
+  `missing_items`, `empty_items`). `normalize()` builds the DTO. Helpers: `normalize_phone()`
+  (E.164 / Saudi-aware), `normalize_email()`, `_canonical_status()` (Arabic + English map),
+  `_canonical_payment_method()` (mada / visa / apple_pay / stc_pay / cash / cod / tamara / tabby…).
+  `NormalizationError(code, message)` carries structured failure detail.
+- `/app/backend/integrations/qoyod/webhook.py` — `POST /api/integrations/qoyod/webhook`. Token check
+  (`X-Webhook-Token` against `QOYOD_WEBHOOK_TOKEN`, constant-time compare). Idempotency key
+  resolution: `X-Idempotency-Key` header → `salla:order:<id>:<event>` → random UUID fallback.
+  Atomic insert into `integration_inbox` (DuplicateKeyError → 200 `{duplicate:true, trace_id:…}`).
+  Runs `_process_inbox_row()` synchronously: NEW → RECEIVED → VALIDATED → NORMALIZED. Failures route
+  through the specific `FAILED_*` hop then to **DEAD_LETTER** (terminal, NOT deleted, NOT retried).
+
+### State machine extension
+- New failure stage `FAILED_NORMALIZATION` (resume target `VALIDATED`).
+- `last_failed_stage` now EXCLUDES `DEAD_LETTER` so the operator always sees the *specific*
+  failure that triggered dead-lettering (FAILED_VALIDATION / FAILED_NORMALIZATION / etc.).
+- Webhook orchestration injects `pipeline_started_at` into the in-memory row right after the
+  NEW→RECEIVED hop so DEAD_LETTER routing can compute `pipeline_duration_ms` in-flight.
+
+### Endpoint contract
+```
+POST /api/integrations/qoyod/webhook
+Headers:
+  X-Webhook-Token:     <required — env QOYOD_WEBHOOK_TOKEN>
+  X-Idempotency-Key:   <optional — overrides derived key>
+Body: JSON object (Salla webhook shape)
+
+200 OK happy:
+  {ok:true, duplicate:false, trace_id, pipeline_stage:"NORMALIZED",
+   salla_order_id, audit:{started_at,finished_at,duration_ms,last_success_stage,last_failed_stage},
+   canonical_payload_present:true}
+
+200 OK duplicate:
+  {ok:true, duplicate:true, trace_id, idempotency_key, pipeline_stage, salla_order_id, received_at}
+
+200 OK dead-letter:
+  {ok:false, duplicate:false, trace_id, pipeline_stage:"DEAD_LETTER",
+   audit:{…last_failed_stage:"FAILED_VALIDATION"…},
+   error:{code,message}, canonical_payload_present:false}
+
+401  invalid_webhook_token / missing_webhook_token
+503  qoyod_webhook_token_not_configured
+400  payload_must_be_json_object
+```
+
+### Live smoke (curl on PREVIEW) ✅
+1. Bad token → 401 `invalid_webhook_token`.
+2. Happy payload → 200 `NORMALIZED`, canonical_payload_present=true.
+3. Re-send same `X-Idempotency-Key` → 200 `duplicate:true` (row count stays 1).
+4. Payload missing `status` → 200 `DEAD_LETTER`, `last_failed_stage="FAILED_VALIDATION"`,
+   stage_history = `[NEW, RECEIVED, FAILED_VALIDATION, DEAD_LETTER]`, row preserved in DB.
+
+### Tests — 90/90 ✅
+- `tests/test_qoyod_day3_webhook.py` — 28/28
+  (token: 4 · idempotency: 3 · validate: 7 · normalize: 7 · e2e: 7).
+- `tests/test_qoyod_state_machine.py` — 23/23 (FAILED_NORMALIZATION vocab + DEAD_LETTER exclusion).
+- `tests/test_qoyod_compliance.py` — 11/11 unchanged.
+- `tests/test_qoyod_day1_foundation.py` — 28/28 unchanged.
+
+### Critical invariants (locked by tests)
+- DEAD_LETTER rows are **never deleted, never auto-retried**.
+- `last_failed_stage` always points to the specific FAILED_* stage, never DEAD_LETTER.
+- `canonical_payload` is ONLY written on the NORMALIZED hop; failed rows have it as None.
+- `qoyod_invoices` collection stays untouched — no rows are written from the webhook.
+
+### Outstanding for Day 4-5 (waiting for sign-off)
+- Business Rules step (RULES_APPLIED).
+- 4a Customer / 4b Product / 4c Invoice / 4d Receipt — actual Qoyod API calls.
+- Background retry worker (RETRYING → resume_from).
+- Activation of the 6 Manual Action buttons + the "سجل المزامنة" page.
+
 ## Qoyod MVP — Pre-Day 3 Refinements v2 (2026-06-26 · Navigation IA + Reconciliation Card + Audit Trail)
 **User mandate before starting Day 3:** three additive improvements that lock in the IA so we
 don't need a refactor mid-Day-3.

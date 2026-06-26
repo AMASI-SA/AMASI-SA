@@ -37,6 +37,7 @@ from integrations.qoyod.models import (
 from integrations.qoyod.compliance import (
     list_orphan_orders, compliance_summary, reconciliation_check,
 )
+from integrations.qoyod.webhook import attach_webhook_routes
 
 
 # MVP runs single-tenant; we still derive user_id from the auth layer
@@ -306,5 +307,9 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def compliance_reconciliation(user=Depends(current_user)):
         tenant = _tenant_id(user)
         return {"ok": True, "reconciliation": await reconciliation_check(db, tenant)}
+
+    # ── POST /webhook — Day 3 entry point (no JWT, token-protected) ──
+    # Token check + idempotency + validation + normalization, nothing more.
+    attach_webhook_routes(router, db)
 
     return router

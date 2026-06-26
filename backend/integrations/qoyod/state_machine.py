@@ -58,6 +58,7 @@ RETRYING:  str = "RETRYING"    # transient between failure and resume
 # Failure stages — exactly one per pipeline step where work happens.
 FAILURE_STAGES: tuple[str, ...] = (
     "FAILED_VALIDATION",    # validation step rejected the payload
+    "FAILED_NORMALIZATION", # normalization step couldn't build the DTO
     "FAILED_CUSTOMER",      # 4a couldn't resolve/create customer
     "FAILED_PRODUCT",       # 4b couldn't resolve/create products
     "FAILED_INVOICE",       # 4c invoice POST to Qoyod failed
@@ -74,11 +75,12 @@ TERMINAL_STAGES: frozenset[str] = frozenset({"COMPLETED", "SKIPPED", "DEAD_LETTE
 # when the row transitions through RETRYING. This is the ONLY
 # encoding of "what does retry mean" — keeps it diff-able in one place.
 FAILURE_TO_RESUME: dict[str, str] = {
-    "FAILED_VALIDATION":  "RECEIVED",     # re-run validation
-    "FAILED_CUSTOMER":    "RULES_APPLIED",
-    "FAILED_PRODUCT":     "CUSTOMER_RESOLVED",
-    "FAILED_INVOICE":     "PRODUCT_RESOLVED",
-    "FAILED_RECEIPT":     "INVOICE_CREATED",
+    "FAILED_VALIDATION":    "RECEIVED",     # re-run validation
+    "FAILED_NORMALIZATION": "VALIDATED",    # re-run normalization
+    "FAILED_CUSTOMER":      "RULES_APPLIED",
+    "FAILED_PRODUCT":       "CUSTOMER_RESOLVED",
+    "FAILED_INVOICE":       "PRODUCT_RESOLVED",
+    "FAILED_RECEIPT":       "INVOICE_CREATED",
 }
 
 
@@ -260,8 +262,11 @@ def transition(
     if to_stage in HAPPY_PATH and to_stage != "NEW":
         set_block["last_success_stage"] = to_stage
 
-    # Track the most recent failure for the operator UI.
-    if to_stage in FAILURE_STAGES:
+    # Track the most recent failure for the operator UI. We deliberately
+    # EXCLUDE DEAD_LETTER here because DEAD_LETTER is a catch-all bucket;
+    # the meaningful "last failed stage" is the specific FAILED_* hop
+    # that the row passed through right before being dead-lettered.
+    if to_stage in FAILURE_STAGES and to_stage != "DEAD_LETTER":
         set_block["last_failed_stage"] = to_stage
 
     patch: dict[str, Any] = {

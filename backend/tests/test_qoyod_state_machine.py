@@ -28,10 +28,14 @@ def test_happy_path_locked_to_ten_stages():
 
 
 def test_failure_stages_match_user_spec():
-    # The user listed exactly these failure tokens in the Pre-Day 3 brief.
+    # The user listed these failure tokens in the Pre-Day 3 + Day 3 briefs.
+    # FAILED_NORMALIZATION was added at Day 3 so the inbox can record
+    # a normalization-specific failure before falling into DEAD_LETTER.
     expected = {
-        "FAILED_VALIDATION", "FAILED_CUSTOMER", "FAILED_PRODUCT",
-        "FAILED_INVOICE", "FAILED_RECEIPT", "DEAD_LETTER",
+        "FAILED_VALIDATION", "FAILED_NORMALIZATION",
+        "FAILED_CUSTOMER", "FAILED_PRODUCT",
+        "FAILED_INVOICE", "FAILED_RECEIPT",
+        "DEAD_LETTER",
     }
     assert set(FAILURE_STAGES) == expected
 
