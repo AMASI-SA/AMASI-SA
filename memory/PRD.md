@@ -1,5 +1,41 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## QYD-GO "Outstanding Failures Returns RED After Refresh" — Investigation (2026-02-26)
+**User report**: After clicking "تنظيف فشل الاختبار" the checklist goes 11/11 green, but on refresh "لا فواشل عالقة" returns to RED. User suspected exclusion is not persisted or not read.
+
+### Investigation result
+**The exclusion mechanism is fully correct** — proved by 5 new integration tests in `tests/test_qoyod_qydgo_clear_failures_persistence.py`:
+1. Cleanup endpoint writes `excluded_from_checklist=true` + `excluded_at=<datetime>` to Mongo for all matched rows.
+2. `_check_outstanding_failures` correctly filters `{"$ne": True}` on the flag.
+3. Three successive checks after cleanup all return OK (= page stays green across refreshes).
+4. Cleanup is idempotent.
+5. **NEW** failures appearing after cleanup correctly DO surface (this is the actual cause).
+
+There is **only one code path** that counts outstanding failures (`_check_outstanding_failures` in `go_live.py`); no second un-filtered query exists.
+
+### Most likely root cause
+The background worker keeps draining old in-flight orders (NORMALIZED, CUSTOMER_RESOLVED, INVOICE_CREATED, …) and when any of them fails it produces a **brand-new** DEAD_LETTER row. The new row has no `excluded_from_checklist` flag (correct — exclusion only stamps existing rows at the time of the click). So:
+
+```
+T0: 5 DEAD_LETTER rows from previous tests
+T1: user clicks "تنظيف فشل الاختبار" → all 5 excluded → green
+T1+δ: worker processes 3 stuck NORMALIZED rows → 2 fail → 2 NEW DEAD_LETTER rows
+T2: user refreshes → 2 new rows counted → RED
+```
+
+The user perceives "old failures came back" but in reality these are new ones.
+
+### Files
+- `/app/backend/tests/test_qoyod_qydgo_clear_failures_persistence.py` (new — 5 tests, all pass)
+- No production code changed yet — awaiting user decision on the fix strategy.
+
+### Proposed fixes (awaiting user choice)
+- (a) **Dry-run-aware check**: `_check_outstanding_failures` only counts `dry_run: False` failures. Production failures still block; dry-run noise never blocks. Removes the need for the "clear test failures" button entirely.
+- (b) **Watermark exclusion**: cleanup also writes `qoyod_settings.failures_excluded_since=now()`; the check only counts rows with `received_at > since` AND `excluded_from_checklist != True`. Closer to current UX but adds a hidden "since" timestamp.
+- (c) **Archive-on-cleanup**: replace `excluded_from_checklist` with the new archive flow — physically move dry-run DEAD_LETTER rows to `integration_inbox_archive` (already built for First-Sync Monitor). Cleanest, most durable.
+
+
+
 ## First-Sync Monitor → Permanent Operational Dashboard (2026-02-26)
 **User request**: Transform the First-Sync Monitor from a dev-only diagnostic into a daily operational tool with sidebar integration, status counters, failure alerts, and a safe cleanup tool for old dry-run test noise.
 
