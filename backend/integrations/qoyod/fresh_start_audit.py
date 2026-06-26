@@ -109,12 +109,25 @@ async def _paginate(
     extract_keys: tuple[str, ...],
 ) -> list:
     """Generic paginator. Stops on empty page or when `max_pages` reached.
-    Sleeps briefly between calls to be polite to Qoyod."""
+    Sleeps briefly between calls to be polite to Qoyod.
+
+    404 handling
+    ────────────
+    Qoyod returns `404 "We found nothing"` on LIST endpoints when the
+    underlying collection is empty (e.g. after a Fresh-Start cleanup,
+    or for a brand-new tenant that never used the integration). This
+    is a SUCCESSFUL response semantically — the collection just has no
+    rows. The audit treats it as `[]` (graceful end of pagination)
+    instead of bubbling a failure.
+    """
     out: list = []
     for page in range(1, max_pages + 1):
         try:
             resp = await fetch(page=page, limit=page_size)
-        except QoyodAPIError:
+        except QoyodAPIError as exc:
+            if exc.status_code == 404:
+                # Empty collection (or past-last-page). Treat as end.
+                break
             raise
         items = _extract_list(resp, extract_keys)
         if not items:

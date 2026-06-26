@@ -373,6 +373,35 @@ export default function QoyodFreshStart() {
 
       {audit && audit.status === "completed" && (
         <>
+          {/* Clean-account banner: 404/empty on all 4 entities */}
+          {(totals.invoices === 0 && totals.receipts === 0
+            && totals.products === 0 && totals.customers === 0) && (
+            <div className="rounded-xl border-2 border-emerald-400 bg-emerald-50 p-4 mb-4"
+                 data-testid="clean-account-banner">
+              <div className="flex items-start gap-3">
+                <span className="text-3xl">✅</span>
+                <div>
+                  <h3 className="text-base font-extrabold text-emerald-900">
+                    حساب قيود نظيف وجاهز لأول مزامنة
+                  </h3>
+                  <p className="text-[12px] text-emerald-800 mt-1 leading-relaxed">
+                    لا توجد فواتير، سندات، منتجات، أو عملاء في قيود.
+                    هذا قد يعني أن الحساب جديد، أو أن مرحلة التنظيف نُفِّذت
+                    سابقاً بنجاح. يمكنك الآن:
+                  </p>
+                  <ol className="text-[12px] text-emerald-800 mt-2 space-y-0.5 list-decimal pr-5">
+                    <li>الذهاب إلى{" "}
+                      <a href="/integrations/qoyod/settings"
+                         className="font-bold underline">إعدادات قيود</a>{" "}
+                      وإيقاف Dry Run.
+                    </li>
+                    <li>إرسال أول Test Payload من Make.com.</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Totals overview */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <Card title="الفواتير" value={totals.invoices ?? 0}
