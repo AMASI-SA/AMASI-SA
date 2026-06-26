@@ -1,7 +1,8 @@
 """Tests for the QYD-GO 3-bugs fix (2026-06-27):
 
   1. Branch ID is now OPTIONAL — single-branch accounts must pass.
-  2. `outstanding_failures` excludes rows flagged `excluded_from_checklist`.
+  2. `outstanding_failures` ignores dry-run failures and counts ONLY
+     production (`dry_run != True`) failures (per user spec 2026-02-26).
   3. `eligible_orders` recognises recent COMPLETED dry-run rows as proof
      the pipeline is healthy (was always 0 after the worker fix).
   4. `dry_run_proven` reads `integration_inbox` (not legacy `qoyod_invoices`).
@@ -74,35 +75,57 @@ class _FakeDB:
 
 
 @pytest.mark.asyncio
-async def test_outstanding_failures_excludes_flagged_rows():
-    """The user's bug: old test DEAD_LETTER rows blocked Go Live.
-    Now, rows with `excluded_from_checklist=True` are ignored."""
+async def test_outstanding_failures_ignores_dry_run_failures():
+    """Spec 2026-02-26: dry-run failures NEVER block Go-Live.
+    Only production failures (dry_run != True) are counted."""
     db = _FakeDB()
     db.integration_inbox.rows = [
-        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER"},
+        # Dry-run failures — must be ignored.
         {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
-         "excluded_from_checklist": True},
+         "dry_run": True},
         {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
-         "excluded_from_checklist": True},
-        {"user_id": "u1", "pipeline_stage": "PARTIAL_FAILURE"},
+         "dry_run": True},
+        {"user_id": "u1", "pipeline_stage": "PARTIAL_FAILURE",
+         "dry_run": True},
+        # Production failures — must count.
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
+         "dry_run": False},
+        {"user_id": "u1", "pipeline_stage": "PARTIAL_FAILURE",
+         "dry_run": False},
     ]
     res = await _check_outstanding_failures(db, "u1")
-    # 1 DEAD_LETTER + 1 PARTIAL_FAILURE (2 excluded) — 2 active blockers.
     assert res["ok"] is False
-    assert res["extra"]["stuck_count"] == 2
+    assert res["extra"]["stuck_count"] == 2  # only the 2 production failures
 
 
 @pytest.mark.asyncio
-async def test_outstanding_failures_passes_when_all_excluded():
+async def test_outstanding_failures_passes_when_only_dry_run_failures():
+    """If the ONLY failures are dry-run noise, the check passes."""
     db = _FakeDB()
     db.integration_inbox.rows = [
         {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
-         "excluded_from_checklist": True},
+         "dry_run": True},
         {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
-         "excluded_from_checklist": True},
+         "dry_run": True},
+        {"user_id": "u1", "pipeline_stage": "PARTIAL_FAILURE",
+         "dry_run": True},
     ]
     res = await _check_outstanding_failures(db, "u1")
     assert res["ok"] is True
+    assert "Dry Run" in res["detail"]
+
+
+@pytest.mark.asyncio
+async def test_outstanding_failures_treats_missing_dry_run_as_production():
+    """Defensive: a row without `dry_run` field is treated as production
+    (the safer interpretation — it blocks)."""
+    db = _FakeDB()
+    db.integration_inbox.rows = [
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER"},  # no dry_run key
+    ]
+    res = await _check_outstanding_failures(db, "u1")
+    assert res["ok"] is False
+    assert res["extra"]["stuck_count"] == 1
 
 
 # ─── Eligible orders (#3) ─────────────────────────────────────────

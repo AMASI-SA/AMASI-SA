@@ -130,20 +130,27 @@ async def _check_dry_run_proven(db, user_id: str, settings: dict) -> dict:
 
 
 async def _check_outstanding_failures(db, user_id: str) -> dict:
-    """Counts DEAD_LETTER + PARTIAL_FAILURE rows EXCLUDING those marked
-    as `excluded_from_checklist` (the operator's "Clear Test Failures"
-    button sets this flag on stale test rows)."""
+    """Counts ONLY production (non-dry-run) failures.
+
+    Per user spec (2026-02-26): dry-run failures are test noise by
+    definition and must NEVER block Go-Live. They stay visible in the
+    First-Sync Monitor for diagnosis and can be archived from there.
+    Production failures (dry_run != True) are the only ones that block
+    readiness — and they always do (no exclusion mechanism).
+    """
     stuck = await db.integration_inbox.count_documents({
         "user_id": user_id,
         "pipeline_stage": {"$in": ["DEAD_LETTER", "PARTIAL_FAILURE"]},
-        "excluded_from_checklist": {"$ne": True},
+        "dry_run": {"$ne": True},
     })
     if stuck:
         return {"ok": False,
-                "detail": (f"{stuck} طلب عالق في DEAD_LETTER / PARTIAL_FAILURE — "
-                           "راجعها أو اضغط 'تنظيف فشل الاختبار' لاستبعاد الاختبارات القديمة."),
+                "detail": (f"{stuck} فاتورة إنتاجية فشلت — يجب مراجعتها قبل المتابعة "
+                           "(فشل Dry Run لا يُعيق الجاهزية)."),
                 "extra": {"stuck_count": stuck}}
-    return {"ok": True, "detail": "لا توجد طلبات عالقة تحتاج تدخّلاً يدوياً."}
+    return {"ok": True,
+            "detail": ("لا توجد فواصل إنتاجية عالقة. "
+                       "فشل Dry Run (إن وُجد) معروض في صفحة المراقبة فقط.")}
 
 
 async def _check_eligible_orders(
@@ -297,7 +304,7 @@ async def go_live_checklist(
          **(await _check_customer_mapping(db, user_id))},
         {"key": "dry_run",           "label": "تجربة Dry Run موثّقة",
          **(await _check_dry_run_proven(db, user_id, settings))},
-        {"key": "outstanding_failures", "label": "لا فواشل عالقة",
+        {"key": "outstanding_failures", "label": "لا فواصل إنتاجية عالقة",
          **(await _check_outstanding_failures(db, user_id))},
         {"key": "eligible_orders",   "label": "وجود طلبات مؤهلة",
          **(await _check_eligible_orders(db, user_id, eligible_count, settings))},

@@ -32,7 +32,7 @@ function StatCell({ label, value, tone = "slate", testid, sub }) {
   );
 }
 
-function ChecklistRow({ item, onClearTestFailures, clearingFailures }) {
+function ChecklistRow({ item }) {
   const ok = item.ok;
   return (
     <li
@@ -54,18 +54,6 @@ function ChecklistRow({ item, onClearTestFailures, clearingFailures }) {
         <div className={`text-xs ${ok ? "text-emerald-800" : "text-rose-800"}`}>
           {item.detail}
         </div>
-        {!ok && item.key === "outstanding_failures" && onClearTestFailures && (
-          <button
-            type="button"
-            onClick={onClearTestFailures}
-            disabled={clearingFailures}
-            data-testid="btn-clear-test-failures"
-            className="mt-2 px-3 py-1 text-[11px] font-bold rounded bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50">
-            {clearingFailures
-              ? "جاري التنظيف…"
-              : "🗑️ تنظيف فشل الاختبار (استبعاد من الفحص)"}
-          </button>
-        )}
       </div>
     </li>
   );
@@ -77,26 +65,6 @@ export default function QoyodGoLive() {
   const [checklist, setChecklist] = useState(null);
   const [report,    setReport]    = useState(null);
   const [activating, setActivating] = useState(false);
-  const [clearingFailures, setClearingFailures] = useState(false);
-
-  const clearTestFailures = async () => {
-    if (!window.confirm(
-      "سيتم استبعاد جميع الطلبات في DEAD_LETTER / PARTIAL_FAILURE من فحص الجاهزية. "
-      + "الطلبات تبقى في قاعدة البيانات وقابلة للعرض في First Sync Monitor. "
-      + "متابعة؟"
-    )) return;
-    setClearingFailures(true);
-    try {
-      const { data } = await axios.post(
-        `${API}/integrations/qoyod/go-live/clear-test-failures`);
-      toast.success(`تم استبعاد ${data.excluded || 0} طلب من الفحص`);
-      await loadAll();
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "فشل التنظيف");
-    } finally {
-      setClearingFailures(false);
-    }
-  };
 
   const loadAll = async () => {
     setLoadingChecklist(true);
@@ -116,7 +84,7 @@ export default function QoyodGoLive() {
     }
   };
 
-  useEffect(() => { loadAll(); }, []); // eslint-disable-line
+  useEffect(() => { loadAll(); }, []);
 
   const onActivate = async () => {
     if (!checklist?.all_passed) {
@@ -288,9 +256,7 @@ export default function QoyodGoLive() {
         ) : (
           <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {(checklist?.items || []).map((it) => (
-              <ChecklistRow key={it.key} item={it}
-                            onClearTestFailures={clearTestFailures}
-                            clearingFailures={clearingFailures} />
+              <ChecklistRow key={it.key} item={it} />
             ))}
           </ul>
         )}

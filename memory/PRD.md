@@ -1,5 +1,45 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## QYD-GO Dry-Run Awareness + Migration SSOT Clarification (2026-02-26)
+**User decisions**:
+1. `_check_outstanding_failures` counts ONLY production (`dry_run != True`) failures. Dry-run failures NEVER block Go-Live.
+2. Archive flow for dry-run failures stays on the First-Sync Monitor page (already built — "أرشفة فشل الاختبار القديم").
+3. Dry-run failures remain visible in the Monitor for diagnosis until archived.
+4. Production failures (`dry_run: False`) always block readiness — no exclusion mechanism.
+5. The «مرحلة الانتقال» page is review-only; SSOT for products/customers post-Go-Live is **Mezan + Salla**, NOT imported Qoyod data.
+
+### Backend changes
+- **`integrations/qoyod/go_live.py`**:
+  - `_check_outstanding_failures` filter changed from `excluded_from_checklist: {$ne: True}` → `dry_run: {$ne: True}`.
+  - Detail messages updated: green says "لا توجد فواصل إنتاجية عالقة. فشل Dry Run (إن وُجد) معروض في صفحة المراقبة فقط." Red says "X فاتورة إنتاجية فشلت — يجب مراجعتها قبل المتابعة (فشل Dry Run لا يُعيق الجاهزية)."
+  - Checklist label changed to "لا فواصل إنتاجية عالقة".
+- **`integrations/qoyod/product_resolver.py`** + **`customer_resolver.py`**: docstrings explicitly state Mezan+Salla SSOT; runtime never reads `qoyod_external_*` / `qoyod_migration_*`.
+- The `clear-test-failures` endpoint remains for backward compat (no UI uses it anymore) — `excluded_from_checklist` field is no longer consulted by any check.
+
+### Frontend changes
+- **`pages/QoyodGoLive.jsx`**: removed the obsolete "🗑️ تنظيف فشل الاختبار" button + its handler + state. The button could have masked real production failures and is now dangerous.
+- **`pages/QoyodMigration.jsx`**: added blue notice banner explaining the page is review-only and Mezan+Salla are SSOT.
+
+### Tests
+- **`tests/test_qoyod_go_live_qyd_fix.py`**: rewrote the 2 outstanding-failures tests + added a "missing dry_run treated as production" defensive test (3 new tests).
+- **`tests/test_qoyod_qydgo_clear_failures_persistence.py`**: rewritten end-to-end on real Mongo (5 tests):
+  - Dry-run failures alone never block.
+  - Production failures always block.
+  - Mixed: only production count.
+  - Refresh stability ×3.
+  - Worker-produced new dry failures still don't block.
+- **`tests/test_qoyod_runtime_ssot_isolation.py`** (new, 1 test): tokenises every runtime module and fails if any of them references `qoyod_external_*` / `qoyod_migration_*` collections in executable code (docstrings allowed). CI guardrail against future drift.
+
+### Verification
+- 35 tests pass (all Qoyod-touched).
+- Screenshot of QYD-GO confirms: green "لا فواصل إنتاجية عالقة" with new detail, NO clear-test-failures button visible.
+- Screenshot of «مرحلة الانتقال» confirms SSOT notice banner renders correctly.
+
+### Architectural confirmation
+A grep across `/app/backend/integrations/qoyod/` (excluding `migration.py` + `migration_routes.py`) shows **zero references** to the 4 migration collections. The runtime pipeline only reads/writes `qoyod_products_mapping` + `qoyod_customers_mapping`, which are populated on-demand by the resolvers themselves from Salla-supplied data.
+
+
+
 ## QYD-GO "Outstanding Failures Returns RED After Refresh" — Investigation (2026-02-26)
 **User report**: After clicking "تنظيف فشل الاختبار" the checklist goes 11/11 green, but on refresh "لا فواشل عالقة" returns to RED. User suspected exclusion is not persisted or not read.
 

@@ -503,6 +503,25 @@ export default function QoyodMigration() {
         </div>
       </div>
 
+      {/* SSOT clarification banner — after Go-Live this page is read-only
+          review tool. The runtime invoice pipeline NEVER consults
+          imported Qoyod products/customers; it uses Mezan + Salla
+          (SSOT) and creates missing entities in Qoyod on first use. */}
+      <div className="rounded-xl border-2 border-sky-200 bg-sky-50 p-3 flex items-start gap-2"
+           data-testid="migration-ssot-notice">
+        <span className="text-lg" aria-hidden="true">ℹ️</span>
+        <div className="flex-1 text-[12.5px] text-sky-900 leading-relaxed">
+          <strong>هذه الصفحة للمراجعة فقط.</strong>
+          {" "}
+          المصدر الوحيد المعتمد (SSOT) لإنشاء الفواتير في قيود هو
+          <strong className="mx-1">ميزان + سلة</strong>.
+          بيانات قيود المستوردة هنا (المنتجات والعملاء) لا تؤثر على
+          خط معالجة الطلبات بعد Go-Live —
+          خط الأنابيب يستخدم SKU/بيانات العميل من سلة مباشرةً، وعند
+          غياب الربط المحلي يُنشئ الكيان في قيود تلقائياً.
+        </div>
+      </div>
+
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         {loading
           ? <div className="text-sm text-slate-500" data-testid="loading-report">

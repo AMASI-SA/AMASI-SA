@@ -1,22 +1,18 @@
-"""Integration test for the QYD-GO «clear-test-failures» persistence.
+"""Tests for the new QYD-GO `_check_outstanding_failures` behaviour
+(2026-02-26 user spec).
 
-The user reported a bug:
-    1. Open QYD-GO page
-    2. Click "🗑️ تنظيف فشل الاختبار" → checklist turns 11/11 green
-    3. Refresh the page
-    4. "لا فواصل عالقة" goes back to RED
+Spec
+────
+Dry-run failures NEVER block Go-Live. Only production failures
+(`dry_run != True`) are counted by `_check_outstanding_failures`.
+The operator archives stale dry-run failures from the First-Sync Monitor
+page (separate flow, already built).
 
-This test reproduces the exact end-to-end flow to PROVE whether:
-    a) the cleanup endpoint actually writes `excluded_from_checklist=true`
-       and persists it in MongoDB;
-    b) `_check_outstanding_failures` correctly ignores excluded rows
-       across SUCCESSIVE invocations (= "refresh");
-    c) idempotency holds — running cleanup twice does not unset the flag.
-
-If all three assertions pass and the user still sees the bug in
-production, the cause must be NEW failures arriving after the cleanup
-(the worker keeps draining in-flight rows into DEAD_LETTER), not a
-bug in the exclusion mechanism.
+These tests reproduce the user's exact workflow on real MongoDB:
+    • Seed dry-run failures → check returns ok=True (page stays green).
+    • Seed production failures → check returns ok=False (page red).
+    • Successive calls (= page refresh) keep returning the same result
+      — no false-positive RED after refresh.
 """
 from __future__ import annotations
 
@@ -44,209 +40,115 @@ def tenant():
     return f"qydgo-test-{uuid.uuid4().hex[:8]}"
 
 
-async def _seed_failed_rows(db, tenant: str, *,
-                            n_dead: int = 3, n_partial: int = 2) -> None:
-    rows: list[dict] = []
-    for i in range(n_dead):
-        rows.append({
-            "user_id":         tenant,
-            "trace_id":        uuid.uuid4().hex,
-            "id":              uuid.uuid4().hex,
-            "connector_key":   "qoyod",
-            "idempotency_key": f"qydgo-d-{tenant}-{i}-{uuid.uuid4().hex}",
-            "received_at":     datetime.now(timezone.utc),
-            "pipeline_stage":  "DEAD_LETTER",
-            "dry_run":         True,
-        })
-    for i in range(n_partial):
-        rows.append({
-            "user_id":         tenant,
-            "trace_id":        uuid.uuid4().hex,
-            "id":              uuid.uuid4().hex,
-            "connector_key":   "qoyod",
-            "idempotency_key": f"qydgo-p-{tenant}-{i}-{uuid.uuid4().hex}",
-            "received_at":     datetime.now(timezone.utc),
-            "pipeline_stage":  "PARTIAL_FAILURE",
-            "dry_run":         True,
-        })
+async def _seed(db, tenant: str, rows: list[dict]) -> None:
+    for i, r in enumerate(rows):
+        r.setdefault("user_id", tenant)
+        r.setdefault("trace_id", uuid.uuid4().hex)
+        r.setdefault("id",       uuid.uuid4().hex)
+        r.setdefault("connector_key", "qoyod")
+        r.setdefault("idempotency_key",
+                     f"qydgo-{tenant}-{i}-{uuid.uuid4().hex}")
+        r.setdefault("received_at", datetime.now(timezone.utc))
     if rows:
         await db.integration_inbox.insert_many(rows)
-
-
-# This mirrors the exact `update_many` call inside the
-# /api/integrations/qoyod/go-live/clear-test-failures endpoint.
-# Kept here verbatim (NOT imported) so the test catches any future
-# drift between the endpoint code and the intended behaviour.
-async def _clear_test_failures_endpoint_body(db, user_id: str) -> dict:
-    result = await db.integration_inbox.update_many(
-        {"user_id": user_id,
-         "pipeline_stage": {"$in": ["DEAD_LETTER", "PARTIAL_FAILURE"]},
-         "excluded_from_checklist": {"$ne": True}},
-        {"$set": {"excluded_from_checklist": True,
-                  "excluded_at": datetime.now(timezone.utc)}},
-    )
-    return {"ok": True, "excluded": result.modified_count}
 
 
 async def _cleanup(db, tenant: str) -> None:
     await db.integration_inbox.delete_many({"user_id": tenant})
 
 
-# ─── 1) Cleanup endpoint actually writes the flag to Mongo ───────────
+# ─── Dry-run failures never block ────────────────────────────────────
 @pytest.mark.asyncio
-async def test_clear_test_failures_writes_excluded_flag_to_mongo(db, tenant):
+async def test_dry_run_failures_do_not_block(db, tenant):
+    """The user's main complaint reframed: even with multiple dry-run
+    DEAD_LETTER / PARTIAL_FAILURE rows in the inbox, Go-Live readiness
+    should stay GREEN. No magic button needed.
+    """
     try:
-        await _seed_failed_rows(db, tenant, n_dead=3, n_partial=2)
-        # Sanity: before cleanup, no row has the flag.
-        before = await db.integration_inbox.count_documents(
-            {"user_id": tenant, "excluded_from_checklist": True})
-        assert before == 0
-
-        result = await _clear_test_failures_endpoint_body(db, tenant)
-        assert result["ok"] is True
-        assert result["excluded"] == 5
-
-        # After cleanup, ALL 5 rows have `excluded_from_checklist=True`
-        # AND `excluded_at` populated.
-        after = await db.integration_inbox.count_documents(
-            {"user_id": tenant, "excluded_from_checklist": True})
-        assert after == 5
-        async for r in db.integration_inbox.find(
-                {"user_id": tenant},
-                {"_id": 0, "excluded_from_checklist": 1, "excluded_at": 1,
-                 "pipeline_stage": 1}):
-            assert r["excluded_from_checklist"] is True
-            assert r["excluded_at"] is not None
+        await _seed(db, tenant, [
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
+            {"pipeline_stage": "PARTIAL_FAILURE", "dry_run": True},
+        ])
+        res = await _check_outstanding_failures(db, tenant)
+        assert res["ok"] is True, f"expected ok but got {res}"
+        assert "Dry Run" in res["detail"]
     finally:
         await _cleanup(db, tenant)
 
 
-# ─── 2) Check ignores excluded rows ──────────────────────────────────
+# ─── Production failures always block ────────────────────────────────
 @pytest.mark.asyncio
-async def test_check_outstanding_failures_ignores_excluded_rows(db, tenant):
+async def test_production_failures_always_block(db, tenant):
     try:
-        await _seed_failed_rows(db, tenant, n_dead=2, n_partial=1)
-        # Before cleanup → check FAILS with count=3
+        await _seed(db, tenant, [
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": False},
+            {"pipeline_stage": "PARTIAL_FAILURE", "dry_run": False},
+        ])
         res = await _check_outstanding_failures(db, tenant)
         assert res["ok"] is False
-        assert res["extra"]["stuck_count"] == 3
-
-        # Run cleanup
-        await _clear_test_failures_endpoint_body(db, tenant)
-
-        # After cleanup → check PASSES
-        res = await _check_outstanding_failures(db, tenant)
-        assert res["ok"] is True
-        assert "لا توجد طلبات عالقة" in res["detail"]
+        assert res["extra"]["stuck_count"] == 2
     finally:
         await _cleanup(db, tenant)
 
 
-# ─── 3) Persistence across multiple invocations (= "refresh") ────────
+# ─── Mixed: only production count ────────────────────────────────────
 @pytest.mark.asyncio
-async def test_exclusion_survives_multiple_checks_simulating_refresh(db, tenant):
-    """This is the EXACT bug the user reported. Reproduces:
-       run cleanup → check ok (page green) → simulate refresh (re-call
-       check) → check should still be ok (page stays green) → simulate
-       another refresh → still ok.
-    """
+async def test_mixed_failures_count_only_production(db, tenant):
     try:
-        await _seed_failed_rows(db, tenant, n_dead=4, n_partial=1)
-
-        # Step 1: User clicks "تنظيف فشل الاختبار"
-        cleanup_res = await _clear_test_failures_endpoint_body(db, tenant)
-        assert cleanup_res["excluded"] == 5
-
-        # Step 2: First check after cleanup (page is green)
-        first = await _check_outstanding_failures(db, tenant)
-        assert first["ok"] is True
-
-        # Step 3: User refreshes the page → second check
-        second = await _check_outstanding_failures(db, tenant)
-        assert second["ok"] is True, (
-            "Bug repro: exclusion did NOT survive a second check call. "
-            f"Result: {second}")
-
-        # Step 4: User refreshes again → third check
-        third = await _check_outstanding_failures(db, tenant)
-        assert third["ok"] is True, (
-            "Bug repro: exclusion did NOT survive a third check call. "
-            f"Result: {third}")
-
-        # Step 5: Verify the flag is still in Mongo (not transient).
-        still_excluded = await db.integration_inbox.count_documents(
-            {"user_id": tenant, "excluded_from_checklist": True})
-        assert still_excluded == 5
-    finally:
-        await _cleanup(db, tenant)
-
-
-# ─── 4) Idempotency — running cleanup twice keeps the flag ───────────
-@pytest.mark.asyncio
-async def test_cleanup_is_idempotent(db, tenant):
-    try:
-        await _seed_failed_rows(db, tenant, n_dead=2, n_partial=2)
-
-        first = await _clear_test_failures_endpoint_body(db, tenant)
-        assert first["excluded"] == 4
-
-        # Second call: no new rows to exclude, but already-excluded rows
-        # must remain excluded.
-        second = await _clear_test_failures_endpoint_body(db, tenant)
-        assert second["excluded"] == 0
-
-        still_excluded = await db.integration_inbox.count_documents(
-            {"user_id": tenant, "excluded_from_checklist": True})
-        assert still_excluded == 4
-
-        res = await _check_outstanding_failures(db, tenant)
-        assert res["ok"] is True
-    finally:
-        await _cleanup(db, tenant)
-
-
-# ─── 5) NEW failures after cleanup still surface (correct behaviour) ─
-@pytest.mark.asyncio
-async def test_new_failures_after_cleanup_DO_surface(db, tenant):
-    """This is the EXPECTED behaviour: rows added AFTER the cleanup
-    must NOT be auto-excluded — the operator should see them.
-
-    This test documents the difference between:
-       • a bug (old excluded rows reappear → would fail this test's
-         "still_excluded == 3" assertion in step 4)
-       • correct behaviour (new failures appear, old ones stay
-         excluded → matches what this test asserts).
-    """
-    try:
-        await _seed_failed_rows(db, tenant, n_dead=3, n_partial=0)
-        await _clear_test_failures_endpoint_body(db, tenant)
-
-        # Operator's view at this point: clean.
-        res = await _check_outstanding_failures(db, tenant)
-        assert res["ok"] is True
-
-        # NOW simulate the worker producing a NEW DEAD_LETTER row
-        # AFTER the cleanup.
-        await db.integration_inbox.insert_one({
-            "user_id":         tenant,
-            "trace_id":        uuid.uuid4().hex,
-            "id":              uuid.uuid4().hex,
-            "connector_key":   "qoyod",
-            "idempotency_key": f"new-after-cleanup-{uuid.uuid4().hex}",
-            "received_at":     datetime.now(timezone.utc),
-            "pipeline_stage":  "DEAD_LETTER",
-            "dry_run":         True,
-        })
-
-        # The new failure SHOULD surface (this is correct, not a bug).
+        await _seed(db, tenant, [
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
+            {"pipeline_stage": "PARTIAL_FAILURE", "dry_run": True},
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": False},
+        ])
         res = await _check_outstanding_failures(db, tenant)
         assert res["ok"] is False
         assert res["extra"]["stuck_count"] == 1
+    finally:
+        await _cleanup(db, tenant)
 
-        # And the original 3 rows are still excluded in Mongo —
-        # not "un-excluded" by anything.
-        still_excluded = await db.integration_inbox.count_documents(
-            {"user_id": tenant, "excluded_from_checklist": True})
-        assert still_excluded == 3
+
+# ─── Refresh stability ───────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_refresh_stability_with_only_dry_failures(db, tenant):
+    """The exact user-reported bug, rewritten for the new spec.
+    Three successive calls (= refresh ×3) all return the same green
+    result. There is no stateful exclusion mechanism that could be
+    forgotten between calls.
+    """
+    try:
+        await _seed(db, tenant, [
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": True},
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": True},
+        ])
+        for i in range(3):
+            res = await _check_outstanding_failures(db, tenant)
+            assert res["ok"] is True, f"call {i+1} flipped to red: {res}"
+    finally:
+        await _cleanup(db, tenant)
+
+
+# ─── Worker-produced new dry-run failures still don't block ──────────
+@pytest.mark.asyncio
+async def test_worker_produced_dry_failures_still_dont_block(db, tenant):
+    """Original symptom: after a click, worker added NEW dry-run
+    DEAD_LETTER rows → page flipped to red. With the new spec the
+    new dry-run rows are still ignored → page stays green.
+    """
+    try:
+        await _seed(db, tenant, [
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": True}])
+        assert (await _check_outstanding_failures(db, tenant))["ok"]
+        # Simulate the worker adding 4 more dry-run DEAD_LETTER rows.
+        await _seed(db, tenant, [
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
+            {"pipeline_stage": "PARTIAL_FAILURE", "dry_run": True},
+            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
+        ])
+        # Page still green.
+        assert (await _check_outstanding_failures(db, tenant))["ok"]
     finally:
         await _cleanup(db, tenant)

@@ -1,9 +1,17 @@
 """Qoyod Product Resolution (Step 4b) — `CUSTOMER_RESOLVED → PRODUCT_RESOLVED`.
 
+SSOT (Single Source Of Truth) for products at runtime
+─────────────────────────────────────────────────────
+The runtime pipeline uses **Mezan + Salla** as the SSOT for products.
+It does NOT read from the migration snapshot collections
+(`qoyod_external_products`, `qoyod_migration_products`) — those are
+review-only artefacts populated by the «مرحلة الانتقال» page.
+
 For each line item:
-    1. Hit `qoyod_products_mapping` by `sku`.
-    2. On miss → POST /products to Qoyod (or stub in dry-run).
-    3. Persist the mapping for next time.
+    1. Hit `qoyod_products_mapping` by `sku` (the runtime mapping table).
+    2. On miss → POST /products to Qoyod (or stub in dry-run) using the
+       SKU/name/price coming from the Salla canonical DTO.
+    3. Persist the new mapping for next time.
 
 Failures route to FAILED_PRODUCT → DEAD_LETTER (no PARTIAL_FAILURE
 at this stage — nothing has been written to Qoyod yet).

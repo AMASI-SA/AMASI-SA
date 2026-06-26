@@ -1,5 +1,12 @@
 """Qoyod Customer Resolution (Step 4a) — `RULES_APPLIED → CUSTOMER_RESOLVED`.
 
+SSOT (Single Source Of Truth) for customers at runtime
+──────────────────────────────────────────────────────
+The runtime pipeline uses **Mezan + Salla** as the SSOT for customer
+data. It does NOT read from the migration snapshot collections
+(`qoyod_external_customers`, `qoyod_migration_customers`) — those are
+review-only artefacts populated by the «مرحلة الانتقال» page.
+
 Day 4 scope:
     Take the `CustomerDTO` from the canonical SalesOrderDTO and produce
     a Qoyod `contact_id`. Two paths:
