@@ -1,5 +1,45 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Qoyod Settings — Final One-Time Setup Page (2026-06-27)
+**Goal**: After saving once, operator never needs to revisit unless a new payment method is added or accounting setup changes.
+
+### Backend
+- **NEW `integrations/qoyod/setup_validation.py`**
+  - `CANONICAL_PAYMENT_METHODS`: ordered list of 11 canonical methods (mada, apple_pay, visa, mastercard, credit_card, stc_pay, bank_transfer, tamara, tabby, emkan, cod).
+  - `collect_used_payment_methods(db, user_id)` — scans `unified_orders` (payment_method + raw.payment_method) and `integration_inbox.canonical_payload.payment_method`. Returns grouped `{key,label_ar,count,sources,native_examples}` rows.
+  - `validate_settings_for_setup(db, user_id)` — runs every Settings-page check:
+    - `missing_branch_id` (blocker)
+    - `missing_tax_id` (blocker)
+    - `unmapped_payment_methods` (blocker) — every USED canonical key must have a non-empty `qoyod_account_id`.
+    - `missing_inventory_account` / `missing_cost_account` (blocker, only if product_type=inventory)
+    - `missing_default_customer` (warning) — optional guest fallback.
+- **`integrations/qoyod/normalizer.py`** — added `emkan` (and Arabic `إمكان`) to canonical payment-method table.
+- **New endpoints** in `routes.py`:
+  - `GET /api/integrations/qoyod/payment-methods/used` — returns `{used:[…], catalogue:[…]}` for the mapping table.
+  - `GET /api/integrations/qoyod/setup/validate` — returns full validation result for fail-safe server-side gate.
+
+### Frontend (`pages/QoyodSettings.jsx`)
+Complete rewrite as a one-time setup page:
+1. **Setup Status banner** (top) — live client-side validation that mirrors the backend logic and updates as user types. Red banner with `Jump to →` buttons when blockers exist.
+2. **Master switches** — enabled/auto_send/auto_receipt/dry_run_mode.
+3. **API Key** + Test Connection.
+4. **Webhook Token** (unchanged) — Make.com inbound auth.
+5. **Core IDs**: Branch ID, Tax ID, Default Customer ID (optional) — manual input + datalist suggestions.
+6. **💳 Payment Method Mapping table** (the most important section):
+   - One row per used method (mandatory) + addable canonical methods.
+   - Each row: Salla method label, Account ID input, status badge (مربوط / مطلوب / اختياري).
+   - Rejected rows have rose-50 highlight.
+7. **📦 Inventory Accounts** (conditional, only when `default_product_type === "inventory"`) — Inventory Account + COGS Account.
+8. **Advanced** — trigger statuses, invoice date source, product type, trigger_once_only.
+9. **Capability flags** — create_customers/products/invoices/receipts.
+10. **📋 Setup Guide** (inline expandable) — 6 cards (Branch, Tax, Account, Default Customer, Inventory, API Key) with step-by-step instructions + direct `legacy.qoyod.com` links.
+11. **Sticky save bar** — disabled when blockers exist. Save calls server validate after PUT as fail-safe.
+
+### Tests
+- `tests/test_qoyod_setup_validation.py` — 9 tests covering catalogue completeness, missing branch/tax blocking, used-but-unmapped detection, inventory mode requirements, payment method normalisation grouping, partial mapping handling.
+- Full Qoyod suite: 291 passed, 2 skipped, 0 regressions.
+
+
 ## QYD-GO — Production Readiness Layer (2026-06-26)
 Independent, read-only verification layer. NO new business logic; refuses to let
 the operator flip the connector to live-mode unless every check passes.

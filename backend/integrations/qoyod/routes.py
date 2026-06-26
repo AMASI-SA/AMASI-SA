@@ -46,6 +46,11 @@ from integrations.qoyod.go_live import (
     activate_production_mode, ActivationBlocked,
 )
 from integrations.qoyod.migration_routes import attach_migration_routes
+from integrations.qoyod.setup_validation import (
+    collect_used_payment_methods,
+    validate_settings_for_setup,
+    CANONICAL_PAYMENT_METHODS,
+)
 from integrations.qoyod.webhook_token_store import (
     generate_token,
     save_webhook_token,
@@ -320,6 +325,30 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     @router.get("/qoyod-taxes")
     async def qoyod_taxes(user=Depends(current_user)):
         return await _proxied_catalog(_tenant_id(user), "list_taxes")
+
+    # ── Setup helpers — payment methods discovery & validation ──────
+    @router.get("/payment-methods/used")
+    async def payment_methods_used(user=Depends(current_user)):
+        """Returns every payment-method key that has appeared on real
+        store data so the Settings UI can mandate a mapping for each.
+        Also includes the canonical catalogue (so the UI can offer
+        suggestions like Apple Pay/Emkan that haven't appeared yet)."""
+        tenant = _tenant_id(user)
+        used = await collect_used_payment_methods(db, user_id=tenant)
+        return {"ok": True,
+                "used": used,
+                "catalogue": CANONICAL_PAYMENT_METHODS}
+
+    @router.get("/setup/validate")
+    async def setup_validate(user=Depends(current_user)):
+        """One-shot Settings-page validation. Powers the green/red
+        banner at the top of the page and the disabled-state of the
+        Save button."""
+        tenant = _tenant_id(user)
+        return {"ok": True,
+                "validation": await validate_settings_for_setup(
+                    db, user_id=tenant)}
+
 
     # ── GET /health — terse connector status for monitoring ──────────
     @router.get("/health")

@@ -289,6 +289,8 @@ def _canonical_payment_method(native: Optional[str]) -> Optional[str]:
         "bank transfer":  "bank_transfer",
         "tamara":         "tamara",
         "tabby":          "tabby",
+        "emkan":          "emkan",
+        "إمكان":          "emkan",
         "credit_card":    "credit_card",
         "paypal":         "paypal",
     }
