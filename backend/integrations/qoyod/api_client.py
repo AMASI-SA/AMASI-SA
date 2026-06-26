@@ -139,7 +139,11 @@ class QoyodAPIClient:
         idempotency_key: Optional[str] = None,
     ) -> Any:
         url = f"{self._base_url}{path}"
-        async with httpx.AsyncClient(timeout=self._timeout) as http:
+        # `follow_redirects=True` is a safety belt against Qoyod's
+        # domain migration (www.qoyod.com → legacy.qoyod.com). Without
+        # it, a 307 surfaces to the operator as an unhelpful "HTTP error".
+        async with httpx.AsyncClient(timeout=self._timeout,
+                                     follow_redirects=True) as http:
             try:
                 resp = await http.request(
                     method, url,
@@ -177,8 +181,15 @@ class QoyodAPIClient:
 
     # ── Public surface — only what the MVP pipeline needs ───────────
     async def me(self) -> dict:
-        """Used by /test-connection to verify the API key."""
-        return await self._request("GET", "/me")
+        """Used by /test-connection to verify the API key.
+
+        Qoyod retired `/me` in the legacy.qoyod.com migration so we
+        probe a cheap protected list endpoint instead — valid key →
+        200 with paging metadata; invalid key → 401 → classified as
+        `qoyod_unauthorized` upstream. We never actually use the
+        returned products list."""
+        return await self._request(
+            "GET", "/products", params={"limit": 1, "page": 1})
 
     async def list_branches(self) -> Any:
         return await self._request("GET", "/branches")
@@ -197,9 +208,15 @@ class QoyodAPIClient:
             "GET", "/products", params={"page": page, "limit": limit})
 
     async def list_contacts(self, *, page: int = 1, limit: int = 50) -> Any:
-        """GET /contacts — same purpose as `list_products` but for customers."""
+        """GET /customers — same purpose as `list_products` but for customers.
+
+        Note (2026-06-26 connectivity blocker diagnosis): Qoyod's legacy
+        domain uses `/customers` for the list endpoint and reserves
+        `/contacts/{id}` for single-resource GETs. Using `/contacts`
+        without an id returns 404 "Invalid ID". We keep the Python
+        method name `list_contacts` for consistency with `create_contact`."""
         return await self._request(
-            "GET", "/contacts", params={"page": page, "limit": limit})
+            "GET", "/customers", params={"page": page, "limit": limit})
 
     async def create_contact(self, payload: dict, *, idem: str) -> Any:
         return await self._request(
