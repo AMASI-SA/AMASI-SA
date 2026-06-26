@@ -530,6 +530,22 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                         "reasons": exc.reasons,
                         "items":   exc.items})
 
+    @router.post("/go-live/clear-test-failures")
+    async def clear_test_failures(user=Depends(current_user)):
+        """Marks all current DEAD_LETTER / PARTIAL_FAILURE rows as
+        `excluded_from_checklist=True` so they no longer block the
+        readiness check. The rows stay in the database for the First-Sync
+        Monitor; only the QYD-GO check ignores them."""
+        tenant = _tenant_id(user)
+        result = await db.integration_inbox.update_many(
+            {"user_id": tenant,
+             "pipeline_stage": {"$in": ["DEAD_LETTER", "PARTIAL_FAILURE"]},
+             "excluded_from_checklist": {"$ne": True}},
+            {"$set": {"excluded_from_checklist": True,
+                      "excluded_at": datetime.now(timezone.utc)}},
+        )
+        return {"ok": True, "excluded": result.modified_count}
+
     # ── Existing-Data Migration (read-only pre-flight) ──────────────
     attach_migration_routes(router, db, current_user, _tenant_id)
 

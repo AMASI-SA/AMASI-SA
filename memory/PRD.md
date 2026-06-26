@@ -1,5 +1,39 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## QYD-GO Checklist Fixes — 3 Blockers (2026-06-27)
+**User-reported**: After the worker wiring, QYD-GO page still blocked Go-Live with 3 false-positives.
+
+### Fix 1 — Branch ID no longer a blocker
+- `go_live.py::_check_branch` now returns `ok: True` regardless of branch value.
+  - When set: detail shows the ID.
+  - When blank: detail reads "اختياري — الحساب أحادي الفرع، سيستخدم قيود الفرع الافتراضي تلقائياً".
+- Consistent with the earlier `setup_validation.py` change that demoted branch to a warning.
+
+### Fix 2 — Outstanding-failures check ignores excluded test rows
+- `_check_outstanding_failures` now filters `excluded_from_checklist: {$ne: true}` so stale DEAD_LETTER/PARTIAL_FAILURE rows from pre-fix tests don't block readiness.
+- **New endpoint** `POST /api/integrations/qoyod/go-live/clear-test-failures`:
+  - Marks all current DEAD_LETTER/PARTIAL_FAILURE rows as `excluded_from_checklist: True` with `excluded_at` timestamp.
+  - Rows STAY in the database for First-Sync-Monitor visibility — only the QYD-GO check ignores them.
+- **Frontend** `QoyodGoLive.jsx`:
+  - When `outstanding_failures` fails, an inline button "🗑️ تنظيف فشل الاختبار (استبعاد من الفحص)" appears beneath the row.
+  - On click: confirmation prompt → POST → toast with count → reload.
+
+### Fix 3 — Eligible orders detects post-worker dry-run completions
+- `_check_eligible_orders` now has TWO acceptance paths:
+  - a) In-flight rows (NORMALIZED / CUSTOMER_RESOLVED) matching a trigger slug — existing behaviour.
+  - b) **NEW**: At least one COMPLETED dry-run row in the last 24h matching a trigger slug.
+- Path (b) is critical because the worker now drains rows quickly out of NORMALIZED, so (a) often returns 0 even when the pipeline is healthy and processing real webhooks.
+- Detail reads "X طلب اكتمل في Dry Run خلال 24 ساعة — الـ pipeline نشط".
+
+### Fix 4 (bonus) — Dry-run proof uses integration_inbox
+- `_check_dry_run_proven` previously read `db.qoyod_invoices` which is not populated by the new pipeline.
+- Now reads `integration_inbox` with `pipeline_stage: COMPLETED` + `dry_run: True`.
+
+### Tests
+- `tests/test_qoyod_go_live_qyd_fix.py` — 10 tests covering all 4 fixes incl. nested-field queries and edge cases.
+- All Qoyod-touched tests still pass.
+
+
 ## Pipeline Worker Wiring — CRITICAL FIX (2026-06-27)
 **User-reported bug**: Webhook order #268602475 stuck at NORMALIZED forever; never reached CUSTOMER_RESOLVED / INVOICE / RECEIPT.
 

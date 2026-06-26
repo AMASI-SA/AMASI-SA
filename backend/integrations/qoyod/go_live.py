@@ -52,9 +52,13 @@ async def _check_api_key(db, user_id: str) -> dict:
 
 
 def _check_branch(settings: dict) -> dict:
+    """Branch is OPTIONAL per user spec 2026-06-27 — many Qoyod accounts
+    are single-branch and don't even expose a branches page. When blank,
+    we explicitly tell Qoyod nothing and it uses its default branch."""
     if settings.get("default_branch_id"):
         return {"ok": True, "detail": f"الفرع: {settings['default_branch_id']}"}
-    return {"ok": False, "detail": "لم يُحدَّد فرع افتراضي في الإعدادات."}
+    return {"ok": True,
+            "detail": "اختياري — الحساب أحادي الفرع، سيستخدم قيود الفرع الافتراضي تلقائياً."}
 
 
 def _check_tax(settings: dict) -> dict:
@@ -105,12 +109,16 @@ async def _check_customer_mapping(db, user_id: str) -> dict:
 async def _check_dry_run_proven(db, user_id: str, settings: dict) -> dict:
     """We require BOTH:
        1. Dry Run mode is currently ENABLED (= we haven't flipped to live yet).
-       2. At least one row has completed under dry-run (= testing happened)."""
+       2. At least one row has completed under dry-run (= testing happened).
+
+    Source of truth: `integration_inbox.pipeline_stage == COMPLETED` with
+    `dry_run == True`. (The legacy `qoyod_invoices` collection is no
+    longer populated by the new pipeline.)"""
     if not settings.get("dry_run_mode"):
         return {"ok": False,
                 "detail": ("وضع التشغيل الجاف غير مُفعّل حالياً — يجب أن يكون "
                            "مُفعّلاً قبل التحقق وإلا قد نُرسل فواتير حقيقية بالخطأ.")}
-    completed_dry = await db.qoyod_invoices.count_documents(
+    completed_dry = await db.integration_inbox.count_documents(
         {"user_id": user_id, "dry_run": True,
          "pipeline_stage": "COMPLETED"})
     if completed_dry == 0:
@@ -122,24 +130,54 @@ async def _check_dry_run_proven(db, user_id: str, settings: dict) -> dict:
 
 
 async def _check_outstanding_failures(db, user_id: str) -> dict:
+    """Counts DEAD_LETTER + PARTIAL_FAILURE rows EXCLUDING those marked
+    as `excluded_from_checklist` (the operator's "Clear Test Failures"
+    button sets this flag on stale test rows)."""
     stuck = await db.integration_inbox.count_documents({
         "user_id": user_id,
         "pipeline_stage": {"$in": ["DEAD_LETTER", "PARTIAL_FAILURE"]},
+        "excluded_from_checklist": {"$ne": True},
     })
     if stuck:
         return {"ok": False,
-                "detail": f"{stuck} طلب عالق في DEAD_LETTER / PARTIAL_FAILURE — يحتاج مراجعة قبل البدء.",
+                "detail": (f"{stuck} طلب عالق في DEAD_LETTER / PARTIAL_FAILURE — "
+                           "راجعها أو اضغط 'تنظيف فشل الاختبار' لاستبعاد الاختبارات القديمة."),
                 "extra": {"stuck_count": stuck}}
     return {"ok": True, "detail": "لا توجد طلبات عالقة تحتاج تدخّلاً يدوياً."}
 
 
-async def _check_eligible_orders(db, user_id: str, eligible_count: int) -> dict:
-    if eligible_count == 0:
-        return {"ok": False,
-                "detail": ("لا توجد طلبات مؤهلة للإرسال — تأكّد أن webhook "
-                           "Make.com يُرسل، وأن حالات تفعيل الفاتورة صحيحة.")}
-    return {"ok": True,
-            "detail": f"{eligible_count} طلب مؤهل في خط الأنابيب جاهز للإرسال."}
+async def _check_eligible_orders(
+    db, user_id: str, eligible_count: int, settings: dict,
+) -> dict:
+    """Counts as "eligible":
+       a) Rows currently in NORMALIZED / CUSTOMER_RESOLVED matching a
+          trigger status (`eligible_count` from the walker).
+       b) OR — at least one COMPLETED dry-run row in the last 24h (proof
+          the pipeline received & processed a real Salla webhook).
+
+    The (b) clause is critical after the worker fix: rows now drain
+    quickly out of NORMALIZED so (a) often shows 0 even though the
+    pipeline is healthy. (b) catches "first new completed order"."""
+    if eligible_count > 0:
+        return {"ok": True,
+                "detail": f"{eligible_count} طلب مؤهل في خط الأنابيب جاهز للإرسال."}
+    from datetime import timedelta
+    recent_cutoff = _now() - timedelta(hours=24)
+    triggers = settings.get("invoice_trigger_statuses") or ["completed"]
+    recent_completed = await db.integration_inbox.count_documents({
+        "user_id": user_id,
+        "pipeline_stage": "COMPLETED",
+        "dry_run": True,
+        "canonical_payload.order_status": {"$in": triggers},
+        "received_at": {"$gte": recent_cutoff},
+    })
+    if recent_completed > 0:
+        return {"ok": True,
+                "detail": (f"{recent_completed} طلب اكتمل في Dry Run خلال 24 ساعة — "
+                           "الـ pipeline نشط وجاهز لاستقبال الطلبات الجديدة.")}
+    return {"ok": False,
+            "detail": ("لا توجد طلبات مؤهلة في خط الأنابيب ولا اكتمال حديث — "
+                       "أرسل Test Payload من Make.com أو تأكّد من حالات تفعيل الفاتورة.")}
 
 
 async def _check_lookup(api_client, label: str, fn) -> dict:
@@ -262,7 +300,7 @@ async def go_live_checklist(
         {"key": "outstanding_failures", "label": "لا فواشل عالقة",
          **(await _check_outstanding_failures(db, user_id))},
         {"key": "eligible_orders",   "label": "وجود طلبات مؤهلة",
-         **(await _check_eligible_orders(db, user_id, eligible_count))},
+         **(await _check_eligible_orders(db, user_id, eligible_count, settings))},
         {"key": "products_lookup",   "label": "استعلام منتجات قيود",
          **(await _check_lookup(
              api_client, "منتجات قيود",
