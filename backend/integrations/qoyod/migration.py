@@ -219,7 +219,22 @@ async def import_qoyod_customers(
 async def extract_mezan_products(db, *, user_id: str) -> list[dict]:
     """Distinct products from `order_items` keyed by SKU (or by name when
     no SKU is present). Returns a list of dicts with normalised fields.
+
+    `last_order_date` is the most recent order date the SKU appears on.
+    We use `unified_orders.order_date` as the authoritative signal,
+    falling back to `received_at` and finally to `order_items.created_at`.
     """
+    # Build {order_number: best_date_string} once.
+    order_dates: dict[str, str] = {}
+    cursor = db.unified_orders.find(
+        {"user_id": user_id},
+        {"order_number": 1, "order_date": 1, "received_at": 1, "_id": 0})
+    async for o in cursor:
+        on = o.get("order_number")
+        if not on:
+            continue
+        order_dates[on] = (o.get("order_date") or o.get("received_at") or "")
+
     pipeline = [
         {"$match": {"user_id": user_id}},
         {"$group": {
@@ -228,6 +243,8 @@ async def extract_mezan_products(db, *, user_id: str) -> list[dict]:
             "name":        {"$first": "$product_name"},
             "unit_price":  {"$first": "$unit_price"},
             "occurrences": {"$sum": 1},
+            "order_numbers": {"$addToSet": "$order_number"},
+            "item_created_max": {"$max": "$created_at"},
         }},
     ]
     rows = await db.order_items.aggregate(pipeline).to_list(length=10000)
@@ -237,13 +254,21 @@ async def extract_mezan_products(db, *, user_id: str) -> list[dict]:
         name = r.get("name") or ""
         if not sku and not name:
             continue
+        # Pick the max order_date over the SKU's order_numbers
+        best_date = ""
+        for on in (r.get("order_numbers") or []):
+            d = order_dates.get(on) or ""
+            if d and d > best_date:
+                best_date = d
+        last_order_date = best_date or (r.get("item_created_max") or "")
         out.append({
-            "sku":          sku,
-            "name":         name,
-            "unit_price":   _coerce_float(r.get("unit_price")),
-            "occurrences":  r.get("occurrences", 0),
-            "sku_norm":     normalize_sku(sku),
-            "name_norm":    normalize_name(name),
+            "sku":              sku,
+            "name":             name,
+            "unit_price":       _coerce_float(r.get("unit_price")),
+            "occurrences":      r.get("occurrences", 0),
+            "sku_norm":         normalize_sku(sku),
+            "name_norm":        normalize_name(name),
+            "last_order_date":  last_order_date or None,
         })
     return out
 
@@ -252,14 +277,17 @@ async def extract_mezan_customers(db, *, user_id: str) -> list[dict]:
     """Distinct customers from `unified_orders.raw` + `custom_app_customers`.
 
     De-duplication priority: phone (E.164) > email (lower) > name.
+    `last_order_date` is the most recent `order_date` (falling back to
+    `received_at`) the customer appears on. For `custom_app_customers`
+    rows that have no order, we use `updated_at`/`created_at`.
     """
     bucket: dict[str, dict] = {}
 
-    def _add(name: str, phone: str, email: str, occurrences: int = 1):
+    def _add(name: str, phone: str, email: str, *,
+             when: str = "", occurrences: int = 1):
         p_norm = normalize_phone(phone)
         e_norm = normalize_email(email)
         n_norm = normalize_name(name)
-        # Choose the strongest available key for de-dup.
         if p_norm:
             key = "P:" + p_norm
         elif e_norm:
@@ -271,38 +299,50 @@ async def extract_mezan_customers(db, *, user_id: str) -> list[dict]:
         cur = bucket.get(key)
         if cur:
             cur["occurrences"] += occurrences
+            if when and (not cur.get("last_order_date")
+                          or when > cur["last_order_date"]):
+                cur["last_order_date"] = when
             return
         bucket[key] = {
-            "name":         name or "",
-            "phone":        phone or "",
-            "email":        email or "",
-            "occurrences":  occurrences,
-            "phone_norm":   p_norm,
-            "email_norm":   e_norm,
-            "name_norm":    n_norm,
+            "name":             name or "",
+            "phone":            phone or "",
+            "email":            email or "",
+            "occurrences":      occurrences,
+            "phone_norm":       p_norm,
+            "email_norm":       e_norm,
+            "name_norm":        n_norm,
+            "last_order_date":  when or None,
         }
 
-    # Source 1: unified_orders (high-volume, real billing footprint)
+    # Source 1: unified_orders — authoritative for "last order date"
     cursor = db.unified_orders.find(
         {"user_id": user_id},
         {"customer_name": 1, "raw.customer_mobile": 1,
-         "raw.customer_email": 1, "raw.customer_name": 1, "_id": 0})
+         "raw.customer_email": 1, "raw.customer_name": 1,
+         "order_date": 1, "received_at": 1, "_id": 0})
     async for o in cursor:
         raw = o.get("raw") or {}
+        when = o.get("order_date") or o.get("received_at") or ""
         _add(
             o.get("customer_name") or raw.get("customer_name") or "",
             raw.get("customer_mobile") or raw.get("customer_phone") or "",
             raw.get("customer_email") or "",
+            when=when,
         )
 
-    # Source 2: custom_app_customers (manually entered)
+    # Source 2: custom_app_customers (manually entered, no order linked)
     cursor2 = db.custom_app_customers.find(
         {"user_id": user_id},
-        {"name": 1, "mobile": 1, "email": 1, "_id": 0})
+        {"name": 1, "mobile": 1, "email": 1,
+         "updated_at": 1, "created_at": 1, "_id": 0})
     async for c in cursor2:
+        when = c.get("updated_at") or c.get("created_at") or ""
+        if hasattr(when, "isoformat"):
+            when = when.isoformat()
         _add(c.get("name") or "",
              c.get("mobile") or "",
-             c.get("email") or "")
+             c.get("email") or "",
+             when=str(when) if when else "")
 
     return list(bucket.values())
 
@@ -416,6 +456,7 @@ async def match_products(db, *, user_id: str, run_id: str) -> dict:
                 "mezan_name":         mz["name"],
                 "mezan_unit_price":   mz["unit_price"],
                 "occurrences":        mz["occurrences"],
+                "last_order_date":    mz.get("last_order_date"),
                 "status":             cls["status"],
                 "qoyod_product_id":   cls["qoyod_id"],
                 "candidate_qoyod_id": cls.get("candidate_qoyod_id"),
@@ -473,6 +514,7 @@ async def match_customers(db, *, user_id: str, run_id: str) -> dict:
                 "mezan_phone":        mz["phone"],
                 "mezan_email":        mz["email"],
                 "occurrences":        mz["occurrences"],
+                "last_order_date":    mz.get("last_order_date"),
                 "status":             cls["status"],
                 "qoyod_customer_id":  cls["qoyod_id"],
                 "candidate_qoyod_id": cls.get("candidate_qoyod_id"),

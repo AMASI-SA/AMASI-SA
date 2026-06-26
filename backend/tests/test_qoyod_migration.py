@@ -256,28 +256,68 @@ async def test_extract_mezan_products_from_order_items(db):
 
 
 @pytest.mark.asyncio
+async def test_extract_mezan_products_carries_last_order_date(db):
+    """Last Order Date uses unified_orders.order_date over the SKU's orders."""
+    await db.unified_orders.insert_many([
+        {"user_id": "main", "order_number": "O1", "order_date": "2024-01-15"},
+        {"user_id": "main", "order_number": "O2", "order_date": "2026-03-22"},
+        {"user_id": "main", "order_number": "O3", "order_date": "2025-08-10"},
+    ])
+    await db.order_items.insert_many([
+        {"user_id": "main", "sku": "SKU-A", "product_name": "A",
+         "unit_price": 100, "order_number": "O1",
+         "created_at": "2024-01-15T00:00:00+00:00"},
+        {"user_id": "main", "sku": "SKU-A", "product_name": "A",
+         "unit_price": 100, "order_number": "O2",
+         "created_at": "2026-03-22T00:00:00+00:00"},
+        {"user_id": "main", "sku": "SKU-B", "product_name": "B",
+         "unit_price": 50, "order_number": "O3",
+         "created_at": "2025-08-10T00:00:00+00:00"},
+        # SKU with no matching unified_order — falls back to item.created_at
+        {"user_id": "main", "sku": "SKU-C", "product_name": "C",
+         "unit_price": 10, "order_number": "ORPHAN",
+         "created_at": "2023-12-01T00:00:00+00:00"},
+    ])
+    out = await extract_mezan_products(db, user_id="main")
+    by_sku = {p["sku"]: p for p in out}
+    # SKU-A appears on O1 (2024) and O2 (2026) → max = 2026
+    assert by_sku["SKU-A"]["last_order_date"] == "2026-03-22"
+    assert by_sku["SKU-B"]["last_order_date"] == "2025-08-10"
+    # Fallback to item.created_at when no unified_orders row matches
+    assert by_sku["SKU-C"]["last_order_date"] == \
+        "2023-12-01T00:00:00+00:00"
+
+
+@pytest.mark.asyncio
 async def test_extract_mezan_customers_dedupes_by_phone(db):
     await db.unified_orders.insert_many([
         {"user_id": "main", "customer_name": "Ahmad",
+         "order_date": "2024-01-15",
          "raw": {"customer_mobile": "0500000001",
                  "customer_email": "a@x.com"}},
         {"user_id": "main", "customer_name": "Ahmad",
+         "order_date": "2026-04-12",
          "raw": {"customer_mobile": "+966500000001",
                  "customer_email": "a@x.com"}},
         {"user_id": "main", "customer_name": "Sara",
+         "order_date": "2025-09-09",
          "raw": {"customer_mobile": "0500000002"}},
     ])
     await db.custom_app_customers.insert_one({
         "user_id": "main", "name": "Khaled", "mobile": "",
-        "email": "k@x.com"})
+        "email": "k@x.com", "created_at": "2023-02-01T00:00:00+00:00"})
     out = await extract_mezan_customers(db, user_id="main")
-    keys = {(c["phone_norm"], c["email_norm"], c["name_norm"]) for c in out}
-    # Ahmad de-duped to one row by phone
     phones = [c["phone_norm"] for c in out if c["phone_norm"]]
     assert phones.count("+966500000001") == 1
     assert "+966500000002" in phones
-    # Khaled comes through email (no phone)
     assert any(c["email_norm"] == "k@x.com" for c in out)
+    # Last Order Date — Ahmad merged across two orders should take the max
+    ahmad = next(c for c in out if c["phone_norm"] == "+966500000001")
+    assert ahmad["last_order_date"] == "2026-04-12"
+    sara = next(c for c in out if c["phone_norm"] == "+966500000002")
+    assert sara["last_order_date"] == "2025-09-09"
+    khaled = next(c for c in out if c["email_norm"] == "k@x.com")
+    assert khaled["last_order_date"] == "2023-02-01T00:00:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -446,3 +486,69 @@ async def test_migration_is_read_only_against_qoyod(db):
         "unit_price": 1.0, "order_number": "O1"})
     await run_migration(db, user_id="main", api_client=client)
     assert calls_made == [], "Migration must not perform writes on Qoyod"
+
+
+# ─── Last Order Date — persistence + filter integration ──────────────
+@pytest.mark.asyncio
+async def test_match_products_persists_last_order_date(db):
+    await db.unified_orders.insert_one(
+        {"user_id": "main", "order_number": "O1",
+         "order_date": "2026-04-01"})
+    await db.order_items.insert_one(
+        {"user_id": "main", "sku": "SKU-A", "product_name": "A",
+         "unit_price": 100.0, "order_number": "O1",
+         "created_at": "2026-04-01T10:00:00+00:00"})
+    await db.qoyod_external_products.insert_one(
+        {"user_id": "main", "qoyod_id": "Q1", "sku": "SKU-A", "name": "A",
+         "price": 100.0, "sku_norm": "SKU-A", "name_norm": "a"})
+    await match_products(db, user_id="main", run_id="r1")
+    row = await db.qoyod_migration_products.find_one(
+        {"user_id": "main", "mezan_sku": "SKU-A"})
+    assert row["last_order_date"] == "2026-04-01"
+
+
+@pytest.mark.asyncio
+async def test_match_customers_persists_last_order_date(db):
+    await db.unified_orders.insert_one(
+        {"user_id": "main", "customer_name": "Ahmad",
+         "order_date": "2026-05-15",
+         "raw": {"customer_mobile": "0500000001"}})
+    await db.qoyod_external_customers.insert_one(
+        {"user_id": "main", "qoyod_id": "C1", "name": "Ahmad",
+         "phone": "+966500000001", "email": "",
+         "phone_norm": "+966500000001", "email_norm": "",
+         "name_norm": "ahmad"})
+    await match_customers(db, user_id="main", run_id="r1")
+    row = await db.qoyod_migration_customers.find_one(
+        {"user_id": "main", "mezan_phone": "0500000001"})
+    assert row["last_order_date"] == "2026-05-15"
+
+
+@pytest.mark.asyncio
+async def test_last_order_date_does_not_change_mapping_decision(db):
+    """Regression: old or new SKUs map by the SAME policy; date is metadata only."""
+    await db.unified_orders.insert_many([
+        {"user_id": "main", "order_number": "OLD", "order_date": "2020-01-01"},
+        {"user_id": "main", "order_number": "NEW", "order_date": "2026-06-01"},
+    ])
+    await db.order_items.insert_many([
+        {"user_id": "main", "sku": "SKU-OLD", "product_name": "Old",
+         "unit_price": 10.0, "order_number": "OLD"},
+        {"user_id": "main", "sku": "SKU-NEW", "product_name": "New",
+         "unit_price": 20.0, "order_number": "NEW"},
+    ])
+    # Only the OLD one exists in Qoyod
+    await db.qoyod_external_products.insert_one(
+        {"user_id": "main", "qoyod_id": "QO", "sku": "SKU-OLD", "name": "Old",
+         "price": 10.0, "sku_norm": "SKU-OLD", "name_norm": "old"})
+    counts = await match_products(db, user_id="main", run_id="r2")
+    # OLD → auto_mapped, NEW → unmapped, regardless of dates
+    assert counts["auto_mapped"] == 1
+    assert counts["unmapped"] == 1
+    rows = await db.qoyod_migration_products.find(
+        {"user_id": "main"}).to_list(10)
+    by_sku = {r["mezan_sku"]: r for r in rows}
+    assert by_sku["SKU-OLD"]["status"] == "auto_mapped"
+    assert by_sku["SKU-OLD"]["last_order_date"] == "2020-01-01"
+    assert by_sku["SKU-NEW"]["status"] == "unmapped"
+    assert by_sku["SKU-NEW"]["last_order_date"] == "2026-06-01"

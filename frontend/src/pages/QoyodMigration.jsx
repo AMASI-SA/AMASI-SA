@@ -162,14 +162,18 @@ function MappingTable({ kind, version }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmingKey, setConfirmingKey] = useState(null);
+  const [sort, setSort] = useState("last_order_date");
+  const [sortDir, setSortDir] = useState("desc");
+  const [lastOrderAfter, setLastOrderAfter] = useState("");
   const pageSize = 50;
 
   const load = async () => {
     setLoading(true);
     try {
-      const params = { page, page_size: pageSize };
-      if (statusFilter) params.status = statusFilter;
-      if (search)       params.search = search;
+      const params = { page, page_size: pageSize, sort, sort_dir: sortDir };
+      if (statusFilter)    params.status = statusFilter;
+      if (search)          params.search = search;
+      if (lastOrderAfter)  params.last_order_after = lastOrderAfter;
       const r = await axios.get(`${M_API}/${kind}`, { params });
       setRows(r.data?.rows || []);
       setTotal(r.data?.total || 0);
@@ -181,7 +185,7 @@ function MappingTable({ kind, version }) {
   };
 
   useEffect(() => { load(); },
-           [kind, page, statusFilter, version]);
+           [kind, page, statusFilter, sort, sortDir, lastOrderAfter, version]);
 
   const onSearch = (e) => { e.preventDefault(); setPage(1); load(); };
 
@@ -204,11 +208,30 @@ function MappingTable({ kind, version }) {
 
   const exportUrl = useMemo(() => {
     const u = new URL(`${M_API}/${kind}/export.csv`);
-    if (statusFilter) u.searchParams.set("status", statusFilter);
+    if (statusFilter)   u.searchParams.set("status", statusFilter);
     return u.toString();
   }, [kind, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const toggleSort = (col) => {
+    if (sort === col) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSort(col);
+      setSortDir("desc");
+    }
+    setPage(1);
+  };
+  const sortIndicator = (col) =>
+    sort === col ? (sortDir === "desc" ? " ↓" : " ↑") : "";
+
+  const fmtDate = (d) => {
+    if (!d) return "—";
+    // Accept "YYYY-MM-DD" or full ISO
+    const s = String(d);
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  };
 
   return (
     <div className="space-y-3" data-testid={`mapping-table-${kind}`}>
@@ -238,6 +261,20 @@ function MappingTable({ kind, version }) {
             بحث
           </button>
         </form>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          آخر طلب بعد:
+          <input type="date"
+            value={lastOrderAfter}
+            onChange={(e) => { setLastOrderAfter(e.target.value); setPage(1); }}
+            className="px-2 py-1 text-sm border border-slate-300 rounded-md"
+            data-testid={`filter-last-order-after-${kind}`} />
+          {lastOrderAfter && (
+            <button type="button"
+              onClick={() => { setLastOrderAfter(""); setPage(1); }}
+              className="text-rose-600 hover:underline"
+              data-testid={`clear-last-order-after-${kind}`}>×</button>
+          )}
+        </label>
         <div className="flex-1" />
         <a href={exportUrl} target="_blank" rel="noreferrer"
            className="px-3 py-1.5 text-sm border border-slate-300 rounded-md bg-white hover:bg-slate-50"
@@ -258,7 +295,16 @@ function MappingTable({ kind, version }) {
                   <th className="text-right p-2">SKU (ميزان)</th>
                   <th className="text-right p-2">الاسم (ميزان)</th>
                   <th className="text-right p-2">السعر</th>
-                  <th className="text-right p-2">التكرار</th>
+                  <th className="text-right p-2 cursor-pointer select-none hover:bg-slate-100"
+                      onClick={() => toggleSort("occurrences")}
+                      data-testid="sort-occurrences">
+                    التكرار{sortIndicator("occurrences")}
+                  </th>
+                  <th className="text-right p-2 cursor-pointer select-none hover:bg-slate-100"
+                      onClick={() => toggleSort("last_order_date")}
+                      data-testid="sort-last-order-date">
+                    آخر طلب{sortIndicator("last_order_date")}
+                  </th>
                   <th className="text-right p-2">الحالة</th>
                   <th className="text-right p-2">معرّف قيود</th>
                   <th className="text-right p-2">الاسم في قيود</th>
@@ -269,7 +315,16 @@ function MappingTable({ kind, version }) {
                   <th className="text-right p-2">الاسم (ميزان)</th>
                   <th className="text-right p-2">الهاتف</th>
                   <th className="text-right p-2">الإيميل</th>
-                  <th className="text-right p-2">التكرار</th>
+                  <th className="text-right p-2 cursor-pointer select-none hover:bg-slate-100"
+                      onClick={() => toggleSort("occurrences")}
+                      data-testid="sort-occurrences">
+                    التكرار{sortIndicator("occurrences")}
+                  </th>
+                  <th className="text-right p-2 cursor-pointer select-none hover:bg-slate-100"
+                      onClick={() => toggleSort("last_order_date")}
+                      data-testid="sort-last-order-date">
+                    آخر طلب{sortIndicator("last_order_date")}
+                  </th>
                   <th className="text-right p-2">الحالة</th>
                   <th className="text-right p-2">معرّف قيود</th>
                   <th className="text-right p-2">الاسم في قيود</th>
@@ -293,6 +348,10 @@ function MappingTable({ kind, version }) {
                       <td className="p-2">{r.mezan_name || "—"}</td>
                       <td className="p-2 tabular-nums">{r.mezan_unit_price ?? "—"}</td>
                       <td className="p-2 tabular-nums">{r.occurrences ?? 0}</td>
+                      <td className="p-2 tabular-nums whitespace-nowrap text-xs"
+                          data-testid={`last-order-date-${kind}-${i}`}>
+                        {fmtDate(r.last_order_date)}
+                      </td>
                       <td className="p-2">
                         <StatusBadge status={r.status} />
                         {(r.warnings || []).length > 0 && (
@@ -310,6 +369,10 @@ function MappingTable({ kind, version }) {
                       <td className="p-2 font-mono text-xs">{r.mezan_phone || "—"}</td>
                       <td className="p-2 text-xs">{r.mezan_email || "—"}</td>
                       <td className="p-2 tabular-nums">{r.occurrences ?? 0}</td>
+                      <td className="p-2 tabular-nums whitespace-nowrap text-xs"
+                          data-testid={`last-order-date-${kind}-${i}`}>
+                        {fmtDate(r.last_order_date)}
+                      </td>
                       <td className="p-2">
                         <StatusBadge status={r.status} />
                         {(r.warnings || []).length > 0 && (
@@ -337,7 +400,7 @@ function MappingTable({ kind, version }) {
               );
             })}
             {rows.length === 0 && !loading && (
-              <tr><td colSpan={8} className="p-6 text-center text-slate-500">
+              <tr><td colSpan={9} className="p-6 text-center text-slate-500">
                 لا توجد نتائج لهذه الفلاتر.
               </td></tr>
             )}

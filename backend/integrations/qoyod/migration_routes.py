@@ -73,6 +73,11 @@ def attach_migration_routes(router: APIRouter, db, current_user, tenant_of):
         search: Optional[str] = None,
         page: int = Query(1, ge=1),
         page_size: int = Query(50, ge=1, le=500),
+        sort: str = Query("occurrences", regex="^(occurrences|last_order_date|status)$"),
+        sort_dir: str = Query("desc", regex="^(asc|desc)$"),
+        last_order_after: Optional[str] = Query(
+            None, description="ISO date (YYYY-MM-DD). Keep rows whose "
+            "last_order_date >= this value. Use to skip stale entities."),
     ):
         if kind not in ("products", "customers"):
             raise HTTPException(404, "kind must be products|customers")
@@ -81,6 +86,8 @@ def attach_migration_routes(router: APIRouter, db, current_user, tenant_of):
         q: dict = {"user_id": tenant}
         if status_filter:
             q["status"] = status_filter
+        if last_order_after:
+            q["last_order_date"] = {"$gte": last_order_after}
         if search:
             rgx = {"$regex": search, "$options": "i"}
             if kind == "products":
@@ -89,7 +96,8 @@ def attach_migration_routes(router: APIRouter, db, current_user, tenant_of):
                 q["$or"] = [{"mezan_name": rgx}, {"mezan_phone": rgx},
                             {"mezan_email": rgx}]
         total = await coll.count_documents(q)
-        cursor = coll.find(q, {"_id": 0}).sort("occurrences", -1) \
+        direction = -1 if sort_dir == "desc" else 1
+        cursor = coll.find(q, {"_id": 0}).sort(sort, direction) \
             .skip((page - 1) * page_size).limit(page_size)
         rows = [r async for r in cursor]
         # ISO-serialise dates
@@ -143,8 +151,9 @@ def attach_migration_routes(router: APIRouter, db, current_user, tenant_of):
         w = csv.writer(buf)
         if kind == "products":
             w.writerow(["mezan_sku", "mezan_name", "mezan_unit_price",
-                        "occurrences", "status", "qoyod_product_id",
-                        "candidate_qoyod_id", "matched_on", "warnings",
+                        "occurrences", "last_order_date", "status",
+                        "qoyod_product_id", "candidate_qoyod_id",
+                        "matched_on", "warnings",
                         "qoyod_name", "qoyod_price"])
             async for r in coll.find(q, {"_id": 0}):
                 snap = r.get("qoyod_snapshot") or {}
@@ -153,6 +162,7 @@ def attach_migration_routes(router: APIRouter, db, current_user, tenant_of):
                     r.get("mezan_name") or "",
                     r.get("mezan_unit_price") or "",
                     r.get("occurrences") or 0,
+                    r.get("last_order_date") or "",
                     r.get("status") or "",
                     r.get("qoyod_product_id") or "",
                     r.get("candidate_qoyod_id") or "",
@@ -163,8 +173,9 @@ def attach_migration_routes(router: APIRouter, db, current_user, tenant_of):
                 ])
         else:
             w.writerow(["mezan_name", "mezan_phone", "mezan_email",
-                        "occurrences", "status", "qoyod_customer_id",
-                        "candidate_qoyod_id", "matched_on", "warnings",
+                        "occurrences", "last_order_date", "status",
+                        "qoyod_customer_id", "candidate_qoyod_id",
+                        "matched_on", "warnings",
                         "qoyod_name", "qoyod_phone", "qoyod_email"])
             async for r in coll.find(q, {"_id": 0}):
                 snap = r.get("qoyod_snapshot") or {}
@@ -173,6 +184,7 @@ def attach_migration_routes(router: APIRouter, db, current_user, tenant_of):
                     r.get("mezan_phone") or "",
                     r.get("mezan_email") or "",
                     r.get("occurrences") or 0,
+                    r.get("last_order_date") or "",
                     r.get("status") or "",
                     r.get("qoyod_customer_id") or "",
                     r.get("candidate_qoyod_id") or "",

@@ -1,0 +1,40 @@
+{
+  "summary": "iter-257 verified the new 'Last Order Date' enhancement on /integrations/qoyod/migration end-to-end. Backend pytest: 31/31 PASS on test_qoyod_migration.py (incl. 4 new tests: extract_mezan_products_carries_last_order_date, match_products_persists_last_order_date, match_customers_persists_last_order_date, last_order_date_does_not_change_mapping_decision). Full Qoyod regression suite: 188 passed + 1 skipped (the prior /openapi.json catch-all skip from iter-256) across 10 test files — NO regression. New live HTTP smoke (test_qoyod_migration_last_order_date_iter257.py, 8/8 PASS) hits the public REACT_APP_BACKEND_URL with admin@hesab.app and confirms: GET /migration/products?sort=last_order_date&sort_dir=desc (rows sorted desc), GET /migration/products?last_order_after=2025-01-01 (rows filtered), same on /customers, both export.csv files include 'last_order_date' as a header column, and an invalid sort key (?sort=bogus) is rejected with 422 by FastAPI's regex Query validator. Frontend page renders correctly with all 5 new testids (sort-last-order-date on both tabs, filter-last-order-after-products, filter-last-order-after-customers, per-row last-order-date-{kind}-{i}) and Arabic header 'آخر طلب' visible; sort toggle and date filter both function. Matching policy is LOCKED — test_last_order_date_does_not_change_mapping_decision proves date is metadata only.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qoyod_migration.py",
+    "/app/backend/tests/test_qoyod_migration_last_order_date_iter257.py",
+    "/app/backend/tests/test_qoyod_migration_http_iter256.py",
+    "/app/test_reports/pytest/iter257_qoyod_migration.xml",
+    "/app/test_reports/pytest/iter257_qoyod_full.xml",
+    "/app/test_reports/pytest/iter257_last_order_date_http.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "migration_routes.py:76 — Query(..., regex=...) is deprecated in FastAPI/Pydantic v2 in favour of `pattern=...`. Both still work, but the deprecation warning will eventually become an error; consider switching to pattern=^(occurrences|last_order_date|status)$.",
+    "migration_routes.py:88-90 — last_order_after compares as a STRING ($gte). This works only because last_order_date is stored as an ISO 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS+00:00' lexically-sortable string. Adding a tiny isoformat-validation (e.g. datetime.fromisoformat) would shield against bogus inputs like '2025/01/01' silently degrading to a no-op filter. Cosmetic.",
+    "migration.py:262 — best_date is compared with `>` between strings of mixed lengths ('2026-03-22' vs '2026-03-22T00:00:00+00:00'). They sort correctly in practice because the date prefix matches, but if a future code path inserts a non-UTC offset (e.g. '2026-03-21T23:00:00-01:00'), string compare will mis-rank. Consider normalising to a date-only prefix before max.",
+    "migration.py:236 — order_dates dict is built unbounded for all unified_orders of the tenant; on a 200k-order merchant this can spike memory by 30-50MB. Switch to a streaming cursor with projection-only fields or chunk by date range. Same concern noted in iter-256 for extract_mezan_customers — still no length cap.",
+    "Matching policy CONFIRMED still locked: test_last_order_date_does_not_change_mapping_decision passes — date does not influence auto_mapped vs candidate_match vs unmapped. ✔"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_qoyod_migration_last_order_date_iter257.py"
+  ],
+  "success_rate": {
+    "backend": "100% (31/31 unit + 188/189 full qoyod suite — 1 pre-existing skip, + 8/8 new HTTP smoke = 227/228 incl. skip)",
+    "frontend": "100% (all 5 new testids present, sort+filter+tab-switch functional, Arabic header rendered)"
+  },
+  "test_credentials": "admin@hesab.app / admin123",
+  "seed_data_creation": "None. The admin tenant has no Qoyod data and no unified_orders, so rows are empty; assertions are conditional (verify sort only when len(rows)>=2). The 4 new unit tests in test_qoyod_migration.py seed their own in-memory MongoDB collections.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The Last Order Date column is now LIVE and verified at /integrations/qoyod/migration. All migration endpoints accept sort=last_order_date&sort_dir=asc|desc and last_order_after=YYYY-MM-DD. Both CSV exports include the 'last_order_date' header. Frontend testids: sort-last-order-date (header, both tabs), filter-last-order-after-products, filter-last-order-after-customers, last-order-date-{kind}-{i} (per row). Mapping policy untouched — name-only matches remain candidate_match with qoyod_*_id=None (locked by test_last_order_date_does_not_change_mapping_decision). When seeding data for further UI verification: insert into qoyod_migration_products / qoyod_migration_customers with user_id='main' and a last_order_date string ('YYYY-MM-DD' or full ISO)."
+}

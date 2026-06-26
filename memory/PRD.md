@@ -1424,3 +1424,27 @@ counterparties in Production (per-account blocker / reason histogram).
 - `/app/backend/tests/test_p15p_employee_guard_widened.py` — 7/7 PASS
 - `/app/backend/tests/test_p15ab_suppliers_unification_forensic.py` — 3/3 PASS
 - `/app/backend/tests/test_iter251_v12_scheduler_diagnostics.py` — 3/3 PASS
+
+## Iter-256 — Qoyod Existing-Data Migration (2026-06-26, READ-ONLY)
+  - **User-locked policy** (Arabic spec, 2026-06-26):
+    - Products: SKU exact → `auto_mapped`; SKU + name OR price differs → `mapped_with_warning`; name-only → `candidate_match` (NO auto mapping); else `unmapped`.
+    - Customers: phone (E.164) → `auto_mapped`; email when no phone → `auto_mapped`; name-only → `candidate_match`; else `unmapped`.
+    - STRICTLY read-only against Qoyod — no POST/PUT calls.
+  - New module `integrations/qoyod/migration.py`: phone/sku/email/name normalisation, paginated GET importers (`import_qoyod_products`, `import_qoyod_customers`), Mezan-side extractors from `order_items` + `unified_orders` + `custom_app_customers`, `match_products`/`match_customers`/`run_migration` orchestrator with idempotent upserts.
+  - New collections (additive, isolated from runtime resolver mappings):
+    `qoyod_external_products`, `qoyod_external_customers`,
+    `qoyod_migration_products`, `qoyod_migration_customers`,
+    `qoyod_migration_runs`.
+  - New routes (under `/api/integrations/qoyod/migration/*`):
+    `POST /run`, `GET /status`, `GET /report`, `GET /{kind}`,
+    `POST /{kind}/confirm`, `GET /{kind}/export.csv`.
+  - Frontend: new page `/integrations/qoyod/migration` (`QoyodMigration.jsx`) — status cards, products/customers tabs, status filter, search, CSV export, "Confirm Match" for candidates; sidebar link `nav-qoyod-migration`.
+  - Day-5 failing test fixed (`test_dry_run_client_records_calls_and_returns_fake_ids`) — updated to `{"customer": {...}}` envelope post `legacy.qoyod.com` migration.
+  - **Tests**: `tests/test_qoyod_migration.py` — 27/27 PASS;
+    `tests/test_qoyod_migration_http_iter256.py` — 9/9 PASS (+1 skip);
+    full Qoyod suite: **184/184 GREEN** — zero regression.
+
+## Pending (User-gated)
+- ▶ Dry Run on real data — blocked until migration report is approved by user.
+- ▶ Go Live (disable `dry_run_mode`) — blocked until Dry Run is approved.
+
