@@ -1481,3 +1481,40 @@ counterparties in Production (per-account blocker / reason histogram).
   - **Tests**: `test_qoyod_webhook_token.py` — 19/19 PASS; HTTP smoke 5/5 PASS; full Qoyod suite — **222/222 GREEN**. Zero regression.
   - UX polish: first-time generate no longer triggers an unnecessary confirm; only regenerate (replacement) prompts.
 
+
+## Iter-259 — Legacy Adapter for Make.com → Qoyod webhook (2026-06-26)
+  - **Goal**: support Make.com's flat JSON without touching the legacy `/api/webhook/make` module, and without forcing Make.com to rebuild scenarios. Users will add a SECOND HTTP module in Make pointing at `/api/integrations/qoyod/webhook` with (almost) the same body shape.
+  - **New module** `integrations/qoyod/legacy_adapter.py`:
+    - `is_legacy_shape(raw)` — sniffs flat root + missing `data` envelope.
+    - `adapt(raw) → (adapted, meta)` — pure transformer.
+    - Items resolution priority: `items[]` → `packages[].items[]` → `"missing"`.
+    - Each line item rebuilt to Salla's canonical `{sku, name, quantity, amounts: {price_without_tax, total}}` shape so the existing `normalizer.py` accepts it unchanged.
+    - Flat amounts (subtotal/tax/shipping_cost/discount/total_amount) → nested `data.amounts.{sub_total, tax, shipping, discount, total}`.
+    - Flat customer (customer_name/customer_mobile/customer_email) → nested `data.customer.{first_name, last_name, mobile, email}`.
+    - Status node built from `order_status` + `order_status_slug` → `{name, slug, customized:{name}}`.
+    - Unknown root fields preserved in `meta.legacy_extras` (utm_source, utm_campaign, device, shipping_company, received_from, etc.) for audit — never silently dropped.
+  - **State machine** (`state_machine.py`):
+    - Added `NEEDS_ENRICHMENT` (transient side-state).
+    - Added `FAILED_ENRICHMENT` (failure stage) with `FAILURE_TO_RESUME["FAILED_ENRICHMENT"] = "RECEIVED"`.
+    - Edges: `RECEIVED → NEEDS_ENRICHMENT`, `NEEDS_ENRICHMENT → {VALIDATED, FAILED_ENRICHMENT, DEAD_LETTER}`, `FAILED_ENRICHMENT → {RETRYING, DEAD_LETTER}`, `RETRYING → RECEIVED`.
+  - **Webhook handler** (`webhook.py`):
+    - `adapt_legacy()` called BEFORE idempotency derivation.
+    - Inbox row now persists `adapted_payload`, `adapter_meta`, `enrichment_fallback_used` (bool).
+    - New `_handle_missing_items()` branch:
+      - Toggle OFF (default): `RECEIVED → FAILED_VALIDATION → DEAD_LETTER` with code `missing_items_no_enricher`. NO invoice created.
+      - Toggle ON: `RECEIVED → NEEDS_ENRICHMENT → FAILED_ENRICHMENT → DEAD_LETTER` with code `enricher_not_implemented` (Salla-API enricher stub — actual implementation deferred).
+  - **Settings** (`models.py` + `routes.py`):
+    - `QoyodSettings.enrichment_fallback_enabled: bool = False` (opt-in, default OFF).
+    - `SettingsPatch` (PUT route) accepts the new field. Round-trip tested.
+  - **Bug found & fixed during testing** (iter-259 retest): `SettingsPatch` was missing the new field → `422 extra_forbidden`. Fixed by adding `enrichment_fallback_enabled: Optional[bool] = None` to the patch model.
+  - **Tests** (NEW):
+    - `tests/test_qoyod_legacy_adapter.py` — 40/40 PASS (detection, helpers, item adaptation, item collection priority, status node, public adapt(), downstream contract with `validate()`, state machine additions).
+    - `tests/test_qoyod_legacy_adapter_http.py` — 5/5 PASS + 1 conditional skip (legacy-with-items progress, missing-items toggle OFF, missing-items toggle ON, legacy_extras audit, PUT settings round-trip).
+  - **Full Qoyod regression**: **243/243 GREEN** + 1 skip (token gate). Zero regression.
+
+## Pending (User-gated)
+- ▶ User adds a SECOND HTTP module in Make.com → `/api/integrations/qoyod/webhook`.
+- ▶ Smoke test on Preview with one real-shaped legacy payload that includes items[].
+- ▶ If items[] consistently absent in real Make output, decide on enricher (Salla API or Make-side scenario edit).
+- ▶ Then Dry Run → Go Live.
+

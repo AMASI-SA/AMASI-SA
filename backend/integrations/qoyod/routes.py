@@ -95,6 +95,9 @@ class SettingsPatch(BaseModel):
     default_product_type: Optional[str] = None
     payment_method_mapping: Optional[list] = None
     capabilities:         Optional[QoyodCapabilityFlags] = None
+    # Legacy-Adapter enrichment toggle (Salla-API fallback when items
+    # are missing from the incoming webhook). Default False — opt-in.
+    enrichment_fallback_enabled: Optional[bool] = None
 
 
 class CredentialsRequest(BaseModel):

@@ -207,3 +207,37 @@ async def test_legacy_extras_persisted_for_audit(db):
     assert extras.get("utm_source") == "snapchat"
     assert extras.get("utm_campaign") == "test-campaign-123"
     assert extras.get("device") == "mobile"
+
+
+@pytest.mark.asyncio
+async def test_put_settings_round_trip_enrichment_fallback_enabled():
+    """Regression for iter-259 bug: SettingsPatch (extra='forbid') had
+    been missing the `enrichment_fallback_enabled` field, so the toggle
+    could only be read (via GET) and never set (PUT returned 422
+    extra_forbidden). Verifies the field is now accepted both ways."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        # Login
+        r = await client.post(
+            f"{API_BASE}/api/auth/login",
+            json={"email": "admin@hesab.app", "password": "admin123"})
+        assert r.status_code == 200, r.text
+        token = r.json().get("access_token") or r.json().get("token")
+        h = {"Authorization": f"Bearer {token}"}
+        try:
+            # Flip ON
+            r1 = await client.put(
+                f"{API_BASE}/api/integrations/qoyod/settings",
+                headers=h, json={"enrichment_fallback_enabled": True})
+            assert r1.status_code == 200, r1.text
+            assert r1.json().get("enrichment_fallback_enabled") is True
+            # Confirm via GET
+            r2 = await client.get(
+                f"{API_BASE}/api/integrations/qoyod/settings", headers=h)
+            assert r2.json().get("enrichment_fallback_enabled") is True
+        finally:
+            # Restore default OFF so other tests are unaffected
+            r3 = await client.put(
+                f"{API_BASE}/api/integrations/qoyod/settings",
+                headers=h, json={"enrichment_fallback_enabled": False})
+            assert r3.status_code == 200
+            assert r3.json().get("enrichment_fallback_enabled") is False
