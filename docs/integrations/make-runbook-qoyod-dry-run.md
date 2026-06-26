@@ -52,10 +52,10 @@ POST
 |---|---|
 | `Content-Type` | `application/json; charset=utf-8` |
 | `X-Webhook-Token` | الـ Token الذي نسخته من Mezan في الخطوة المسبقة #4 |
-| `X-Idempotency-Key` | `salla:order:{{1.order.reference_id}}:{{1.event}}` |
+| `X-Idempotency-Key` | `salla:order:{{1.data.reference_id}}:{{1.event}}` |
 | `X-Mezan-Source` | `make.com` |
 
-> 💡 الـ `{{1.order.reference_id}}` و `{{1.event}}` يجب أن تستبدلها بـ **mappings** من الـ trigger module في Make (الرقم `1` قد يختلف عندك حسب ترتيب الـ Modules).
+> 💡 الـ `{{1.data.reference_id}}` و `{{1.event}}` يجب أن تستبدلها بـ **mappings** من الـ trigger module في Make (الرقم `1` قد يختلف عندك حسب ترتيب الـ Modules).
 
 #### `Body type`
 ```
@@ -74,42 +74,65 @@ Yes  ← مهم لرؤية النتيجة في Make
 
 ### الخطوة 1.3 — Body (نسخ-لصق + استبدل الـ mappings)
 
-استخدم هذا الـ template **حرفياً** ثم استبدل القيم بين `{{ }}` بالـ mappings الفعلية من الـ Salla trigger module:
+> 📌 **ملاحظة Salla Trigger في Make**: الـ module يفكّ الـ envelope `{event, data: {...}}` تلقائياً ويعطيك الحقول تحت `data.*` (وليس `order.*`).
+
+استخدم هذا الـ template **حرفياً** ثم استبدل `{{1.x}}` بـ mappings فعلية من panel الـ Salla trigger module (الرقم `1` قد يختلف عندك حسب ترتيب الـ Modules):
 
 ```json
 {
-  "event_type":         "order_completed",
-  "order_id":           "{{1.order.id}}",
-  "order_number":       "{{1.order.reference_id}}",
-  "created_at":         "{{1.order.date.date}}",
-  "completed_at":       "{{formatDate(now; 'YYYY-MM-DD HH:mm:ss')}}",
-  "order_status":       "{{1.order.status.name}}",
-  "order_status_slug":  "{{1.order.status.slug}}",
-  "currency":           "{{1.order.currency}}",
-  "payment_method":     "{{1.order.payment_method}}",
-  "subtotal":           {{1.order.amounts.sub_total.amount}},
-  "tax":                {{1.order.amounts.tax.amount}},
-  "shipping_cost":      {{1.order.amounts.shipping_cost.amount}},
-  "total_amount":       {{1.order.amounts.total.amount}},
-  "customer_name":      "{{1.order.customer.first_name}} {{1.order.customer.last_name}}",
-  "customer_mobile":    "{{1.order.customer.mobile}}",
-  "customer_email":     "{{1.order.customer.email}}",
+  "event_type":        "order_completed",
+  "order_id":          "{{1.data.id}}",
+  "order_number":      "{{1.data.reference_id}}",
+  "created_at":        "{{1.data.date.date}}",
+  "completed_at":      "{{formatDate(now; 'YYYY-MM-DD HH:mm:ss')}}",
+  "order_status":      "{{1.data.status.name}}",
+  "order_status_slug": "{{1.data.status.slug}}",
+  "currency":          "{{1.data.currency}}",
+  "payment_method":    "{{1.data.payment_method}}",
+  "subtotal":          {{1.data.amounts.sub_total.amount}},
+  "tax":               {{1.data.amounts.tax.amount}},
+  "shipping_cost":     {{1.data.amounts.shipping_cost.amount}},
+  "total_amount":      {{1.data.amounts.total.amount}},
+  "customer_name":     "{{1.data.customer.first_name}} {{1.data.customer.last_name}}",
+  "customer_mobile":   "{{1.data.customer.mobile}}",
+  "customer_email":    "{{1.data.customer.email}}",
   "items": [
-    {{#each 1.order.items as |item|}}
-    {
-      "sku":      "{{item.sku}}",
-      "name":     "{{item.name}}",
-      "quantity": {{item.quantity}},
-      "price":    { "amount": {{item.amounts.price_without_tax.amount}}, "currency": "{{1.order.currency}}" }
-    }{{#unless @last}},{{/unless}}
-    {{/each}}
+    {{map(1.data.items; "{""sku"":""" + sku + """,""name"":""" + name + """,""quantity"":" + quantity + ",""price"":{""amount"":" + amounts.price_without_tax.amount + ",""currency"":""" + amounts.price_without_tax.currency + """}}"; ",")}}
   ],
-  "shipping_company":   "{{1.order.shipments.0.courier_name}}",
-  "received_from":      "make"
+  "shipping_company":  "{{1.data.shipments.0.courier_name}}",
+  "received_from":     "make"
 }
 ```
 
-> 📝 إذا Salla يرجع `packages[]` بدلاً من `items[]` لمتجرك، استبدل `items` بـ `packages` وكرّر الـ structure داخل `packages[].items[]` — المعالج يقبل الشكلين (انظر §3.2 من العقد).
+> 📝 إذا Salla يرجع `packages[]` بدلاً من `items[]` لمتجرك، استبدل `data.items` بـ `data.packages` وكرّر الـ structure داخل `packages[].items[]` — المعالج يقبل الشكلين (انظر §3.2 من العقد).
+
+### 1.3.1 — جدول Mapping الكامل (الحقل في الـ Body → الحقل في Salla Trigger)
+
+| الحقل في الـ Body | المصدر من Salla Trigger | إلزامي؟ | ملاحظات |
+|---|---|---|---|
+| `event_type` | ثابت `"order_completed"` | ✅ | نص ثابت — لا mapping |
+| `order_id` | `1.data.id` | ✅ | الرقم الداخلي الطويل |
+| `order_number` | `1.data.reference_id` | ✅ | الرقم القصير الظاهر للعميل |
+| `created_at` | `1.data.date.date` | ✅ | بصيغة `YYYY-MM-DD HH:mm:ss` |
+| `completed_at` | `formatDate(now; 'YYYY-MM-DD HH:mm:ss')` | ✅ | الوقت الحالي للسيناريو |
+| `order_status` | `1.data.status.name` | ✅ | الاسم العربي الظاهر |
+| `order_status_slug` | `1.data.status.slug` | ✅ | **slug** هو ما يطابقه ميزان |
+| `currency` | `1.data.currency` | ✅ | `SAR` فقط |
+| `payment_method` | `1.data.payment_method` | ✅ | يجب أن يكون مربوطاً في Payment Method Mapping |
+| `subtotal` | `1.data.amounts.sub_total.amount` | ✅ | **رقم بدون اقتباس** |
+| `tax` | `1.data.amounts.tax.amount` | ✅ | **رقم بدون اقتباس** |
+| `shipping_cost` | `1.data.amounts.shipping_cost.amount` | اختياري | `0` إذا غير موجود |
+| `total_amount` | `1.data.amounts.total.amount` | ✅ | **> 0** وإلا يُرفض الطلب |
+| `customer_name` | `1.data.customer.first_name` + ` ` + `1.data.customer.last_name` | موصى به | بدونه يصبح "Guest" |
+| `customer_mobile` | `1.data.customer.mobile` | موصى به | بصيغة `+9665XXXXXXXX` |
+| `customer_email` | `1.data.customer.email` | موصى به | حروف صغيرة |
+| `items[].sku` | `1.data.items[].sku` | ✅ | **يجب أن يكون غير فارغ لكل عنصر** |
+| `items[].name` | `1.data.items[].name` | ✅ | اسم المنتج |
+| `items[].quantity` | `1.data.items[].quantity` | ✅ | رقم |
+| `items[].price.amount` | `1.data.items[].amounts.price_without_tax.amount` | ✅ | السعر بدون ضريبة |
+| `items[].price.currency` | `1.data.items[].amounts.price_without_tax.currency` | ✅ | عادة `SAR` |
+| `shipping_company` | `1.data.shipments.0.courier_name` | اختياري | فقط للأرشفة |
+| `received_from` | ثابت `"make"` | ✅ | نص ثابت |
 
 ### الخطوة 1.4 — احفظ الـ Module
 
