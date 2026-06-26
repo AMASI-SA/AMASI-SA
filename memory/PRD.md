@@ -1460,3 +1460,24 @@ counterparties in Production (per-account blocker / reason histogram).
   - **Policy guarantee** (locked by test): Last Order Date is metadata only — it does NOT change auto_mapped vs candidate_match decisions.
   - Tests: `test_qoyod_migration.py` — 31/31 PASS (+4 new); HTTP smoke `test_qoyod_migration_last_order_date_iter257.py` — 8/8 PASS; full Qoyod suite — 188/188 GREEN.
 
+
+## Iter-258 — UI-driven Webhook Token (DB-stored, fingerprint-only) (2026-06-26)
+  - **New module** `integrations/qoyod/webhook_token_store.py`:
+    - `generate_token()` — `mzn_qoyod_prod_` + 48-byte urlsafe (79 chars)
+    - `save_webhook_token()` / `get_webhook_token()` — Fernet-encrypted in `qoyod_webhook_tokens`
+    - `get_webhook_token_meta()` — UI-safe (fingerprint, rotated_at, last_verified_at)
+    - `verify_provided_token()` — **DB-first, env-fallback only when DB empty** (hmac.compare_digest)
+    - `revoke_webhook_token()` — idempotent
+  - **Refactored** `webhook.py` `_verify_token` into a `_make_verify_token(db)` factory so the dependency can access the DB. Legacy sync `_verify_token` kept for older test compat.
+  - **New routes** (under `/api/integrations/qoyod/`):
+    - `GET /webhook-token` — metadata (fingerprint only)
+    - `POST /webhook-token/generate` — plaintext returned **EXACTLY ONCE**, then encrypted at rest
+    - `DELETE /webhook-token` — revoke
+  - **Frontend** (`QoyodSettings.jsx`): new `WebhookTokenSection` with one-time copy reveal, copy-to-clipboard, dismiss, regenerate (with confirm), and revoke. Plaintext disappears from DOM on dismiss; only fingerprint persists.
+  - **Security guarantees** (locked by tests):
+    - DB token takes EXCLUSIVE precedence — legacy env value cannot bypass after generation.
+    - Plaintext NEVER returned by GET /webhook-token nor by /settings.
+    - Revoked tokens fail verification.
+  - **Tests**: `test_qoyod_webhook_token.py` — 19/19 PASS; HTTP smoke 5/5 PASS; full Qoyod suite — **222/222 GREEN**. Zero regression.
+  - UX polish: first-time generate no longer triggers an unnecessary confirm; only regenerate (replacement) prompts.
+

@@ -75,10 +75,14 @@ function WebhookTokenSection() {
   useEffect(() => { load(); }, []);
 
   const generate = async () => {
-    const ask = meta?.configured
-      ? "هل تريد إعادة التوليد؟ سيتم إبطال الـ Token الحالي فوراً. تأكّد من تحديث Make.com قبل وصول أي طلب جديد."
-      : "سيتم توليد Webhook Token جديد. لن يظهر مرة أخرى — انسخه فوراً.";
-    if (!window.confirm(ask)) return;
+    // Only require confirmation when REPLACING an existing token —
+    // the first generation has nothing to revoke.
+    if (meta?.configured) {
+      const ok = window.confirm(
+        "هل تريد إعادة التوليد؟ سيتم إبطال الـ Token الحالي فوراً. " +
+        "تأكّد من تحديث Make.com قبل وصول أي طلب جديد.");
+      if (!ok) return;
+    }
     setGenerating(true);
     try {
       const { data } = await axios.post(
