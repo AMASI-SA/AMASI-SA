@@ -855,8 +855,8 @@ export default function QoyodSettings() {
     const tax    = (settings.default_tax_id    || "").toString().trim();
     if (!branch) {
       issues.push({ code: "missing_branch_id", field: "default_branch_id",
-        severity: "blocker",
-        message: "لم يُحدَّد Branch ID. ادخل قيود → الإعدادات → الفروع → انسخ رقم المعرّف." });
+        severity: "warning",
+        message: "لم يُحدَّد Branch ID. اختياري إذا كان حسابك بفرع واحد فقط." });
     }
     if (!tax) {
       issues.push({ code: "missing_tax_id", field: "default_tax_id",
@@ -1034,19 +1034,19 @@ export default function QoyodSettings() {
         <div className="grid md:grid-cols-2 gap-3">
           <div data-testid="field-default_branch_id">
             <IDInput
-              label="الفرع الافتراضي (Branch ID)" required
+              label="الفرع الافتراضي (Branch ID — اختياري)"
               value={settings.default_branch_id}
               onChange={(v) => patch({ default_branch_id: v })}
               testid="select-branch"
               datalistId="branches-list"
               suggestions={branches}
-              placeholder={branches.length ? "" : "مثال: 1234"}
+              placeholder={branches.length ? "" : "اتركه فارغاً إذا كان حسابك بفرع واحد"}
               disabled={!hasCreds}
               invalid={fieldInvalid("default_branch_id")}
               unsupportedHint={
                 !hasCreds ? "احفظ مفتاح API أولاً" :
                 branchesMeta.unsupported
-                  ? "ℹ️ Qoyod 2.0 API لا يكشف قائمة الفروع — انسخ Branch ID من قيود → الإعدادات → الفروع."
+                  ? "ℹ️ اختياري — اتركه فارغاً للحساب أحادي الفرع، أو انسخ Branch ID من قيود → الإعدادات → الفروع."
                   : null
               }
             />

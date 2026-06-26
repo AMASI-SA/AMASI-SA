@@ -53,6 +53,9 @@ from integrations.qoyod.fresh_start_cleanup import (
     build_plan, latest_plan, execute_cleanup,
     CleanupRefused, EXPECTED_CONFIRM_TOKEN, PROTECTED_ENTITIES,
 )
+from integrations.qoyod.first_sync_monitor import (
+    list_recent_for_monitor, get_row_for_monitor,
+)
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
     validate_settings_for_setup,
@@ -574,5 +577,26 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         except CleanupRefused as exc:
             raise HTTPException(400, str(exc))
         return result
+
+    # ── First-Sync Monitor (READ-ONLY operational view) ─────────────
+    @router.get("/first-sync-monitor")
+    async def first_sync_monitor_list(
+        limit: int = 5, user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        rows = await list_recent_for_monitor(
+            db, user_id=tenant, limit=limit)
+        return {"ok": True, "rows": rows, "count": len(rows)}
+
+    @router.get("/first-sync-monitor/{trace_id}")
+    async def first_sync_monitor_one(
+        trace_id: str, user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        row = await get_row_for_monitor(
+            db, user_id=tenant, trace_id=trace_id)
+        if not row:
+            raise HTTPException(404, "trace_id_not_found")
+        return {"ok": True, "row": row}
 
     return router

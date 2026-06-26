@@ -57,14 +57,18 @@ def test_canonical_catalogue_contains_all_user_required_methods():
 
 
 @pytest.mark.asyncio
-async def test_validate_blocks_missing_branch_and_tax():
+async def test_validate_blocks_missing_tax_but_branch_is_warning():
+    """Branch ID is OPTIONAL (per user spec 2026-06-27: single-branch
+    accounts). Tax ID remains REQUIRED."""
     db = FakeDB()
     db.qoyod_settings.rows = [{"user_id": "main"}]
     res = await validate_settings_for_setup(db, user_id="main")
-    codes = [i["code"] for i in res["issues"] if i["severity"] == "blocker"]
-    assert "missing_branch_id" in codes
-    assert "missing_tax_id" in codes
-    assert res["ok"] is False
+    blockers = [i["code"] for i in res["issues"] if i["severity"] == "blocker"]
+    warnings = [i["code"] for i in res["issues"] if i["severity"] == "warning"]
+    assert "missing_branch_id" in warnings
+    assert "missing_branch_id" not in blockers
+    assert "missing_tax_id" in blockers
+    assert res["ok"] is False  # tax_id still blocking
 
 
 @pytest.mark.asyncio

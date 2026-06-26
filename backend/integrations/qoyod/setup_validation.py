@@ -157,14 +157,18 @@ async def validate_settings_for_setup(db, *, user_id: str) -> dict:
 
     issues: list[dict] = []
 
-    # 1) Branch ID
+    # 1) Branch ID — optional (some Qoyod accounts are single-branch
+    #    and don't expose a branch picker). Treated as a WARNING so the
+    #    operator can save & proceed; the invoice builder omits the
+    #    field when None.
     if not (settings.get("default_branch_id") or "").strip():
         issues.append({
             "code": "missing_branch_id",
             "field": "default_branch_id",
-            "severity": "blocker",
-            "message": ("لم يُحدَّد Branch ID. ادخل قيود → الإعدادات → "
-                        "الفروع → انسخ رقم المعرّف."),
+            "severity": "warning",
+            "message": ("لم يُحدَّد Branch ID. اختياري إذا كان حسابك "
+                        "بفرع واحد فقط — في هذه الحالة سيستخدم قيود "
+                        "الفرع الافتراضي تلقائياً."),
         })
 
     # 2) Tax ID

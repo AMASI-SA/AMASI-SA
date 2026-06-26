@@ -1,5 +1,42 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## P0 First Production Dry Run Readiness (2026-06-27)
+**Goal**: Final pre-production polish before flipping Dry Run off.
+
+### 1) Branch ID is now OPTIONAL
+- `setup_validation.py` — `missing_branch_id` demoted from `blocker` to `warning` (single-branch Qoyod accounts don't need this set).
+- `invoice_builder.py` — when `default_branch_id` is None/empty, the field is OMITTED from the invoice payload (no `branch_id: null` sent to Qoyod).
+- Frontend `QoyodSettings.jsx` — label changed to "Branch ID — اختياري", `required` asterisk removed, hint reads "اتركه فارغاً إذا كان حسابك بفرع واحد".
+- Tests cover both the validation severity change and the conditional payload behaviour.
+
+### 2) Tax ID hardening
+- `invoice_builder.py` — explicit comment that `default_tax_id` MUST be a Qoyod **Tax ID** (e.g. `"1"`), NOT a rate (e.g. `"15"`). When unset the line-item `tax_id` is OMITTED so Qoyod uses the item's own tax.
+- Regression test `test_invoice_line_uses_tax_id_not_rate` asserts no `tax_rate` or `rate` field leaks into the line payload.
+
+### 3) First-Sync Monitor (new page)
+- **Backend** `integrations/qoyod/first_sync_monitor.py`:
+  - `shape_inbox_row_for_monitor(row)` — reduces an `integration_inbox` doc into operator timeline: order summary, raw Make payload, canonical DTO, 4 step cards (customer/product/invoice/receipt) each with `payload` + `response` + `duration_ms` + per-step status.
+  - `_status_for_stage()` — calculates per-step status: success / failed / pending / skipped based on `last_success_stage` and `last_failed_stage`.
+  - Endpoints:
+    - `GET /api/integrations/qoyod/first-sync-monitor?limit=N` — latest N rows reduced.
+    - `GET /api/integrations/qoyod/first-sync-monitor/{trace_id}` — single row by trace.
+- **Pipeline** persists raw Qoyod responses now:
+  - `qoyod_responses.invoice = {body, qoyod_id, qoyod_number, duration_ms, received_at}` on success / `{error, duration_ms}` on failure.
+  - Same for `qoyod_responses.receipt`.
+- **Frontend** new page `pages/QoyodFirstSyncMonitor.jsx` at route `/integrations/qoyod/first-sync-monitor`:
+  - Toolbar: refresh, auto-refresh-every-5s toggle, limit selector (1/3/5/10/25).
+  - Per-row card with collapsed/expanded states.
+  - 4 expandable step cards with side-by-side "📤 الإرسال إلى Qoyod" + "📥 الرد من Qoyod" JSON blocks.
+  - Stage History timeline with timestamps, actors, notes, and error blocks.
+  - Side-by-side Make raw + canonical DTO + business rules + preflight.
+  - Empty-state guides the operator to send first Make payload.
+
+### Tests
+- `tests/test_qoyod_first_sync_monitor.py` — 11 tests covering status calculation, shaper output, branch-id-optional in builder, tax-id-not-rate, setup-validation severity downgrade.
+- Updated `test_qoyod_setup_validation.py` to expect branch as warning instead of blocker.
+- Full Qoyod suite: **336 passed**, 0 Qoyod regressions.
+
+
 ## Qoyod Fresh-Start Cleanup — Plan + Execute (2026-06-27)
 **Goal**: Simplified deletion workflow (Audit → Plan → Execute) gated by `DELETE-CONFIRM` token. No Dry-Delete; environment not yet productive.
 

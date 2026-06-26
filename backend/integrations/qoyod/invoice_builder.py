@@ -38,36 +38,55 @@ def build_invoice_payload(
     invoice_date,        # datetime from rules decision
     settings: dict,
 ) -> dict:
-    """Build the Qoyod `POST /invoices` body."""
+    """Build the Qoyod `POST /invoices` body.
+
+    Tax handling
+    ────────────
+    `default_tax_id` MUST be a Qoyod Tax ID (e.g. `"1"`) — NOT a tax
+    rate. Qoyod resolves the rate from the tax record server-side. If
+    no `default_tax_id` is set in settings, the line-item `tax_id` is
+    omitted; the operator must ensure each item carries its own tax.
+
+    Branch handling
+    ───────────────
+    `branch_id` is OPTIONAL. Some Qoyod accounts are single-branch
+    and reject explicit branch_id values. When not configured we
+    OMIT the field entirely so Qoyod falls back to the default branch.
+    """
     res_by_sku = {r["sku"]: r["qoyod_product_id"]
                   for r in product_resolutions if r.get("qoyod_product_id")}
+    default_tax_id = (settings.get("default_tax_id") or "").strip() or None
     lines = []
     for it in dto_dict.get("items", []):
         pid = res_by_sku.get(it.get("sku"))
-        lines.append({
+        line: dict = {
             "product_id":  pid,
             "description": it.get("name"),
             "quantity":    it.get("quantity"),
             "unit_price":  it.get("unit_price"),
-            "tax_id":      settings.get("default_tax_id"),
             "discount":    0,
-        })
-
-    body = {
-        "invoice": {
-            "contact_id":     qoyod_customer_id,
-            "issue_date":     invoice_date.date().isoformat() if invoice_date else None,
-            "due_date":       invoice_date.date().isoformat() if invoice_date else None,
-            "reference":      dto_dict.get("order_number") or dto_dict.get("order_id"),
-            "currency_code":  dto_dict.get("currency") or "SAR",
-            "branch_id":      settings.get("default_branch_id"),
-            "line_items":     lines,
-            "notes":          f"Mezan · Salla order {dto_dict.get('order_id')}",
-            # Provenance — operator can find the source order from Qoyod.
-            "external_reference": dto_dict.get("order_id"),
         }
+        if default_tax_id:
+            line["tax_id"] = default_tax_id
+        lines.append(line)
+
+    invoice: dict = {
+        "contact_id":     qoyod_customer_id,
+        "issue_date":     invoice_date.date().isoformat() if invoice_date else None,
+        "due_date":       invoice_date.date().isoformat() if invoice_date else None,
+        "reference":      dto_dict.get("order_number") or dto_dict.get("order_id"),
+        "currency_code":  dto_dict.get("currency") or "SAR",
+        "line_items":     lines,
+        "notes":          f"Mezan · Salla order {dto_dict.get('order_id')}",
+        # Provenance — operator can find the source order from Qoyod.
+        "external_reference": dto_dict.get("order_id"),
     }
-    return body
+    # Only include branch_id when the operator has configured one.
+    branch_id = (settings.get("default_branch_id") or "").strip()
+    if branch_id:
+        invoice["branch_id"] = branch_id
+
+    return {"invoice": invoice}
 
 
 def build_receipt_payload(

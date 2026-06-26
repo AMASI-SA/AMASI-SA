@@ -358,21 +358,44 @@ async def process_customer_resolved_row(
     qoyod_invoice_id = None
     qoyod_invoice_number = None
     invoice_idem = f"mzn-{trace_id}-invoice"
+    inv_resp_raw: Any = None
+    inv_started_ms = int(_now().timestamp() * 1000)
     try:
         inv_resp = await api_client.create_invoice(invoice_payload,
                                                    idem=invoice_idem)
+        inv_resp_raw = inv_resp
         # Extract id/number — tolerant to a few shapes.
         if isinstance(inv_resp, dict):
             inv = inv_resp.get("invoice") if isinstance(inv_resp.get("invoice"), dict) else inv_resp
             qoyod_invoice_id = str(inv.get("id")) if inv.get("id") is not None else None
             qoyod_invoice_number = inv.get("number") or inv.get("reference")
     except QoyodAPIError as exc:
+        await db.integration_inbox.update_one(
+            {"id": row["id"]},
+            {"$set": {
+                "qoyod_responses.invoice.error":      exc.to_log_dict(),
+                "qoyod_responses.invoice.received_at": _now(),
+                "qoyod_responses.invoice.duration_ms":
+                    int(_now().timestamp() * 1000) - inv_started_ms,
+            }})
         await _dead_letter(
             db, row_id=row["id"], from_stage="PRODUCT_RESOLVED",
             fail_stage="FAILED_INVOICE", error=exc.to_log_dict(),
             started_at=started_at)
         return {"row_id": row["id"], "outcome": "DEAD_LETTER",
                 "reason": "FAILED_INVOICE"}
+
+    # Persist raw invoice response (success path) — First-Sync-Monitor.
+    await db.integration_inbox.update_one(
+        {"id": row["id"]},
+        {"$set": {
+            "qoyod_responses.invoice.body":        inv_resp_raw,
+            "qoyod_responses.invoice.received_at": _now(),
+            "qoyod_responses.invoice.duration_ms":
+                int(_now().timestamp() * 1000) - inv_started_ms,
+            "qoyod_responses.invoice.qoyod_id":    qoyod_invoice_id,
+            "qoyod_responses.invoice.qoyod_number": qoyod_invoice_number,
+        }})
 
     if not qoyod_invoice_id:
         await _dead_letter(
@@ -441,13 +464,24 @@ async def process_customer_resolved_row(
     )
     receipt_idem = f"mzn-{trace_id}-receipt"
     qoyod_receipt_id = None
+    rcpt_resp_raw: Any = None
+    rcpt_started_ms = int(_now().timestamp() * 1000)
     try:
         rcpt_resp = await api_client.create_receipt(receipt_payload,
                                                     idem=receipt_idem)
+        rcpt_resp_raw = rcpt_resp
         if isinstance(rcpt_resp, dict):
             r = rcpt_resp.get("receipt") if isinstance(rcpt_resp.get("receipt"), dict) else rcpt_resp
             qoyod_receipt_id = str(r.get("id")) if r.get("id") is not None else None
     except QoyodAPIError as exc:
+        await db.integration_inbox.update_one(
+            {"id": row["id"]},
+            {"$set": {
+                "qoyod_responses.receipt.error":      exc.to_log_dict(),
+                "qoyod_responses.receipt.received_at": _now(),
+                "qoyod_responses.receipt.duration_ms":
+                    int(_now().timestamp() * 1000) - rcpt_started_ms,
+            }})
         # Partial failure! Invoice exists, receipt does not.
         p = transition(from_stage="INVOICE_CREATED",
                        to_stage="FAILED_RECEIPT", actor="worker",
@@ -475,6 +509,16 @@ async def process_customer_resolved_row(
                          if is_dry else "receipt created in Qoyod"))
     p.setdefault("$set", {})["qoyod_receipt_id"] = qoyod_receipt_id
     await _apply(db, row["id"], p)
+    # Persist raw receipt response (success path) — First-Sync-Monitor.
+    await db.integration_inbox.update_one(
+        {"id": row["id"]},
+        {"$set": {
+            "qoyod_responses.receipt.body":        rcpt_resp_raw,
+            "qoyod_responses.receipt.received_at": _now(),
+            "qoyod_responses.receipt.duration_ms":
+                int(_now().timestamp() * 1000) - rcpt_started_ms,
+            "qoyod_responses.receipt.qoyod_id":    qoyod_receipt_id,
+        }})
 
     p = transition(from_stage="RECEIPT_CREATED", to_stage="COMPLETED",
                    actor="worker",
