@@ -1,5 +1,44 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Outstanding-Failures Watermark Fix (2026-02-26, final)
+**User-reported bug**: QYD-GO blocked with "27 فاتورة إنتاجية فشلت" but the user had never activated Go-Live yet — the 27 rows were old test data from before the dry_run flag existed (or before it was reliably set per-row).
+
+**Root cause**: My previous fix used `dry_run: {$ne: True}` as the production filter. Legacy rows from before the worker fix had **no `dry_run` field at all**, so they passed the `$ne True` test and got counted as production failures.
+
+**User spec**:
+1. Pre-Go-Live (`go_live_activated_at` not set) — check ALWAYS passes; old test rows can never block first-time activation.
+2. Post-Go-Live — count only rows with `received_at ≥ go_live_activated_at` AND `dry_run != True`.
+3. Legacy rows without `dry_run` flag created before activation are by definition pre-activation noise.
+
+### Backend changes
+- **`integrations/qoyod/go_live.py::_check_outstanding_failures`**:
+  - Reads `settings.go_live_activated_at` (with fallback to legacy `activated_at`).
+  - Parses ISO-string timestamps as a defensive fallback.
+  - **If unset → always returns `ok: True`** with detail: "لم يتم تفعيل الإنتاج بعد. السجلات القديمة (ما قبل التفعيل) لا تُحسب كفشل إنتاجي."
+  - If set → counts only `pipeline_stage ∈ {DEAD_LETTER, PARTIAL_FAILURE} AND dry_run != True AND received_at ≥ activated_at`.
+- **`activate_go_live`**: writes BOTH `go_live_activated_at` (new canonical) and `activated_at` (legacy compat) on flip.
+- **Function signature** updated to take optional `settings` param (passed from checklist to avoid double DB load).
+
+### Tests
+- **`tests/test_qoyod_go_live_qyd_fix.py`** — rewrote outstanding_failures tests to use the watermark spec:
+  - Pre-Go-Live always passes (even with 27 missing-dry_run rows — the exact user scenario).
+  - Post-Go-Live: pre-activation rows ignored, post-activation dry-run ignored, post-activation production COUNTED.
+  - Legacy `activated_at` field honoured (backward compat).
+  - ISO-string activation timestamp parsed correctly.
+- **`tests/test_qoyod_qydgo_clear_failures_persistence.py`** — rewrote on real Mongo (5 tests):
+  - Pre-Go-Live with mixed rows (dry/non-dry/missing) all green.
+  - Post-Go-Live pre-activation rows ignored.
+  - Post-Go-Live post-activation production counts.
+  - Refresh stability ×5 stays green pre-activation.
+  - Legacy `activated_at` field works.
+
+### Verification
+- ✅ **18 watermark tests pass**; **386 total Qoyod tests pass** (no regressions).
+- ✅ Live API: `/go-live/checklist` returns outstanding_failures with `ok: True` + the new pre-activation detail message.
+- ✅ Screenshot: QYD-GO page shows green ✓ "لا فواصل إنتاجية عالقة" with the new message. Total progress moved from blocked → 6/11 passed.
+
+
+
 ## Payment-Method Alias Resolution — Final Pre-Go-Live Fix (2026-02-26)
 **User-reported bug**: Order reached `PRODUCT_RESOLVED` then failed at `INVOICE_CREATED` with `payment_method_mapping_missing` because Salla sent `tamara_installment` but only `tamara` was mapped in settings.
 

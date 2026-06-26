@@ -1,25 +1,18 @@
-"""Tests for the new QYD-GO `_check_outstanding_failures` behaviour
-(2026-02-26 user spec).
+"""Integration tests for the watermark-based `_check_outstanding_failures`.
 
-Spec
-────
-Dry-run failures NEVER block Go-Live. Only production failures
-(`dry_run != True`) are counted by `_check_outstanding_failures`.
-The operator archives stale dry-run failures from the First-Sync Monitor
-page (separate flow, already built).
-
-These tests reproduce the user's exact workflow on real MongoDB:
-    • Seed dry-run failures → check returns ok=True (page stays green).
-    • Seed production failures → check returns ok=False (page red).
-    • Successive calls (= page refresh) keep returning the same result
-      — no false-positive RED after refresh.
+User spec (2026-02-26, final):
+    • Pre-Go-Live (no `go_live_activated_at`) — check always passes;
+      old test rows can never block activation.
+    • Post-Go-Live — only rows with `received_at ≥ go_live_activated_at`
+      AND `dry_run != True` count as production failures.
+    • Refresh stability: successive checks return the same result.
 """
 from __future__ import annotations
 
 import os
 import uuid
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 
 load_dotenv("/app/backend/.env")
@@ -57,98 +50,103 @@ async def _cleanup(db, tenant: str) -> None:
     await db.integration_inbox.delete_many({"user_id": tenant})
 
 
-# ─── Dry-run failures never block ────────────────────────────────────
 @pytest.mark.asyncio
-async def test_dry_run_failures_do_not_block(db, tenant):
-    """The user's main complaint reframed: even with multiple dry-run
-    DEAD_LETTER / PARTIAL_FAILURE rows in the inbox, Go-Live readiness
-    should stay GREEN. No magic button needed.
-    """
+async def test_pre_go_live_no_failures_count(db, tenant):
+    """The exact user-reported bug: 27 old test rows, no Go-Live
+    activation yet. Check must stay green regardless of dry_run flag."""
     try:
         await _seed(db, tenant, [
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
-            {"pipeline_stage": "PARTIAL_FAILURE", "dry_run": True},
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": False},
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": True},
+            # legacy row — no dry_run field at all
+            {"pipeline_stage": "DEAD_LETTER"},
+            {"pipeline_stage": "PARTIAL_FAILURE"},
         ])
-        res = await _check_outstanding_failures(db, tenant)
-        assert res["ok"] is True, f"expected ok but got {res}"
-        assert "Dry Run" in res["detail"]
+        # No settings → no go_live_activated_at → ALWAYS green.
+        res = await _check_outstanding_failures(db, tenant, settings={})
+        assert res["ok"] is True
+        assert "تفعيل" in res["detail"]
     finally:
         await _cleanup(db, tenant)
 
 
-# ─── Production failures always block ────────────────────────────────
 @pytest.mark.asyncio
-async def test_production_failures_always_block(db, tenant):
+async def test_post_go_live_pre_activation_rows_ignored(db, tenant):
+    """Activation watermark = 30 minutes ago. Pre-activation rows
+    must NOT count, even if they look like production failures."""
     try:
+        activated_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+        before = activated_at - timedelta(hours=24)
+        after  = activated_at + timedelta(minutes=1)
         await _seed(db, tenant, [
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": False},
-            {"pipeline_stage": "PARTIAL_FAILURE", "dry_run": False},
+            # Pre-activation — ignored.
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": False,
+             "received_at": before},
+            {"pipeline_stage": "DEAD_LETTER", "received_at": before},
+            # Post-activation dry-run — ignored.
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": True,
+             "received_at": after},
         ])
-        res = await _check_outstanding_failures(db, tenant)
+        res = await _check_outstanding_failures(
+            db, tenant, settings={"go_live_activated_at": activated_at})
+        assert res["ok"] is True
+    finally:
+        await _cleanup(db, tenant)
+
+
+@pytest.mark.asyncio
+async def test_post_go_live_post_activation_production_failures_block(db, tenant):
+    try:
+        activated_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+        before = activated_at - timedelta(hours=24)
+        after  = activated_at + timedelta(minutes=1)
+        await _seed(db, tenant, [
+            # Pre-activation production — ignored.
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": False,
+             "received_at": before},
+            # Post-activation production — COUNTED.
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": False,
+             "received_at": after},
+            {"pipeline_stage": "PARTIAL_FAILURE", "dry_run": False,
+             "received_at": after},
+        ])
+        res = await _check_outstanding_failures(
+            db, tenant, settings={"go_live_activated_at": activated_at})
         assert res["ok"] is False
         assert res["extra"]["stuck_count"] == 2
     finally:
         await _cleanup(db, tenant)
 
 
-# ─── Mixed: only production count ────────────────────────────────────
 @pytest.mark.asyncio
-async def test_mixed_failures_count_only_production(db, tenant):
+async def test_refresh_stability_pre_go_live(db, tenant):
+    """User's repro: 27 old test rows + many refreshes. Check must
+    stay green stably (no flicker)."""
     try:
         await _seed(db, tenant, [
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
-            {"pipeline_stage": "PARTIAL_FAILURE", "dry_run": True},
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": False},
+            {"pipeline_stage": "DEAD_LETTER"} for _ in range(27)
         ])
-        res = await _check_outstanding_failures(db, tenant)
+        for _ in range(5):
+            res = await _check_outstanding_failures(db, tenant, settings={})
+            assert res["ok"] is True
+    finally:
+        await _cleanup(db, tenant)
+
+
+@pytest.mark.asyncio
+async def test_legacy_activated_at_field_works(db, tenant):
+    """Tenants activated before this iter may have only the legacy
+    `activated_at` field. Must still trigger the watermark."""
+    try:
+        activated_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+        after = activated_at + timedelta(seconds=1)
+        await _seed(db, tenant, [
+            {"pipeline_stage": "DEAD_LETTER", "dry_run": False,
+             "received_at": after},
+        ])
+        res = await _check_outstanding_failures(
+            db, tenant, settings={"activated_at": activated_at})
         assert res["ok"] is False
         assert res["extra"]["stuck_count"] == 1
-    finally:
-        await _cleanup(db, tenant)
-
-
-# ─── Refresh stability ───────────────────────────────────────────────
-@pytest.mark.asyncio
-async def test_refresh_stability_with_only_dry_failures(db, tenant):
-    """The exact user-reported bug, rewritten for the new spec.
-    Three successive calls (= refresh ×3) all return the same green
-    result. There is no stateful exclusion mechanism that could be
-    forgotten between calls.
-    """
-    try:
-        await _seed(db, tenant, [
-            {"pipeline_stage": "DEAD_LETTER", "dry_run": True},
-            {"pipeline_stage": "DEAD_LETTER", "dry_run": True},
-        ])
-        for i in range(3):
-            res = await _check_outstanding_failures(db, tenant)
-            assert res["ok"] is True, f"call {i+1} flipped to red: {res}"
-    finally:
-        await _cleanup(db, tenant)
-
-
-# ─── Worker-produced new dry-run failures still don't block ──────────
-@pytest.mark.asyncio
-async def test_worker_produced_dry_failures_still_dont_block(db, tenant):
-    """Original symptom: after a click, worker added NEW dry-run
-    DEAD_LETTER rows → page flipped to red. With the new spec the
-    new dry-run rows are still ignored → page stays green.
-    """
-    try:
-        await _seed(db, tenant, [
-            {"pipeline_stage": "DEAD_LETTER", "dry_run": True}])
-        assert (await _check_outstanding_failures(db, tenant))["ok"]
-        # Simulate the worker adding 4 more dry-run DEAD_LETTER rows.
-        await _seed(db, tenant, [
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
-            {"pipeline_stage": "PARTIAL_FAILURE", "dry_run": True},
-            {"pipeline_stage": "DEAD_LETTER",     "dry_run": True},
-        ])
-        # Page still green.
-        assert (await _check_outstanding_failures(db, tenant))["ok"]
     finally:
         await _cleanup(db, tenant)

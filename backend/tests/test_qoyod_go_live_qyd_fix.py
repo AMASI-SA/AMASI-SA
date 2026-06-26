@@ -1,8 +1,9 @@
-"""Tests for the QYD-GO 3-bugs fix (2026-06-27):
+"""Tests for the QYD-GO 3-bugs fix (2026-06-27) — refined 2026-02-26.
 
   1. Branch ID is now OPTIONAL — single-branch accounts must pass.
-  2. `outstanding_failures` ignores dry-run failures and counts ONLY
-     production (`dry_run != True`) failures (per user spec 2026-02-26).
+  2. `outstanding_failures` ONLY counts production failures created
+     AFTER `go_live_activated_at` (the activation watermark).
+     Pre-activation rows are test data by definition and never block.
   3. `eligible_orders` recognises recent COMPLETED dry-run rows as proof
      the pipeline is healthy (was always 0 after the worker fix).
   4. `dry_run_proven` reads `integration_inbox` (not legacy `qoyod_invoices`).
@@ -70,62 +71,106 @@ class _FakeColl:
 
 
 class _FakeDB:
+    """Tiny fake — only the bits `_check_outstanding_failures` needs."""
     def __init__(self):
         self.integration_inbox = _FakeColl()
 
 
-@pytest.mark.asyncio
-async def test_outstanding_failures_ignores_dry_run_failures():
-    """Spec 2026-02-26: dry-run failures NEVER block Go-Live.
-    Only production failures (dry_run != True) are counted."""
-    db = _FakeDB()
-    db.integration_inbox.rows = [
-        # Dry-run failures — must be ignored.
-        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
-         "dry_run": True},
-        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
-         "dry_run": True},
-        {"user_id": "u1", "pipeline_stage": "PARTIAL_FAILURE",
-         "dry_run": True},
-        # Production failures — must count.
-        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
-         "dry_run": False},
-        {"user_id": "u1", "pipeline_stage": "PARTIAL_FAILURE",
-         "dry_run": False},
-    ]
-    res = await _check_outstanding_failures(db, "u1")
-    assert res["ok"] is False
-    assert res["extra"]["stuck_count"] == 2  # only the 2 production failures
+# Reusable activation watermark = 1 hour ago. Any row with
+# `received_at` ≥ this is "post-activation".
+_ACTIVATED_AT = datetime.now(timezone.utc) - timedelta(hours=1)
+_AFTER  = _ACTIVATED_AT + timedelta(minutes=5)
+_BEFORE = _ACTIVATED_AT - timedelta(hours=24)
 
 
 @pytest.mark.asyncio
-async def test_outstanding_failures_passes_when_only_dry_run_failures():
-    """If the ONLY failures are dry-run noise, the check passes."""
+async def test_pre_go_live_always_passes_even_with_failures():
+    """No `go_live_activated_at` → check always green. Old test rows
+    cannot block a tenant that hasn't even activated yet."""
     db = _FakeDB()
     db.integration_inbox.rows = [
-        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
-         "dry_run": True},
-        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
-         "dry_run": True},
-        {"user_id": "u1", "pipeline_stage": "PARTIAL_FAILURE",
-         "dry_run": True},
+        # Lots of "production failures" — must all be ignored pre-activation.
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",     "dry_run": False},
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",     "dry_run": False},
+        {"user_id": "u1", "pipeline_stage": "PARTIAL_FAILURE", "dry_run": False},
+        # Rows with missing dry_run flag (the user's repro scenario).
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER"},
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER"},
     ]
-    res = await _check_outstanding_failures(db, "u1")
+    res = await _check_outstanding_failures(db, "u1", settings={})
     assert res["ok"] is True
-    assert "Dry Run" in res["detail"]
+    assert "تفعيل" in res["detail"]
 
 
 @pytest.mark.asyncio
-async def test_outstanding_failures_treats_missing_dry_run_as_production():
-    """Defensive: a row without `dry_run` field is treated as production
-    (the safer interpretation — it blocks)."""
+async def test_post_go_live_counts_only_post_activation_production_failures():
+    """The whole spec in one test."""
     db = _FakeDB()
     db.integration_inbox.rows = [
-        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER"},  # no dry_run key
+        # ✗ Pre-activation production failure — ignored.
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
+         "dry_run": False, "received_at": _BEFORE},
+        # ✗ Pre-activation missing dry_run — ignored.
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
+         "received_at": _BEFORE},
+        # ✗ Post-activation but dry_run — ignored.
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
+         "dry_run": True, "received_at": _AFTER},
+        # ✓ Post-activation production — COUNTS.
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
+         "dry_run": False, "received_at": _AFTER},
+        {"user_id": "u1", "pipeline_stage": "PARTIAL_FAILURE",
+         "dry_run": False, "received_at": _AFTER},
     ]
-    res = await _check_outstanding_failures(db, "u1")
+    res = await _check_outstanding_failures(
+        db, "u1", settings={"go_live_activated_at": _ACTIVATED_AT})
+    assert res["ok"] is False
+    assert res["extra"]["stuck_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_post_go_live_passes_when_no_post_activation_failures():
+    db = _FakeDB()
+    db.integration_inbox.rows = [
+        # All pre-activation — should pass.
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
+         "dry_run": False, "received_at": _BEFORE},
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
+         "received_at": _BEFORE},
+    ]
+    res = await _check_outstanding_failures(
+        db, "u1", settings={"go_live_activated_at": _ACTIVATED_AT})
+    assert res["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_legacy_activated_at_field_is_honoured():
+    """Backward compat: settings written before this iter used
+    `activated_at` (not `go_live_activated_at`). Both must work."""
+    db = _FakeDB()
+    db.integration_inbox.rows = [
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
+         "dry_run": False, "received_at": _AFTER},
+    ]
+    res = await _check_outstanding_failures(
+        db, "u1", settings={"activated_at": _ACTIVATED_AT})
     assert res["ok"] is False
     assert res["extra"]["stuck_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_iso_string_activation_timestamp_is_parsed():
+    """Mongo stores datetimes as BSON Date by default, but some legacy
+    code paths persisted ISO strings. Must still be honoured."""
+    db = _FakeDB()
+    db.integration_inbox.rows = [
+        {"user_id": "u1", "pipeline_stage": "DEAD_LETTER",
+         "dry_run": False, "received_at": _AFTER},
+    ]
+    res = await _check_outstanding_failures(
+        db, "u1",
+        settings={"go_live_activated_at": _ACTIVATED_AT.isoformat()})
+    assert res["ok"] is False
 
 
 # ─── Eligible orders (#3) ─────────────────────────────────────────

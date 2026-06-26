@@ -129,27 +129,60 @@ async def _check_dry_run_proven(db, user_id: str, settings: dict) -> dict:
             "detail": f"{completed_dry} طلب أكمل التجربة الجافة بنجاح."}
 
 
-async def _check_outstanding_failures(db, user_id: str) -> dict:
-    """Counts ONLY production (non-dry-run) failures.
+async def _check_outstanding_failures(db, user_id: str, settings: dict | None = None) -> dict:
+    """Counts ONLY production failures CREATED AFTER Go-Live activation.
 
-    Per user spec (2026-02-26): dry-run failures are test noise by
-    definition and must NEVER block Go-Live. They stay visible in the
-    First-Sync Monitor for diagnosis and can be archived from there.
-    Production failures (dry_run != True) are the only ones that block
-    readiness — and they always do (no exclusion mechanism).
+    Pre-Go-Live behaviour (Iter 2026-02-26, refined)
+    ─────────────────────────────────────────────────
+    Before the operator activates Go-Live (`settings.go_live_activated_at`
+    is not set), this check ALWAYS passes. Pre-activation rows are by
+    definition test data — even if their `dry_run` flag is missing/wrong
+    on legacy rows, they cannot represent "real production failures"
+    because production wasn't on yet.
+
+    Post-Go-Live behaviour
+    ──────────────────────
+    Counts only rows where ALL of:
+        • `pipeline_stage ∈ {DEAD_LETTER, PARTIAL_FAILURE}`
+        • `dry_run != True` (real production attempts)
+        • `received_at >= go_live_activated_at` (the activation watermark)
+
+    This guarantees old test failures (no matter how broken their
+    `dry_run` flag) never block re-activation or stay red after a fix.
     """
+    if settings is None:
+        settings = await _load_settings(db, user_id)
+
+    activated_at = settings.get("go_live_activated_at") \
+                   or settings.get("activated_at")   # legacy field
+    # Normalise legacy ISO-string activations to datetime for $gte.
+    if isinstance(activated_at, str):
+        try:
+            activated_at = datetime.fromisoformat(
+                activated_at.replace("Z", "+00:00"))
+        except ValueError:
+            activated_at = None
+
+    if not activated_at:
+        # No activation yet → no production failures are possible.
+        return {"ok": True,
+                "detail": ("لم يتم تفعيل الإنتاج بعد. السجلات القديمة "
+                           "(ما قبل التفعيل) لا تُحسب كفشل إنتاجي.")}
+
     stuck = await db.integration_inbox.count_documents({
         "user_id": user_id,
         "pipeline_stage": {"$in": ["DEAD_LETTER", "PARTIAL_FAILURE"]},
         "dry_run": {"$ne": True},
+        "received_at": {"$gte": activated_at},
     })
     if stuck:
         return {"ok": False,
-                "detail": (f"{stuck} فاتورة إنتاجية فشلت — يجب مراجعتها قبل المتابعة "
-                           "(فشل Dry Run لا يُعيق الجاهزية)."),
-                "extra": {"stuck_count": stuck}}
+                "detail": (f"{stuck} فاتورة إنتاجية فشلت بعد التفعيل "
+                           f"({activated_at.isoformat()[:19]}) — راجعها."),
+                "extra": {"stuck_count": stuck,
+                          "since": activated_at.isoformat()}}
     return {"ok": True,
-            "detail": ("لا توجد فواصل إنتاجية عالقة. "
+            "detail": ("لا توجد فواصل إنتاجية عالقة منذ التفعيل. "
                        "فشل Dry Run (إن وُجد) معروض في صفحة المراقبة فقط.")}
 
 
@@ -305,7 +338,7 @@ async def go_live_checklist(
         {"key": "dry_run",           "label": "تجربة Dry Run موثّقة",
          **(await _check_dry_run_proven(db, user_id, settings))},
         {"key": "outstanding_failures", "label": "لا فواصل إنتاجية عالقة",
-         **(await _check_outstanding_failures(db, user_id))},
+         **(await _check_outstanding_failures(db, user_id, settings))},
         {"key": "eligible_orders",   "label": "وجود طلبات مؤهلة",
          **(await _check_eligible_orders(db, user_id, eligible_count, settings))},
         {"key": "products_lookup",   "label": "استعلام منتجات قيود",
@@ -446,14 +479,19 @@ async def activate_production_mode(
         failing = [i["label"] for i in checklist["items"] if not i["ok"]]
         raise ActivationBlocked(reasons=failing, items=checklist["items"])
 
+    activated_at = _now()
     await db.qoyod_settings.update_one(
         {"user_id": user_id},
+        # Write BOTH the new canonical field and the legacy one so any
+        # older code/UI reading either continues to work.
         {"$set": {"enabled": True, "dry_run_mode": False,
-                  "activated_at": _now()}},
+                  "go_live_activated_at": activated_at,
+                  "activated_at": activated_at}},
         upsert=True,
     )
     return {
         "ok": True,
-        "activated_at": _now(),
+        "activated_at": activated_at,
+        "go_live_activated_at": activated_at,
         "checklist_snapshot": checklist,
     }
