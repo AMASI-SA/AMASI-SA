@@ -1,5 +1,33 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Qoyod Fresh-Start Audit — READ-ONLY Snapshot (2026-06-27)
+**Goal**: Forensic audit of what already exists in Qoyod (legacy direct-Salla integration data) before Mezan becomes the sole source. STRICTLY read-only; no DELETE/PUT/PATCH.
+
+### Backend
+- **NEW `integrations/qoyod/fresh_start_audit.py`** — orchestrator + pure analysers:
+  - `run_fresh_start_audit()` paginates ONLY 4 endpoints: `/invoices`, `/receipts`, `/products`, `/customers`. 100ms cushion between pages.
+  - Per-entity analysers: counts, monthly histograms, sample rows (first 5), and link-completeness checks.
+  - `_build_flags()` derives cross-entity risk warnings: invoices without receipts, orphan receipts, products without SKU, customers without invoices, ref/invoice mismatch.
+  - Run persisted to `qoyod_fresh_start_audits` (one row per run; latest is fetched by `latest_audit()`).
+  - Hard scope: **never** queries `/accounts`, `/branches`, `/taxes`, or any settings endpoint.
+- **`integrations/qoyod/api_client.py`** — added `list_invoices(page, limit)` and `list_receipts(page, limit)` (GET only).
+- **New endpoints** in `routes.py`:
+  - `POST /api/integrations/qoyod/fresh-start/audit/run` — kicks off a new audit.
+  - `GET /api/integrations/qoyod/fresh-start/audit` — returns latest audit snapshot.
+
+### Frontend (`pages/QoyodFreshStart.jsx`)
+- New route: `/integrations/qoyod/fresh-start`.
+- Header explicitly states "قراءة فقط — لا تعديل ولا حذف".
+- Pre-run state: 🛡️ safety guarantees panel.
+- Post-run state: 4 total cards + per-entity sections with month histograms + sample tables + risk flags pill list.
+- Failed state: shows structured error (e.g. `qoyod_unauthorized`).
+- Footer reminds operator: deletion is a separate gated phase requiring `DELETE-CONFIRM` and explicit criteria.
+
+### Tests
+- `tests/test_qoyod_fresh_start_audit.py` — 16 tests covering ref pattern detection, month-bucket parsing, list extraction robustness, all 4 analysers, and 4 flag-building edge cases.
+- Full Qoyod suite: 307 passed, 2 skipped, 0 regressions.
+
+
 ## Qoyod Settings — Final One-Time Setup Page (2026-06-27)
 **Goal**: After saving once, operator never needs to revisit unless a new payment method is added or accounting setup changes.
 

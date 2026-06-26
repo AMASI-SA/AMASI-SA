@@ -242,3 +242,15 @@ class QoyodAPIClient:
     async def create_receipt(self, payload: dict, *, idem: str) -> Any:
         return await self._request(
             "POST", "/receipts", json_body=payload, idempotency_key=idem)
+
+    # ── Read-only list endpoints for Fresh-Start Audit ──────────────
+    # Strictly READ; never call DELETE/PUT from this client.
+    async def list_invoices(self, *, page: int = 1, limit: int = 50) -> Any:
+        """GET /invoices — paginated. Used by Fresh-Start Audit ONLY."""
+        return await self._request(
+            "GET", "/invoices", params={"page": page, "limit": limit})
+
+    async def list_receipts(self, *, page: int = 1, limit: int = 50) -> Any:
+        """GET /receipts — paginated. Used by Fresh-Start Audit ONLY."""
+        return await self._request(
+            "GET", "/receipts", params={"page": page, "limit": limit})

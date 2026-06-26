@@ -46,6 +46,9 @@ from integrations.qoyod.go_live import (
     activate_production_mode, ActivationBlocked,
 )
 from integrations.qoyod.migration_routes import attach_migration_routes
+from integrations.qoyod.fresh_start_audit import (
+    run_fresh_start_audit, latest_audit,
+)
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
     validate_settings_for_setup,
@@ -501,5 +504,25 @@ def make_qoyod_router(db, current_user) -> APIRouter:
 
     # ── Existing-Data Migration (read-only pre-flight) ──────────────
     attach_migration_routes(router, db, current_user, _tenant_id)
+
+    # ── Fresh-Start Audit (READ-ONLY) ───────────────────────────────
+    # User spec 2026-06-27: a forensic snapshot of what Qoyod contains
+    # before Mezan becomes the sole source. NO DELETE/PUT logic here.
+    # Scope is hard-locked to invoices / receipts / products / customers.
+    @router.post("/fresh-start/audit/run")
+    async def fresh_start_audit_run(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        key = await get_api_key(db, tenant)
+        if not key:
+            raise HTTPException(400, "no_credentials")
+        result = await run_fresh_start_audit(
+            db, user_id=tenant, api_client=QoyodAPIClient(key))
+        return result
+
+    @router.get("/fresh-start/audit")
+    async def fresh_start_audit_status(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        doc = await latest_audit(db, user_id=tenant)
+        return {"ok": True, "audit": doc}
 
     return router
