@@ -62,6 +62,48 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+# ── Diagnostic capture: log unparseable webhook bodies ────────────────
+#
+# The legacy `/make/{token}`, `/tiktok/{token}` and `/meta/{token}`
+# endpoints reject any body that is not parseable JSON with 400
+# "Invalid JSON". For months we had no way to know WHY a given Make.com
+# execution was rejected — the bytes were dropped on the floor.
+#
+# This helper (added on 2026-06-26 after a 2026-06-19 production
+# incident) writes a SMALL diagnostic record before the 400 propagates.
+# It does NOT change behaviour: the request still fails, the response
+# is still `{"detail":"Invalid JSON"}`. Only operators get a record.
+#
+# Privacy:
+#   • Stores at most 2 KB of the body (truncated UTF-8 with replacement
+#     for non-decodable bytes).
+#   • Stores only the first 6 chars of the token (so an operator can
+#     correlate the failure to a tenant without exposing the secret).
+#   • Records the client IP (already in standard server logs anyway).
+#
+# Retention: a TTL index on `occurred_at` expires rows after 30 days.
+async def _capture_parse_failure(
+    db, request, token: str, exc: Exception,
+) -> None:
+    """Best-effort diagnostic capture. Never raises."""
+    try:
+        raw = await request.body()
+        ip = request.client.host if getattr(request, "client", None) else None
+        await db.webhook_parse_failures.insert_one({
+            "occurred_at":     datetime.now(timezone.utc),
+            "token_prefix":    (token or "")[:6] + "…",
+            "content_type":    request.headers.get("content-type"),
+            "content_length":  len(raw),
+            "body_preview":    raw[:2048].decode("utf-8", errors="replace"),
+            "parser_error":    f"{type(exc).__name__}: {exc}"[:512],
+            "ip":              ip,
+            "route":           str(request.url.path),
+        })
+    except Exception:
+        # Diagnostic must never escalate or block the original 400.
+        logger.exception("_capture_parse_failure swallowed an internal error")
+
+
 class WebhookOrderIn(BaseModel):
     """Liberal schema — accepts every field listed in the user's Make.com mapping.
 
@@ -226,7 +268,8 @@ def _build_router(db) -> APIRouter:
         user_id = tok_doc["user_id"]
         try:
             body = await request.json()
-        except Exception:
+        except Exception as _exc:
+            await _capture_parse_failure(db, request, token, _exc)
             raise HTTPException(status_code=400, detail="Invalid JSON")
 
         # Allow a batch (list) or single object
@@ -343,7 +386,8 @@ def _build_router(db) -> APIRouter:
         user_id = tok_doc["user_id"]
         try:
             body = await request.json()
-        except Exception:
+        except Exception as _exc:
+            await _capture_parse_failure(db, request, token, _exc)
             raise HTTPException(status_code=400, detail="Invalid JSON")
 
         items = body if isinstance(body, list) else [body]
@@ -416,7 +460,8 @@ def _build_router(db) -> APIRouter:
         # Accept: single object, or list of objects, or {"orders": [...]} wrapper
         try:
             body = await request.json()
-        except Exception:
+        except Exception as _exc:
+            await _capture_parse_failure(db, request, token, _exc)
             raise HTTPException(status_code=400, detail="Invalid JSON")
 
         if isinstance(body, dict) and "orders" in body and isinstance(body["orders"], list):

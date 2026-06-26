@@ -4237,6 +4237,10 @@ async def on_startup():
     await db.settings.create_index("user_id", unique=True)
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
     await db.analyses.create_index([("user_id", 1), ("created_at", -1)])
+    # iter-260 — diagnostic capture for unparseable webhook bodies.
+    # TTL: 30 days. Index is idempotent (no-op if already present).
+    await db.webhook_parse_failures.create_index(
+        "occurred_at", expireAfterSeconds=30 * 24 * 60 * 60)
     await ensure_import_jobs_indexes(db)
     await ensure_transfers_indexes(db)
     await ensure_accounts_indexes(db)
