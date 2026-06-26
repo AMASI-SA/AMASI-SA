@@ -4605,6 +4605,18 @@ async def on_startup():
             logger.exception("iter-147: startup migration failed: %s", e)
 
     _asyncio.create_task(_tamara_attribution_startup_migration())
+
+    # iter-262 — Qoyod Pipeline Worker. Auto-advances `integration_inbox`
+    # rows from NORMALIZED → CUSTOMER_RESOLVED → INVOICE_CREATED →
+    # RECEIPT_CREATED. Without this, the webhook handler stops at
+    # NORMALIZED and nothing reaches Qoyod.
+    try:
+        from integrations.qoyod.worker import start_worker as _qoyod_worker_start
+        _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
+        logger.info("iter-262: qoyod pipeline worker started")
+    except Exception as e:
+        logger.exception("iter-262: qoyod pipeline worker failed to start: %s", e)
+
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:

@@ -21,8 +21,54 @@ it into an operator-friendly response.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
+
+
+# Threshold above which a NORMALIZED/CUSTOMER_RESOLVED/INVOICE_CREATED
+# row is treated as "stuck" — the worker should have processed it by
+# then. The UI surfaces a "بانتظار العامل" badge & manual button.
+STUCK_AFTER_SECONDS = 30
+WAITING_STAGES = {
+    "NORMALIZED", "RULES_APPLIED", "CUSTOMER_RESOLVED",
+    "INVOICE_CREATED",  # intermediate, may stall before receipt
+}
+
+
+def _is_stuck(row: dict) -> dict | None:
+    """Return `{stage, waited_seconds, reason}` if the row is stuck in
+    an intermediate stage past the threshold, else `None`."""
+    stage = row.get("pipeline_stage")
+    if stage not in WAITING_STAGES:
+        return None
+    # Compute "waited" from the latest stage transition.
+    history = row.get("stage_history") or []
+    last_at = None
+    for h in reversed(history):
+        if h.get("to_stage") == stage:
+            last_at = h.get("at")
+            break
+    if isinstance(last_at, str):
+        try:
+            last_at = datetime.fromisoformat(last_at.replace("Z", "+00:00"))
+        except Exception:
+            last_at = None
+    if not last_at:
+        last_at = row.get("received_at")
+    if not isinstance(last_at, datetime):
+        return None
+    now = datetime.now(timezone.utc)
+    # Make `last_at` timezone-aware if it isn't.
+    if last_at.tzinfo is None:
+        last_at = last_at.replace(tzinfo=timezone.utc)
+    waited = (now - last_at).total_seconds()
+    if waited < STUCK_AFTER_SECONDS:
+        return None
+    return {
+        "stage":  stage,
+        "waited_seconds": int(waited),
+        "reason": "بانتظار العامل (Background Worker) — قد يكون متأخراً.",
+    }
 
 
 def _isoize(v: Any) -> Any:
@@ -152,6 +198,7 @@ def shape_inbox_row_for_monitor(row: dict) -> dict:
         "last_failed_stage":  row.get("last_failed_stage"),
         "attempts":           row.get("attempts", 0),
         "dry_run":            row.get("dry_run", False),
+        "stuck":              _is_stuck(row),
         "order_summary": {
             "order_id":     canonical.get("order_id"),
             "order_number": canonical.get("order_number"),

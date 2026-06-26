@@ -484,6 +484,21 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         tenant = _tenant_id(user)
         return await process_pending_customer_resolved(db, tenant, limit=limit)
 
+    # ── Background worker liveness & manual trigger (iter-262) ──────
+    @router.get("/worker/status")
+    async def worker_status(user=Depends(current_user)):
+        from integrations.qoyod.worker import liveness
+        return {"ok": True, "worker": liveness()}
+
+    @router.post("/worker/run-now")
+    async def worker_run_now(user=Depends(current_user)):
+        """Manual emergency trigger — drains one round of the worker
+        immediately. Used by the First-Sync-Monitor 'Advance Now' button.
+        """
+        from integrations.qoyod.worker import run_now
+        result = await run_now(db, user_id=_tenant_id(user))
+        return {"ok": True, "result": result}
+
     # ── GET /reports/day4 — Eligibility & resolution outcomes card ──
     @router.get("/reports/day4")
     async def reports_day4(user=Depends(current_user)):

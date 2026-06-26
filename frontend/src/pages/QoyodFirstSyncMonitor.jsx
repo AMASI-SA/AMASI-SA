@@ -136,7 +136,7 @@ function StageHistoryTimeline({ history }) {
 }
 
 
-function RowCard({ row, expanded, onToggle }) {
+function RowCard({ row, expanded, onToggle, onAdvanceNow, advancing }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 mb-4"
          data-testid={`monitor-row-${row.trace_id}`}>
@@ -166,6 +166,13 @@ function RowCard({ row, expanded, onToggle }) {
                 DRY-RUN
               </span>
             )}
+            {row.stuck && (
+              <span className="mr-2 inline-block px-1.5 py-0.5 rounded bg-rose-100
+                                text-rose-800 font-extrabold text-[10px]"
+                    data-testid={`row-stuck-${row.trace_id}`}>
+                ⏳ بانتظار العامل ({row.stuck.waited_seconds}s)
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -180,6 +187,32 @@ function RowCard({ row, expanded, onToggle }) {
           <span className="text-slate-400 text-sm">{expanded ? "▲" : "▼"}</span>
         </div>
       </button>
+
+      {row.stuck && (
+        <div className="mt-3 rounded-lg border border-rose-300 bg-rose-50 p-3"
+             data-testid={`stuck-banner-${row.trace_id}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <div className="text-sm font-extrabold text-rose-900">
+                ⏳ الطلب بانتظار {row.stuck.waited_seconds} ثانية
+                — العامل الخلفي قد يكون متأخراً
+              </div>
+              <div className="text-[12px] text-rose-700 mt-0.5">
+                توقّف عند <code className="font-mono">{row.stuck.stage}</code>.
+                اضغط الزر يميناً لتشغيل دفعة واحدة الآن.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onAdvanceNow}
+              disabled={advancing}
+              data-testid={`btn-advance-now-${row.trace_id}`}
+              className="px-3 py-2 text-xs font-extrabold rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50">
+              {advancing ? "جاري التشغيل…" : "▶️ تشغيل الآن"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {expanded && (
         <div className="mt-4 space-y-3">
@@ -234,23 +267,44 @@ export default function QoyodFirstSyncMonitor() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [limit, setLimit] = useState(5);
+  const [workerStatus, setWorkerStatus] = useState(null);
+  const [advancing, setAdvancing] = useState(false);
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const { data } = await axios.get(
-        `${API}/integrations/qoyod/first-sync-monitor?limit=${limit}`);
-      setRows(data?.rows || []);
-      // Auto-expand the most recent row on first load.
-      if (!expandedId && (data?.rows || []).length > 0) {
-        setExpandedId(data.rows[0].trace_id);
+      const [rowsRes, wsRes] = await Promise.all([
+        axios.get(`${API}/integrations/qoyod/first-sync-monitor?limit=${limit}`),
+        axios.get(`${API}/integrations/qoyod/worker/status`).catch(() => ({ data: null })),
+      ]);
+      setRows(rowsRes.data?.rows || []);
+      setWorkerStatus(wsRes.data?.worker || null);
+      if (!expandedId && (rowsRes.data?.rows || []).length > 0) {
+        setExpandedId(rowsRes.data.rows[0].trace_id);
       }
     } catch (e) {
       if (!silent) toast.error("تعذّر تحميل المراقب");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const advanceNow = async () => {
+    setAdvancing(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/worker/run-now`);
+      const r = data?.result || {};
+      const n = r.normalized?.processed || 0;
+      const c = r.customer_resolved?.processed || 0;
+      toast.success(`تم — ${n} normalized + ${c} customer_resolved`);
+      await load(true);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "فشل التشغيل");
+    } finally {
+      setAdvancing(false);
     }
   };
 
@@ -302,9 +356,20 @@ export default function QoyodFirstSyncMonitor() {
           </select>
           طلب
         </label>
-        <div className="text-[11px] text-slate-500 ms-auto"
+        <div className="text-[11px] text-slate-500 ms-auto flex items-center gap-3"
              data-testid="monitor-count">
-          {rows.length} طلب معروض
+          {workerStatus && (
+            <span data-testid="worker-status"
+                  className={`px-2 py-0.5 rounded-full font-bold border
+                    ${workerStatus.running && workerStatus.last_run_ok
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                      : "bg-rose-50 text-rose-800 border-rose-300"}`}>
+              العامل: {workerStatus.running
+                       ? (workerStatus.last_run_ok ? "✓ يعمل" : "⚠ خطأ")
+                       : "✗ متوقف"}
+            </span>
+          )}
+          <span>{rows.length} طلب معروض</span>
         </div>
       </div>
 
@@ -330,7 +395,9 @@ export default function QoyodFirstSyncMonitor() {
                  expanded={expandedId === row.trace_id}
                  onToggle={() =>
                    setExpandedId(expandedId === row.trace_id
-                     ? null : row.trace_id)} />
+                     ? null : row.trace_id)}
+                 onAdvanceNow={advanceNow}
+                 advancing={advancing} />
       ))}
     </div>
   );

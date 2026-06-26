@@ -149,6 +149,22 @@ async def process_normalized_row(
 
     settings = await _load_settings(db, user_id)
 
+    # If caller didn't pre-build an API client, build one now —
+    # honouring dry_run_mode so the customer resolver doesn't reach
+    # Qoyod when the operator is testing.
+    if api_client is None:
+        api_client, _is_dry = await _get_api_client(db, user_id, settings)
+        if api_client is None:
+            await _dead_letter(
+                db, row_id=row["id"], from_stage="NORMALIZED",
+                fail_stage="FAILED_CUSTOMER",
+                error={"code": "no_credentials",
+                       "message": "Qoyod API key not configured"},
+                started_at=row.get("pipeline_started_at"),
+            )
+            return {"row_id": row["id"], "outcome": "DEAD_LETTER",
+                    "reason": "no_credentials"}
+
     # Existing invoice row — used by `trigger_once_only`.
     existing = await db.qoyod_invoices.find_one(
         {"user_id": user_id, "salla_order_id": dto.order_id},

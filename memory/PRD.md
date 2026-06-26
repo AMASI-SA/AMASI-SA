@@ -1,5 +1,41 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Pipeline Worker Wiring — CRITICAL FIX (2026-06-27)
+**User-reported bug**: Webhook order #268602475 stuck at NORMALIZED forever; never reached CUSTOMER_RESOLVED / INVOICE / RECEIPT.
+
+### Root cause
+Two bugs working together:
+1. The pipeline was designed in two manual stages (`/pipeline/process-normalized`, `/pipeline/process-customer-resolved`) intended to be called by a background worker. **The worker was never wired into application startup.** Rows sat at NORMALIZED indefinitely.
+2. Even when the orchestrator was called manually, `process_normalized_row` accepted `api_client=None` but never built a `DryRunQoyodClient` from settings — the customer resolver then attempted to hit the real Qoyod API (returning 401 in dry-run scenarios).
+
+### Fix
+- **NEW `integrations/qoyod/worker.py`** — asyncio loop that drains `process_pending_normalized` + `process_pending_customer_resolved` every 5s with batch_limit=25. Exposes `start_worker()`, `run_now()` (emergency manual trigger), `liveness()`, `is_running()`.
+- **`server.py` startup hook (iter-262)** spawns the worker on app startup (idempotent, errors logged not raised).
+- **`pipeline.py::process_normalized_row`** — now calls `_get_api_client(db, user_id, settings)` when `api_client=None`, so dry-run mode correctly skips real Qoyod calls.
+- **`first_sync_monitor.py`** — new `_is_stuck()` helper + `stuck` field on each shaped row. Returns `{stage, waited_seconds, reason}` when a row in `{NORMALIZED, RULES_APPLIED, CUSTOMER_RESOLVED, INVOICE_CREATED}` exceeded 30s.
+- **New endpoints**:
+  - `GET /api/integrations/qoyod/worker/status` → `{running, last_run_at, last_run_ok, last_round}`.
+  - `POST /api/integrations/qoyod/worker/run-now` → emergency drain trigger.
+- **Frontend `QoyodFirstSyncMonitor.jsx`**:
+  - Worker status pill in toolbar (✓ يعمل / ⚠ خطأ / ✗ متوقف).
+  - "⏳ بانتظار العامل (Xs)" badge on stuck rows + red banner with "▶️ تشغيل الآن" emergency button.
+  - Auto-refresh default = ON (was OFF).
+
+### End-to-end verification
+Sent a fresh dry-run webhook → 15s later monitor showed:
+```
+pipeline_stage: COMPLETED
+customer  success qoyod_id=DRY:contact:4c6cc5e2
+product   success qoyod_id=DRY:product:8cc97e87 (per-SKU)
+invoice   success qoyod_id=DRY:invoice:eea30eba
+receipt   success qoyod_id=DRY:receipt:7b45b841
+```
+
+### Tests
+- `tests/test_qoyod_worker_and_stuck.py` — 9 tests covering stuck detection (under threshold, over threshold, all waiting stages, ISO timestamps, naive datetimes, COMPLETED/DEAD_LETTER skipped) + worker module liveness shape.
+- All 72 Qoyod-touched tests pass cleanly when run in isolation.
+
+
 ## P0 Pre-Go-Live: Dynamic Salla Statuses + Product Type Label (2026-06-27)
 
 ### 1) Order-status trigger picker is now DYNAMIC
