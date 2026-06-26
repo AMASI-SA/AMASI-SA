@@ -190,6 +190,16 @@ class QoyodSettings(BaseModel):
     capabilities: QoyodCapabilityFlags = Field(
         default_factory=QoyodCapabilityFlags)
 
+    # ─── Legacy-Adapter enrichment toggle ───────────────────────────
+    # When `false` (default): a payload arriving WITHOUT line items
+    # (neither `items[]` nor `packages[]`) is dead-on-arrival. The row
+    # transitions to FAILED_VALIDATION with code `missing_items_no_enricher`
+    # and is NEVER promoted to invoice creation.
+    # When `true`: the same payload transitions to NEEDS_ENRICHMENT and
+    # the (separately implemented) Salla-API enricher is invoked.
+    # User policy 2026-06-26: opt-in only. Default OFF.
+    enrichment_fallback_enabled: bool = False
+
     # ─── Future-ready placeholders (reserved; not used by MVP) ──────
     # These keep the schema stable when we later add refunds, sync
     # cancellations, ZATCA local validation, custom invoice prefixes,

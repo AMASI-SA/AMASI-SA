@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.650" timestamp="2026-06-26T13:48:17.958625+00:00" hostname="agent-env-f5e6b93a-68a2-4155-84ad-e55b4fa936d3"><testcase classname="tests.test_qoyod_enrichment_toggle_http_iter259" name="test_enrichment_fallback_toggle_round_trip" time="0.552"><failure message="AssertionError: PUT failed 422: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;enrichment_fallback_enabled&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;input&quot;:false,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.13/v/extra_forbidden&quot;}]}&#10;assert 422 == 200&#10; +  where 422 = &lt;Response [422]&gt;.status_code">tests/test_qoyod_enrichment_toggle_http_iter259.py:71: in test_enrichment_fallback_toggle_round_trip
+    _put_settings(admin_session, {"enrichment_fallback_enabled": True})
+tests/test_qoyod_enrichment_toggle_http_iter259.py:51: in _put_settings
+    assert r.status_code == 200, f"PUT failed {r.status_code}: {r.text}"
+E   AssertionError: PUT failed 422: {"detail":[{"type":"extra_forbidden","loc":["body","enrichment_fallback_enabled"],"msg":"Extra inputs are not permitted","input":true,"url":"https://errors.pydantic.dev/2.13/v/extra_forbidden"}]}
+E   assert 422 == 200
+E    +  where 422 = &lt;Response [422]&gt;.status_code
+
+During handling of the above exception, another exception occurred:
+tests/test_qoyod_enrichment_toggle_http_iter259.py:81: in test_enrichment_fallback_toggle_round_trip
+    _put_settings(
+tests/test_qoyod_enrichment_toggle_http_iter259.py:51: in _put_settings
+    assert r.status_code == 200, f"PUT failed {r.status_code}: {r.text}"
+E   AssertionError: PUT failed 422: {"detail":[{"type":"extra_forbidden","loc":["body","enrichment_fallback_enabled"],"msg":"Extra inputs are not permitted","input":false,"url":"https://errors.pydantic.dev/2.13/v/extra_forbidden"}]}
+E   assert 422 == 200
+E    +  where 422 = &lt;Response [422]&gt;.status_code</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,51 @@
+{
+  "summary": "iter-259 verified the Make.com Legacy Adapter for the Qoyod webhook. RESULT: 264/266 PASS + 2 skips across the full Qoyod regression (15 files). New adapter unit suite test_qoyod_legacy_adapter.py — 40/40 PASS (TestDetection 4, TestHelpers 2, TestItemAdaptation 6, TestItemsCollection 6, TestStatus 3, TestAdaptPublic 7, TestDownstreamContract 3, TestStateMachineEnrichmentStages 9). New HTTP suite test_qoyod_legacy_adapter_http.py — 4 live PASS + 1 conditional SKIP (skip when QOYOD_WEBHOOK_TOKEN unset; preview env has the token configured so 4/4 ran and passed). State machine: NEEDS_ENRICHMENT ∈ ALL_STAGES, FAILED_ENRICHMENT ∈ FAILURE_STAGES, FAILURE_TO_RESUME['FAILED_ENRICHMENT'] == 'RECEIVED', edges RECEIVED→NEEDS_ENRICHMENT, NEEDS_ENRICHMENT→{VALIDATED|FAILED_ENRICHMENT|DEAD_LETTER}, FAILED_ENRICHMENT→{RETRYING|DEAD_LETTER}, RETRYING→RECEIVED all asserted. Pipeline outcomes verified live: (a) legacy flat items[] → progresses past RECEIVED; (b) packages[].items[] → flattened, items_source='packages'; (c) no items + toggle OFF → DEAD_LETTER, error.code='missing_items_no_enricher', history FAILED_VALIDATION→DEAD_LETTER, enrichment_fallback_used=False; (d) no items + toggle ON → DEAD_LETTER, error.code='enricher_not_implemented', history NEEDS_ENRICHMENT→FAILED_ENRICHMENT→DEAD_LETTER, enrichment_fallback_used=True, FAILED_VALIDATION absent; (e) legacy_extras (utm_source, utm_campaign, device, shipping_company, received_from) persisted to inbox.adapter_meta.legacy_extras; (f) canonical Salla payload passthrough → adapter_applied=false, items_source='passthrough'. Adapter purity confirmed (no DB / no I/O — adapt() is a sync pure function returning (adapted, meta)). NO regression on prior 222/222 (iter-258). HOWEVER — discovered ONE BUG: PUT /api/integrations/qoyod/settings rejects {enrichment_fallback_enabled: true|false} with 422 extra_forbidden because the `SettingsPatch` request model at routes.py:76-97 (model_config = ConfigDict(extra='forbid')) is missing the field; the underlying `QoyodSettings` model in models.py:201 DOES expose `enrichment_fallback_enabled: bool = False`, and GET /settings correctly returns it, so the toggle is half-wired.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "PUT /api/integrations/qoyod/settings",
+        "issue": "Returns 422 extra_forbidden when client sends {enrichment_fallback_enabled: true|false}. SettingsPatch Pydantic schema (routes.py:76-97) uses ConfigDict(extra='forbid') and does NOT list enrichment_fallback_enabled, so the field cannot be toggled via the API even though QoyodSettings model has it. GET /settings returns the field correctly (default False). Fix is one line: add `enrichment_fallback_enabled: Optional[bool] = None` to class SettingsPatch in routes.py. This directly contradicts user-spec scenario #11 (\"existing PATCH /api/integrations/qoyod/settings accepts it\").",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_qoyod_legacy_adapter.py",
+    "/app/backend/tests/test_qoyod_legacy_adapter_http.py",
+    "/app/backend/tests/test_qoyod_state_machine.py",
+    "/app/backend/tests/test_qoyod_enrichment_toggle_http_iter259.py",
+    "/app/test_reports/pytest/iter259_legacy_adapter_unit.xml",
+    "/app/test_reports/pytest/iter259_legacy_adapter_http.xml",
+    "/app/test_reports/pytest/iter259_enrichment_toggle.xml",
+    "/app/test_reports/pytest/iter259_qoyod_full.xml"
+  ],
+  "action_items": [
+    "Add `enrichment_fallback_enabled: Optional[bool] = None` to class SettingsPatch in /app/backend/integrations/qoyod/routes.py:76-97 (right next to the other capability flags like auto_send, dry_run_mode). After the fix, the merged-then-revalidated logic at routes.py:178-181 will already persist it correctly because QoyodSettings.enrichment_fallback_enabled already exists.",
+    "Confirm with E1: the user message in the spec said 'PATCH /api/integrations/qoyod/settings' but the actual route is PUT. Either rename the spec language or add a PATCH alias. Not blocking — PUT works for partial updates already (extra-forbidden + Optional[None] field pattern).",
+    "[OPTIONAL] Once #1 is fixed, add a 1-line regression: PUT settings {enrichment_fallback_enabled: True} → GET → assert True → PUT False → GET → assert False. (The test file /app/backend/tests/test_qoyod_enrichment_toggle_http_iter259.py I wrote will start passing the moment the patch lands.)"
+  ],
+  "critical_code_review_comments": [
+    "legacy_adapter.py — adapt() is correctly pure: only reads from `raw`, only returns Python primitives, no `await`, no Mongo, no httpx. Verified by all 40 unit tests running in 0.12s without any fixture I/O. Good.",
+    "legacy_adapter.py:80-86 — is_legacy_shape() correctly checks BOTH: (no `data` envelope) AND (at least one legacy marker key). This means a half-formed canonical payload {data:{}} with `customer_name` at root would NOT be re-routed through the adapter — the `raw.get('data')` truthy check prevents that. Good for forward compat.",
+    "legacy_adapter.py:65-77 — _KNOWN_LEGACY_KEYS deliberately omits utm_*, device, received_from, shipping_company so they fall into meta.legacy_extras. Verified at HTTP level — those fields appear in inbox.adapter_meta.legacy_extras. Good audit hook.",
+    "legacy_adapter.py:113-196 — _adapt_item drops items lacking BOTH name and sku (returns None) so a junk item like {quantity:1} can't poison the canonical shape. Verified by test_item_without_name_or_sku_drops. Good safety.",
+    "legacy_adapter.py:199-246 — _collect_items priority items > products alias > packages > missing is documented and tested (test_priority_items_over_packages). Good.",
+    "state_machine.py — NEEDS_ENRICHMENT is correctly treated as TRANSIENT (in ALL_STAGES but not FAILURE_STAGES); FAILED_ENRICHMENT correctly added to FAILURE_STAGES with resume→RECEIVED. The edge set is closed: no rogue FAILED_VALIDATION→NEEDS_ENRICHMENT path (test_no_direct_failed_validation_to_needs_enrichment asserts this — important because that would let an invalid payload bypass validation by claiming it needs enrichment). Good.",
+    "webhook.py / _handle_missing_items() — verified live: with toggle OFF the row transitions RECEIVED → FAILED_VALIDATION → DEAD_LETTER with code missing_items_no_enricher; with toggle ON it transitions RECEIVED → NEEDS_ENRICHMENT → FAILED_ENRICHMENT → DEAD_LETTER with code enricher_not_implemented and FAILED_VALIDATION absent from stage_history. Correct branching.",
+    "routes.py:76 — **BUG** SettingsPatch uses extra='forbid' but is missing enrichment_fallback_enabled. Detailed in backend_issues.critical[0].",
+    "Adapter ordering — adapt_legacy() runs BEFORE idempotency derivation, so the idempotency key is computed off the canonical shape regardless of which input shape Make sent. This guarantees that the same logical order coming from two different scenarios in Make (flat items vs packages) idempotently dedupes. Good.",
+    "Safety promise — confirmed live: items_source='missing' NEVER reached an invoice creation path under either toggle value. Both branches terminate at DEAD_LETTER with a clear error.code. This is the core safety guarantee the user called out as critical."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_qoyod_enrichment_toggle_http_iter259.py (new — tests the SettingsPatch round-trip; currently failing because of the bug above; will pass once one line is added to SettingsPatch)"
+  ],
+  "success_rate": {"backend": "99.6% (264/266 + 2 expected skips on the Qoyod regression; 40/40 adapter unit + 25/25 state machine + 4 live HTTP + 1 expected skip + 19/19 webhook-token + 5/5 webhook-token-http + 198/198 prior regression). The one functional failure is the SettingsPatch missing-field bug.", "frontend": "n/a — backend-only iteration"},
+  "test_credentials": "admin@hesab.app / admin123 (for the PUT /settings probe). QOYOD_WEBHOOK_TOKEN=mzn_qoyod_dev_token_change_me already set in /app/backend/.env.",
+  "seed_data_creation": "None. HTTP tests use unique uuid-based idempotency keys per run and clean up via the autouse _cleanup_test_inbox_rows fixture. Settings toggle test restores the baseline value in a finally block.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Adapter is at /app/backend/integrations/qoyod/legacy_adapter.py. Public entrypoint: adapt(raw) → (adapted_payload, meta). meta keys: adapter_applied (bool), items_source ∈ {items|packages|missing|passthrough}, legacy_status_slug (str|None), legacy_extras (dict). Webhook pipeline branch for missing items lives in _handle_missing_items() of /app/backend/integrations/qoyod/webhook.py — toggle gate is settings.enrichment_fallback_enabled (DEFAULT False) on QoyodSettings (models.py:201). The Salla-API enricher is INTENTIONALLY stubbed to always emit code='enricher_not_implemented'; do NOT treat that as a bug. ONE OUTSTANDING FIX: SettingsPatch at routes.py:76 needs `enrichment_fallback_enabled: Optional[bool] = None` added so PUT /settings can flip the toggle. After E1 patches that, re-run /app/backend/tests/test_qoyod_enrichment_toggle_http_iter259.py — it will turn green.",
+  "rca_of_the_issue": "Root cause of the PUT /settings bug: when the field `enrichment_fallback_enabled` was added to QoyodSettings (models.py:201), the corresponding partial-update DTO `SettingsPatch` in routes.py was not updated. Because SettingsPatch uses ConfigDict(extra='forbid'), unknown keys are rejected at the FastAPI request-body validation layer BEFORE the merge-then-revalidate logic at routes.py:178-181 can run. Reproduction: 1) login as admin; 2) PUT /api/integrations/qoyod/settings with body {\"enrichment_fallback_enabled\": true} → expect 200, get 422 {\"detail\":[{\"type\":\"extra_forbidden\",\"loc\":[\"body\",\"enrichment_fallback_enabled\"],\"msg\":\"Extra inputs are not permitted\"}]}. Mitigation: add the field as `Optional[bool] = None` to SettingsPatch — single-line change at routes.py:97."
+}

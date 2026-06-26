@@ -31,8 +31,10 @@ def test_failure_stages_match_user_spec():
     # The user listed these failure tokens in the Pre-Day 3 + Day 3 briefs.
     # FAILED_NORMALIZATION was added at Day 3 so the inbox can record
     # a normalization-specific failure before falling into DEAD_LETTER.
+    # FAILED_ENRICHMENT was added on 2026-06-26 for the Legacy-Adapter
+    # `enrichment_fallback_enabled` toggle (Salla-API enricher path).
     expected = {
-        "FAILED_VALIDATION", "FAILED_NORMALIZATION",
+        "FAILED_VALIDATION", "FAILED_NORMALIZATION", "FAILED_ENRICHMENT",
         "FAILED_CUSTOMER", "FAILED_PRODUCT",
         "FAILED_INVOICE", "FAILED_RECEIPT",
         "DEAD_LETTER",

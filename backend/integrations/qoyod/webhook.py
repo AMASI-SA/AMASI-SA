@@ -35,6 +35,7 @@ from integrations.qoyod.state_machine import (
 from integrations.qoyod.webhook_token_store import (
     verify_provided_token,
 )
+from integrations.qoyod.legacy_adapter import adapt as adapt_legacy
 
 
 # Connector key for the inbox row — matches the unique idempotency
@@ -165,6 +166,7 @@ async def _apply(db, *, doc_filter: dict, patch: dict) -> None:
 
 async def _process_inbox_row(
     db, *, row: dict, raw_payload: dict,
+    adapter_meta: Optional[dict] = None,
 ) -> tuple[str, Optional[dict]]:
     """Run steps 5→7 against a freshly-inserted inbox row.
 
@@ -173,6 +175,13 @@ async def _process_inbox_row(
     The function is **safe to call** on already-processed rows
     (idempotency guards above): the call sites only invoke it for
     `pipeline_stage == "NEW"` rows.
+
+    `adapter_meta` (when provided) carries the Legacy-Adapter outcome.
+    When `items_source == "missing"` the function consults the tenant's
+    `enrichment_fallback_enabled` setting:
+      • False (default) → FAILED_VALIDATION  (no invoice ever created)
+      • True            → NEEDS_ENRICHMENT → FAILED_ENRICHMENT
+        (enricher stub: actual Salla-API call is not implemented yet)
     """
     doc_filter = {"id": row["id"]}
 
@@ -186,6 +195,11 @@ async def _process_inbox_row(
     started_at = patch.get("$set", {}).get("pipeline_started_at")
     if started_at is not None:
         row["pipeline_started_at"] = started_at
+
+    # ── Items-missing branch (Legacy-Adapter outcome) ────────────
+    if adapter_meta and adapter_meta.get("items_source") == "missing":
+        return await _handle_missing_items(
+            db, row=row, doc_filter=doc_filter, adapter_meta=adapter_meta)
 
     # ── RECEIVED → VALIDATED (5) ─────────────────────────────────
     ok, err = validate(raw_payload)
@@ -261,6 +275,92 @@ async def _dead_letter(
     return ("DEAD_LETTER", error)
 
 
+async def _handle_missing_items(
+    db, *, row: dict, doc_filter: dict, adapter_meta: dict,
+) -> tuple[str, Optional[dict]]:
+    """Branch entered when the Legacy Adapter could not find any line
+    items in the incoming payload.
+
+    Behaviour is gated by the per-tenant setting
+    `qoyod_settings.enrichment_fallback_enabled`:
+
+      • Default OFF (user policy 2026-06-26):
+          RECEIVED → FAILED_VALIDATION
+          code = `missing_items_no_enricher`
+          → NO invoice ever created. Manual review.
+
+      • Toggle ON:
+          RECEIVED → NEEDS_ENRICHMENT → FAILED_ENRICHMENT
+          code = `enricher_not_implemented`
+          The Salla-API enricher will be wired in a follow-up
+          iteration. Until then the row sits in FAILED_ENRICHMENT
+          for operator visibility (NOT auto-promoted).
+
+    Either way: `enrichment_fallback_used` is persisted for audit.
+    """
+    started_at = row.get("pipeline_started_at")
+    tenant = row.get("user_id")
+    settings = await db.qoyod_settings.find_one(
+        {"user_id": tenant}, {"_id": 0, "enrichment_fallback_enabled": 1})
+    fallback_enabled = bool(
+        (settings or {}).get("enrichment_fallback_enabled", False))
+
+    if not fallback_enabled:
+        # Strict path — NEVER create an invoice from an items-missing payload.
+        error = {
+            "code": "missing_items_no_enricher",
+            "message": "payload has no line items and "
+                       "enrichment_fallback_enabled is OFF",
+            "items_source": adapter_meta.get("items_source"),
+            "adapter_applied": adapter_meta.get("adapter_applied"),
+        }
+        p1 = transition(from_stage="RECEIVED",
+                        to_stage="FAILED_VALIDATION",
+                        actor="webhook", error=error)
+        p1.setdefault("$set", {})["pipeline_error"] = error
+        p1["$set"]["enrichment_fallback_used"] = False
+        await _apply(db, doc_filter=doc_filter, patch=p1)
+
+        p2 = transition(from_stage="FAILED_VALIDATION",
+                        to_stage="DEAD_LETTER",
+                        actor="webhook",
+                        note="no line items and enricher disabled — "
+                             "manual review required",
+                        existing_started_at=started_at)
+        await _apply(db, doc_filter=doc_filter, patch=p2)
+        return ("DEAD_LETTER", error)
+
+    # Toggle ON — enter NEEDS_ENRICHMENT. The actual Salla-API enricher
+    # is intentionally NOT yet implemented (per user spec: states first,
+    # call later). We transition into NEEDS_ENRICHMENT for visibility
+    # then immediately FAILED_ENRICHMENT with a clear `not_implemented`
+    # marker so the operator knows what to do next.
+    p1 = transition(from_stage="RECEIVED", to_stage="NEEDS_ENRICHMENT",
+                    actor="webhook",
+                    note="items missing — enricher fallback ENABLED")
+    p1.setdefault("$set", {})["enrichment_fallback_used"] = True
+    await _apply(db, doc_filter=doc_filter, patch=p1)
+
+    error = {
+        "code": "enricher_not_implemented",
+        "message": "Salla-API enricher is not yet implemented in this "
+                   "iteration (states wired, call pending).",
+        "items_source": adapter_meta.get("items_source"),
+    }
+    p2 = transition(from_stage="NEEDS_ENRICHMENT",
+                    to_stage="FAILED_ENRICHMENT",
+                    actor="webhook", error=error)
+    p2.setdefault("$set", {})["pipeline_error"] = error
+    await _apply(db, doc_filter=doc_filter, patch=p2)
+
+    p3 = transition(from_stage="FAILED_ENRICHMENT", to_stage="DEAD_LETTER",
+                    actor="webhook",
+                    note="enricher stub not implemented yet — manual review",
+                    existing_started_at=started_at)
+    await _apply(db, doc_filter=doc_filter, patch=p3)
+    return ("DEAD_LETTER", error)
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Router attach
 # ─────────────────────────────────────────────────────────────────────
@@ -289,8 +389,15 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
         now = _now()
         idem_key = derive_idempotency_key(body, x_idempotency_key)
 
+        # ── 3b) Legacy-shape Adapter ─────────────────────────────────
+        # Make.com (and the legacy /api/webhook/make module) emit a
+        # flat JSON contract. Convert to canonical Salla shape BEFORE
+        # idempotency lookup or persistence runs. The original raw
+        # payload is still kept verbatim in `raw_payload` for audit.
+        adapted_body, adapter_meta = adapt_legacy(body)
+
         # Pull the (best-effort) order anchor for fast lookup later.
-        data = body.get("data") if isinstance(body.get("data"), dict) else body
+        data = adapted_body.get("data") if isinstance(adapted_body.get("data"), dict) else adapted_body
         salla_order_id = (
             data.get("reference_id") or data.get("id") or data.get("order_id"))
         if salla_order_id is not None:
@@ -307,6 +414,9 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
             "source": "webhook",
             "received_at": now,
             "raw_payload": body,
+            "adapted_payload": adapted_body if adapter_meta["adapter_applied"] else None,
+            "adapter_meta": adapter_meta,
+            "enrichment_fallback_used": False,
             "raw_headers": _capture_headers(request),
             "signature_status": "verified",
             "salla_order_id": salla_order_id,
@@ -320,7 +430,9 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
             "canonical_payload": None,
             "stage_history": [
                 initial_history_entry(actor="webhook",
-                                      note=f"trace_id={trace_id}"),
+                                      note=f"trace_id={trace_id}"
+                                            f" · adapter={adapter_meta['adapter_applied']}"
+                                            f" · items_source={adapter_meta['items_source']}"),
             ],
         }
         try:
@@ -346,7 +458,8 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
 
         # ── 5-7) Run validation + normalization synchronously ────────
         final_stage, err = await _process_inbox_row(
-            db, row=new_row, raw_payload=body)
+            db, row=new_row, raw_payload=adapted_body,
+            adapter_meta=adapter_meta)
 
         # Fetch the updated row's audit fields for the response.
         latest = await db.integration_inbox.find_one(

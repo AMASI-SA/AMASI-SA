@@ -55,11 +55,14 @@ HAPPY_PATH: tuple[str, ...] = (
 SKIPPED:   str = "SKIPPED"     # business rule said: do not send
 RETRYING:  str = "RETRYING"    # transient between failure and resume
 PARTIAL_FAILURE: str = "PARTIAL_FAILURE"   # invoice OK but receipt failed
+NEEDS_ENRICHMENT: str = "NEEDS_ENRICHMENT"  # waiting for Salla-API enricher
+                                            # (toggle: enrichment_fallback_enabled)
 
 # Failure stages — exactly one per pipeline step where work happens.
 FAILURE_STAGES: tuple[str, ...] = (
     "FAILED_VALIDATION",    # validation step rejected the payload
     "FAILED_NORMALIZATION", # normalization step couldn't build the DTO
+    "FAILED_ENRICHMENT",    # Salla-API enricher exhausted its retries
     "FAILED_CUSTOMER",      # 4a couldn't resolve/create customer
     "FAILED_PRODUCT",       # 4b couldn't resolve/create products
     "FAILED_INVOICE",       # 4c invoice POST to Qoyod failed
@@ -68,7 +71,9 @@ FAILURE_STAGES: tuple[str, ...] = (
 )
 
 # The full canonical set (used for Pydantic Literal validation).
-ALL_STAGES: tuple[str, ...] = HAPPY_PATH + (SKIPPED, RETRYING, PARTIAL_FAILURE) + FAILURE_STAGES
+ALL_STAGES: tuple[str, ...] = HAPPY_PATH + (
+    SKIPPED, RETRYING, PARTIAL_FAILURE, NEEDS_ENRICHMENT,
+) + FAILURE_STAGES
 
 TERMINAL_STAGES: frozenset[str] = frozenset({
     "COMPLETED", "SKIPPED", "DEAD_LETTER", "PARTIAL_FAILURE",
@@ -80,6 +85,7 @@ TERMINAL_STAGES: frozenset[str] = frozenset({
 FAILURE_TO_RESUME: dict[str, str] = {
     "FAILED_VALIDATION":    "RECEIVED",     # re-run validation
     "FAILED_NORMALIZATION": "VALIDATED",    # re-run normalization
+    "FAILED_ENRICHMENT":    "RECEIVED",     # re-attempt Salla enricher
     "FAILED_CUSTOMER":      "RULES_APPLIED",
     "FAILED_PRODUCT":       "CUSTOMER_RESOLVED",
     "FAILED_INVOICE":       "PRODUCT_RESOLVED",
@@ -140,6 +146,18 @@ def _build_allowed() -> set[tuple[str, str]]:
     # DEAD_LETTER would imply we lost everything — but we didn't.
     # PARTIAL_FAILURE preserves that nuance for the operator.
     allowed.add(("FAILED_RECEIPT", "PARTIAL_FAILURE"))
+
+    # ─── NEEDS_ENRICHMENT (transient) ─────────────────────────────────
+    # When Legacy Adapter detects an items-missing payload AND the
+    # `enrichment_fallback_enabled` toggle is on, the row enters
+    # NEEDS_ENRICHMENT from RECEIVED. The (separately implemented)
+    # enricher resolves it to either VALIDATED (success) or
+    # FAILED_ENRICHMENT (give up). DEAD_LETTER stays reachable as the
+    # terminal manual override.
+    allowed.add(("RECEIVED", NEEDS_ENRICHMENT))
+    allowed.add((NEEDS_ENRICHMENT, "VALIDATED"))
+    allowed.add((NEEDS_ENRICHMENT, "FAILED_ENRICHMENT"))
+    allowed.add((NEEDS_ENRICHMENT, "DEAD_LETTER"))
 
     return allowed
 
