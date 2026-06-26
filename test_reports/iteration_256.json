@@ -1,0 +1,39 @@
+{
+  "summary": "Verified the new Qoyod 'Existing Data Migration' read-only phase end-to-end. Backend pytest suite: 175/175 green (148 prior Qoyod + 27 new migration in test_qoyod_migration.py — NO regression). Added a new live-HTTP smoke suite (test_qoyod_migration_http_iter256.py, 9 passed + 1 skipped) hitting the public REACT_APP_BACKEND_URL with admin@hesab.app credentials. All 6 new endpoints respond correctly: /run completes (200) without 5xx, /status returns {ok, run}, /report returns the locked 13-field counts schema, /products and /customers honour status+search+pagination, /confirm validates required body fields, and /export.csv returns text/csv with the correct header row for both kinds. openapi.json (queried internally at localhost:8001) lists all 6 new paths. Frontend: /integrations/qoyod/migration page renders with data-testid='qoyod-migration-page' visible, Arabic UI fully functional, sidebar link 'nav-qoyod-migration' is highlighted/visible after login, and every documented testid (btn-run-migration, tab-products, tab-customers, search-*, filter-status-*, export-csv-*) is present. The page displays a completed prior run (run_id 26fd673d… finished 2026-06-26 02:27:48) with all status cards at 0 — expected for an admin user that has no Qoyod data yet. Matching policy verified by the 27 pytest unit tests (name-only matches stay candidate_match with qoyod_id=None — locked policy preserved).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qoyod_migration.py",
+    "/app/backend/tests/test_qoyod_migration_http_iter256.py",
+    "/app/test_reports/pytest/iter256_qoyod.xml",
+    "/app/test_reports/pytest/iter256_qoyod_http.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "migration_routes.py:42 — `await client.aclose() if hasattr(client, 'aclose') else None` is a no-op when the method isn't present and silently swallows any aclose error. Wrap in try/except and log, or simplify to `if hasattr(client, 'aclose'): await client.aclose()`. Cosmetic.",
+    "migration_routes.py:104-105 — `class _ConfirmBody(dict): pass` is dead code (the endpoint uses `body: dict = Body(...)`). Either delete it or replace the dict with a Pydantic model for proper request validation in OpenAPI.",
+    "migration_routes.py:78 — invalid kind raises HTTPException(404, …) but the same check in /confirm goes through confirm_candidate() which raises ValueError → HTTPException(400). Inconsistent status codes for the same class of input error. Pick 404 (path-style) or 400 (validation) and apply uniformly across list/confirm/export.csv.",
+    "migration.py:432-487 — extract_mezan_customers reads ALL unified_orders for the tenant with .find() (no batching/cursor projection limits). On a real merchant with 50k+ orders this can OOM-spike. Consider batch_size on the cursor + an explicit length cap (currently extract_mezan_products caps aggregate at 10000 but customers has no cap).",
+    "migration.py:617-623 — _coerce_float silently returns None on str→float failure. That's safe but you might want to log once per run with a counter (e.g. 'malformed_prices_skipped: N') in the run summary so a future merchant can spot data-quality issues.",
+    "Matching policy verified — name-only matches correctly produce candidate_match with qoyod_id=None and candidate_qoyod_id set; auto_mapped only triggers on SKU/phone/email exact matches. Locked behaviour preserved."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_qoyod_migration_http_iter256.py"
+  ],
+  "success_rate": {
+    "backend": "100% (175/175 unit + 9/9 HTTP, 1 openapi smoke skipped due to ingress catch-all)",
+    "frontend": "100% (all 9 testids present, page renders, sidebar link visible)"
+  },
+  "test_credentials": "admin@hesab.app / admin123",
+  "seed_data_creation": "None — admin tenant has no Qoyod data; report counts are all zero which is the correct empty-state response.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 6 new endpoints under /api/integrations/qoyod/migration/* are live and behaving per spec. The admin@hesab.app tenant has at least one completed migration run (status=completed) with zero matches because there are no order_items/unified_orders for that tenant. To exercise the candidate-confirm flow end-to-end via UI, seed a row into qoyod_migration_products with status='candidate_match' for user_id='main' before testing. The migration MVP_TENANT_ID is hard-coded to 'main' in routes.py:53; remember this when querying Mongo directly. No regressions in the prior 148 Qoyod tests."
+}

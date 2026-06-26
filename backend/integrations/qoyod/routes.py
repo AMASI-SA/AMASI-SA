@@ -45,6 +45,7 @@ from integrations.qoyod.go_live import (
     go_live_checklist, go_live_report,
     activate_production_mode, ActivationBlocked,
 )
+from integrations.qoyod.migration_routes import attach_migration_routes
 
 
 # MVP runs single-tenant; we still derive user_id from the auth layer
@@ -398,5 +399,8 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 detail={"code": "activation_blocked",
                         "reasons": exc.reasons,
                         "items":   exc.items})
+
+    # ── Existing-Data Migration (read-only pre-flight) ──────────────
+    attach_migration_routes(router, db, current_user, _tenant_id)
 
     return router

@@ -155,6 +155,7 @@ const SECTIONS = [
                 items: [
                     { to: "/integrations/qoyod/settings", label: "إعدادات قيود", icon: Gear, testid: "nav-qoyod-settings" },
                     { to: "/integrations/qoyod/go-live", label: "🚀 جاهزية الإنتاج (QYD-GO)", icon: Lightning, testid: "nav-qoyod-go-live" },
+                    { to: "/integrations/qoyod/migration", label: "🔁 مرحلة الانتقال — قراءة/مطابقة", icon: Queue, testid: "nav-qoyod-migration" },
                     { to: "/integrations/qoyod/invoices", label: "فواتير قيود — مراقبة", icon: Receipt, testid: "nav-qoyod-invoices" },
                     { to: "/integrations/qoyod/products", label: "منتجات قيود", icon: Package, testid: "nav-qoyod-products" },
                     { to: "/integrations/qoyod/customers", label: "عملاء قيود", icon: UsersThree, testid: "nav-qoyod-customers" },
