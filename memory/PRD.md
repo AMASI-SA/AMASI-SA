@@ -1448,3 +1448,15 @@ counterparties in Production (per-account blocker / reason histogram).
 - ▶ Dry Run on real data — blocked until migration report is approved by user.
 - ▶ Go Live (disable `dry_run_mode`) — blocked until Dry Run is approved.
 
+
+## Iter-257 — Last Order Date column on Migration page (2026-06-26)
+  - Added `last_order_date` to both `qoyod_migration_products` and `qoyod_migration_customers`.
+  - Extraction logic:
+    - **Products**: max(unified_orders.order_date over the SKU's order_numbers), fallback to received_at, then order_items.created_at.
+    - **Customers**: max(unified_orders.order_date) keyed by phone/email, fallback to custom_app_customers.updated_at/created_at.
+  - New API params on `GET /api/integrations/qoyod/migration/{kind}`: `sort` (occurrences|last_order_date|status), `sort_dir` (asc|desc), `last_order_after` (YYYY-MM-DD).
+  - CSV export now includes `last_order_date` as a column.
+  - UI: sortable column "آخر طلب" on both tabs, date filter "آخر طلب بعد".
+  - **Policy guarantee** (locked by test): Last Order Date is metadata only — it does NOT change auto_mapped vs candidate_match decisions.
+  - Tests: `test_qoyod_migration.py` — 31/31 PASS (+4 new); HTTP smoke `test_qoyod_migration_last_order_date_iter257.py` — 8/8 PASS; full Qoyod suite — 188/188 GREEN.
+
