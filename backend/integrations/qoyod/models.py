@@ -247,6 +247,16 @@ class IntegrationInbox(BaseModel):
     # stays consistent for the Timeline UI.
     stage_history:  list[dict[str, Any]] = Field(default_factory=list)
 
+    # ─── Audit Trail (Pre-Day 3 spec — every row is self-describing) ─
+    # All five fields are set by `state_machine.transition()` so the
+    # operator never has to reconstruct lifecycle data from logs.
+    pipeline_started_at:  Optional[datetime] = None
+    pipeline_finished_at: Optional[datetime] = None
+    pipeline_duration_ms: Optional[int]      = None
+    pipeline_outcome:     Optional[str]      = None  # terminal stage name
+    last_success_stage:   Optional[str]      = None
+    last_failed_stage:    Optional[str]      = None
+
     # Stage-3 output (canonical DTO)
     canonical_payload: Optional[dict[str, Any]] = None
 
@@ -308,6 +318,15 @@ class QoyodInvoiceRecord(BaseModel):
     # Append-only timeline (mirrors the inbox row's history so the
     # invoice view stays self-contained for the operator).
     stage_history: list[dict[str, Any]] = Field(default_factory=list)
+
+    # Audit Trail — mirrors `IntegrationInbox` so a single row is
+    # enough for the operator to reason about lifecycle + duration.
+    pipeline_started_at:  Optional[datetime] = None
+    pipeline_finished_at: Optional[datetime] = None
+    pipeline_duration_ms: Optional[int]      = None
+    pipeline_outcome:     Optional[str]      = None
+    last_success_stage:   Optional[str]      = None
+    last_failed_stage:    Optional[str]      = None
 
     created_at:    datetime = Field(default_factory=_now)
     updated_at:    datetime = Field(default_factory=_now)

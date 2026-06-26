@@ -146,7 +146,65 @@ function formatDate(d) {
   } catch { return String(d); }
 }
 
-// ─── Compliance Alert Card (Dashboard Alert — Qoyod page only) ───────
+// ─── Reconciliation Card (Pre-Day 3 Refinement) ──────────────────────
+// Three-number diff card per user spec: eligible orders, sent invoices,
+// and the gap between them. When there IS a gap a CTA reveals the list.
+function ReconciliationCard({ recon, loading, onDrillDown }) {
+  if (loading) {
+    return <Card title="مطابقة قيود"><span className="text-sm text-slate-500">جاري التحميل…</span></Card>;
+  }
+  if (!recon) return null;
+  const eligible = recon.eligible_orders_count || 0;
+  const invoiced = recon.qoyod_invoices_count  || 0;
+  const diff     = recon.difference            || 0;
+  const tone = diff === 0 ? "success" : "alert";
+  const diffTone = diff === 0 ? "emerald" : (diff > 10 ? "rose" : "amber");
+  return (
+    <Card
+      title="مطابقة قيود — Reconciliation"
+      subtitle="هذه البطاقة هي المرجع الرئيسي للتأكد من وصول جميع الطلبات المؤهلة إلى قيود."
+      tone={tone}
+      testid="qoyod-reconciliation-card"
+    >
+      <div className="grid grid-cols-3 gap-3">
+        <StatCell label="عدد الطلبات المؤهلة للإرسال"
+                  value={eligible}
+                  tone="slate"
+                  testid="recon-eligible-count" />
+        <StatCell label="عدد الفواتير الموجودة في قيود"
+                  value={invoiced}
+                  tone="emerald"
+                  testid="recon-invoiced-count" />
+        <StatCell label="الفرق"
+                  value={diff}
+                  tone={diffTone}
+                  testid="recon-difference" />
+      </div>
+      {diff > 0 && (
+        <div className="mt-4 flex items-center justify-between gap-3 flex-wrap bg-amber-100/60 rounded-lg px-3 py-2.5 border border-amber-200">
+          <p className="text-xs text-amber-900 font-bold">
+            ⚠️ يوجد {diff} طلب{diff === 1 ? "" : "اً"} مؤهل{diff > 10 ? "ة" : ""} لم تصل إلى قيود بعد.
+          </p>
+          <button
+            type="button"
+            onClick={onDrillDown}
+            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold transition"
+            data-testid="recon-drill-down"
+          >
+            عرض الطلبات غير المرسلة ↓
+          </button>
+        </div>
+      )}
+      {diff === 0 && eligible > 0 && (
+        <p className="mt-3 text-xs text-emerald-800 bg-emerald-100/60 rounded-lg px-3 py-2">
+          ✓ كل الطلبات المؤهلة وصلت إلى قيود — لا توجد فجوة.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+
 function ComplianceAlertCard({ summary, loading }) {
   if (loading) {
     return <Card title="مراقبة الامتثال (Compliance Watch)"><span className="text-sm text-slate-500">جاري التحميل…</span></Card>;
@@ -349,6 +407,71 @@ function TimelineDrawer({ open, item, onClose }) {
         </header>
 
         <div className="p-5 space-y-4">
+          {/* Audit Trail summary — Pre-Day 3 spec */}
+          {(item.invoice || item.inbox) && (
+            <section className="rounded-xl border border-slate-200 p-4 bg-slate-50" data-testid="audit-trail-summary">
+              <h4 className="text-sm font-extrabold text-slate-700 mb-3">
+                🧭 سجل التتبع (Audit Trail)
+              </h4>
+              <dl className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[11px]">
+                <div>
+                  <dt className="text-slate-500 font-bold">Trace ID</dt>
+                  <dd className="font-mono text-slate-700 truncate" title={item.invoice?.trace_id || item.inbox?.trace_id}>
+                    {item.invoice?.trace_id || item.inbox?.trace_id || "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 font-bold">المرحلة الحالية</dt>
+                  <dd><Pill tone="slate">{STAGE_AR[item.invoice?.pipeline_stage || item.inbox?.pipeline_stage] || "—"}</Pill></dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 font-bold">آخر مرحلة نجحت</dt>
+                  <dd><Pill tone="emerald">{STAGE_AR[item.invoice?.last_success_stage || item.inbox?.last_success_stage] || "—"}</Pill></dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 font-bold">آخر مرحلة فشلت</dt>
+                  <dd>
+                    {(item.invoice?.last_failed_stage || item.inbox?.last_failed_stage)
+                      ? <Pill tone="rose">{STAGE_AR[item.invoice?.last_failed_stage || item.inbox?.last_failed_stage]}</Pill>
+                      : <span className="text-slate-400">—</span>}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 font-bold">وقت البداية</dt>
+                  <dd className="text-slate-700">{formatDate(item.invoice?.pipeline_started_at || item.inbox?.pipeline_started_at)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 font-bold">وقت النهاية</dt>
+                  <dd className="text-slate-700">{formatDate(item.invoice?.pipeline_finished_at || item.inbox?.pipeline_finished_at)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 font-bold">مدة التنفيذ</dt>
+                  <dd className="text-slate-700">
+                    {(() => {
+                      const ms = item.invoice?.pipeline_duration_ms ?? item.inbox?.pipeline_duration_ms;
+                      if (ms == null) return "—";
+                      if (ms < 1000) return `${ms} ms`;
+                      if (ms < 60000) return `${(ms/1000).toFixed(2)} ث`;
+                      return `${(ms/60000).toFixed(2)} د`;
+                    })()}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 font-bold">عدد المحاولات</dt>
+                  <dd className="text-slate-700 tabular-nums">{item.invoice?.attempts ?? item.inbox?.attempts ?? 0}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 font-bold">نتيجة الخط</dt>
+                  <dd>
+                    {(item.invoice?.pipeline_outcome || item.inbox?.pipeline_outcome)
+                      ? <Pill tone="slate">{STAGE_AR[item.invoice?.pipeline_outcome || item.inbox?.pipeline_outcome]}</Pill>
+                      : <span className="text-slate-400">—</span>}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          )}
+
           {/* Manual Actions placeholders */}
           <section className="rounded-xl border border-dashed border-slate-300 p-4 bg-slate-50/60">
             <h4 className="text-sm font-extrabold text-slate-700 mb-2">
@@ -439,27 +562,32 @@ function TimelineDrawer({ open, item, onClose }) {
 // ─── Main Page ───────────────────────────────────────────────────────
 export default function QoyodInvoices() {
   const [loadingSummary, setLoadingSummary] = useState(true);
+  const [loadingRecon,   setLoadingRecon]   = useState(true);
   const [loadingOrphans, setLoadingOrphans] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [summary, setSummary] = useState(null);
+  const [recon,   setRecon]   = useState(null);
   const [orphans, setOrphans] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [selected, setSelected] = useState(null);
 
   const loadAll = async () => {
     try {
-      const [s, o, inv] = await Promise.all([
+      const [s, r, o, inv] = await Promise.all([
         axios.get(`${API}/integrations/qoyod/compliance/summary`),
+        axios.get(`${API}/integrations/qoyod/compliance/reconciliation`),
         axios.get(`${API}/integrations/qoyod/compliance/orphan-orders?limit=200`),
         axios.get(`${API}/integrations/qoyod/invoices?limit=100`),
       ]);
       setSummary(s.data?.summary || null);
+      setRecon(r.data?.reconciliation || null);
       setOrphans(o.data?.items || []);
       setInvoices(inv.data?.items || []);
     } catch (e) {
       toast.error("تعذّر تحميل بيانات قيود");
     } finally {
       setLoadingSummary(false);
+      setLoadingRecon(false);
       setLoadingOrphans(false);
       setLoadingInvoices(false);
     }
@@ -501,6 +629,14 @@ export default function QoyodInvoices() {
         </p>
       </header>
 
+      <ReconciliationCard
+        recon={recon}
+        loading={loadingRecon}
+        onDrillDown={() => {
+          const el = document.querySelector('[data-testid="qoyod-orphans-table"], [data-testid="qoyod-orphans-empty"]');
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+      />
       <ComplianceAlertCard summary={summary} loading={loadingSummary} />
       <OrphanOrdersSection orphans={orphans} loading={loadingOrphans} onOpen={openInvoice} />
       <InvoicesTable invoices={invoices} loading={loadingInvoices} onOpen={openInvoice} />

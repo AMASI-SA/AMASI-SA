@@ -32,6 +32,7 @@ import ImageCatalog from "./pages/ImageCatalog";
 import SallaIntegration from "./pages/SallaIntegration";
 import QoyodSettings from "./pages/QoyodSettings";
 import QoyodInvoices from "./pages/QoyodInvoices";
+import IntegrationPlaceholder from "./pages/IntegrationPlaceholder";
 import SallaSourceComparison from "./pages/SallaSourceComparison";
 import PaymentSettlements from "./pages/PaymentSettlements";
 import Profile from "./pages/Profile";
@@ -160,6 +161,12 @@ function AppRoutes() {
             <Route path="/integrations/custom-app" element={<ProtectedRoute><Layout><CustomAppIntegration /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/settings" element={<ProtectedRoute><Layout><QoyodSettings /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/invoices" element={<ProtectedRoute><Layout><QoyodInvoices /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/products" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="منتجات قيود" subtitle="تتبع SKUs المرتبطة بمنتجات قيود وتقارير المنتجات غير المربوطة." icon="📦" phase="Day 4-5" testid="qoyod-products-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"},{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/customers" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="عملاء قيود" subtitle="إدارة ربط العملاء (هاتف/إيميل) مع جهات الاتصال في قيود." icon="👥" phase="Day 4-5" testid="qoyod-customers-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"}]} /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/sync-log" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="سجل المزامنة — قيود" subtitle="سجل أحداث Pipeline الكامل: استلام Webhook، تحقق، تطبيع، إنشاء فاتورة/سند." icon="📜" phase="Day 3" testid="qoyod-sync-log-placeholder" related={[{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/error-log" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="سجل الأخطاء — قيود" subtitle="جميع حالات الفشل (FAILED_*, DEAD_LETTER) قابلة للفلترة وإعادة المحاولة." icon="⚠️" phase="Day 4-5" testid="qoyod-error-log-placeholder" related={[{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/salla/orders" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="مراقبة الطلبات — سلة" subtitle="عرض الطلبات الواردة من سلة وحالتها الحالية في خط الأنابيب." icon="🛒" phase="مرحلة لاحقة" testid="salla-orders-placeholder" related={[{to:"/orders",label:"الطلبات"},{to:"/salla-sources",label:"مقارنة مصادر البيانات"}]} /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/salla/events" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="سجل الأحداث — سلة" subtitle="جميع أحداث Webhooks من سلة (طلب جديد، شحن، إلغاء، استرجاع…)." icon="📋" phase="مرحلة لاحقة" testid="salla-events-placeholder" related={[{to:"/make-webhook",label:"ربط Make.com"}]} /></Layout></ProtectedRoute>} />
             <Route path="/ad-accounts" element={<ProtectedRoute><Layout><AdAccounts /></Layout></ProtectedRoute>} />
             <Route path="/integrations/bnpl" element={<ProtectedRoute><Layout><BnplIntegrations /></Layout></ProtectedRoute>} />
             <Route path="/integrations/bnpl/diagnostics" element={<ProtectedRoute><Layout><BnplDiagnostics /></Layout></ProtectedRoute>} />

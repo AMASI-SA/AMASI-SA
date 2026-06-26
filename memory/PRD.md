@@ -1,5 +1,64 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Qoyod MVP — Pre-Day 3 Refinements v2 (2026-06-26 · Navigation IA + Reconciliation Card + Audit Trail)
+**User mandate before starting Day 3:** three additive improvements that lock in the IA so we
+don't need a refactor mid-Day-3.
+
+### 1. Navigation reorganisation
+- New top-level sidebar section: **التكاملات (Integrations)** with sub-grouped items per upstream platform.
+- `Sidebar.jsx` now supports `subgroups: [{id,label,items}]` alongside flat `items`. Renderer prints
+  a small uppercase subgroup header above each sub-list. `findSectionFor`, search filter,
+  visibility dialog, and `totalMatches` all walk subgroups transparently.
+- **Salla** subgroup: إعدادات سلة · Webhooks · مراقبة الطلبات · سجل الأحداث · مقارنة مصادر البيانات.
+- **قيود** subgroup: إعدادات قيود · فواتير قيود — مراقبة · منتجات قيود · عملاء قيود · سجل المزامنة · سجل الأخطاء.
+- Generic stub component `pages/IntegrationPlaceholder.jsx` powers the 6 "coming soon" routes
+  (qoyod products/customers/sync-log/error-log + salla orders/events). Each carries `phase` (Day 3 /
+  Day 4-5 / مرحلة لاحقة) and `related[]` links so the operator can navigate to ready siblings.
+- Qoyod entries removed from "الاستيراد والربط".
+
+### 2. Reconciliation Card (مطابقة قيود)
+- New backend helper `compliance.reconciliation_check()` returns:
+  `{eligible_orders_count, qoyod_invoices_count, difference, has_diff, drilldown_url, oldest_unsent_at}`.
+- Endpoint: `GET /api/integrations/qoyod/compliance/reconciliation`.
+- Frontend card on `/integrations/qoyod/invoices` — 3 stat cells + amber CTA "عرض الطلبات غير المرسلة"
+  that scrolls to the Orphan Orders table. Renders an emerald "كل الطلبات وصلت" message when diff=0.
+
+### 3. Audit Trail in `state_machine.transition()`
+Per user spec, every transition now records:
+- `pipeline_started_at`  — set on NEW → RECEIVED.
+- `pipeline_finished_at` — set on entry to any terminal stage (COMPLETED/SKIPPED/DEAD_LETTER).
+- `pipeline_duration_ms` — computed server-side from `existing_started_at` arg + finish timestamp.
+- `pipeline_outcome`     — the terminal stage name.
+- `last_success_stage`   — last happy-path stage we reached (excl. NEW).
+- `last_failed_stage`    — last `FAILED_*` stage entered.
+- `trace_id`             — already present, surfaced in the audit summary.
+
+Models extended with the six new fields on both `IntegrationInbox` and `QoyodInvoiceRecord`.
+Timeline Drawer in `QoyodInvoices.jsx` now opens with an "🧭 سجل التتبع" section listing all
+nine audit fields in a compact 3-column grid.
+
+### Tests (62/62 ✅)
+- `tests/test_qoyod_state_machine.py` — 23/23 (vocabulary lock + graph + transition + audit trail +
+  retry loop e2e).
+- `tests/test_qoyod_compliance.py` — 11/11 (classification, orphan listing, summary, reconciliation
+  with/without diff).
+- `tests/test_qoyod_day1_foundation.py` — 28/28 (unchanged).
+- curl Live on PREVIEW: `/compliance/reconciliation` returns the expected JSON shape.
+
+### Frontend smoke (screenshot verified)
+- Reconciliation card renders with 3 cells at top.
+- Compliance Alert below with 5 cells.
+- Orphan + Invoices tables render empty-state placeholders.
+- New Integrations section in sidebar with Salla + قيود subgroups expanded; all 11 nav items present
+  with the expected data-testids (`nav-salla-orders`, `nav-qoyod-products`, etc.).
+- Old Qoyod links no longer appear in "الاستيراد والربط".
+
+### Outstanding for Day 3
+- `POST /api/integrations/qoyod/webhook` — idempotent insert into `integration_inbox`, initial
+  transition `NEW → RECEIVED` (will auto-populate `pipeline_started_at`).
+- Validation step → `VALIDATED` / `FAILED_VALIDATION`.
+- Normalization step → `NORMALIZED` canonical SalesOrder DTO.
+
 ## Qoyod MVP — Pre-Day 3 Refinements (2026-06-25 · State Machine + Compliance Watch + UI Placeholders)
 **User mandate before starting Day 3 webhook work:**
 1. ✅ **State Machine** — canonical UPPERCASE vocabulary, allowed transitions, RETRYING transient stage,

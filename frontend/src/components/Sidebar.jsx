@@ -124,12 +124,43 @@ const SECTIONS = [
             { to: "/import-jobs", label: "حالة الاستيراد", icon: Queue, testid: "nav-import-jobs" },
             { to: "/make-webhook", label: "ربط Make.com", icon: Plug, testid: "nav-make-webhook" },
             { to: "/integrations/custom-app", label: "ربط تطبيقي الخاص", icon: Plug, testid: "nav-custom-app" },
-            { to: "/integrations/qoyod/settings", label: "إعدادات قيود", icon: Plug, testid: "nav-qoyod-settings" },
-            { to: "/integrations/qoyod/invoices", label: "فواتير قيود — مراقبة", icon: Plug, testid: "nav-qoyod-invoices" },
             { to: "/integrations/bnpl", label: "ربط تمارا وتابي", icon: Lightning, testid: "nav-bnpl-integrations" },
-            { to: "/settings/salla", label: "ربط متجر سلة", icon: Storefront, testid: "nav-salla-integration" },
-            { to: "/salla-sources", label: "مقارنة مصادر البيانات", icon: ChartPieSlice, testid: "nav-salla-sources" },
             { to: "/history", label: "سجل التحليلات", icon: ClockCounterClockwise, testid: "nav-history" },
+        ],
+    },
+    // ── Integrations Hub ─────────────────────────────────────────────
+    // Dedicated, top-level section per Pre-Day 3 user request.
+    // Sub-grouped per upstream platform (Salla, Qoyod, …) so the
+    // operator knows where to look without scanning a flat list.
+    // Pages not yet built render the IntegrationPlaceholder stub.
+    {
+        id: "integrations",
+        label: "التكاملات (Integrations)",
+        icon: Plug,
+        subgroups: [
+            {
+                id: "salla",
+                label: "سلة",
+                items: [
+                    { to: "/settings/salla", label: "إعدادات سلة", icon: Storefront, testid: "nav-salla-settings" },
+                    { to: "/make-webhook", label: "Webhooks", icon: Plug, testid: "nav-salla-webhooks" },
+                    { to: "/integrations/salla/orders", label: "مراقبة الطلبات", icon: Package, testid: "nav-salla-orders" },
+                    { to: "/integrations/salla/events", label: "سجل الأحداث", icon: ClockCounterClockwise, testid: "nav-salla-events" },
+                    { to: "/salla-sources", label: "مقارنة مصادر البيانات", icon: ChartPieSlice, testid: "nav-salla-sources" },
+                ],
+            },
+            {
+                id: "qoyod",
+                label: "قيود",
+                items: [
+                    { to: "/integrations/qoyod/settings", label: "إعدادات قيود", icon: Gear, testid: "nav-qoyod-settings" },
+                    { to: "/integrations/qoyod/invoices", label: "فواتير قيود — مراقبة", icon: Receipt, testid: "nav-qoyod-invoices" },
+                    { to: "/integrations/qoyod/products", label: "منتجات قيود", icon: Package, testid: "nav-qoyod-products" },
+                    { to: "/integrations/qoyod/customers", label: "عملاء قيود", icon: UsersThree, testid: "nav-qoyod-customers" },
+                    { to: "/integrations/qoyod/sync-log", label: "سجل المزامنة", icon: Queue, testid: "nav-qoyod-sync-log" },
+                    { to: "/integrations/qoyod/error-log", label: "سجل الأخطاء", icon: Receipt, testid: "nav-qoyod-error-log" },
+                ],
+            },
         ],
     },
     {
@@ -175,9 +206,23 @@ const SECTIONS = [
 const OPEN_SECTION_STORAGE_KEY = "hesab.sidebar.openSection";
 
 
+// Flatten any section into a flat list of items, walking subgroups when
+// present. Used by path-matching, search filtering, and the visibility
+// dialog so a single function is the source of truth.
+function flattenSectionItems(section) {
+    if (Array.isArray(section.items) && section.items.length) {
+        return section.items;
+    }
+    if (Array.isArray(section.subgroups)) {
+        return section.subgroups.flatMap((g) => g.items || []);
+    }
+    return [];
+}
+
+
 function findSectionFor(pathname) {
     for (const sec of SECTIONS) {
-        for (const item of sec.items) {
+        for (const item of flattenSectionItems(sec)) {
             if (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)) {
                 return sec.id;
             }
@@ -268,25 +313,39 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
     const normalizedQuery = normalizeAr(search);
 
     const filteredSections = useMemo(() => {
-        // Apply hidden-pages filter FIRST (per-user visibility),
-        // then the search filter on top of the remaining visible items.
-        const base = sections
-            .map((s) => ({
-                ...s,
-                items: s.items.filter((it) => !hiddenSet.has(it.testid)),
-            }))
-            .filter((s) => s.items.length > 0);
-        if (!searchActive) return base;
-        return base
-            .map((s) => ({
-                ...s,
-                items: s.items.filter((it) => normalizeAr(it.label).includes(normalizedQuery)),
-            }))
-            .filter((s) => s.items.length > 0);
+        // Helper: filter a single bag of items by hidden + (optional) search.
+        const filterItems = (items) => {
+            let out = items.filter((it) => !hiddenSet.has(it.testid));
+            if (searchActive) {
+                out = out.filter((it) => normalizeAr(it.label).includes(normalizedQuery));
+            }
+            return out;
+        };
+        return sections
+            .map((s) => {
+                if (Array.isArray(s.subgroups)) {
+                    // Subgroup-aware filtering. Drop empty subgroups and
+                    // drop the whole section if every subgroup is empty.
+                    const subgroups = s.subgroups
+                        .map((g) => ({ ...g, items: filterItems(g.items || []) }))
+                        .filter((g) => g.items.length > 0);
+                    return { ...s, subgroups };
+                }
+                return { ...s, items: filterItems(s.items || []) };
+            })
+            .filter((s) => {
+                if (Array.isArray(s.subgroups)) return s.subgroups.length > 0;
+                return (s.items || []).length > 0;
+            });
     }, [sections, hiddenSet, searchActive, normalizedQuery]);
 
     const totalMatches = useMemo(
-        () => filteredSections.reduce((n, s) => n + s.items.length, 0),
+        () => filteredSections.reduce(
+            (n, s) => n + (Array.isArray(s.subgroups)
+                ? s.subgroups.reduce((m, g) => m + g.items.length, 0)
+                : (s.items || []).length),
+            0,
+        ),
         [filteredSections],
     );
 
@@ -397,8 +456,31 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                         // When searching, force every section open so all
                         // matches are visible without clicking.
                         const isOpen = searchActive || openId === section.id;
-                        const containsActive = section.items.some(
+                        const sectionItems = Array.isArray(section.subgroups)
+                            ? section.subgroups.flatMap((g) => g.items)
+                            : (section.items || []);
+                        const containsActive = sectionItems.some(
                             (i) => i.to === "/" ? location.pathname === "/" : location.pathname.startsWith(i.to),
+                        );
+                        const renderItem = ({ to, label, icon: Icon, testid }) => (
+                            <NavLink
+                                key={to}
+                                to={to}
+                                end={to === "/"}
+                                onClick={onMobileClose}
+                                data-testid={testid}
+                                className={({ isActive }) =>
+                                    [
+                                        "flex items-center gap-2.5 ps-4 pe-3 py-2 rounded-lg text-[13.5px] transition-colors",
+                                        isActive
+                                            ? "bg-brand text-white font-semibold"
+                                            : "text-foreground hover:bg-accent hover:text-brand",
+                                    ].join(" ")
+                                }
+                            >
+                                <Icon size={17} weight="duotone" />
+                                <span className="truncate">{label}</span>
+                            </NavLink>
                         );
                         return (
                             <div key={section.id} className="select-none" data-testid={`sidebar-section-${section.id}`}>
@@ -434,30 +516,24 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                                     id={`sidebar-panel-${section.id}`}
                                     role="region"
                                     className={`overflow-hidden transition-[max-height] duration-300 ease-out ${
-                                        isOpen ? "max-h-[800px]" : "max-h-0"
+                                        isOpen ? "max-h-[1200px]" : "max-h-0"
                                     }`}
                                 >
                                     <div className="ps-2 pt-1 pb-2 space-y-0.5">
-                                        {section.items.map(({ to, label, icon: Icon, testid }) => (
-                                            <NavLink
-                                                key={to}
-                                                to={to}
-                                                end={to === "/"}
-                                                onClick={onMobileClose}
-                                                data-testid={testid}
-                                                className={({ isActive }) =>
-                                                    [
-                                                        "flex items-center gap-2.5 ps-4 pe-3 py-2 rounded-lg text-[13.5px] transition-colors",
-                                                        isActive
-                                                            ? "bg-brand text-white font-semibold"
-                                                            : "text-foreground hover:bg-accent hover:text-brand",
-                                                    ].join(" ")
-                                                }
-                                            >
-                                                <Icon size={17} weight="duotone" />
-                                                <span className="truncate">{label}</span>
-                                            </NavLink>
-                                        ))}
+                                        {Array.isArray(section.subgroups) ? (
+                                            section.subgroups.map((g) => (
+                                                <div key={g.id} className="mb-2" data-testid={`sidebar-subgroup-${g.id}`}>
+                                                    <div className="px-3 pt-2 pb-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 border-b border-slate-100 mx-2">
+                                                        {g.label}
+                                                    </div>
+                                                    <div className="space-y-0.5 mt-1">
+                                                        {g.items.map(renderItem)}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            (section.items || []).map(renderItem)
+                                        )}
                                     </div>
                                 </div>
                             </div>

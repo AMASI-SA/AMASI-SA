@@ -178,20 +178,34 @@ def transition(
     actor: str = "system",
     note: Optional[str] = None,
     error: Optional[dict] = None,
+    existing_started_at: Optional[datetime] = None,
 ) -> dict[str, Any]:
     """Return a Mongo update document that performs the transition.
 
     The caller writes the result with `db.collection.update_one(filter, patch)`.
 
+    Audit Trail fields (Pre-Day 3 spec, expanded):
+        • `pipeline_started_at`   — set once on NEW → RECEIVED.
+        • `pipeline_finished_at`  — set on entry to any terminal stage
+                                    (COMPLETED, SKIPPED, DEAD_LETTER).
+        • `pipeline_duration_ms`  — computed when `existing_started_at`
+                                    is provided AND we are entering a
+                                    terminal stage.
+        • `last_success_stage`    — updated when transitioning INTO any
+                                    happy-path stage (NEW excluded).
+        • `last_failed_stage`     — updated when transitioning INTO any
+                                    FAILED_* stage.
+
+    Caller responsibility: pass `existing_started_at` from the current
+    row when entering a terminal stage so duration can be computed
+    server-side in a single round-trip.
+
     Result shape:
         {
-          "$set":  {"pipeline_stage": <to_stage>, "updated_at": <utc>},
+          "$set":  {"pipeline_stage": <to_stage>, "updated_at": <utc>, ...},
           "$push": {"stage_history": <history-entry>},
           "$inc":  {"attempts": 1}  # only for retries
         }
-
-    The `stage_history` entry is fully structured so the timeline UI
-    can render it without ad-hoc parsing.
 
     Raises:
         InvalidTransition: if (from_stage, to_stage) isn't allowed.
@@ -217,8 +231,41 @@ def transition(
             for k, v in error.items()
         }
 
+    set_block: dict[str, Any] = {
+        "pipeline_stage": to_stage,
+        "updated_at":     now,
+    }
+
+    # ─── Audit Trail bookkeeping ────────────────────────────────────
+    # Mark pipeline start exactly once — first hop out of NEW.
+    if from_stage == "NEW" and to_stage == "RECEIVED":
+        set_block["pipeline_started_at"] = now
+
+    # Mark pipeline finish on entry to terminal stages.
+    if to_stage in TERMINAL_STAGES:
+        set_block["pipeline_finished_at"] = now
+        set_block["pipeline_outcome"]     = to_stage
+        if existing_started_at is not None:
+            try:
+                delta = now - existing_started_at
+                set_block["pipeline_duration_ms"] = int(
+                    delta.total_seconds() * 1000)
+            except Exception:
+                # Defensive — never break a transition for an arithmetic
+                # edge case; just skip the duration.
+                pass
+
+    # Track the last successful happy-path stage we reached (excluding
+    # NEW because NEW is "row exists", not "work done").
+    if to_stage in HAPPY_PATH and to_stage != "NEW":
+        set_block["last_success_stage"] = to_stage
+
+    # Track the most recent failure for the operator UI.
+    if to_stage in FAILURE_STAGES:
+        set_block["last_failed_stage"] = to_stage
+
     patch: dict[str, Any] = {
-        "$set":  {"pipeline_stage": to_stage, "updated_at": now},
+        "$set":  set_block,
         "$push": {"stage_history": entry},
     }
     # Increment attempt counter only when we re-enter the pipeline

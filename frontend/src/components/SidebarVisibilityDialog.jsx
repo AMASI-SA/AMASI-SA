@@ -87,7 +87,13 @@ function DialogInner({ open, onClose, sections }) {
 
                 {/* Sections grid */}
                 <div className="space-y-4 mt-2">
-                    {sections.map((sec) => (
+                    {sections.map((sec) => {
+                        // Subgroup-aware flatten: keeps the dialog
+                        // visualisation flat to avoid scope creep.
+                        const items = Array.isArray(sec.subgroups)
+                            ? sec.subgroups.flatMap((g) => g.items || [])
+                            : (sec.items || []);
+                        return (
                         <div
                             key={sec.id}
                             className="border-2 border-slate-200 rounded-xl p-3"
@@ -96,13 +102,13 @@ function DialogInner({ open, onClose, sections }) {
                             <h4 className="text-sm font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                                 {sec.label}
                                 <span className="text-xs font-normal text-slate-500">
-                                    ({sec.items.filter((i) => !hidden.has(i.testid)).length}
+                                    ({items.filter((i) => !hidden.has(i.testid)).length}
                                     {" / "}
-                                    {sec.items.length} ظاهرة)
+                                    {items.length} ظاهرة)
                                 </span>
                             </h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                {sec.items.map((item) => {
+                                {items.map((item) => {
                                     const isHidden = hidden.has(item.testid);
                                     return (
                                         <label
@@ -131,7 +137,8 @@ function DialogInner({ open, onClose, sections }) {
                                 })}
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 <DialogFooter className="mt-3">

@@ -35,7 +35,7 @@ from integrations.qoyod.models import (
     QoyodSettings, QoyodCapabilityFlags,
 )
 from integrations.qoyod.compliance import (
-    list_orphan_orders, compliance_summary,
+    list_orphan_orders, compliance_summary, reconciliation_check,
 )
 
 
@@ -299,5 +299,12 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def compliance_summary_endpoint(user=Depends(current_user)):
         tenant = _tenant_id(user)
         return {"ok": True, "summary": await compliance_summary(db, tenant)}
+
+    # ── GET /compliance/reconciliation — Reconciliation Card ─────────
+    # Three-number diff: eligible Salla orders vs invoices in Qoyod.
+    @router.get("/compliance/reconciliation")
+    async def compliance_reconciliation(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        return {"ok": True, "reconciliation": await reconciliation_check(db, tenant)}
 
     return router

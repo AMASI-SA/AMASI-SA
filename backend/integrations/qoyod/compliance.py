@@ -177,6 +177,59 @@ async def list_orphan_orders(
     return output
 
 
+async def reconciliation_check(db, user_id: str) -> dict:
+    """Reconciliation card — three numbers + drilldown trigger.
+
+    Output:
+        {
+          schema_version:           1,
+          generated_at:             iso,
+          eligible_orders_count:    int,   # Salla orders that SHOULD be in Qoyod
+          qoyod_invoices_count:     int,   # rows successfully sent (status="sent")
+          difference:               int,   # eligible - sent (>= 0 normally)
+          has_diff:                 bool,
+          drilldown_url:            str,   # frontend deep-link
+          oldest_unsent_at:         iso | null,
+        }
+
+    Pure aggregation — never modifies state.
+    """
+    eligible = await db.unified_orders.count_documents({
+        "user_id": user_id,
+        "order_status": {"$in": list(COMPLETED_TRIGGER_STATUSES)},
+    })
+    sent = await db.qoyod_invoices.count_documents({
+        "user_id": user_id, "status": "sent",
+    })
+    diff = max(0, eligible - sent)
+
+    oldest_unsent = None
+    if diff > 0:
+        # Surface the date of the oldest eligible order that ISN'T sent.
+        # Cheap heuristic: oldest completed order overall — refinement
+        # comes in Day 4-5 when we join properly.
+        oldest = await db.unified_orders.find_one(
+            {"user_id": user_id,
+             "order_status": {"$in": list(COMPLETED_TRIGGER_STATUSES)}},
+            sort=[("order_date", 1)],
+            projection={"_id": 0, "order_date": 1, "completed_at": 1},
+        )
+        if oldest:
+            oldest_unsent = oldest.get("completed_at") or oldest.get("order_date")
+
+    return {
+        "schema_version":        1,
+        "generated_at":          _now(),
+        "eligible_orders_count": eligible,
+        "qoyod_invoices_count":  sent,
+        "difference":            diff,
+        "has_diff":              diff > 0,
+        "drilldown_url":         "/integrations/qoyod/invoices?filter=unsent",
+        "oldest_unsent_at":      oldest_unsent,
+    }
+
+
+
 async def compliance_summary(db, user_id: str) -> dict:
     """Aggregate counts for the Dashboard Alert card on the Qoyod page.
 

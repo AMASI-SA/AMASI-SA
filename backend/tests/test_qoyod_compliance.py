@@ -18,7 +18,7 @@ from integrations.qoyod.models import (
 )
 from integrations.qoyod.compliance import (
     classify_eligibility, list_orphan_orders, compliance_summary,
-    COMPLETED_TRIGGER_STATUSES,
+    reconciliation_check, COMPLETED_TRIGGER_STATUSES,
 )
 
 
@@ -187,6 +187,66 @@ async def test_orphan_listing_and_summary(db):
 def test_completed_trigger_includes_arabic_and_english():
     assert "تم التنفيذ" in COMPLETED_TRIGGER_STATUSES
     assert "completed"   in COMPLETED_TRIGGER_STATUSES
+
+
+# ─────────────────────────────────────────────────────────────────────
+# C) reconciliation_check — three-number diff card
+# ─────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_reconciliation_check_counts_and_diff(db):
+    user_id = f"test_recon_{uuid.uuid4().hex[:8]}"
+    now = datetime.now(timezone.utc)
+    try:
+        await db.unified_orders.insert_many([
+            {"user_id": user_id, "salla_order_id": f"R-{i}",
+             "order_number": f"{user_id}-N{i}",
+             "order_status": "تم التنفيذ",
+             "order_date": now - timedelta(days=i + 1)}
+            for i in range(5)
+        ])
+        # 2 of the 5 are already in Qoyod as "sent".
+        await db.qoyod_invoices.insert_many([
+            {"user_id": user_id, "salla_order_id": "R-0",
+             "status": "sent", "trace_id": "t0", "updated_at": now},
+            {"user_id": user_id, "salla_order_id": "R-1",
+             "status": "sent", "trace_id": "t1", "updated_at": now},
+        ])
+        rec = await reconciliation_check(db, user_id)
+        assert rec["eligible_orders_count"] == 5
+        assert rec["qoyod_invoices_count"]  == 2
+        assert rec["difference"]             == 3
+        assert rec["has_diff"] is True
+        assert "filter=unsent" in rec["drilldown_url"]
+        assert rec["oldest_unsent_at"] is not None
+        assert rec["schema_version"] == 1
+    finally:
+        await db.unified_orders.delete_many({"user_id": user_id})
+        await db.qoyod_invoices.delete_many({"user_id": user_id})
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_check_no_diff_when_all_sent(db):
+    user_id = f"test_recon2_{uuid.uuid4().hex[:8]}"
+    now = datetime.now(timezone.utc)
+    try:
+        await db.unified_orders.insert_one({
+            "user_id": user_id, "salla_order_id": "R-X",
+            "order_number": f"{user_id}-N1",
+            "order_status": "تم التنفيذ", "order_date": now,
+        })
+        await db.qoyod_invoices.insert_one({
+            "user_id": user_id, "salla_order_id": "R-X",
+            "status": "sent", "trace_id": "tx", "updated_at": now,
+        })
+        rec = await reconciliation_check(db, user_id)
+        assert rec["eligible_orders_count"] == 1
+        assert rec["qoyod_invoices_count"]  == 1
+        assert rec["difference"]            == 0
+        assert rec["has_diff"] is False
+        assert rec["oldest_unsent_at"]      is None
+    finally:
+        await db.unified_orders.delete_many({"user_id": user_id})
+        await db.qoyod_invoices.delete_many({"user_id": user_id})
 
 
 if __name__ == "__main__":

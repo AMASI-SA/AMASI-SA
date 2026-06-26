@@ -162,6 +162,60 @@ def test_resume_target_unknown_failure_raises():
 
 
 # ─────────────────────────────────────────────────────────────────────
+# C.bis) Audit Trail bookkeeping
+# ─────────────────────────────────────────────────────────────────────
+def test_audit_pipeline_started_at_set_on_first_hop_out_of_new():
+    p = transition(from_stage="NEW", to_stage="RECEIVED", actor="webhook")
+    assert "pipeline_started_at" in p["$set"]
+    assert p["$set"]["pipeline_started_at"] == p["$set"]["updated_at"]
+
+
+def test_audit_pipeline_started_at_not_set_on_other_transitions():
+    p = transition(from_stage="RECEIVED", to_stage="VALIDATED", actor="w")
+    assert "pipeline_started_at" not in p["$set"]
+
+
+def test_audit_finished_at_on_terminal_stages():
+    from datetime import datetime, timezone, timedelta
+    # No existing_started_at supplied — duration field absent, finished_at set.
+    p = transition(from_stage="RECEIPT_CREATED", to_stage="COMPLETED",
+                   actor="worker")
+    assert "pipeline_finished_at" in p["$set"]
+    assert p["$set"]["pipeline_outcome"] == "COMPLETED"
+    assert "pipeline_duration_ms" not in p["$set"]
+
+    # With existing_started_at — duration computed.
+    started = datetime.now(timezone.utc) - timedelta(seconds=12, milliseconds=500)
+    p = transition(from_stage="RECEIPT_CREATED", to_stage="COMPLETED",
+                   actor="worker", existing_started_at=started)
+    assert "pipeline_duration_ms" in p["$set"]
+    assert p["$set"]["pipeline_duration_ms"] >= 12_000
+    # SKIPPED and DEAD_LETTER are also terminal.
+    p2 = transition(from_stage="NORMALIZED", to_stage="SKIPPED",
+                    actor="rules", existing_started_at=started)
+    assert p2["$set"]["pipeline_outcome"] == "SKIPPED"
+    assert "pipeline_finished_at" in p2["$set"]
+
+
+def test_audit_last_success_stage_tracks_happy_path_only():
+    p1 = transition(from_stage="NEW", to_stage="RECEIVED", actor="w")
+    assert p1["$set"].get("last_success_stage") == "RECEIVED"
+    p2 = transition(from_stage="RULES_APPLIED", to_stage="FAILED_CUSTOMER",
+                    actor="w", error={"code": "x"})
+    # Failure transitions DO NOT update last_success_stage.
+    assert "last_success_stage" not in p2["$set"]
+
+
+def test_audit_last_failed_stage_tracks_failures():
+    p = transition(from_stage="CUSTOMER_RESOLVED", to_stage="FAILED_PRODUCT",
+                   actor="w", error={"code": "missing_sku"})
+    assert p["$set"]["last_failed_stage"] == "FAILED_PRODUCT"
+    # Happy transitions DO NOT update last_failed_stage.
+    p2 = transition(from_stage="NEW", to_stage="RECEIVED", actor="w")
+    assert "last_failed_stage" not in p2["$set"]
+
+
+# ─────────────────────────────────────────────────────────────────────
 # D) End-to-end scenario walk (golden path + retry loop)
 # ─────────────────────────────────────────────────────────────────────
 def test_walks_full_happy_path_via_transition():
