@@ -82,8 +82,11 @@ def derive_lookup(customer: CustomerDTO) -> tuple[Optional[str], str]:
 # Qoyod payload builder
 # ─────────────────────────────────────────────────────────────────────
 def _build_contact_payload(customer: CustomerDTO) -> dict:
-    """Map our DTO → Qoyod /contacts POST body.
+    """Map our DTO → Qoyod `POST /customers` body.
 
+    Note (2026-06-26 endpoint audit): Qoyod's legacy domain expects
+    `{"customer": {...}}` for POST /customers. The Python helper name
+    stays `_build_contact_payload` to avoid churn at call sites.
     Conservative: only sends fields we KNOW Qoyod accepts. Address
     enrichment is deferred to Day 5 (after the merchant reviews the
     Day 4 output).
@@ -101,19 +104,27 @@ def _build_contact_payload(customer: CustomerDTO) -> dict:
         payload["country"] = customer.country
     # Qoyod groups individual customers under type=client (default).
     # Bigger payloads (CR/VAT for companies) are out of scope here.
-    return {"contact": payload}
+    return {"customer": payload}
 
 
 def _extract_contact_id(api_resp: Any) -> Optional[str]:
-    """Qoyod responses occasionally wrap the created resource."""
+    """Read the new resource id from Qoyod's response. Tolerant of
+    both v2 shapes (`{"customer": {...}}` legacy preferred form, and
+    `{"contact": {...}}` older alias) — the lookup walks all options."""
     if not isinstance(api_resp, dict):
         return None
-    # Common Qoyod v2 shapes
-    if "contact" in api_resp and isinstance(api_resp["contact"], dict):
+    # Preferred v2 shape on legacy.qoyod.com
+    if isinstance(api_resp.get("customer"), dict):
+        cid = api_resp["customer"].get("id")
+        if cid is not None:
+            return str(cid)
+    # Legacy/alternate shape kept for resilience.
+    if isinstance(api_resp.get("contact"), dict):
         cid = api_resp["contact"].get("id")
         if cid is not None:
             return str(cid)
-    cid = api_resp.get("id") or api_resp.get("contact_id")
+    cid = api_resp.get("id") or api_resp.get("customer_id") \
+          or api_resp.get("contact_id")
     return str(cid) if cid is not None else None
 
 

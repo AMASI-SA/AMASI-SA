@@ -219,8 +219,17 @@ class QoyodAPIClient:
             "GET", "/customers", params={"page": page, "limit": limit})
 
     async def create_contact(self, payload: dict, *, idem: str) -> Any:
+        """POST /customers — creates a customer record in Qoyod.
+
+        Note (2026-06-26 endpoint audit): the legacy domain serves both
+        `/contacts` and `/customers` for POST, but only `/customers`
+        honors auth-first ordering (POST /contacts returns 422 even
+        with an invalid key, which breaks our error classifier).
+        We standardise on `/customers` for safety + consistency with
+        `list_contacts`. The Python method name is kept to preserve
+        call sites — the resource is logically the same entity."""
         return await self._request(
-            "POST", "/contacts", json_body=payload, idempotency_key=idem)
+            "POST", "/customers", json_body=payload, idempotency_key=idem)
 
     async def create_product(self, payload: dict, *, idem: str) -> Any:
         return await self._request(

@@ -151,13 +151,16 @@ def test_receipt_payload_resolves_payment_account():
 @pytest.mark.asyncio
 async def test_dry_run_client_records_calls_and_returns_fake_ids():
     c = DryRunQoyodClient()
-    r1 = await c.create_contact({"contact":{"name":"X"}}, idem="i1")
+    # Legacy.qoyod.com expects {"customer": {...}} envelope
+    r1 = await c.create_contact({"customer":{"name":"X"}}, idem="i1")
     r2 = await c.create_invoice({"invoice":{"ref":"O-1"}}, idem="i2")
     r3 = await c.create_receipt({"receipt":{"invoice_id":r2["invoice"]["id"]}}, idem="i3")
-    assert r1["contact"]["id"].startswith("DRY:contact:")
+    assert r1["customer"]["id"].startswith("DRY:contact:")
     assert r2["invoice"]["id"].startswith("DRY:invoice:")
     assert r3["receipt"]["id"].startswith("DRY:receipt:")
     assert len(c.calls) == 3
+    # Audit trail records the correct endpoint
+    assert c.calls[0]["endpoint"] == "POST /customers"
 
 
 # ─── E2E pipeline tests ─────────────────────────────────────────────

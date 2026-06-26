@@ -187,7 +187,10 @@ def test_contact_payload_only_includes_supported_fields():
     c = CustomerDTO(name="أحمد",
                     phone="+966501234567", email="x@y.com",
                     city="Riyadh", country="SA", is_guest=False)
-    p = _build_contact_payload(c)["contact"]
+    # Qoyod's legacy.qoyod.com uses `{"customer": {...}}` per the
+    # 2026-06-26 endpoint audit. `_build_contact_payload` was renamed
+    # internally but kept its Python name to minimise call-site churn.
+    p = _build_contact_payload(c)["customer"]
     assert p["name"] == "أحمد"
     assert p["phone_number"] == "+966501234567"
     assert p["email"] == "x@y.com"
@@ -196,9 +199,13 @@ def test_contact_payload_only_includes_supported_fields():
 
 
 def test_extract_contact_id_handles_wrapped_response():
-    assert _extract_contact_id({"contact": {"id": 42}}) == "42"
+    # New canonical shape on legacy.qoyod.com
+    assert _extract_contact_id({"customer": {"id": 42}}) == "42"
+    # Tolerant of the older `contact` alias for resilience.
+    assert _extract_contact_id({"contact": {"id": 17}}) == "17"
     assert _extract_contact_id({"id": "abc"}) == "abc"
-    assert _extract_contact_id({"contact_id": 7}) == "7"
+    assert _extract_contact_id({"customer_id": 7}) == "7"
+    assert _extract_contact_id({"contact_id": 9}) == "9"
     assert _extract_contact_id(None) is None
 
 
@@ -222,7 +229,7 @@ class _FakeAPIClient:
                 response_excerpt="…",
                 endpoint="POST /contacts",
             )
-        return {"contact": {"id": self.return_id, "name": payload["contact"]["name"]}}
+        return {"customer": {"id": self.return_id, "name": payload.get("customer", payload.get("contact", {})).get("name")}}
 
 
 @pytest.mark.asyncio

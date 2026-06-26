@@ -111,10 +111,13 @@ class DryRunQoyodClient:
         return f"DRY:{kind}:{h}"
 
     async def create_contact(self, payload, *, idem):
-        cid = self._fake("contact", payload.get("contact") or payload)
-        self.calls.append({"endpoint": "POST /contacts", "idem": idem,
+        # Accept both "customer" (preferred legacy.qoyod.com) and
+        # "contact" (older alias) so existing tests keep passing.
+        body = payload.get("customer") or payload.get("contact") or payload
+        cid = self._fake("contact", body)
+        self.calls.append({"endpoint": "POST /customers", "idem": idem,
                            "payload": payload, "returned_id": cid})
-        return {"contact": {"id": cid}}
+        return {"customer": {"id": cid}}
 
     async def create_product(self, payload, *, idem):
         pid = self._fake("product", payload.get("product") or payload)
