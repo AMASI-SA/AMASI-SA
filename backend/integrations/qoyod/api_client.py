@@ -190,6 +190,17 @@ class QoyodAPIClient:
     async def list_taxes(self) -> Any:
         return await self._request("GET", "/taxes")
 
+    async def list_products(self, *, page: int = 1, limit: int = 50) -> Any:
+        """GET /products — used by Go-Live Readiness to estimate how many
+        SKUs already exist in Qoyod before we begin creating new ones."""
+        return await self._request(
+            "GET", "/products", params={"page": page, "limit": limit})
+
+    async def list_contacts(self, *, page: int = 1, limit: int = 50) -> Any:
+        """GET /contacts — same purpose as `list_products` but for customers."""
+        return await self._request(
+            "GET", "/contacts", params={"page": page, "limit": limit})
+
     async def create_contact(self, payload: dict, *, idem: str) -> Any:
         return await self._request(
             "POST", "/contacts", json_body=payload, idempotency_key=idem)

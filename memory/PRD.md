@@ -1,5 +1,71 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## QYD-GO — Production Readiness Layer (2026-06-26)
+Independent, read-only verification layer. NO new business logic; refuses to let
+the operator flip the connector to live-mode unless every check passes.
+
+### Backend (`integrations/qoyod/go_live.py`)
+**Checklist — 11 items** (returned as `[{key,label,ok,detail,extra?}]`):
+1. `api_key`              — credentials saved + fingerprint visible.
+2. `branch`               — `default_branch_id` set.
+3. `tax`                  — `default_tax_id` set.
+4. `payment_mapping`      — at least one mapping AND all observed PMs mapped.
+5. `product_mapping`      — local SKU mappings exist (or DryRun will create).
+6. `customer_mapping`     — local customer mappings exist (or DryRun will create).
+7. `dry_run`              — `dry_run_mode==True` NOW AND ≥1 completed dry-run row.
+8. `outstanding_failures` — no rows stuck in DEAD_LETTER or PARTIAL_FAILURE.
+9. `eligible_orders`      — ≥1 eligible row in NORMALIZED / CUSTOMER_RESOLVED.
+10. `products_lookup`     — live GET /products against Qoyod succeeds.
+11. `customers_lookup`    — live GET /contacts against Qoyod succeeds.
+
+**Report — 8 numbers** (the operator stares at these before clicking activate):
+- `eligible_orders_count`, `products_needing_creation`, `products_already_in_qoyod`,
+  `qoyod_products_total`, `customers_needing_creation`, `customers_already_local`,
+  `qoyod_contacts_total`, `unmapped_payment_methods` (+count), `would_fail_if_live_now`,
+  `dry_run_mode_currently_on`.
+
+**Activation** (`activate_production_mode()`):
+- Re-runs the checklist server-side (defense-in-depth — UI can't bypass).
+- On failure → raises `ActivationBlocked(reasons=…, items=…)` → HTTP 409 with the
+  closed list of failing labels for the toast.
+- On success → atomic `update_one(..., $set:{enabled:true, dry_run_mode:false,
+  activated_at:now()})`.
+
+### API endpoints
+- `GET  /api/integrations/qoyod/go-live/checklist`
+- `GET  /api/integrations/qoyod/go-live/report`
+- `POST /api/integrations/qoyod/go-live/activate`
+
+### API client extension
+- `list_products(page,limit)` + `list_contacts(page,limit)` added to `QoyodAPIClient`
+  (used only by Go-Live lookup checks).
+
+### Frontend (`QoyodGoLive.jsx` at `/integrations/qoyod/go-live`)
+- Top status banner: traffic-light (emerald = live, blue = ready, amber = blocked) +
+  ACTIVATE button disabled until `all_passed`.
+- Report card: 8 stat cells with tone (rose for ‘would_fail’, amber for ‘needs work’,
+  emerald for safe).
+- Checklist card: 2-column grid of items with ✓/✗ circle + detail text +
+  "X/11 اجتاز" badge.
+- Confirmation dialog before activation; toast surfaces the failing reasons on 409.
+- New sidebar entry under Integrations → قيود: "🚀 جاهزية الإنتاج (QYD-GO)" with
+  testid `nav-qoyod-go-live` (above Invoices).
+
+### Tests — 10/10 ✅ (full Qoyod suite: 140/140)
+- `tests/test_qyd_go_production_readiness.py` covers:
+  - Checklist happy path (full readiness → all_passed=true).
+  - Each negative path: missing api_key / missing branch+tax / unmapped payment /
+    dry_run disabled / outstanding DEAD_LETTER / Qoyod lookup error.
+  - Report: products/customers creation-vs-mapped counts, unmapped PMs, would_fail.
+  - Activation: blocked when checklist fails (settings stay unchanged) ·
+    succeeds when all pass (flips dry_run_mode→false + enabled→true atomically).
+
+### Live curl + UI smoke ✅
+- `GET /go-live/checklist` → 11 items rendered in Arabic with ✓/✗.
+- `GET /go-live/report` → all 8 fields populated.
+- `POST /go-live/activate` (with one check failing) → 409 `activation_blocked` with
+  the failing labels in `detail.reasons`.
+
 ## Qoyod MVP — Day 5 + Pre-Day-5 Safety Rules (2026-06-26)
 **User-locked safety rules** (implemented BEFORE any live Qoyod write):
 

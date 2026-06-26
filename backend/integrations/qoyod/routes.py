@@ -41,6 +41,10 @@ from integrations.qoyod.webhook import attach_webhook_routes
 from integrations.qoyod.pipeline import (
     process_pending_normalized, process_pending_customer_resolved, day4_report,
 )
+from integrations.qoyod.go_live import (
+    go_live_checklist, go_live_report,
+    activate_production_mode, ActivationBlocked,
+)
 
 
 # MVP runs single-tenant; we still derive user_id from the auth layer
@@ -369,5 +373,30 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def reports_day4(user=Depends(current_user)):
         tenant = _tenant_id(user)
         return {"ok": True, "report": await day4_report(db, tenant)}
+
+    # ── QYD-GO — Production Readiness ────────────────────────────────
+    # Three endpoints, all read-only except `activate` which only flips
+    # `dry_run_mode/enabled` once the checklist passes.
+    @router.get("/go-live/checklist")
+    async def go_live_checklist_endpoint(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        return {"ok": True, "checklist": await go_live_checklist(db, tenant)}
+
+    @router.get("/go-live/report")
+    async def go_live_report_endpoint(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        return {"ok": True, "report": await go_live_report(db, tenant)}
+
+    @router.post("/go-live/activate")
+    async def go_live_activate_endpoint(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        try:
+            return await activate_production_mode(db, tenant)
+        except ActivationBlocked as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "activation_blocked",
+                        "reasons": exc.reasons,
+                        "items":   exc.items})
 
     return router

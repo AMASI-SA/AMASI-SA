@@ -32,6 +32,7 @@ import ImageCatalog from "./pages/ImageCatalog";
 import SallaIntegration from "./pages/SallaIntegration";
 import QoyodSettings from "./pages/QoyodSettings";
 import QoyodInvoices from "./pages/QoyodInvoices";
+import QoyodGoLive from "./pages/QoyodGoLive";
 import IntegrationPlaceholder from "./pages/IntegrationPlaceholder";
 import SallaSourceComparison from "./pages/SallaSourceComparison";
 import PaymentSettlements from "./pages/PaymentSettlements";
@@ -160,6 +161,7 @@ function AppRoutes() {
             <Route path="/operations-dashboard" element={<ProtectedRoute><Layout><OperationsDashboard /></Layout></ProtectedRoute>} />
             <Route path="/integrations/custom-app" element={<ProtectedRoute><Layout><CustomAppIntegration /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/settings" element={<ProtectedRoute><Layout><QoyodSettings /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/go-live" element={<ProtectedRoute><Layout><QoyodGoLive /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/invoices" element={<ProtectedRoute><Layout><QoyodInvoices /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/products" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="منتجات قيود" subtitle="تتبع SKUs المرتبطة بمنتجات قيود وتقارير المنتجات غير المربوطة." icon="📦" phase="Day 4-5" testid="qoyod-products-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"},{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/customers" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="عملاء قيود" subtitle="إدارة ربط العملاء (هاتف/إيميل) مع جهات الاتصال في قيود." icon="👥" phase="Day 4-5" testid="qoyod-customers-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"}]} /></Layout></ProtectedRoute>} />
