@@ -1,5 +1,33 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Qoyod Fresh-Start Cleanup — Plan + Execute (2026-06-27)
+**Goal**: Simplified deletion workflow (Audit → Plan → Execute) gated by `DELETE-CONFIRM` token. No Dry-Delete; environment not yet productive.
+
+### Backend
+- **NEW `integrations/qoyod/fresh_start_cleanup.py`**:
+  - `EXPECTED_CONFIRM_TOKEN = "DELETE-CONFIRM"` (exact case-sensitive match).
+  - `PROTECTED_ENTITIES` constant lists what is NEVER touched: chart_of_accounts, branches, taxes, settings, users, financial_accounts.
+  - `build_plan()` paginates 4 entities and persists ID lists to `qoyod_fresh_start_cleanups`.
+  - `execute_cleanup()` — refuses unless token matches exactly AND a planned job exists. Deletion order: **Receipts → Invoices → Products → Customers** (FK-safe).
+  - `_delete_batch()` — continues past failures, treats 404 as success, aborts batch on 405 (Qoyod doesn't support DELETE), 100ms cushion between calls.
+  - Raises `CleanupRefused` on bad token or missing plan.
+- **API client**: added GET-only `list_invoices`/`list_receipts` and DELETE methods `delete_invoice/receipt/product/customer` (gated by cleanup module only).
+- **New endpoints**:
+  - `POST /api/integrations/qoyod/fresh-start/plan/build` — builds a plan job, returns full ID list + totals.
+  - `GET /api/integrations/qoyod/fresh-start/plan/latest` — returns latest plan (also exposes `expected_confirm_token` and `protected_entities`).
+  - `POST /api/integrations/qoyod/fresh-start/execute` — body `{job_id, confirm}`. Returns final report with `deleted` counts and `failed` array.
+
+### Frontend (`pages/QoyodFreshStart.jsx` enhancement)
+After a successful audit, three new sections appear:
+1. **🗂️ Plan section** — explicit lists of "سيُحذف فقط" (4 entities) vs "لن يُمَس إطلاقاً" (6 protected), big-numbers preview of the current plan, build/rebuild button.
+2. **🔴 Execute section** — appears only when `plan.status === "planned"`. Final warning + `DELETE-CONFIRM` text input that turns green when typed correctly. Execute button disabled until exact match.
+3. **📊 Execute Result section** — per-entity deleted counts (success cards) + a failures table (entity/id/code/message) if any. On full success, prompts navigation to Settings to disable Dry Run and send first Make.com test.
+
+### Tests
+- `tests/test_qoyod_fresh_start_cleanup.py` — 15 tests covering: token constant, protected list, ID extraction edge cases, batch happy path, 404-as-success, continue-past-failures, 405 abort, token gating (wrong/whitespace/case/missing-plan), deletion ORDER assertion, partial failure reporting, confirm-token audit trail persistence, plan building from all 4 entities.
+- Full Qoyod suite: **333 passed**, 0 regressions.
+
+
 ## Qoyod Fresh-Start Audit — READ-ONLY Snapshot (2026-06-27)
 **Goal**: Forensic audit of what already exists in Qoyod (legacy direct-Salla integration data) before Mezan becomes the sole source. STRICTLY read-only; no DELETE/PUT/PATCH.
 

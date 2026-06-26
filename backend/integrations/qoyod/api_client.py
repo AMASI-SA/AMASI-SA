@@ -254,3 +254,19 @@ class QoyodAPIClient:
         """GET /receipts — paginated. Used by Fresh-Start Audit ONLY."""
         return await self._request(
             "GET", "/receipts", params={"page": page, "limit": limit})
+
+    # ── DELETE endpoints — Fresh-Start Cleanup ONLY ─────────────────
+    # Strictly gated by `qoyod_fresh_start_cleanup.execute_cleanup`.
+    # Never call these from any other code path.
+    async def delete_invoice(self, invoice_id: str) -> Any:
+        return await self._request("DELETE", f"/invoices/{invoice_id}")
+
+    async def delete_receipt(self, receipt_id: str) -> Any:
+        return await self._request("DELETE", f"/receipts/{receipt_id}")
+
+    async def delete_product(self, product_id: str) -> Any:
+        return await self._request("DELETE", f"/products/{product_id}")
+
+    async def delete_customer(self, customer_id: str) -> Any:
+        # Qoyod uses /customers (legacy) — same path as list_contacts.
+        return await self._request("DELETE", f"/customers/{customer_id}")

@@ -149,12 +149,22 @@ export default function QoyodFreshStart() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
 
+  // Plan + Execute state
+  const [plan, setPlan] = useState(null);
+  const [planning, setPlanning] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [executing, setExecuting] = useState(false);
+  const [executeResult, setExecuteResult] = useState(null);
+
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get(
-        `${API}/integrations/qoyod/fresh-start/audit`);
-      setAudit(data?.audit || null);
+      const [auditRes, planRes] = await Promise.all([
+        axios.get(`${API}/integrations/qoyod/fresh-start/audit`),
+        axios.get(`${API}/integrations/qoyod/fresh-start/plan/latest`),
+      ]);
+      setAudit(auditRes.data?.audit || null);
+      setPlan(planRes.data?.plan || null);
     } catch (e) {
       toast.error("تعذّر تحميل التقرير");
     } finally {
@@ -185,6 +195,81 @@ export default function QoyodFreshStart() {
                   || e.message || "فشل تشغيل التقرير");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const buildPlan = async () => {
+    if (!window.confirm(
+      "سيتم بناء قائمة شاملة بكل IDs التي ستُحذف من قيود.\n"
+      + "هذه الخطوة قراءة فقط — لن يُحذف أي شيء الآن.\n"
+      + "متابعة؟"
+    )) return;
+    setPlanning(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/fresh-start/plan/build`,
+        {}, { timeout: 300000 });
+      if (data?.ok) {
+        setPlan(data.plan);
+        setConfirmText("");
+        setExecuteResult(null);
+        toast.success(
+          `تم بناء الخطة — إجمالي ${
+            (data.plan?.plan?.totals?.invoices || 0)
+            + (data.plan?.plan?.totals?.receipts || 0)
+            + (data.plan?.plan?.totals?.products || 0)
+            + (data.plan?.plan?.totals?.customers || 0)
+          } سجل`);
+      } else {
+        toast.error(data?.error?.message || "فشل بناء الخطة");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail
+                  || e.message || "فشل بناء الخطة");
+    } finally {
+      setPlanning(false);
+    }
+  };
+
+  const executePlan = async () => {
+    if (!plan?.job_id) return;
+    if (confirmText !== "DELETE-CONFIRM") {
+      toast.error("اكتب DELETE-CONFIRM بالضبط لتفعيل التنفيذ");
+      return;
+    }
+    if (!window.confirm(
+      "⚠️ هذا الحذف لا يمكن التراجع عنه.\n\n"
+      + `سيتم حذف:\n`
+      + `  • ${plan.plan.totals.receipts} سند قبض\n`
+      + `  • ${plan.plan.totals.invoices} فاتورة\n`
+      + `  • ${plan.plan.totals.products} منتج\n`
+      + `  • ${plan.plan.totals.customers} عميل\n\n`
+      + "هل تريد المتابعة؟"
+    )) return;
+    setExecuting(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/fresh-start/execute`,
+        { job_id: plan.job_id, confirm: confirmText },
+        { timeout: 600000 });
+      setExecuteResult(data);
+      if (data.ok) {
+        toast.success(
+          `اكتمل الحذف — ${data.deleted.invoices} فاتورة + `
+          + `${data.deleted.customers} عميل + `
+          + `${data.deleted.products} منتج + `
+          + `${data.deleted.receipts} سند`);
+      } else {
+        toast.warning(
+          `اكتمل الحذف مع أخطاء — ${data.failed.length} فشل`);
+      }
+      await load();
+      setConfirmText("");
+    } catch (e) {
+      toast.error(e.response?.data?.detail
+                  || e.message || "فشل التنفيذ");
+    } finally {
+      setExecuting(false);
     }
   };
 
@@ -506,20 +591,209 @@ export default function QoyodFreshStart() {
             )}
           </Section>
 
-          {/* Footer — next step */}
-          <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 mt-4"
-               data-testid="audit-next-step">
-            <h4 className="text-sm font-extrabold text-amber-900 mb-1">
-              ⚠️ الخطوة التالية
-            </h4>
-            <p className="text-[12px] text-amber-800 leading-relaxed">
-              راجع الأرقام أعلاه بعناية. لم يتم حذف أي شيء من قيود.
-              إذا أردت المضي في خطة الحذف، أخبرني بالمعايير (تاريخ الفصل،
-              ما يُحذف وما يُبقى) وسأبني مرحلة Plan (Preview قبل التنفيذ)
-              مع تأكيد <code className="font-mono bg-white px-1.5 py-0.5 rounded
-                                          border border-amber-300">DELETE-CONFIRM</code>.
-            </p>
-          </div>
+          {/* Plan + Execute sections */}
+          <Section
+            title="🗂️ مرحلة Plan — بناء قائمة الحذف"
+            subtitle="إعداد قائمة شاملة بكل IDs التي ستُحذف. خطوة قراءة فقط — لا يتم حذف أي شيء هنا.">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 mb-3">
+              <div className="text-xs font-extrabold text-emerald-900 mb-1.5">
+                ✅ سيُحذف فقط:
+              </div>
+              <ul className="text-[12px] text-emerald-800 list-disc pr-5 space-y-0.5">
+                <li>الفواتير (Invoices)</li>
+                <li>سندات القبض (Receipts)</li>
+                <li>المنتجات (Products)</li>
+                <li>العملاء (Customers)</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border border-rose-200 bg-rose-50/40 p-3 mb-3">
+              <div className="text-xs font-extrabold text-rose-900 mb-1.5">
+                🛡️ لن يُمَس إطلاقاً:
+              </div>
+              <ul className="text-[12px] text-rose-800 list-disc pr-5 space-y-0.5">
+                <li>دليل الحسابات (Chart of Accounts)</li>
+                <li>الفروع (Branches)</li>
+                <li>الضرائب (Taxes)</li>
+                <li>الإعدادات (Settings)</li>
+                <li>المستخدمون (Users)</li>
+                <li>الحسابات المالية والربط البنكي</li>
+              </ul>
+            </div>
+
+            {plan && plan.status === "planned" && (
+              <div className="rounded-xl border-2 border-sky-300 bg-sky-50 p-3 mb-3"
+                   data-testid="plan-summary">
+                <div className="text-sm font-extrabold text-sky-900 mb-2">
+                  📋 ملخص الخطة الحالية
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="bg-white rounded p-2 text-center">
+                    <div className="text-[10px] font-bold text-slate-500">فواتير</div>
+                    <div className="text-xl font-mono font-extrabold text-slate-900"
+                         data-testid="plan-invoices-count">
+                      {plan.plan.totals.invoices}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded p-2 text-center">
+                    <div className="text-[10px] font-bold text-slate-500">سندات</div>
+                    <div className="text-xl font-mono font-extrabold text-slate-900"
+                         data-testid="plan-receipts-count">
+                      {plan.plan.totals.receipts}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded p-2 text-center">
+                    <div className="text-[10px] font-bold text-slate-500">منتجات</div>
+                    <div className="text-xl font-mono font-extrabold text-slate-900"
+                         data-testid="plan-products-count">
+                      {plan.plan.totals.products}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded p-2 text-center">
+                    <div className="text-[10px] font-bold text-slate-500">عملاء</div>
+                    <div className="text-xl font-mono font-extrabold text-slate-900"
+                         data-testid="plan-customers-count">
+                      {plan.plan.totals.customers}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-[11px] text-sky-700 mt-2 font-mono">
+                  Job ID: {plan.job_id} · بُنيت في{" "}
+                  {plan.created_at
+                    ? new Date(plan.created_at).toLocaleString("ar-SA")
+                    : "—"}
+                </div>
+              </div>
+            )}
+
+            {plan && plan.status?.startsWith("executed") && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 mb-3"
+                   data-testid="plan-executed-note">
+                <div className="text-xs font-bold text-amber-900">
+                  ⚠️ آخر خطة نُفِّذت بالفعل (status:{" "}
+                  <span className="font-mono">{plan.status}</span>).
+                  لا يمكن إعادة تنفيذها — ابنِ خطة جديدة لاحتساب المتبقي.
+                </div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={buildPlan}
+              disabled={planning}
+              data-testid="btn-build-plan"
+              className="px-4 py-2 text-sm font-bold rounded-lg bg-slate-900 text-white hover:bg-black disabled:opacity-50">
+              {planning
+                ? "جاري البناء…"
+                : (plan ? "🔄 إعادة بناء الخطة" : "🗂️ بناء خطة الحذف")}
+            </button>
+          </Section>
+
+          {/* Execute */}
+          {plan && plan.status === "planned" && (
+            <Section
+              title="🔴 مرحلة Execute — تنفيذ الحذف الفعلي"
+              subtitle="هذه الخطوة لا يمكن التراجع عنها. اكتب DELETE-CONFIRM بالضبط للتفعيل.">
+              <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 mb-3"
+                   data-testid="execute-warning">
+                <div className="text-sm font-extrabold text-rose-900">
+                  ⚠️ تحذير نهائي
+                </div>
+                <p className="text-[12px] text-rose-800 mt-1 leading-relaxed">
+                  سيتم استدعاء DELETE على Qoyod API لكل ID في القائمة.
+                  ترتيب التنفيذ: سندات القبض ← الفواتير ← المنتجات ← العملاء.
+                  لا يوجد Rollback من جهة Qoyod.
+                </p>
+              </div>
+
+              <label className="block">
+                <span className="text-xs font-bold text-slate-700">
+                  للتأكيد، اكتب <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-300">DELETE-CONFIRM</code> بالحروف الكبيرة:
+                </span>
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="DELETE-CONFIRM"
+                  dir="ltr"
+                  data-testid="input-confirm-token"
+                  className={`mt-1.5 w-full px-3 py-2.5 border-2 rounded-lg text-sm font-mono
+                              ${confirmText === "DELETE-CONFIRM"
+                                ? "border-emerald-400 bg-emerald-50"
+                                : "border-slate-300"}`}
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={executePlan}
+                disabled={executing || confirmText !== "DELETE-CONFIRM"}
+                data-testid="btn-execute-cleanup"
+                title={confirmText !== "DELETE-CONFIRM"
+                       ? "اكتب DELETE-CONFIRM بالضبط أولاً" : ""}
+                className="mt-3 px-5 py-3 text-sm font-extrabold rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                {executing ? "جاري التنفيذ…" : "🗑️ تنفيذ الحذف النهائي"}
+              </button>
+            </Section>
+          )}
+
+          {/* Execute Result */}
+          {executeResult && (
+            <Section
+              title="📊 تقرير التنفيذ"
+              subtitle={`اكتمل في ${executeResult.duration_ms} مللي ثانية`}>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"
+                   data-testid="execute-result-cards">
+                <Card title="فواتير حُذفت"
+                  value={executeResult.deleted?.invoices ?? 0}
+                  tone="success" testid="exec-deleted-invoices" />
+                <Card title="سندات حُذفت"
+                  value={executeResult.deleted?.receipts ?? 0}
+                  tone="success" testid="exec-deleted-receipts" />
+                <Card title="منتجات حُذفت"
+                  value={executeResult.deleted?.products ?? 0}
+                  tone="success" testid="exec-deleted-products" />
+                <Card title="عملاء حُذفوا"
+                  value={executeResult.deleted?.customers ?? 0}
+                  tone="success" testid="exec-deleted-customers" />
+              </div>
+              {executeResult.failed && executeResult.failed.length > 0 ? (
+                <div className="rounded-lg border border-rose-300 bg-rose-50 p-3"
+                     data-testid="execute-failures">
+                  <div className="text-sm font-extrabold text-rose-900 mb-2">
+                    ❌ {executeResult.failed.length} عملية فشلت
+                  </div>
+                  <SamplesTable
+                    rows={executeResult.failed.slice(0, 20).map((f) => ({
+                      entity: f.entity,
+                      id:     f.id,
+                      code:   f.error?.code || "",
+                      message: f.error?.message || "",
+                    }))}
+                    testid="exec-failures-table"
+                    columns={[
+                      {key:"entity",  label:"النوع"},
+                      {key:"id",      label:"ID"},
+                      {key:"code",    label:"رمز الخطأ"},
+                      {key:"message", label:"الرسالة"},
+                    ]} />
+                </div>
+              ) : (
+                <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3"
+                     data-testid="execute-success">
+                  <div className="text-sm font-extrabold text-emerald-900">
+                    ✅ اكتمل الحذف بنجاح. حسابك في قيود جاهز الآن لاستقبال
+                    أول مزامنة من ميزان.
+                  </div>
+                  <p className="text-[12px] text-emerald-800 mt-1">
+                    الخطوة التالية: اذهب إلى{" "}
+                    <a href="/integrations/qoyod/settings"
+                       className="font-bold underline">إعدادات قيود</a>،
+                    أوقف Dry Run، وأرسل أول طلب تجريبي من Make.com.
+                  </p>
+                </div>
+              )}
+            </Section>
+          )}
         </>
       )}
 

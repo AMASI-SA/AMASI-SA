@@ -49,6 +49,10 @@ from integrations.qoyod.migration_routes import attach_migration_routes
 from integrations.qoyod.fresh_start_audit import (
     run_fresh_start_audit, latest_audit,
 )
+from integrations.qoyod.fresh_start_cleanup import (
+    build_plan, latest_plan, execute_cleanup,
+    CleanupRefused, EXPECTED_CONFIRM_TOKEN, PROTECTED_ENTITIES,
+)
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
     validate_settings_for_setup,
@@ -110,6 +114,11 @@ class SettingsPatch(BaseModel):
 
 class CredentialsRequest(BaseModel):
     api_key: str = Field(min_length=1, max_length=512)
+
+
+class FreshStartExecutePayload(BaseModel):
+    job_id:  str = Field(..., description="The plan job_id to execute")
+    confirm: str = Field(..., description="Must equal DELETE-CONFIRM")
 
 
 class TestConnectionResponse(BaseModel):
@@ -524,5 +533,46 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         tenant = _tenant_id(user)
         doc = await latest_audit(db, user_id=tenant)
         return {"ok": True, "audit": doc}
+
+    # ── Fresh-Start Cleanup — Plan + Execute (DELETE-CONFIRM gated) ─
+    @router.post("/fresh-start/plan/build")
+    async def fresh_start_plan_build(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        key = await get_api_key(db, tenant)
+        if not key:
+            raise HTTPException(400, "no_credentials")
+        try:
+            plan = await build_plan(
+                db, user_id=tenant, api_client=QoyodAPIClient(key))
+        except QoyodAPIError as exc:
+            return {"ok": False, "error": exc.to_log_dict()}
+        return {"ok": True, "plan": plan,
+                "expected_confirm_token": EXPECTED_CONFIRM_TOKEN,
+                "protected_entities": PROTECTED_ENTITIES}
+
+    @router.get("/fresh-start/plan/latest")
+    async def fresh_start_plan_latest(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        doc = await latest_plan(db, user_id=tenant)
+        return {"ok": True, "plan": doc,
+                "expected_confirm_token": EXPECTED_CONFIRM_TOKEN,
+                "protected_entities": PROTECTED_ENTITIES}
+
+    @router.post("/fresh-start/execute")
+    async def fresh_start_execute(
+        payload: FreshStartExecutePayload, user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        key = await get_api_key(db, tenant)
+        if not key:
+            raise HTTPException(400, "no_credentials")
+        try:
+            result = await execute_cleanup(
+                db, user_id=tenant,
+                job_id=payload.job_id,
+                confirm_token=payload.confirm,
+                api_client=QoyodAPIClient(key))
+        except CleanupRefused as exc:
+            raise HTTPException(400, str(exc))
+        return result
 
     return router
