@@ -288,18 +288,34 @@ export default function QoyodSettings() {
     }
   };
 
+  const [branchesMeta, setBranchesMeta] = useState({ unsupported: false, message: null });
+  const [taxesMeta,    setTaxesMeta]    = useState({ unsupported: false, message: null });
+  const [accountsMeta, setAccountsMeta] = useState({ unsupported: false, message: null });
+
   const loadCatalogs = async () => {
-    // Best-effort — silently skip if API key not configured.
-    const tryGet = async (path, setter) => {
+    // Best-effort. Each catalog may be: live list, unsupported by Qoyod
+    // (branches/taxes), or auth-scope-denied (accounts on restricted keys).
+    const tryGet = async (path, setData, setMeta) => {
       try {
         const { data } = await axios.get(`${API}/integrations/qoyod/${path}`);
-        if (data.ok) setter(data.data || []);
-      } catch (_) { /* no-op */ }
+        setData(Array.isArray(data.data) ? data.data
+                : (data.data?.accounts || data.data?.branches
+                   || data.data?.taxes || []));
+        setMeta({
+          unsupported: !!data.unsupported,
+          message: data.message || (data.error && data.error.message) || null,
+          code:    data.error?.code || null,
+        });
+      } catch (_) {
+        setMeta({ unsupported: false,
+                  message: "تعذّر الاتصال بقيود — أدخل المعرّف يدوياً.",
+                  code: "network_error" });
+      }
     };
     await Promise.all([
-      tryGet("qoyod-branches", setBranches),
-      tryGet("qoyod-accounts", setAccounts),
-      tryGet("qoyod-taxes",    setTaxes),
+      tryGet("qoyod-branches", setBranches, setBranchesMeta),
+      tryGet("qoyod-accounts", setAccounts, setAccountsMeta),
+      tryGet("qoyod-taxes",    setTaxes,    setTaxesMeta),
     ]);
   };
 
@@ -574,41 +590,64 @@ export default function QoyodSettings() {
             </select>
           </label>
           <label className="block">
-            <span className="text-xs font-bold text-slate-700">الفرع الافتراضي</span>
-            <select
+            <span className="text-xs font-bold text-slate-700">الفرع الافتراضي (Branch ID)</span>
+            <input
+              type="text"
               value={settings.default_branch_id || ""}
               onChange={(e) => patch({ default_branch_id: e.target.value || null })}
               data-testid="select-branch"
               disabled={!hasCreds}
-              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100"
-            >
-              <option value="">— اختر فرع —</option>
+              placeholder={branches.length ? "" : "1234"}
+              list="branches-list"
+              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100 font-mono"
+            />
+            <datalist id="branches-list">
               {branches.map((b) => (
                 <option key={b.id || b.value} value={b.id || b.value}>
                   {b.name_ar || b.name || b.label}
                 </option>
               ))}
-            </select>
-            {!hasCreds && (
-              <span className="text-[10px] text-slate-400">احفظ مفتاح API أولاً لجلب الفروع</span>
-            )}
+            </datalist>
+            {!hasCreds ? (
+              <span className="text-[10px] text-slate-400">احفظ مفتاح API أولاً</span>
+            ) : branchesMeta.unsupported ? (
+              <span className="text-[11px] text-amber-700 block mt-1"
+                    data-testid="branches-unsupported-hint">
+                ℹ️ Qoyod 2.0 API لا يكشف قائمة الفروع. ابحث عن Branch ID في
+                Qoyod → الإعدادات → الفروع، ثم الصقه هنا.
+              </span>
+            ) : branches.length === 0 ? (
+              <span className="text-[11px] text-slate-500 block mt-1">
+                {branchesMeta.message || "لا توجد فروع — أدخل المعرّف يدوياً."}
+              </span>
+            ) : null}
           </label>
           <label className="block">
-            <span className="text-xs font-bold text-slate-700">ضريبة القيمة المضافة الافتراضية</span>
-            <select
+            <span className="text-xs font-bold text-slate-700">ضريبة القيمة المضافة الافتراضية (Tax ID)</span>
+            <input
+              type="text"
               value={settings.default_tax_id || ""}
               onChange={(e) => patch({ default_tax_id: e.target.value || null })}
               data-testid="select-tax"
               disabled={!hasCreds}
-              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100"
-            >
-              <option value="">— اختر ضريبة —</option>
+              placeholder={taxes.length ? "" : "5678"}
+              list="taxes-list"
+              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100 font-mono"
+            />
+            <datalist id="taxes-list">
               {taxes.map((t) => (
                 <option key={t.id || t.value} value={t.id || t.value}>
                   {t.name_ar || t.name || `${t.rate}%`}
                 </option>
               ))}
-            </select>
+            </datalist>
+            {taxesMeta.unsupported && (
+              <span className="text-[11px] text-amber-700 block mt-1"
+                    data-testid="taxes-unsupported-hint">
+                ℹ️ Qoyod 2.0 API لا يكشف قائمة الضرائب. ابحث عن Tax ID في
+                Qoyod → الإعدادات → الضرائب، ثم الصقه هنا.
+              </span>
+            )}
           </label>
         </div>
       </Section>

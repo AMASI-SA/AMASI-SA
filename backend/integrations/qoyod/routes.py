@@ -268,7 +268,35 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             )
 
     # ── Catalogs proxies — read-only convenience for the UI ──────────
+    # Note: As of Qoyod API 2.0 (legacy.qoyod.com), `/branches` and
+    # `/taxes` are NOT exposed as REST resources — branches live as
+    # "Locations" in the Qoyod UI and tax rates are inlined in invoice
+    # payloads. We short-circuit those proxies so the operator sees a
+    # clear "unsupported" marker instead of an opaque 404.
+    _UNSUPPORTED_CATALOGS = {
+        "list_branches": {
+            "code": "qoyod_catalog_not_exposed",
+            "message": "Qoyod 2.0 API does not expose a /branches "
+                       "endpoint — enter the Branch ID manually from "
+                       "Qoyod → الإعدادات → الفروع.",
+            "qoyod_ui_path": "/settings/branches",
+        },
+        "list_taxes": {
+            "code": "qoyod_catalog_not_exposed",
+            "message": "Qoyod 2.0 API does not expose a /taxes endpoint "
+                       "— enter the Tax ID manually from Qoyod → "
+                       "الإعدادات → الضرائب.",
+            "qoyod_ui_path": "/settings/taxes",
+        },
+    }
+
     async def _proxied_catalog(tenant: str, fetcher_name: str):
+        # Short-circuit endpoints that Qoyod does NOT expose. The UI
+        # falls back to free-text input for the corresponding ID.
+        if fetcher_name in _UNSUPPORTED_CATALOGS:
+            return {"ok": True, "data": [],
+                    "unsupported": True,
+                    **_UNSUPPORTED_CATALOGS[fetcher_name]}
         key = await get_api_key(db, tenant)
         if not key:
             raise HTTPException(400, "no_credentials")
@@ -276,9 +304,10 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             client = QoyodAPIClient(key)
             fn = getattr(client, fetcher_name)
             data = await fn()
-            return {"ok": True, "data": data}
+            return {"ok": True, "data": data, "unsupported": False}
         except QoyodAPIError as exc:
-            return {"ok": False, "error": exc.to_log_dict()}
+            return {"ok": False, "unsupported": False,
+                    "error": exc.to_log_dict()}
 
     @router.get("/qoyod-branches")
     async def qoyod_branches(user=Depends(current_user)):
