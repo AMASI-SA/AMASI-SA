@@ -1,5 +1,32 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## P0 Pre-Go-Live: Dynamic Salla Statuses + Product Type Label (2026-06-27)
+
+### 1) Order-status trigger picker is now DYNAMIC
+- **Backend** `routes.py` — new endpoint `GET /api/integrations/qoyod/salla-order-statuses`:
+  - Primary source: calls Salla `GET /orders/statuses` via `call_salla()` (auto-refresh token).
+  - Each row normalized to `{id, slug (lowercase), name, name_en, type, is_system}`.
+  - Fallback when Salla disconnected/unreachable: scans `unified_orders` for distinct `order_status` slugs + Arabic names from `raw.status.name`.
+  - Response includes `source: "salla_api" | "fallback"` and structured `error` so the UI can inform the operator.
+- **Frontend** `QoyodSettings.jsx`:
+  - Removed hardcoded `TRIGGER_STATUS_OPTIONS` (completed/delivered/paid/shipped).
+  - New `loadSallaStatuses()` populates the picker from the endpoint.
+  - Source badge: ✓ من Salla API (emerald) أو ⚠ من الطلبات المرصودة (amber).
+  - Each row shows the merchant's actual Arabic status name + the immutable `slug:` (small mono) underneath.
+  - Hint clarifies: "النظام يستخدم slug الحالة من Salla — تغيير الاسم الظاهر في Salla لا يكسر التكامل."
+  - 🔄 Reload button per-section to force a fresh fetch.
+  - Persisted to settings as lowercase slug array (existing pipeline already matches on `dto.order_status` which is also lowercase canonical — no behaviour change downstream).
+- **Tests**: `test_qoyod_salla_order_statuses.py` — 3 tests (Salla success path normalization, fallback to observed orders, slug-not-name persistence).
+
+### 2) Product Type label change (cosmetic only)
+- **Frontend** `QoyodSettings.jsx` — the `PRODUCT_TYPE_OPTIONS` row for technical value `"service"` now reads:
+  - **"منتجات بدون إدارة مخزون في قيود — موصى به لربط ميزان"** (was "خدمات (Service) — موصى به للمتاجر الرقمية").
+- The wire value sent to Qoyod remains `service`. Pipeline / invoice builder unchanged.
+
+### Tests
+- Full Qoyod suite: **339 passed**, 0 regressions.
+
+
 ## P0 First Production Dry Run Readiness (2026-06-27)
 **Goal**: Final pre-production polish before flipping Dry Run off.
 

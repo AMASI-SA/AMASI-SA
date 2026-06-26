@@ -26,16 +26,15 @@ import { toast } from "sonner";
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
 const PRODUCT_TYPE_OPTIONS = [
-  { value: "service",     label: "خدمات (Service) — موصى به للمتاجر الرقمية" },
+  { value: "service",     label: "منتجات بدون إدارة مخزون في قيود — موصى به لربط ميزان" },
   { value: "inventory",   label: "مخزنية (Inventory) — للمتاجر بمستودع وSKUs" },
   { value: "per_product", label: "حسب إعداد كل منتج (Per Product)" },
 ];
 
-const TRIGGER_STATUS_OPTIONS = [
-  { value: "completed", label: "تم التنفيذ (completed) — الموصى به" },
-  { value: "delivered", label: "تم التوصيل (delivered)" },
-  { value: "paid",      label: "مدفوع (paid)" },
-  { value: "shipped",   label: "تم الشحن (shipped)" },
+// Hardcoded fallback ONLY when Salla API + observed orders are both
+// unavailable. Real options come from `/salla-order-statuses`.
+const FALLBACK_TRIGGER_STATUSES = [
+  { slug: "completed", name: "تم التنفيذ" },
 ];
 
 const INVOICE_DATE_OPTIONS = [
@@ -675,6 +674,9 @@ export default function QoyodSettings() {
 
   const [pmCatalogue, setPmCatalogue] = useState([]);
   const [pmUsed,      setPmUsed]      = useState([]);
+  const [sallaStatuses, setSallaStatuses] = useState([]);
+  const [statusesSource, setStatusesSource] = useState(null);
+  const [statusesError,  setStatusesError]  = useState(null);
 
   // ── Loaders ────────────────────────────────────────────────────
   const loadSettings = async () => {
@@ -720,6 +722,21 @@ export default function QoyodSettings() {
     }
   };
 
+  const loadSallaStatuses = async () => {
+    try {
+      const { data } = await axios.get(
+        `${API}/integrations/qoyod/salla-order-statuses`);
+      setSallaStatuses(data?.statuses || []);
+      setStatusesSource(data?.source || null);
+      setStatusesError(data?.error || null);
+    } catch (_) {
+      setSallaStatuses([]);
+      setStatusesSource("error");
+      setStatusesError({ code: "network_error",
+                         message: "تعذّر الاتصال بـ Salla" });
+    }
+  };
+
   const revalidate = async () => {
     // Server-side re-check as a fail-safe on save.
     try {
@@ -738,7 +755,7 @@ export default function QoyodSettings() {
       if (s?.credentials?.fingerprint) {
         await loadCatalogs();
       }
-      await Promise.all([loadPaymentMethods()]);
+      await Promise.all([loadPaymentMethods(), loadSallaStatuses()]);
     } catch (_) {
       toast.error("تعذّر تحميل الإعدادات");
     } finally { setLoading(false); }
@@ -1145,37 +1162,84 @@ export default function QoyodSettings() {
                subtitle="سياسة تشغيل الفاتورة وأنواع المنتجات">
         <div className="grid md:grid-cols-2 gap-3">
           <div className="md:col-span-2">
-            <span className="text-xs font-bold text-slate-700">
-              حالات الطلب التي تطلق إنشاء الفاتورة
-            </span>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold text-slate-700">
+                حالات الطلب التي تطلق إنشاء الفاتورة
+              </span>
+              <div className="flex items-center gap-2">
+                {statusesSource === "salla_api" && (
+                  <span className="text-[10px] text-emerald-700 font-bold"
+                        data-testid="trigger-statuses-source-api">
+                    ✓ من Salla API
+                  </span>
+                )}
+                {statusesSource === "fallback" && (
+                  <span className="text-[10px] text-amber-700 font-bold"
+                        data-testid="trigger-statuses-source-fallback">
+                    ⚠ من الطلبات المرصودة (Salla غير متاح)
+                  </span>
+                )}
+                <button type="button" onClick={loadSallaStatuses}
+                        data-testid="btn-reload-statuses"
+                        className="text-[10px] font-bold text-sky-700 hover:underline">
+                  🔄 تحديث
+                </button>
+              </div>
+            </div>
             <p className="text-[11px] text-slate-500 mt-0.5 mb-2">
               تُنشأ الفاتورة في قيود فقط عند انتقال الطلب لأحد هذه الحالات.
+              النظام يستخدم <code className="font-mono bg-slate-100 px-1 rounded">slug</code> الحالة
+              من Salla — تغيير الاسم الظاهر في Salla لا يكسر التكامل.
             </p>
-            <div className="grid grid-cols-2 gap-1.5" data-testid="trigger-statuses-list">
-              {TRIGGER_STATUS_OPTIONS.map((o) => {
+            {statusesError && (
+              <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 mb-2"
+                   data-testid="trigger-statuses-error">
+                {statusesError.message}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-1.5"
+                 data-testid="trigger-statuses-list">
+              {(sallaStatuses.length > 0 ? sallaStatuses
+                                          : FALLBACK_TRIGGER_STATUSES)
+                .map((s) => {
                 const list = Array.isArray(settings.invoice_trigger_statuses)
                   ? settings.invoice_trigger_statuses
                   : (settings.invoice_trigger_status ? [settings.invoice_trigger_status] : ["completed"]);
-                const checked = list.includes(o.value);
+                const slug = (s.slug || "").toLowerCase();
+                const checked = list.includes(slug);
                 return (
-                  <label key={o.value}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer border
+                  <label key={slug}
+                    className={`flex items-start gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer border
                                 ${checked ? "bg-emerald-50 border-emerald-300 text-emerald-900"
                                           : "bg-white border-slate-200 hover:bg-slate-50"}`}
-                    data-testid={`trigger-status-${o.value}`}>
+                    data-testid={`trigger-status-${slug}`}>
                     <input type="checkbox" checked={checked}
                       onChange={(e) => {
                         const next = e.target.checked
-                          ? Array.from(new Set([...list, o.value]))
-                          : list.filter((v) => v !== o.value);
+                          ? Array.from(new Set([...list, slug]))
+                          : list.filter((v) => v !== slug);
                         patch({ invoice_trigger_statuses: next.length ? next : ["completed"] });
                       }}
-                      className="h-4 w-4 accent-emerald-600" />
-                    <span className="font-medium">{o.label}</span>
+                      className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                    <span className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{s.name}</div>
+                      <div className="text-[10px] font-mono text-slate-500 truncate">
+                        slug: {slug}
+                        {s.id && ` · id: ${s.id}`}
+                        {s.is_system && " · system"}
+                      </div>
+                    </span>
                   </label>
                 );
               })}
             </div>
+            {sallaStatuses.length === 0 && (
+              <div className="text-[11px] text-slate-500 italic mt-2"
+                   data-testid="trigger-statuses-empty">
+                لم نتمكن من جلب أي حالات. سنستخدم <code className="font-mono">completed</code> افتراضياً.
+                تأكّد من اتصال Salla أو وجود طلبات مرصودة.
+              </div>
+            )}
           </div>
 
           <label className="block">

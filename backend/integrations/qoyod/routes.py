@@ -56,6 +56,7 @@ from integrations.qoyod.fresh_start_cleanup import (
 from integrations.qoyod.first_sync_monitor import (
     list_recent_for_monitor, get_row_for_monitor,
 )
+from salla_integration.service import call_salla, SallaError
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
     validate_settings_for_setup,
@@ -598,5 +599,62 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         if not row:
             raise HTTPException(404, "trace_id_not_found")
         return {"ok": True, "row": row}
+
+    # ── Salla Order Statuses — dynamic source for the trigger picker ─
+    # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the
+    # tenant's actual status catalogue from Salla so custom statuses
+    # are also selectable. Falls back to observed statuses from
+    # `unified_orders` when Salla API is unreachable.
+    @router.get("/salla-order-statuses")
+    async def salla_order_statuses(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        statuses: list[dict] = []
+        source = "salla_api"
+        error: Optional[dict] = None
+        try:
+            resp = await call_salla(db, tenant, "GET", "/orders/statuses")
+            data = resp.get("data") if isinstance(resp, dict) else None
+            if isinstance(data, list):
+                for s in data:
+                    if not isinstance(s, dict):
+                        continue
+                    slug = (s.get("slug") or s.get("code")
+                            or s.get("name") or "").strip()
+                    if not slug:
+                        continue
+                    statuses.append({
+                        "id":    s.get("id"),
+                        "slug":  slug.lower(),
+                        "name":  s.get("name") or slug,
+                        "name_en": s.get("name_en"),
+                        "type":  s.get("type"),
+                        "is_system": s.get("type") == "system",
+                    })
+        except SallaError as exc:
+            error = {"code": "salla_unavailable", "message": str(exc),
+                     "needs_reauth": getattr(exc, "needs_reauth", False)}
+            source = "fallback"
+        # Fallback: distinct statuses observed in unified_orders.
+        if not statuses:
+            seen: set[str] = set()
+            async for o in db.unified_orders.find(
+                {"user_id": tenant},
+                {"order_status": 1, "raw.status.slug": 1,
+                 "raw.status.name": 1, "_id": 0},
+            ):
+                slug = (o.get("order_status") or "").strip().lower()
+                if slug and slug not in seen:
+                    seen.add(slug)
+                    raw_status = ((o.get("raw") or {}).get("status") or {})
+                    statuses.append({
+                        "id":   None,
+                        "slug": slug,
+                        "name": raw_status.get("name") or slug,
+                        "name_en": None,
+                        "type": "observed",
+                        "is_system": False,
+                    })
+        return {"ok": True, "statuses": statuses,
+                "source": source, "error": error}
 
     return router
