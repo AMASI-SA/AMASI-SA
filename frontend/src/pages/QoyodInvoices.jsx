@@ -205,6 +205,76 @@ function ReconciliationCard({ recon, loading, onDrillDown }) {
 }
 
 
+// ─── Day 4 Report Card (Eligibility & Resolution outcomes) ───────────
+function Day4ReportCard({ report, loading, onProcessNormalized, onProcessCustomerResolved, running }) {
+  if (loading) {
+    return <Card title="تقرير Day 4 — أهلية وحل العميل"><span className="text-sm text-slate-500">جاري التحميل…</span></Card>;
+  }
+  if (!report) return null;
+  const t = report.totals || {};
+  const sr = report.skipped_reasons || {};
+  const dl = report.dead_letter_by_stage || {};
+  return (
+    <Card
+      title="تقرير Day 4 — مراجعة قبل بدء الإرسال الفعلي"
+      subtitle="إحصاء لمخرجات قواعد العمل وحل العميل عبر جميع الطلبات المُستقبَلة."
+      testid="qoyod-day4-report-card"
+    >
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <StatCell label="استُلمت (NORMALIZED)" value={t.normalized} testid="d4-stat-normalized" />
+        <StatCell label="جاهز للعميل" value={t.customer_resolved} tone="amber" testid="d4-stat-resolved" />
+        <StatCell label="مكتملة" value={t.completed} tone="emerald" testid="d4-stat-completed" />
+        <StatCell label="تخطّى" value={t.skipped} testid="d4-stat-skipped" />
+        <StatCell label="Dead Letter" value={t.dead_letter} tone="rose" testid="d4-stat-deadletter" />
+        <StatCell label="فشل جزئي" value={t.partial_failure} tone="orange" testid="d4-stat-partial" />
+      </div>
+      {Object.keys(sr).length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-bold text-slate-700 mb-2">أسباب التخطّي:</p>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(sr).map(([reason, n]) => (
+              <Pill key={reason} tone="slate">{(REASON_AR && REASON_AR[reason]) || reason} · {n}</Pill>
+            ))}
+          </div>
+        </div>
+      )}
+      {Object.keys(dl).length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-bold text-slate-700 mb-2">Dead Letter — حسب آخر مرحلة فشل:</p>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(dl).map(([stage, n]) => (
+              <Pill key={stage} tone="rose">{(STAGE_AR && STAGE_AR[stage]) || stage} · {n}</Pill>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
+        <button
+          type="button"
+          onClick={onProcessNormalized}
+          disabled={running}
+          className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold transition disabled:opacity-50"
+          data-testid="run-process-normalized">
+          ⚙️ تشغيل: NORMALIZED → CUSTOMER_RESOLVED
+        </button>
+        <button
+          type="button"
+          onClick={onProcessCustomerResolved}
+          disabled={running}
+          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition disabled:opacity-50"
+          data-testid="run-process-customer-resolved">
+          🚀 تشغيل: CUSTOMER_RESOLVED → INVOICE → COMPLETED
+        </button>
+        <span className="text-[11px] text-slate-500">
+          (يحترم Dry Run Mode + Pre-flight + Payload Snapshot)
+        </span>
+      </div>
+    </Card>
+  );
+}
+
+
+
 function ComplianceAlertCard({ summary, loading }) {
   if (loading) {
     return <Card title="مراقبة الامتثال (Compliance Watch)"><span className="text-sm text-slate-500">جاري التحميل…</span></Card>;
@@ -565,22 +635,27 @@ export default function QoyodInvoices() {
   const [loadingRecon,   setLoadingRecon]   = useState(true);
   const [loadingOrphans, setLoadingOrphans] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
+  const [loadingReport,  setLoadingReport]  = useState(true);
+  const [running,        setRunning]        = useState(false);
   const [summary, setSummary] = useState(null);
   const [recon,   setRecon]   = useState(null);
+  const [report,  setReport]  = useState(null);
   const [orphans, setOrphans] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [selected, setSelected] = useState(null);
 
   const loadAll = async () => {
     try {
-      const [s, r, o, inv] = await Promise.all([
+      const [s, r, rep, o, inv] = await Promise.all([
         axios.get(`${API}/integrations/qoyod/compliance/summary`),
         axios.get(`${API}/integrations/qoyod/compliance/reconciliation`),
+        axios.get(`${API}/integrations/qoyod/reports/day4`),
         axios.get(`${API}/integrations/qoyod/compliance/orphan-orders?limit=200`),
         axios.get(`${API}/integrations/qoyod/invoices?limit=100`),
       ]);
       setSummary(s.data?.summary || null);
       setRecon(r.data?.reconciliation || null);
+      setReport(rep.data?.report || null);
       setOrphans(o.data?.items || []);
       setInvoices(inv.data?.items || []);
     } catch (e) {
@@ -588,8 +663,24 @@ export default function QoyodInvoices() {
     } finally {
       setLoadingSummary(false);
       setLoadingRecon(false);
+      setLoadingReport(false);
       setLoadingOrphans(false);
       setLoadingInvoices(false);
+    }
+  };
+
+  const runPipeline = async (endpoint, label) => {
+    setRunning(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/pipeline/${endpoint}?limit=25`);
+      const c = data?.counts || {};
+      toast.success(`${label}: ${data?.processed || 0} طلب · ${JSON.stringify(c)}`);
+      await loadAll();
+    } catch (e) {
+      toast.error(`تعذّر تشغيل ${label}`);
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -636,6 +727,13 @@ export default function QoyodInvoices() {
           const el = document.querySelector('[data-testid="qoyod-orphans-table"], [data-testid="qoyod-orphans-empty"]');
           if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
+      />
+      <Day4ReportCard
+        report={report}
+        loading={loadingReport}
+        running={running}
+        onProcessNormalized={() => runPipeline("process-normalized", "Day 4")}
+        onProcessCustomerResolved={() => runPipeline("process-customer-resolved", "Day 5")}
       />
       <ComplianceAlertCard summary={summary} loading={loadingSummary} />
       <OrphanOrdersSection orphans={orphans} loading={loadingOrphans} onOpen={openInvoice} />

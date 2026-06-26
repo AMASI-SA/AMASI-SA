@@ -1,5 +1,92 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Qoyod MVP — Day 5 + Pre-Day-5 Safety Rules (2026-06-26)
+**User-locked safety rules** (implemented BEFORE any live Qoyod write):
+
+### 1. Dry Run Mode (`settings.dry_run_mode: bool`)
+- Master toggle in `QoyodSettings.jsx` (🧪 وضع التشغيل الجاف).
+- New `DryRunQoyodClient` is a drop-in replacement for `QoyodAPIClient` with the
+  same async interface (`create_contact / create_product / create_invoice / create_receipt`).
+- Returns deterministic fake ids of the form `DRY:<entity>:<sha8>` so downstream stages
+  still build receipt payloads correctly. Records every "POST" it WOULD make in `self.calls`.
+- The orchestrator picks the client based on `is_dry_run_mode(settings)`.
+- Rows complete the pipeline fully — payloads snapshotted, ledger rows written with
+  `dry_run=true` + `status="pending"`. Audit fields populated identically to live mode.
+
+### 2. Pre-flight Checklist (`preflight.py`)
+Six required checks, ALL must pass before any invoice POST:
+  1. **customer**   — `qoyod_customer_id` populated.
+  2. **products**   — every line item has a `qoyod_product_id`.
+  3. **tax**        — `default_tax_id` configured OR all items carry `tax_amount`.
+  4. **payment**    — Salla method present AND mapped to a Qoyod account.
+  5. **status**     — canonical order_status in `invoice_trigger_statuses`.
+  6. **idempotency**— no prior `status="sent"` invoice row (when `trigger_once_only=True`).
+Failure → row routes through `FAILED_INVOICE → DEAD_LETTER` with the full `preflight.failures[]`
+recorded in `pipeline_error.preflight` for diagnosis.
+
+### 3. Payload Snapshot
+- Invoice payload written to `row.qoyod_payloads.invoice` + `invoice_snapshot_at` BEFORE the
+  POST attempt — same for receipt. Survives even if Qoyod returns 5xx mid-call.
+- Snapshots are full Qoyod request bodies (not the canonical DTO) so the operator can
+  diff-test against a future Qoyod API change.
+
+### 4. Partial Failure (`PARTIAL_FAILURE` terminal stage)
+- New terminal stage in `state_machine.py`. Added to `TERMINAL_STAGES`. The edge
+  `FAILED_RECEIPT → PARTIAL_FAILURE` is the ONLY path in.
+- When invoice POST succeeds but receipt POST raises → row goes
+  `INVOICE_CREATED → FAILED_RECEIPT → PARTIAL_FAILURE` (NOT DEAD_LETTER — invoice IS in Qoyod).
+- `qoyod_invoices.status="invoice_sent_receipt_failed"`, `pipeline_stage="PARTIAL_FAILURE"`,
+  `last_failed_stage="FAILED_RECEIPT"`, `last_success_stage="INVOICE_CREATED"`.
+
+## Day 5 — Pipeline Completion (4b → 4c → 4d)
+
+### New backend modules
+- `product_resolver.py` — `resolve_products()` walks `dto.items`, hits
+  `qoyod_products_mapping` first, creates in Qoyod on miss with idempotency
+  key `mzn-{trace}-product-{sku}`. Builds product payload from `default_product_type`.
+  `ProductsResolutionResult.items` carries per-sku status.
+- `invoice_builder.py` — pure `build_invoice_payload()` / `build_receipt_payload()`,
+  `DryRunQoyodClient`, `is_dry_run_mode()`. Maps DTO line items → Qoyod line_items with
+  resolved product ids + `default_tax_id`. Receipt resolves `account_id` from
+  `payment_method_mapping`.
+- `preflight.py` — pure `run()` returning `PreflightResult(passed, failures)`.
+- `pipeline.py` extended with `process_customer_resolved_row()` chain:
+  `CUSTOMER_RESOLVED → PRODUCT_RESOLVED → (preflight) → INVOICE_CREATED → RECEIPT_CREATED → COMPLETED`,
+  with the three safety nets above wired into every hop. Also `process_pending_customer_resolved()`
+  batch driver and `day4_report()` aggregation.
+
+### New API endpoints
+- `POST /api/integrations/qoyod/pipeline/process-customer-resolved?limit=25`
+  — drains CUSTOMER_RESOLVED rows up to limit.
+- `GET  /api/integrations/qoyod/reports/day4`
+  — aggregates `by_stage`, `skipped_reasons`, `dead_letter_by_stage`, `totals`.
+
+### Frontend
+- `QoyodSettings.jsx` — new Dry Run toggle (`data-testid="toggle-dry-run-mode"`).
+- `QoyodInvoices.jsx` — new **Day 4 Report Card** (`qoyod-day4-report-card`):
+  6 stat cells (normalized/customer_resolved/completed/skipped/dead_letter/partial_failure)
+  + skipped-reason pills + dead-letter-by-stage pills
+  + 2 action buttons (`run-process-normalized` blue, `run-process-customer-resolved` green)
+  with hint "يحترم Dry Run Mode + Pre-flight + Payload Snapshot".
+- Reconciliation + Compliance + Orphans + Invoices Tables unchanged.
+
+### Tests — 130/130 ✅
+- `tests/test_qoyod_day5_invoice_receipt.py` — **15/15** new tests:
+  - State-machine: PARTIAL_FAILURE terminal + FAILED_RECEIPT edge.
+  - Preflight: 6 checks (passes / each fails individually).
+  - Payload builders: invoice/receipt include all required fields, resolve payment account.
+  - DryRunQoyodClient: records calls, returns deterministic fake ids.
+  - E2E: dry-run completes without POST + payloads snapshotted +
+    `pending` ledger row · preflight blocks on missing tax · receipt failure routes to
+    PARTIAL_FAILURE + ledger reflects split state · snapshot timestamps present ·
+    day4_report aggregates correctly.
+- All prior suites unchanged: Day1×28, State Machine×24, Compliance×11, Day3×28, Day4×25.
+
+### Live UI smoke ✅
+- Day 4 Report card visible at top of `/integrations/qoyod/invoices` with 6 stat cells.
+- Both action buttons render with correct test ids.
+- Sidebar sub-grouping intact.
+
 ## Qoyod MVP — Day 4 — Business Rules + Customer Resolution (2026-06-26)
 **User-locked Invoice Trigger Policy (foundational rule):**
 ```

@@ -139,6 +139,11 @@ class QoyodSettings(BaseModel):
     enabled:           bool = False     # ADR-001 #3 — connector master toggle
     auto_send:         bool = True      # pipeline runs automatically on inbox
     auto_receipt:      bool = True      # create receipt right after invoice
+    # Day 5 safety net — when True the pipeline goes through every step,
+    # builds the EXACT Qoyod payload, but skips the final POST. The
+    # payload snapshot is saved to the row so the operator can review
+    # large batches before going live.
+    dry_run_mode:      bool = False
 
     # ─── Send rule (per user directive on Day 1 / Day 4) ────────────
     # The Invoice Trigger Policy controls WHEN an order becomes eligible

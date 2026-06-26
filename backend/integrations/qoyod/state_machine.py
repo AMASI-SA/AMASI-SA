@@ -54,6 +54,7 @@ HAPPY_PATH: tuple[str, ...] = (
 # Side-stages — non-failure terminal or transient.
 SKIPPED:   str = "SKIPPED"     # business rule said: do not send
 RETRYING:  str = "RETRYING"    # transient between failure and resume
+PARTIAL_FAILURE: str = "PARTIAL_FAILURE"   # invoice OK but receipt failed
 
 # Failure stages — exactly one per pipeline step where work happens.
 FAILURE_STAGES: tuple[str, ...] = (
@@ -67,9 +68,11 @@ FAILURE_STAGES: tuple[str, ...] = (
 )
 
 # The full canonical set (used for Pydantic Literal validation).
-ALL_STAGES: tuple[str, ...] = HAPPY_PATH + (SKIPPED, RETRYING) + FAILURE_STAGES
+ALL_STAGES: tuple[str, ...] = HAPPY_PATH + (SKIPPED, RETRYING, PARTIAL_FAILURE) + FAILURE_STAGES
 
-TERMINAL_STAGES: frozenset[str] = frozenset({"COMPLETED", "SKIPPED", "DEAD_LETTER"})
+TERMINAL_STAGES: frozenset[str] = frozenset({
+    "COMPLETED", "SKIPPED", "DEAD_LETTER", "PARTIAL_FAILURE",
+})
 
 # Map each failure stage back to the happy-path stage we resume from
 # when the row transitions through RETRYING. This is the ONLY
@@ -131,6 +134,12 @@ def _build_allowed() -> set[tuple[str, str]]:
     # Failure → DEAD_LETTER (max attempts reached / operator decision).
     for fail_stage in FAILURE_TO_RESUME:
         allowed.add((fail_stage, "DEAD_LETTER"))
+
+    # FAILED_RECEIPT has a special partial-success route. The invoice
+    # already exists in Qoyod; only the receipt POST failed. Going to
+    # DEAD_LETTER would imply we lost everything — but we didn't.
+    # PARTIAL_FAILURE preserves that nuance for the operator.
+    allowed.add(("FAILED_RECEIPT", "PARTIAL_FAILURE"))
 
     return allowed
 

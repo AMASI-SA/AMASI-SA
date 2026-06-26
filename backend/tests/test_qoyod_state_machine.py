@@ -45,8 +45,10 @@ def test_all_stages_includes_skipped_and_retrying():
     assert RETRYING in ALL_STAGES
 
 
-def test_terminal_stages_are_completed_skipped_deadletter():
-    assert TERMINAL_STAGES == frozenset({"COMPLETED", "SKIPPED", "DEAD_LETTER"})
+def test_terminal_stages_are_completed_skipped_deadletter_partial():
+    assert TERMINAL_STAGES == frozenset({
+        "COMPLETED", "SKIPPED", "DEAD_LETTER", "PARTIAL_FAILURE",
+    })
 
 
 def test_is_valid_stage_rejects_unknown():

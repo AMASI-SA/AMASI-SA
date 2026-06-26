@@ -38,7 +38,9 @@ from integrations.qoyod.compliance import (
     list_orphan_orders, compliance_summary, reconciliation_check,
 )
 from integrations.qoyod.webhook import attach_webhook_routes
-from integrations.qoyod.pipeline import process_pending_normalized
+from integrations.qoyod.pipeline import (
+    process_pending_normalized, process_pending_customer_resolved, day4_report,
+)
 
 
 # MVP runs single-tenant; we still derive user_id from the auth layer
@@ -66,6 +68,7 @@ class SettingsPatch(BaseModel):
     enabled:              Optional[bool] = None
     auto_send:            Optional[bool] = None
     auto_receipt:         Optional[bool] = None
+    dry_run_mode:         Optional[bool] = None
     # Day 4 Invoice Trigger Policy
     invoice_trigger_statuses: Optional[list[str]] = None
     invoice_date_source:  Optional[str] = None
@@ -350,5 +353,21 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     ):
         tenant = _tenant_id(user)
         return await process_pending_normalized(db, tenant, limit=limit)
+
+    # ── POST /pipeline/process-customer-resolved — Day 5 (4b→4c→4d) ─
+    # Honours dry_run_mode + Pre-flight + Payload Snapshot + PARTIAL_FAILURE.
+    @router.post("/pipeline/process-customer-resolved")
+    async def process_customer_resolved(
+        user=Depends(current_user),
+        limit: int = 25,
+    ):
+        tenant = _tenant_id(user)
+        return await process_pending_customer_resolved(db, tenant, limit=limit)
+
+    # ── GET /reports/day4 — Eligibility & resolution outcomes card ──
+    @router.get("/reports/day4")
+    async def reports_day4(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        return {"ok": True, "report": await day4_report(db, tenant)}
 
     return router

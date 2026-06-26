@@ -173,6 +173,7 @@ export default function QoyodSettings() {
         enabled:              settings.enabled,
         auto_send:            settings.auto_send,
         auto_receipt:         settings.auto_receipt,
+        dry_run_mode:         !!settings.dry_run_mode,
         invoice_trigger_statuses: Array.isArray(settings.invoice_trigger_statuses)
           ? settings.invoice_trigger_statuses
           : (settings.invoice_trigger_status
@@ -234,6 +235,13 @@ export default function QoyodSettings() {
           checked={settings.auto_receipt}
           onChange={(v) => patch({ auto_receipt: v })}
           testid="toggle-auto-receipt"
+        />
+        <ToggleRow
+          label="🧪 وضع التشغيل الجاف (Dry Run Mode)"
+          hint="عند التفعيل: ينفّذ المسار كاملاً ويُحفَظ كل Payload في snapshot دون إرسال أي طلب فعلي إلى قيود. مناسب لاختبار دفعة طلبات قبل أول إرسال حقيقي."
+          checked={!!settings.dry_run_mode}
+          onChange={(v) => patch({ dry_run_mode: v })}
+          testid="toggle-dry-run-mode"
         />
       </Section>
 
