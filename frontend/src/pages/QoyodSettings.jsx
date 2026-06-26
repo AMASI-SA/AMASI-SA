@@ -26,14 +26,16 @@ const PRODUCT_TYPE_OPTIONS = [
 
 const TRIGGER_STATUS_OPTIONS = [
   { value: "completed", label: "تم التنفيذ (completed) — الموصى به" },
-  { value: "paid",      label: "مدفوع (paid)" },
   { value: "delivered", label: "تم التوصيل (delivered)" },
+  { value: "paid",      label: "مدفوع (paid)" },
+  { value: "shipped",   label: "تم الشحن (shipped)" },
 ];
 
 const INVOICE_DATE_OPTIONS = [
-  { value: "completed_at", label: "تاريخ تنفيذ الطلب" },
-  { value: "paid_at",      label: "تاريخ الدفع" },
-  { value: "created_at",   label: "تاريخ الإنشاء" },
+  { value: "trigger_status_date", label: "تاريخ انتقال الطلب للحالة المؤهلة (مُوصى به)" },
+  { value: "completed_at", label: "تاريخ تنفيذ الطلب (completed_at)" },
+  { value: "paid_at",      label: "تاريخ الدفع (paid_at)" },
+  { value: "created_at",   label: "تاريخ الإنشاء (created_at)" },
 ];
 
 function Section({ title, children, tone = "default" }) {
@@ -171,8 +173,13 @@ export default function QoyodSettings() {
         enabled:              settings.enabled,
         auto_send:            settings.auto_send,
         auto_receipt:         settings.auto_receipt,
-        invoice_trigger_status: settings.invoice_trigger_status,
-        invoice_date_source:  settings.invoice_date_source,
+        invoice_trigger_statuses: Array.isArray(settings.invoice_trigger_statuses)
+          ? settings.invoice_trigger_statuses
+          : (settings.invoice_trigger_status
+              ? [settings.invoice_trigger_status]
+              : ["completed"]),
+        invoice_date_source:  settings.invoice_date_source || "trigger_status_date",
+        trigger_once_only:    settings.trigger_once_only !== false,
         default_branch_id:    settings.default_branch_id,
         default_tax_id:       settings.default_tax_id,
         default_product_type: settings.default_product_type,
@@ -290,23 +297,48 @@ export default function QoyodSettings() {
       {/* ─── Defaults ─── */}
       <Section title="الإعدادات الافتراضية">
         <div className="grid md:grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-xs font-bold text-slate-700">حالة الطلب التي تطلق الإرسال</span>
-            <select
-              value={settings.invoice_trigger_status}
-              onChange={(e) => patch({ invoice_trigger_status: e.target.value })}
-              data-testid="select-trigger-status"
-              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-            >
-              {TRIGGER_STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </label>
+          <div className="block md:col-span-2">
+            <span className="text-xs font-bold text-slate-700">
+              حالات الطلب التي تطلق إنشاء الفاتورة (Invoice Trigger Statuses)
+            </span>
+            <p className="text-[11px] text-slate-500 mt-0.5 mb-2">
+              تُنشأ الفاتورة في قيود فقط عند انتقال الطلب لأحد هذه الحالات.
+              الافتراضي: «تم التنفيذ» وفقاً لمتطلبات الزكاة والضريبة.
+            </p>
+            <div className="grid grid-cols-2 gap-1.5 mt-1" data-testid="trigger-statuses-list">
+              {TRIGGER_STATUS_OPTIONS.map((o) => {
+                const list = Array.isArray(settings.invoice_trigger_statuses)
+                  ? settings.invoice_trigger_statuses
+                  : (settings.invoice_trigger_status ? [settings.invoice_trigger_status] : ["completed"]);
+                const checked = list.includes(o.value);
+                return (
+                  <label key={o.value}
+                         className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition border
+                                     ${checked ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                                               : "bg-white border-slate-200 hover:bg-slate-50"}`}
+                         data-testid={`trigger-status-${o.value}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? Array.from(new Set([...list, o.value]))
+                          : list.filter((v) => v !== o.value);
+                        // Never allow an empty list — default to ["completed"].
+                        patch({ invoice_trigger_statuses: next.length ? next : ["completed"] });
+                      }}
+                      className="h-4 w-4 accent-emerald-600"
+                    />
+                    <span className="font-medium">{o.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
           <label className="block">
             <span className="text-xs font-bold text-slate-700">تاريخ الفاتورة المعتمد</span>
             <select
-              value={settings.invoice_date_source}
+              value={settings.invoice_date_source || "trigger_status_date"}
               onChange={(e) => patch({ invoice_date_source: e.target.value })}
               data-testid="select-invoice-date-source"
               className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
@@ -316,6 +348,13 @@ export default function QoyodSettings() {
               ))}
             </select>
           </label>
+          <ToggleRow
+            label="إنشاء الفاتورة لمرة واحدة فقط (Trigger Once Only)"
+            hint="عند التفعيل: لن تُنشأ فاتورة جديدة لطلب أُرسل سابقاً، حتى لو تغيّرت حالته."
+            checked={settings.trigger_once_only !== false}
+            onChange={(v) => patch({ trigger_once_only: v })}
+            testid="toggle-trigger-once-only"
+          />
           <label className="block md:col-span-2">
             <span className="text-xs font-bold text-slate-700">نوع المنتجات الافتراضي في قيود</span>
             <select

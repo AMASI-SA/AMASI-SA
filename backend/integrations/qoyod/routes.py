@@ -38,6 +38,7 @@ from integrations.qoyod.compliance import (
     list_orphan_orders, compliance_summary, reconciliation_check,
 )
 from integrations.qoyod.webhook import attach_webhook_routes
+from integrations.qoyod.pipeline import process_pending_normalized
 
 
 # MVP runs single-tenant; we still derive user_id from the auth layer
@@ -65,8 +66,13 @@ class SettingsPatch(BaseModel):
     enabled:              Optional[bool] = None
     auto_send:            Optional[bool] = None
     auto_receipt:         Optional[bool] = None
-    invoice_trigger_status: Optional[str] = None
+    # Day 4 Invoice Trigger Policy
+    invoice_trigger_statuses: Optional[list[str]] = None
     invoice_date_source:  Optional[str] = None
+    trigger_once_only:    Optional[bool] = None
+    # Legacy alias (single string). If only this is provided, the API
+    # layer expands it to invoice_trigger_statuses = [<value>].
+    invoice_trigger_status: Optional[str] = None
     default_branch_id:    Optional[str] = None
     default_tax_id:       Optional[str] = None
     inventory_account_id: Optional[str] = None
@@ -104,6 +110,20 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             # First read — return defaults without writing yet.
             defaults = QoyodSettings(user_id=tenant).model_dump(mode="json")
             return defaults
+        # Backwards-compat shim: legacy docs only carried
+        # `invoice_trigger_status` (singular). If the new list field
+        # is missing, derive it from the legacy value so downstream
+        # code never has to worry about the old shape.
+        if not doc.get("invoice_trigger_statuses"):
+            legacy = doc.get("invoice_trigger_status")
+            doc["invoice_trigger_statuses"] = (
+                [legacy] if legacy else ["completed"])
+        if "trigger_once_only" not in doc:
+            doc["trigger_once_only"] = True
+        # Legacy default `completed_at` was equivalent to the new
+        # `trigger_status_date` semantics. Migrate on the fly.
+        if doc.get("invoice_date_source") == "completed_at":
+            doc["invoice_date_source"] = "trigger_status_date"
         return doc
 
     async def _attach_fingerprint(tenant: str, payload: dict) -> dict:
@@ -129,6 +149,14 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         current = await _load_settings(tenant)
         # Merge: only non-None fields from the patch overwrite.
         update = patch.model_dump(exclude_none=True, mode="json")
+        # Backwards-compat: if the caller only sent the legacy
+        # `invoice_trigger_status` (singular), expand it into the new
+        # list field so the canonical shape stays consistent.
+        if "invoice_trigger_status" in update and \
+           "invoice_trigger_statuses" not in update:
+            legacy_val = update.pop("invoice_trigger_status")
+            update["invoice_trigger_statuses"] = (
+                [legacy_val] if legacy_val else ["completed"])
         if not update:
             raise HTTPException(400, "no fields to update")
         # Validate the merged result via Pydantic so we never persist
@@ -311,5 +339,16 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     # ── POST /webhook — Day 3 entry point (no JWT, token-protected) ──
     # Token check + idempotency + validation + normalization, nothing more.
     attach_webhook_routes(router, db)
+
+    # ── POST /pipeline/process-normalized — Day 4 advancement ────────
+    # Strictly stops at CUSTOMER_RESOLVED. Manual trigger only — the
+    # background worker (Day 5) will call the same orchestrator.
+    @router.post("/pipeline/process-normalized")
+    async def process_normalized(
+        user=Depends(current_user),
+        limit: int = 25,
+    ):
+        tenant = _tenant_id(user)
+        return await process_pending_normalized(db, tenant, limit=limit)
 
     return router

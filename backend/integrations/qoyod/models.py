@@ -140,13 +140,33 @@ class QoyodSettings(BaseModel):
     auto_send:         bool = True      # pipeline runs automatically on inbox
     auto_receipt:      bool = True      # create receipt right after invoice
 
-    # ─── Send rule (per user directive on Day 1) ────────────────────
-    # Only Salla orders that reach this status are pushed to Qoyod.
-    # Default = "completed" (= Arabic "تم التنفيذ" in Salla).
-    invoice_trigger_status: str = "completed"
-    # The date Mezan writes on the Qoyod invoice. "completed_at" =
-    # the moment the order transitioned to invoice_trigger_status.
-    invoice_date_source: Literal["completed_at", "paid_at", "created_at"] = "completed_at"
+    # ─── Send rule (per user directive on Day 1 / Day 4) ────────────
+    # The Invoice Trigger Policy controls WHEN an order becomes eligible
+    # for Qoyod and what date the invoice carries. NEVER hard-code "paid"
+    # as the sole trigger — the merchant is responsible (legally, for VAT
+    # and Zakat) for what status drives the invoice date.
+    #
+    #   `invoice_trigger_statuses`  — closed list; matched against the
+    #       order's CANONICAL status. Default ["completed"] (= Arabic
+    #       "تم التنفيذ"). Multiple statuses allowed (e.g. ["completed",
+    #       "delivered"]).
+    #   `invoice_date_source`       — picks WHICH timestamp goes on the
+    #       Qoyod invoice. New canonical value: "trigger_status_date"
+    #       = the moment the order entered one of the trigger statuses.
+    #   `trigger_once_only`         — if True (default), once a Qoyod
+    #       invoice exists for a Salla order we ignore subsequent status
+    #       transitions — never auto-re-create or duplicate.
+    invoice_trigger_statuses: list[str] = Field(
+        default_factory=lambda: ["completed"])
+    invoice_date_source: Literal[
+        "trigger_status_date", "completed_at", "paid_at", "created_at"
+    ] = "trigger_status_date"
+    trigger_once_only: bool = True
+
+    # ─── Legacy single-status field (deprecated — read-only mirror) ──
+    # Kept for backwards compatibility with existing DB docs written by
+    # Day 1 settings. New code reads `invoice_trigger_statuses` only.
+    invoice_trigger_status: Optional[str] = None
 
     # ─── Qoyod refs (populated after first /test-connection) ────────
     default_branch_id:    Optional[str] = None

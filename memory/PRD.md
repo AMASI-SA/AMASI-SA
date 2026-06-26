@@ -1,5 +1,96 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Qoyod MVP — Day 4 — Business Rules + Customer Resolution (2026-06-26)
+**User-locked Invoice Trigger Policy (foundational rule):**
+```
+invoice_trigger_statuses = ["completed"]        # list, NEVER hard-code "paid"
+invoice_date_source      = "trigger_status_date"
+trigger_once_only        = true
+```
+Rationale: VAT + Zakat compliance forces the invoice date to come from
+a configurable status transition, not from `paid`. Multiple statuses
+allowed for merchants who fire on completed+delivered.
+
+**Day 4 scope (strictly stopped at CUSTOMER_RESOLVED):**
+1. `NORMALIZED → RULES_APPLIED` — eligibility decision per Invoice Trigger Policy.
+2. `RULES_APPLIED → CUSTOMER_RESOLVED` (4a only) — local mapping hit OR Qoyod create.
+3. NO products, NO invoice, NO receipt — pending merchant review.
+
+### New backend modules
+- `integrations/qoyod/business_rules.py` — pure `evaluate(dto, settings, existing_invoice_row)`
+  returns `RulesDecision`. Tokens: `eligible / not_in_trigger_statuses / already_sent`.
+  Resolves invoice date from `trigger_status_date | completed_at | paid_at | created_at`
+  with safe fallback to `order_date`. Includes a status→date-field map so each canonical
+  status (completed/delivered/paid/shipped/processing) picks the right timestamp.
+- `integrations/qoyod/customer_resolver.py` — `resolve_customer()` walks the lookup chain
+  `phone → email → guest_order`. Hits `qoyod_customers_mapping` first; only calls
+  Qoyod `POST /contacts` on miss (with idempotency key `mzn-{trace}-contact-{kind}-{key}`).
+  Returns `ResolutionResult(success, qoyod_customer_id, lookup_key, lookup_kind, created_new, error)`.
+- `integrations/qoyod/pipeline.py` — orchestrator. `process_normalized_row()` advances ONE row
+  and is idempotent on stage check. `process_pending_normalized()` batches up to `limit` rows
+  sequentially. Failures route through `FAILED_CUSTOMER → DEAD_LETTER` (two-hop, exact same
+  pattern as Day 3). Records `business_rules_decision` + `customer_resolution` snapshots on
+  the row for the Timeline UI.
+
+### Settings model extension (with backwards-compat shim)
+- `QoyodSettings`:
+  - `invoice_trigger_statuses: list[str] = ["completed"]` (new canonical)
+  - `invoice_date_source: Literal["trigger_status_date","completed_at","paid_at","created_at"]
+     = "trigger_status_date"` (new default)
+  - `trigger_once_only: bool = True`
+  - `invoice_trigger_status` kept as legacy field (None default), reads migrated on the fly.
+- `_load_settings()` auto-migrates: legacy `invoice_trigger_status` → list; legacy
+  `invoice_date_source="completed_at"` → `"trigger_status_date"`; missing `trigger_once_only`
+  → True.
+- PUT /settings expands the singular field if a caller still sends it (safe rollout).
+
+### New API endpoint
+- `POST /api/integrations/qoyod/pipeline/process-normalized?limit=25` (JWT-protected).
+  Drains NORMALIZED rows. Response: `{ok, processed, counts:{customer_resolved,skipped,dead_letter}, items:[…]}`.
+  Each item carries the `decision` + `customer` snapshots so the operator can audit one click.
+
+### Frontend (`QoyodSettings.jsx`)
+- Replaced the single trigger dropdown with a **4-checkbox group** (completed/delivered/paid/shipped)
+  + label "حالات الطلب التي تطلق إنشاء الفاتورة". Default pre-checks `completed`.
+- Added `trigger_once_only` toggle ("إنشاء الفاتورة لمرة واحدة فقط").
+- Updated invoice-date dropdown to include "تاريخ انتقال الطلب للحالة المؤهلة" (recommended default).
+- Save payload now sends the new list field; empty list is never accepted (auto-resets to ["completed"]).
+
+### Tests — 115/115 ✅
+- `tests/test_qoyod_day4_rules_and_customer.py` — **25/25** new tests:
+  - Rules (9): eligible/not-eligible/multi-trigger/once-only/never-implicit-paid/fallback date.
+  - Resolver helpers (5): phone-preferred, email-fallback, guest, payload, id extraction.
+  - Resolver DB (5): local hit · create-new + mapping persisted · API error path ·
+    guest with default · guest without default.
+  - Pipeline (6): happy CUSTOMER_RESOLVED · SKIPPED · DEAD_LETTER + audit · trigger_once_only
+    blocks resend · idempotent on already-advanced rows · batch counter sums.
+- `tests/test_qoyod_day3_webhook.py` — 28/28 unchanged.
+- `tests/test_qoyod_state_machine.py` — 23/23 unchanged.
+- `tests/test_qoyod_compliance.py` — 11/11 unchanged.
+- `tests/test_qoyod_day1_foundation.py` — 28/28 (updated `test_settings_defaults_are_safe` to
+  match the new tri-field policy).
+
+### Live curl smoke (PREVIEW) ✅
+1. Webhook ingestion of an order in "تم التنفيذ" → 200 NORMALIZED.
+2. `/pipeline/process-normalized` → rules say eligible/triggered_by="completed"/
+   invoice_date_source="completed_at". Customer call returns 307 (placeholder API key) →
+   row → `DEAD_LETTER` with `FAILED_CUSTOMER` + Qoyod response excerpt. Row preserved.
+3. Webhook with "تم الشحن" → run → `SKIPPED` with `reason="not_in_trigger_statuses"`.
+
+### Critical invariants (locked by tests)
+- "paid" is NEVER an implicit trigger — must be explicitly added by the merchant.
+- `trigger_once_only=True` is enforced before customer resolution (no Qoyod call on resend).
+- Day 4 ceiling: orchestrator never writes to `qoyod_invoices`, never calls
+  `create_product/create_invoice/create_receipt`.
+- DEAD_LETTER rows from FAILED_CUSTOMER carry the full Qoyod error excerpt for diagnosis.
+
+### Outstanding for Day 5 (pending merchant review)
+- Step 4b — Product Resolution (`CUSTOMER_RESOLVED → PRODUCT_RESOLVED`).
+- Step 4c — Invoice Creation (`PRODUCT_RESOLVED → INVOICE_CREATED`).
+- Step 4d — Receipt Creation (`INVOICE_CREATED → RECEIPT_CREATED → COMPLETED`).
+- Background retry worker (RETRYING flow).
+- Manual Action buttons activation + سجل المزامنة page wiring.
+
 ## Qoyod MVP — Day 3 — Reliable Webhook Reception Layer (2026-06-26)
 **User-locked scope (8 steps, nothing else):**
 1. Receive webhook  ·  2. Verify token  ·  3. Idempotency  ·

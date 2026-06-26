@@ -110,8 +110,10 @@ def test_settings_defaults_are_safe():
     assert s.enabled is False                  # ADR-001 #3 feature flag default OFF
     assert s.auto_send is True
     assert s.auto_receipt is True
-    assert s.invoice_trigger_status == "completed"  # = Salla "تم التنفيذ"
-    assert s.invoice_date_source == "completed_at"
+    # Day 4 — Invoice Trigger Policy defaults.
+    assert s.invoice_trigger_statuses == ["completed"]  # = Salla "تم التنفيذ"
+    assert s.invoice_date_source == "trigger_status_date"
+    assert s.trigger_once_only is True
     assert s.default_product_type == "service" # user spec: Amasi default
     assert s.user_id == "main"                 # single-tenant
     assert s.schema_version == 1
