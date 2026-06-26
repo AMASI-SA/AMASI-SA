@@ -65,6 +65,13 @@ PAYMENT_METHOD_ALIASES: dict[str, str] = {
     # COD
     "cash_on_delivery":    "cod",
     "cash":                "cod",
+    # Arabic variants of COD that may have made it into the canonical
+    # field on legacy rows (before the normalizer table was extended).
+    "الدفع_عند_الاستلام":  "cod",
+    "النوع_عند_الاستلام":  "cod",
+    "الدفع_نقدا_عند_الاستلام": "cod",
+    "نقد_عند_الاستلام":    "cod",
+    "نقدًا_عند_الاستلام":   "cod",
     # STC Pay
     "stcpay":              "stc_pay",
     # Apple Pay

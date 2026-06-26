@@ -455,6 +455,21 @@ function PaymentMethodMappingTable({
                       <div className="font-bold text-slate-800">{labelFor(key)}</div>
                       <div className="text-[10px] text-slate-500 font-mono">
                         {key}
+                        {/* Show the original Salla string when it differs
+                            from the canonical key — helps the user
+                            recognise vendor-side labels (e.g. Arabic
+                            "النوع عند الاستلام" → key=cod). */}
+                        {usedRow?.native_examples?.length > 0
+                          && usedRow.native_examples[0] !== key && (
+                          <span
+                            data-testid={`pm-native-${key}`}
+                            title="القيمة الأصلية من سلة"
+                            className="mr-2 inline-block px-1.5 py-0.5 rounded
+                                       bg-slate-100 text-slate-700 font-bold"
+                            dir="auto">
+                            من سلة: «{usedRow.native_examples[0]}»
+                          </span>
+                        )}
                         {isUsed && (
                           <span className="mr-2 inline-block px-1.5 py-0.5 rounded
                                            bg-amber-100 text-amber-800 font-extrabold">

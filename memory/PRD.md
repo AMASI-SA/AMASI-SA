@@ -1,5 +1,52 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Final Pre-Go-Live Fixes — Customer Name Fallback + Arabic COD Aliases (2026-02-26)
+
+### Issue 1: `contact.name Can't be blank` from Qoyod
+**Root cause**: `_normalize_customer` fell back to literal "ضيف" but the resulting DTO could still produce a blank name in edge cases (e.g. customer payload missing first/last/full name and the normalizer didn't have order context).
+
+**Fix (`integrations/qoyod/normalizer.py::_normalize_customer`)**: now takes optional `order_number` arg and falls back in this strict order:
+1. `first_name + last_name`
+2. `full_name`
+3. `name`
+4. `"عميل {phone}"` (so the customer is recognizable in Qoyod)
+5. `"ضيف #{order_number}"` (distinguishable guest per order)
+6. `"ضيف"` (last-resort literal)
+
+**Belt-and-suspenders (`customer_resolver.py::_build_contact_payload`)**: even if the DTO somehow has a blank name (legacy rows), the payload builder NEVER sends blank — uses phone/email as label or last-resort "ضيف".
+
+### Issue 2: COD Arabic variant `النوع عند الاستلام` unmapped
+**Root cause**: `_canonical_payment_method` had no Arabic entries. Salla sent the Arabic native string and it was canonicalized to `النوع_عند_الاستلام` (the user saw this raw value in the Settings page).
+
+**Fix (`integrations/qoyod/normalizer.py`)**: Arabic COD variants now canonicalize to `cod` at write-time:
+- `الدفع عند الاستلام` → `cod`
+- `النوع عند الاستلام` → `cod`
+- `الدفع نقدا عند الاستلام` → `cod`
+- `نقد عند الاستلام` → `cod`
+- Plus `cash` (was previously `cash`, now `cod` for consistency)
+- Plus Arabic provider names: `تمارا → tamara`, `تابي → tabby`, `تحويل بنكي → bank_transfer`.
+
+**Fix (`payment_methods.py`)**: `PAYMENT_METHOD_ALIASES` also covers already-underscored Arabic keys (legacy rows written before the normalizer extension). E.g. `الدفع_عند_الاستلام → cod`.
+
+### Frontend (`pages/QoyodSettings.jsx`)
+Payment-method rows now also render a slate badge **"من سلة: «<native>»"** when the original Salla string differs from the canonical key. This shows the user EXACTLY what Salla sent, so they can never wonder where a row came from.
+
+### Tests
+- **`tests/test_qoyod_customer_name_and_cod.py`** (new, 27 tests, all pass):
+  - 9 tests for the customer-name fallback chain (first+last priority, full_name, name field, phone label, guest with order number, bare guest, string customer payloads).
+  - 4 tests for `_build_contact_payload` belt-and-suspenders.
+  - 8 parametrized tests for COD canonical resolution (English + 5 Arabic variants).
+  - 4 parametrized tests for other Arabic provider names.
+  - 2 alias-table coverage tests for already-normalised Arabic keys.
+- **Full Qoyod suite: 413 tests pass** (no regressions).
+
+### Verified end-to-end live
+- Seeded an inbox row with `payment_method_native: "النوع عند الاستلام"`, `payment_method: "cod"`.
+- `/payment-methods/used` returned `key: "cod"`, `label_ar: "الدفع عند الاستلام"`, `native_examples: ["النوع عند الاستلام"]`.
+- Settings UI rendered: title "الدفع عند الاستلام", badge "من سلة: «النوع عند الاستلام»", mapping single account ID once covers ALL Arabic + English COD variants.
+
+
+
 ## Outstanding-Failures Watermark Fix (2026-02-26, final)
 **User-reported bug**: QYD-GO blocked with "27 فاتورة إنتاجية فشلت" but the user had never activated Go-Live yet — the 27 rows were old test data from before the dry_run flag existed (or before it was reliably set per-row).
 

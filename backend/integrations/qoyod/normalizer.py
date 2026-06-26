@@ -282,37 +282,79 @@ def _canonical_payment_method(native: Optional[str]) -> Optional[str]:
         "applepay":       "apple_pay",
         "stc pay":        "stc_pay",
         "stcpay":         "stc_pay",
-        "cash":           "cash",
+        "cash":           "cod",
         "cod":            "cod",
         "cash on delivery": "cod",
+        # Arabic variants Salla sends as `payment_method` (especially
+        # for older stores or custom labels). Mapped to `cod` so the
+        # operator only has to map one row.
+        "الدفع عند الاستلام": "cod",
+        "النوع عند الاستلام": "cod",
+        "الدفع نقدا عند الاستلام": "cod",
+        "نقد عند الاستلام": "cod",
+        "نقدًا عند الاستلام": "cod",
         "bank":           "bank_transfer",
         "bank transfer":  "bank_transfer",
+        "تحويل بنكي":     "bank_transfer",
         "tamara":         "tamara",
         "tabby":          "tabby",
         "emkan":          "emkan",
         "إمكان":          "emkan",
+        "تمارا":          "tamara",
+        "تابي":           "tabby",
         "credit_card":    "credit_card",
         "paypal":         "paypal",
     }
     return table.get(low, low.replace(" ", "_"))
 
 
-def _normalize_customer(data: dict) -> CustomerDTO:
+def _normalize_customer(data: dict, order_number: str | None = None) -> CustomerDTO:
+    """Build a CustomerDTO. Guarantees `name` is never blank — falls back
+    in this order:
+
+        1. first_name + last_name
+        2. full_name
+        3. name
+        4. mobile / phone digits
+        5. "ضيف #{order_number}" (so each guest is distinguishable in Qoyod)
+        6. literal "ضيف" (last resort — no order_number known)
+    """
     raw = data.get("customer") or {}
     if isinstance(raw, str):
         # Salla occasionally returns just the customer's name string.
-        return CustomerDTO(name=raw or "ضيف", is_guest=True)
+        return CustomerDTO(
+            name=(raw.strip() or _guest_fallback(order_number)),
+            is_guest=True)
+
     first = (raw.get("first_name") or "").strip()
     last  = (raw.get("last_name") or "").strip()
-    full  = (f"{first} {last}").strip() or (raw.get("name") or "").strip() or "ضيف"
+    candidates = [
+        (f"{first} {last}").strip(),
+        (raw.get("full_name") or "").strip(),
+        (raw.get("name") or "").strip(),
+    ]
+    name = next((c for c in candidates if c), "")
+    phone = normalize_phone(raw.get("mobile") or raw.get("phone"))
+    if not name and phone:
+        # Use the phone digits as a stable display label.
+        name = f"عميل {phone}"
+    if not name:
+        name = _guest_fallback(order_number)
+
     return CustomerDTO(
-        name=full,
-        phone=normalize_phone(raw.get("mobile") or raw.get("phone")),
+        name=name,
+        phone=phone,
         email=normalize_email(raw.get("email")),
         is_guest=bool(raw.get("is_guest", False)),
         city=(raw.get("city") or None),
         country=(raw.get("country") or None),
     )
+
+
+def _guest_fallback(order_number: str | None) -> str:
+    """Stable, distinguishable label for nameless guests."""
+    on = (order_number or "").strip()
+    return f"ضيف #{on}" if on else "ضيف"
 
 
 def _normalize_item(it: dict) -> LineItemDTO:
@@ -441,7 +483,7 @@ def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrde
         shipping_amount=_money(amounts.get("shipping")),
         discount_amount=_money(amounts.get("discounts") or amounts.get("discount")),
         total_amount=_money(amounts.get("total")),
-        customer=_normalize_customer(data),
+        customer=_normalize_customer(data, order_number=order_number),
         items=items,
         payment_method=_canonical_payment_method(pm_native),
         payment_method_native=pm_native,

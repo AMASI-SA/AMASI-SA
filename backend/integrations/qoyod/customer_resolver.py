@@ -88,6 +88,17 @@ def derive_lookup(customer: CustomerDTO) -> tuple[Optional[str], str]:
 # ─────────────────────────────────────────────────────────────────────
 # Qoyod payload builder
 # ─────────────────────────────────────────────────────────────────────
+def _safe_guest_name(customer: CustomerDTO) -> str:
+    """Last-line-of-defence guest label. Used if both the normalizer's
+    fallback AND the DTO's `name` field somehow ended up blank.
+    Phone / email used as stable labels before the generic literal."""
+    if customer.phone:
+        return f"عميل {customer.phone}"
+    if customer.email:
+        return f"عميل {customer.email}"
+    return "ضيف"
+
+
 def _build_contact_payload(customer: CustomerDTO) -> dict:
     """Map our DTO → Qoyod `POST /customers` body.
 
@@ -98,8 +109,12 @@ def _build_contact_payload(customer: CustomerDTO) -> dict:
     enrichment is deferred to Day 5 (after the merchant reviews the
     Day 4 output).
     """
+    # Belt-and-suspenders: even if the DTO somehow has a blank name
+    # (legacy rows, edge case), guarantee we NEVER send blank to Qoyod
+    # — Qoyod responds with `contact.name Can't be blank`.
+    safe_name = (customer.name or "").strip() or _safe_guest_name(customer)
     payload: dict[str, Any] = {
-        "name": customer.name or "ضيف",
+        "name": safe_name,
     }
     if customer.phone:
         payload["phone_number"] = customer.phone
