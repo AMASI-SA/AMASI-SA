@@ -36,6 +36,7 @@ from integrations.qoyod.webhook_token_store import (
     verify_provided_token,
 )
 from integrations.qoyod.legacy_adapter import adapt as adapt_legacy
+from integrations.qoyod.eligibility import check_invoice_eligibility
 
 
 # Connector key for the inbox row — matches the unique idempotency
@@ -200,6 +201,27 @@ async def _process_inbox_row(
     if adapter_meta and adapter_meta.get("items_source") == "missing":
         return await _handle_missing_items(
             db, row=row, doc_filter=doc_filter, adapter_meta=adapter_meta)
+
+    # ── Contract v1.0 eligibility — SKU + positive total ─────────
+    # Items are present (we just passed the missing-items branch);
+    # now enforce the per-item SKU rule and the positive-total rule.
+    # Failure here is FAILED_VALIDATION → DEAD_LETTER — NEVER auto-retry,
+    # NEVER promoted to invoice creation. See contract §4 rules 2 & 4.
+    eligibility_err = check_invoice_eligibility(raw_payload)
+    if eligibility_err is not None:
+        started_at = row.get("pipeline_started_at")
+        p1 = transition(from_stage="RECEIVED",
+                        to_stage="FAILED_VALIDATION",
+                        actor="webhook", error=eligibility_err)
+        p1.setdefault("$set", {})["pipeline_error"] = eligibility_err
+        await _apply(db, doc_filter=doc_filter, patch=p1)
+        p2 = transition(from_stage="FAILED_VALIDATION",
+                        to_stage="DEAD_LETTER",
+                        actor="webhook",
+                        note=f"contract v1.0 rule failed: {eligibility_err['code']}",
+                        existing_started_at=started_at)
+        await _apply(db, doc_filter=doc_filter, patch=p2)
+        return ("DEAD_LETTER", eligibility_err)
 
     # ── RECEIVED → VALIDATED (5) ─────────────────────────────────
     ok, err = validate(raw_payload)

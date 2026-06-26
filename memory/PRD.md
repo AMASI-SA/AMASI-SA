@@ -1518,3 +1518,40 @@ counterparties in Production (per-account blocker / reason histogram).
 - ▶ If items[] consistently absent in real Make output, decide on enricher (Salla API or Make-side scenario edit).
 - ▶ Then Dry Run → Go Live.
 
+
+## Iter-260 — Integration Contract v1.0 + diagnostic capture + SKU/total guards (2026-06-26)
+
+### Webhook parse-failure diagnostic capture
+  - New `_capture_parse_failure(db, request, token, exc)` helper in `webhook_routes.py`.
+  - Triggered at all 3 legacy webhook routes (`/make/{token}`, `/tiktok/{token}`, `/meta/{token}`) on body-parse failure.
+  - Stores `{occurred_at, token_prefix (6 chars + …), content_type, content_length, body_preview ≤ 2 KB, parser_error, ip, route}`.
+  - TTL index on `occurred_at` (30 days) created in `server.py` startup.
+  - Behaviour UNCHANGED: still returns `400 {"detail":"Invalid JSON"}`.
+  - Tests: `tests/test_webhook_parse_failure_capture.py` — 10/10 PASS.
+
+### Contract v1.0 — invoice eligibility guards
+  - New module `integrations/qoyod/eligibility.py` — `check_invoice_eligibility(payload)`.
+  - Enforces 2 user-locked rules:
+    - **`items_missing_sku`** — every dict item must have non-empty `sku`. Non-dict items are silently skipped (let `normalize()` raise `FAILED_NORMALIZATION` so Day-3 contract survives).
+    - **`total_must_be_positive`** — order `data.amounts.total.amount` (or `data.total_amount` fallback) must be > 0. Also handles string totals (`"139.51"`) and rejects invalid types.
+  - Wired into `_process_inbox_row` between the items-missing branch and `validate()`. Failure path: `RECEIVED → FAILED_VALIDATION → DEAD_LETTER` with the offending code. NEVER promotes to invoice creation.
+  - Tests: `tests/test_qoyod_eligibility.py` — 16 unit + 4 HTTP integration = 20/20 PASS.
+
+### Contract documentation
+  - New artefact: `/app/docs/integrations/qoyod-webhook-contract-v1.md` (paste-ready for Make.com integrators).
+    - Headers (X-Webhook-Token, X-Idempotency-Key), required/optional fields, full payload example (items + packages forms), responses (success, duplicate, business-rule fail, transport fail), failure-state map, Make HTTP module config, 7-step first-test checklist.
+  - Status: v1.0 ACTIVE.
+
+### Aggregate test status
+  - **Full Qoyod regression**: **273/273 GREEN** + 1 skip. Zero regression.
+  - New surfaces locked:
+    * Adapter (40 unit + 5 HTTP)
+    * Webhook parse-failure capture (10)
+    * Eligibility (16 unit + 4 HTTP)
+
+## Pending (User-gated, ordered)
+- ▶ User adds the SECOND HTTP module in Make.com per contract §8 (using the generated `QOYOD_WEBHOOK_TOKEN` from Mezan UI).
+- ▶ Run the 7-step first-test checklist on **Preview** before promoting to Production.
+- ▶ Then Dry Run with real orders.
+- ▶ Then Go Live (disable `dry_run_mode`).
+
