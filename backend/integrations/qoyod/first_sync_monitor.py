@@ -265,3 +265,158 @@ async def get_row_for_monitor(
     if not row:
         return None
     return shape_inbox_row_for_monitor(row)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Aggregate stats (sidebar badges + monitor counters)
+# ─────────────────────────────────────────────────────────────────────
+# Stages bucketed for the operator dashboard.
+SUCCESS_STAGES = {"COMPLETED"}
+FAILED_STAGES = {"DEAD_LETTER", "PARTIAL_FAILURE"}
+SKIPPED_STAGES = {"SKIPPED"}
+# Anything else (NEW, RECEIVED, VALIDATED, NORMALIZED, RULES_APPLIED,
+# CUSTOMER_RESOLVED, PRODUCT_RESOLVED, INVOICE_CREATED, RECEIPT_CREATED,
+# RETRYING, NEEDS_ENRICHMENT, FAILED_* in-flight) is "processing".
+
+
+async def get_monitor_stats(db, *, user_id: str) -> dict:
+    """Return aggregate counts across `integration_inbox` rows for the
+    current tenant — used by the sidebar alert dot + monitor page
+    counter badges.
+
+    Buckets
+    ───────
+    • processing  — anything not in a terminal bucket
+    • failed      — DEAD_LETTER + PARTIAL_FAILURE
+    • success     — COMPLETED
+    • skipped     — SKIPPED (business rule excluded the order)
+    • dry_failed  — subset of `failed` where `dry_run is true`
+                    (this is what the "archive failed tests" button
+                    will target; surfaced so the UI shows the button
+                    only when there's something to clean up)
+    """
+    pipeline = [
+        {"$match": {"user_id": user_id}},
+        {"$group": {
+            "_id": {
+                "stage": "$pipeline_stage",
+                "dry_run": {"$ifNull": ["$dry_run", False]},
+            },
+            "n": {"$sum": 1},
+        }},
+    ]
+    counts = {"processing": 0, "failed": 0, "success": 0,
+              "skipped": 0, "dry_failed": 0, "total": 0}
+    async for row in db.integration_inbox.aggregate(pipeline):
+        stage = (row.get("_id") or {}).get("stage")
+        is_dry = bool((row.get("_id") or {}).get("dry_run"))
+        n = int(row.get("n") or 0)
+        counts["total"] += n
+        if stage in SUCCESS_STAGES:
+            counts["success"] += n
+        elif stage in FAILED_STAGES:
+            counts["failed"] += n
+            if is_dry:
+                counts["dry_failed"] += n
+        elif stage in SKIPPED_STAGES:
+            counts["skipped"] += n
+        else:
+            counts["processing"] += n
+    return counts
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Archive failed dry-run tests
+# ─────────────────────────────────────────────────────────────────────
+# The "أرشفة فشل الاختبار القديم" button — only ever touches
+# `integration_inbox` rows that are BOTH:
+#   • in a failed terminal bucket (DEAD_LETTER or PARTIAL_FAILURE), AND
+#   • were processed in Dry Run mode (`dry_run is true`).
+#
+# It NEVER touches:
+#   • COMPLETED rows (real or dry)
+#   • any non-failed stage
+#   • any real (production) row, even if failed
+#   • any data inside Qoyod itself (this is a local-only op)
+#
+# Behaviour: copy matched rows to `integration_inbox_archive` (with
+# `archived_at` + `archived_by` + `archive_reason`), then delete from
+# `integration_inbox`. This is recoverable — the archive collection
+# is never auto-pruned.
+ARCHIVE_CONFIRM_TOKEN = "CLEAN"
+
+
+class ArchiveRefused(Exception):
+    """Raised when the archive request fails its safety checks."""
+
+
+async def archive_failed_dry_run_tests(
+    db, *, user_id: str, confirm_token: str, actor: str,
+) -> dict:
+    """Archive (move + delete) DEAD_LETTER + PARTIAL_FAILURE dry-run
+    rows for `user_id`. Returns `{matched, archived, deleted, archive_ids}`.
+
+    Raises `ArchiveRefused` when the confirm token is wrong.
+    """
+    if (confirm_token or "").strip() != ARCHIVE_CONFIRM_TOKEN:
+        raise ArchiveRefused(
+            f"confirm_token must equal {ARCHIVE_CONFIRM_TOKEN!r}")
+
+    # Strict filter — both conditions must hold.
+    q = {
+        "user_id": user_id,
+        "pipeline_stage": {"$in": list(FAILED_STAGES)},
+        "dry_run": True,
+    }
+
+    now = datetime.now(timezone.utc)
+    matched: list[dict] = []
+    async for row in db.integration_inbox.find(q):
+        matched.append(row)
+
+    if not matched:
+        return {"matched": 0, "archived": 0, "deleted": 0, "archive_ids": []}
+
+    # Stamp the archive metadata on each doc before insert.
+    archive_docs = []
+    archive_keys = []
+    for row in matched:
+        doc = dict(row)
+        # Drop _id so Mongo assigns a fresh ObjectId in the archive
+        # collection (avoids unique-index collisions on re-archive).
+        original_id = doc.pop("_id", None)
+        doc["archived_at"] = now.isoformat()
+        doc["archived_by"] = actor or "system"
+        doc["archive_reason"] = "dry_run_failed_test_cleanup"
+        doc["original_inbox_id"] = str(original_id) if original_id else None
+        archive_docs.append(doc)
+        # We delete by `id` (string field that mirrors `_id` for our
+        # PyObjectId pattern) plus the strict filter as a belt-and-
+        # suspenders measure so we NEVER delete something outside the
+        # filter even if races occur.
+        archive_keys.append(row.get("id") or row.get("trace_id"))
+
+    # 1) Insert archive copies first — if this fails, nothing is lost.
+    ins = await db.integration_inbox_archive.insert_many(archive_docs)
+    archive_ids = [str(x) for x in ins.inserted_ids]
+
+    # 2) Delete the matched rows from the live collection — strict
+    # filter again so we cannot drift outside the safety boundary.
+    trace_ids = [r.get("trace_id") for r in matched if r.get("trace_id")]
+    if trace_ids:
+        delete_q = dict(q)
+        delete_q["trace_id"] = {"$in": trace_ids}
+    else:
+        # Fallback: use the row ids (PyObjectId string mirror) if
+        # trace_id is somehow missing. Still keeps the strict filter.
+        ids = [k for k in archive_keys if k]
+        delete_q = dict(q)
+        if ids:
+            delete_q["id"] = {"$in": ids}
+    res = await db.integration_inbox.delete_many(delete_q)
+    return {
+        "matched": len(matched),
+        "archived": len(archive_ids),
+        "deleted": int(res.deleted_count),
+        "archive_ids": archive_ids,
+    }

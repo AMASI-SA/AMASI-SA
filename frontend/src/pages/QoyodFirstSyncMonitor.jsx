@@ -271,16 +271,26 @@ export default function QoyodFirstSyncMonitor() {
   const [limit, setLimit] = useState(5);
   const [workerStatus, setWorkerStatus] = useState(null);
   const [advancing, setAdvancing] = useState(false);
+  const [stats, setStats] = useState(null);
+
+  // Archive-failed-tests modal state
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveConfirm, setArchiveConfirm] = useState("");
+  const [archiving, setArchiving] = useState(false);
+  const [archiveResult, setArchiveResult] = useState(null);
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [rowsRes, wsRes] = await Promise.all([
+      const [rowsRes, wsRes, statsRes] = await Promise.all([
         axios.get(`${API}/integrations/qoyod/first-sync-monitor?limit=${limit}`),
         axios.get(`${API}/integrations/qoyod/worker/status`).catch(() => ({ data: null })),
+        axios.get(`${API}/integrations/qoyod/first-sync-monitor/stats/summary`)
+          .catch(() => ({ data: null })),
       ]);
       setRows(rowsRes.data?.rows || []);
       setWorkerStatus(wsRes.data?.worker || null);
+      setStats(statsRes.data?.stats || null);
       if (!expandedId && (rowsRes.data?.rows || []).length > 0) {
         setExpandedId(rowsRes.data.rows[0].trace_id);
       }
@@ -308,6 +318,28 @@ export default function QoyodFirstSyncMonitor() {
     }
   };
 
+  const runArchive = async () => {
+    if (archiveConfirm.trim() !== "CLEAN") {
+      toast.error('أدخل كلمة "CLEAN" للتأكيد');
+      return;
+    }
+    setArchiving(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/first-sync-monitor/archive-failed-tests`,
+        { confirm: "CLEAN" });
+      setArchiveResult(data);
+      toast.success(
+        `تمت الأرشفة — ${data.archived} سجل تم نقله، ${data.deleted} حذف من القائمة الحية`);
+      await load(true);
+    } catch (e) {
+      const detail = e.response?.data?.detail;
+      toast.error(detail?.message || detail || "فشلت الأرشفة");
+    } finally {
+      setArchiving(false);
+    }
+  };
+
   useEffect(() => { load(); }, [limit]);
 
   useEffect(() => {
@@ -329,6 +361,77 @@ export default function QoyodFirstSyncMonitor() {
           مع المدة الزمنية وحالة كل خطوة.
         </p>
       </header>
+
+      {/* Status counter badges (Iter — sidebar integration) */}
+      {stats && (
+        <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-2"
+             data-testid="monitor-stats-badges">
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-3"
+               data-testid="stat-processing">
+            <div className="text-[11px] font-bold text-sky-700">قيد المعالجة</div>
+            <div className="text-2xl font-extrabold text-sky-900 num">
+              {stats.processing || 0}
+            </div>
+          </div>
+          <div className={`rounded-xl border p-3 ${
+                  (stats.failed || 0) > 0
+                    ? "border-rose-300 bg-rose-50"
+                    : "border-slate-200 bg-slate-50"}`}
+               data-testid="stat-failed">
+            <div className={`text-[11px] font-bold ${
+                  (stats.failed || 0) > 0 ? "text-rose-700" : "text-slate-600"}`}>
+              فشل (DEAD_LETTER + PARTIAL)
+            </div>
+            <div className={`text-2xl font-extrabold num ${
+                  (stats.failed || 0) > 0 ? "text-rose-900" : "text-slate-700"}`}>
+              {stats.failed || 0}
+            </div>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"
+               data-testid="stat-success">
+            <div className="text-[11px] font-bold text-emerald-700">ناجحة (COMPLETED)</div>
+            <div className="text-2xl font-extrabold text-emerald-900 num">
+              {stats.success || 0}
+            </div>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"
+               data-testid="stat-skipped">
+            <div className="text-[11px] font-bold text-amber-700">متخطّاة (SKIPPED)</div>
+            <div className="text-2xl font-extrabold text-amber-900 num">
+              {stats.skipped || 0}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive failed dry-run tests — surfaced only when there's
+          something to clean. Strict safety: archive (not delete) + a
+          typed "CLEAN" confirmation token. */}
+      {stats && (stats.dry_failed || 0) > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 flex items-center justify-between gap-3"
+             data-testid="archive-failed-tests-banner">
+          <div className="flex-1">
+            <div className="text-sm font-extrabold text-amber-900">
+              🗂️ يوجد {stats.dry_failed} سجل اختبار فاشل من Dry Run
+            </div>
+            <div className="text-[12px] text-amber-800 mt-0.5">
+              يمكنك أرشفتها لتنظيف لوحة المراقبة.
+              <strong className="mx-1">لن يتم حذف أي بيانات من قيود</strong>
+              ولن تُمسّ السجلات الناجحة (COMPLETED) ولا السجلات الإنتاجية —
+              فقط <code className="font-mono">DEAD_LETTER</code> +
+              <code className="font-mono"> PARTIAL_FAILURE</code> في وضع Dry Run.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setArchiveOpen(true); setArchiveConfirm(""); setArchiveResult(null); }}
+            data-testid="btn-open-archive-modal"
+            className="px-3 py-2 text-xs font-extrabold rounded-lg bg-amber-600 text-white hover:bg-amber-700 whitespace-nowrap"
+          >
+            🗂️ أرشفة فشل الاختبار القديم
+          </button>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="rounded-xl border border-slate-200 bg-white p-3 mb-4
@@ -399,6 +502,85 @@ export default function QoyodFirstSyncMonitor() {
                  onAdvanceNow={advanceNow}
                  advancing={advancing} />
       ))}
+
+      {/* Archive confirm modal — requires typing "CLEAN" */}
+      {archiveOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+             data-testid="archive-modal-backdrop"
+             onClick={() => !archiving && setArchiveOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6"
+               data-testid="archive-modal"
+               onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-extrabold text-slate-900 mb-2">
+              🗂️ أرشفة فشل الاختبار القديم
+            </h2>
+            <p className="text-sm text-slate-700 leading-relaxed">
+              ستتم أرشفة كل سجل بمرحلة
+              <code className="font-mono mx-1 text-rose-700">DEAD_LETTER</code>
+              أو <code className="font-mono mx-1 text-rose-700">PARTIAL_FAILURE</code>
+              تم إنشاؤه في وضع <strong>Dry Run</strong> فقط.
+            </p>
+            <ul className="text-[12px] text-slate-600 list-disc pe-5 mt-2 space-y-1">
+              <li>السجلات تُنقَل إلى مجموعة الأرشيف (<code className="font-mono">integration_inbox_archive</code>) — قابلة للاسترجاع.</li>
+              <li>لن يُمسّ أي سجل <code className="font-mono">COMPLETED</code>.</li>
+              <li>لن يتم حذف أي بيانات من قيود نفسه.</li>
+              <li>لن يتم حذف السجلات الإنتاجية الفاشلة (إن وُجدت).</li>
+            </ul>
+
+            {archiveResult ? (
+              <div className="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 p-3"
+                   data-testid="archive-result">
+                <div className="text-sm font-extrabold text-emerald-900">
+                  ✓ تمت الأرشفة بنجاح
+                </div>
+                <div className="text-[12px] text-emerald-800 mt-1 num">
+                  مطابق: {archiveResult.matched} · مؤرشف: {archiveResult.archived} ·
+                  محذوف من القائمة الحية: {archiveResult.deleted}
+                </div>
+              </div>
+            ) : (
+              <>
+                <label className="block mt-4 text-[12px] font-bold text-slate-700">
+                  للتأكيد، اكتب <code className="font-mono text-rose-700">CLEAN</code> في الحقل أدناه:
+                </label>
+                <input
+                  type="text"
+                  value={archiveConfirm}
+                  onChange={(e) => setArchiveConfirm(e.target.value)}
+                  dir="ltr"
+                  placeholder="CLEAN"
+                  data-testid="archive-confirm-input"
+                  autoFocus
+                  className="mt-1 w-full px-3 py-2 border-2 border-slate-300 rounded-lg font-mono text-sm focus:border-amber-500 outline-none"
+                />
+              </>
+            )}
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setArchiveOpen(false)}
+                disabled={archiving}
+                data-testid="btn-archive-cancel"
+                className="px-4 py-2 text-sm font-bold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {archiveResult ? "إغلاق" : "إلغاء"}
+              </button>
+              {!archiveResult && (
+                <button
+                  type="button"
+                  onClick={runArchive}
+                  disabled={archiving || archiveConfirm.trim() !== "CLEAN"}
+                  data-testid="btn-archive-confirm"
+                  className="px-4 py-2 text-sm font-extrabold rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40"
+                >
+                  {archiving ? "جاري الأرشفة…" : "🗂️ تنفيذ الأرشفة"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -55,6 +55,8 @@ from integrations.qoyod.fresh_start_cleanup import (
 )
 from integrations.qoyod.first_sync_monitor import (
     list_recent_for_monitor, get_row_for_monitor,
+    get_monitor_stats, archive_failed_dry_run_tests, ArchiveRefused,
+    ARCHIVE_CONFIRM_TOKEN,
 )
 from salla_integration.service import call_salla, SallaError
 from integrations.qoyod.setup_validation import (
@@ -123,6 +125,11 @@ class CredentialsRequest(BaseModel):
 class FreshStartExecutePayload(BaseModel):
     job_id:  str = Field(..., description="The plan job_id to execute")
     confirm: str = Field(..., description="Must equal DELETE-CONFIRM")
+
+
+class ArchiveFailedTestsBody(BaseModel):
+    confirm: str = Field(..., description="Must equal 'CLEAN'.")
+    model_config = ConfigDict(extra="forbid")
 
 
 class TestConnectionResponse(BaseModel):
@@ -619,6 +626,38 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         rows = await list_recent_for_monitor(
             db, user_id=tenant, limit=limit)
         return {"ok": True, "rows": rows, "count": len(rows)}
+
+    # Aggregate counters used by the sidebar alert dot + monitor page
+    # status badges. Polled every few seconds by the UI.
+    @router.get("/first-sync-monitor/stats/summary")
+    async def first_sync_monitor_stats(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        stats = await get_monitor_stats(db, user_id=tenant)
+        return {"ok": True, "stats": stats}
+
+    # Archive (move + delete) DEAD_LETTER + PARTIAL_FAILURE dry-run
+    # rows ONLY. Never touches COMPLETED rows or any production row.
+    # The archive collection (`integration_inbox_archive`) is kept
+    # forever so the operation is fully recoverable.
+    @router.post("/first-sync-monitor/archive-failed-tests")
+    async def first_sync_monitor_archive_failed_tests(
+        payload: ArchiveFailedTestsBody,
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        try:
+            result = await archive_failed_dry_run_tests(
+                db, user_id=tenant,
+                confirm_token=payload.confirm,
+                actor=getattr(user, "email", None) or tenant,
+            )
+        except ArchiveRefused as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "confirm_required",
+                        "message": str(exc),
+                        "expected_token": ARCHIVE_CONFIRM_TOKEN})
+        return {"ok": True, **result}
 
     @router.get("/first-sync-monitor/{trace_id}")
     async def first_sync_monitor_one(

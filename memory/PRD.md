@@ -1,5 +1,66 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## First-Sync Monitor → Permanent Operational Dashboard (2026-02-26)
+**User request**: Transform the First-Sync Monitor from a dev-only diagnostic into a daily operational tool with sidebar integration, status counters, failure alerts, and a safe cleanup tool for old dry-run test noise.
+
+### Sidebar Integration (frontend)
+- New link **"🩺 مراقبة مزامنة قيود"** added under التكاملات → قيود (Sidebar.jsx).
+- Polls `/api/integrations/qoyod/first-sync-monitor/stats/summary` every 20s.
+- Red pulsing dot + numeric badge next to the link when `failed > 0`.
+- Red dot next to "التكاملات (Integrations)" section header so the alert is visible even when the section is collapsed.
+- testids: `nav-qoyod-first-sync-monitor`, `nav-qoyod-monitor-alert-dot`, `sidebar-integrations-alert-dot`.
+
+### Status Counter Badges (frontend monitor page)
+- 4 stat tiles at the top of `QoyodFirstSyncMonitor.jsx`:
+  - **قيد المعالجة** — any non-terminal pipeline stage.
+  - **فشل (DEAD_LETTER + PARTIAL)** — failed terminal states (red when >0).
+  - **ناجحة (COMPLETED)** — successful terminal state.
+  - **متخطّاة (SKIPPED)** — business-rule excluded.
+- testids: `stat-processing`, `stat-failed`, `stat-success`, `stat-skipped`.
+
+### Archive Failed Dry-Run Tests (renamed from "delete")
+- Banner appears only when `stats.dry_failed > 0`.
+- Button **"🗂️ أرشفة فشل الاختبار القديم"** opens a confirm modal.
+- User must type **"CLEAN"** (case-sensitive) — submit button stays disabled until exact match.
+- Modal explicitly lists safety guarantees: rows go to archive (recoverable), COMPLETED untouched, no Qoyod data touched, production failures untouched.
+- testids: `archive-failed-tests-banner`, `btn-open-archive-modal`, `archive-modal`, `archive-confirm-input`, `btn-archive-confirm`, `btn-archive-cancel`, `archive-result`.
+
+### Backend
+- **`integrations/qoyod/first_sync_monitor.py`**:
+  - `get_monitor_stats(db, user_id)` — `$group` aggregation by `pipeline_stage` + `dry_run`, buckets into `{processing, failed, success, skipped, dry_failed, total}`.
+  - `archive_failed_dry_run_tests(db, user_id, confirm_token, actor)` — strict filter `{user_id, pipeline_stage ∈ {DEAD_LETTER, PARTIAL_FAILURE}, dry_run: True}`; copies matched rows to `integration_inbox_archive` with stamped metadata (`archived_at`, `archived_by`, `archive_reason`, `original_inbox_id`), then deletes with the same strict filter + a `trace_id` constraint for defense-in-depth.
+  - Confirm token **"CLEAN"** enforced; missing/wrong raises `ArchiveRefused`.
+- **`integrations/qoyod/routes.py`**:
+  - `GET /api/integrations/qoyod/first-sync-monitor/stats/summary` — counter endpoint.
+  - `POST /api/integrations/qoyod/first-sync-monitor/archive-failed-tests` — body `{confirm: "CLEAN"}` → `{matched, archived, deleted, archive_ids}`. Returns 400 `confirm_required` on wrong token.
+  - Routes ordered so concrete paths come before the `{trace_id}` wildcard.
+
+### Safety Contract (NEVER violated)
+1. NEVER touches `pipeline_stage: COMPLETED` rows.
+2. NEVER touches `dry_run: False` rows (production data is sacred).
+3. NEVER touches rows from other tenants.
+4. NEVER touches data inside Qoyod itself (local-only archive op).
+5. Always copies before deletes — archive is the source of truth for recovery.
+
+### Tests
+- **`tests/test_qoyod_monitor_archive.py`** (7 tests, all pass):
+  - Stats correctly bucket all stages including `dry_failed` subset.
+  - Empty tenant returns all zeros.
+  - Confirm-token enforcement (empty / lowercase / wrong word all rejected).
+  - Strict filter test: 8-row mix → only the 2 dry+failed rows archived; 6 protected rows untouched.
+  - Idempotent when no matches.
+  - Cross-tenant isolation.
+- E2E manual test passed: seeded 1 dry-run DEAD_LETTER row → sidebar badge + section dot + banner appeared → typed CLEAN → archive succeeded → row in `integration_inbox_archive` with full metadata, 0 rows in live collection.
+
+### Files Changed
+- `/app/backend/integrations/qoyod/first_sync_monitor.py` (+~120 lines)
+- `/app/backend/integrations/qoyod/routes.py` (3 new endpoints, BaseModel)
+- `/app/frontend/src/components/Sidebar.jsx` (link + 20s polling + alert dot)
+- `/app/frontend/src/pages/QoyodFirstSyncMonitor.jsx` (badges + banner + modal)
+- `/app/backend/tests/test_qoyod_monitor_archive.py` (new — 7 tests)
+
+
+
 ## QYD-GO Checklist Fixes — 3 Blockers (2026-06-27)
 **User-reported**: After the worker wiring, QYD-GO page still blocked Go-Live with 3 false-positives.
 
