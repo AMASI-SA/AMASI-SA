@@ -46,6 +46,12 @@ from integrations.qoyod.go_live import (
     activate_production_mode, ActivationBlocked,
 )
 from integrations.qoyod.migration_routes import attach_migration_routes
+from integrations.qoyod.webhook_token_store import (
+    generate_token,
+    save_webhook_token,
+    get_webhook_token_meta,
+    revoke_webhook_token,
+)
 
 
 # MVP runs single-tenant; we still derive user_id from the auth layer
@@ -202,6 +208,38 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         await db.qoyod_settings.update_one(
             {"user_id": tenant}, {"$set": {"enabled": False}})
         ok = await delete_api_key(db, tenant)
+        return {"ok": ok}
+
+    # ── Webhook Token (Make.com → Mezan shared secret) ───────────────
+    # Lifecycle: GET status → POST generate (returns plaintext ONCE) →
+    # DELETE revoke. After generate, only fingerprint is ever exposed.
+    @router.get("/webhook-token")
+    async def webhook_token_status(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        meta = await get_webhook_token_meta(db, tenant)
+        return {"ok": True, "configured": bool(meta and meta.get("configured")),
+                "meta": meta}
+
+    @router.post("/webhook-token/generate")
+    async def webhook_token_generate(user=Depends(current_user)):
+        """Generates a fresh strong token, persists it encrypted, and
+        returns the plaintext EXACTLY ONCE. Any subsequent read exposes
+        only the fingerprint.
+
+        Rotating: calling this endpoint again replaces the previous
+        token immediately (no overlap). Make.com must be updated before
+        the next webhook fires."""
+        tenant = _tenant_id(user)
+        token = generate_token()
+        meta = await save_webhook_token(db, tenant, token)
+        # The plaintext is returned ONLY here.
+        return {"ok": True, "token": token, "meta": meta,
+                "warning": "هذه القيمة لن تظهر مرة أخرى — احفظها فوراً في Make.com"}
+
+    @router.delete("/webhook-token")
+    async def webhook_token_revoke(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        ok = await revoke_webhook_token(db, tenant)
         return {"ok": ok}
 
     # ── POST /test-connection ────────────────────────────────────────

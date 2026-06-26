@@ -50,6 +50,196 @@ function Section({ title, children, tone = "default" }) {
   );
 }
 
+
+// ─── Webhook Token UI ──────────────────────────────────────────────
+function WebhookTokenSection() {
+  const [meta, setMeta] = useState(null);          // { configured, fingerprint, ... }
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  // One-time plaintext disclosure (cleared on dismiss):
+  const [revealedToken, setRevealedToken] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(
+        `${API}/integrations/qoyod/webhook-token`);
+      setMeta(data?.meta || null);
+    } catch (_e) {
+      setMeta(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const generate = async () => {
+    const ask = meta?.configured
+      ? "هل تريد إعادة التوليد؟ سيتم إبطال الـ Token الحالي فوراً. تأكّد من تحديث Make.com قبل وصول أي طلب جديد."
+      : "سيتم توليد Webhook Token جديد. لن يظهر مرة أخرى — انسخه فوراً.";
+    if (!window.confirm(ask)) return;
+    setGenerating(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/webhook-token/generate`);
+      if (data?.token) {
+        setRevealedToken(data.token);
+        setCopied(false);
+        toast.success("تم التوليد — انسخ القيمة فوراً، لن تظهر مرة أخرى");
+        await load();
+      } else {
+        toast.error("لم يتم استلام Token من الخادم");
+      }
+    } catch (e) {
+      toast.error("فشل توليد Token");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const copyToken = async () => {
+    if (!revealedToken) return;
+    try {
+      await navigator.clipboard.writeText(revealedToken);
+      setCopied(true);
+      toast.success("تم النسخ إلى الحافظة");
+    } catch (e) {
+      toast.error("تعذّر النسخ — انسخ يدوياً");
+    }
+  };
+
+  const dismissReveal = () => {
+    setRevealedToken(null);
+    setCopied(false);
+  };
+
+  const revoke = async () => {
+    if (!window.confirm(
+      "إبطال Webhook Token الحالي؟ Make.com لن يستطيع إرسال الطلبات بعد ذلك حتى توليد Token جديد."
+    )) return;
+    try {
+      await axios.delete(`${API}/integrations/qoyod/webhook-token`);
+      toast.success("تم إبطال الـ Token");
+      await load();
+    } catch (e) {
+      toast.error("فشل الإبطال");
+    }
+  };
+
+  if (loading) {
+    return (
+      <Section title="Webhook Token (Make.com → ميزان)">
+        <div className="text-sm text-slate-500"
+             data-testid="webhook-token-loading">
+          جاري التحميل…
+        </div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Webhook Token (Make.com → ميزان)">
+      {/* One-time plaintext disclosure */}
+      {revealedToken && (
+        <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-3 space-y-2"
+             data-testid="webhook-token-revealed">
+          <div className="flex items-start gap-2">
+            <span className="text-amber-700 text-lg">⚠</span>
+            <div className="flex-1">
+              <div className="text-sm font-extrabold text-amber-900">
+                هذه القيمة لن تظهر مرة أخرى — انسخها الآن والصقها في Make.com.
+              </div>
+              <div className="text-[11px] text-amber-700 mt-1">
+                لو ضاعت، اضغط &quot;إعادة التوليد&quot; لإصدار قيمة جديدة (سيتم إبطال هذه فوراً).
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 items-stretch">
+            <code className="flex-1 px-3 py-2 text-xs font-mono break-all
+                              bg-white border border-amber-300 rounded select-all"
+                  dir="ltr"
+                  data-testid="webhook-token-plaintext">
+              {revealedToken}
+            </code>
+            <button
+              onClick={copyToken}
+              className={`px-3 py-2 text-sm font-bold rounded text-white
+                          ${copied ? "bg-emerald-600 hover:bg-emerald-700"
+                                   : "bg-slate-900 hover:bg-black"}`}
+              data-testid="btn-copy-webhook-token">
+              {copied ? "✓ تم النسخ" : "📋 نسخ"}
+            </button>
+            <button
+              onClick={dismissReveal}
+              className="px-3 py-2 text-sm font-bold rounded bg-slate-200 hover:bg-slate-300"
+              data-testid="btn-dismiss-webhook-token">
+              إغلاق
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Configured state */}
+      {meta?.configured ? (
+        <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg p-3"
+             data-testid="webhook-token-configured">
+          <div>
+            <div className="text-sm font-bold text-emerald-800">
+              Webhook Token مفعّل ومُشفَّر
+            </div>
+            <div className="text-xs text-emerald-700 font-mono mt-1"
+                 data-testid="webhook-token-fingerprint">
+              Fingerprint: {meta.fingerprint || "—"}
+            </div>
+            {meta.last_verified_at && (
+              <div className="text-[11px] text-emerald-700 mt-0.5">
+                آخر استعمال ناجح: {new Date(meta.last_verified_at)
+                                     .toLocaleString("ar-SA")}
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={generate} disabled={generating}
+              className="px-3 py-2 text-sm font-bold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+              data-testid="btn-regenerate-webhook-token">
+              {generating ? "جاري التوليد…" : "إعادة التوليد"}
+            </button>
+            <button
+              onClick={revoke}
+              className="px-3 py-2 text-sm font-bold rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200"
+              data-testid="btn-revoke-webhook-token">
+              إبطال
+            </button>
+          </div>
+        </div>
+      ) : (
+        // Not configured (or revoked) — only the Generate button.
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4"
+             data-testid="webhook-token-empty">
+          <div className="text-sm text-slate-700 mb-3">
+            لم يتم توليد Webhook Token بعد. هذا الـ Token يسمح لـ Make.com بإرسال
+            طلبات سلة إلى مسار قيود داخل ميزان (مستقل تماماً عن Webhook التقارير).
+          </div>
+          <ul className="text-[12px] text-slate-600 list-disc pr-5 mb-3 space-y-0.5">
+            <li>القيمة تُولَّد عشوائياً (48 بايت ≈ 384 bit) وتُحفظ مشفّرة في قاعدة البيانات.</li>
+            <li>تظهر القيمة الكاملة <strong>مرة واحدة فقط</strong> بعد التوليد.</li>
+            <li>لاحقاً يُعرض Fingerprint فقط (لا يمكن استرجاع القيمة الأصلية).</li>
+            <li>إعادة التوليد تُبطل القيمة السابقة فوراً.</li>
+          </ul>
+          <button
+            onClick={generate} disabled={generating}
+            className="px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+            data-testid="btn-generate-webhook-token">
+            {generating ? "جاري التوليد…" : "🔑 توليد Webhook Token"}
+          </button>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 function ToggleRow({ label, hint, checked, onChange, testid }) {
   return (
     <label className="flex items-start justify-between gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
@@ -109,7 +299,7 @@ export default function QoyodSettings() {
     ]);
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, []);
 
   const patch = (changes) =>
     setSettings((s) => ({ ...s, ...changes }));
@@ -301,6 +491,9 @@ export default function QoyodSettings() {
           </div>
         )}
       </Section>
+
+      {/* ─── Webhook Token (Make.com inbound auth) ─── */}
+      <WebhookTokenSection />
 
       {/* ─── Defaults ─── */}
       <Section title="الإعدادات الافتراضية">

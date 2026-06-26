@@ -32,6 +32,9 @@ from integrations.qoyod.normalizer import (
 from integrations.qoyod.state_machine import (
     transition, initial_history_entry,
 )
+from integrations.qoyod.webhook_token_store import (
+    verify_provided_token,
+)
 
 
 # Connector key for the inbox row — matches the unique idempotency
@@ -45,16 +48,59 @@ def _now() -> datetime:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Token verification dependency
+# Token verification dependency factory
 # ─────────────────────────────────────────────────────────────────────
-def _verify_token(
+def _make_verify_token(db):
+    """Build a FastAPI dependency that captures the DB handle.
+
+    Verification order (matches webhook_token_store.verify_provided_token):
+        1) DB-stored token under tenant 'main' (production path)
+        2) `QOYOD_WEBHOOK_TOKEN` env var      (preview / CI fallback)
+
+    Raises 401 on mismatch, 503 only when BOTH DB and env are empty
+    (a real misconfiguration the operator must fix).
+    """
+    async def _verify_token(
+        x_webhook_token: Optional[str] = Header(
+            default=None, alias="X-Webhook-Token"),
+    ) -> bool:
+        provided = (x_webhook_token or "").strip()
+        if not provided:
+            raise HTTPException(401, "missing_webhook_token")
+        env_fallback = (os.environ.get("QOYOD_WEBHOOK_TOKEN") or "").strip()
+        # Short-circuit "no source at all" check so the operator sees
+        # the actionable error code immediately.
+        db_token_exists = await _db_token_configured(db)
+        if not env_fallback and not db_token_exists:
+            raise HTTPException(503, "qoyod_webhook_token_not_configured")
+        ok = await verify_provided_token(
+            db, provided=provided, user_id="main",
+            env_fallback=env_fallback or None,
+        )
+        if not ok:
+            raise HTTPException(401, "invalid_webhook_token")
+        return True
+    return _verify_token
+
+
+async def _db_token_configured(db) -> bool:
+    """Cheap existence probe — used only to distinguish 401 vs 503."""
+    doc = await db.qoyod_webhook_tokens.find_one(
+        {"user_id": "main", "revoked": {"$ne": True}},
+        {"_id": 1})
+    return doc is not None
+
+
+# Legacy alias retained so existing tests that monkey-patch the old
+# name keep working until they are migrated to the factory above.
+def _verify_token(  # noqa: D401 (kept for backward compat)
     x_webhook_token: Optional[str] = Header(default=None, alias="X-Webhook-Token"),
 ) -> bool:
-    """Verifies X-Webhook-Token against `QOYOD_WEBHOOK_TOKEN` env.
+    """Backwards-compatible env-only verifier (used by older tests).
 
-    Returns True on success. Raises 401 on mismatch, 503 on
-    mis-configuration so the operator is never confused between
-    "wrong token" and "server forgot to set the token".
+    Note: synchronous on purpose — the day-3 test suite calls this
+    function directly without awaiting. The production webhook route
+    uses `_make_verify_token(db)` (DB-first) instead.
     """
     expected = (os.environ.get("QOYOD_WEBHOOK_TOKEN") or "").strip()
     if not expected:
@@ -224,6 +270,7 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
     Defined as a function so the router factory can call it after
     creating the router — keeps `make_qoyod_router()` short.
     """
+    verify_token_dep = _make_verify_token(db)
 
     @router.post("/webhook")
     async def receive_webhook(
@@ -231,7 +278,7 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
         body: Any = Body(...),
         x_idempotency_key: Optional[str] = Header(
             default=None, alias="X-Idempotency-Key"),
-        _token_ok: bool = Depends(_verify_token),
+        _token_ok: bool = Depends(verify_token_dep),
     ):
         # Day 3 ONLY accepts JSON object payloads.
         if not isinstance(body, dict):

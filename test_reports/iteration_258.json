@@ -1,0 +1,37 @@
+{
+  "summary": "iter-258 verified the new UI-driven Webhook Token generator end-to-end. Backend pytest: 19/19 PASS on test_qoyod_webhook_token.py and 198/198 PASS on the full Qoyod regression suite (10 files: webhook_token + day1/day3/day4/day5 + compliance + endpoint_contract + state_machine + migration + go-live). NO regression. New live HTTP smoke test_qoyod_webhook_token_http_iter258.py — 5/5 PASS — covers: (a) initial empty status, (b) generate returns plaintext length=79 starting 'mzn_qoyod_prod_' with SHA-256 4…4 fingerprint that matches client-side hash, (c) GET after generate exposes only fingerprint (no plaintext in response body), (d) regenerate yields a DIFFERENT token and DB has only 1 row for tenant 'main', (e) DELETE revokes and subsequent GET reports configured:false, (f) DB-stored token accepted by POST /webhook (200 ok:false DEAD_LETTER on empty payload — token passed, payload failed), (g) legacy env value 'mzn_qoyod_dev_token_change_me' is REJECTED with 401 invalid_webhook_token once a DB token exists (security-critical precedence verified), (h) unauth GET returns 401. Frontend at /integrations/qoyod/settings exercised in Playwright: empty state (data-testid='webhook-token-empty') → click 'btn-generate-webhook-token' → revealed section appears with 79-char plaintext, copy + dismiss buttons → click 'btn-dismiss-webhook-token' → 'webhook-token-configured' with 'webhook-token-fingerprint' (e.g. '3da0…9751') visible while plaintext is gone from the entire DOM (verified via full-page string search) → click 'btn-regenerate-webhook-token' → confirm accepted → NEW plaintext (79 chars, different from previous). Arabic UI strings render correctly ('Webhook Token (Make.com → ميزان)', warning banner 'هذه القيمة لن تظهر مرة أخرى …').",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "QoyodSettings.jsx WebhookTokenSection", "issues": ["The first-time generate ALSO triggers a window.confirm() dialog. The spec said the confirm is only required on REGENERATE (replacing an existing token). For the very first generation there is nothing to revoke, so an extra confirm here is needless friction. Suggestion: gate `window.confirm(ask)` inside `generate()` on `meta?.configured` only (file: QoyodSettings.jsx lines 77-81)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qoyod_webhook_token.py",
+    "/app/backend/tests/test_qoyod_webhook_token_http_iter258.py",
+    "/app/test_reports/pytest/iter258_webhook_token.xml",
+    "/app/test_reports/pytest/iter258_webhook_token_http.xml",
+    "/app/test_reports/pytest/iter258_qoyod_full.xml"
+  ],
+  "action_items": [
+    "OPTIONAL UX polish — drop the window.confirm on first-time generate (only confirm when meta?.configured is true). Lines 77-81 of QoyodSettings.jsx.",
+    "OPTIONAL — use native browser confirm() with a `<Dialog>` modal so the copy mechanism works in non-Chromium contexts where window.confirm UX is rough."
+  ],
+  "critical_code_review_comments": [
+    "webhook_token_store.py — DB-precedence-over-env property is correctly implemented (`if db_token: ...; return False` BEFORE the env_fallback compare). Verified by 2 dedicated unit tests + 1 live HTTP test.",
+    "webhook_token_store.py:97 — `find_one({'revoked': {'$ne': True}})` correctly excludes revoked rows so a rotated-and-revoked token can never be returned by `get_webhook_token`. Good.",
+    "webhook_token_store.py:165-169 — hmac.compare_digest is used on both branches, no early-return on length mismatch — timing-safe. Good.",
+    "routes.py:223-237 — POST /webhook-token/generate returns the plaintext only ONCE; subsequent GETs never include the token field. The `warning` Arabic string is helpful. Consider also returning the previous fingerprint when rotating so the audit log of the UI can show 'rotated FROM X TO Y'.",
+    "routes.py:217-221 — GET /webhook-token returns {ok:true, configured:false, meta:null} when nothing was ever saved, and {ok:true, configured:false, meta:{configured:false,...}} after a revoke. The shape divergence (meta:null vs meta:{}) is harmless but slightly inconsistent — consider always returning meta:null when configured:false.",
+    "QoyodSettings.jsx — token is held in component state only (revealedToken); not persisted, not logged. Good. Dismiss correctly sets state to null so React unmounts the revealed JSX (verified — plaintext fully removed from DOM after dismiss)."
+  ],
+  "updated_files": ["/app/backend/tests/test_qoyod_webhook_token_http_iter258.py"],
+  "success_rate": {"backend": "100% (19/19 unit + 198/198 full qoyod regression + 5/5 new HTTP smoke = 222/222)", "frontend": "100% — all 8 testids present and functional; plaintext disappears from DOM on dismiss; rotation produces a different token"},
+  "test_credentials": "admin@hesab.app / admin123",
+  "seed_data_creation": "None. Unit tests seed their own in-memory MongoDB; HTTP tests use the live 'main' tenant and clean up via DELETE before/after.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Webhook Token store collection: qoyod_webhook_tokens (user_id, token_enc, fingerprint, rotated_at, last_verified_at, revoked, schema_version=1). Encryption is Fernet (same key as qoyod_credentials). Token format: 'mzn_qoyod_prod_' + secrets.token_urlsafe(48) → total 79 chars. Fingerprint format: SHA-256 hex first4…last4. Webhook verifier (_make_verify_token closure in webhook.py) consults DB FIRST; only falls back to QOYOD_WEBHOOK_TOKEN env var when DB has NO token. Legacy sync _verify_token is preserved for the old tests in test_qoyod_day3_webhook.py. To exercise the UI: login as admin@hesab.app, go to /integrations/qoyod/settings, scroll past the 'مفتاح API الخاص بقيود' section to find the 'Webhook Token (Make.com → ميزان)' card. Testids: webhook-token-empty | btn-generate-webhook-token | webhook-token-revealed | webhook-token-plaintext | btn-copy-webhook-token | btn-dismiss-webhook-token | webhook-token-configured | webhook-token-fingerprint | btn-regenerate-webhook-token. NOTE: both generate and regenerate currently fire window.confirm — Playwright tests must register a `page.on('dialog', lambda d: d.accept())` handler BEFORE clicking the generate button."
+}
