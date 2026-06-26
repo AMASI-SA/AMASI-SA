@@ -1,5 +1,51 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Payment-Method Alias Resolution — Final Pre-Go-Live Fix (2026-02-26)
+**User-reported bug**: Order reached `PRODUCT_RESOLVED` then failed at `INVOICE_CREATED` with `payment_method_mapping_missing` because Salla sent `tamara_installment` but only `tamara` was mapped in settings.
+
+**User spec**:
+1. No hardcoded provider names — accept anything Salla sends.
+2. New methods auto-appear as Settings rows, never as runtime crashes.
+3. Built-in alias table: `*_installment` variants collapse to their base provider (`tamara_installment → tamara`, `tabby_installment → tabby`, etc.) so one mapping covers both.
+4. User can still explicitly map a variant to a different Qoyod account if needed.
+
+### Backend
+- **`integrations/qoyod/payment_methods.py`** (NEW):
+  - `PAYMENT_METHOD_ALIASES` table covering Tamara/Tabby/Emkan installment variants, bank/wire, cash/cod, applepay/stcpay typo variants, credit/card.
+  - `provider_family(method)` — collapses a variant to its base provider.
+  - `resolve_payment_account(settings, method)` — direct match → alias fallback → None.
+  - `explain_resolution(settings, method)` — diagnostic for UI/monitor.
+- **`integrations/qoyod/invoice_builder.py::_resolve_payment_account`**: delegates to the new resolver.
+- **`integrations/qoyod/preflight.py`**: uses `resolve_payment_account`; failure message now surfaces `provider_family` hint so operator sees which base to map.
+- **`integrations/qoyod/setup_validation.py`**: a method is "mapped" if direct OR alias resolves. The blocker carries `extra.alias_hints` listing variants that could be solved by mapping a base provider.
+- **`integrations/qoyod/go_live.py::_collect_eligible_skus_and_methods`**: same alias-aware unmapped detection.
+- **`GET /api/integrations/qoyod/payment-methods/used`**: each row now carries `provider_family`, `mapped_via` ("direct"|"alias"|null), `matched_key`, `resolved_account_id`. The endpoint also returns the full `aliases` table.
+
+### Frontend (`pages/QoyodSettings.jsx`)
+- Payment-method mapping table renders each used method as before, but when a row is alias-covered:
+  - Sky-blue row background instead of red.
+  - "✓ مربوط (Alias)" badge in status column instead of "مطلوب".
+  - Inline hint badge "عبر تمارا" next to the method name.
+  - Input placeholder shows "(اختياري — يستخدم tamara)".
+- Client-side validation mirrors backend: rows with `mapped_via === "alias"` are NOT counted as missing.
+
+### Tests
+- **`tests/test_qoyod_payment_method_aliases.py`** (new, 13 tests, all pass):
+  - Provider family collapses known aliases, passes through unknown methods, handles empty/None.
+  - Resolver: direct match takes priority over alias; falls back to alias; returns None when neither; ignores blank account IDs; case-insensitive + whitespace-tolerant.
+  - Preflight passes when variant resolves via alias; fails with helpful family hint when no alias covers.
+  - Settings validation treats variants as mapped when alias covers them.
+- Full Qoyod suite: **384 tests pass** (no regressions).
+
+### Verified end-to-end
+- Seeded a `tamara_installment` inbox row with only `tamara` mapped in settings.
+- `/payment-methods/used` returns the row with `mapped_via: "alias"`, `matched_key: "tamara"`, `resolved_account_id: "A-9999"`.
+- `/setup/validate` returns `ok: true` — no blocker.
+- Settings UI shows sky-blue row with "✓ مربوط (Alias)" badge and "عبر تمارا" hint.
+- Bottom save banner: "✅ كل الحقول مكتملة — جاهز للحفظ".
+
+
+
 ## QYD-GO Dry-Run Awareness + Migration SSOT Clarification (2026-02-26)
 **User decisions**:
 1. `_check_outstanding_failures` counts ONLY production (`dry_run != True`) failures. Dry-run failures NEVER block Go-Live.

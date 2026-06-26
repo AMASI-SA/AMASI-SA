@@ -20,6 +20,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from integrations.qoyod.payment_methods import (
+    resolve_payment_account, provider_family,
+)
+
 
 @dataclass
 class PreflightResult:
@@ -71,22 +75,24 @@ def run(
                          "code": "missing_tax_configuration",
                          "message": "default_tax_id not set and items have no tax_amount"})
 
-    # 4) Payment method mapping
+    # 4) Payment method mapping (alias-aware — Iter 2026-02-26)
     pm_native = dto_dict.get("payment_method") or dto_dict.get("payment_method_native")
-    mapping = settings.get("payment_method_mapping") or []
-    pm_mapped = None
-    for m in mapping:
-        if (m.get("salla_method") or "").lower() == (pm_native or "").lower():
-            pm_mapped = m.get("qoyod_account_id")
-            break
+    pm_mapped = resolve_payment_account(settings, pm_native)
     if not pm_native:
         failures.append({"check": "payment_method",
                          "code": "missing_payment_method",
                          "message": "order has no payment_method on the DTO"})
     elif not pm_mapped:
+        family = provider_family(pm_native)
+        msg = (f"no Qoyod account mapped for payment_method={pm_native!r}")
+        if family and family != (pm_native or "").lower():
+            msg += (f" (try mapping its base provider '{family}' "
+                    f"or this variant directly)")
         failures.append({"check": "payment_method",
                          "code": "payment_method_mapping_missing",
-                         "message": f"no Qoyod account mapped for payment_method={pm_native!r}"})
+                         "message": msg,
+                         "extra": {"payment_method": pm_native,
+                                   "provider_family": family}})
 
     # 5) Status
     triggers = settings.get("invoice_trigger_statuses") or ["completed"]

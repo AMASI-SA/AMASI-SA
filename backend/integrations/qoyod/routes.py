@@ -354,13 +354,34 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def payment_methods_used(user=Depends(current_user)):
         """Returns every payment-method key that has appeared on real
         store data so the Settings UI can mandate a mapping for each.
-        Also includes the canonical catalogue (so the UI can offer
-        suggestions like Apple Pay/Emkan that haven't appeared yet)."""
+
+        Per Iter 2026-02-26 each row also carries:
+          • `provider_family` — the alias-collapsed base provider
+            (e.g. `tamara` for `tamara_installment`).
+          • `mapped_via`      — null | "direct" | "alias" indicating how
+            the current settings resolve this key today.
+          • `resolved_account_id` — the Qoyod account it maps to today.
+
+        The UI uses these to show "✓ مربوطة عبر تمارا" instead of
+        "غير مربوطة" when an alias already covers a variant.
+        """
+        from integrations.qoyod.payment_methods import (
+            explain_resolution, PAYMENT_METHOD_ALIASES,
+        )
         tenant = _tenant_id(user)
         used = await collect_used_payment_methods(db, user_id=tenant)
+        settings = await db.qoyod_settings.find_one(
+            {"user_id": tenant}, {"_id": 0}) or {}
+        for row in used:
+            info = explain_resolution(settings, row.get("key"))
+            row["provider_family"]     = info["family"]
+            row["mapped_via"]          = info["matched_via"]
+            row["matched_key"]         = info["matched_key"]
+            row["resolved_account_id"] = info["qoyod_account_id"]
         return {"ok": True,
                 "used": used,
-                "catalogue": CANONICAL_PAYMENT_METHODS}
+                "catalogue": CANONICAL_PAYMENT_METHODS,
+                "aliases":   PAYMENT_METHOD_ALIASES}
 
     @router.get("/setup/validate")
     async def setup_validate(user=Depends(current_user)):

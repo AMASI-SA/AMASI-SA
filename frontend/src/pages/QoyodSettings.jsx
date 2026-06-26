@@ -440,11 +440,16 @@ function PaymentMethodMappingTable({
               {visibleKeys.map((key) => {
                 const row = mappingByKey.get(key);
                 const accId = row?.qoyod_account_id || "";
-                const isUsed = usedByKey.has(key);
-                const missing = isUsed && !accId;
+                const usedRow = usedByKey.get(key);
+                const isUsed = !!usedRow;
+                const resolvedViaAlias =
+                  !accId && usedRow?.mapped_via === "alias"
+                  && usedRow?.matched_key;
+                const missing = isUsed && !accId && !resolvedViaAlias;
                 return (
                   <tr key={key}
-                      className={`${missing ? "bg-rose-50/40" : ""}`}
+                      className={`${missing ? "bg-rose-50/40"
+                                 : resolvedViaAlias ? "bg-sky-50/40" : ""}`}
                       data-testid={`pm-row-${key}`}>
                     <td className="px-3 py-2 align-middle">
                       <div className="font-bold text-slate-800">{labelFor(key)}</div>
@@ -453,7 +458,16 @@ function PaymentMethodMappingTable({
                         {isUsed && (
                           <span className="mr-2 inline-block px-1.5 py-0.5 rounded
                                            bg-amber-100 text-amber-800 font-extrabold">
-                            مُستخدم ({usedByKey.get(key)?.count ?? 0})
+                            مُستخدم ({usedRow?.count ?? 0})
+                          </span>
+                        )}
+                        {resolvedViaAlias && (
+                          <span
+                            data-testid={`pm-alias-hint-${key}`}
+                            title={`يُحلّ تلقائياً إلى ${usedRow.matched_key}`}
+                            className="mr-2 inline-block px-1.5 py-0.5 rounded
+                                       bg-sky-100 text-sky-800 font-extrabold">
+                            عبر {labelFor(usedRow.matched_key)}
                           </span>
                         )}
                       </div>
@@ -463,7 +477,9 @@ function PaymentMethodMappingTable({
                         type="text"
                         value={accId}
                         onChange={(e) => updateRow(key, e.target.value.trim())}
-                        placeholder="مثال: 9876"
+                        placeholder={resolvedViaAlias
+                          ? `(اختياري — يستخدم ${usedRow.matched_key})`
+                          : "مثال: 9876"}
                         list="qoyod-accounts-list"
                         data-testid={`pm-input-${key}`}
                         className={`w-full px-2 py-1.5 border rounded text-sm font-mono
@@ -475,6 +491,11 @@ function PaymentMethodMappingTable({
                       {accId ? (
                         <span className="text-[11px] text-emerald-700 font-bold"
                               data-testid={`pm-status-${key}`}>✓ مربوط</span>
+                      ) : resolvedViaAlias ? (
+                        <span className="text-[11px] text-sky-700 font-bold"
+                              data-testid={`pm-status-${key}`}>
+                          ✓ مربوط (Alias)
+                        </span>
                       ) : isUsed ? (
                         <span className="text-[11px] text-rose-700 font-bold"
                               data-testid={`pm-status-${key}`}>مطلوب</span>
@@ -880,13 +901,25 @@ export default function QoyodSettings() {
         severity: "blocker",
         message: "لم يُحدَّد Tax ID. ادخل قيود → الإعدادات → الضرائب → انسخ رقم معرّف ضريبة VAT 15%." });
     }
-    // Payment-method mapping completeness (based on USED methods)
+    // Payment-method mapping completeness (based on USED methods).
+    // A method counts as "mapped" if it has a direct mapping OR its
+    // alias-family base provider is mapped (mirrors backend resolver,
+    // Iter 2026-02-26). We trust the backend's `mapped_via` field on
+    // each used row for the alias case; the in-memory user edit only
+    // affects DIRECT entries so we recompute `direct` here and trust
+    // `mapped_via === "alias"` for the rest.
     const mappingByKey = new Map(
       (settings.payment_method_mapping || [])
         .filter((r) => (r.salla_method || "").trim() && (r.qoyod_account_id || "").trim())
         .map((r) => [(r.salla_method || "").toLowerCase(), r]));
-    const usedKeys = (pmUsed || []).map((u) => u.key).filter(Boolean);
-    const missing = usedKeys.filter((k) => !mappingByKey.has(k));
+    const missing = (pmUsed || [])
+      .filter((u) => u.key)
+      .filter((u) => {
+        if (mappingByKey.has(u.key)) return false;       // direct edit
+        if (u.mapped_via === "alias") return false;      // alias cover
+        return true;
+      })
+      .map((u) => u.key);
     if (missing.length > 0) {
       const labels = missing.slice(0, 5).map((k) => {
         const c = (pmCatalogue || []).find((x) => x.key === k);
@@ -926,7 +959,7 @@ export default function QoyodSettings() {
       issues,
       context: {
         product_type: ptype,
-        used_payment_methods: usedKeys,
+        used_payment_methods: (pmUsed || []).map((u) => u.key).filter(Boolean),
         mapped_payment_methods: [...mappingByKey.keys()],
         missing_payment_methods: missing,
         blocker_count: blockerCount,

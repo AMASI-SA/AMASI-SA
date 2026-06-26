@@ -20,16 +20,17 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Optional
 
+from integrations.qoyod.payment_methods import resolve_payment_account
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Pure payload builders
 # ─────────────────────────────────────────────────────────────────────
 def _resolve_payment_account(settings: dict, payment_method: Optional[str]) -> Optional[str]:
-    mapping = settings.get("payment_method_mapping") or []
-    for m in mapping:
-        if (m.get("salla_method") or "").lower() == (payment_method or "").lower():
-            return m.get("qoyod_account_id")
-    return None
+    # Delegates to the alias-aware resolver so variants like
+    # `tamara_installment` fall back to the `tamara` mapping
+    # automatically (Iter 2026-02-26).
+    return resolve_payment_account(settings, payment_method)
 
 
 def build_invoice_payload(

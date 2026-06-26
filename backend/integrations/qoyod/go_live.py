@@ -224,9 +224,9 @@ async def _collect_eligible_skus_and_methods(
          would_fail_count).
     """
     triggers = settings.get("invoice_trigger_statuses") or ["completed"]
-    pm_mapping = settings.get("payment_method_mapping") or []
-    mapped_methods = {(m.get("salla_method") or "").lower()
-                      for m in pm_mapping if m.get("salla_method")}
+    # Alias-aware mapping lookup (Iter 2026-02-26): a method counts as
+    # "mapped" if it has a direct mapping OR its base provider does.
+    from integrations.qoyod.payment_methods import resolve_payment_account
 
     cursor = db.integration_inbox.find(
         {"user_id": user_id,
@@ -247,9 +247,9 @@ async def _collect_eligible_skus_and_methods(
             sku = (it.get("sku") or "").strip()
             if sku:
                 eligible_skus.add(sku)
-        # Track unmapped payment methods.
+        # Track unmapped payment methods (alias-aware).
         pm = (canonical.get("payment_method") or "").lower()
-        if pm and pm not in mapped_methods:
+        if pm and not resolve_payment_account(settings, pm):
             unmapped.add(pm)
         # Estimate "would_fail": run preflight with the row's *current*
         # resolution state. Products not resolved yet → that's expected

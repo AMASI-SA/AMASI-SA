@@ -23,6 +23,9 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from integrations.qoyod.normalizer import _canonical_payment_method
+from integrations.qoyod.payment_methods import (
+    resolve_payment_account, provider_family, PAYMENT_METHOD_ALIASES,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -182,16 +185,21 @@ async def validate_settings_for_setup(db, *, user_id: str) -> dict:
         })
 
     # 3) Payment-method mapping must cover every USED method.
+    # A method counts as "mapped" if either it has a direct entry OR
+    # its alias-family base provider has one (alias-aware lookup,
+    # Iter 2026-02-26). This stops `tamara_installment` from blocking
+    # Go-Live when `tamara` is already mapped.
     used_rows = await collect_used_payment_methods(db, user_id=user_id)
     used_keys = {r["key"] for r in used_rows if r.get("key")}
-    mapping = _ensure_iter(settings.get("payment_method_mapping"))
-    mapped_keys = {
-        (m.get("salla_method") or "").strip().lower()
-        for m in mapping
-        if (m.get("salla_method") or "").strip()
-        and (m.get("qoyod_account_id") or "").strip()
+    settings_for_lookup = {
+        "payment_method_mapping":
+            _ensure_iter(settings.get("payment_method_mapping")),
     }
-    missing = sorted(used_keys - mapped_keys)
+    missing = sorted(
+        k for k in used_keys
+        if not resolve_payment_account(settings_for_lookup, k)
+    )
+    mapped_keys = sorted(used_keys - set(missing))
     if missing:
         labels = ", ".join(_label_for(k) for k in missing[:5])
         more = f" (+{len(missing)-5} غيرها)" if len(missing) > 5 else ""
@@ -201,7 +209,12 @@ async def validate_settings_for_setup(db, *, user_id: str) -> dict:
             "severity": "blocker",
             "message": (f"{len(missing)} طريقة دفع مُستخدمة في طلباتك "
                         f"غير مربوطة بحساب قيود: {labels}{more}."),
-            "extra": {"missing": missing},
+            "extra": {"missing": missing,
+                      "alias_hints": [
+                          {"key": k, "suggested_family": provider_family(k)}
+                          for k in missing
+                          if provider_family(k) and provider_family(k) != k
+                      ]},
         })
 
     # 4) Inventory-mode required accounts
@@ -242,7 +255,7 @@ async def validate_settings_for_setup(db, *, user_id: str) -> dict:
         "context": {
             "product_type": ptype,
             "used_payment_methods":    sorted(used_keys),
-            "mapped_payment_methods":  sorted(mapped_keys),
+            "mapped_payment_methods":  list(mapped_keys),
             "missing_payment_methods": missing,
             "blocker_count": len(blockers),
             "warning_count": sum(
