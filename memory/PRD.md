@@ -1,5 +1,39 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-283 — Totals Guard Discount Accounting Fix (2026-02-27)
+**User scenario (production preview)**: Order `268632361` (trace `33c07a10...`) returned PASS for normalize but FAIL on totals_guard:
+- `items_sum_excl = 187.06` (= 199 − 11.94 discount)
+- `items_sum_incl = 202.02`
+- `subtotal = 199.00` (Salla's GROSS — pre-discount)
+- `code = line_items_total_mismatch`
+
+### Root cause
+Salla's `subtotal` is reported PRE-discount (gross). Pre-Iter-283 the guard only knew two conventions (`excl` = post-discount-pre-tax, `incl` = post-discount-with-tax). For ANY order with a discount the guard would always mismatch.
+
+### Fix (`totals_guard.py`)
+Added a third convention `items_sum_gross = Σ(unit_price × qty)` (pre-discount, pre-tax) and try it FIRST (Salla default). Match priority: `gross > excl > incl`. The guard surfaces ALL THREE sums in `details` so the operator sees the full picture. Each parsed item now also carries `line_gross` alongside `line_excl` and `line_incl`.
+
+### Status gate vs preview (clarification)
+- **Production pipeline** (Iter-282): status gate runs FIRST; `processing` / `under_review` → SKIPPED, never reaches totals_guard.
+- **Preview reprocess** (Iter-281): runs ALL stages for diagnostic visibility — totals_guard runs regardless of status, by design. The `preflight.failures` block surfaces the status-trigger mismatch separately.
+
+### Tests (Iter-283)
+- **NEW** `tests/test_qoyod_totals_guard_discount_iter283.py` — **8/8 pass**:
+  - Production order 268632361 PASSES (the exact failing scenario).
+  - `matched_convention == "gross"`.
+  - All three sums surfaced (`gross=199, excl=187.06, incl=202.02`).
+  - No-discount orders still pass (gross = excl).
+  - Post-discount subtotal convention still accepted (Make.com flattening).
+  - Actually missing items STILL hard-refuses.
+  - Multi-item with per-line discounts matches gross.
+  - mezan_vat_diagnostics still embedded.
+- **Updated** 2 existing tests for the new `matched_convention="gross"` value when discount=0.
+- **701/701** Qoyod pytest suite passes. 0 regressions.
+
+### Open question for the user
+On point #1 of the user's message: should `event=order_completed + status=processing` be considered a trigger? Recommendation: **No** — `order_status_slug` is the SSOT. The Iter-282 gate correctly routes by status, not by Make's `event_type`. If the user wants to support `processing` as billable, they can add it to `settings.invoice_trigger_statuses`. The current behavior (SKIPPED) is the safer default.
+
+
 ## Iter-282 — Status Gate Before Totals Guard + Mezan VAT 15% SSOT (2026-02-27)
 **User scenario**: Order `268746039` reached DEAD_LETTER with code `line_items_total_mismatch` even though its REAL status was `under_review` (not invoice-eligible) — Make.com was incorrectly sending `event_type: order_completed` for under-review rows, and totals_guard ran BEFORE status gate. Additionally, the mismatch was a Salla-vs-Mezan tax math divergence (Salla `tax.percent=8.00`, Mezan policy is 15%) which should NOT block the row.
 

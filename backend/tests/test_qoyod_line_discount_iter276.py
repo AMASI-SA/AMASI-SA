@@ -165,21 +165,25 @@ def test_totals_guard_still_rejects_truly_incomplete_items():
 def test_totals_guard_parsed_items_now_carry_discount_column():
     """Operator-facing audit row must include discount_amount so
     `unit_price * qty − discount + tax = total` is verifiable from
-    the modal."""
+    the modal. After Iter-283 (gross convention) such a row PASSES the
+    guard; we still surface parsed_items to expose discount_amount."""
     canonical = {
         "subtotal":     50.0, "total_amount": 50.0,
         "items": [{"sku": "X", "quantity": 1, "unit_price": 50,
                    "discount_amount": 10, "tax_amount": 0,
                    "total": 40}],
     }
-    # 50 − 10 + 0 = 40, but subtotal = 50 ≠ items_sum_excl 40 →
-    # rejected. Doesn't matter for this test — we just want the
-    # parsed_items shape to include `discount_amount`.
     result = validate_totals(canonical)
-    assert result.ok is False
-    pi = result.details["parsed_items"][0]
-    assert pi["discount_amount"] == 10.0
-    assert pi["line_excl"] == 40.0
+    # Iter-283 — gross convention matches (50×1 = 50 = subtotal).
+    assert result.ok is True
+    assert result.details["matched_convention"] == "gross"
+    # Audit must surface every discount line regardless of pass/fail,
+    # so we hoist the parsed_items shape on the success path too.
+    # Pre-Iter-283 this lived only in the failure branch — now we
+    # check it via the items_sum_* triplet that always carries the
+    # discount-aware view.
+    assert result.details["items_sum_gross"] == 50.0
+    assert result.details["items_sum_excl"]  == 40.0  # = 50 − 10 disc
 
 
 # ── Multi-item order with mixed discounts (full E2E maths) ──────────

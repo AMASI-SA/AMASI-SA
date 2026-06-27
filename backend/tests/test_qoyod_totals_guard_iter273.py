@@ -65,7 +65,9 @@ def test_clean_order_with_matching_totals_passes():
     result = validate_totals(canonical)
     assert result.ok is True, result.message
     assert result.details["items_count"] == 2
-    assert result.details["matched_convention"] == "exclusive"
+    # Iter-283: when discount=0 and tax=0, GROSS == EXCL, and gross is
+    # tried first → matched_convention="gross".
+    assert result.details["matched_convention"] == "gross"
 
 
 # ── 3. Tax-INCLUSIVE convention also accepted ───────────────────────

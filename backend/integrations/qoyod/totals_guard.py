@@ -121,70 +121,78 @@ def validate_totals(
         # Zero-value order with no items — pathological but consistent.
         return TotalsGuardResult(ok=True, details={"items_count": 0})
 
-    # ── 2. Compute items sum (excl-tax baseline) ───────────────────
-    # Line-level math (Iter-276):
-    #   line_excl  = unit_price × quantity − discount_amount
-    #   line_incl  = line_excl + tax_amount
-    # The discount is REAL money the merchant gave away; it must
-    # subtract from items_sum_excl so the guard reconciles against
-    # the order-level `subtotal` (which Salla reports POST-discount).
-    items_sum_excl = 0.0
-    items_sum_incl = 0.0
+    # ── 2. Compute items sum — both conventions (Iter-283) ─────────
+    # Line-level math:
+    #   line_gross = unit_price × quantity        (PRE-discount, PRE-tax)
+    #   line_net   = line_gross − discount_amount (POST-discount, PRE-tax)
+    #   line_incl  = line_net   + tax_amount      (POST-discount, WITH tax)
+    #
+    # The catch (Iter-283): Salla's `subtotal` may be reported under
+    # either convention depending on storefront config:
+    #   • `subtotal_gross` ⇄ `Σ unit_price × qty`   (most common — Salla default)
+    #   • `subtotal_net`   ⇄ `Σ (up×qty − disc)`    (Make.com flattens it after discount)
+    #   • `subtotal_incl`  ⇄ `Σ (up×qty − disc + tax)`
+    # We compute ALL THREE and accept whichever matches `subtotal`.
+    # Match priority: gross > net > incl (Salla default first).
+    items_sum_gross = 0.0
+    items_sum_excl  = 0.0   # = items_sum_net (post-discount, pre-tax)
+    items_sum_incl  = 0.0
     parsed_items = []
     for it in items:
         unit_price = _safe_float(it.get("unit_price"))
         quantity   = _safe_float(it.get("quantity"))
         item_tax   = _safe_float(it.get("tax_amount"))
         item_disc  = _safe_float(it.get("discount_amount"))
-        line_excl  = unit_price * quantity - item_disc
-        line_incl  = line_excl + item_tax
-        items_sum_excl += line_excl
-        items_sum_incl += line_incl
+        line_gross = unit_price * quantity
+        line_excl  = line_gross - item_disc
+        line_incl  = line_excl  + item_tax
+        items_sum_gross += line_gross
+        items_sum_excl  += line_excl
+        items_sum_incl  += line_incl
         parsed_items.append({
             "sku":              it.get("sku"),
             "quantity":         quantity,
             "unit_price":       unit_price,
             "discount_amount":  item_disc,
             "tax_amount":       item_tax,
+            "line_gross":       _round2(line_gross),
             "line_excl":        _round2(line_excl),
             "line_incl":        _round2(line_incl),
         })
 
-    items_sum_excl = _round2(items_sum_excl)
-    items_sum_incl = _round2(items_sum_incl)
-    subtotal_r     = _round2(subtotal)
-    mezan_diag     = _mezan_diag(canonical)
+    items_sum_gross = _round2(items_sum_gross)
+    items_sum_excl  = _round2(items_sum_excl)
+    items_sum_incl  = _round2(items_sum_incl)
+    subtotal_r      = _round2(subtotal)
+    mezan_diag      = _mezan_diag(canonical)
 
-    # ── 3. items_sum vs subtotal — the headline check ──────────────
-    # Some adapters report subtotal INCLUSIVE of item-level tax (rare),
-    # others EXCLUSIVE (Salla default). Accept either convention so
-    # we don't reject a legit order on a tax-bookkeeping nit.
-    matches_excl = abs(items_sum_excl - subtotal_r) <= tolerance
-    matches_incl = abs(items_sum_incl - subtotal_r) <= tolerance
-    if not (matches_excl or matches_incl):
-        # If items sum is SUBSTANTIALLY less than subtotal, the
-        # upstream dropped rows. Otherwise it's a convention
-        # divergence (still a refusal, but a different code so the
-        # operator knows whether to chase Make.com or normalizer).
-        shortfall = subtotal_r - items_sum_excl
-        if shortfall > tolerance and items_sum_excl < subtotal_r * 0.5:
+    # ── 3. items_sum vs subtotal — try all three conventions ───────
+    matches_gross = abs(items_sum_gross - subtotal_r) <= tolerance
+    matches_excl  = abs(items_sum_excl  - subtotal_r) <= tolerance
+    matches_incl  = abs(items_sum_incl  - subtotal_r) <= tolerance
+    if not (matches_gross or matches_excl or matches_incl):
+        # Items genuinely don't add up. Pick the most informative code.
+        shortfall = subtotal_r - items_sum_gross
+        if shortfall > tolerance and items_sum_gross < subtotal_r * 0.5:
             code = "line_items_incomplete"
-            msg  = (f"items[] is missing rows: items_sum_excl="
-                    f"{items_sum_excl} but subtotal={subtotal_r} "
+            msg  = (f"items[] is missing rows: items_sum_gross="
+                    f"{items_sum_gross} but subtotal={subtotal_r} "
                     f"(shortfall={_round2(shortfall)} SAR)")
         else:
             code = "line_items_total_mismatch"
-            msg  = (f"items_sum_excl={items_sum_excl} / "
-                    f"items_sum_incl={items_sum_incl} neither matches "
+            msg  = (f"items_sum_gross={items_sum_gross} / "
+                    f"items_sum_excl={items_sum_excl} / "
+                    f"items_sum_incl={items_sum_incl} none matches "
                     f"subtotal={subtotal_r} within ±{tolerance}")
         return TotalsGuardResult(
             ok=False, code=code, message=msg,
             details={
                 "items_count":         len(items),
+                "items_sum_gross":     items_sum_gross,
                 "items_sum_excl":      items_sum_excl,
                 "items_sum_incl":      items_sum_incl,
                 "subtotal":            subtotal_r,
-                "shortfall":           _round2(subtotal_r - items_sum_excl),
+                "shortfall":           _round2(subtotal_r - items_sum_gross),
                 "tolerance":           tolerance,
                 "parsed_items":        parsed_items,
                 "mezan_vat_diagnostics": mezan_diag,
@@ -199,15 +207,21 @@ def validate_totals(
     # but it NEVER moves the row to DEAD_LETTER.
 
     # ── 5. All green ───────────────────────────────────────────────
+    matched_convention = (
+        "gross"     if matches_gross else
+        "exclusive" if matches_excl  else
+        "inclusive"
+    )
     return TotalsGuardResult(
         ok=True,
         details={
-            "items_count":     len(items),
-            "items_sum_excl":  items_sum_excl,
-            "items_sum_incl":  items_sum_incl,
-            "subtotal":        subtotal_r,
-            "matched_convention": "exclusive" if matches_excl else "inclusive",
+            "items_count":      len(items),
+            "items_sum_gross":  items_sum_gross,
+            "items_sum_excl":   items_sum_excl,
+            "items_sum_incl":   items_sum_incl,
+            "subtotal":         subtotal_r,
+            "matched_convention": matched_convention,
             "mezan_vat_diagnostics": mezan_diag,
-            "total_amount":    _round2(total_amount),
+            "total_amount":     _round2(total_amount),
         },
     )
