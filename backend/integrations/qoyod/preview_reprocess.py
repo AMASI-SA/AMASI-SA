@@ -325,6 +325,18 @@ async def preview_reprocess_one_order(
         "items": product_previews,
         "would_send_to_qoyod": False,
         "product_defaults_status": product_defaults_status,
+        # Iter-288 — operator-facing resolution mode summary.
+        "auto_adopt_existing_qoyod_products": bool(
+            settings.get("auto_adopt_existing_qoyod_products", True)),
+        "resolution_policy_note": (
+            "POST /products is called ONLY when no matching SKU exists "
+            "in Qoyod. If a single match exists in Qoyod it is "
+            "AUTO-ADOPTED (no create). If 2+ matches exist, the pipeline "
+            "blocks with `duplicate_qoyod_sku`."
+            if settings.get("auto_adopt_existing_qoyod_products", True) else
+            "Strict Trust Gate: existing Qoyod SKUs trigger refusal "
+            "until the operator adopts manually."
+        ),
     }
     out["would_send_to_qoyod"]["products"] = False
 

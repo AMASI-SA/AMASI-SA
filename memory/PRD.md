@@ -1,5 +1,48 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-288 — Auto-Adopt Existing Qoyod Products by SKU (2026-02-27)
+**User scenario**: Operator is uploading the full Amasi catalog to Qoyod trial manually. SKU is the canonical key between Salla and Qoyod. The pre-Iter-288 Trust Gate REFUSED any order whose SKU happened to already exist in Qoyod, requiring a manual adopt — which would block every order in the trial.
+
+### Behaviour (mandatory sequence)
+1. **Check local mapping** `db.qoyod_products_mapping` by `(user_id, sku)` — zero Qoyod calls.
+2. **If no mapping** → `GET /products?q[sku_eq]=<sku>` via `api_client.find_all_products_by_sku(sku)`.
+3. **If 1 match** AND `auto_adopt_existing_qoyod_products=True` (default) → write local mapping `source=auto_adopted_from_qoyod, adopted_by=system, resolved_via=auto_adopt_sku_match`, reuse the existing `qoyod_product_id`. **NO `POST /products`**.
+4. **If 2+ matches** → block with `code=duplicate_qoyod_sku, failed_at_stage=PRODUCT_MATCH` + surface all matches for the operator to clean up.
+5. **If 0 matches** → proceed with the Iter-287 create path.
+6. **If `auto_adopt_existing_qoyod_products=False`** (strict Trust Gate) → 1 match → refuse with `qoyod_existing_untrusted` (legacy behaviour preserved).
+
+### Backend changes
+- `api_client.find_all_products_by_sku(sku, limit=10)` — new multi-row lookup; defensively re-checks SKU equality in case Qoyod ignores the filter. Legacy `find_product_by_sku` kept as a 1-row wrapper.
+- `resolve_products` runs the new flow per SKU. Falls back to single-row API for older test stubs via `hasattr` check.
+- `DryRunQoyodClient.find_all_products_by_sku` returns `[]` and records audit.
+- `preview_reprocess.stages.products_preview` surfaces `auto_adopt_existing_qoyod_products` flag + plain-Arabic `resolution_policy_note`.
+
+### Tests (Iter-288)
+- **NEW** `tests/test_qoyod_auto_adopt_existing_iter288.py` — **8/8 pass**:
+  - Local mapping → no Qoyod calls.
+  - 1 Qoyod match + auto_adopt=true → adopt + skip POST.
+  - 2+ Qoyod matches → block with duplicate_qoyod_sku.
+  - 0 matches → create.
+  - auto_adopt=false → strict Trust Gate refusal preserved.
+  - Default (no setting) → auto_adopt=true.
+  - Multi-item order (3 SKUs): one local, one adopted, one created — exactly ONE POST /products.
+  - Malformed Qoyod match (no id) → block with `qoyod_match_missing_id`.
+- **Updated** `test_qoyod_ssot_product_trust_gate.py::test_resolver_blocks_qoyod_existing_untrusted` — adds explicit `auto_adopt_existing_qoyod_products: False` to preserve legacy refusal contract.
+- **758/758** Qoyod pytest suite passes. 0 regressions. Lint clean.
+
+### Production runbook after redeploy
+1. Upload Amasi catalog to Qoyod trial (SKU-centric).
+2. Trigger one-shot-reprocess on order 268756329:
+   - First SKU `AMS11961` (already in Qoyod) → adopted silently, mapping written.
+   - Any other SKU not yet in Qoyod → created with Iter-287 defaults.
+3. Subsequent orders with same SKUs reuse the local mapping (zero Qoyod lookup).
+
+### Backlog (still deferred)
+- Frontend rendering of product_defaults_status, reconciliation, mezan_vat_diagnostics, duplicate-group banner, resolution-mode badges.
+- Consolidated `/admin/settings-health` endpoint.
+- Tamara BNPL 15,770 SAR discrepancy (P2).
+
+
 ## Iter-287 — Qoyod Required Product Fields + Preflight Gate (2026-02-27)
 **User-reported production failure** after Iter-286 cleared the `sale_item` 422: order `268756329` hit a SECOND 422 from Qoyod:
 ```

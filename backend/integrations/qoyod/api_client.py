@@ -215,68 +215,69 @@ class QoyodAPIClient:
             "GET", "/products", params={"page": page, "limit": limit})
 
     async def find_product_by_sku(self, sku: str) -> Optional[dict]:
-        """Look up a Qoyod product by SKU using Ransack filtering.
+        """Look up a single Qoyod product by SKU (returns the first match).
 
-        Returns the FIRST matching product dict or None if no rows
-        come back. Used by the **SSOT trust gate** (product_resolver):
-        before creating a new product in Qoyod we check whether the
-        SKU already exists from a previous era — if so, the row is
-        flagged `qoyod_existing_untrusted` until the operator explicitly
-        adopts it. See `product_resolver.resolve_products` for usage.
+        Kept for backwards-compatibility with the legacy Trust Gate path.
+        New callers should prefer `find_all_products_by_sku` so they can
+        detect duplicate-SKU collisions in Qoyod.
+        """
+        rows = await self.find_all_products_by_sku(sku, limit=1)
+        return rows[0] if rows else None
 
-        Two query shapes are attempted (some Qoyod deployments expose
-        Ransack, others expose a top-level `sku` filter). We treat
-        either successful response as authoritative and short-circuit
-        on the first hit. Network/auth errors propagate to the caller
-        as QoyodAPIError, which the resolver maps to FAILED_PRODUCT.
+    async def find_all_products_by_sku(
+        self, sku: str, *, limit: int = 10,
+    ) -> list[dict]:
+        """Iter-288 — return ALL Qoyod products whose SKU matches.
+
+        Why a list, not a single row?
+        ─────────────────────────────
+        For Auto-Adopt (Iter-288) we MUST distinguish:
+          0 matches → safe to create
+          1 match   → adopt that single match
+          ≥2 matches → REFUSE (ambiguous binding) and surface the
+                       duplicates so the operator can clean up.
+        `find_product_by_sku` returned only the first hit and hid the
+        duplicate-SKU case; this method surfaces it explicitly.
         """
         if not sku or not isinstance(sku, str):
-            return None
+            return []
         sku = sku.strip()
         if not sku:
-            return None
+            return []
 
         candidates: list[dict[str, Any]] = [
-            {"q[sku_eq]": sku, "limit": 1},   # Ransack (most common)
-            {"sku":       sku, "limit": 1},   # legacy flat filter
+            {"q[sku_eq]": sku, "limit": limit},   # Ransack (most common)
+            {"sku":       sku, "limit": limit},   # legacy flat filter
         ]
-        last_err: Optional[Exception] = None
         for params in candidates:
             try:
                 body = await self._request(
                     "GET", "/products", params=params)
-            except QoyodAPIError as exc:
-                last_err = exc
+            except QoyodAPIError:
                 continue
             rows = []
             if isinstance(body, dict):
                 rows = body.get("products") or body.get("data") or []
             elif isinstance(body, list):
                 rows = body
-            # Defensive: Qoyod may ignore an unsupported filter and return
-            # the WHOLE collection — verify the SKU actually matches before
-            # claiming a hit.
+            # Defensive: Qoyod may ignore the filter and return ALL
+            # products — verify the SKU actually matches.
+            matches: list[dict] = []
             for r in rows:
                 if not isinstance(r, dict):
                     continue
                 row_sku = (r.get("sku") or r.get("reference") or "")
                 if isinstance(row_sku, str) and row_sku.strip() == sku:
-                    return r
-            # Filter likely worked but returned nothing — done.
-            if rows == [] or (isinstance(rows, list) and rows
-                              and not any(
-                                  isinstance(r, dict)
-                                  and (r.get("sku") or r.get("reference"))
-                                       == sku
-                                  for r in rows
-                              )):
-                # Filter honoured (empty) OR filter ignored (whole list
-                # returned, none matching) — either way, no hit.
-                if rows == []:
-                    return None
-        if last_err is not None and not isinstance(last_err, QoyodAPIError):
-            raise last_err   # pragma: no cover — unreachable
-        return None
+                    matches.append(r)
+                    if len(matches) >= limit:
+                        break
+            if matches:
+                return matches
+            # Filter honoured (empty) → done; no need to try the legacy
+            # candidate since Qoyod definitively has no row with this SKU.
+            if rows == []:
+                return []
+        return []
 
     async def list_contacts(self, *, page: int = 1, limit: int = 50) -> Any:
         """GET /customers — same purpose as `list_products` but for customers.

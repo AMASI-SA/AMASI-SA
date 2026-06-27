@@ -185,6 +185,10 @@ async def test_resolver_blocks_qoyod_existing_untrusted(db, tenant):
                 "default_product_tax_id":       "TAX-15",
                 "default_product_unit_type_id": "UNIT-PIECE",
                 "default_sales_account_id":     "ACC-SALES",
+                # Iter-288: strict Trust Gate kicks in only when
+                # auto-adopt is off. This test specifically asserts
+                # the legacy refusal path.
+                "auto_adopt_existing_qoyod_products": False,
             },
             trace_id="t-2", api_client=client,
         )

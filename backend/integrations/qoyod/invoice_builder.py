@@ -269,6 +269,13 @@ class DryRunQoyodClient:
                            "returned_id": None})
         return None
 
+    async def find_all_products_by_sku(self, sku, *, limit: int = 10):
+        """Iter-288 — Dry-run returns empty list (no existing products)."""
+        self.calls.append({"endpoint": "GET /products?q[sku_eq]",
+                           "idem": None, "payload": {"sku": sku, "limit": limit},
+                           "returned_id": None})
+        return []
+
     async def create_invoice(self, payload, *, idem):
         iid = self._fake("invoice", payload.get("invoice") or payload)
         self.calls.append({"endpoint": "POST /invoices", "idem": idem,

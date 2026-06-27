@@ -359,15 +359,27 @@ async def resolve_products(
             ))
             continue
 
-        # ─── SSOT Trust Gate ─────────────────────────────────────────
-        # Before creating, ask Qoyod whether this SKU already exists.
-        # If it does AND we have no local mapping AND the gate is on →
-        # refuse to proceed. The operator must adopt the historical
-        # product or archive it. This prevents a fresh order from
-        # silently binding to a legacy Qoyod row of unknown origin.
+        # ─── SSOT Trust Gate / Auto-Adopt (Iter-288) ─────────────────
+        # Always look up the SKU in Qoyod BEFORE attempting to create.
+        # Behaviour on a hit depends on `auto_adopt_existing_qoyod_products`:
+        #   • true  (DEFAULT for trial Iter-288): treat a single-SKU
+        #     match as the canonical Qoyod row, write a local mapping
+        #     marked `auto_adopted_from_qoyod`, and reuse the existing
+        #     `qoyod_product_id`. NO `POST /products` is fired.
+        #   • false (strict Trust Gate, original behaviour): refuse with
+        #     `untrusted_qoyod_product_match` — operator must adopt manually.
+        # In BOTH modes, a multi-row match aborts the resolver with
+        # `duplicate_qoyod_sku` so the operator can clean up Qoyod.
         if trust_gate_on:
             try:
-                qoyod_match = await api_client.find_product_by_sku(sku)
+                # Iter-288 — prefer the multi-row lookup; fall back to
+                # the legacy single-row method for test stubs / older
+                # api_client builds that only expose find_product_by_sku.
+                if hasattr(api_client, "find_all_products_by_sku"):
+                    qoyod_matches = await api_client.find_all_products_by_sku(sku)
+                else:
+                    single = await api_client.find_product_by_sku(sku)
+                    qoyod_matches = [single] if single else []
             except QoyodAPIError as exc:
                 # Lookup failed → be strict and refuse. Treat as
                 # transient: caller will retry / dead-letter as usual.
@@ -379,12 +391,82 @@ async def resolve_products(
                 result.error = err
                 result.items.append(ProductResolutionItem(sku=sku, error=err))
                 return result
-            if qoyod_match and isinstance(qoyod_match, dict):
-                err = _untrusted_error(sku, qoyod_match)
+
+            if len(qoyod_matches) >= 2:
+                # Duplicate SKU in Qoyod — never auto-adopt either way.
+                err = {
+                    "code":            "duplicate_qoyod_sku",
+                    "failed_at_stage": "PRODUCT_MATCH",
+                    "message": (
+                        f"تم العثور على {len(qoyod_matches)} منتجات في "
+                        f"قيود بنفس الـ SKU={sku!r} — لا يمكن الربط "
+                        f"تلقائياً. يرجى توحيد المنتجات في قيود."),
+                    "matches": [
+                        {"qoyod_product_id": str(m.get("id") or ""),
+                         "name":             m.get("name"),
+                         "sku":              m.get("sku"),
+                         "selling_price":    m.get("selling_price"),
+                         "type":             m.get("type")}
+                        for m in qoyod_matches[:10]
+                    ],
+                }
                 result.success = False
                 result.error = err
                 result.items.append(ProductResolutionItem(sku=sku, error=err))
                 return result
+
+            if len(qoyod_matches) == 1:
+                qoyod_match = qoyod_matches[0]
+                auto_adopt = settings.get(
+                    "auto_adopt_existing_qoyod_products", True)
+                if auto_adopt:
+                    # Iter-288 — silently bind to the existing Qoyod row.
+                    qpid = str(qoyod_match.get("id") or "")
+                    if not qpid:
+                        err = {
+                            "code":            "qoyod_match_missing_id",
+                            "failed_at_stage": "PRODUCT_MATCH",
+                            "message": (
+                                f"Qoyod returned a match for sku={sku!r} "
+                                f"but without an id — cannot auto-adopt"),
+                            "qoyod_match_excerpt": str(qoyod_match)[:300],
+                        }
+                        result.success = False
+                        result.error = err
+                        result.items.append(
+                            ProductResolutionItem(sku=sku, error=err))
+                        return result
+                    await db.qoyod_products_mapping.update_one(
+                        {"user_id": user_id, "sku": sku},
+                        {"$set": {
+                            "schema_version":     1,
+                            "user_id":            user_id,
+                            "sku":                sku,
+                            "qoyod_product_id":   qpid,
+                            "qoyod_product_name": qoyod_match.get("name"),
+                            "auto_created":       False,
+                            "adopted":            True,
+                            "adopted_at":         _now(),
+                            "adopted_by":         "system",
+                            "source":             "auto_adopted_from_qoyod",
+                            "resolved_via":       "auto_adopt_sku_match",
+                        },
+                         "$setOnInsert": {"created_at": _now()}},
+                        upsert=True,
+                    )
+                    result.items.append(ProductResolutionItem(
+                        sku=sku, qoyod_product_id=qpid, created_new=False,
+                        trust_source="auto_adopted"))
+                    continue
+                else:
+                    # Strict mode — refuse, operator must adopt manually.
+                    err = _untrusted_error(sku, qoyod_match)
+                    result.success = False
+                    result.error = err
+                    result.items.append(
+                        ProductResolutionItem(sku=sku, error=err))
+                    return result
+            # Otherwise (0 matches) → fall through to the create path.
 
         # Need to create in Qoyod. Iter-287 — preflight defaults first.
         ok_defaults, missing_keys = validate_product_defaults(settings)
