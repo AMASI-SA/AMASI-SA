@@ -422,5 +422,19 @@ def adapt(raw: Any) -> tuple[Any, dict]:
     # when both keys are missing in source.
     if status_node:
         adapted["data"]["status"] = status_node
+        # Iter-279: ALSO mirror the status onto the adapted root so any
+        # downstream consumer that reads top-level fields (replay
+        # diagnostics, audit log, future adapters) sees it without
+        # drilling into `data.status` or `meta.legacy_status_slug`.
+        # The normalizer itself only reads `data.status`, so this is
+        # purely for visibility — never source of truth.
+        slug = status_node.get("slug")
+        name = status_node.get("name")
+        if slug:
+            adapted["order_status_slug"] = slug
+        if name:
+            adapted["order_status"] = name
+        if slug or name:
+            adapted["status"] = slug or name
 
     return adapted, meta

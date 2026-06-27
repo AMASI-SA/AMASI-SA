@@ -1022,13 +1022,52 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         adapted_items = (adapted.get("data") or {}).get("items") \
             if isinstance(adapted.get("data"), dict) else adapted.get("items")
         out["adapter_first_item"] = (adapted_items or [None])[0]
+        # Iter-279: surface the status fields the operator can verify
+        # made it through the adapter into the payload the normalizer
+        # actually sees.
+        if isinstance(adapted, dict):
+            data_envelope = adapted.get("data") or {}
+            out["adapted_payload_status"] = {
+                "order_status":      adapted.get("order_status"),
+                "order_status_slug": adapted.get("order_status_slug"),
+                "status":            adapted.get("status"),
+                "data.status":       data_envelope.get("status"),
+            }
+            # Trace where the status came from in the original raw.
+            out["status_source"] = (
+                "raw.order_status_slug" if raw.get("order_status_slug")
+                else "raw.status_slug" if raw.get("status_slug")
+                else "raw.status"       if raw.get("status")
+                else "raw.order_status" if raw.get("order_status")
+                else "MISSING"
+            )
 
-        # ─ Step 2: normalizer (full DTO) ─────────────────────────────
+        # ─ Step 2: normalizer (full DTO from ADAPTED payload) ────────
+        # Iter-279: previously called `normalize(raw)` which skipped
+        # the adapter step — for legacy Make payloads this raised
+        # `NormalizationError(missing_order_status)` because the status
+        # lives in `raw.order_status_slug` and only the adapter routes
+        # it into `data.status` where the normalizer looks. Mirror the
+        # real webhook chain: adapt() THEN normalize(adapted).
+        normalizer_input = adapted if adapter_meta.get("adapter_applied") else raw
         try:
-            dto = normalize(raw, received_at=row.get("received_at"))
+            dto = normalize(normalizer_input,
+                            received_at=row.get("received_at"))
             canon = dto.model_dump(mode="json")
         except Exception as exc:
             out["normalizer_error"] = f"{type(exc).__name__}: {exc}"
+            # Surface the status keys we DID try so the operator knows
+            # whether the adapter dropped them.
+            out["status_in_adapted_payload"] = {
+                "data.status":  (adapted.get("data") or {}).get("status")
+                                 if isinstance(adapted, dict) else None,
+                "order_status": (adapted or {}).get("order_status")
+                                 if isinstance(adapted, dict) else None,
+                "order_status_slug": (adapted or {}).get("order_status_slug")
+                                      if isinstance(adapted, dict) else None,
+                "status":       (adapted or {}).get("status")
+                                 if isinstance(adapted, dict) else None,
+            }
             return out
 
         live_first = (canon.get("items") or [None])[0]
