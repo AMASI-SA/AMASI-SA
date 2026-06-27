@@ -135,6 +135,7 @@ INBOX_ROW = {
 SETTINGS = {
     "user_id":             "main",
     "default_tax_id":      "1",
+    "tax_mode":            "mezan_fixed_15",
     "default_branch_id":   "",
     "default_product_type": "service",
     "invoice_trigger_statuses": ["completed"],
@@ -204,8 +205,8 @@ async def test_preview_builds_product_payloads_per_sku():
     body = prods["items"][0]["request_body"]["product"]
     assert body["sku"]           == "AMS11980"
     assert body["selling_price"] == 199.0
-    # Iter-272 lock-in: is_sold MUST be true
-    assert body["is_sold"] is True
+    # Iter-286 lock-in: sale_item MUST be 1 (supersedes Iter-272 `is_sold`)
+    assert body["sale_item"] == 1
 
 
 async def test_preview_builds_invoice_and_receipt_payloads():

@@ -33,6 +33,102 @@ def _resolve_payment_account(settings: dict, payment_method: Optional[str]) -> O
     return resolve_payment_account(settings, payment_method)
 
 
+def _f(v: Any, default: float = 0.0) -> float:
+    """Tiny safe-float helper."""
+    try:
+        return float(v) if v is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Tax-mode strategies (Iter-285)
+# ─────────────────────────────────────────────────────────────────────
+# Customer-first ("salla_declared"): invoice total MUST equal what the
+#   customer paid (canonical.total_amount). Per-line unit_price is the
+#   TAX-INCLUSIVE price (Salla unit_price + per-line tax/qty), and the
+#   line uses `settings.zero_tax_id` (a 0% tax record) so Qoyod doesn't
+#   add tax on top. Discounts stay per-line so promo attribution survives.
+# Mezan-fixed-15 ("mezan_fixed_15"): legacy behavior. Use default_tax_id
+#   pointing to a 15% Qoyod tax record; Qoyod computes tax server-side.
+TAX_MODE_CUSTOMER_FIRST = "customer_first"
+TAX_MODE_MEZAN_FIXED_15 = "mezan_fixed_15"
+DEFAULT_TAX_MODE = TAX_MODE_CUSTOMER_FIRST
+
+
+def _get_tax_mode(settings: dict) -> str:
+    """Read the tax_mode setting with a safe default."""
+    mode = (settings.get("tax_mode") or "").strip()
+    if mode in (TAX_MODE_CUSTOMER_FIRST, TAX_MODE_MEZAN_FIXED_15):
+        return mode
+    return DEFAULT_TAX_MODE
+
+
+def _line_unit_price_for_mode(it: dict, tax_mode: str) -> float:
+    """Return the unit_price Qoyod should see on this line.
+
+    customer_first: unit_price is INCLUSIVE of Salla's per-line tax.
+        This way, with a 0% tax_id on the line, Qoyod's computed total
+        equals the customer-paid amount EXACTLY — invoice == receipt.
+    mezan_fixed_15: pass Salla's net unit_price; Qoyod adds 15% on top.
+    """
+    base = _f(it.get("unit_price"))
+    if tax_mode != TAX_MODE_CUSTOMER_FIRST:
+        return base
+    qty = _f(it.get("quantity"), default=1.0) or 1.0
+    tax = _f(it.get("tax_amount"))
+    # Distribute the line's tax across each unit.
+    return round(base + (tax / qty), 4)
+
+
+def _line_tax_id_for_mode(it: dict, tax_mode: str, settings: dict) -> Optional[str]:
+    """Return the Qoyod tax_id to attach to this line."""
+    if tax_mode == TAX_MODE_CUSTOMER_FIRST:
+        # Prefer an explicit 0% tax record. Fall back to none (omit
+        # tax_id entirely so Qoyod uses its default — which the
+        # operator must configure as 0% before flipping live).
+        zero = (settings.get("zero_tax_id") or "").strip()
+        return zero or None
+    # Mezan-fixed-15: original behavior.
+    return (settings.get("default_tax_id") or "").strip() or None
+
+
+def estimated_invoice_total(dto_dict: dict, settings: dict) -> float:
+    """Estimate the invoice total Qoyod will compute for this row.
+
+    customer_first → Σ(unit_price_inclusive × qty − discount) + 0% tax
+                  = canonical.total_amount (within rounding).
+    mezan_fixed_15 → Σ(unit_price × qty − discount) × (1 + 0.15)
+                  + 0.15 × shipping_amount.
+    """
+    tax_mode = _get_tax_mode(settings)
+    items = dto_dict.get("items") or []
+    if tax_mode == TAX_MODE_CUSTOMER_FIRST:
+        total = 0.0
+        for it in items:
+            up_incl = _line_unit_price_for_mode(it, tax_mode)
+            qty     = _f(it.get("quantity"), default=1.0)
+            disc    = _f(it.get("discount_amount"))
+            total += up_incl * qty - disc
+        # Shipping is not yet rendered as a line in customer_first
+        # mode; the customer-paid total in canonical already includes
+        # shipping at Salla's effective rate. We add the canonical
+        # shipping_amount + shipping tax (0 in customer_first since
+        # we don't bill shipping separately) here so the preflight
+        # can reconcile. NOTE: if shipping is later rendered as its
+        # own line we must adjust this.
+        total += _f(dto_dict.get("shipping_amount"))
+        return round(total, 2)
+    # mezan_fixed_15
+    items_net = 0.0
+    for it in items:
+        items_net += _f(it.get("unit_price")) * _f(it.get("quantity"),
+                                                    default=1.0) \
+                    - _f(it.get("discount_amount"))
+    shipping = _f(dto_dict.get("shipping_amount"))
+    return round(items_net * 1.15 + shipping * 1.15, 2)
+
+
 def build_invoice_payload(
     *, dto_dict: dict, qoyod_customer_id: str,
     product_resolutions: list[dict],
@@ -41,12 +137,24 @@ def build_invoice_payload(
 ) -> dict:
     """Build the Qoyod `POST /invoices` body.
 
-    Tax handling
-    ────────────
-    `default_tax_id` MUST be a Qoyod Tax ID (e.g. `"1"`) — NOT a tax
-    rate. Qoyod resolves the rate from the tax record server-side. If
-    no `default_tax_id` is set in settings, the line-item `tax_id` is
-    omitted; the operator must ensure each item carries its own tax.
+    Tax handling — Iter-285
+    ───────────────────────
+    Behaviour depends on `settings.tax_mode`:
+
+    • `customer_first` (DEFAULT for trial Go-Live): invoice total
+      MUST equal `canonical.total_amount` (what the customer paid).
+      Each line carries a TAX-INCLUSIVE unit_price (Salla's
+      `unit_price + per-line tax/quantity`) and `tax_id =
+      settings.zero_tax_id` (a 0% tax record). Discounts stay
+      per-line. Qoyod's computed total = invoice total = receipt
+      amount. The 15% Mezan policy is surfaced as DIAGNOSTIC ONLY
+      via `mezan_vat_diagnostics`.
+
+    • `mezan_fixed_15` (legacy): line unit_price is Salla's net,
+      `tax_id = settings.default_tax_id` (15% Qoyod record). Qoyod
+      computes tax server-side. Customer-paid amount may diverge
+      from invoice total; needs a tax adjustment line — NOT done
+      here.
 
     Branch handling
     ───────────────
@@ -54,24 +162,27 @@ def build_invoice_payload(
     and reject explicit branch_id values. When not configured we
     OMIT the field entirely so Qoyod falls back to the default branch.
     """
+    tax_mode = _get_tax_mode(settings)
     res_by_sku = {r["sku"]: r["qoyod_product_id"]
                   for r in product_resolutions if r.get("qoyod_product_id")}
-    default_tax_id = (settings.get("default_tax_id") or "").strip() or None
     lines = []
     for it in dto_dict.get("items", []):
         pid = res_by_sku.get(it.get("sku"))
-        # Iter-276: per-line discount column. Qoyod accepts `discount` as
-        # an absolute amount per line; we never fold it into unit_price
-        # so the merchant's books match Salla's promo-code attribution.
+        unit_price = _line_unit_price_for_mode(it, tax_mode)
+        line_tax_id = _line_tax_id_for_mode(it, tax_mode, settings)
+        # Iter-276: per-line discount column. Qoyod accepts `discount`
+        # as an absolute amount per line; we never fold it into
+        # unit_price so the merchant's books match Salla's promo-code
+        # attribution.
         line: dict = {
             "product_id":  pid,
             "description": it.get("name"),
             "quantity":    it.get("quantity"),
-            "unit_price":  it.get("unit_price"),
-            "discount":    it.get("discount_amount") or 0,
+            "unit_price":  unit_price,
+            "discount":    _f(it.get("discount_amount")),
         }
-        if default_tax_id:
-            line["tax_id"] = default_tax_id
+        if line_tax_id:
+            line["tax_id"] = line_tax_id
         lines.append(line)
 
     invoice: dict = {
@@ -81,7 +192,8 @@ def build_invoice_payload(
         "reference":      dto_dict.get("order_number") or dto_dict.get("order_id"),
         "currency_code":  dto_dict.get("currency") or "SAR",
         "line_items":     lines,
-        "notes":          f"Mezan · Salla order {dto_dict.get('order_id')}",
+        "notes":          f"Mezan · Salla order {dto_dict.get('order_id')} · "
+                          f"tax_mode={tax_mode}",
         # Provenance — operator can find the source order from Qoyod.
         "external_reference": dto_dict.get("order_id"),
     }

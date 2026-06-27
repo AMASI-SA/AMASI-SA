@@ -67,13 +67,20 @@ def run(
                          "message": f"{len(unresolved)} item(s) lack Qoyod product id",
                          "items": unresolved[:20]})
 
-    # 3) Tax
-    has_default_tax = bool(settings.get("default_tax_id"))
-    items_have_tax  = all(it.get("tax_amount") is not None for it in items)
-    if not has_default_tax and not items_have_tax:
-        failures.append({"check": "tax",
-                         "code": "missing_tax_configuration",
-                         "message": "default_tax_id not set and items have no tax_amount"})
+    # 3) Tax — Iter-285 honors `settings.tax_mode`.
+    tax_mode = (settings.get("tax_mode") or "customer_first").strip()
+    if tax_mode == "customer_first":
+        # customer_first mode does NOT require default_tax_id; the
+        # builder uses zero_tax_id (if configured) or omits tax_id.
+        # No hard refusal for missing tax config in this mode.
+        pass
+    else:
+        has_default_tax = bool(settings.get("default_tax_id"))
+        items_have_tax  = all(it.get("tax_amount") is not None for it in items)
+        if not has_default_tax and not items_have_tax:
+            failures.append({"check": "tax",
+                             "code": "missing_tax_configuration",
+                             "message": "default_tax_id not set and items have no tax_amount"})
 
     # 4) Payment method mapping (alias-aware — Iter 2026-02-26)
     pm_native = dto_dict.get("payment_method") or dto_dict.get("payment_method_native")
@@ -108,5 +115,43 @@ def run(
             failures.append({"check": "idempotency",
                              "code": "already_sent",
                              "message": "an invoice for this order is already 'sent'"})
+
+    # 7) Iter-285 — Invoice ↔ Receipt reconciliation (customer_first mode).
+    # In customer_first mode the invoice total Qoyod will compute MUST
+    # equal `canonical.total_amount` (= receipt amount). If it diverges,
+    # the books would carry a phantom delta; block before any POST.
+    if tax_mode == "customer_first":
+        from integrations.qoyod.invoice_builder import (
+            estimated_invoice_total,
+        )
+        try:
+            est_total = estimated_invoice_total(dto_dict, settings)
+        except Exception as exc:  # pragma: no cover — defensive
+            est_total = None
+            failures.append({
+                "check":   "invoice_receipt_reconciliation",
+                "code":    "estimation_failed",
+                "message": f"{type(exc).__name__}: {exc}",
+            })
+        receipt_amount = float(dto_dict.get("total_amount") or 0.0)
+        if est_total is not None:
+            diff = round(est_total - receipt_amount, 2)
+            tolerance = max(0.10, 0.005 * receipt_amount)  # 50 hallalat OR 0.5% — whichever wider
+            if abs(diff) > tolerance:
+                failures.append({
+                    "check": "invoice_receipt_reconciliation",
+                    "code":  "invoice_total_mismatch_with_receipt",
+                    "message": (
+                        f"estimated_invoice_total={est_total} would NOT "
+                        f"match receipt_amount={receipt_amount} "
+                        f"(diff={diff} SAR, tolerance={round(tolerance,2)})"),
+                    "extra": {
+                        "estimated_invoice_total": est_total,
+                        "receipt_amount":          receipt_amount,
+                        "diff":                    diff,
+                        "tolerance":               round(tolerance, 2),
+                        "tax_mode":                tax_mode,
+                    },
+                })
 
     return PreflightResult(passed=not failures, failures=failures)

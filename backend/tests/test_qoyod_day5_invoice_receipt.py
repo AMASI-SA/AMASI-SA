@@ -84,6 +84,7 @@ def _base_payload():
         "settings": {
             "invoice_trigger_statuses": ["completed"],
             "default_tax_id": "TAX-15",
+            "tax_mode": "mezan_fixed_15",
             "payment_method_mapping": [
                 {"salla_method": "mada", "qoyod_account_id": "ACC-9"}],
         },
@@ -113,6 +114,9 @@ def test_preflight_fails_when_product_unresolved():
 
 def test_preflight_fails_when_tax_not_configured():
     p = _base_payload(); p["settings"]["default_tax_id"] = None
+    # Iter-285: customer_first mode does NOT require default_tax_id.
+    # This test specifically checks the legacy mezan_fixed_15 path.
+    p["settings"]["tax_mode"] = "mezan_fixed_15"
     # Force items_have_tax=False by removing tax_amount.
     for it in p["dto_dict"]["items"]: it["tax_amount"] = None
     r = preflight_run(**p)
@@ -142,7 +146,8 @@ def test_invoice_payload_includes_all_required_fields():
         qoyod_customer_id="C-9",
         product_resolutions=[{"sku":"SKU-1","qoyod_product_id":"P-9"}],
         invoice_date=dto.completed_at,
-        settings={"default_tax_id":"T-15", "default_branch_id":"B-1"})
+        settings={"default_tax_id":"T-15", "default_branch_id":"B-1",
+                   "tax_mode": "mezan_fixed_15"})
     inv = pl["invoice"]
     assert inv["contact_id"] == "C-9"
     assert inv["currency_code"] == "SAR"
@@ -219,6 +224,7 @@ async def _seed_settings(db, user_id, **overrides):
         "invoice_date_source": "trigger_status_date",
         "trigger_once_only": True,
         "default_tax_id": "TAX-15", "default_branch_id": "BR-1",
+        "tax_mode": "mezan_fixed_15",
         "default_product_type": "service",
         "payment_method_mapping": [{"salla_method":"mada",
                                     "qoyod_account_id":"ACC-9"}],

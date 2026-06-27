@@ -28,20 +28,26 @@ def test_create_product_payload_uses_selling_price_not_sale_price():
     assert p["selling_price"] == 5.0
 
 
-def test_create_product_payload_includes_is_sold_activation_flag():
-    """Without `is_sold: true`, Qoyod ignores `selling_price` and
-    rejects the create with `enter at least a purchase price...`."""
+def test_create_product_payload_includes_sale_item_activation_flag():
+    """Iter-286 supersedes Iter-272's `is_sold:true` with the correct
+    Qoyod API field `sale_item: 1`. Without it, Qoyod's validator
+    ignores `selling_price` and rejects the create with `enter at
+    least a purchase price...`."""
     item = {"sku": "X", "unit_price": 10}
     payload = _build_product_payload(item, {})
-    assert payload["product"]["is_sold"] is True, \
-        "`is_sold` must be True to activate selling_price validation"
+    assert payload["product"]["sale_item"] == 1, \
+        "`sale_item` must be 1 to activate selling_price validation"
+    # Legacy boolean activation flag must NOT be present.
+    assert "is_sold" not in payload["product"]
 
 
-def test_create_product_payload_marks_is_bought_false():
-    """Mezan sells, doesn't track purchases. `is_bought: false`
-    keeps Qoyod from requiring `buying_price`."""
+def test_create_product_payload_marks_purchase_item_zero():
+    """Mezan sells, doesn't track purchases. `purchase_item: 0`
+    keeps Qoyod from requiring `buying_price`. Iter-286 replaces
+    `is_bought: False` with `purchase_item: 0`."""
     payload = _build_product_payload({"sku": "X", "unit_price": 1}, {})
-    assert payload["product"]["is_bought"] is False
+    assert payload["product"]["purchase_item"] == 0
+    assert "is_bought" not in payload["product"]
 
 
 def test_create_product_payload_coerces_string_price_to_float():
@@ -54,7 +60,7 @@ def test_create_product_payload_falls_back_to_zero_when_missing():
     payload = _build_product_payload({"sku": "FREE-GIFT"}, {})
     # Even free items must have the field present for Qoyod to accept the create.
     assert payload["product"]["selling_price"] == 0.0
-    assert payload["product"]["is_sold"] is True
+    assert payload["product"]["sale_item"]     == 1
 
 
 def test_create_product_payload_preserves_name_sku_type_fields():
@@ -67,6 +73,6 @@ def test_create_product_payload_preserves_name_sku_type_fields():
     assert p["sku"] == "K-1"
     assert p["type"] == "service"
     assert p["is_non_stock"] is True
-    # New activation flags don't displace the old ones.
-    assert p["is_sold"] is True
-    assert p["is_bought"] is False
+    # Iter-286 activation flags (integer-flag style).
+    assert p["sale_item"]     == 1
+    assert p["purchase_item"] == 0

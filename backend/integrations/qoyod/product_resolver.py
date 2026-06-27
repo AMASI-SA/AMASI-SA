@@ -81,41 +81,69 @@ class ProductsResolutionResult:
 def _build_product_payload(item: dict, settings: dict) -> dict:
     """Map a DTO LineItem (as dict) → Qoyod /products POST body.
 
-    Qoyod's legacy `/products` (Rails-backed) REQUIRES TWO things to
-    accept a price:
-      1. Field name **`selling_price`** (NOT `sale_price`, NOT `price`).
-         Qoyod's own GET /products response uses this exact key.
-      2. The activation flag **`is_sold: true`**. Without it, Qoyod's
-         validator treats the product as not-for-sale and refuses
-         the create with:
-            {"base": ["enter at least a purchase price or a sales price to continue."]}
-         even when `selling_price` is in the payload.
+    Iter-286 — corrected field names per Qoyod live API
+    ──────────────────────────────────────────────────
+    Qoyod's `/products` endpoint uses the snake_case integer-flag
+    convention (`sale_item: 1`, `purchase_item: 0`), NOT the boolean
+    Rails-style `is_sold`/`is_bought` shape we previously tried.
 
-    Iter-270b briefly renamed to `sale_price` on outdated docs; this
-    iteration restores `selling_price` AND adds the activation flag.
-    Verified against Qoyod knowledge-base and on-the-wire 422
-    response from order 268670571 (2026-02-27, Production).
+    Production 422 from order 268756329 (2026-02-27):
+        {"base": ["enter at least a purchase price or a sales price
+                  to continue."]}
+    despite sending `is_sold: true` + `selling_price: 5` — confirmed
+    on the wire that Qoyod ignores the `is_*` flags. Switching to
+    `sale_item: 1` clears the validator.
+
+    Required fields (for a sellable, non-stock service):
+      • `name`           — display name
+      • `sku`            — Salla SKU (used by trust gate)
+      • `type`           — "service" | "product"
+      • `is_non_stock`   — true for services
+      • `sale_item: 1`   — activates the sales-side fields
+      • `selling_price`  — REQUIRED whenever `sale_item: 1`
+      • `purchase_item: 0` — explicit OFF; we don't track purchase cost
+
+    A self-healing 422 retry path lives in `api_client.create_product`
+    (Iter-286): if Qoyod still complains about prices we fall back to
+    the smallest viable payload — `name, sku, sale_item=1,
+    selling_price` only — exactly once.
     """
     # Coerce to float so we never accidentally send a string-typed
-    # price. Falls back to 0.0 when missing — Qoyod accepts a zero
-    # selling price as long as is_sold is true and the field exists.
+    # price. Qoyod requires `selling_price` whenever `sale_item: 1`.
+    raw_price = item.get("unit_price")
+    try:
+        selling_price = float(raw_price) if raw_price is not None else 0.0
+    except (TypeError, ValueError):
+        selling_price = 0.0
+
+    ptype = (settings.get("default_product_type") or "service")
+    return {"product": {
+        "name":              item.get("name") or item.get("sku") or "منتج",
+        "sku":               item.get("sku"),
+        "type":              ptype,
+        "is_non_stock":      ptype == "service",
+        # Iter-286 — integer-flag activation per Qoyod live API.
+        "sale_item":         1,
+        "purchase_item":     0,
+        "selling_price":     selling_price,
+    }}
+
+
+def _build_product_payload_fallback(item: dict, settings: dict) -> dict:
+    """Minimal-fields product payload used by the 422 self-healing
+    retry (Iter-286). Strips everything except the four fields Qoyod's
+    validator absolutely needs: name, sku, sale_item, selling_price.
+    No type/is_non_stock/purchase_item — let Qoyod default them."""
     raw_price = item.get("unit_price")
     try:
         selling_price = float(raw_price) if raw_price is not None else 0.0
     except (TypeError, ValueError):
         selling_price = 0.0
     return {"product": {
-        "name":              item.get("name") or item.get("sku") or "منتج",
-        "sku":               item.get("sku"),
-        "type":              (settings.get("default_product_type")
-                              or "service"),
-        "is_non_stock":      (settings.get("default_product_type") or "service") == "service",
-        # Activation flags — without `is_sold` Qoyod ignores `selling_price`
-        # entirely and rejects the create. We don't track purchase prices
-        # in Mezan (we only sell), so `is_bought` is False.
-        "is_sold":           True,
-        "is_bought":         False,
-        "selling_price":     selling_price,
+        "name":          item.get("name") or item.get("sku") or "منتج",
+        "sku":           item.get("sku"),
+        "sale_item":     1,
+        "selling_price": selling_price,
     }}
 
 
@@ -290,11 +318,38 @@ async def resolve_products(
             resp = await api_client.create_product(
                 _build_product_payload(it, settings), idem=idem)
         except QoyodAPIError as exc:
-            err = exc.to_log_dict()
-            result.success = False
-            result.error = err
-            result.items.append(ProductResolutionItem(sku=sku, error=err))
-            return result
+            # Iter-286 — self-healing 422 retry. Some Qoyod tenants
+            # reject the canonical payload with:
+            #   {"base": ["enter at least a purchase price or a sales price..."]}
+            # even when `sale_item: 1` + `selling_price` are present
+            # (older tenant template missing `type`/`is_non_stock`).
+            # Retry ONCE with the minimal-fields payload before
+            # surfacing the failure.
+            err_payload = exc.to_log_dict() if hasattr(exc, "to_log_dict") else {}
+            msg = (str(err_payload.get("qoyod_response_excerpt") or "")
+                   + " " + str(err_payload.get("message") or "")).lower()
+            should_retry = (
+                err_payload.get("status_code") == 422
+                and ("purchase price" in msg or "sales price" in msg)
+            )
+            if should_retry:
+                try:
+                    resp = await api_client.create_product(
+                        _build_product_payload_fallback(it, settings),
+                        idem=f"{idem}-fb")
+                except QoyodAPIError as exc2:
+                    err = exc2.to_log_dict() if hasattr(exc2, "to_log_dict") else {}
+                    err["fallback_attempted"] = True
+                    result.success = False
+                    result.error = err
+                    result.items.append(ProductResolutionItem(sku=sku, error=err))
+                    return result
+            else:
+                err = err_payload or {"code": "qoyod_api_error", "message": str(exc)}
+                result.success = False
+                result.error = err
+                result.items.append(ProductResolutionItem(sku=sku, error=err))
+                return result
 
         pid = _extract_product_id(resp)
         if not pid:

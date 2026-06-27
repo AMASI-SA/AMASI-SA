@@ -371,6 +371,40 @@ async def preview_reprocess_one_order(
     }
     out["would_send_to_qoyod"]["receipt"] = False
 
+    # ── 11b) Iter-285 — Invoice/Receipt reconciliation summary ─────
+    # Surfaces the tax-mode contract: estimated invoice total Qoyod
+    # WILL compute vs the receipt amount we WILL post. UI uses these
+    # to render the "Customer-First" / "Mezan 15%" badges and the
+    # green/red reconciled state.
+    from integrations.qoyod.invoice_builder import (
+        estimated_invoice_total, _get_tax_mode,
+    )
+    try:
+        est_invoice_total = estimated_invoice_total(canonical, settings)
+    except Exception as exc:   # pragma: no cover
+        est_invoice_total = None
+    receipt_amount = canonical.get("total_amount") or 0.0
+    tax_mode = _get_tax_mode(settings)
+    mvd = (totals_guard_check(canonical).details
+           if False else (out.get("mezan_vat") or {}))
+    diff = (round(est_invoice_total - float(receipt_amount), 2)
+            if est_invoice_total is not None else None)
+    tolerance = max(0.10, 0.005 * float(receipt_amount or 0))
+    out["tax_mode"] = tax_mode
+    out["reconciliation"] = {
+        "tax_mode":                  tax_mode,
+        "salla_declared_total":      round(float(receipt_amount), 2),
+        "mezan_expected_total":      (mvd or {}).get("mezan_expected_total"),
+        "tax_difference":            (mvd or {}).get("tax_difference"),
+        "estimated_invoice_total":   est_invoice_total,
+        "receipt_amount":            round(float(receipt_amount), 2),
+        "tolerance":                 round(tolerance, 2),
+        "invoice_receipt_reconciled": (
+            est_invoice_total is not None
+            and abs(diff) <= tolerance),
+        "diff":                      diff,
+    }
+
     # ── 12) Preflight summary ───────────────────────────────────────
     try:
         pf = preflight_run(

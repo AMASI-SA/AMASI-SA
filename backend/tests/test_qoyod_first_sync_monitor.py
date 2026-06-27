@@ -128,7 +128,7 @@ def test_shape_inbox_row_marks_failed_step():
 
 # ─── Branch ID optional in invoice builder ─────────────────────────
 def test_invoice_payload_omits_branch_id_when_settings_blank():
-    settings = {"default_tax_id": "1"}  # no branch_id at all
+    settings = {"default_tax_id": "1", "tax_mode": "mezan_fixed_15"}  # no branch_id at all
     body = build_invoice_payload(
         dto_dict={"order_id": "9", "items": [], "currency": "SAR"},
         qoyod_customer_id="C-1",
@@ -145,7 +145,8 @@ def test_invoice_payload_includes_branch_id_when_set():
         qoyod_customer_id="C-1",
         product_resolutions=[],
         invoice_date=None,
-        settings={"default_branch_id": "5", "default_tax_id": "1"},
+        settings={"default_branch_id": "5", "default_tax_id": "1",
+                   "tax_mode": "mezan_fixed_15"},
     )
     assert body["invoice"]["branch_id"] == "5"
 
@@ -162,7 +163,7 @@ def test_invoice_line_uses_tax_id_not_rate():
         qoyod_customer_id="C-1",
         product_resolutions=[{"sku": "S1", "qoyod_product_id": "P-1"}],
         invoice_date=None,
-        settings={"default_tax_id": "1"},
+        settings={"default_tax_id": "1", "tax_mode": "mezan_fixed_15"},
     )
     line = body["invoice"]["line_items"][0]
     assert line["tax_id"] == "1"
@@ -218,6 +219,7 @@ async def test_validate_treats_missing_branch_as_warning_not_blocker():
     db.qoyod_settings.rows = [{
         "user_id": "main",
         "default_tax_id": "1",
+        "tax_mode": "mezan_fixed_15",
         "default_product_type": "service",
         "payment_method_mapping": [],
     }]

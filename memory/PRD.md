@@ -1,5 +1,48 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-286 — Qoyod `/products` Payload: `sale_item: 1` (2026-02-27)
+**User-reported production failure**: Order `268756329` reached FAILED_PRODUCT with Qoyod 422:
+```
+qoyod_validation_error · POST /products · 422
+{"base": ["enter at least a purchase price or a sales price to continue."]}
+```
+The previous payload had `is_sold: true` + `selling_price: 5` but Qoyod's live `/products` endpoint uses integer-flag activation fields (`sale_item`, `purchase_item`), not the Rails-style booleans.
+
+### Backend fixes
+1. **`product_resolver._build_product_payload`** — drops `is_sold`/`is_bought`. Now emits `sale_item: 1`, `purchase_item: 0`, `selling_price`. Required fields per Qoyod live API: `name`, `sku`, `type`, `is_non_stock`, `sale_item`, `purchase_item`, `selling_price`.
+2. **NEW `_build_product_payload_fallback`** — minimal-fields payload (`name, sku, sale_item, selling_price` only). No `type` / `is_non_stock` / `purchase_item` so Qoyod uses tenant defaults.
+3. **Self-healing 422 retry in `resolve_products`**: catches `QoyodAPIError` with `status_code=422 AND ("purchase price" OR "sales price" in response excerpt)`, retries ONCE with the fallback payload. Other 422s (e.g. duplicate SKU) do NOT trigger the retry. If fallback ALSO fails, surfaces `fallback_attempted: True` on the error. No infinite retry.
+
+### Tests (Iter-286)
+- **NEW** `tests/test_qoyod_product_payload_sale_item_iter286.py` — **10/10 pass**:
+  - Order 268756329 SKU `AMS11961` → `sale_item=1, selling_price=5.0`.
+  - No `is_sold` / `is_bought` keys.
+  - String→float price coercion preserved.
+  - Defaults to `selling_price=0` when missing.
+  - Fallback payload has exactly 4 keys.
+  - End-to-end: 422 with "purchase price" → fallback succeeds.
+  - 422 with "has already been taken" → NO retry.
+  - Both attempts fail → `fallback_attempted: True`, no infinite retry.
+- **Updated** `test_qoyod_product_create_payload_selling_price_iter272.py` — renamed Iter-272's `is_sold`/`is_bought` assertions to Iter-286's `sale_item`/`purchase_item` (5 tests).
+- **Updated** `test_qoyod_preview_reprocess_iter281.py` for the new field name.
+- **739/739** Qoyod pytest suite passes. 0 regressions.
+
+### Production observations preserved
+- Customer may already exist in Qoyod trial (created before product failure). That's acceptable — idempotency on customer side is by SKU/phone match. Invoice idempotency remains OPEN (no invoice was created yet), so the next reprocess attempt will correctly try again.
+- DRY quarantine logic untouched.
+
+### Production runbook (after redeploy)
+1. Re-run preview for `268756329` → all stages green, products preview should show the new payload shape.
+2. `one-shot-reprocess` should now clear FAILED_PRODUCT and proceed to INVOICE → RECEIPT → COMPLETED.
+3. If the retry triggers on any item, the row's `qoyod_payloads.products` audit will carry both the canonical attempt AND the fallback attempt for forensics.
+
+
+## Iter-285 — Customer-First Tax Mode (trial Go-Live) (2026-02-27)
+**Tests**: 19/19 pass (after Iter-285), 2 brittle existing tests updated (`tax_mode=mezan_fixed_15` added to preserve legacy intent).
+
+[Full Iter-285 details preserved below.]
+
+
 ## Iter-284 — Per-line Discount Aggregation + Clearer Error Codes (2026-02-27)
 **User scenario (production)**: Order `268756329` (3 items, internal math consistent) failed `line_items_total_mismatch` because the normalizer emitted `discount_amount=0` (Salla put discounts only on items, not at order root) and the guard's UI message wrongly accused Make.com.
 
