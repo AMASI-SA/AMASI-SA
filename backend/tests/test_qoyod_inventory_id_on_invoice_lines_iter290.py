@@ -60,7 +60,8 @@ _RESOLUTIONS = [
 _BASE_SETTINGS = {
     "tax_mode":              "customer_first",
     "default_branch_id":     "BR-1",
-    "default_inventory_id":  "INV-42",
+    # Iter-290b — Qoyod expects integer; we coerce at build time.
+    "default_inventory_id":  "42",
     "default_tax_id":        "1",
     "zero_tax_id":           "1",
     "invoice_trigger_statuses": ["completed"],
@@ -80,9 +81,11 @@ def test_invoice_payload_stamps_inventory_id_on_every_line():
     lines = pl["invoice"]["line_items"]
     assert len(lines) == 3
     for ln in lines:
-        assert ln["inventory_id"] == "INV-42", (
-            f"every line must carry inventory_id; got {ln!r}"
+        # Iter-290b — must be int (not "42") per Qoyod apidoc.
+        assert ln["inventory_id"] == 42, (
+            f"every line must carry integer inventory_id; got {ln!r}"
         )
+        assert isinstance(ln["inventory_id"], int)
 
 
 def test_invoice_payload_omits_inventory_id_when_setting_blank():
@@ -144,3 +147,55 @@ def test_preflight_passes_when_default_inventory_id_set():
     )
     codes = [f["code"] for f in res.failures]
     assert "missing_default_inventory_id" not in codes
+
+
+# ─── Iter-290b — Integer coercion ───────────────────────────────────
+def test_invoice_payload_coerces_string_inventory_id_to_int():
+    """Operator pastes "10" in UI → Qoyod must receive 10 (int).
+    Qoyod's invoice validator rejects strings as 'missing inventory'."""
+    settings = {**_BASE_SETTINGS, "default_inventory_id": "10"}
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="C-1",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=settings,
+    )
+    for ln in pl["invoice"]["line_items"]:
+        assert ln["inventory_id"] == 10
+        assert isinstance(ln["inventory_id"], int)
+
+
+def test_invoice_payload_coerces_int_inventory_id_unchanged():
+    settings = {**_BASE_SETTINGS, "default_inventory_id": 7}
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="C-1",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=settings,
+    )
+    for ln in pl["invoice"]["line_items"]:
+        assert ln["inventory_id"] == 7
+        assert isinstance(ln["inventory_id"], int)
+
+
+def test_invoice_payload_omits_inventory_id_when_value_non_numeric():
+    """A non-numeric value (e.g. operator pasted the warehouse name
+    by mistake) must NOT be sent — preflight will block the row
+    upstream so this is a safety net only."""
+    settings = {**_BASE_SETTINGS, "default_inventory_id": "main-warehouse"}
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="C-1",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=settings,
+    )
+    for ln in pl["invoice"]["line_items"]:
+        assert "inventory_id" not in ln
+
+
+def test_invoice_payload_trims_whitespace_around_numeric_string():
+    settings = {**_BASE_SETTINGS, "default_inventory_id": "  10  "}
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="C-1",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=settings,
+    )
+    for ln in pl["invoice"]["line_items"]:
+        assert ln["inventory_id"] == 10

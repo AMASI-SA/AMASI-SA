@@ -1,5 +1,29 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290b — `inventory_id` must be sent as integer, not string (2026-02-28)
+**User scenario**: After Iter-290 stamped `inventory_id` on every invoice line, production retry of order `268756329` STILL failed with the same Qoyod error:
+```
+POST /invoices → 422
+{"errors": ["inventory id missing in a line item"]}
+```
+even though the JSON payload visibly carried `"inventory_id": "10"` on every line.
+
+**Root cause**: Qoyod's invoice validator expects `inventory_id` as **integer** (per official apidoc example: `"inventory_id": 1001`). A string value (`"10"`) is treated as missing by the validator. Mezan's Settings UI persists ids as strings, so we must coerce at payload-build time.
+
+### Fix (`/app/backend/integrations/qoyod/invoice_builder.py::build_invoice_payload`)
+- Read `settings.default_inventory_id`, strip whitespace, then `int(...)` it.
+- Non-numeric values are silently omitted from the payload (preflight blocks the row upstream so we never POST without it).
+- Integer values pass through unchanged.
+
+### Tests
+- Extended `tests/test_qoyod_inventory_id_on_invoice_lines_iter290.py` with 4 coercion tests:
+  - string "10" → int 10 on every line
+  - native int 7 → unchanged
+  - non-numeric "main-warehouse" → field omitted
+  - whitespace "  10  " → 10 (trimmed + coerced)
+- Existing test updated to assert `isinstance(ln["inventory_id"], int)`.
+- **777/777 Qoyod pytest passes**. Lint clean.
+
 ## Iter-290 — Qoyod /invoices requires `inventory_id` on every line item (2026-02-28)
 **User scenario**: After Iter-289 fixed `tax_id` as array, production order `268756329` reached `PRODUCT_RESOLVED` ✅ then failed at `FAILED_INVOICE` ❌ with:
 ```

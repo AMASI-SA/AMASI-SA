@@ -169,7 +169,21 @@ def build_invoice_payload(
     # on every line item, even when the product is type=service or
     # is_non_stock. The operator creates one default warehouse in
     # Qoyod and sets its id in `settings.default_inventory_id`.
-    inventory_id = (settings.get("default_inventory_id") or "").strip() or None
+    #
+    # Iter-290b — Qoyod's API expects `inventory_id` as an INTEGER.
+    # When sent as a string ("10") Qoyod's validator treats the field
+    # as missing and returns 422 "inventory id missing in a line
+    # item" even though the field IS present in the JSON. The official
+    # apidoc example uses `inventory_id: 1001` (no quotes). Coerce here
+    # so the operator can paste either "10" or 10 in the UI.
+    inv_raw = (settings.get("default_inventory_id") or "")
+    inv_raw = inv_raw.strip() if isinstance(inv_raw, str) else inv_raw
+    inventory_id = None
+    if inv_raw not in (None, ""):
+        try:
+            inventory_id = int(str(inv_raw).strip())
+        except (TypeError, ValueError):
+            inventory_id = None  # invalid id → omit; preflight blocks upstream
     lines = []
     for it in dto_dict.get("items", []):
         pid = res_by_sku.get(it.get("sku"))
