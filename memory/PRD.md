@@ -2799,3 +2799,57 @@ curl -s https://mezansalla.com/api/integrations/qoyod/admin/normalizer-self-test
 ### Verification
 - Preview self-test: **`ok: true`** for both iters.
 - Full Qoyod regression: **615 passed, 2 skipped, 0 failed** (+2 from Iter-276).
+
+---
+
+## 2026-02-27 — Iter-278 (legacy_adapter — bug in items[] amounts extraction)
+
+### Smoking gun
+The `normalizer-self-test` (Iter-277) returned `ok: true` on Production, but a real order `268632361 / AMS11980` still produced `unit_price=0, tax_amount=0, discount_amount=0`. The stage history exposed the missing link:
+```
+NEW ← trace_id=eac68e664dee48738005a52b15e50a60 · adapter=True · items_source=items
+```
+The **legacy adapter** runs BEFORE the normalizer. It was reading the wrong fields.
+
+### Root cause (`integrations/qoyod/legacy_adapter.py::_adapt_item`)
+1. **`unit_price`**: only looked at top-level `raw_item.price` / `raw_item.unit_price`. Salla's modern webhook ships items WITHOUT a `price` field — the price lives in `raw_item.amounts.price_without_tax.amount`. Adapter emitted `price_without_tax: null` → normalizer rendered `unit_price = 0`.
+2. **`tax_amount`**: looked at `raw_item.amounts.tax.amount` (one level). Salla's modern tax node is double-nested: `{"percent": "8.00", "amount": {"amount": 14.96}}`. The adapter then took `.amount`, got a dict `{"amount": 14.96}`, and `_money(dict, ...)` returned None.
+3. **`total_discount`**: DROPPED ENTIRELY by the adapter. The normalizer's Iter-276 discount support was useless because the field never made it through the adapter.
+
+### Fix (`legacy_adapter.py`)
+- New `_extract_money_value(node)` helper that recurses through `{amount: {amount: N}}` (same as the normalizer's `_money` from Iter-275).
+- `_adapt_item` priority chains:
+  - **unit_price**: `amounts.price_without_tax.amount` → `price.amount` → `unit_price` → `None`
+  - **tax_amount**: `amounts.tax (recursed)` → `raw.tax` → `None`
+  - **discount_amount**: `amounts.total_discount.amount` → `raw.discount_amount` → `raw.discount` → `None`  ← NEW
+  - **total**: `amounts.total.amount` → `raw.total` → `raw.total_price` → `price × qty` → `None`
+- Adapter now emits `amounts.total_discount` so the normalizer (Iter-276) can pick it up.
+- Old flat-price payloads still parse cleanly (back-compat).
+
+### Diagnostic upgrades (`routes.py`)
+- `GET /admin/normalizer-self-test` now runs `_adapt_item → _normalize_item` chain (not just normalizer). New flag `iter_278_adapter_nested_amounts_fix`. Sample input updated to AMS11980 (price=199, tax=14.96, discount=11.94, total=202.02).
+- **New** `GET /admin/normalize-row-self-test?trace_id=...`:
+  - Replays the actual stored `raw_payload` for that row through adapter+normalizer.
+  - Returns: `adapter_meta`, `adapter_first_item`, `live_first_item` (DTO from current code), `stored_first_item` (what's persisted), `extractor_source` (per-field origin), and a **drift flag** indicating if the stored canonical is stale.
+
+### Tests (`test_qoyod_legacy_adapter_nested_amounts_iter278.py` → 12/12 PASS)
+- ✓ Adapter extracts unit_price=199 from `amounts.price_without_tax`
+- ✓ Adapter recurses through double-nested tax → 14.96
+- ✓ Adapter surfaces `total_discount` → 11.94 (previously dropped)
+- ✓ Adapter preserves total=202.02
+- ✓ Full adapter→normalizer chain produces correct canonical DTO
+- ✓ Full webhook body through `adapt()` succeeds
+- ✓ Legacy flat-price payloads still parse (back-compat)
+- ✓ Direct `_extract_money_value` matrix (flat/double-nested/bare/None)
+
+Full Qoyod regression: **627 passed, 2 skipped, 0 failed**.
+
+### NOT in scope
+- ❌ No UI changes.
+- ❌ Did NOT reprocess 268632361 / 268670571 — operator decides timing.
+
+### Operator playbook
+1. Deploy Iter-278.
+2. `curl /admin/normalizer-self-test` on Production → expect `iter_278_adapter_nested_amounts_fix: true`.
+3. `curl /admin/normalize-row-self-test?trace_id=eac68e664dee48738005a52b15e50a60` → expect `live_first_item.unit_price == 199` (etc.) and `live_vs_stored_drift: true` (because stored canonical is stale from pre-fix attempt).
+4. Use the One-Shot Reprocess button to overwrite the stale canonical with the corrected one (the row's raw_payload is preserved — re-running the pipeline normalizes it cleanly).

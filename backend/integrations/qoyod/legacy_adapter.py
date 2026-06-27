@@ -98,6 +98,28 @@ def _money(amount: Any, currency: str = "SAR") -> Optional[dict]:
     return {"amount": n, "currency": currency or "SAR"}
 
 
+def _extract_money_value(node: Any) -> Optional[float]:
+    """Extract a numeric amount from a Salla money node, handling
+    BOTH flat `{amount, currency}` and double-nested
+    `{amount: {amount, currency}}` shapes (Iter-275 normalizer parity).
+    Returns None when the node carries no resolvable amount.
+    """
+    if node is None or node == "":
+        return None
+    if isinstance(node, dict):
+        inner = node.get("amount")
+        if isinstance(inner, dict):
+            return _extract_money_value(inner)
+        try:
+            return float(inner) if inner not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+    try:
+        return float(node)
+    except (TypeError, ValueError):
+        return None
+
+
 def _split_name(full: Any) -> tuple[str, str]:
     """Split 'first last' → ('first', 'last'). Handles None/empty/single-word."""
     if not full:
@@ -135,39 +157,70 @@ def _adapt_item(raw_item: dict, default_currency: str) -> Optional[dict]:
     except (TypeError, ValueError):
         qty = 1.0
 
-    # Price comes in MANY shapes — try them all defensively.
-    price_node = raw_item.get("price")
-    if isinstance(price_node, dict):
-        price_amount = price_node.get("amount")
-        price_currency = price_node.get("currency") or default_currency
+    # ── Price / tax / discount extraction (Iter-278) ────────────────
+    # Bug fixed: previous version only inspected `raw_item.price` and
+    # `raw_item.amounts.tax.amount` (one level). Salla's modern
+    # webhook ships items as:
+    #   amounts: {
+    #     price_without_tax: { amount, currency },
+    #     total_discount:    { amount, currency },          ← was dropped
+    #     tax:   { percent, amount: { amount, currency } }, ← double-nested
+    #     total: { amount, currency }
+    #   }
+    # — and crucially does NOT include a top-level `price` field.
+    # Without this fix, the adapter produced `price_without_tax: null`
+    # which the normalizer rendered as `unit_price = 0`. See orders
+    # 268632361 / 268633052 (Iter-278 forensic).
+    amounts_node = raw_item.get("amounts") if isinstance(
+        raw_item.get("amounts"), dict) else {}
+
+    # Currency: prefer the explicit price_without_tax.currency, fall back
+    # to a flat price.currency, finally to order-level default.
+    pwt_node = amounts_node.get("price_without_tax")
+    flat_price_node = raw_item.get("price")
+    if isinstance(pwt_node, dict) and pwt_node.get("currency"):
+        price_currency = pwt_node.get("currency")
+    elif isinstance(flat_price_node, dict) and flat_price_node.get("currency"):
+        price_currency = flat_price_node.get("currency")
     else:
-        price_amount = price_node if price_node is not None \
-            else raw_item.get("unit_price")
         price_currency = default_currency
 
-    # Total per line: prefer explicit `amounts.total` or `total_price`
-    # else compute price*qty.
-    amounts_node = raw_item.get("amounts") or {}
-    explicit_total = (amounts_node.get("total") if isinstance(amounts_node, dict)
-                      else None) or raw_item.get("total") \
-                      or raw_item.get("total_price")
-    if isinstance(explicit_total, dict):
-        total_amount = explicit_total.get("amount")
-    else:
-        total_amount = explicit_total
-
-    if total_amount in (None, "") and price_amount not in (None, ""):
+    # Unit price — priority chain: amounts.price_without_tax →
+    # flat price.amount → raw.unit_price → None.
+    price_amount = _extract_money_value(pwt_node)
+    if price_amount is None:
+        price_amount = _extract_money_value(flat_price_node)
+    if price_amount is None and raw_item.get("unit_price") not in (None, ""):
         try:
-            total_amount = float(price_amount) * qty
+            price_amount = float(raw_item.get("unit_price"))
         except (TypeError, ValueError):
-            total_amount = None
+            price_amount = None
 
-    tax_node = (amounts_node.get("tax") if isinstance(amounts_node, dict)
-                else None) or raw_item.get("tax")
-    if isinstance(tax_node, dict):
-        tax_amount = tax_node.get("amount")
-    else:
-        tax_amount = tax_node
+    # Total per line — priority: amounts.total → raw.total → raw.total_price.
+    total_amount = _extract_money_value(amounts_node.get("total")) \
+        if amounts_node else None
+    if total_amount is None:
+        total_amount = _extract_money_value(raw_item.get("total"))
+    if total_amount is None:
+        total_amount = _extract_money_value(raw_item.get("total_price"))
+    if total_amount is None and price_amount is not None:
+        total_amount = price_amount * qty
+
+    # Tax — handles BOTH flat (`amounts.tax = {amount, currency}`)
+    # AND Salla's modern double-nested
+    # (`amounts.tax = {percent, amount: {amount, currency}}`).
+    tax_amount = _extract_money_value(amounts_node.get("tax")) \
+        if amounts_node else None
+    if tax_amount is None:
+        tax_amount = _extract_money_value(raw_item.get("tax"))
+
+    # Per-line discount — Iter-276 column. Previously dropped entirely.
+    discount_amount = _extract_money_value(amounts_node.get("total_discount")) \
+        if amounts_node else None
+    if discount_amount is None:
+        discount_amount = _extract_money_value(raw_item.get("discount_amount"))
+    if discount_amount is None:
+        discount_amount = _extract_money_value(raw_item.get("discount"))
 
     item: dict = {
         "name": name or sku,
@@ -178,8 +231,11 @@ def _adapt_item(raw_item: dict, default_currency: str) -> Optional[dict]:
             "total":             _money(total_amount, price_currency),
         },
     }
-    if tax_amount not in (None, ""):
+    if tax_amount is not None:
         item["amounts"]["tax"] = _money(tax_amount, price_currency)
+    if discount_amount is not None:
+        item["amounts"]["total_discount"] = _money(
+            discount_amount, price_currency)
 
     # Carry product_id when Salla shipped one.
     pid = raw_item.get("product_id") or (

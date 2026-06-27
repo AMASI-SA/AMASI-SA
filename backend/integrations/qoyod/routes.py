@@ -925,31 +925,34 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         return result
 
     # ── Normalizer Self-Test — verifies the deployed code carries
-    #    Iter-275 (layered `amounts`) + Iter-276 (line discount). Lets
-    #    the operator confirm a Production redeploy actually landed
+    #    Iter-275 (layered `amounts`) + Iter-276 (line discount) +
+    #    Iter-278 (legacy adapter nested-amounts fix). Lets the
+    #    operator confirm a Production redeploy actually landed
     #    without inspecting code.
     @router.get("/admin/normalizer-self-test")
     async def admin_normalizer_self_test(user=Depends(current_user)):
         from integrations.qoyod.normalizer import _normalize_item
-        # Exact shape from production order 268633052 / AMS11980.
+        from integrations.qoyod.legacy_adapter import _adapt_item
+        # Exact shape from production order 268632361 / AMS11980.
         sample = {
             "sku": "AMS11980",
             "name": "عباية ستيتش بناتي",
             "quantity": 1,
             "amounts": {
-                "price_without_tax": {"amount": 159, "currency": "SAR"},
-                "total_discount":    {"amount": 17.01, "currency": "SAR"},
+                "price_without_tax": {"amount": 199, "currency": "SAR"},
+                "total_discount":    {"amount": 11.94, "currency": "SAR"},
                 "tax": {
                     "percent": "8.00",
-                    "amount":  {"amount": 11.36, "currency": "SAR"},
+                    "amount":  {"amount": 14.96, "currency": "SAR"},
                 },
-                "total": {"amount": 153.35, "currency": "SAR"},
+                "total": {"amount": 202.02, "currency": "SAR"},
             },
         }
-        expected = {"unit_price": 159.0, "tax_amount": 11.36,
-                    "discount_amount": 17.01, "total": 153.35}
+        expected = {"unit_price": 199.0, "tax_amount": 14.96,
+                    "discount_amount": 11.94, "total": 202.02}
         try:
-            dto = _normalize_item(sample)
+            adapted = _adapt_item(sample, "SAR")
+            dto = _normalize_item(adapted)
             got = {
                 "unit_price":      dto.unit_price,
                 "tax_amount":      dto.tax_amount,
@@ -958,19 +961,119 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             }
         except Exception as exc:
             return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-        ok_iter275 = got["unit_price"] == 159.0 and got["tax_amount"] == 11.36
-        ok_iter276 = got["discount_amount"] == 17.01
+        ok_iter275 = got["unit_price"] == 199.0 and got["tax_amount"] == 14.96
+        ok_iter276 = got["discount_amount"] == 11.94
+        ok_iter278 = ok_iter275 and ok_iter276    # adapter fix gates both
         return {
             "ok":              ok_iter275 and ok_iter276,
             "iter_275_layered_amounts_supported": ok_iter275,
             "iter_276_line_discount_supported":   ok_iter276,
+            "iter_278_adapter_nested_amounts_fix": ok_iter278,
             "expected":        expected,
             "got":             got,
+            "adapted_item":    adapted,
             "sample_input":    sample,
-            "hint": ("If iter_275=false → redeploy needed (Iter-275). "
-                     "If iter_276=false → redeploy needed (Iter-276). "
-                     "If both true → Production is up to date."),
+            "hint": ("If any flag is false → redeploy needed. The chain "
+                     "runs raw → _adapt_item → _normalize_item, so a "
+                     "broken adapter (Iter-278) silently zeroes the "
+                     "values even when the normalizer itself is fine."),
         }
+
+    # ── Per-Row Replay — re-run the EXACT raw payload of an existing
+    #    inbox row through the live adapter + normalizer chain. Use
+    #    this when self-test says ok=true but a specific order still
+    #    produces zeros: it tells you whether the bug is in the
+    #    parsing chain OR in the stored canonical (cached pre-fix).
+    @router.get("/admin/normalize-row-self-test")
+    async def admin_normalize_row_self_test(
+        trace_id: str = Query(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.normalizer import _normalize_item, normalize
+        from integrations.qoyod.legacy_adapter import adapt as adapt_legacy
+        tenant = _tenant_id(user)
+        row = await db.integration_inbox.find_one(
+            {"user_id": tenant, "trace_id": trace_id},
+            {"_id": 0, "raw_payload": 1, "canonical_payload": 1,
+             "trace_id": 1, "salla_order_number": 1, "pipeline_stage": 1,
+             "received_at": 1})
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "row_not_found",
+                        "trace_id": trace_id})
+        raw = row.get("raw_payload") or {}
+        out: dict = {
+            "row": {
+                "trace_id":           row.get("trace_id"),
+                "salla_order_number": row.get("salla_order_number"),
+                "pipeline_stage":     row.get("pipeline_stage"),
+                "received_at":        row.get("received_at"),
+            },
+            "stored_canonical": row.get("canonical_payload"),
+        }
+        # ─ Step 1: legacy adapter ────────────────────────────────────
+        try:
+            adapted, adapter_meta = adapt_legacy(raw)
+        except Exception as exc:
+            out["adapter_error"] = f"{type(exc).__name__}: {exc}"
+            return out
+        out["adapter_meta"] = adapter_meta
+        adapted_items = (adapted.get("data") or {}).get("items") \
+            if isinstance(adapted.get("data"), dict) else adapted.get("items")
+        out["adapter_first_item"] = (adapted_items or [None])[0]
+
+        # ─ Step 2: normalizer (full DTO) ─────────────────────────────
+        try:
+            dto = normalize(raw, received_at=row.get("received_at"))
+            canon = dto.model_dump(mode="json")
+        except Exception as exc:
+            out["normalizer_error"] = f"{type(exc).__name__}: {exc}"
+            return out
+
+        live_first = (canon.get("items") or [None])[0]
+        stored_first = ((row.get("canonical_payload") or {}).get("items")
+                        or [None])[0]
+        out["live_first_item"] = live_first
+        out["stored_first_item"] = stored_first
+
+        # ─ Per-field extractor source attribution ───────────────────
+        if isinstance(adapted_items, list) and adapted_items:
+            raw_first = (raw.get("items") or [None])[0] \
+                if isinstance(raw.get("items"), list) else None
+            adapted_first = adapted_items[0] if adapted_items else None
+            adapted_amounts = (adapted_first or {}).get("amounts") or {}
+            out["extractor_source"] = {
+                "unit_price": ("raw.items[0].amounts.price_without_tax.amount"
+                               if (raw_first or {}).get("amounts", {}).get(
+                                   "price_without_tax") is not None
+                               else ("raw.items[0].price.amount"
+                                     if isinstance((raw_first or {}).get("price"), dict)
+                                     else "raw.items[0].unit_price / fallback 0")),
+                "tax_amount": ("raw.items[0].amounts.tax (recursed)"
+                               if (raw_first or {}).get("amounts", {}).get("tax")
+                               is not None
+                               else "fallback 0"),
+                "discount_amount": ("raw.items[0].amounts.total_discount.amount"
+                                     if (raw_first or {}).get("amounts", {}).get(
+                                         "total_discount") is not None
+                                     else "fallback 0"),
+                "total": ("raw.items[0].amounts.total.amount"
+                          if (raw_first or {}).get("amounts", {}).get("total")
+                          is not None
+                          else "fallback unit_price*quantity"),
+                "adapted_amounts": adapted_amounts,
+            }
+
+        # ─ Drift detection ──────────────────────────────────────────
+        out["live_vs_stored_drift"] = (live_first != stored_first)
+        out["hint"] = (
+            "If `live_first_item` is correct but `stored_first_item` "
+            "shows zeros, the row was normalized BEFORE the fix shipped — "
+            "reprocess the row to overwrite the stored canonical. "
+            "If `live_first_item` ALSO shows zeros, the deploy is stale."
+        )
+        return out
 
     # ── Webhook Parse Failures — last N malformed-JSON receipts ─────
     # When Make.com sends invalid JSON (e.g. injecting an Array into
