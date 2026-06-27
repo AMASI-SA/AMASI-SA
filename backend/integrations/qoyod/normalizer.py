@@ -63,9 +63,18 @@ def _f(val: Any, default: float = 0.0) -> float:
 
 def _money(node: Any, default: float = 0.0) -> float:
     """Salla money shape: `{amount: "12.30", currency: "SAR"}` OR a bare
-    number. Returns the float amount."""
+    number. Returns the float amount.
+
+    Some Salla webhooks (per Iter-275, observed via Make.com) double-nest
+    the money node: `{amount: {amount: 12.86, currency: "SAR"}}`. The
+    inner dict is itself a money node — recurse one level so we don't
+    silently fall back to `default` and bury the value as 0.
+    """
     if isinstance(node, dict):
-        return _f(node.get("amount"), default)
+        inner = node.get("amount")
+        if isinstance(inner, dict):
+            return _money(inner, default)
+        return _f(inner, default)
     return _f(node, default)
 
 
@@ -357,7 +366,92 @@ def _guest_fallback(order_number: str | None) -> str:
     return f"ضيف #{on}" if on else "ضيف"
 
 
+def _extract_item_unit_price(it: dict, amounts: dict) -> float:
+    """Priority chain (Iter-275, user directive):
+       1) `item.unit_price`
+       2) `item.price.amount`  (Salla money node)
+       3) `item.amounts.price_without_tax.amount`
+       4) 0.0
+    """
+    # Direct numeric override — what the Mezan canonical sets and what
+    # any pre-normalised payload would carry.
+    if it.get("unit_price") is not None:
+        return _f(it.get("unit_price"), 0.0)
+    # Salla item-level money node.
+    if "price" in it:
+        v = _money(it.get("price"), default=float("nan"))
+        if v == v:  # not NaN
+            return v
+    # Salla layered amounts node.
+    if amounts:
+        return _money(amounts.get("price_without_tax")
+                      or amounts.get("price"), 0.0)
+    return 0.0
+
+
+def _extract_item_tax_amount(it: dict, amounts: dict) -> float:
+    """Priority chain:
+       1) `item.tax_amount`
+       2) `item.amounts.tax.amount.amount`  (double-nested money node)
+       3) 0.0
+    `_money` now recurses through double-nested `{amount: {amount: N}}`.
+    """
+    if it.get("tax_amount") is not None:
+        return _f(it.get("tax_amount"), 0.0)
+    if amounts and amounts.get("tax") is not None:
+        return _money(amounts.get("tax"), 0.0)
+    return _money(it.get("tax"), 0.0)
+
+
+def _extract_item_total(it: dict, amounts: dict,
+                        unit_price: float, quantity: float) -> float:
+    """Priority chain:
+       1) `item.total`
+       2) `item.amounts.total.amount`
+       3) `unit_price * quantity`  (computed fallback)
+    """
+    if it.get("total") is not None:
+        return _f(it.get("total"), 0.0)
+    if amounts and amounts.get("total") is not None:
+        return _money(amounts.get("total"), 0.0)
+    return _f(unit_price * quantity, 0.0)
+
+
+def _extract_item_currency(it: dict, amounts: dict,
+                           fallback: str = "SAR") -> str:
+    """Priority chain:
+       1) `item.price.currency`
+       2) `item.amounts.price_without_tax.currency`
+       3) `SAR`
+    Currency is read for diagnostic/audit only — LineItemDTO is currency-
+    agnostic (order-level currency is the source of truth).
+    """
+    if isinstance(it.get("price"), dict):
+        c = it["price"].get("currency")
+        if c:
+            return str(c).upper()
+    if amounts:
+        pwt = amounts.get("price_without_tax")
+        if isinstance(pwt, dict) and pwt.get("currency"):
+            return str(pwt["currency"]).upper()
+    return fallback
+
+
 def _normalize_item(it: dict) -> LineItemDTO:
+    """Convert a Salla / Make item dict to a `LineItemDTO`.
+
+    Accepts three shapes of progressively richer nesting:
+      • Mezan canonical: `{sku, name, quantity, unit_price, tax_amount, total}`.
+      • Flat Salla:      `{sku, name, quantity, price: {amount, currency}, ...}`.
+      • Layered Salla:   `{sku, name, quantity, amounts: {price_without_tax,
+                          tax: {amount: {amount, currency}}, total: {amount, currency}}}`.
+
+    Iter-275: the layered shape — emitted by Make.com when an Array
+    Aggregator passes through Salla's native `amounts` block — now
+    parses cleanly to the same canonical DTO. Critical for the Totals
+    Guard (Iter-273): without correct per-item totals the guard would
+    raise false-positive `line_items_total_mismatch` errors.
+    """
     if not isinstance(it, dict):
         raise NormalizationError(
             "invalid_item_shape", "line item must be an object",
@@ -371,12 +465,10 @@ def _normalize_item(it: dict) -> LineItemDTO:
     if not name and isinstance(it.get("product"), dict):
         name = str(it["product"].get("name") or "").strip()
 
-    # Salla layered prices: `amounts.price_without_tax.amount` + `amounts.tax.amount`
-    unit_price = _money(amounts.get("price_without_tax")
-                        or amounts.get("price")
-                        or it.get("price"))
-    tax_amount = _money(amounts.get("tax")) if amounts else _money(it.get("tax"))
-    total      = _money(amounts.get("total")) if amounts else _money(it.get("total"))
+    quantity   = _f(it.get("quantity"), 1.0)
+    unit_price = _extract_item_unit_price(it, amounts)
+    tax_amount = _extract_item_tax_amount(it, amounts)
+    total      = _extract_item_total(it, amounts, unit_price, quantity)
 
     product_id = None
     if isinstance(it.get("product"), dict):
@@ -387,7 +479,7 @@ def _normalize_item(it: dict) -> LineItemDTO:
 
     return LineItemDTO(
         sku=sku, name=name,
-        quantity=_f(it.get("quantity"), 1.0),
+        quantity=quantity,
         unit_price=unit_price,
         tax_amount=tax_amount,
         total=total,

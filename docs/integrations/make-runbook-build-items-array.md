@@ -16,6 +16,8 @@ HTTP 422 {"detail":"json_invalid","message":"Expecting property name enclosed in
 
 **Never** inject a Make Array directly into a Raw JSON body. Build the payload with a **Create JSON** module so Make is responsible for the JSON encoding, not you.
 
+> **Iter-275 update (2026-02-27)**: Mezan's normalizer now accepts Salla's native nested `amounts` shape directly — you don't need to flatten `unit_price`/`tax_amount`/`total` inside Make. The Array Aggregator can pass the entire Salla item bundle through with minimal field selection. See §2.3 for the simpler aggregator setup.
+
 ---
 
 ## 1. What "wrong" looks like (do NOT do this)
@@ -70,18 +72,43 @@ If your Make scenario keeps hitting `422 json_invalid`, ask the Mezan operator t
 * **Module**: `Tools › Array aggregator`.
 * **Source Module**: select the Iterator (Module 2).
 * **Target structure type**: `Custom`.
-* **Inside the aggregator**, define the per-item shape Mezan expects:
+
+#### Option A (RECOMMENDED post-Iter-275) — pass Salla item bundle through
+
+The Array Aggregator's `Custom` mode only lets you pick existing fields
+from the iterator bundle. That's perfect — pick the fields you need and
+let Mezan's normalizer handle the layered `amounts` shape. Map:
+
+| Field | Map from |
+|---|---|
+| `sku` | `{{2.sku}}` |
+| `name` | `{{2.name}}` |
+| `quantity` | `{{2.quantity}}` |
+| `amounts` | `{{2.amounts}}`  ← whole sub-object, parses cleanly |
+
+After Iter-275 the normalizer reads:
+- `unit_price` from `item.amounts.price_without_tax.amount`
+- `tax_amount` from `item.amounts.tax.amount.amount` (double-nested money node Salla emits)
+- `total` from `item.amounts.total.amount`
+
+So `amounts` is enough — no need to synthesise flat keys.
+
+#### Option B (legacy — pre-Iter-275 flat keys)
+
+If you prefer the flat Mezan-canonical shape, map per-field:
 
 | Field | Map from |
 |---|---|
 | `sku` | `{{2.sku}}` |
 | `name` | `{{2.name}}` |
 | `quantity` | `{{2.quantity}}` (parse to Number if Salla sends string: `{{parseNumber(2.quantity)}}`) |
-| `unit_price` | `{{2.price.amount}}` (Number) — NOTE: Mezan's canonical uses `unit_price` (ex-tax). |
+| `unit_price` | `{{2.price.amount}}` (Number) — Salla's per-item ex-tax price. |
 | `tax_amount` | `{{ifempty(2.tax_amount; 0)}}` |
 | `total` | `{{2.total.amount}}` |
 
 > Salla's `data.items[].price` is an object `{amount, currency}` — drill into `.amount`.
+
+Both options produce the same canonical DTO downstream. Pick whichever feels less brittle for your Make scenario.
 
 After this module Make has a single bundle containing an `array` field — the fully-formed `items[]` list.
 

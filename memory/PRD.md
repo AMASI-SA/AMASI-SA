@@ -2656,3 +2656,64 @@ Before this iteration, parse failures were silent — Mezan returned 422 to Make
 3. Send one test order. On Mezan's monitor:
    - If the red banner appears → Make is still producing bad JSON. Click to see exact body Mezan rejected.
    - If no banner AND row reaches `COMPLETED` with `items_count == subtotal_lines` → 🎉 ready for live re-processing of 268670571 (which still has the broken canonical payload — operator must re-trigger from Salla or Make Replay).
+
+---
+
+## 2026-02-27 — Iter-275 (Normalizer accepts Salla's nested `amounts` per-item shape)
+
+### Context
+Operator tried building the Make.com items array via Array Aggregator (Iter-274 runbook). Make's Array Aggregator's `Custom` mode does NOT let you synthesise new fields like `unit_price` / `tax_amount` — you can only pick existing fields from the iterator bundle. The natural pass-through shape from Salla is:
+```json
+{
+  "sku": "AMS13000",
+  "name": "عباية جنان",
+  "quantity": 1,
+  "amounts": {
+    "price_without_tax": { "amount": 180, "currency": "SAR" },
+    "tax":               { "amount": { "amount": 12.86, "currency": "SAR" } },
+    "total":             { "amount": 173.6, "currency": "SAR" }
+  }
+}
+```
+Note the **double-nested** `tax.amount.amount` (Salla quirk).
+
+User directive: "Make should not be more complex. Mezan must support this `amounts` shape directly."
+
+### What changed
+
+**`integrations/qoyod/normalizer.py`:**
+- `_money()` now recurses through `{amount: {amount: N}}` so the double-nested tax node parses correctly instead of silently falling back to 0.
+- New explicit priority extractors (replacing the implicit chain):
+  - `_extract_item_unit_price`: `it.unit_price → it.price.amount → it.amounts.price_without_tax.amount → 0.0`
+  - `_extract_item_tax_amount`: `it.tax_amount → it.amounts.tax.amount.amount → 0.0`
+  - `_extract_item_total`: `it.total → it.amounts.total.amount → unit_price * quantity`
+  - `_extract_item_currency`: `it.price.currency → it.amounts.price_without_tax.currency → SAR` (diagnostic-only; LineItemDTO stays currency-agnostic per-item)
+- `_normalize_item` now produces identical canonical DTO from THREE shapes: Mezan canonical, flat Salla, layered Salla.
+
+**`docs/integrations/make-runbook-build-items-array.md`:**
+- §0 TL;DR updated with Iter-275 note.
+- §2 Module 3 (Array Aggregator) now documents two equivalent options:
+  - Option A (recommended): pass through `{sku, name, quantity, amounts}` — let Mezan parse.
+  - Option B (legacy): keep the flat Mezan-canonical keys if your scenario already has them.
+
+### Tests
+`test_qoyod_normalizer_layered_amounts_iter275.py` — **24/24 PASS**:
+- ✓ User-reported exact shape (AMS13000, 180/12.86/173.6) → canonical DTO matches expectation.
+- ✓ `_money` recursion through double-nested money node.
+- ✓ Priority chain for unit_price (3 levels + zero fallback).
+- ✓ Priority chain for tax_amount (3 levels + flat-node compat).
+- ✓ Priority chain for total (3 levels including computed `unit_price * quantity`).
+- ✓ Currency extraction (3-level priority).
+- ✓ Backward-compat: existing canonical shape still normalizes identically.
+- ✓ String-typed numbers from Make are coerced cleanly.
+- ✓ Hostile shapes (non-dict, empty amounts) handled.
+- ✓ Multi-item layered shape sums correctly for Totals Guard.
+
+### Verification
+- `pytest tests/test_qoyod_normalizer_layered_amounts_iter275.py` → **24/24 PASS**.
+- Full Qoyod regression (`pytest -k qoyod`) → **602 passed, 2 skipped, 0 failed**.
+
+### Operator next steps
+1. Deploy Iter-275 to Production.
+2. Simplify Make's Array Aggregator: pick `sku`, `name`, `quantity`, `amounts` (whole sub-object). Drop the manual mapping of `unit_price` / `tax_amount` / `total`.
+3. Send one test order. The monitor should show `pipeline_stage=COMPLETED` with the canonical_payload.items each carrying the flat shape — proving the normalizer collapsed Salla's nested form correctly.
