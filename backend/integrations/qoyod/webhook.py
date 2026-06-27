@@ -121,8 +121,24 @@ def _verify_token(  # noqa: D401 (kept for backward compat)
 def derive_idempotency_key(raw: dict, header_key: Optional[str]) -> str:
     """Idempotency key resolution order:
         1. Explicit `X-Idempotency-Key` header (Make.com & friends).
-        2. `salla:order:<id>:<event>` derived from the payload.
+        2. `salla:order:<id>:<event>:<status_slug>` derived from the payload.
         3. Last resort: random UUID (guarantees insertion).
+
+    Status-slug inclusion (Iter-267, user directive 2026-02-27)
+    ──────────────────────────────────────────────────────────
+    Salla fires `order.updated` repeatedly as a single order moves
+    through statuses (`under_review` → `payment_pending` → `completed`
+    → …). Each transition is a DIFFERENT business event for Mezan
+    (the first may be SKIPPED, a later one may be invoice-eligible).
+    Without the status suffix, Mezan's inbox would treat every later
+    transition as a duplicate of the first and silently drop it.
+
+    `trigger_once_only` (separate rule) still guarantees no duplicate
+    invoice when the SAME completed status fires twice — see
+    business_rules.py.
+
+    The runbook MUST instruct Make.com to use the same composition:
+        salla:order:{{1.data.reference_id}}:{{1.event}}:{{1.data.status.slug}}
     """
     if header_key and header_key.strip():
         return header_key.strip()
@@ -134,10 +150,36 @@ def derive_idempotency_key(raw: dict, header_key: Optional[str]) -> str:
     event = (raw.get("event") if isinstance(raw, dict) else None) \
             or raw.get("event_type") if isinstance(raw, dict) else None \
             or "order"
+    # Status slug: lives under `data.status.slug` for nested-shape
+    # payloads, or `data.status` when the legacy adapter has already
+    # flattened it. Falls back to `data.order_status` for top-level
+    # legacy Make webhooks. `none` is used (not blank) so the key
+    # stays stable when status truly is absent.
+    status_slug = _extract_status_slug(data) or "none"
     if order_id:
-        return f"salla:order:{order_id}:{event}"
+        return f"salla:order:{order_id}:{event}:{status_slug}"
     # No key in headers AND no order id → random; will never collide.
     return f"salla:unknown:{uuid.uuid4().hex}"
+
+
+def _extract_status_slug(data: dict) -> Optional[str]:
+    """Pull the status slug from any of the shapes Salla/Make has
+    used historically. Returns lowercase string or None."""
+    if not isinstance(data, dict):
+        return None
+    st = data.get("status")
+    if isinstance(st, dict):
+        slug = st.get("slug") or st.get("name") or st.get("key")
+        if isinstance(slug, str) and slug.strip():
+            return slug.strip().lower()
+    elif isinstance(st, str) and st.strip():
+        return st.strip().lower()
+    # Legacy top-level fallback used by some Make scenarios
+    for k in ("order_status", "status_slug", "current_status"):
+        v = data.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip().lower()
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────

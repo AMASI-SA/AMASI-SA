@@ -52,10 +52,12 @@ POST
 |---|---|
 | `Content-Type` | `application/json; charset=utf-8` |
 | `X-Webhook-Token` | الـ Token الذي نسخته من Mezan في الخطوة المسبقة #4 |
-| `X-Idempotency-Key` | `salla:order:{{1.data.reference_id}}:{{1.event}}` |
+| `X-Idempotency-Key` | `salla:order:{{1.data.reference_id}}:{{1.event}}:{{1.data.status.slug}}` |
 | `X-Mezan-Source` | `make.com` |
 
-> 💡 الـ `{{1.data.reference_id}}` و `{{1.event}}` يجب أن تستبدلها بـ **mappings** من الـ trigger module في Make (الرقم `1` قد يختلف عندك حسب ترتيب الـ Modules).
+> 💡 الـ `{{1.data.reference_id}}` و `{{1.event}}` و `{{1.data.status.slug}}` يجب أن تستبدلها بـ **mappings** من الـ trigger module في Make (الرقم `1` قد يختلف عندك حسب ترتيب الـ Modules).
+>
+> 🔑 **مهم — تحديث 2026-02-27:** الـ `:{{1.data.status.slug}}` في نهاية الـIdempotency Key يضمن أن تغيير حالة نفس الطلب (مثلاً `under_review` → `completed`) ينتج Key مختلف. هذا يسمح للطلب بدخول النظام مرتين كرسالتين منفصلتين (الأولى SKIPPED، الثانية تُعالَج). بدون هذه الإضافة، Salla webhook الثاني يُعتبر duplicate ويُسقَط بصمت — وهي مشكلة الطلب `268452656` التي ظهرت في الإنتاج. حماية تكرار الفاتورة محفوظة عبر `trigger_once_only` في طبقة قيود.
 
 #### `Body type`
 ```
@@ -162,7 +164,7 @@ Yes  ← مهم لرؤية النتيجة في Make
 curl -X POST 'https://mezansalla.com/api/integrations/qoyod/webhook' \
   -H 'Content-Type: application/json; charset=utf-8' \
   -H 'X-Webhook-Token: <الـ token الذي نسخته>' \
-  -H 'X-Idempotency-Key: salla:order:TEST-001:order.status.updated' \
+  -H 'X-Idempotency-Key: salla:order:TEST-001:order.status.updated:completed' \
   -H 'X-Mezan-Source: manual-test' \
   -d '{
     "event_type":        "order_completed",
