@@ -42,6 +42,7 @@ What this module DOES NOT do
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -68,14 +69,25 @@ def _contact_name_blank_matcher(err: dict | None) -> bool:
         • {"code": "qoyod_api_error",
            "message": "... contact_name ... Can't be blank ..."}
         • Nested under `qoyod_errors` for older log shapes.
+
+    Iter-267 fix: previously used `str(err).lower()` which invokes
+    Python's `repr()` on inner string values — that escapes
+    apostrophes (`Can't` → `Can\\'t`), making the literal substring
+    search for `can't be blank` miss every real production row.
+    Switched to `json.dumps(default=str)` which preserves apostrophes
+    verbatim (JSON only escapes `"` and `\\`).
     """
     if not isinstance(err, dict):
         return False
-
-    # Stringify the WHOLE error blob once and look for both tokens.
-    # Cheap, deterministic, and resilient to whichever sub-key Qoyod used.
-    blob = str(err).lower()
-    return "contact_name" in blob and "can't be blank" in blob
+    try:
+        blob = json.dumps(err, ensure_ascii=False, default=str).lower()
+    except (TypeError, ValueError):
+        # Last-resort fallback for non-serializable inputs.
+        blob = str(err).lower()
+    # `contact_name` + `blank` is the unique signature (we deliberately
+    # do NOT require the literal `can't` token so locale variants
+    # like `cant be blank` or `can not be blank` also match).
+    return "contact_name" in blob and "blank" in blob
 
 
 KNOWN_FIXED_PATTERNS: list[dict[str, Any]] = [

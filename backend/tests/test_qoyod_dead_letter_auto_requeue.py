@@ -111,6 +111,26 @@ def test_matcher_accepts_inline_message_shape():
     assert match_pattern(row) is not None
 
 
+def test_matcher_accepts_production_shape_with_repr_escaped_apostrophe():
+    """Regression for Iter-267 production bug: the row was sitting in
+    DEAD_LETTER with this exact error shape but the matcher rejected
+    it because `str(err)` escaped the apostrophe (`Can't` → `Can\\'t`)
+    breaking the literal substring search."""
+    row = {
+        "last_failed_stage": "FAILED_CUSTOMER",
+        "pipeline_error": {
+            "code":         "qoyod_validation_error",
+            "message":      "{'contact_name': [\"Can't be blank\"]}",
+            "status_code":  422,
+            "endpoint":     "POST /customers",
+            "qoyod_response_excerpt": "{'errors': {'contact_name': [\"Can't be blank\"]}}",
+        },
+    }
+    pat = match_pattern(row)
+    assert pat is not None, "Production shape must match — was failing pre-Iter-267"
+    assert pat["id"] == "contact_name_blank_2026_02_26"
+
+
 def test_matcher_rejects_wrong_failed_stage():
     """Pattern only applies to FAILED_CUSTOMER. Same error on
     FAILED_INVOICE must NOT match."""
