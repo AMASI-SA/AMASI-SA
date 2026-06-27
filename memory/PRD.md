@@ -2757,3 +2757,45 @@ Full Qoyod regression: **613 passed, 2 skipped, 0 failed** (+11 from Iter-276 ba
 ### NOT in scope (per user directive)
 - ❌ No new UI / Dashboard.
 - ❌ No order-level discount changes (the canonical already has `discount_amount` at the order level; this iter only adds the per-line column).
+
+---
+
+## 2026-02-27 — Iter-277 (Normalizer self-test endpoint + deploy-state verification)
+
+### Context
+User reported that order `268633052` (AMS11980) received a correct nested `amounts` payload from Make, but the canonical DTO showed:
+```json
+unit_price: 0, tax_amount: 0, discount_amount: 0, total: 153.35
+```
+
+Diagnosis: Preview code (Iter-275/276) parses this exact payload correctly — verified by a new dedicated regression test (`test_qoyod_normalize_prod_order_268633052_iter277.py`). The bug is a deploy-state gap: **Production has not yet been redeployed** with Iter-275/276.
+
+### Changes
+**Backend (`integrations/qoyod/routes.py`):**
+- New endpoint **`GET /api/integrations/qoyod/admin/normalizer-self-test`** runs the exact production payload for AMS11980 through `_normalize_item` and returns:
+  - `iter_275_layered_amounts_supported` (bool) — true if unit_price=159 and tax_amount=11.36
+  - `iter_276_line_discount_supported` (bool) — true if discount_amount=17.01
+  - `expected` vs `got` for side-by-side compare
+  - `hint` explaining what each false signal means
+- Auth-protected.
+
+**Tests (`test_qoyod_normalize_prod_order_268633052_iter277.py`):**
+- ✓ Exact AMS11980 payload normalizes to 159 / 11.36 / 17.01 / 153.35
+- ✓ Line math reconciles: 159 − 17.01 + 11.36 = 153.35
+- ✓ `_money` handles tax node with `{percent, amount: {amount, currency}}` correctly
+
+### How the operator uses it
+```bash
+TOKEN=$(curl -s -X POST https://mezansalla.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"...","password":"..."}' | jq -r .token)
+
+curl -s https://mezansalla.com/api/integrations/qoyod/admin/normalizer-self-test \
+  -H "Authorization: Bearer $TOKEN" | jq .ok
+```
+- `ok: true` → Production carries Iter-275/276. The issue is elsewhere (data, not deploy).
+- `ok: false` → Redeploy needed. `iter_275_layered_amounts_supported` / `iter_276_line_discount_supported` show which iter is missing.
+
+### Verification
+- Preview self-test: **`ok: true`** for both iters.
+- Full Qoyod regression: **615 passed, 2 skipped, 0 failed** (+2 from Iter-276).

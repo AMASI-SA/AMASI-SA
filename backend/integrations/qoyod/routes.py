@@ -924,6 +924,54 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             )
         return result
 
+    # ── Normalizer Self-Test — verifies the deployed code carries
+    #    Iter-275 (layered `amounts`) + Iter-276 (line discount). Lets
+    #    the operator confirm a Production redeploy actually landed
+    #    without inspecting code.
+    @router.get("/admin/normalizer-self-test")
+    async def admin_normalizer_self_test(user=Depends(current_user)):
+        from integrations.qoyod.normalizer import _normalize_item
+        # Exact shape from production order 268633052 / AMS11980.
+        sample = {
+            "sku": "AMS11980",
+            "name": "عباية ستيتش بناتي",
+            "quantity": 1,
+            "amounts": {
+                "price_without_tax": {"amount": 159, "currency": "SAR"},
+                "total_discount":    {"amount": 17.01, "currency": "SAR"},
+                "tax": {
+                    "percent": "8.00",
+                    "amount":  {"amount": 11.36, "currency": "SAR"},
+                },
+                "total": {"amount": 153.35, "currency": "SAR"},
+            },
+        }
+        expected = {"unit_price": 159.0, "tax_amount": 11.36,
+                    "discount_amount": 17.01, "total": 153.35}
+        try:
+            dto = _normalize_item(sample)
+            got = {
+                "unit_price":      dto.unit_price,
+                "tax_amount":      dto.tax_amount,
+                "discount_amount": getattr(dto, "discount_amount", None),
+                "total":           dto.total,
+            }
+        except Exception as exc:
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        ok_iter275 = got["unit_price"] == 159.0 and got["tax_amount"] == 11.36
+        ok_iter276 = got["discount_amount"] == 17.01
+        return {
+            "ok":              ok_iter275 and ok_iter276,
+            "iter_275_layered_amounts_supported": ok_iter275,
+            "iter_276_line_discount_supported":   ok_iter276,
+            "expected":        expected,
+            "got":             got,
+            "sample_input":    sample,
+            "hint": ("If iter_275=false → redeploy needed (Iter-275). "
+                     "If iter_276=false → redeploy needed (Iter-276). "
+                     "If both true → Production is up to date."),
+        }
+
     # ── Webhook Parse Failures — last N malformed-JSON receipts ─────
     # When Make.com sends invalid JSON (e.g. injecting an Array into
     # Raw Body without Create JSON), Mezan rejects with 422 and logs
