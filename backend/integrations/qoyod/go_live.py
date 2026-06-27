@@ -220,7 +220,8 @@ async def _check_eligible_orders(
                        "أرسل Test Payload من Make.com أو تأكّد من حالات تفعيل الفاتورة.")}
 
 
-async def _check_lookup(api_client, label: str, fn, *, endpoint: str) -> dict:
+async def _check_lookup(api_client, label: str, fn, *,
+                        endpoint: str, sample_limit: int = 5) -> dict:
     """Live Qoyod API check.
 
     This function calls Qoyod's REST API directly (NO cache, NO local
@@ -230,12 +231,16 @@ async def _check_lookup(api_client, label: str, fn, *, endpoint: str) -> dict:
         • `detail`      — human-readable Arabic line for the UI.
         • `extra.source`              — always 'qoyod_api_live'.
         • `extra.endpoint`            — the exact path called.
-        • `extra.queried_at`          — ISO timestamp of THIS check
-                                         (Qoyod doesn't return a
-                                         server-side ETag/last-modified).
-        • `extra.qoyod_total`         — the count Qoyod returned
-                                         (from `meta.total` when
-                                         available, else the page len).
+        • `extra.queried_at`          — ISO timestamp of THIS check.
+        • `extra.qoyod_total`         — the count Qoyod returned.
+        • `extra.sample`              — first N rows (id, name, sku) so
+                                         the operator can EYEBALL that
+                                         the data belongs to the right
+                                         Qoyod tenant.
+        • `extra.qoyod_response_meta` — Qoyod's own `meta` object verbatim
+                                         (page/total/total_pages — lets
+                                         the user spot tenant mismatches
+                                         by inspecting the raw response).
 
     Intentional non-feature: there is no cached count anywhere. If
     Qoyod is unreachable the check FAILS with `qoyod_*` error code —
@@ -254,21 +259,41 @@ async def _check_lookup(api_client, label: str, fn, *, endpoint: str) -> dict:
         # — `limit=1` would otherwise show "1 موجود" misleadingly.
         n = 0
         total_source = "page_length"
+        sample: list[dict] = []
+        meta_raw: dict = {}
         if isinstance(resp, dict):
             meta = resp.get("meta")
-            if isinstance(meta, dict) and meta.get("total") is not None:
-                n = int(meta.get("total") or 0)
-                total_source = "meta.total"
-            else:
-                for k in ("products", "contacts", "data", "items"):
-                    v = resp.get(k)
-                    if isinstance(v, list):
+            if isinstance(meta, dict):
+                meta_raw = dict(meta)
+                if meta.get("total") is not None:
+                    n = int(meta.get("total") or 0)
+                    total_source = "meta.total"
+            # Pull sample rows from whichever list-key Qoyod used.
+            for k in ("products", "contacts", "customers", "data", "items"):
+                v = resp.get(k)
+                if isinstance(v, list):
+                    if n == 0:
                         n = len(v)
                         total_source = f"len({k})"
-                        break
+                    for row in v[:sample_limit]:
+                        if not isinstance(row, dict):
+                            continue
+                        sample.append({
+                            "id":   row.get("id"),
+                            "name": row.get("name") or row.get("contact_name"),
+                            "sku":  row.get("sku") or row.get("reference"),
+                        })
+                    break
         elif isinstance(resp, list):
             n = len(resp)
             total_source = "len(root_list)"
+            for row in resp[:sample_limit]:
+                if isinstance(row, dict):
+                    sample.append({
+                        "id":   row.get("id"),
+                        "name": row.get("name") or row.get("contact_name"),
+                        "sku":  row.get("sku") or row.get("reference"),
+                    })
         return {"ok": True,
                 "detail": (f"{label} (استعلام مباشر من قيود): "
                            f"{n} عنصر — {queried_at[:19]} UTC"),
@@ -276,7 +301,9 @@ async def _check_lookup(api_client, label: str, fn, *, endpoint: str) -> dict:
                           "endpoint": endpoint,
                           "queried_at": queried_at,
                           "qoyod_total": n,
-                          "total_source": total_source}}
+                          "total_source": total_source,
+                          "sample": sample,
+                          "qoyod_response_meta": meta_raw}}
     except QoyodAPIError as exc:
         return {"ok": False,
                 "detail": f"{label}: تعذّر الاستعلام — {exc.code}",
@@ -392,14 +419,14 @@ async def go_live_checklist(
          "label": "استعلام مباشر من قيود — المنتجات",
          **(await _check_lookup(
              api_client, "منتجات قيود",
-             (lambda: api_client.list_products(limit=1)) if api_client else (lambda: None),
-             endpoint="GET /products?limit=1"))},
+             (lambda: api_client.list_products(limit=5)) if api_client else (lambda: None),
+             endpoint="GET /products?limit=5"))},
         {"key": "customers_lookup",
          "label": "استعلام مباشر من قيود — العملاء",
          **(await _check_lookup(
              api_client, "عملاء قيود",
-             (lambda: api_client.list_contacts(limit=1)) if api_client else (lambda: None),
-             endpoint="GET /customers?limit=1"))},
+             (lambda: api_client.list_contacts(limit=5)) if api_client else (lambda: None),
+             endpoint="GET /customers?limit=5"))},
     ]
     all_passed = all(i["ok"] for i in items)
     return {

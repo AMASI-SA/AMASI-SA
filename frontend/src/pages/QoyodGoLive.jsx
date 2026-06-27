@@ -65,6 +65,23 @@ export default function QoyodGoLive() {
   const [checklist, setChecklist] = useState(null);
   const [report,    setReport]    = useState(null);
   const [activating, setActivating] = useState(false);
+  const [diag, setDiag] = useState(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [identityConfirmed, setIdentityConfirmed] = useState(false);
+
+  const runIdentityDiagnostics = async () => {
+    setDiagLoading(true);
+    try {
+      const { data } = await axios.get(
+        `${API}/integrations/qoyod/diagnostics/identity`);
+      setDiag(data);
+      setIdentityConfirmed(false); // require re-confirm on every refresh
+    } catch (e) {
+      toast.error("تعذّر تشغيل تشخيص الهوية");
+    } finally {
+      setDiagLoading(false);
+    }
+  };
 
   const loadAll = async () => {
     setLoadingChecklist(true);
@@ -89,6 +106,11 @@ export default function QoyodGoLive() {
   const onActivate = async () => {
     if (!checklist?.all_passed) {
       toast.warning("لا يمكن التفعيل — هناك بنود لم تجتز التحقق بعد.");
+      return;
+    }
+    if (!identityConfirmed) {
+      toast.warning(
+        "يجب تشغيل تشخيص الهوية والتأكيد أن حساب قيود صحيح قبل التفعيل.");
       return;
     }
     if (!window.confirm(
@@ -163,19 +185,189 @@ export default function QoyodGoLive() {
             <button
               type="button"
               onClick={onActivate}
-              disabled={!allPassed || activating || isLiveAlready}
+              disabled={!allPassed || !identityConfirmed || activating || isLiveAlready}
               data-testid="btn-activate-production"
               className={`px-5 py-2.5 rounded-lg font-extrabold text-sm transition
-                          ${allPassed && !isLiveAlready
+                          ${allPassed && identityConfirmed && !isLiveAlready
                             ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                             : "bg-slate-200 text-slate-500 cursor-not-allowed"}`}>
               {activating ? "جاري التفعيل…" :
                isLiveAlready ? "مُفعَّل ✓" :
+               !identityConfirmed ? "🔒 يلزم تأكيد الهوية" :
                "🚀 تفعيل وضع الإنتاج"}
             </button>
           </div>
         </div>
       )}
+
+      {/* ── Identity Diagnostics ─────────────────────────────────── */}
+      <section className="rounded-xl border-2 border-amber-300 bg-amber-50/50 p-4 md:p-5 mb-5"
+               data-testid="qoyod-identity-diagnostics-card">
+        <header className="mb-3 flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h3 className="text-base font-extrabold text-amber-900">
+              🔍 تشخيص هوية حساب قيود (إلزامي قبل التفعيل)
+            </h3>
+            <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+              تأكّد أن المفتاح المستخدم في ميزان مربوط بنفس حساب قيود الذي تراه في الواجهة.
+              قارن العيّنات أدناه مع ما يظهر لديك في قيود — إذا لم تتطابق، أوقف التفعيل واستبدل المفتاح.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={runIdentityDiagnostics}
+            disabled={diagLoading}
+            data-testid="btn-run-identity-diag"
+            className="px-3 py-2 text-xs font-extrabold rounded-lg bg-amber-700 text-white
+                       hover:bg-amber-800 disabled:opacity-50 whitespace-nowrap">
+            {diagLoading ? "جاري الاستعلام…" : "▶ تشغيل التشخيص الآن"}
+          </button>
+        </header>
+
+        {!diag ? (
+          <p className="text-sm text-amber-800 bg-amber-100 rounded p-3">
+            لم يتم التشخيص بعد. اضغط الزر أعلاه لاستعلام Qoyod مباشرة وعرض عيّنة من المنتجات والعملاء.
+          </p>
+        ) : diag.summary === "no_api_key" ? (
+          <div className="text-sm text-rose-800 bg-rose-50 border border-rose-200 rounded p-3"
+               data-testid="diag-no-api-key">
+            ⛔ {diag.next_step}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Mezan-side */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[12px]">
+              <div className="bg-white border border-slate-200 rounded p-2"
+                   data-testid="diag-mezan-base-url">
+                <div className="text-[10px] font-bold text-slate-500">Base URL</div>
+                <div className="font-mono break-all" dir="ltr">{diag.mezan?.base_url}</div>
+              </div>
+              <div className="bg-white border border-slate-200 rounded p-2"
+                   data-testid="diag-mezan-fingerprint">
+                <div className="text-[10px] font-bold text-slate-500">API Key Fingerprint</div>
+                <div className="font-mono" dir="ltr">{diag.mezan?.api_key_fingerprint || "—"}</div>
+              </div>
+              <div className="bg-white border border-slate-200 rounded p-2"
+                   data-testid="diag-queried-at">
+                <div className="text-[10px] font-bold text-slate-500">آخر تشخيص</div>
+                <div className="font-mono text-[11px]" dir="ltr">
+                  {diag.mezan?.queried_at?.slice(0, 19)} UTC
+                </div>
+              </div>
+            </div>
+
+            {/* Tenant hints */}
+            {diag.qoyod?.tenant_hints && Object.keys(diag.qoyod.tenant_hints).length > 0 && (
+              <div className="bg-white border border-emerald-200 rounded p-2"
+                   data-testid="diag-tenant-hints">
+                <div className="text-[11px] font-extrabold text-emerald-800 mb-1">
+                  معلومات الحساب من /branches:
+                </div>
+                <pre className="text-[11px] font-mono whitespace-pre-wrap" dir="ltr">
+                  {JSON.stringify(diag.qoyod.tenant_hints, null, 2)}
+                </pre>
+              </div>
+            )}
+
+            {/* Products sample */}
+            <div className="bg-white border border-slate-200 rounded p-2"
+                 data-testid="diag-products">
+              <div className="text-[11px] font-extrabold text-slate-700 mb-1 flex items-center justify-between">
+                <span>أول 5 منتجات من قيود</span>
+                <span className="font-mono text-slate-500" dir="ltr">
+                  {diag.qoyod?.products?.endpoint}
+                </span>
+              </div>
+              {diag.qoyod?.products?.ok ? (
+                <>
+                  <div className="text-[11px] text-slate-600 mb-1">
+                    إجمالي حسب Qoyod: <strong>{diag.qoyod.products.meta?.total ?? "?"}</strong>
+                  </div>
+                  {diag.qoyod.products.sample?.length > 0 ? (
+                    <table className="w-full text-[11px]" data-testid="diag-products-table">
+                      <thead className="bg-slate-50">
+                        <tr><th className="text-right p-1">ID</th><th className="text-right p-1">الاسم</th><th className="text-right p-1">SKU</th></tr>
+                      </thead>
+                      <tbody>
+                        {diag.qoyod.products.sample.map((p, i) => (
+                          <tr key={i} className="border-t border-slate-100">
+                            <td className="p-1 font-mono" dir="ltr">{p.id}</td>
+                            <td className="p-1">{p.name || "—"}</td>
+                            <td className="p-1 font-mono" dir="ltr">{p.sku || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="text-[11px] text-slate-500 italic">لا توجد منتجات</div>
+                  )}
+                </>
+              ) : (
+                <div className="text-[11px] text-rose-700">
+                  ✗ {diag.qoyod?.products?.error?.code} —
+                  {" "}{diag.qoyod?.products?.error?.message}
+                </div>
+              )}
+            </div>
+
+            {/* Customers sample */}
+            <div className="bg-white border border-slate-200 rounded p-2"
+                 data-testid="diag-customers">
+              <div className="text-[11px] font-extrabold text-slate-700 mb-1 flex items-center justify-between">
+                <span>أول 5 عملاء من قيود</span>
+                <span className="font-mono text-slate-500" dir="ltr">
+                  {diag.qoyod?.customers?.endpoint}
+                </span>
+              </div>
+              {diag.qoyod?.customers?.ok ? (
+                <>
+                  <div className="text-[11px] text-slate-600 mb-1">
+                    إجمالي حسب Qoyod: <strong>{diag.qoyod.customers.meta?.total ?? "?"}</strong>
+                  </div>
+                  {diag.qoyod.customers.sample?.length > 0 ? (
+                    <table className="w-full text-[11px]" data-testid="diag-customers-table">
+                      <thead className="bg-slate-50">
+                        <tr><th className="text-right p-1">ID</th><th className="text-right p-1">الاسم</th><th className="text-right p-1">الهاتف</th></tr>
+                      </thead>
+                      <tbody>
+                        {diag.qoyod.customers.sample.map((c, i) => (
+                          <tr key={i} className="border-t border-slate-100">
+                            <td className="p-1 font-mono" dir="ltr">{c.id}</td>
+                            <td className="p-1">{c.name || "—"}</td>
+                            <td className="p-1 font-mono" dir="ltr">{c.phone || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="text-[11px] text-slate-500 italic">لا توجد عملاء</div>
+                  )}
+                </>
+              ) : (
+                <div className="text-[11px] text-rose-700">
+                  ✗ {diag.qoyod?.customers?.error?.code} —
+                  {" "}{diag.qoyod?.customers?.error?.message}
+                </div>
+              )}
+            </div>
+
+            {/* Operator confirmation */}
+            <label className="flex items-start gap-2 mt-3 p-2 bg-amber-100 rounded border border-amber-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={identityConfirmed}
+                onChange={(e) => setIdentityConfirmed(e.target.checked)}
+                data-testid="diag-confirm-identity"
+                className="mt-1"
+              />
+              <span className="text-[12.5px] font-bold text-amber-900">
+                ✅ أؤكد أن المنتجات والعملاء أعلاه تطابق ما أراه في واجهة قيود
+                لحسابي. (إلزامي قبل تفعيل الإنتاج)
+              </span>
+            </label>
+          </div>
+        )}
+      </section>
 
       {/* ── Quantitative report ──────────────────────────────────── */}
       {!loadingReport && report && (

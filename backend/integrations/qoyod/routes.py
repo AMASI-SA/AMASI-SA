@@ -349,6 +349,19 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def qoyod_taxes(user=Depends(current_user)):
         return await _proxied_catalog(_tenant_id(user), "list_taxes")
 
+    # ── Tenant identity diagnostics ─────────────────────────────────
+    # Surfaces enough Qoyod-side evidence (org/branches + sample
+    # products + sample customers) so the operator can verify the API
+    # key Mezan is using belongs to the SAME Qoyod tenant they see in
+    # the Qoyod web UI. Critical guard before Go-Live activation.
+    @router.get("/diagnostics/identity")
+    async def diagnostics_identity(user=Depends(current_user)):
+        from integrations.qoyod.identity_diagnostics import \
+            run_identity_diagnostics
+        tenant = _tenant_id(user)
+        result = await run_identity_diagnostics(db, tenant)
+        return result
+
     # ── Setup helpers — payment methods discovery & validation ──────
     @router.get("/payment-methods/used")
     async def payment_methods_used(user=Depends(current_user)):
