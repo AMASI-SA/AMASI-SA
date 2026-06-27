@@ -1,5 +1,37 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Dead-Letter Auto-Requeue — Self-Healing for KNOWN_FIXED_PATTERNS (2026-02-27)
+**User scenario**: QYD-GO was stuck at 10/11 — `1 فاتورة إنتاجية فشلت` — because a Qoyod customer-create call had previously failed with `contact_name: Can't be blank`. The code bug was already fixed (2026-02-26: send both `name` + `contact_name`), but the row was permanently DEAD_LETTER and blocked Go-Live. User explicitly demanded that QYD-GO reflect CURRENT state, not old fixed errors, and that the row reach 11/11 **without manual intervention**.
+
+### Strict constraints (user-imposed, encoded in code)
+- Auto-Requeue acts ONLY on rows matching `KNOWN_FIXED_PATTERNS`. Generic DEAD_LETTER rows stay red.
+- `MAX_REQUEUE_ATTEMPTS = 2` per row.
+- Today the registry has exactly **one** entry: `contact_name_blank_2026_02_26` (FAILED_CUSTOMER only).
+- Manual "إعادة المعالجة الآن" button in QYD-GO obeys the same registry.
+
+### Backend changes
+- **New** `/app/backend/integrations/qoyod/dead_letter_requeue.py` — pattern registry, `match_pattern()`, `requeue_row()` (two-hop: terminal→RETRYING→NORMALIZED/CUSTOMER_RESOLVED), `find_requeue_candidates()`, `auto_requeue_known_fixed()`, `requeue_one()`.
+- **state_machine.py** — added operator-override edges `(DEAD_LETTER, RETRYING)`, `(PARTIAL_FAILURE, RETRYING)`, `(RETRYING, NORMALIZED)`, `(RETRYING, CUSTOMER_RESOLVED)`. Terminal-stage invariant test updated.
+- **worker.py** — `_one_round()` runs `auto_requeue_known_fixed()` BEFORE draining queues; self-heals on every 5s tick.
+- **go_live.py** — `_check_outstanding_failures()` now partitions failures into `blocking_count` vs `auto_recoverable_count`; QYD-GO `ok=True` when only auto-recoverable rows remain. Returns `extra.sample_blocking` (top 5) for forensics.
+- **routes.py** — three new endpoints:
+  - `GET  /api/integrations/qoyod/dead-letter/preview` → candidates + registry
+  - `POST /api/integrations/qoyod/dead-letter/auto-requeue` → bulk requeue
+  - `POST /api/integrations/qoyod/dead-letter/requeue-one` → single row by `row_id`|`trace_id` (still bounded by pattern registry)
+
+### Frontend (`QoyodGoLive.jsx`)
+- `ChecklistRow` for `outstanding_failures` now renders:
+  - `auto-recoverable-banner` + `btn-trigger-auto-requeue` when `extra.auto_recoverable_count > 0`
+  - `blocking-failures-sample` `<details>` listing top-5 stuck rows when `extra.blocking_count > 0`
+- Manual button calls POST `/dead-letter/auto-requeue`, toasts result, refreshes checklist after 2.5s.
+
+### Tests (Iter-264)
+- **17 new unit tests** in `tests/test_qoyod_dead_letter_auto_requeue.py` — pattern matcher, single-row requeue, MAX_REQUEUE_ATTEMPTS cap, bulk auto-requeue, QYD-GO integration end-to-end, manual requeue_one paths.
+- **8 new HTTP tests** in `tests/test_qoyod_dead_letter_iter264_http.py` — full live endpoint contract via ingress URL.
+- **471/471** Qoyod pytest suite passes. **100%** success in iter-264.
+- Worker drains seeded rows within ~5s (self-healing verified).
+
+
 ## Identity Diagnostics Extension — Raw-Field Visibility for 38-vs-0 Discrepancy (2026-02-26)
 **User scenario**: Production diagnostics returned 38 products via `GET /products` (SKUs like AMS11903, AMS11577 with empty names) but Qoyod UI showed zero after a Fresh Start. Customers matched. User refused to tick "I confirm identity" until they can see exactly what those mystery products are.
 
