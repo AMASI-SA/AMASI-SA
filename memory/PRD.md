@@ -2608,3 +2608,51 @@ User directive: stop the row BEFORE any Qoyod side-effects when totals don't mat
 
 ### NOT in scope (per user directive)
 - ❌ Order `268670571` was NOT reprocessed against Production this iteration. Operator wants to verify the Make.com fix lands first, then dry-run, then live.
+
+---
+
+## 2026-02-27 — Iter-274 (Make.com items[] Runbook + parse-failure UI)
+
+### Context
+After Iter-273 shipped the Totals Guard, the operator updated their Make.com scenario from sending one item to sending all items. The new body used Raw JSON injection:
+```jsonc
+"items": {{1.data.items}}
+```
+Make's text engine treats the Array as a string and emits `[object Object]` / `omap{...}` — invalid JSON. Mezan rejected with `422 json_invalid`.
+
+### What changed
+**1. New runbook (`docs/integrations/make-runbook-build-items-array.md`)** — 7-section step-by-step guide:
+- §0 TL;DR with the exact failure mode.
+- §1 Anti-pattern (don't inject `{{1.data.items}}` into Raw JSON).
+- §2 Correct 5-module scenario (Webhook → **Iterator → Array Aggregator → Create JSON** → HTTP).
+- §3 Copy-paste JSON schema for the Create JSON module.
+- §4 Verification queries (UI + curl).
+- §5 Troubleshooting table (5 common symptoms → fixes).
+- §6 Why Create JSON > text injection.
+- §7 Verified Shape A (flat items[]) vs Shape B (packages[].items[]).
+
+**2. Backend — new admin route exposing parse failures**
+- `GET /api/integrations/qoyod/admin/webhook-parse-failures?limit=N` (default 5, max 50).
+- Reads from existing `webhook_parse_failures` collection (already populated by `webhook_routes._capture_parse_failure`).
+- Response includes a `hint` field pointing the operator at the new runbook.
+- Auth-protected.
+
+**3. Frontend — new red banner on `🩺 مراقب أول مزامنة`**
+- Shows when `webhook_parse_failures` has at least one row.
+- Collapsible; lists last 5 failures with `occurred_at`, `parser_error`, `token_prefix`, `content_type`, `content_length`, `ip`, and the full `body_preview` (2KB) in a `<pre>` block.
+- Strong CTA to the runbook in the heading.
+
+### Why this matters
+Before this iteration, parse failures were silent — Mezan returned 422 to Make and the operator had no UI surface. Now any malformed-JSON receipt shows up on the monitor home page within seconds of arriving.
+
+### Verification
+- Live curl: `GET /api/integrations/qoyod/admin/webhook-parse-failures?limit=3` → returns `{count, rows[], hint}`. Auth-protected. Returns 0 rows on preview (no parse failures here).
+- Full Qoyod regression: **578 passed, 2 skipped, 0 failed** (no regressions from the new route).
+- Frontend lints clean.
+
+### Operator next steps
+1. Deploy Iter-274 to Production.
+2. Update Make.com scenario per the new runbook (Iterator → Array Aggregator → Create JSON).
+3. Send one test order. On Mezan's monitor:
+   - If the red banner appears → Make is still producing bad JSON. Click to see exact body Mezan rejected.
+   - If no banner AND row reaches `COMPLETED` with `items_count == subtotal_lines` → 🎉 ready for live re-processing of 268670571 (which still has the broken canonical payload — operator must re-trigger from Salla or Make Replay).

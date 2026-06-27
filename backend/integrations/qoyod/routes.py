@@ -25,7 +25,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
@@ -923,6 +923,32 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 },
             )
         return result
+
+    # ── Webhook Parse Failures — last N malformed-JSON receipts ─────
+    # When Make.com sends invalid JSON (e.g. injecting an Array into
+    # Raw Body without Create JSON), Mezan rejects with 422 and logs
+    # to `webhook_parse_failures`. This route exposes the last N for
+    # debugging without forcing the operator to dig in Mongo.
+    @router.get("/admin/webhook-parse-failures")
+    async def admin_webhook_parse_failures(
+        limit: int = Query(5, ge=1, le=50),
+        user=Depends(current_user),
+    ):
+        # The collection is single-tenant by design (token-scoped) so
+        # we surface globally for `main`. The token_prefix tells the
+        # operator which scenario tripped.
+        rows = await db.webhook_parse_failures \
+            .find({}, {"_id": 0}) \
+            .sort("occurred_at", -1) \
+            .limit(limit).to_list(length=limit)
+        return {
+            "count":   len(rows),
+            "rows":    rows,
+            "hint":    ("If 'body_preview' contains literal `[object Object]` "
+                        "or `omap{...}`, Make.com is injecting an Array into "
+                        "Raw JSON. Use a Create JSON module instead — see "
+                        "docs/integrations/make-runbook-build-items-array.md"),
+        }
 
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
     # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the

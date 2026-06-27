@@ -288,18 +288,26 @@ export default function QoyodFirstSyncMonitor() {
   const [reprocResult, setReprocResult] = useState(null);
   const [reprocError, setReprocError] = useState(null);
 
+  // Last malformed-JSON receipts from Make.com (helps debug Iterator /
+  // Create JSON misconfiguration BEFORE the row ever reaches the inbox).
+  const [parseFails, setParseFails] = useState([]);
+  const [parseFailsOpen, setParseFailsOpen] = useState(false);
+
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [rowsRes, wsRes, statsRes] = await Promise.all([
+      const [rowsRes, wsRes, statsRes, parseFailsRes] = await Promise.all([
         axios.get(`${API}/integrations/qoyod/first-sync-monitor?limit=${limit}`),
         axios.get(`${API}/integrations/qoyod/worker/status`).catch(() => ({ data: null })),
         axios.get(`${API}/integrations/qoyod/first-sync-monitor/stats/summary`)
+          .catch(() => ({ data: null })),
+        axios.get(`${API}/integrations/qoyod/admin/webhook-parse-failures?limit=5`)
           .catch(() => ({ data: null })),
       ]);
       setRows(rowsRes.data?.rows || []);
       setWorkerStatus(wsRes.data?.worker || null);
       setStats(statsRes.data?.stats || null);
+      setParseFails(parseFailsRes.data?.rows || []);
       if (!expandedId && (rowsRes.data?.rows || []).length > 0) {
         setExpandedId(rowsRes.data.rows[0].trace_id);
       }
@@ -542,6 +550,54 @@ export default function QoyodFirstSyncMonitor() {
 
       {loading && rows.length === 0 && (
         <div className="p-8 text-center text-slate-500">جاري التحميل…</div>
+      )}
+
+      {/* Webhook parse failures — Make.com sending broken JSON ──────── */}
+      {parseFails.length > 0 && (
+        <div className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4"
+             data-testid="parse-failures-banner">
+          <button type="button"
+                  onClick={() => setParseFailsOpen(!parseFailsOpen)}
+                  className="w-full flex items-center justify-between text-right">
+            <div className="text-sm font-extrabold text-rose-900">
+              🛑 آخر {parseFails.length} طلب رفضناهم بسبب JSON غير صالح من Make
+            </div>
+            <div className="text-xs text-rose-700 font-bold">
+              {parseFailsOpen ? "إخفاء ▲" : "عرض ▼"}
+            </div>
+          </button>
+          <div className="text-[11px] text-rose-700 mt-1">
+            هذه الطلبات لم تصل حتى للـ inbox — Make يُرسل body غير قابل للقراءة
+            (عادةً <code className="font-mono bg-rose-100 px-1">items: [object Object]</code>).
+            راجع: <code className="font-mono">docs/integrations/make-runbook-build-items-array.md</code>
+          </div>
+          {parseFailsOpen && (
+            <div className="mt-3 space-y-2" data-testid="parse-failures-list">
+              {parseFails.map((pf, idx) => (
+                <details key={idx} className="bg-white rounded border border-rose-200 p-2">
+                  <summary className="cursor-pointer text-[12px] text-rose-900">
+                    <span className="font-mono">{pf.occurred_at}</span>
+                    {" · "}
+                    <span className="font-bold">{pf.parser_error}</span>
+                    {pf.token_prefix && (
+                      <span className="text-rose-600">
+                        {" · token="}<code className="font-mono">{pf.token_prefix}</code>
+                      </span>
+                    )}
+                  </summary>
+                  <div className="mt-2 text-[10px] font-mono text-slate-500">
+                    {pf.content_type} · {pf.content_length} bytes · ip={pf.ip || "—"}
+                  </div>
+                  <pre className="mt-1 bg-slate-900 text-slate-100 p-2 rounded text-[10px] font-mono whitespace-pre-wrap break-words max-h-48 overflow-auto"
+                       dir="ltr"
+                       data-testid={`parse-failure-body-${idx}`}>
+{pf.body_preview}
+                  </pre>
+                </details>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {!loading && rows.length === 0 && (
