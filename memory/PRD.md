@@ -1,5 +1,38 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Identity Diagnostics Extension — Raw-Field Visibility for 38-vs-0 Discrepancy (2026-02-26)
+**User scenario**: Production diagnostics returned 38 products via `GET /products` (SKUs like AMS11903, AMS11577 with empty names) but Qoyod UI showed zero after a Fresh Start. Customers matched. User refused to tick "I confirm identity" until they can see exactly what those mystery products are.
+
+### Hypothesis
+Most likely: the products are **archived** (Qoyod UI hides archived by default). Less likely: products are of `type: service` with hidden category, or the API key is on a different tenant.
+
+### Backend changes (`identity_diagnostics.py`)
+- `_sample` default `limit=10` (was 5); accepts explicit `limit=` param.
+- Product picker now extracts: `id`, `name`, `sku`, `type`/`kind`, `status`, `active` (or `is_active`), `archived` (or derived from `archived_at`), `archived_at`, `category` (string or `.name` if dict), `price`/`selling_price`.
+- Customer picker now extracts: `id`, `name`/`contact_name`, `phone`/`phone_number`, `email`, `type`/`kind`, `archived`.
+- New `_raw_first(rows)` returns the **first** raw dict from Qoyod (up to 50 keys verbatim) so the operator can spot hidden flags (`archived_at`, custom fields, …) that the picker missed.
+- Endpoints: `GET /products?page=1&limit=10`, `GET /customers?page=1&limit=10`.
+
+### Frontend (`pages/QoyodGoLive.jsx`)
+- Products table: 6 columns (ID, الاسم, SKU, النوع, الحالة, مؤرشف).
+- Customers table: 5 columns (ID, الاسم, الهاتف, النوع, مؤرشف).
+- Archived cell renders **"نعم"** in red-bold when `archived === true` OR `archived_at` truthy; "—" otherwise.
+- Collapsible `<details>` testid `diag-products-raw` / `diag-customers-raw` with summary `🔎 عرض أول منتج كامل من Qoyod (لكشف الحقول المخفية)` — clicking reveals the raw_first_row JSON in `<pre dir="ltr">`.
+
+### Tests
+- **`tests/test_qoyod_identity_diagnostics.py`** — 11 tests (was 9), all pass:
+  - Updated existing limit-5 tests to limit-10.
+  - **New `test_raw_first_row_exposes_hidden_archived_field`** — the EXACT user repro: 1 product with `archived_at: "2026-06-25T10:00:00Z"`, `type: "service"`, `category: {name: "Hidden Cat"}`, `custom_field_x: "anything"`. Asserts the sample correctly extracts `archived=true`, the picker reads `category` from the dict, AND `raw_first_row` preserves `custom_field_x`.
+
+### Testing agent verification (iteration 262)
+- ✅ 11/11 pytest pass.
+- ✅ Live HTTP returns spec-compliant 200 with `limit=10` endpoint strings, `api_key_fingerprint='08cef7386398'` (raw key never exposed).
+- ✅ All required testids present.
+- ✅ Conditional tables/raw `<details>` correctly gated behind `ok=true` and exercised by pytest.
+- ✅ No regressions; 433 total Qoyod tests still pass.
+
+
+
 ## Tenant Identity Diagnostics — Anti-Mismatch Guard (2026-02-26)
 **User concern**: QYD-GO reported "38 products in Qoyod" via direct API call, but the Qoyod web UI for the user's account shows ZERO products. Demanded: print Qoyod tenant identifier, exact endpoint, first 5 products + customers (id, name, sku), raw `meta.total`. Block Go-Live until the user confirms identity.
 
