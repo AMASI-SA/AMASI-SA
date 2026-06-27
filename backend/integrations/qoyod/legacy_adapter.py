@@ -315,6 +315,13 @@ def adapt(raw: Any) -> tuple[Any, dict]:
     if first or last:
         customer["first_name"] = first
         customer["last_name"]  = last
+    # Always also expose the original concatenated name as `full_name`
+    # so the normalizer's fallback chain (full_name → name → phone →
+    # guest) still has it even if `_split_name` ever returns empty
+    # parts on weird inputs (RTL marks, single-character names, …).
+    cn = (src.get("customer_name") or "").strip()
+    if cn:
+        customer["full_name"] = cn
     if src.get("customer_mobile"):
         customer["mobile"] = src["customer_mobile"]
     if src.get("customer_email"):

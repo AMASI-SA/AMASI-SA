@@ -50,6 +50,10 @@ class ResolutionResult:
     created_new:        bool = False
     error:              Optional[dict] = None
     notes:              Optional[list[str]] = None
+    # Forensic payload snapshot — the exact body sent to `POST /customers`.
+    # Always populated (even on failure) so the operator can diagnose
+    # `Can't be blank`-class errors without needing live debugger access.
+    qoyod_request_payload: Optional[dict] = None
 
     def to_log_dict(self) -> dict:
         return {
@@ -60,6 +64,7 @@ class ResolutionResult:
             "created_new":        self.created_new,
             "error":              self.error,
             "notes":              self.notes,
+            "qoyod_request_payload": self.qoyod_request_payload,
         }
 
 
@@ -102,19 +107,21 @@ def _safe_guest_name(customer: CustomerDTO) -> str:
 def _build_contact_payload(customer: CustomerDTO) -> dict:
     """Map our DTO → Qoyod `POST /customers` body.
 
-    Note (2026-06-26 endpoint audit): Qoyod's legacy domain expects
-    `{"customer": {...}}` for POST /customers. The Python helper name
-    stays `_build_contact_payload` to avoid churn at call sites.
-    Conservative: only sends fields we KNOW Qoyod accepts. Address
-    enrichment is deferred to Day 5 (after the merchant reviews the
-    Day 4 output).
+    Qoyod's contact schema requires BOTH `name` (business/account name)
+    AND `contact_name` (contact person). For B2C orders we use the same
+    safe-name string for both (verified against Qoyod's API spec — the
+    `contact_name: ["Can't be blank"]` validation fires when only `name`
+    is supplied). For business accounts we don't currently distinguish;
+    the same value satisfies both columns.
+
+    Belt-and-suspenders: even if the DTO somehow has a blank name (legacy
+    rows, edge case), we NEVER send a blank field to Qoyod — phone /
+    email used as labels, then a literal "ضيف" as last resort.
     """
-    # Belt-and-suspenders: even if the DTO somehow has a blank name
-    # (legacy rows, edge case), guarantee we NEVER send blank to Qoyod
-    # — Qoyod responds with `contact.name Can't be blank`.
     safe_name = (customer.name or "").strip() or _safe_guest_name(customer)
     payload: dict[str, Any] = {
-        "name": safe_name,
+        "name":         safe_name,
+        "contact_name": safe_name,
     }
     if customer.phone:
         payload["phone_number"] = customer.phone
@@ -225,10 +232,14 @@ async def resolve_customer(
     try:
         resp = await api_client.create_contact(payload, idem=idem)
     except QoyodAPIError as exc:
+        # Attach the payload we DID send so the operator can verify
+        # the name/contact_name pair without needing to recreate the run.
+        err = exc.to_log_dict()
         return ResolutionResult(
             success=False,
             lookup_key=lookup_key, lookup_kind=lookup_kind,
-            error=exc.to_log_dict(),
+            error=err,
+            qoyod_request_payload=payload,
         )
 
     cid = _extract_contact_id(resp)
@@ -239,6 +250,7 @@ async def resolve_customer(
             error={"code": "qoyod_response_missing_id",
                    "message": "create_contact response had no id",
                    "qoyod_response_excerpt": str(resp)[:300]},
+            qoyod_request_payload=payload,
         )
 
     # ── Persist mapping (idempotent upsert) ─────────────────────────
@@ -264,4 +276,5 @@ async def resolve_customer(
         qoyod_customer_id=cid,
         lookup_key=lookup_key, lookup_kind=lookup_kind,
         created_new=True,
+        qoyod_request_payload=payload,
     )

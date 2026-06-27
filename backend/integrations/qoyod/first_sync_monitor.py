@@ -124,6 +124,8 @@ def shape_inbox_row_for_monitor(row: dict) -> dict:
             "title":   "إنشاء/مطابقة العميل",
             "stage":   "CUSTOMER_RESOLVED",
             "payload": (row.get("customer_resolution") or {}).get(
+                "qoyod_request_payload")
+                       or (row.get("customer_resolution") or {}).get(
                 "customer_payload") or {},
             "response": {
                 "qoyod_id":  row.get("qoyod_customer_id"),

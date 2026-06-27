@@ -1,5 +1,47 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Root Cause Found — Qoyod Requires BOTH `name` + `contact_name` (2026-02-26)
+**User report**: Order #268316484 had `customer_name = "هيفاء الحيدر الشمري"` in the raw payload but failed at `FAILED_CUSTOMER` with Qoyod returning `contact_name: ["Can't be blank"]`.
+
+### Root cause
+Qoyod's `POST /customers` endpoint requires TWO required fields:
+- `name` — business/account name
+- **`contact_name`** — contact person (this was missing in our payload)
+
+Verified via web search of Qoyod API docs: our payload only sent `name`, so `contact_name` defaulted to empty and Qoyod rejected. The customer-name fallback I added earlier worked correctly all the way through to the DTO — the bug was at the LAST mile inside the Qoyod payload builder.
+
+### Fix (`customer_resolver.py::_build_contact_payload`)
+```python
+safe_name = (customer.name or "").strip() or _safe_guest_name(customer)
+payload = {
+    "name":         safe_name,
+    "contact_name": safe_name,   # ← was missing
+    ...
+}
+```
+Both fields are always populated with the same safe-name string for B2C orders (verified the field has been missing since Day-1; this was a latent bug exposed by today's order).
+
+### Forensic logging added
+`ResolutionResult.qoyod_request_payload` now carries the EXACT payload sent to `POST /customers`, populated on BOTH success and failure paths. This propagates to the inbox row via `to_log_dict()` and is surfaced on the First-Sync Monitor under the "إنشاء/مطابقة العميل" step. Operator can now see the exact body without rerunning the order.
+
+### Defense-in-depth in legacy adapter
+`legacy_adapter.py` now ALSO writes `customer.full_name` (in addition to `first_name + last_name`) so the normalizer's fallback chain (full_name → name → phone → guest) still has the original `customer_name` string if `_split_name` ever returns empty parts (single-character names, RTL marks, etc.).
+
+### Tests
+- **`tests/test_qoyod_contact_name_end_to_end.py`** (new, 9 tests, all pass):
+  1. Direct payload-builder: both `name` AND `contact_name` populated.
+  2. Blank DTO: both fallback to safe guest label — never blank.
+  3. Email-only DTO: contact_name uses email label.
+  4. Empty DTO: contact_name is literal "ضيف".
+  5. **End-to-end repro of user's order**: Make payload → adapter → normalizer → builder. Asserts the final Qoyod payload has `contact_name: "هيفاء الحيدر الشمري"`.
+  6. Single-character name: `full_name` defense in adapter saves the day.
+  7. `resolve_customer` returns the payload snapshot on success.
+  8. `resolve_customer` returns the payload snapshot on failure.
+  9. `to_log_dict` propagates the snapshot to the inbox row.
+- **Full Qoyod suite: 422 tests pass** (no regressions).
+
+
+
 ## Final Pre-Go-Live Fixes — Customer Name Fallback + Arabic COD Aliases (2026-02-26)
 
 ### Issue 1: `contact.name Can't be blank` from Qoyod
