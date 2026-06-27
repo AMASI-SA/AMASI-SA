@@ -25,7 +25,9 @@ import hashlib
 import pytest
 
 from integrations.qoyod.identity_diagnostics import (
-    _key_fingerprint, _sample, run_identity_diagnostics,
+    _key_fingerprint, _sample, _raw_first, _raw_rows,
+    _extract_name, _name_source, _is_system_product,
+    run_identity_diagnostics,
 )
 from integrations.qoyod.api_client import QoyodAPIError
 
@@ -65,6 +67,78 @@ def test_sample_picker_tolerates_non_list_and_non_dict_items():
     assert _sample("not a list", lambda r: r) == []
     assert _sample([1, 2, {"id": 3}], lambda r: {"id": r["id"]}) \
            == [{"id": 3}]
+
+
+# ─── Name extraction fallback chain ─────────────────────────────────
+def test_extract_name_prefers_name_field():
+    assert _extract_name({"name": "Real Name", "arabic_name": "كذا"}) \
+           == "Real Name"
+
+
+def test_extract_name_falls_back_to_arabic_name_when_name_blank():
+    assert _extract_name({"name": "", "arabic_name": "اسم عربي"}) \
+           == "اسم عربي"
+
+
+def test_extract_name_tries_all_locale_variants():
+    for k in ("english_name", "name_ar", "name_en", "display_name", "title"):
+        assert _extract_name({k: "From " + k}) == "From " + k
+
+
+def test_extract_name_falls_back_to_localizations_array():
+    row = {"name": None,
+           "localizations": [{"locale": "ar", "name": "اسم"}]}
+    assert _extract_name(row) == "اسم"
+
+
+def test_extract_name_returns_none_when_truly_blank():
+    assert _extract_name({"sku": "AMS11903"}) is None
+    assert _extract_name({"name": "   "}) is None
+
+
+def test_name_source_tells_which_field_was_used():
+    assert _name_source({"name": "X"})         == "name"
+    assert _name_source({"name": "", "arabic_name": "Y"}) == "arabic_name"
+    assert _name_source({"localizations": [{"name": "Z"}]}) == "localizations"
+    assert _name_source({"sku": "x"}) is None
+
+
+# ─── System / shadow product detection ──────────────────────────────
+@pytest.mark.parametrize("sku,expected", [
+    ("cod_item",        True),
+    ("custom_product",  True),
+    ("shipping_fee",    True),
+    ("delivery_fee",    True),
+    ("discount_item",   True),
+    ("fees_item",       True),
+    ("shipping_express",True),    # prefix match
+    ("system_x",        True),    # prefix match
+    ("AMS11903",        False),
+    ("",                False),
+    ("normal-sku",      False),
+])
+def test_is_system_product(sku, expected):
+    assert _is_system_product({"sku": sku}) is expected
+
+
+def test_is_system_product_uses_reference_when_sku_missing():
+    assert _is_system_product({"reference": "cod_item"}) is True
+    assert _is_system_product({"reference": "ABC123"}) is False
+
+
+# ─── raw_rows helper ────────────────────────────────────────────────
+def test_raw_rows_returns_all_up_to_limit():
+    rows = [{"id": i, "sku": f"S{i}"} for i in range(15)]
+    assert len(_raw_rows(rows)) == 10
+    assert _raw_rows(rows, limit=3) == [
+        {"id": 0, "sku": "S0"}, {"id": 1, "sku": "S1"}, {"id": 2, "sku": "S2"}]
+
+
+def test_raw_rows_caps_each_row_at_50_keys():
+    big_row = {f"k{i}": i for i in range(80)}
+    out = _raw_rows([big_row])
+    assert len(out) == 1
+    assert len(out[0]) == 50
 
 
 # ─── End-to-end with patched API client ─────────────────────────────
@@ -269,6 +343,65 @@ async def test_products_response_with_more_than_ten_rows_is_truncated(monkeypatc
     res = await run_identity_diagnostics(_DB(), "u1")
     assert len(res["qoyod"]["products"]["sample"]) == 10
     assert res["qoyod"]["products"]["meta"]["total"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_user_scenario_empty_name_and_system_products(monkeypatch):
+    """Mirrors the EXACT user observation from production:
+    - 38 products, but most have empty `name` field.
+    - Some SKUs are system shadows (cod_item, custom_product).
+    - Some SKUs look like Salla product IDs (AMS11903, 581412596928).
+
+    The diagnostics must:
+      • Extract names from fallback fields (arabic_name) when name=empty.
+      • Flag cod_item + custom_product + shipping_* as is_system=true.
+      • Return raw_rows with the FULL JSON of all 10 products so the
+        operator can inspect every field Qoyod sent.
+    """
+    fake = _FakeClient({
+        "branches": {"branches": []},
+        "products": {
+            "meta": {"total": 38},
+            "products": [
+                {"id": 1, "name": "", "arabic_name": "منتج فعلي",
+                 "sku": "AMS11903", "type": "inventory",
+                 "active": True, "archived_at": None,
+                 "selling_price": 100},
+                {"id": 2, "name": None, "sku": "cod_item",
+                 "type": "service", "active": True},
+                {"id": 3, "name": "", "sku": "custom_product",
+                 "type": "service"},
+                {"id": 4, "name": "", "sku": "shipping_express"},
+                {"id": 5, "name": "", "english_name": "Real EN Name",
+                 "sku": "AMS11577"},
+                {"id": 6, "name": "", "sku": "581412596928"},
+            ],
+        },
+        "contacts": {"meta": {"total": 0}, "contacts": []},
+    })
+    monkeypatch.setattr(
+        "integrations.qoyod.identity_diagnostics.QoyodAPIClient",
+        lambda key: fake)
+
+    res = await run_identity_diagnostics(_DB(), "u1")
+    sample = res["qoyod"]["products"]["sample"]
+    assert len(sample) == 6
+    assert sample[0]["name"]        == "منتج فعلي"
+    assert sample[0]["name_source"] == "arabic_name"
+    assert sample[0]["is_system"]   is False
+    assert sample[1]["name"]        is None
+    assert sample[1]["is_system"]   is True
+    assert sample[2]["is_system"]   is True   # custom_product
+    assert sample[3]["is_system"]   is True   # shipping_express
+    assert sample[4]["name"]        == "Real EN Name"
+    assert sample[4]["name_source"] == "english_name"
+    assert sample[5]["name"]        is None
+    assert sample[5]["is_system"]   is False  # numeric SKU not system
+
+    raw_rows = res["qoyod"]["products"]["raw_rows"]
+    assert len(raw_rows) == 6
+    assert raw_rows[0]["arabic_name"] == "منتج فعلي"
+    assert raw_rows[1]["sku"]         == "cod_item"
 
 
 @pytest.mark.asyncio

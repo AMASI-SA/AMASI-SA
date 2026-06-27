@@ -59,9 +59,88 @@ def _raw_first(rows: Any) -> Optional[dict]:
     max). Used by the operator to inspect fields we don't pick out
     explicitly — e.g. `type`, `archived_at`, `category_id`, `kind`."""
     if isinstance(rows, list) and rows and isinstance(rows[0], dict):
-        # Cap at 50 keys to keep the response tight.
         return {k: rows[0][k] for k in list(rows[0].keys())[:50]}
     return None
+
+
+def _raw_rows(rows: Any, limit: int = 10) -> list[dict]:
+    """Return up to `limit` rows verbatim (up to 50 keys each).
+    Iter 2026-02-26: user wanted ALL sample rows visible as raw JSON
+    so they can compare empty-name rows side-by-side."""
+    out: list[dict] = []
+    if not isinstance(rows, list):
+        return out
+    for row in rows[:limit]:
+        if isinstance(row, dict):
+            out.append({k: row[k] for k in list(row.keys())[:50]})
+    return out
+
+
+# ─── Name extraction & system-product detection ──────────────────────
+# Qoyod stores names in several columns depending on store config:
+#   • `name`           — primary (English by default)
+#   • `arabic_name` / `name_ar`
+#   • `english_name` / `name_en`
+#   • `description`    — fallback for products that have only that
+#   • inside nested `localizations: [{locale, name}]`
+def _extract_name(row: dict) -> Optional[str]:
+    for k in ("name", "arabic_name", "english_name",
+              "name_ar", "name_en", "display_name", "title"):
+        v = row.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    locs = row.get("localizations") or row.get("translations")
+    if isinstance(locs, list):
+        for loc in locs:
+            if isinstance(loc, dict):
+                v = (loc.get("name") or loc.get("value") or "").strip() \
+                    if isinstance(loc.get("name") or loc.get("value"), str) else ""
+                if v:
+                    return v
+    return None
+
+
+def _name_source(row: dict) -> Optional[str]:
+    """Which field did `_extract_name` actually use? Useful for the UI
+    so the operator sees 'name source: arabic_name' next to empty rows."""
+    for k in ("name", "arabic_name", "english_name",
+              "name_ar", "name_en", "display_name", "title"):
+        v = row.get(k)
+        if isinstance(v, str) and v.strip():
+            return k
+    locs = row.get("localizations") or row.get("translations")
+    if isinstance(locs, list):
+        for loc in locs:
+            if isinstance(loc, dict) and (loc.get("name") or loc.get("value")):
+                return "localizations"
+    return None
+
+
+# Known shadow/system products that Qoyod or other connectors create
+# automatically. Surfacing these as "نظامي" stops the operator from
+# mistaking them for real catalogue items.
+_SYSTEM_SKU_EXACT = {
+    "cod_item",
+    "custom_product",
+    "shipping_fee",
+    "delivery_fee",
+    "discount_item",
+    "tax_item",
+    "rounding_item",
+    "fees_item",
+}
+_SYSTEM_SKU_PREFIXES = (
+    "shipping_", "delivery_", "fees_", "tax_", "system_",
+)
+
+
+def _is_system_product(row: dict) -> bool:
+    sku = (row.get("sku") or row.get("reference") or "").strip().lower()
+    if not sku:
+        return False
+    if sku in _SYSTEM_SKU_EXACT:
+        return True
+    return any(sku.startswith(p) for p in _SYSTEM_SKU_PREFIXES)
 
 
 async def _call(api_client: QoyodAPIClient, fn, endpoint: str) -> dict:
@@ -125,23 +204,28 @@ async def run_identity_diagnostics(db, user_id: str) -> dict:
     products_sample = _sample(
         products_list,
         lambda r: {
-            "id":          r.get("id"),
-            "name":        r.get("name"),
-            "sku":         r.get("sku") or r.get("reference"),
-            "type":        r.get("type")     or r.get("kind"),
-            "status":      r.get("status"),
-            "active":      r.get("active") if "active" in r else r.get("is_active"),
-            "archived":    r.get("archived") if "archived" in r else (
-                              r.get("archived_at") is not None
-                              if "archived_at" in r else None),
-            "archived_at": r.get("archived_at"),
-            "category":    (r.get("category") or {}).get("name")
-                              if isinstance(r.get("category"), dict)
-                              else r.get("category"),
-            "price":       r.get("price")    or r.get("selling_price"),
+            "id":            r.get("id"),
+            "name":          _extract_name(r),
+            "name_source":   _name_source(r),
+            "sku":           r.get("sku") or r.get("reference"),
+            "type":          r.get("type")     or r.get("kind")
+                                or r.get("product_type"),
+            "status":        r.get("status"),
+            "active":        r.get("active") if "active" in r
+                              else r.get("is_active"),
+            "archived":      r.get("archived") if "archived" in r else (
+                                r.get("archived_at") is not None
+                                if "archived_at" in r else None),
+            "archived_at":   r.get("archived_at"),
+            "category":      (r.get("category") or {}).get("name")
+                                if isinstance(r.get("category"), dict)
+                                else r.get("category"),
+            "price":         r.get("price")    or r.get("selling_price"),
+            "is_system":     _is_system_product(r),
         },
         limit=10)
     products_raw_first = _raw_first(products_list)
+    products_raw_rows  = _raw_rows(products_list, limit=10)
     products_meta = (products.get("response") or {}).get("meta") \
                     if products.get("ok") else None
 
@@ -156,17 +240,18 @@ async def run_identity_diagnostics(db, user_id: str) -> dict:
     customers_sample = _sample(
         customers_list,
         lambda r: {
-            "id":          r.get("id"),
-            "name":        r.get("name") or r.get("contact_name"),
-            "phone":       r.get("phone_number") or r.get("phone"),
-            "email":       r.get("email"),
-            "type":        r.get("type") or r.get("kind"),
-            "archived":    r.get("archived") if "archived" in r else (
+            "id":         r.get("id"),
+            "name":       _extract_name(r) or r.get("contact_name"),
+            "phone":      r.get("phone_number") or r.get("phone"),
+            "email":      r.get("email"),
+            "type":       r.get("type") or r.get("kind"),
+            "archived":   r.get("archived") if "archived" in r else (
                               r.get("archived_at") is not None
                               if "archived_at" in r else None),
         },
         limit=10)
     customers_raw_first = _raw_first(customers_list)
+    customers_raw_rows  = _raw_rows(customers_list, limit=10)
     customers_meta = customers_root.get("meta")
 
     # 4) Tenant identity hints — best-effort. Qoyod doesn't expose a
@@ -206,6 +291,7 @@ async def run_identity_diagnostics(db, user_id: str) -> dict:
             "meta":           products_meta,
             "sample":         products_sample,
             "raw_first_row":  products_raw_first,
+            "raw_rows":       products_raw_rows,
         },
         "customers": {
             "ok":             customers.get("ok"),
@@ -214,6 +300,7 @@ async def run_identity_diagnostics(db, user_id: str) -> dict:
             "meta":           customers_meta,
             "sample":         customers_sample,
             "raw_first_row":  customers_raw_first,
+            "raw_rows":       customers_raw_rows,
         },
     }
 

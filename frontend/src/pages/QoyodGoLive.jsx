@@ -297,9 +297,32 @@ export default function QoyodGoLive() {
                       </thead>
                       <tbody>
                         {diag.qoyod.products.sample.map((p, i) => (
-                          <tr key={i} className="border-t border-slate-100">
+                          <tr key={i} className={`border-t border-slate-100 ${
+                                p.is_system ? "bg-slate-50" : ""}`}
+                              data-testid={`diag-product-row-${i}`}>
                             <td className="p-1 font-mono" dir="ltr">{p.id}</td>
-                            <td className="p-1">{p.name || <span className="text-slate-400">—</span>}</td>
+                            <td className="p-1">
+                              {p.name ? (
+                                <span>
+                                  {p.name}
+                                  {p.name_source && p.name_source !== "name" && (
+                                    <span className="ms-1 text-[9px] text-slate-500"
+                                          dir="ltr">({p.name_source})</span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic">— (لا يوجد اسم في أي حقل)</span>
+                              )}
+                              {p.is_system && (
+                                <span
+                                  data-testid={`diag-product-system-badge-${i}`}
+                                  title="منتج نظامي/افتراضي ينشئه Qoyod أو موصِّل خارجي تلقائياً"
+                                  className="ms-1 inline-block px-1 py-0.5 rounded
+                                             bg-slate-200 text-slate-700 text-[9px] font-extrabold">
+                                  نظامي
+                                </span>
+                              )}
+                            </td>
                             <td className="p-1 font-mono" dir="ltr">{p.sku || "—"}</td>
                             <td className="p-1">{p.type || "—"}</td>
                             <td className="p-1">
@@ -318,13 +341,14 @@ export default function QoyodGoLive() {
                   ) : (
                     <div className="text-[11px] text-slate-500 italic">لا توجد منتجات</div>
                   )}
-                  {diag.qoyod.products.raw_first_row && (
-                    <details className="mt-2 text-[11px]" data-testid="diag-products-raw">
-                      <summary className="cursor-pointer font-bold text-slate-600">
-                        🔎 عرض أول منتج كامل من Qoyod (لكشف الحقول المخفية)
+                  {diag.qoyod.products.raw_rows?.length > 0 && (
+                    <details open className="mt-2 text-[11px]"
+                             data-testid="diag-products-raw">
+                      <summary className="cursor-pointer font-bold text-slate-700">
+                        🔎 عرض JSON الكامل لـ {diag.qoyod.products.raw_rows.length} منتجات من Qoyod
                       </summary>
-                      <pre className="mt-1 p-2 bg-slate-50 rounded font-mono whitespace-pre-wrap text-[10px]" dir="ltr">
-                        {JSON.stringify(diag.qoyod.products.raw_first_row, null, 2)}
+                      <pre className="mt-1 p-2 bg-slate-900 text-slate-100 rounded font-mono whitespace-pre-wrap text-[10px] max-h-96 overflow-auto" dir="ltr">
+                        {JSON.stringify(diag.qoyod.products.raw_rows, null, 2)}
                       </pre>
                     </details>
                   )}
@@ -381,13 +405,14 @@ export default function QoyodGoLive() {
                   ) : (
                     <div className="text-[11px] text-slate-500 italic">لا توجد عملاء</div>
                   )}
-                  {diag.qoyod.customers.raw_first_row && (
-                    <details className="mt-2 text-[11px]" data-testid="diag-customers-raw">
-                      <summary className="cursor-pointer font-bold text-slate-600">
-                        🔎 عرض أول عميل كامل من Qoyod
+                  {diag.qoyod.customers.raw_rows?.length > 0 && (
+                    <details open className="mt-2 text-[11px]"
+                             data-testid="diag-customers-raw">
+                      <summary className="cursor-pointer font-bold text-slate-700">
+                        🔎 عرض JSON الكامل لـ {diag.qoyod.customers.raw_rows.length} عملاء من Qoyod
                       </summary>
-                      <pre className="mt-1 p-2 bg-slate-50 rounded font-mono whitespace-pre-wrap text-[10px]" dir="ltr">
-                        {JSON.stringify(diag.qoyod.customers.raw_first_row, null, 2)}
+                      <pre className="mt-1 p-2 bg-slate-900 text-slate-100 rounded font-mono whitespace-pre-wrap text-[10px] max-h-96 overflow-auto" dir="ltr">
+                        {JSON.stringify(diag.qoyod.customers.raw_rows, null, 2)}
                       </pre>
                     </details>
                   )}
