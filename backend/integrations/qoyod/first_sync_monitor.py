@@ -422,3 +422,282 @@ async def archive_failed_dry_run_tests(
         "deleted": int(res.deleted_count),
         "archive_ids": archive_ids,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Duplicate-attempt detection + cleanup (Iter-280)
+# ─────────────────────────────────────────────────────────────────────
+# Before Iter-280's idempotency-key fix, legacy Make flat payloads
+# produced random `salla:unknown:<uuid>` keys, so every webhook for
+# the same order created a fresh inbox row. Production rows from
+# before the fix still show this duplication. These helpers let the
+# operator inspect groups and archive all-but-one of each group.
+DUPLICATE_CONFIRM_TOKEN = "MERGE"
+
+
+class DuplicateMergeRefused(Exception):
+    """Raised when the duplicate-merge request fails its safety checks."""
+
+
+def _extract_event_and_status_from_row(row: dict) -> tuple[str, str]:
+    """Best-effort extraction of (event_type, status_slug) for grouping.
+    Mirrors what `derive_idempotency_key` reads, but tolerant of every
+    historical shape we have written to the inbox.
+    """
+    raw = row.get("raw_payload") or {}
+    adapted = row.get("adapted_payload") or {}
+    canonical = row.get("canonical_payload") or {}
+
+    # Event — canonical first, then adapter wrap, then raw.
+    event = (canonical.get("metadata") or {}).get("source_event") \
+            or (adapted.get("event") if isinstance(adapted, dict) else None) \
+            or (raw.get("event") if isinstance(raw, dict) else None) \
+            or (raw.get("event_type") if isinstance(raw, dict) else None) \
+            or "order"
+    event = str(event).strip() or "order"
+
+    # Status slug — canonical first, then raw root keys.
+    status = canonical.get("order_status")
+    if not status and isinstance(raw, dict):
+        # First try nested raw.data.status (canonical Salla shape).
+        data_node = raw.get("data") if isinstance(raw.get("data"), dict) else None
+        if data_node:
+            st_node = data_node.get("status")
+            if isinstance(st_node, dict):
+                for k in ("slug", "name", "key"):
+                    v = st_node.get(k)
+                    if isinstance(v, str) and v.strip():
+                        status = v.strip().lower()
+                        break
+            elif isinstance(st_node, str) and st_node.strip():
+                status = st_node.strip().lower()
+        # Fall back to legacy ROOT keys.
+        if not status:
+            for k in ("order_status_slug", "status_slug", "order_status",
+                      "current_status", "status"):
+                v = raw.get(k)
+                if isinstance(v, str) and v.strip():
+                    status = v.strip().lower()
+                    break
+    return event, (status or "none")
+
+
+async def find_duplicate_groups(
+    db, *, user_id: str, only_failed: bool = True,
+) -> list[dict]:
+    """Return the list of duplicate groups.
+
+    A "group" = ≥2 inbox rows sharing the same
+    `(salla_order_number, event, status_slug)` tuple for this tenant.
+
+    Each group dict:
+      {
+        "order_number":  "268632361",
+        "event":         "order_completed",
+        "status_slug":   "completed",
+        "attempts":      [{trace_id, received_at, pipeline_stage,
+                            idempotency_key, dry_run}, ... newest-first],
+        "latest_trace":  "33c07a10...",
+        "oldest_trace":  "eac68e66...",
+      }
+
+    Set `only_failed=False` to include groups whose latest attempt
+    completed successfully (rare — only happens if the user
+    re-triggered a webhook by hand AFTER the order was already
+    invoiced; we still surface so they can clean noise).
+    """
+    q: dict = {"user_id": user_id, "salla_order_number": {"$ne": None}}
+    if only_failed:
+        # Surface groups that contain at least one failed terminal row
+        # (those are the actionable duplicates). We filter after
+        # grouping below; the query still narrows to rows with an
+        # order number so we don't scan the world.
+        pass
+
+    # In-memory grouping — duplicates are rare; the operator only
+    # sees ~50 rows max.
+    groups: dict[tuple[str, str, str], list[dict]] = {}
+    cursor = db.integration_inbox.find(
+        q, sort=[("received_at", -1)])
+    async for row in cursor:
+        order_number = row.get("salla_order_number")
+        if not order_number:
+            continue
+        event, status = _extract_event_and_status_from_row(row)
+        key = (str(order_number), event, status)
+        groups.setdefault(key, []).append({
+            "trace_id":        row.get("trace_id"),
+            "row_id":          row.get("id"),
+            "received_at":     row.get("received_at"),
+            "pipeline_stage":  row.get("pipeline_stage"),
+            "idempotency_key": row.get("idempotency_key"),
+            "dry_run":         bool(row.get("dry_run")),
+            "qoyod_invoice_id": row.get("qoyod_invoice_id"),
+        })
+
+    out: list[dict] = []
+    for (order_number, event, status), attempts in groups.items():
+        if len(attempts) < 2:
+            continue
+        if only_failed:
+            # Skip groups that ended successfully — they're not the
+            # user's pain point and likely include legitimate
+            # transitions (under_review → completed) that we don't
+            # want to dedupe.
+            has_failed = any(a.get("pipeline_stage") in FAILED_STAGES
+                              for a in attempts)
+            if not has_failed:
+                continue
+        # newest first by received_at
+        attempts.sort(key=lambda a: a.get("received_at") or "", reverse=True)
+        out.append({
+            "order_number":  order_number,
+            "event":         event,
+            "status_slug":   status,
+            "attempts":      attempts,
+            "attempt_count": len(attempts),
+            "latest_trace":  (attempts[0] or {}).get("trace_id"),
+            "oldest_trace":  (attempts[-1] or {}).get("trace_id"),
+            # Sticky-keep suggestion: if exactly ONE attempt has a
+            # non-DEAD_LETTER stage, prefer that. Else prefer the
+            # newest. The operator can override.
+            "suggested_keep_trace": _suggest_keep_trace(attempts),
+        })
+    # newest groups first
+    out.sort(
+        key=lambda g: (g["attempts"][0].get("received_at") or ""),
+        reverse=True,
+    )
+    return out
+
+
+def _suggest_keep_trace(attempts: list[dict]) -> str | None:
+    """Heuristic — prefer the most progressed attempt; fall back to
+    the newest one if all are failed at the same level."""
+    if not attempts:
+        return None
+    # Rank by progress: COMPLETED > non-failed-terminal > FAILED > DEAD_LETTER.
+    def progress_score(a: dict) -> tuple[int, str]:
+        stage = a.get("pipeline_stage") or ""
+        if stage == "COMPLETED":
+            score = 4
+        elif stage == "PARTIAL_FAILURE":
+            score = 3
+        elif stage in FAILED_STAGES:
+            score = 1
+        elif stage in SUCCESS_STAGES:
+            score = 4
+        else:
+            score = 2
+        return (score, a.get("received_at") or "")
+    best = max(attempts, key=progress_score)
+    return best.get("trace_id")
+
+
+async def archive_duplicate_attempts(
+    db, *, user_id: str, order_number: str,
+    event: str, status_slug: str,
+    keep_trace_id: str, confirm_token: str, actor: str,
+) -> dict:
+    """Archive every duplicate attempt in the group EXCEPT
+    `keep_trace_id`. Safety:
+      • Confirm token must equal `MERGE`.
+      • The keep_trace_id MUST exist in the group, else refuse.
+      • NEVER touches Qoyod itself.
+      • NEVER touches any row outside the group's
+        (order_number, event, status_slug) tuple.
+      • Archive insert happens BEFORE delete (recoverable).
+    """
+    if (confirm_token or "").strip() != DUPLICATE_CONFIRM_TOKEN:
+        raise DuplicateMergeRefused(
+            f"confirm_token must equal {DUPLICATE_CONFIRM_TOKEN!r}")
+    if not order_number or not keep_trace_id:
+        raise DuplicateMergeRefused(
+            "order_number and keep_trace_id are required")
+
+    # Fetch all rows for this order_number; filter by event+status in
+    # python (same logic as find_duplicate_groups so the group is
+    # consistent with what the operator saw).
+    rows: list[dict] = []
+    async for row in db.integration_inbox.find(
+            {"user_id": user_id, "salla_order_number": order_number}):
+        ev, st = _extract_event_and_status_from_row(row)
+        if ev == event and st == status_slug:
+            rows.append(row)
+
+    if len(rows) < 2:
+        raise DuplicateMergeRefused(
+            f"group has only {len(rows)} attempt(s) — nothing to merge")
+
+    keep = next((r for r in rows if r.get("trace_id") == keep_trace_id), None)
+    if not keep:
+        raise DuplicateMergeRefused(
+            f"keep_trace_id={keep_trace_id} not in group "
+            f"(order_number={order_number}, event={event}, "
+            f"status={status_slug})")
+
+    losers = [r for r in rows if r.get("trace_id") != keep_trace_id]
+    if not losers:
+        return {"matched": len(rows), "archived": 0, "deleted": 0,
+                "archive_ids": [], "kept_trace": keep_trace_id}
+
+    now = datetime.now(timezone.utc)
+    archive_docs = []
+    loser_trace_ids = []
+    for row in losers:
+        doc = dict(row)
+        original_id = doc.pop("_id", None)
+        doc["archived_at"] = now.isoformat()
+        doc["archived_by"] = actor or "system"
+        doc["archive_reason"] = "duplicate_attempt_merged"
+        doc["duplicate_group"] = {
+            "order_number": order_number,
+            "event":        event,
+            "status_slug":  status_slug,
+            "kept_trace":   keep_trace_id,
+        }
+        doc["original_inbox_id"] = str(original_id) if original_id else None
+        archive_docs.append(doc)
+        if row.get("trace_id"):
+            loser_trace_ids.append(row["trace_id"])
+
+    # 1) Insert archive copies first.
+    ins = await db.integration_inbox_archive.insert_many(archive_docs)
+    archive_ids = [str(x) for x in ins.inserted_ids]
+
+    # 2) Delete losers — strict filter constrained to the trace_ids
+    # we know about + tenant.
+    delete_q = {
+        "user_id": user_id,
+        "salla_order_number": order_number,
+        "trace_id": {"$in": loser_trace_ids},
+    }
+    res = await db.integration_inbox.delete_many(delete_q)
+
+    # 3) Stamp the kept row with attempt history so the operator can
+    # see the duplicates that were merged into it.
+    merged_summary = [
+        {"trace_id": d.get("trace_id"),
+         "received_at": d.get("received_at"),
+         "pipeline_stage": d.get("pipeline_stage")}
+        for d in losers
+    ]
+    await db.integration_inbox.update_one(
+        {"user_id": user_id, "trace_id": keep_trace_id},
+        {"$set": {
+            "duplicate_attempts_merged_at": now.isoformat(),
+            "duplicate_attempts_merged_by": actor or "system",
+        },
+         "$push": {
+            "duplicate_attempts_archive": {"$each": merged_summary},
+         }},
+    )
+
+    return {
+        "matched":      len(rows),
+        "archived":     len(archive_ids),
+        "deleted":      int(res.deleted_count),
+        "archive_ids":  archive_ids,
+        "kept_trace":   keep_trace_id,
+        "merged_traces": loser_trace_ids,
+    }

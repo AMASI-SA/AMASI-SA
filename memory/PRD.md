@@ -1,5 +1,46 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-280 — Duplicate Inbox Rows for Legacy Make Payloads (2026-02-27)
+**User scenario**: First Sync Monitor showed order `268632361` TWICE as separate DEAD_LETTER rows (`eac68e664dee48738005a52b15e50a60` + `33c07a10a2994f6796a44fa386a33c00`). User demanded: same order must never produce two independent rows; attempts must accumulate inside ONE inbox doc; idempotency at `order_number + event_type + order_status_slug`.
+
+### Root cause
+`derive_idempotency_key(body, header)` inspected ONLY `body.data.*`. Legacy Make scenarios ship a FLAT body (no `data` envelope), so `order_id` was None and the function fell through to `f"salla:unknown:{uuid.uuid4().hex}"` — a fresh random UUID on every call. The unique index `(user_id, connector_key, idempotency_key)` could never collide, so every webhook delivery for the same order created a new inbox row.
+
+### Backend fixes
+
+#### 1. Idempotency key now reads ROOT-level legacy fields (`webhook.py::derive_idempotency_key`)
+- `order_id` falls back to `raw.order_number / raw.order_id / raw.reference_id`.
+- `event` falls back to `raw.event_type`.
+- `status_slug` falls back to `_extract_status_slug(raw)` (root-level keys).
+- `_extract_status_slug` now also handles `order_status_slug` (was previously missing).
+- Result: same Make payload always produces the same `salla:order:268632361:order_completed:completed` key → unique index blocks second insert via DuplicateKeyError → webhook handler returns `{duplicate: true, trace_id: <existing>}` instead of creating a new row.
+
+#### 2. Duplicate-group detection + merge endpoint (`first_sync_monitor.py`)
+Production already had orphan duplicate rows from BEFORE the fix. Two new helpers + two new endpoints:
+- `find_duplicate_groups(db, user_id, only_failed=True)` — groups inbox rows by `(salla_order_number, event, status_slug)` and returns groups with ≥2 attempts. Per-group: `latest_trace`, `oldest_trace`, `suggested_keep_trace` (heuristic: prefer COMPLETED > PARTIAL > newest of failed).
+- `archive_duplicate_attempts(db, user_id, order_number, event, status_slug, keep_trace_id, confirm_token, actor)` — token `"MERGE"` required; archives all losing attempts to `integration_inbox_archive` with `archive_reason="duplicate_attempt_merged"` + `duplicate_group: {kept_trace, ...}`. Stamps `duplicate_attempts_archive[]` on the KEPT row for audit. Strict tenant + group scope. Insert-before-delete (recoverable).
+- `GET  /api/integrations/qoyod/first-sync-monitor/duplicate-groups?only_failed=true`
+- `POST /api/integrations/qoyod/first-sync-monitor/archive-duplicates`
+
+#### Safety contract (NEVER violated)
+1. NEVER touches Qoyod itself (local-only archive op).
+2. NEVER touches rows of other tenants.
+3. NEVER touches rows outside the `(order_number, event, status_slug)` group.
+4. Confirm token `"MERGE"` required.
+5. `keep_trace_id` MUST exist in the group.
+6. Archive insert BEFORE delete (recoverable).
+
+### Tests (Iter-280)
+- **NEW** `tests/test_qoyod_webhook_idempotency_legacy_iter280.py` — **12/12 pass**: canonical shape (no regression), legacy flat (deterministic key), identical payloads collide, different status → different key (transitions preserved), different event → different key, X-Idempotency-Key precedence, empty body → random key (defensive).
+- **NEW** `tests/test_qoyod_duplicate_attempts_iter280.py` — **16/16 pass**: extractor handles legacy + canonical + canonical-metadata-preferred, grouping ignores different statuses (transitions preserved), tenant isolation, only_failed gate, completed-group filter, suggest_keep heuristic, refuse without token / unknown keep_trace / single-row group, archive moves loser to archive collection, kept row gets attempt history stamp, strict order scope (other orders untouched).
+- **665/665** Qoyod pytest suite passes. 0 regressions.
+
+### Pending (deferred to next user decision)
+- Frontend UI for duplicate-group banner + "Merge attempts" button in `QoyodFirstSyncMonitor.jsx`.
+- Banner `items: [object Object]` is a Make.com parse-failure artifact (already routed to separate `webhook_parse_failures` table); user requested it be visually segregated from valid Raw Payload attempts in UI.
+- After production redeploys Iter-280 backend, the duplicate `268632361` group can be merged via the new endpoint (or operator picks `33c07a10...` to keep and merges `eac68e66...` into archive).
+
+
 ## Iter-279 — `normalize-row-self-test` Status Fix Regression (2026-02-27)
 **User scenario**: Operator hit `/admin/normalize-row-self-test?trace_id=eac68e664dee48738005a52b15e50a60` to debug production order 268632361. Endpoint crashed with `NormalizationError(missing_order_status, "could not extract status string")` even though the raw Make payload had `order_status_slug: "completed"` and `order_status: "تم التنفيذ"` at the root.
 

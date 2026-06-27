@@ -59,6 +59,8 @@ from integrations.qoyod.first_sync_monitor import (
     list_recent_for_monitor, get_row_for_monitor,
     get_monitor_stats, archive_failed_dry_run_tests, ArchiveRefused,
     ARCHIVE_CONFIRM_TOKEN,
+    find_duplicate_groups, archive_duplicate_attempts,
+    DuplicateMergeRefused, DUPLICATE_CONFIRM_TOKEN,
 )
 from integrations.qoyod.dead_letter_requeue import (
     find_requeue_candidates, auto_requeue_known_fixed, requeue_one,
@@ -144,6 +146,18 @@ class FreshStartExecutePayload(BaseModel):
 class ArchiveFailedTestsBody(BaseModel):
     confirm: str = Field(..., description="Must equal 'CLEAN'.")
     model_config = ConfigDict(extra="forbid")
+
+
+class ArchiveDuplicateAttemptsBody(BaseModel):
+    """Iter-280 — merge duplicate inbox rows of the same logical
+    webhook delivery into a single row. Operator picks which trace
+    to keep; all others go to `integration_inbox_archive`."""
+    model_config = ConfigDict(extra="forbid")
+    order_number:    str = Field(..., description="Salla order number")
+    event:           str = Field(..., description="event_type from raw payload")
+    status_slug:     str = Field(..., description="canonical status slug")
+    keep_trace_id:   str = Field(..., description="trace_id to KEEP")
+    confirm:         str = Field(..., description="Must equal 'MERGE'.")
 
 
 class DeadLetterRequeueOneBody(BaseModel):
@@ -850,6 +864,53 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 detail={"code": "confirm_required",
                         "message": str(exc),
                         "expected_token": ARCHIVE_CONFIRM_TOKEN})
+        return {"ok": True, **result}
+
+    # ── Duplicate-attempt detection (Iter-280) ─────────────────────
+    # Lists inbox rows where the SAME logical webhook delivery
+    # (order_number + event + status_slug) created >1 row. Surfaces
+    # which trace each operator-action would touch.
+    @router.get("/first-sync-monitor/duplicate-groups")
+    async def first_sync_monitor_duplicate_groups(
+        only_failed: bool = Query(
+            True,
+            description="When true, only groups containing ≥1 failed "
+                        "terminal row are returned"),
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        groups = await find_duplicate_groups(
+            db, user_id=tenant, only_failed=only_failed)
+        return {
+            "ok":              True,
+            "groups":          groups,
+            "expected_token":  DUPLICATE_CONFIRM_TOKEN,
+        }
+
+    # Archive every duplicate attempt in a group EXCEPT keep_trace_id.
+    # NEVER touches Qoyod; archive collection is recoverable.
+    @router.post("/first-sync-monitor/archive-duplicates")
+    async def first_sync_monitor_archive_duplicates(
+        payload: ArchiveDuplicateAttemptsBody,
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        try:
+            result = await archive_duplicate_attempts(
+                db, user_id=tenant,
+                order_number=payload.order_number,
+                event=payload.event,
+                status_slug=payload.status_slug,
+                keep_trace_id=payload.keep_trace_id,
+                confirm_token=payload.confirm,
+                actor=getattr(user, "email", None) or tenant,
+            )
+        except DuplicateMergeRefused as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "merge_refused",
+                        "message": str(exc),
+                        "expected_token": DUPLICATE_CONFIRM_TOKEN})
         return {"ok": True, **result}
 
     @router.get("/first-sync-monitor/{trace_id}")

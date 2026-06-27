@@ -142,20 +142,32 @@ def derive_idempotency_key(raw: dict, header_key: Optional[str]) -> str:
     """
     if header_key and header_key.strip():
         return header_key.strip()
-    data = raw.get("data") if isinstance(raw, dict) else {}
-    if not isinstance(data, dict):
-        data = {}
+    if not isinstance(raw, dict):
+        return f"salla:unknown:{uuid.uuid4().hex}"
+
+    data = raw.get("data") if isinstance(raw.get("data"), dict) else {}
+
+    # Iter-280 — Legacy Make payloads ship a FLAT body (no `data`
+    # envelope) with `order_number`, `order_id`, `order_status_slug`,
+    # `event_type` at the root. Previously this function only read
+    # from `data.*`, so legacy payloads fell through to the random
+    # UUID branch and EVERY webhook for the same order created a
+    # brand-new inbox row (bypassing the unique idempotency index).
+    # The fix: when `data` is empty, fall back to ROOT-level fields.
     order_id = (data.get("reference_id") or data.get("id")
-                or data.get("order_id"))
-    event = (raw.get("event") if isinstance(raw, dict) else None) \
-            or raw.get("event_type") if isinstance(raw, dict) else None \
-            or "order"
-    # Status slug: lives under `data.status.slug` for nested-shape
-    # payloads, or `data.status` when the legacy adapter has already
-    # flattened it. Falls back to `data.order_status` for top-level
-    # legacy Make webhooks. `none` is used (not blank) so the key
-    # stays stable when status truly is absent.
-    status_slug = _extract_status_slug(data) or "none"
+                or data.get("order_id")
+                or raw.get("order_number") or raw.get("order_id")
+                or raw.get("reference_id"))
+
+    # Event — `raw.event` (canonical Salla), `raw.event_type` (Make).
+    event = (raw.get("event") or raw.get("event_type") or "order")
+
+    # Status slug: drill into `data.status` (canonical) OR top-level
+    # legacy fields (`order_status_slug`, `status_slug`, `status`).
+    # `none` is used (not blank) so the key stays stable when status
+    # truly is absent.
+    status_slug = _extract_status_slug(data) or _extract_status_slug(raw) \
+                  or "none"
     if order_id:
         return f"salla:order:{order_id}:{event}:{status_slug}"
     # No key in headers AND no order id → random; will never collide.
@@ -175,7 +187,8 @@ def _extract_status_slug(data: dict) -> Optional[str]:
     elif isinstance(st, str) and st.strip():
         return st.strip().lower()
     # Legacy top-level fallback used by some Make scenarios
-    for k in ("order_status", "status_slug", "current_status"):
+    for k in ("order_status_slug", "order_status",
+              "status_slug", "current_status"):
         v = data.get(k)
         if isinstance(v, str) and v.strip():
             return v.strip().lower()
