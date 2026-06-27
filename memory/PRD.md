@@ -1,5 +1,25 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-279 — `normalize-row-self-test` Status Fix Regression (2026-02-27)
+**User scenario**: Operator hit `/admin/normalize-row-self-test?trace_id=eac68e664dee48738005a52b15e50a60` to debug production order 268632361. Endpoint crashed with `NormalizationError(missing_order_status, "could not extract status string")` even though the raw Make payload had `order_status_slug: "completed"` and `order_status: "تم التنفيذ"` at the root.
+
+**Root cause**: The route called `normalize(raw)` directly. Legacy Make scenarios ship status at the ROOT, not under `data.status`, but the normalizer only reads `data.status`. The adapter (which writes `data.status`) was being SKIPPED by the self-test.
+
+**Fixes already applied in previous session** (now locked in by tests):
+1. `legacy_adapter.adapt()` mirrors `order_status` / `order_status_slug` / `status` onto the adapted root for downstream visibility (the normalizer still reads only `data.status`, which the adapter has been writing all along).
+2. `routes.admin_normalize_row_self_test` now chains `adapt(raw) → normalize(adapted)` so the self-test mirrors the real webhook chain.
+
+### Regression Tests (Iter-279)
+- **NEW** `tests/test_qoyod_normalize_self_test_status_fix.py` — **10 tests, all pass**:
+  - Adapter writes `order_status_slug`, `order_status`, top-level `status`, and `data.status` for the user's exact payload.
+  - `normalize(adapted)` does NOT raise — full chain succeeds.
+  - Defensive: `normalize(raw_legacy_body)` (bypassing adapter) STILL raises `NormalizationError(missing_order_status)` — documents WHY the chain matters.
+  - DTO line item fields are exactly: `unit_price=199`, `tax_amount=14.96`, `discount_amount=11.94`, `total=202.02`.
+  - DTO `order_status` canonicalises to `"completed"`, `order_status_native="تم التنفيذ"`.
+  - Slug-only legacy payload (no Arabic name) still survives the chain.
+- **637/637** Qoyod pytest suite passes. 0 regressions.
+
+
 ## SSOT Product Trust Gate + Name Display Fallback (2026-02-27)
 **User scenario (P0 pre-Go-Live)**: 38 historical Qoyod products (cod_item, custom_product, old Salla SKUs like AMS11903 with empty names) could silently bind to fresh Mezan orders via SKU match. User also reported that the QYD-GO Identity Diagnostics table displayed "—" for products with only `name_ar` (e.g. "اقمشة متنوعة"). Both gaps had to close before Go-Live.
 
