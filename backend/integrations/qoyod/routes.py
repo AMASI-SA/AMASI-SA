@@ -63,6 +63,9 @@ from integrations.qoyod.dead_letter_requeue import (
     find_requeue_candidates, auto_requeue_known_fixed, requeue_one,
     MAX_REQUEUE_ATTEMPTS, KNOWN_FIXED_PATTERNS,
 )
+from integrations.qoyod.one_shot_reprocess import (
+    reprocess_one_order, OneShotRefused, CONFIRM_TOKEN_TEMPLATE,
+)
 from salla_integration.service import call_salla, SallaError
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
@@ -166,6 +169,18 @@ class AdoptProductBody(BaseModel):
     qoyod_product_id: str
     qoyod_product_name: Optional[str] = None
     note: Optional[str] = None
+
+
+class OneShotReprocessBody(BaseModel):
+    """Strict single-order reprocess payload. The operator MUST supply
+    `order_number` (the human-readable Salla order id) plus a
+    `confirm` token that equals `REPROCESS-<order_number>`. The
+    optional `trace_id` disambiguates when multiple inbox rows exist
+    for the same order_number (e.g. multiple status webhooks)."""
+    model_config = ConfigDict(extra="forbid")
+    order_number: str = Field(..., min_length=1, max_length=64)
+    confirm:      str = Field(..., min_length=1, max_length=128)
+    trace_id:     Optional[str] = None
 
 
 class TestConnectionResponse(BaseModel):
@@ -844,6 +859,44 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         if not row:
             raise HTTPException(404, "trace_id_not_found")
         return {"ok": True, "row": row}
+
+    # ── One-Shot Reprocess (single order, strict, audit-trail-heavy) ─
+    # Targets EXACTLY one Salla order against the real Qoyod tenant.
+    # Used to recover production rows that DEAD_LETTERed against a
+    # since-fixed bug (e.g. DRY:product leak, Iter-267). NEVER scans
+    # other DEAD_LETTER rows. NEVER triggers backfill.
+    #
+    # Required body:
+    #   { "order_number": "268670571",
+    #     "confirm":      "REPROCESS-268670571",
+    #     "trace_id":     "<optional disambiguator>" }
+    #
+    # Response is uniformly shaped (see `one_shot_reprocess`) — the
+    # UI renders the outcome directly without inspecting HTTP codes.
+    @router.post("/admin/one-shot-reprocess")
+    async def admin_one_shot_reprocess(
+        payload: OneShotReprocessBody, user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        actor = getattr(user, "email", None) or tenant
+        try:
+            result = await reprocess_one_order(
+                db, user_id=tenant,
+                order_number=payload.order_number,
+                trace_id=payload.trace_id,
+                confirm=payload.confirm,
+                actor=actor,
+            )
+        except OneShotRefused as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    **exc.to_dict(),
+                    "expected_confirm_token": CONFIRM_TOKEN_TEMPLATE.format(
+                        order_number=payload.order_number),
+                },
+            )
+        return result
 
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
     # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the

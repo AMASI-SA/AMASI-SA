@@ -279,6 +279,15 @@ export default function QoyodFirstSyncMonitor() {
   const [archiving, setArchiving] = useState(false);
   const [archiveResult, setArchiveResult] = useState(null);
 
+  // One-Shot Reprocess modal state
+  const [reprocOpen, setReprocOpen] = useState(false);
+  const [reprocOrderNo, setReprocOrderNo] = useState("");
+  const [reprocConfirm, setReprocConfirm] = useState("");
+  const [reprocTraceId, setReprocTraceId] = useState("");
+  const [reproc, setReproc] = useState(false);
+  const [reprocResult, setReprocResult] = useState(null);
+  const [reprocError, setReprocError] = useState(null);
+
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -337,6 +346,48 @@ export default function QoyodFirstSyncMonitor() {
       toast.error(detail?.message || detail || "فشلت الأرشفة");
     } finally {
       setArchiving(false);
+    }
+  };
+
+  const expectedReprocToken = (reprocOrderNo || "").trim()
+    ? `REPROCESS-${reprocOrderNo.trim()}`
+    : "";
+
+  const runReprocess = async () => {
+    const orderNo = (reprocOrderNo || "").trim();
+    const confirmTok = (reprocConfirm || "").trim();
+    if (!orderNo) {
+      toast.error("أدخل رقم الطلب أولاً");
+      return;
+    }
+    if (confirmTok !== expectedReprocToken) {
+      toast.error(`أدخل التأكيد بالضبط: ${expectedReprocToken}`);
+      return;
+    }
+    setReproc(true);
+    setReprocError(null);
+    setReprocResult(null);
+    try {
+      const body = { order_number: orderNo, confirm: confirmTok };
+      const traceTrim = (reprocTraceId || "").trim();
+      if (traceTrim) body.trace_id = traceTrim;
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/admin/one-shot-reprocess`, body);
+      setReprocResult(data);
+      if (data?.outcome === "COMPLETED") {
+        toast.success(`نجحت إعادة معالجة الطلب ${orderNo}`);
+      } else if (data?.outcome === "ALREADY_COMPLETED") {
+        toast.info(`الطلب ${orderNo} مكتمل سابقاً`);
+      } else {
+        toast.error(`فشل: ${data?.outcome || "غير معروف"}`);
+      }
+      await load(true);
+    } catch (e) {
+      const detail = e.response?.data?.detail;
+      setReprocError(detail || { code: "request_failed", message: e.message });
+      toast.error(detail?.message || detail?.code || "فشل الطلب");
+    } finally {
+      setReproc(false);
     }
   };
 
@@ -459,6 +510,19 @@ export default function QoyodFirstSyncMonitor() {
           </select>
           طلب
         </label>
+        <button type="button"
+                onClick={() => {
+                  setReprocOpen(true);
+                  setReprocOrderNo("");
+                  setReprocConfirm("");
+                  setReprocTraceId("");
+                  setReprocResult(null);
+                  setReprocError(null);
+                }}
+                data-testid="btn-open-one-shot-reprocess"
+                className="px-3 py-1.5 text-xs font-bold rounded bg-indigo-600 text-white hover:bg-indigo-700">
+          🎯 إعادة معالجة طلب واحد
+        </button>
         <div className="text-[11px] text-slate-500 ms-auto flex items-center gap-3"
              data-testid="monitor-count">
           {workerStatus && (
@@ -575,6 +639,223 @@ export default function QoyodFirstSyncMonitor() {
                   className="px-4 py-2 text-sm font-extrabold rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40"
                 >
                   {archiving ? "جاري الأرشفة…" : "🗂️ تنفيذ الأرشفة"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* One-Shot Reprocess modal — single order, REPROCESS-<order_number> */}
+      {reprocOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+             data-testid="reproc-modal-backdrop"
+             onClick={() => !reproc && setReprocOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
+               data-testid="reproc-modal"
+               onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-extrabold text-slate-900 mb-2">
+              🎯 إعادة معالجة طلب واحد فقط
+            </h2>
+            <p className="text-sm text-slate-700 leading-relaxed">
+              تستهدف <strong>طلباً واحداً فقط</strong> وتُرسله إلى Qoyod الإنتاجي.
+              لا تُشغّل Backfill ولا تُلامس أي سجل آخر.
+            </p>
+            <ul className="text-[12px] text-slate-600 list-disc pe-5 mt-2 space-y-1">
+              <li>إذا وجد أي <code className="font-mono">DRY:</code> في contact_id أو product_id يتم إيقاف الإرسال فوراً.</li>
+              <li>الخرائط (mappings) القديمة بـ <code className="font-mono">DRY:*</code> يتم عزلها قبل إعادة المعالجة.</li>
+              <li>عند الفشل: لا إعادة محاولة. سيظهر <code className="font-mono">request_body_json</code> + المرحلة التي فشلت عندها فقط.</li>
+            </ul>
+
+            {!reprocResult && !reprocError && (
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="block text-[12px] font-bold text-slate-700 mb-1">
+                    رقم الطلب (Salla Order Number)
+                  </label>
+                  <input
+                    type="text"
+                    value={reprocOrderNo}
+                    onChange={(e) => setReprocOrderNo(e.target.value)}
+                    dir="ltr"
+                    placeholder="268670571"
+                    data-testid="reproc-order-no-input"
+                    autoFocus
+                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg font-mono text-sm focus:border-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[12px] font-bold text-slate-700 mb-1">
+                    Trace ID <span className="text-slate-400 font-normal">(اختياري — لتمييز السجلات إذا تكرّر نفس الطلب)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={reprocTraceId}
+                    onChange={(e) => setReprocTraceId(e.target.value)}
+                    dir="ltr"
+                    placeholder="optional"
+                    data-testid="reproc-trace-id-input"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[12px] font-bold text-slate-700 mb-1">
+                    للتأكيد، اكتب: <code className="font-mono text-rose-700">{expectedReprocToken || "REPROCESS-<order_number>"}</code>
+                  </label>
+                  <input
+                    type="text"
+                    value={reprocConfirm}
+                    onChange={(e) => setReprocConfirm(e.target.value)}
+                    dir="ltr"
+                    placeholder={expectedReprocToken || "REPROCESS-..."}
+                    data-testid="reproc-confirm-input"
+                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg font-mono text-sm focus:border-indigo-500 outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Success / failure result */}
+            {reprocResult && (
+              <div className="mt-4" data-testid="reproc-result">
+                <div className={`rounded-lg border p-3 ${
+                       reprocResult.outcome === "COMPLETED"
+                         ? "border-emerald-300 bg-emerald-50"
+                         : reprocResult.outcome === "ALREADY_COMPLETED"
+                           ? "border-sky-300 bg-sky-50"
+                           : "border-rose-300 bg-rose-50"}`}>
+                  <div className="text-sm font-extrabold mb-1">
+                    {reprocResult.outcome === "COMPLETED" && "✓ تم بنجاح"}
+                    {reprocResult.outcome === "ALREADY_COMPLETED" && "ℹ مكتمل سابقاً"}
+                    {!["COMPLETED", "ALREADY_COMPLETED"].includes(reprocResult.outcome) && `✗ فشل: ${reprocResult.outcome}`}
+                  </div>
+                  {reprocResult.trace_id && (
+                    <div className="text-[11px] font-mono text-slate-600">
+                      trace_id: {reprocResult.trace_id}
+                    </div>
+                  )}
+                  {reprocResult.stage_sequence_observed && (
+                    <div className="text-[12px] text-slate-700 mt-1"
+                         data-testid="reproc-stage-sequence">
+                      <strong>المراحل التي اجتازها:</strong>{" "}
+                      {reprocResult.stage_sequence_observed.join(" → ") || "—"}
+                    </div>
+                  )}
+                  {reprocResult.qoyod_invoice_id && (
+                    <div className="text-[12px] font-mono text-slate-800 mt-1">
+                      Invoice: {reprocResult.qoyod_invoice_id} ·
+                      Receipt: {reprocResult.qoyod_receipt_id || "—"}
+                    </div>
+                  )}
+                  {reprocResult.error && (
+                    <div className="mt-2 text-[12px] text-rose-800">
+                      <strong>{reprocResult.error.code}</strong>: {reprocResult.error.message}
+                    </div>
+                  )}
+                  {reprocResult.failed_at_stage && (
+                    <div className="text-[12px] text-slate-700 mt-1">
+                      <strong>المرحلة التي فشل عندها:</strong>{" "}
+                      <code className="font-mono">{reprocResult.failed_at_stage}</code>
+                    </div>
+                  )}
+                </div>
+
+                {/* Final invoice payload — only shown on success/leak so
+                    the operator can paste it into a support ticket */}
+                {(reprocResult.invoice_payload || reprocResult.request_body_json) && (
+                  <div className="mt-3">
+                    <div className="text-[11px] font-bold text-slate-600 mb-1">
+                      {reprocResult.outcome === "COMPLETED"
+                        ? "📦 invoice_payload المُرسل لقيود"
+                        : "📦 request_body_json الذي تم إيقافه (لم يُرسَل لقيود)"}
+                    </div>
+                    <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-slate-900 text-slate-100 rounded p-2 max-h-72 overflow-auto"
+                         dir="ltr"
+                         data-testid="reproc-request-body-json">
+{JSON.stringify(reprocResult.invoice_payload || reprocResult.request_body_json, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {/* Dry-leak audit */}
+                {reprocResult.dry_leaks_in_final_payload != null && (
+                  <div className="mt-2 text-[12px]"
+                       data-testid="reproc-dry-leak-audit">
+                    <strong>فحص DRY: في الـ payload النهائي:</strong>{" "}
+                    {reprocResult.dry_leaks_in_final_payload.length === 0
+                      ? <span className="text-emerald-700 font-bold">✓ نظيف (0)</span>
+                      : <span className="text-rose-700 font-bold">⚠ {reprocResult.dry_leaks_in_final_payload.join(", ")}</span>}
+                  </div>
+                )}
+
+                {reprocResult.quarantine_summary && (
+                  <details className="mt-2 text-[11px] text-slate-600">
+                    <summary className="cursor-pointer font-bold">سجل العزل (DRY mappings)</summary>
+                    <pre className="mt-1 bg-slate-100 p-2 rounded" dir="ltr">
+{JSON.stringify(reprocResult.quarantine_summary, null, 2)}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            )}
+
+            {reprocError && (
+              <div className="mt-4 rounded-lg border border-rose-300 bg-rose-50 p-3"
+                   data-testid="reproc-error">
+                <div className="text-sm font-extrabold text-rose-900">
+                  ✗ الطلب مرفوض
+                </div>
+                <div className="text-[12px] font-mono text-rose-800 mt-1">
+                  {reprocError.code}
+                </div>
+                <div className="text-[12px] text-rose-800 mt-1">
+                  {reprocError.message}
+                </div>
+                {reprocError.expected_confirm_token && (
+                  <div className="text-[11px] text-rose-700 mt-2">
+                    تأكيد متوقّع: <code className="font-mono">{reprocError.expected_confirm_token}</code>
+                  </div>
+                )}
+                {reprocError.candidates && (
+                  <details className="mt-2 text-[11px]">
+                    <summary className="cursor-pointer font-bold text-rose-800">
+                      السجلات المطابقة ({reprocError.candidates.length})
+                    </summary>
+                    <ul className="mt-1 space-y-1 font-mono">
+                      {reprocError.candidates.map((c, i) => (
+                        <li key={i} className="text-rose-700">
+                          {c.trace_id} · {c.pipeline_stage}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReprocOpen(false)}
+                disabled={reproc}
+                data-testid="btn-reproc-cancel"
+                className="px-4 py-2 text-sm font-bold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {(reprocResult || reprocError) ? "إغلاق" : "إلغاء"}
+              </button>
+              {!reprocResult && !reprocError && (
+                <button
+                  type="button"
+                  onClick={runReprocess}
+                  disabled={reproc ||
+                            !(reprocOrderNo || "").trim() ||
+                            (reprocConfirm || "").trim() !== expectedReprocToken}
+                  data-testid="btn-reproc-confirm"
+                  className="px-4 py-2 text-sm font-extrabold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40"
+                >
+                  {reproc ? "جاري المعالجة…" : "🎯 تنفيذ إعادة المعالجة"}
                 </button>
               )}
             </div>

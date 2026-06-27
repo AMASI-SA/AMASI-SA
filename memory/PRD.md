@@ -2282,3 +2282,58 @@ The original `DryRunQoyodClient` continues to back the dry-run tests (where `DRY
 - ✅ Dry-Run Leak Protection fully enforced in Production (covers `DRY:contact`, `DRY:product`, `DRY:invoice`, `DRY:receipt` patterns via product_resolver quarantine + pipeline preflight).
 - ✅ No regression — full Qoyod regression suite green.
 - ⏸ Re-processing Order `268670571` on Production explicitly **paused** per user instruction; nothing has been sent to `api.qoyod.com`.
+
+---
+
+## 2026-02-27 — Iter-269 (One-Shot Reprocess — single-order, strict, audit-trail)
+
+### Context
+After the Iter-267/268 Dry-Run Leak Guard shipped, the operator wants a safe way to recover the production order `268670571` (and any future single-row casualty of a since-fixed bug) WITHOUT triggering backfill, bulk auto-requeue, or shell access.
+
+### Implementation
+**Backend:**
+- `integrations/qoyod/one_shot_reprocess.py` — new module:
+  - `reprocess_one_order(db, *, user_id, order_number=None, trace_id=None, confirm, actor)` — orchestrator.
+  - `_quarantine_dry_mappings(...)` — quarantines `DRY:contact:*` from `qoyod_customers_mapping` and `DRY:product:*` from `qoyod_products_mapping` for ONLY the SKUs/customer of the target order. Also nullifies the row's own `qoyod_customer_id` if it leaks.
+  - `_find_target_row(...)` — single-match enforcement (0 or >1 matches → refused).
+  - `_scan_payload_for_dry(payload)` — defensive payload scanner.
+  - `OneShotRefused` — typed exception with structured `{code, message, ...}` body for the HTTP layer.
+- `integrations/qoyod/customer_resolver.py` — added a DRY: leak guard mirroring `product_resolver` (quarantine + fall-through to create-fresh).
+- `integrations/qoyod/routes.py` — new endpoint:
+  - **`POST /api/integrations/qoyod/admin/one-shot-reprocess`**
+  - Body: `{ order_number: str, confirm: str, trace_id?: str }`
+  - `confirm` MUST equal `REPROCESS-<order_number>` (order-specific, typo-resistant).
+  - Returns uniform shape regardless of outcome (`COMPLETED` / `ALREADY_COMPLETED` / `DEAD_LETTER` / `PARTIAL_FAILURE` / ...).
+  - On failure surfaces `error.code`, `error.message`, `request_body_json`, `failed_at_stage`.
+
+**Frontend:**
+- `pages/QoyodFirstSyncMonitor.jsx` — new `🎯 إعادة معالجة طلب واحد` button in the toolbar + full-screen modal:
+  - Inputs: order_number, trace_id (optional), confirm.
+  - Live-rendered expected token: typing `268670571` displays `REPROCESS-268670571` in red.
+  - Confirm button disabled until the token matches exactly.
+  - Result view shows: outcome badge, stage_sequence_observed, qoyod_invoice_id, dry_leaks_in_final_payload (must be `[]`), full invoice_payload, quarantine_summary.
+  - On failure: shows `error.code`, `error.message`, `request_body_json`, `failed_at_stage`. No auto-retry.
+
+### Strict invariants enforced (matches user directive verbatim)
+1. ✅ Single row only — refused if 0 or >1 matches.
+2. ✅ Confirm token required: `REPROCESS-{order_number}` exact.
+3. ✅ Never scans / touches any other DEAD_LETTER row.
+4. ✅ Never triggers backfill.
+5. ✅ DRY-mapping quarantine before re-run (customer + products).
+6. ✅ Pipeline preflight guard remains the last line of defence — `DRY:` in invoice payload → DEAD_LETTER, **nothing POSTed to Qoyod**.
+7. ✅ On failure: no auto-retry. Returns `error.code` + `error.message` + `request_body_json` + `failed_at_stage`.
+8. ✅ `dry_run_mode=True` blocks the endpoint (real-Qoyod only).
+9. ✅ Missing API credentials blocks the endpoint.
+10. ✅ Already-COMPLETED row is a no-op.
+
+### Verification
+- `pytest tests/test_qoyod_one_shot_reprocess.py` → **11/11 PASS**.
+- `pytest tests/ -k qoyod` → **547 passed, 2 skipped, 0 failed** (full regression green).
+- Live curl with admin token verified:
+  - Token mismatch → `400 {"code":"confirm_token_mismatch", "expected":"REPROCESS-268670571"}`.
+  - Row not found → `400 {"code":"row_not_found"}`.
+- UI smoke-tested on preview: button visible, modal renders, live token preview, confirm button correctly disabled until token matches.
+
+### NOT in scope (per user directive)
+- ❌ No new alert/counter in First-Sync Monitor for "blocked by DRY guard" — explicitly declined.
+- ❌ Order `268670571` was NOT reprocessed against Production yet — the operator will trigger it from the UI when ready.

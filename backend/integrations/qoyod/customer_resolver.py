@@ -212,12 +212,28 @@ async def resolve_customer(
     # ── Local mapping hit ───────────────────────────────────────────
     existing = await db.qoyod_customers_mapping.find_one(
         {"user_id": user_id, "lookup_key": lookup_key},
-        {"_id": 0, "qoyod_customer_id": 1},
+        {"_id": 0, "qoyod_customer_id": 1, "dry_run_only": 1},
     )
-    if existing and existing.get("qoyod_customer_id"):
+    existing_cid = existing.get("qoyod_customer_id") if existing else None
+    # ─── DRY-Run Leak Guard (Iter-268, P0) ─────────────────────────
+    # Any customer mapping carrying a `DRY:contact:*` id is a Dry-Run
+    # artefact and MUST NOT bind to a production invoice. Mirrors the
+    # product_resolver guard. Mapping is quarantined and we fall
+    # through to the create-fresh path so a real Qoyod contact is
+    # created (or matched via the upstream find/create idempotency).
+    if existing_cid and (str(existing_cid).startswith("DRY:")
+                         or (existing or {}).get("dry_run_only")):
+        await db.qoyod_customers_mapping.update_one(
+            {"user_id": user_id, "lookup_key": lookup_key},
+            {"$set": {"dry_run_only": True,
+                      "quarantined_at": _now(),
+                      "quarantine_reason": "dry_run_id_in_production"}},
+        )
+        existing = None     # fall-through to create-fresh
+    elif existing_cid:
         return ResolutionResult(
             success=True,
-            qoyod_customer_id=str(existing["qoyod_customer_id"]),
+            qoyod_customer_id=str(existing_cid),
             lookup_key=lookup_key, lookup_kind=lookup_kind,
             created_new=False,
         )
