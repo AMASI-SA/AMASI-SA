@@ -135,6 +135,16 @@ class SettingsPatch(BaseModel):
     # Backfill mode — controls whether the worker drains pre-activation
     # rows after Go-Live (Iter-267). Default = "now_forward_only".
     backfill_mode:        Optional[str] = None
+    # Iter-287 — Qoyod-required product creation defaults.
+    default_product_category_id:   Optional[str] = None
+    default_product_tax_id:        Optional[str] = None
+    default_product_unit_type_id:  Optional[str] = None
+    default_sales_account_id:      Optional[str] = None
+    # Iter-285 — tax mode (customer_first | mezan_fixed_15).
+    tax_mode:                      Optional[str] = None
+    zero_tax_id:                   Optional[str] = None
+    # Iter-288 — auto-adopt existing Qoyod products by SKU.
+    auto_adopt_existing_qoyod_products: Optional[bool] = None
 
 
 class CredentialsRequest(BaseModel):

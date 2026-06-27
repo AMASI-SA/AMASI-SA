@@ -879,6 +879,17 @@ export default function QoyodSettings() {
         inventory_account_id: (settings.inventory_account_id || "").trim() || null,
         cost_account_id:      (settings.cost_account_id || "").trim() || null,
         default_product_type: settings.default_product_type || "service",
+        // Iter-287 — Qoyod-required product creation defaults.
+        default_product_category_id:  (settings.default_product_category_id || "").trim() || null,
+        default_product_tax_id:       (settings.default_product_tax_id || "").trim() || null,
+        default_product_unit_type_id: (settings.default_product_unit_type_id || "").trim() || null,
+        default_sales_account_id:     (settings.default_sales_account_id || "").trim() || null,
+        // Iter-285 — Tax mode + zero-tax id (for customer_first invoicing).
+        tax_mode:                     (settings.tax_mode || "customer_first"),
+        zero_tax_id:                  (settings.zero_tax_id || "").trim() || null,
+        // Iter-288 — Auto-adopt existing Qoyod products by SKU.
+        auto_adopt_existing_qoyod_products:
+          settings.auto_adopt_existing_qoyod_products !== false,
         payment_method_mapping: pmm,
         capabilities:         settings.capabilities,
         backfill_mode:        settings.backfill_mode || "now_forward_only",
@@ -916,6 +927,31 @@ export default function QoyodSettings() {
       issues.push({ code: "missing_tax_id", field: "default_tax_id",
         severity: "blocker",
         message: "لم يُحدَّد Tax ID. ادخل قيود → الإعدادات → الضرائب → انسخ رقم معرّف ضريبة VAT 15%." });
+    }
+    // ── Iter-287 — Qoyod-required product creation defaults ────────
+    const pCat   = (settings.default_product_category_id   || "").toString().trim();
+    const pTax   = (settings.default_product_tax_id        || "").toString().trim();
+    const pUnit  = (settings.default_product_unit_type_id  || "").toString().trim();
+    const pAcct  = (settings.default_sales_account_id      || "").toString().trim();
+    if (!pCat) {
+      issues.push({ code: "missing_product_category_id",
+        field: "default_product_category_id", severity: "blocker",
+        message: "ناقص: التصنيف الافتراضي للمنتجات (Category ID) — انسخه من قيود → الإعدادات → التصنيفات." });
+    }
+    if (!pTax) {
+      issues.push({ code: "missing_product_tax_id",
+        field: "default_product_tax_id", severity: "blocker",
+        message: "ناقص: ضريبة المنتجات الافتراضية (Product Tax ID) — يمكن استخدام نفس Tax ID للفاتورة، لكنها setting منفصل." });
+    }
+    if (!pUnit) {
+      issues.push({ code: "missing_product_unit_type_id",
+        field: "default_product_unit_type_id", severity: "blocker",
+        message: "ناقص: وحدة القياس الافتراضية (Unit Type ID) — مثل قطعة / ساعة خدمة، من قيود → الإعدادات → وحدات القياس." });
+    }
+    if (!pAcct) {
+      issues.push({ code: "missing_sales_account_id",
+        field: "default_sales_account_id", severity: "blocker",
+        message: "ناقص: حساب المبيعات الافتراضي (Sales Account ID) — من قيود → الحسابات → دليل الحسابات → اختر حساب الإيرادات." });
     }
     // Payment-method mapping completeness (based on USED methods).
     // A method counts as "mapped" if it has a direct mapping OR its
@@ -1149,6 +1185,120 @@ export default function QoyodSettings() {
               unsupportedHint="عند تركه فارغاً، يُنشأ عميل جديد لكل طلب ضيف لا يحتوي على هاتف أو إيميل."
             />
           </div>
+        </div>
+      </Section>
+
+      {/* 5b) Iter-287 — Qoyod-Required Product Creation Defaults */}
+      <Section
+        title="🧾 إعدادات إنشاء المنتجات في قيود"
+        subtitle={
+          <>
+            مطلوبة لإنشاء أي منتج جديد في قيود. قيود يرفض إنشاء المنتج
+            بدون هذه الأربعة. القيم تنسخها مرة واحدة من قيود ولا تتغير
+            عادةً.
+            <br />
+            <span className="text-amber-600 dark:text-amber-400 text-xs">
+              ⚠️ إذا كانت المنتجات موجودة في قيود مسبقاً (auto-adopt مفعّل افتراضياً)
+              فلن يحتاج النظام إنشاء، لكن هذه الإعدادات تبقى مطلوبة احتياطاً
+              لأي SKU جديد.
+            </span>
+          </>
+        }
+        tone={
+          [
+            "default_product_category_id",
+            "default_product_tax_id",
+            "default_product_unit_type_id",
+            "default_sales_account_id",
+          ].some(fieldInvalid) ? "danger" : "default"
+        }>
+        <div className="grid md:grid-cols-2 gap-3">
+          <div data-testid="field-default_product_category_id">
+            <IDInput
+              label="التصنيف الافتراضي (Category ID)" required
+              value={settings.default_product_category_id}
+              onChange={(v) => patch({ default_product_category_id: v })}
+              testid="input-default-product-category"
+              placeholder="مثال: 12"
+              disabled={!hasCreds}
+              invalid={fieldInvalid("default_product_category_id")}
+              unsupportedHint="انسخه من قيود → الإعدادات → التصنيفات → اختر تصنيف المنتجات الافتراضي."
+            />
+          </div>
+
+          <div data-testid="field-default_product_tax_id">
+            <IDInput
+              label="ضريبة المنتجات الافتراضية (Product Tax ID)" required
+              value={settings.default_product_tax_id}
+              onChange={(v) => patch({ default_product_tax_id: v })}
+              testid="input-default-product-tax"
+              datalistId="taxes-list"
+              suggestions={taxes}
+              placeholder="عادة نفس Tax ID الفاتورة"
+              disabled={!hasCreds}
+              invalid={fieldInvalid("default_product_tax_id")}
+              unsupportedHint="ضريبة تُلصق بالمنتج عند إنشائه. غالباً = ضريبة VAT 15% نفسها."
+            />
+          </div>
+
+          <div data-testid="field-default_product_unit_type_id">
+            <IDInput
+              label="وحدة القياس الافتراضية (Unit Type ID)" required
+              value={settings.default_product_unit_type_id}
+              onChange={(v) => patch({ default_product_unit_type_id: v })}
+              testid="input-default-unit-type"
+              placeholder="مثال: 1 (قطعة)"
+              disabled={!hasCreds}
+              invalid={fieldInvalid("default_product_unit_type_id")}
+              unsupportedHint="من قيود → الإعدادات → وحدات القياس. مثال: قطعة، ساعة خدمة، كيلو."
+            />
+          </div>
+
+          <div data-testid="field-default_sales_account_id">
+            <IDInput
+              label="حساب المبيعات الافتراضي (Sales Account ID)" required
+              value={settings.default_sales_account_id}
+              onChange={(v) => patch({ default_sales_account_id: v })}
+              testid="input-default-sales-account"
+              datalistId="accounts-list"
+              suggestions={accounts}
+              placeholder="مثال: 4100"
+              disabled={!hasCreds}
+              invalid={fieldInvalid("default_sales_account_id")}
+              unsupportedHint={
+                accountsMeta.unsupported
+                  ? "Qoyod 2.0 API لا يكشف القائمة — انسخه من قيود → الحسابات → دليل الحسابات → اختر حساب الإيرادات."
+                  : "اختر حساب الإيرادات الذي تُسجّل تحته كل مبيعات Mezan."
+              }
+            />
+          </div>
+        </div>
+
+        {/* Auto-Adopt toggle (Iter-288) */}
+        <div className="mt-4 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+          <label className="flex items-start gap-3 cursor-pointer"
+                 data-testid="toggle-auto_adopt_existing_qoyod_products">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={settings.auto_adopt_existing_qoyod_products !== false}
+              onChange={(e) => patch({
+                auto_adopt_existing_qoyod_products: e.target.checked,
+              })}
+            />
+            <div className="text-sm">
+              <div className="font-semibold">
+                ربط تلقائي للمنتجات الموجودة مسبقاً في قيود
+                <span className="ms-2 text-xs text-slate-500">(SKU match)</span>
+              </div>
+              <div className="text-slate-500 mt-1">
+                عند الإرسال، إذا وجد النظام SKU مطابقاً في قيود → يربط
+                المنتج الموجود مباشرةً بدون إنشاء جديد. هذا الوضع المُوصى به
+                عند رفع كتالوج المنتجات يدوياً إلى قيود (افتراضي مفعّل).
+                لإيقافه يصبح Trust Gate صارماً — كل SKU جديد يحتاج adopt يدوي.
+              </div>
+            </div>
+          </label>
         </div>
       </Section>
 

@@ -1,5 +1,47 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-288b — Settings UI for Qoyod-Required Product Defaults (2026-02-27)
+**User scenario**: After Iter-287 added the four required product settings on the backend, the operator opened `/integrations/qoyod/settings` in production and couldn't find input fields for them — the UI hadn't been extended. Result: `missing_qoyod_product_defaults` was firing correctly but with no way to fix it.
+
+### Frontend additions (`/app/frontend/src/pages/QoyodSettings.jsx`)
+- **NEW Section "إعدادات إنشاء المنتجات في قيود"** with four required inputs:
+  - `default_product_category_id` (Category ID) — labelled with hint "انسخه من قيود → الإعدادات → التصنيفات".
+  - `default_product_tax_id` (Product Tax ID) — uses the same `taxes` datalist as Invoice Tax.
+  - `default_product_unit_type_id` (Unit Type ID) — e.g. "1 (قطعة)".
+  - `default_sales_account_id` (Sales Account ID) — uses the `accounts` datalist.
+- **NEW Auto-Adopt toggle** for `auto_adopt_existing_qoyod_products` (Iter-288). On by default with description: when enabled, existing Qoyod SKUs are auto-bound; when disabled, strict Trust Gate refuses each new SKU.
+- All four fields are surfaced as **blocker-severity** issues in the live validation banner when missing — operator sees the gap immediately on the settings page, not only at send time.
+
+### Backend additions (`/app/backend/integrations/qoyod/routes.py::SettingsPatch`)
+Added optional fields to the `PUT /api/integrations/qoyod/settings` Pydantic model so the new keys persist:
+- `default_product_category_id`
+- `default_product_tax_id`
+- `default_product_unit_type_id`
+- `default_sales_account_id`
+- `tax_mode` (customer_first | mezan_fixed_15) — Iter-285
+- `zero_tax_id` — Iter-285
+- `auto_adopt_existing_qoyod_products` — Iter-288
+
+`QoyodSettings` document model uses `extra="allow"` so no migration needed.
+
+### Verification
+- Browser screenshot confirms the new Section renders with all four inputs + the Auto-Adopt toggle, and the bottom banner reflects "كل الحقول مكتملة — جاهز للحفظ" once filled.
+- **758/758 Qoyod pytest passes**, 0 regressions. Lint clean (Python + ESLint).
+- Live settings PUT with the new keys returns 200 (Pydantic accepts them).
+
+### Production runbook
+1. Redeploy preview → production.
+2. Open `/integrations/qoyod/settings` on `mezansalla.com` → fill the four IDs from Qoyod trial tenant UI:
+   - **التصنيف**: Qoyod → الإعدادات → التصنيفات → اختر تصنيف افتراضي → انسخ ID.
+   - **ضريبة المنتجات**: عادةً = Tax ID للفاتورة (15% VAT). يمكن استخدام نفس القيمة.
+   - **وحدة القياس**: Qoyod → الإعدادات → وحدات القياس → "قطعة" → انسخ ID.
+   - **حساب المبيعات**: Qoyod → الحسابات → دليل الحسابات → اختر حساب الإيرادات → انسخ ID.
+3. التحقق من Auto-Adopt toggle (default ON).
+4. اضغط حفظ. Banner سيتحول إلى أخضر "جاهز للحفظ".
+5. شغّل preview-reprocess للطلب 268756329 → `product_defaults_status.ok=true` يجب أن يظهر الآن.
+6. ثم one-shot-reprocess. SKUs الموجودة مسبقاً في قيود ستُربط تلقائياً (Iter-288)، الجديدة ستُنشأ مع الـ defaults الجديدة (Iter-287).
+
+
 ## Iter-288 — Auto-Adopt Existing Qoyod Products by SKU (2026-02-27)
 **User scenario**: Operator is uploading the full Amasi catalog to Qoyod trial manually. SKU is the canonical key between Salla and Qoyod. The pre-Iter-288 Trust Gate REFUSED any order whose SKU happened to already exist in Qoyod, requiring a manual adopt — which would block every order in the trial.
 
