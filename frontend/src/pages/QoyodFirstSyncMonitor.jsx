@@ -779,6 +779,54 @@ export default function QoyodFirstSyncMonitor() {
                   </div>
                 )}
 
+                {/* Totals Guard refusal (Iter-273) — line item / total mismatch */}
+                {reprocResult.totals_guard && (
+                  <div className="mt-3 rounded-lg border border-orange-300 bg-orange-50 p-3"
+                       data-testid="reproc-totals-guard">
+                    <div className="text-sm font-extrabold text-orange-900 mb-1">
+                      ⚠ Totals Guard أوقف الإرسال (لم يُلامس قيود)
+                    </div>
+                    <div className="text-[12px] font-mono text-orange-900 mb-2">
+                      {reprocResult.totals_guard.code}
+                    </div>
+                    <div className="text-[12px] text-orange-900 mb-2">
+                      {reprocResult.totals_guard.message}
+                    </div>
+                    {reprocResult.totals_guard.details && (
+                      <ul className="text-[12px] space-y-0.5 text-orange-900 list-disc pe-5">
+                        {Object.entries(reprocResult.totals_guard.details)
+                          .filter(([k]) => k !== "parsed_items")
+                          .map(([k, v]) => (
+                            <li key={k}>
+                              <strong>{k}:</strong>{" "}
+                              <code className="font-mono">{
+                                typeof v === "object" && v !== null
+                                  ? JSON.stringify(v)
+                                  : String(v)
+                              }</code>
+                            </li>
+                          ))}
+                      </ul>
+                    )}
+                    {reprocResult.totals_guard.details?.parsed_items && (
+                      <details className="mt-2 text-[11px]">
+                        <summary className="cursor-pointer font-bold text-orange-900">
+                          parsed_items (ما وصلنا منه من Make)
+                        </summary>
+                        <pre className="mt-1 bg-slate-900 text-slate-100 p-2 rounded font-mono whitespace-pre-wrap break-words max-h-48 overflow-auto"
+                             dir="ltr">
+{JSON.stringify(reprocResult.totals_guard.details.parsed_items, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                    <div className="mt-2 text-[11px] text-orange-800">
+                      الحل: راجع Make.com Runbook — يجب أن يُرسل
+                      <code className="font-mono mx-1">data.items[]</code>
+                      كاملاً وليس بنداً واحداً.
+                    </div>
+                  </div>
+                )}
+
                 {/* Stage-specific diagnostic — product_create failures */}
                 {reprocResult.product_create && (
                   <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3"

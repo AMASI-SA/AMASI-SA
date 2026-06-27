@@ -326,3 +326,74 @@ pipeline_stage: COMPLETED   ← النجاح الكامل (مع DRY-RUN badge أ
 ---
 
 *هذا الدليل مُحدَّث بتاريخ 2026-06-27. لأي تغيير في عقد الـ Webhook راجع `qoyod-webhook-contract-v1.md`.*
+
+---
+
+## Iter-273 — Totals Guard (P0)
+
+Production order `268670571` slipped through to `PRODUCT_RESOLVED`
+with a truncated `items[]` (one row, unit_price=5) while the order's
+own `subtotal=105` and `total=131.60`. Make.com's `map()` step had
+silently dropped most of the line items.
+
+### What changed in Mezan
+A **Totals Guard** now runs immediately after the `NORMALIZED` stage
+and BEFORE any Qoyod-bound work (customer/product/invoice). It
+checks:
+
+1. `sum(items[].unit_price × items[].quantity) ≈ subtotal`
+   (within ±0.05 SAR — accepts both tax-inclusive and tax-exclusive
+   conventions).
+2. `subtotal + tax_amount + shipping_amount − discount_amount ≈ total_amount`.
+
+If either check fails, the row goes to **`DEAD_LETTER`** with one
+of these error codes (no auto-retry):
+
+| Error code                  | Meaning                                      |
+|-----------------------------|----------------------------------------------|
+| `line_items_incomplete`     | items_sum ≪ subtotal — Make dropped rows.   |
+| `line_items_total_mismatch` | items_sum ≠ subtotal in either direction.   |
+| `order_total_mismatch`      | header math doesn't reconcile to declared total. |
+
+### Required Make.com fix
+The mapper that builds `data.items[]` MUST emit **every** line of
+the Salla order, not a single mapped row.
+
+**Wrong** (causes Iter-273 refusal):
+```text
+[items] = {{1.data.items[1]}}            ← single object, indexed!
+```
+
+**Right**:
+```text
+[items] = {{1.data.items}}               ← whole array, native
+```
+
+Or, if Make's `map()` is required for shape massage, wrap with an
+**Array Aggregator** that joins ALL mapped objects:
+```
+Modules
+ ├─ Salla webhook (HTTP webhook)
+ ├─ Iterator    on `1.data.items[]`
+ ├─ Set Variable / Transform per item (whatever shape changes you need)
+ └─ Array Aggregator (target source: iterator step, target structure: items[])
+ └─ HTTP POST → /api/integrations/qoyod/webhook
+```
+
+### Where to verify on a live order
+After receiving a fresh webhook on Mezan:
+
+1. Open `🩺 مراقب أول مزامنة` → click the failing row.
+2. The `totals_guard` block shows:
+   - `items_count`, `items_sum_excl`, `items_sum_incl`
+   - `subtotal`, `tax_amount`, `shipping_amount`, `discount_amount`
+   - `shortfall` (= subtotal − items_sum_excl)
+   - `parsed_items[]` — what we actually received per SKU
+3. Compare against the Salla order details page to identify which
+   SKUs Make dropped.
+
+### Backfill caveat
+Iter-273 ships the guard with `default_tolerance = 0.05 SAR`. Any
+historical inbox row whose totals were already mismatched will hit
+the guard on the next reprocess. This is intentional: never POST a
+partial invoice to Qoyod, even on a retry.

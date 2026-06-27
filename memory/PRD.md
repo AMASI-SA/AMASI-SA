@@ -2524,3 +2524,87 @@ So Iter-270b's rename `selling_price → sale_price` was **wrong**. Re-investiga
 
 ### Lesson learned (for the handoff log)
 LLM web-search results for accounting APIs are sometimes contradictory (some sources said `sale_price`, others said `selling_price`). The authoritative signal was **already in the codebase**: `identity_diagnostics.py:229` reads `selling_price` from Qoyod's own GET responses. Next time, **trust READ schemas as the source of truth for WRITE field names** before consulting external docs.
+
+---
+
+## 2026-02-27 — Iter-273 (Totals Guard — payload completeness preflight)
+
+### Critical discovery (P0 by user)
+The operator inspected order `268670571` raw payload and found:
+- Order header: `subtotal=105`, `shipping=23.15`, `total=131.60`
+- But `items[]` had ONLY ONE row: `{sku=AMS11961, unit_price=5}` → items_sum = **5**
+
+Make.com's `map()` step had silently truncated `items[]`. If we had successfully created the product and invoice, **Mezan would have posted a 5 SAR invoice to Qoyod for an order whose real value was 131.60** — a major financial integrity bug.
+
+User directive: stop the row BEFORE any Qoyod side-effects when totals don't match.
+
+### Implementation
+**`integrations/qoyod/totals_guard.py` (new):**
+- Pure function `validate_totals(canonical, *, tolerance=0.05)` returning `TotalsGuardResult{ok, code, message, details}`.
+- Three error codes:
+  - `line_items_incomplete` — items_sum ≪ subtotal (Make dropped rows).
+  - `line_items_total_mismatch` — items_sum diverges in either direction.
+  - `order_total_mismatch` — header math doesn't reconcile.
+- Accepts both tax-EXCLUSIVE and tax-INCLUSIVE conventions (Salla mostly excl, adapters vary).
+- Tolerance ±0.05 SAR (1 halala) for float rounding.
+
+**`integrations/qoyod/pipeline.py`:**
+- `process_normalized_row` now invokes the guard immediately after DTO rehydration, BEFORE `_load_settings` and BEFORE any resolver call.
+- On refusal: row transitions `NORMALIZED → FAILED_VALIDATION → DEAD_LETTER` (no auto-retry — upstream fix required).
+- `totals_guard` audit block persisted to the row (full details + parsed_items).
+
+**`integrations/qoyod/state_machine.py`:**
+- Added allowed edge: `(NORMALIZED → FAILED_VALIDATION)`.
+
+**`integrations/qoyod/one_shot_reprocess.py`:**
+- `_build_failure_response` now surfaces a dedicated `totals_guard` block when the failure code is one of the three guard codes.
+- Stage-specific blocks (product_create, invoice_payload) are NOT shown for a Totals Guard refusal (they'd be misleading — nothing was sent).
+
+**`pages/QoyodFirstSyncMonitor.jsx`:**
+- New orange-bordered "⚠ Totals Guard أوقف الإرسال (لم يُلامس قيود)" section in the modal:
+  - Error code + message
+  - Bulleted breakdown (items_count, items_sum_excl, subtotal, shortfall, etc.)
+  - Collapsible `parsed_items[]` showing what we actually received per SKU
+  - Hint linking to the Make Runbook fix
+
+**`docs/integrations/make-runbook-qoyod-dry-run.md`:**
+- New "Iter-273 — Totals Guard" section documenting:
+  - The three error codes + their meanings
+  - The wrong-vs-right Make.com mapping snippet
+  - Array Aggregator pattern for shape-massaged items
+  - Where to verify on a live order
+
+### Tests
+- `test_qoyod_totals_guard_iter273.py` (14 tests) — pure validate_totals matrix:
+  - ✓ Production order 268670571 shape → `line_items_incomplete`
+  - ✓ Clean matching totals → ok
+  - ✓ Tax-INCLUSIVE convention accepted
+  - ✓ Rounding within ±0.05 tolerance accepted
+  - ✓ Rounding beyond tolerance refused
+  - ✓ Empty items + non-zero subtotal → `line_items_incomplete`
+  - ✓ Empty items + zero subtotal → ok (pathological)
+  - ✓ Order total mismatch → `order_total_mismatch`
+  - ✓ Header math reconciles with shipping + discount
+  - ✓ items_sum >> subtotal → `line_items_total_mismatch`
+  - ✓ String-typed prices coerced
+  - ✓ Custom tolerance widening works
+  - ✓ Result.to_log_dict shape stable
+  - ✓ DEFAULT_TOLERANCE = 0.05
+
+- `test_qoyod_pipeline_totals_guard_e2e_iter273.py` (3 tests) — full pipeline:
+  - ✓ 268670571 shape → DEAD_LETTER without touching CUSTOMER_RESOLVED
+  - ✓ Clean order advances past NORMALIZED
+  - ✓ order_total_mismatch → DEAD_LETTER with correct code
+
+- `test_qoyod_one_shot_failed_product_diagnostic.py` (+2 tests):
+  - ✓ Totals Guard refusal surfaces as dedicated block
+  - ✓ All three codes (incomplete / total_mismatch / order_total_mismatch) surface
+
+- Fixed `test_qoyod_day4_rules_and_customer.py` helper `_dto()` to set `subtotal=86.96` (matching tax-excl items) so existing tests pass the new guard.
+
+### Verification
+- `pytest tests/test_qoyod_totals_guard_iter273.py + e2e_iter273.py` → **17/17 PASS**.
+- `pytest -k qoyod` (full surface) → **578 passed, 2 skipped, 0 failed**.
+
+### NOT in scope (per user directive)
+- ❌ Order `268670571` was NOT reprocessed against Production this iteration. Operator wants to verify the Make.com fix lands first, then dry-run, then live.

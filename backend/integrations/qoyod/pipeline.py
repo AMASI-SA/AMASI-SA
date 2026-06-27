@@ -39,6 +39,9 @@ from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
 from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.dto import SalesOrderDTO
 from integrations.qoyod.state_machine import transition
+from integrations.qoyod.totals_guard import (
+    validate_totals, TotalsGuardResult,
+)
 
 
 def _now() -> datetime:
@@ -148,6 +151,45 @@ async def process_normalized_row(
                 "reason": "canonical_payload_invalid"}
 
     settings = await _load_settings(db, user_id)
+
+    # ── Totals Guard (Iter-273) ────────────────────────────────────
+    # Runs BEFORE any Qoyod-bound side-effect. If Make.com / Salla
+    # silently dropped line items (so `items_sum != subtotal`) or the
+    # header math diverges, refuse the row outright. NO auto-retry:
+    # the fix lives upstream, so retrying without a Make.com change
+    # would just fail again. Operator-facing audit + DEAD_LETTER.
+    totals = validate_totals(canonical)
+    if not totals.ok:
+        await db.integration_inbox.update_one(
+            {"id": row["id"]},
+            {"$set": {"totals_guard": totals.to_log_dict()}},
+        )
+        patch = transition(
+            from_stage="NORMALIZED", to_stage="FAILED_VALIDATION",
+            actor="worker",
+            note=f"totals guard refused: {totals.code}",
+        )
+        patch.setdefault("$set", {})["pipeline_error"] = {
+            "code":    totals.code,
+            "message": totals.message,
+            "details": totals.details,
+        }
+        await _apply(db, row["id"], patch)
+        # Move straight to DEAD_LETTER — totals mismatch is upstream-misconfigured,
+        # retrying without a Make.com fix would just fail again.
+        dead_patch = transition(
+            from_stage="FAILED_VALIDATION", to_stage="DEAD_LETTER",
+            actor="worker",
+            note="totals mismatch is upstream — no auto-retry",
+        )
+        await _apply(db, row["id"], dead_patch)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "DEAD_LETTER",
+            "reason":   totals.code,
+            "trace_id": trace_id,
+            "totals_guard": totals.to_log_dict(),
+        }
 
     # If caller didn't pre-build an API client, build one now —
     # honouring dry_run_mode so the customer resolver doesn't reach

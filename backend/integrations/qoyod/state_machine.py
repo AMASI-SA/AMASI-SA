@@ -141,6 +141,15 @@ def _build_allowed() -> set[tuple[str, str]]:
     for fail_stage in FAILURE_TO_RESUME:
         allowed.add((fail_stage, "DEAD_LETTER"))
 
+    # ─── Totals Guard (Iter-273, 2026-02-27) ──────────────────────────
+    # The pipeline runs a `validate_totals` check immediately after
+    # building the canonical DTO (stage NORMALIZED) and BEFORE any
+    # Qoyod-bound side-effects. A mismatch (e.g. Make.com truncated
+    # items[] like in Production order 268670571) terminates the row
+    # via FAILED_VALIDATION → DEAD_LETTER. No auto-retry — the fix
+    # lives upstream (Make or Salla), not in our pipeline.
+    allowed.add(("NORMALIZED", "FAILED_VALIDATION"))
+
     # FAILED_RECEIPT has a special partial-success route. The invoice
     # already exists in Qoyod; only the receipt POST failed. Going to
     # DEAD_LETTER would imply we lost everything — but we didn't.

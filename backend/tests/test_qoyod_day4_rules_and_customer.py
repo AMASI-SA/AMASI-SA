@@ -47,6 +47,12 @@ def _dto(order_id: str = "ORD-1",
          completed_at: datetime | None = None,
          **overrides) -> SalesOrderDTO:
     now = datetime.now(timezone.utc)
+    # Default fixture is a clean tax-exclusive order:
+    #   items: 86.96 × 1 = 86.96 subtotal
+    #   + tax 13.04 → total_amount 100.0
+    # The header math reconciles (subtotal+tax = total), which keeps
+    # the Iter-273 Totals Guard happy without each call-site needing
+    # to spell out the numbers.
     base = dict(
         order_id=order_id,
         order_number=order_id,
@@ -54,6 +60,8 @@ def _dto(order_id: str = "ORD-1",
         order_status_native=status_native,
         order_date=now - timedelta(days=1),
         completed_at=completed_at or now,
+        subtotal=86.96,
+        tax_amount=13.04,
         total_amount=100.0,
         currency="SAR",
         customer=CustomerDTO(name="أحمد", phone="+966501234567",

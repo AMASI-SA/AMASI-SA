@@ -130,6 +130,50 @@ def test_failed_invoice_still_surfaces_invoice_payload():
     assert "product_create" not in resp
 
 
+# ── Totals Guard refusal (Iter-273) ──────────────────────────────────
+def test_totals_guard_refusal_is_surfaced_as_dedicated_block():
+    """`line_items_incomplete` / `line_items_total_mismatch` /
+    `order_total_mismatch` errors produce a `totals_guard` block in
+    the response (not the generic product_create / invoice block)."""
+    pe = {
+        "code":    "line_items_incomplete",
+        "message": "items_sum_excl=5.0 but subtotal=105.0 (shortfall=100.0)",
+        "details": {
+            "items_count":    1,
+            "items_sum_excl": 5.0,
+            "subtotal":       105.0,
+            "shortfall":      100.0,
+            "parsed_items":   [{"sku": "AMS11961", "unit_price": 5.0}],
+        },
+    }
+    resp = _build_failure_response(
+        outcome="DEAD_LETTER", row_id="r7", trace_id="t7",
+        pipeline_error=pe, last_failed_stage="FAILED_VALIDATION",
+        canonical_payload=CANONICAL, invoice_snapshot=None,
+        stage_sequence=["NORMALIZED"], quarantine_summary={},
+    )
+    assert resp["totals_guard"]["code"] == "line_items_incomplete"
+    assert resp["totals_guard"]["details"]["shortfall"] == 100.0
+    # Stage-specific blocks should NOT appear for a Totals Guard refusal.
+    assert "product_create" not in resp
+    assert "invoice_payload" not in resp
+
+
+def test_totals_guard_surface_covers_all_three_codes():
+    for code in ("line_items_incomplete",
+                 "line_items_total_mismatch",
+                 "order_total_mismatch"):
+        resp = _build_failure_response(
+            outcome="DEAD_LETTER", row_id="r", trace_id="t",
+            pipeline_error={"code": code, "message": "x", "details": {}},
+            last_failed_stage="FAILED_VALIDATION",
+            canonical_payload={}, invoice_snapshot=None,
+            stage_sequence=[], quarantine_summary={},
+        )
+        assert resp.get("totals_guard", {}).get("code") == code, \
+            f"missing totals_guard surface for {code}"
+
+
 def test_expected_from_canonical_uses_selling_price_key():
     """The expected block must mirror the actual field name we send."""
     resp = _build_failure_response(

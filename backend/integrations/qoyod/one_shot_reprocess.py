@@ -636,6 +636,26 @@ def _build_failure_response(
         "quarantine_summary":      quarantine_summary,
     }
 
+    # ── Totals Guard surface (Iter-273) ─────────────────────────────
+    # The pipeline persists `totals_guard.details` to the row on
+    # any FAILED_VALIDATION caused by mismatched line items / order
+    # math. The error code (`line_items_incomplete`, `line_items_total_mismatch`,
+    # `order_total_mismatch`) is in `pipeline_error.code` — the
+    # detailed breakdown lives in `pe.details`.
+    if pe.get("code") in (
+        "line_items_incomplete",
+        "line_items_total_mismatch",
+        "order_total_mismatch",
+    ):
+        response["totals_guard"] = {
+            "code":    pe.get("code"),
+            "message": pe.get("message"),
+            "details": pe.get("details") or {},
+        }
+        # Don't surface stage-specific payload blocks; the breakdown
+        # is the actionable diagnostic here.
+        return response
+
     # ── Stage-specific payload snapshots ────────────────────────────
     if failed_stage == "FAILED_PRODUCT":
         # `pipeline_error.request_body_json` IS the product-create
