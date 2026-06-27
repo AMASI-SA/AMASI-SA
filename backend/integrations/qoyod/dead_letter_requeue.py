@@ -92,6 +92,35 @@ KNOWN_FIXED_PATTERNS: list[dict[str, Any]] = [
 ]
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Policy guard (user directive 2026-02-27)
+# ─────────────────────────────────────────────────────────────────────
+# The registry must stay SMALL and reviewed. Auto-requeue must NEVER
+# silently hide a real production failure under a generic pattern.
+#
+# Adding a new entry requires:
+#   1. A shipped code fix for the specific Qoyod error.
+#   2. A dedicated test in test_qoyod_dead_letter_auto_requeue.py
+#      proving (a) the matcher accepts only the fixed shape, and
+#      (b) unrelated errors are still untouched.
+#   3. Code review explicitly OK'ing the addition (this comment
+#      block is the policy anchor — do not relax it lightly).
+#
+# The invariant below is asserted at import time AND re-asserted by
+# `test_known_fixed_patterns_registry_has_contact_name_only` so any
+# accidental expansion breaks CI immediately.
+_REVIEWED_PATTERN_IDS: frozenset[str] = frozenset({
+    "contact_name_blank_2026_02_26",
+})
+_unreviewed = {p["id"] for p in KNOWN_FIXED_PATTERNS} - _REVIEWED_PATTERN_IDS
+assert not _unreviewed, (
+    "KNOWN_FIXED_PATTERNS contains unreviewed entries: "
+    f"{sorted(_unreviewed)}. Adding a pattern requires updating "
+    "_REVIEWED_PATTERN_IDS *and* code review — see policy comment."
+)
+del _unreviewed
+
+
 MAX_REQUEUE_ATTEMPTS: int = 2
 
 
