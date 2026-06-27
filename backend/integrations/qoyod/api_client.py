@@ -39,12 +39,17 @@ class QoyodAPIError(Exception):
         message: str,
         response_excerpt: str = "",
         endpoint: str = "",
+        request_body_json: Any = None,
     ):
         self.status_code = status_code
         self.code = code
         self.message = message
         self.response_excerpt = response_excerpt[:500]
         self.endpoint = endpoint
+        # The EXACT JSON body httpx serialized and sent. Persisted so
+        # the operator can post-mortem "did we send the right field?"
+        # questions directly from MongoDB instead of guessing.
+        self.request_body_json = request_body_json
         super().__init__(f"Qoyod API {status_code} on {endpoint}: {code}")
 
     def to_log_dict(self) -> dict[str, Any]:
@@ -55,6 +60,7 @@ class QoyodAPIError(Exception):
             "status_code":           self.status_code,
             "endpoint":              self.endpoint,
             "qoyod_response_excerpt": self.response_excerpt,
+            "request_body_json":     self.request_body_json,
         }
 
 
@@ -176,6 +182,7 @@ class QoyodAPIClient:
                 code=code, message=message,
                 response_excerpt=str(body)[:500],
                 endpoint=f"{method} {path}",
+                request_body_json=json_body,
             )
         return body
 

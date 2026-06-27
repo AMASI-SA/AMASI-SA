@@ -34,7 +34,7 @@ def test_payload_includes_both_name_and_contact_name():
     dto = CustomerDTO(name="هيفاء الحيدر الشمري",
                       phone="+966500000000", email=None)
     body = _build_contact_payload(dto)
-    body_customer = body["customer"]
+    body_customer = body["contact"]
     assert body_customer["name"]         == "هيفاء الحيدر الشمري"
     assert body_customer["contact_name"] == "هيفاء الحيدر الشمري"
 
@@ -44,7 +44,7 @@ def test_payload_contact_name_uses_safe_fallback_when_name_blank():
     to the safe guest label — never blank."""
     dto = CustomerDTO(name="", phone="+966500000000", email=None)
     body = _build_contact_payload(dto)
-    bc = body["customer"]
+    bc = body["contact"]
     assert bc["name"].strip(), "name must never be blank"
     assert bc["contact_name"].strip(), "contact_name must never be blank"
     assert bc["name"] == bc["contact_name"]
@@ -54,13 +54,13 @@ def test_payload_contact_name_uses_safe_fallback_when_name_blank():
 def test_payload_contact_name_when_only_email():
     dto = CustomerDTO(name="", phone=None, email="x@y.com")
     body = _build_contact_payload(dto)
-    bc = body["customer"]
+    bc = body["contact"]
     assert bc["contact_name"] == "عميل x@y.com"
 
 
 def test_payload_contact_name_literal_guest_when_nothing():
     dto = CustomerDTO(name="", phone=None, email=None)
-    bc = _build_contact_payload(dto)["customer"]
+    bc = _build_contact_payload(dto)["contact"]
     assert bc["contact_name"] == "ضيف"
 
 
@@ -105,7 +105,7 @@ def test_end_to_end_make_payload_produces_qoyod_payload_with_contact_name():
     assert dto.customer.name == "هيفاء الحيدر الشمري"
 
     # Build the Qoyod /customers payload → BOTH name + contact_name set.
-    body = _build_contact_payload(dto.customer)["customer"]
+    body = _build_contact_payload(dto.customer)["contact"]
     assert body["name"]         == "هيفاء الحيدر الشمري"
     assert body["contact_name"] == "هيفاء الحيدر الشمري"
     assert body["phone_number"] == "+966512345678"
@@ -119,7 +119,7 @@ def test_end_to_end_with_only_full_name_set_in_make_payload():
     p["customer_name"] = "م"   # single character — _split_name → ("م","")
     raw, _ = apply_legacy_adapter(p)
     dto = normalize(raw)
-    body = _build_contact_payload(dto.customer)["customer"]
+    body = _build_contact_payload(dto.customer)["contact"]
     assert body["name"]         == "م"
     assert body["contact_name"] == "م"
 
@@ -174,8 +174,8 @@ async def test_resolve_customer_returns_payload_snapshot_on_success():
     # Snapshot is populated AND captures both name + contact_name.
     snap = res.qoyod_request_payload
     assert snap is not None
-    assert snap["customer"]["name"]         == "هيفاء الحيدر الشمري"
-    assert snap["customer"]["contact_name"] == "هيفاء الحيدر الشمري"
+    assert snap["contact"]["name"]         == "هيفاء الحيدر الشمري"
+    assert snap["contact"]["contact_name"] == "هيفاء الحيدر الشمري"
     # It's the same dict we actually passed to the client.
     assert api.captured == snap
 
@@ -205,7 +205,7 @@ async def test_resolve_customer_returns_payload_snapshot_even_on_failure():
     # Snapshot still attached on failure for diagnostics.
     snap = res.qoyod_request_payload
     assert snap is not None
-    assert snap["customer"]["contact_name"] == "هيفاء الحيدر الشمري"
+    assert snap["contact"]["contact_name"] == "هيفاء الحيدر الشمري"
 
 
 # ─── (4) to_log_dict carries the snapshot to the inbox row ──────────
@@ -220,5 +220,5 @@ def test_to_log_dict_includes_qoyod_request_payload():
         qoyod_request_payload=payload)
     d = res.to_log_dict()
     assert d["qoyod_request_payload"] == payload
-    assert d["qoyod_request_payload"]["customer"]["contact_name"] \
+    assert d["qoyod_request_payload"]["contact"]["contact_name"] \
            == "هيفاء الحيدر الشمري"

@@ -306,9 +306,13 @@ def test_qoyod_api_error_log_dict_omits_secrets():
     )
     log = err.to_log_dict()
     # Only documented fields are present; never api_key, headers, auth.
+    # `request_body_json` added Iter-267 for production forensics.
     assert set(log.keys()) == {
         "code", "message", "status_code", "endpoint",
-        "qoyod_response_excerpt"}
+        "qoyod_response_excerpt", "request_body_json"}
+    # Default request_body_json is None — not None breaks; only the
+    # full HTTP request path inside _request populates it.
+    assert log["request_body_json"] is None
 
 
 # ─────────────────────────────────────────────────────────────────────

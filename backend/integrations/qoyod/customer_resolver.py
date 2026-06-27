@@ -119,21 +119,28 @@ def _build_contact_payload(customer: CustomerDTO) -> dict:
     email used as labels, then a literal "ضيف" as last resort.
     """
     safe_name = (customer.name or "").strip() or _safe_guest_name(customer)
-    payload: dict[str, Any] = {
+    fields: dict[str, Any] = {
         "name":         safe_name,
         "contact_name": safe_name,
     }
     if customer.phone:
-        payload["phone_number"] = customer.phone
+        fields["phone_number"] = customer.phone
     if customer.email:
-        payload["email"] = customer.email
+        fields["email"] = customer.email
     if customer.city:
-        payload["city"] = customer.city
+        fields["city"] = customer.city
     if customer.country:
-        payload["country"] = customer.country
-    # Qoyod groups individual customers under type=client (default).
-    # Bigger payloads (CR/VAT for companies) are out of scope here.
-    return {"customer": payload}
+        fields["country"] = customer.country
+    # Qoyod's `/customers` endpoint accepts both the wrapped form
+    # (`{contact: {...}}` — symmetric with how POST /products uses
+    # `{product: {...}}`) and a flat shape. Empirically the wrapper
+    # `contact` (NOT `customer`) is what Rails-side strong_params
+    # expects — see the legacy method name `create_contact` and the
+    # response-side `_extract_contact_id` which already accepts both
+    # shapes. Iter-267 production forensic on Order #268653181 showed
+    # `{customer: {...}}` was triggering `contact_name: Can't be blank`
+    # because strong_params silently discarded the unknown wrapper.
+    return {"contact": fields}
 
 
 def _extract_contact_id(api_resp: Any) -> Optional[str]:

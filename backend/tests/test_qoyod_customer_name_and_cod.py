@@ -81,20 +81,20 @@ def test_build_contact_payload_never_sends_blank():
     payload builder must still produce a non-blank name."""
     dto = CustomerDTO(name="", phone="+966501234567", email=None)
     body = _build_contact_payload(dto)
-    assert body["customer"]["name"]            # non-empty
-    assert "966501234567" in body["customer"]["name"]
+    assert body["contact"]["name"]            # non-empty
+    assert "966501234567" in body["contact"]["name"]
 
 
 def test_build_contact_payload_uses_email_when_no_phone():
     dto = CustomerDTO(name="   ", phone=None, email="a@b.com")
     body = _build_contact_payload(dto)
-    assert body["customer"]["name"] == "عميل a@b.com"
+    assert body["contact"]["name"] == "عميل a@b.com"
 
 
 def test_build_contact_payload_last_resort_literal_guest():
     dto = CustomerDTO(name="", phone=None, email=None)
     body = _build_contact_payload(dto)
-    assert body["customer"]["name"] == "ضيف"
+    assert body["contact"]["name"] == "ضيف"
 
 
 def test_safe_guest_name_helper_phone_priority():

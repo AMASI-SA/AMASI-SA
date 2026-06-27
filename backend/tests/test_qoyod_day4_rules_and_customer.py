@@ -190,7 +190,7 @@ def test_contact_payload_only_includes_supported_fields():
     # Qoyod's legacy.qoyod.com uses `{"customer": {...}}` per the
     # 2026-06-26 endpoint audit. `_build_contact_payload` was renamed
     # internally but kept its Python name to minimise call-site churn.
-    p = _build_contact_payload(c)["customer"]
+    p = _build_contact_payload(c)["contact"]
     assert p["name"] == "أحمد"
     assert p["phone_number"] == "+966501234567"
     assert p["email"] == "x@y.com"

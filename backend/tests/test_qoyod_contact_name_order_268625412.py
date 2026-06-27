@@ -63,7 +63,7 @@ def test_customer_payload_contains_both_name_and_contact_name():
     adapted, _meta = adapt(raw)
     dto = normalize(adapted)
     body = _build_contact_payload(dto.customer)
-    inner = body["customer"]
+    inner = body["contact"]
     assert inner["name"] == "Abdulaziz Barnawi"
     assert inner["contact_name"] == "Abdulaziz Barnawi"
     assert inner["name"] == inner["contact_name"]
@@ -78,7 +78,7 @@ def test_customer_payload_never_omits_contact_name_even_for_guest():
     from integrations.qoyod.dto import CustomerDTO
     guest = CustomerDTO(name="ضيف #999", is_guest=True)
     body = _build_contact_payload(guest)
-    inner = body["customer"]
+    inner = body["contact"]
     assert "contact_name" in inner
     assert inner["contact_name"] == "ضيف #999"
     assert inner["contact_name"].strip(), \
