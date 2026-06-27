@@ -184,7 +184,12 @@ def _stamp_required_ids(product: dict, settings: dict) -> None:
     if cat:
         product["category_id"] = cat
     if tax:
-        product["tax_id"] = tax
+        # Iter-289 — Qoyod's product validator runs a `:taxes`
+        # has_many check, so `tax_id` MUST be a JSON array even when
+        # we apply a single tax. A scalar value triggers
+        # 422 `{'tax_id': ['Please select taxes']}` despite the field
+        # being present. Confirmed against Qoyod legacy API (2026-02).
+        product["tax_id"] = [tax]
     if unit:
         product["product_unit_type_id"] = unit
     if acct:

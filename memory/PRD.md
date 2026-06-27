@@ -1,5 +1,29 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-289 — Qoyod /products requires `tax_id` as JSON array (2026-02-28)
+**User scenario**: After Iter-288b added the four required product settings in the UI, the operator filled in `default_product_tax_id = "15"` (a valid Qoyod tax id) and re-ran `one-shot-reprocess` for production order `268756329`. Qoyod still rejected the product create with:
+```
+POST /products → 422
+{"errors": {"tax_id": ["Please select taxes"]}}
+```
+despite the field being present and the id being valid.
+
+**Root cause**: Qoyod's product validator runs a `has_many :taxes` check on the incoming payload. A scalar value (`"tax_id": "15"`) fails the validation even when the id exists — Qoyod expects a JSON array (`"tax_id": ["15"]`). Confirmed against Qoyod legacy API documentation (2026-02).
+
+### Fix (`/app/backend/integrations/qoyod/product_resolver.py::_stamp_required_ids`)
+- Wrapped the configured `default_product_tax_id` in a JSON array before stamping it on the outgoing payload.
+- The other three required ids (`category_id`, `product_unit_type_id`, `sales_account_id`) remain scalar — they map to `belongs_to` relationships and accept a single value.
+- Behavior preserved when the setting is blank: the key is dropped entirely (preflight blocks upstream).
+
+### Tests
+- New regression file `tests/test_qoyod_product_tax_id_array_iter289.py` — 4 tests covering full payload, fallback payload, exact length=1, and blank-setting omission.
+- Updated 3 assertions in `tests/test_qoyod_product_required_defaults_iter287.py` to expect a list.
+- **771/771 Qoyod pytest passes** post-fix. Lint clean.
+
+### Deploy
+- Fix lives in preview. **Production redeploy required** to push to `mezansalla.com`.
+- After redeploy: operator runs `preview-reprocess` → expect `PRODUCT_RESOLVED`; then `one-shot-reprocess` → expect `INVOICE_CREATED` → `RECEIPT_CREATED`.
+
 ## Iter-288b — Settings UI for Qoyod-Required Product Defaults (2026-02-27)
 **User scenario**: After Iter-287 added the four required product settings on the backend, the operator opened `/integrations/qoyod/settings` in production and couldn't find input fields for them — the UI hadn't been extended. Result: `missing_qoyod_product_defaults` was firing correctly but with no way to fix it.
 

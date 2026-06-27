@@ -69,7 +69,8 @@ def test_full_payload_stamps_all_four_required_ids():
             "unit_price": 5.0}
     body = _build_product_payload(item, _FULL_SETTINGS)["product"]
     assert body["category_id"]          == "CAT-99"
-    assert body["tax_id"]               == "TAX-15"
+    # Iter-289 — `tax_id` must be a JSON array (Qoyod has_many taxes).
+    assert body["tax_id"]               == ["TAX-15"]
     assert body["product_unit_type_id"] == "UNIT-PIECE"
     assert body["sales_account_id"]     == "ACC-SALES"
     # Iter-286 contract preserved.
@@ -83,7 +84,7 @@ def test_fallback_payload_also_stamps_required_ids():
     item = {"sku": "X", "name": "y", "unit_price": 10}
     body = _build_product_payload_fallback(item, _FULL_SETTINGS)["product"]
     assert body["category_id"]          == "CAT-99"
-    assert body["tax_id"]               == "TAX-15"
+    assert body["tax_id"]               == ["TAX-15"]
     assert body["product_unit_type_id"] == "UNIT-PIECE"
     assert body["sales_account_id"]     == "ACC-SALES"
     # Still minimal otherwise: no type, no is_non_stock, no purchase_item.
@@ -217,7 +218,7 @@ async def test_resolve_products_passes_through_when_defaults_present():
     assert len(captured) == 1
     body = captured[0]["product"]
     assert body["category_id"]          == "CAT-99"
-    assert body["tax_id"]               == "TAX-15"
+    assert body["tax_id"]               == ["TAX-15"]
     assert body["product_unit_type_id"] == "UNIT-PIECE"
     assert body["sales_account_id"]     == "ACC-SALES"
     assert body["sku"] == "AMS11961"
