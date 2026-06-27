@@ -1,5 +1,51 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-281 — Safe Preview Reprocess (No Qoyod Calls) (2026-02-27)
+**User scenario**: One-shot reprocess button refused with `dry_run_mode_active` (it targets real Qoyod). User did NOT want to flip Dry Run off, nor send anything to Qoyod, but DID want to debug order `268632361` end-to-end. Additionally, the existing button returned a raw 500 when something unhandled went wrong — the UI showed `request_failed Request failed with status code 500` without diagnostic detail.
+
+### Backend additions
+
+#### 1. NEW `integrations/qoyod/preview_reprocess.py::preview_reprocess_one_order`
+Re-runs the FULL pipeline IN MEMORY for one inbox row WITHOUT any network call to Qoyod:
+1. Locates the inbox row by `trace_id` (preferred) or `order_number`.
+2. Idempotency check — surfaces `invoice_already_created` with existing `qoyod_invoice_id` when a real (non-DRY) Qoyod invoice exists.
+3. Runs `legacy_adapter.adapt()` → reports `adapter_applied`, `items_source`, `legacy_status_slug`.
+4. Runs `normalizer.validate()` + `normalize()` → returns canonical DTO preview + live-vs-stored drift detection (item-level + top-level).
+5. Runs `totals_guard.validate_totals()` → surfaces `ok / code / message / details`.
+6. Runs `business_rules.evaluate()` → eligibility + chosen invoice date.
+7. Builds the EXACT request body for `POST /customers`, `POST /products` (per SKU), `POST /invoices`, `POST /receipts` using the canonical builders. NEVER sends.
+8. Runs `preflight.run()` → final ok/failures.
+
+Every stage returns `would_send_to_qoyod: false`. The function NEVER raises (every failure path is structured `ok=false, failed_at_stage, error_code, message, errors[]`).
+
+#### 2. NEW endpoint
+`POST /api/integrations/qoyod/admin/preview-reprocess` body `{ order_number?, trace_id? }`. No confirm token (no side-effects). The route catches any unhandled exception and returns 200 with `ok=false, failed_at_stage="unhandled_exception", traceback_tail` so the UI NEVER sees a bare 500 again.
+
+#### 3. Idempotency on existing `one_shot_reprocess`
+Added pre-flight check inside `reprocess_one_order` (BEFORE quarantine + state reset): if `qoyod_invoices` already has a row with `dry_run=false` AND `status ∈ {sent, invoice_sent_receipt_failed, completed}`, refuse with structured `outcome=INVOICE_ALREADY_CREATED`, surface the existing `qoyod_invoice_id` + `qoyod_invoice_number` + status. Set `qoyod_request_sent=false, created_ids.invoice_id=<existing>`. No re-run is attempted — protects books from double-billing.
+
+### Tests (Iter-281)
+- **NEW** `tests/test_qoyod_preview_reprocess_iter281.py` — **15/15 pass**:
+  - Happy path: full chain for order `268632361` returns `ok=true`, all 4 `would_send_to_qoyod` flags false.
+  - Line item values: unit_price=199, tax_amount=14.96, discount_amount=11.94, total=202.02.
+  - Customer payload preview has `name` AND `contact_name` populated.
+  - Product payload preview has `selling_price` + `is_sold: true` (Iter-272 lock-in).
+  - Invoice + receipt previews emit correct shapes including alias-resolved payment account (`tamara_installment → tamara → ACCT-tamara`).
+  - Totals guard surfaced.
+  - Drift detection: stored canonical has zeros (legacy bug) vs live recomputed (correct).
+  - Idempotency: blocks when real Qoyod invoice exists; does NOT block when only DRY:* invoice exists.
+  - Structured error envelopes for `row_not_found` and `missing_lookup`.
+  - **Read-only contract**: inbox row stays at DEAD_LETTER, no mutations.
+  - Tenant isolation.
+- **680/680** Qoyod pytest suite passes. 0 regressions.
+- Live curl on Preview `/admin/preview-reprocess` returns clean structured JSON.
+
+### What this gives the operator (production workflow)
+After redeploy, the UI can swap the One-Shot button for a two-stage flow:
+1. **"معاينة آمنة"** (calls `preview-reprocess`) — see the full DTO + every payload Qoyod WOULD receive, with drift highlighting and idempotency check. NO writes anywhere.
+2. **"One-Shot Reprocess"** (existing, still strict, dry_run must be OFF) — only fired AFTER operator visually confirms the preview is correct AND the row has no existing real invoice.
+
+
 ## Iter-280 — Duplicate Inbox Rows for Legacy Make Payloads (2026-02-27)
 **User scenario**: First Sync Monitor showed order `268632361` TWICE as separate DEAD_LETTER rows (`eac68e664dee48738005a52b15e50a60` + `33c07a10a2994f6796a44fa386a33c00`). User demanded: same order must never produce two independent rows; attempts must accumulate inside ONE inbox doc; idempotency at `order_number + event_type + order_status_slug`.
 

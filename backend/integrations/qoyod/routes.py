@@ -69,6 +69,9 @@ from integrations.qoyod.dead_letter_requeue import (
 from integrations.qoyod.one_shot_reprocess import (
     reprocess_one_order, OneShotRefused, CONFIRM_TOKEN_TEMPLATE,
 )
+from integrations.qoyod.preview_reprocess import (
+    preview_reprocess_one_order,
+)
 from salla_integration.service import call_salla, SallaError
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
@@ -197,6 +200,16 @@ class OneShotReprocessBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     order_number: str = Field(..., min_length=1, max_length=64)
     confirm:      str = Field(..., min_length=1, max_length=128)
+    trace_id:     Optional[str] = None
+
+
+class PreviewReprocessBody(BaseModel):
+    """Safe simulation — re-runs adapter → normalizer → builders for a
+    single inbox row without ANY network call to Qoyod. No confirm
+    token required (no side-effects). Either order_number OR trace_id
+    must be supplied; trace_id wins when both are given."""
+    model_config = ConfigDict(extra="forbid")
+    order_number: Optional[str] = None
     trace_id:     Optional[str] = None
 
 
@@ -985,7 +998,51 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             )
         return result
 
-    # ── Normalizer Self-Test — verifies the deployed code carries
+    # ── Preview Reprocess (SAFE — no Qoyod calls) ──────────────────
+    # Re-runs the WHOLE pipeline in memory: adapter → normalizer →
+    # totals_guard → business rules → customer/product/invoice/receipt
+    # payload builders → preflight. Returns the structured diagnostics
+    # for ONE row WITHOUT any network call to Qoyod.
+    #
+    # No confirm token (no side-effects). Idempotency check still runs:
+    # if a real (non-DRY) Qoyod invoice already exists for the order,
+    # the response surfaces `invoice_already_created` with the existing
+    # qoyod_invoice_id so the operator never builds a duplicate payload.
+    @router.post("/admin/preview-reprocess")
+    async def admin_preview_reprocess(
+        payload: PreviewReprocessBody, user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        try:
+            result = await preview_reprocess_one_order(
+                db, user_id=tenant,
+                order_number=payload.order_number,
+                trace_id=payload.trace_id,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            import traceback as _tb
+            tb_tail = "".join(_tb.format_exception(exc))[-1500:]
+            logger.exception(
+                "qoyod preview-reprocess UNHANDLED order=%s trace=%s "
+                "tenant=%s", payload.order_number, payload.trace_id, tenant)
+            # Even unhandled exceptions return a structured JSON 200
+            # so the UI can render the failure without inspecting HTTP
+            # codes. `ok=false` + `failed_at_stage` keeps the contract
+            # consistent with the success path.
+            return {
+                "ok":              False,
+                "mode":            "preview",
+                "qoyod_request_sent": False,
+                "failed_at_stage": "unhandled_exception",
+                "error_code":      "preview_unhandled_exception",
+                "message":         f"{type(exc).__name__}: {exc}",
+                "traceback_tail":  tb_tail,
+                "order_number":    payload.order_number,
+                "trace_id":        payload.trace_id,
+            }
+        return result
     #    Iter-275 (layered `amounts`) + Iter-276 (line discount) +
     #    Iter-278 (legacy adapter nested-amounts fix). Lets the
     #    operator confirm a Production redeploy actually landed

@@ -390,6 +390,43 @@ async def reprocess_one_order(
                          "لإعادة الإرسال يدوياً يجب أرشفته أولاً."),
         }
 
+    # ── 3b. Idempotency: refuse if a REAL Qoyod invoice already exists
+    #        for this Salla order (protects books against double-billing).
+    salla_order_id_str = (row.get("salla_order_id")
+                          or str(row.get("salla_order_number") or "")
+                          or order_number)
+    existing_invoice = await db.qoyod_invoices.find_one(
+        {"user_id": user_id, "salla_order_id": salla_order_id_str},
+        {"_id": 0, "status": 1, "qoyod_invoice_id": 1,
+         "qoyod_invoice_number": 1, "dry_run": 1},
+    )
+    if existing_invoice:
+        qid = existing_invoice.get("qoyod_invoice_id") or ""
+        is_real = qid and not str(qid).startswith("DRY:")
+        if is_real and existing_invoice.get("status") in (
+                "sent", "invoice_sent_receipt_failed", "completed"):
+            return {
+                "ok":       False,
+                "outcome":  "INVOICE_ALREADY_CREATED",
+                "row_id":   row.get("id"),
+                "trace_id": row.get("trace_id"),
+                "error": {
+                    "code":    "invoice_already_created",
+                    "message": ("فاتورة قيود حقيقية موجودة سابقاً لهذا "
+                                 "الطلب. لن يتم إنشاء فاتورة جديدة لحماية "
+                                 "الدفاتر من التكرار."),
+                },
+                "existing_qoyod_invoice_id":     existing_invoice.get("qoyod_invoice_id"),
+                "existing_qoyod_invoice_number": existing_invoice.get("qoyod_invoice_number"),
+                "existing_status":               existing_invoice.get("status"),
+                "qoyod_request_sent": False,
+                "created_ids": {
+                    "customer_id": None, "product_ids": [],
+                    "invoice_id":  existing_invoice.get("qoyod_invoice_id"),
+                    "receipt_id":  None,
+                },
+            }
+
     # ── 4. Require real-mode + credentials ──────────────────────────
     settings = await db.qoyod_settings.find_one(
         {"user_id": user_id}, {"_id": 0}) or {}
