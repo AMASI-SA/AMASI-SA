@@ -123,6 +123,46 @@ def _untrusted_error(sku: str, qoyod_product: dict) -> dict:
     }
 
 
+# ─────────────────────────────────────────────────────────────────────
+# System-product SKU blocklist (Iter-267, user directive 2026-02-27)
+# ─────────────────────────────────────────────────────────────────────
+# These SKUs belong to Qoyod's internal accounting plumbing (or to
+# other connectors that pre-populated the tenant). They MUST NOT be
+# bound to real order line items — not even via the adoption flow.
+# A Salla order arriving with one of these SKUs is anomalous and is
+# refused outright (FAILED_PRODUCT → DEAD_LETTER).
+#
+# Must stay in sync with `identity_diagnostics._SYSTEM_SKU_EXACT/PREFIXES`
+# — the diagnostic UI uses the same set to badge rows as "نظامي".
+_SYSTEM_SKU_EXACT = frozenset({
+    "cod_item", "custom_product", "shipping_fee", "delivery_fee",
+    "discount_item", "tax_item", "rounding_item", "fees_item",
+})
+_SYSTEM_SKU_PREFIXES = ("shipping_", "delivery_", "fees_", "tax_", "system_")
+
+
+def _is_system_sku(sku: str) -> bool:
+    s = (sku or "").strip().lower()
+    if not s:
+        return False
+    if s in _SYSTEM_SKU_EXACT:
+        return True
+    return any(s.startswith(p) for p in _SYSTEM_SKU_PREFIXES)
+
+
+def _system_sku_error(sku: str) -> dict:
+    return {
+        "code":    "system_product_sku_refused",
+        "message": (f"SKU '{sku}' محجوز للنظام (مثل cod_item / "
+                    "custom_product / shipping_fee). لا يُسمح بربط "
+                    "طلب جديد بمنتج نظامي — هذا منع نهائي ولا "
+                    "يقبل adoption. راجع بيانات الطلب في سلة "
+                    "وصحّح الـSKU."),
+        "sku":            sku,
+        "remediation":    "fix_source_sku",
+    }
+
+
 async def resolve_products(
     db, user_id: str, dto_items: list[dict], settings: dict,
     *, trace_id: str, api_client,
@@ -142,6 +182,18 @@ async def resolve_products(
                             "message": "line item has no sku"}
             result.items.append(ProductResolutionItem(
                 sku="", error=result.error))
+            return result
+
+        # ─── System-SKU block ──────────────────────────────────────
+        # Hard refusal BEFORE the local-mapping lookup. Even if some
+        # legacy import accidentally inserted a `cod_item` mapping,
+        # we refuse the order — system SKUs must never bind to real
+        # invoices.
+        if _is_system_sku(sku):
+            err = _system_sku_error(sku)
+            result.success = False
+            result.error = err
+            result.items.append(ProductResolutionItem(sku=sku, error=err))
             return result
 
         existing = await db.qoyod_products_mapping.find_one(

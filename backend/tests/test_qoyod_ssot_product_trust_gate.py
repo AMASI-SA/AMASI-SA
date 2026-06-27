@@ -92,6 +92,67 @@ async def test_resolver_creates_when_sku_not_in_qoyod(db, tenant):
         await _cleanup(db, tenant)
 
 
+# ─────────────────────────────────────────────────────────────────────
+# System-SKU hard refusal (Iter-267)
+# ─────────────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("sku", [
+    "cod_item", "custom_product", "shipping_fee", "delivery_fee",
+    "discount_item", "tax_item", "rounding_item", "fees_item",
+    "COD_ITEM",        # case-insensitive
+    "shipping_aramex", "delivery_smsa", "tax_vat15", "fees_handling",
+    "system_internal",
+])
+@pytest.mark.asyncio
+async def test_resolver_refuses_system_sku_outright(db, tenant, sku):
+    """System SKUs (cod_item, custom_product, shipping_fee, ...) must
+    NEVER bind to a real order line item — not even if a legacy
+    mapping exists, not even via adoption. Hard refusal returns
+    `system_product_sku_refused` and the row routes to
+    FAILED_PRODUCT → DEAD_LETTER as usual."""
+    try:
+        # Even if Mezan had a stray local mapping (shouldn't happen,
+        # but be defensive) we still refuse.
+        await db.qoyod_products_mapping.insert_one({
+            "user_id": tenant, "sku": sku, "qoyod_product_id": "999",
+            "source": "stray_legacy"})
+        client = _RecordingClient()
+        res = await resolve_products(
+            db, tenant, [{"sku": sku, "name": "x", "unit_price": 1}],
+            settings={}, trace_id="t-sys", api_client=client,
+        )
+        assert res.success is False
+        assert res.error["code"] == "system_product_sku_refused"
+        assert res.error["sku"] == sku
+        assert res.error["remediation"] == "fix_source_sku"
+        # No Qoyod lookup or creation should have been attempted.
+        assert client.lookups == []
+        assert client.creates == []
+    finally:
+        await _cleanup(db, tenant)
+
+
+@pytest.mark.asyncio
+async def test_resolver_accepts_normal_sku_with_system_substring(db, tenant):
+    """Defensive: SKUs that merely CONTAIN a system token (but don't
+    match the exact-set or prefix list) MUST NOT be refused.
+    Example: a real product called `shippingbox-blue` is fine."""
+    try:
+        # `shippingbox` starts with `shipping` but is followed by
+        # letters, not underscore — should be treated as a normal SKU.
+        # Our prefix list uses `shipping_` (with underscore), so this
+        # one passes.
+        client = _RecordingClient(existing_skus={})
+        res = await resolve_products(
+            db, tenant,
+            [{"sku": "shippingbox-blue", "name": "صندوق شحن", "unit_price": 50}],
+            settings={}, trace_id="t-sub", api_client=client,
+        )
+        assert res.success is True
+        assert res.items[0].trust_source == "created"
+    finally:
+        await _cleanup(db, tenant)
+
+
 @pytest.mark.asyncio
 async def test_resolver_blocks_qoyod_existing_untrusted(db, tenant):
     """Mezan mapping MISS + Qoyod HAS the SKU → block with
