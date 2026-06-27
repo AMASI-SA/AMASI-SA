@@ -79,14 +79,29 @@ class ProductsResolutionResult:
 
 
 def _build_product_payload(item: dict, settings: dict) -> dict:
-    """Map a DTO LineItem (as dict) → Qoyod /products POST body."""
+    """Map a DTO LineItem (as dict) → Qoyod /products POST body.
+
+    Qoyod V2 (apidoc.qoyod.com) uses `sale_price` and `purchase_price`
+    as the canonical price field names — NOT `selling_price`. Using
+    the wrong name causes Qoyod to refuse the create with
+    `enter at least a purchase price or a sales price to continue`.
+    """
+    # Coerce to float so we never accidentally send a string-typed
+    # price. Falls back to 0.0 when missing — Qoyod accepts a zero
+    # sale price as long as the field exists, which keeps service /
+    # complimentary products (free gifts, packaging) creatable.
+    raw_price = item.get("unit_price")
+    try:
+        sale_price = float(raw_price) if raw_price is not None else 0.0
+    except (TypeError, ValueError):
+        sale_price = 0.0
     return {"product": {
         "name":              item.get("name") or item.get("sku") or "منتج",
         "sku":               item.get("sku"),
         "type":              (settings.get("default_product_type")
                               or "service"),
         "is_non_stock":      (settings.get("default_product_type") or "service") == "service",
-        "selling_price":     item.get("unit_price"),
+        "sale_price":        sale_price,
     }}
 
 

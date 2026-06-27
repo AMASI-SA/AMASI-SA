@@ -39,7 +39,9 @@ from integrations.qoyod.invoice_builder import is_dry_run_mode
 from integrations.qoyod.pipeline import (
     process_normalized_row, process_customer_resolved_row,
 )
-from integrations.qoyod.state_machine import transition
+from integrations.qoyod.state_machine import (
+    transition, FAILURE_TO_RESUME, InvalidTransition,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -95,36 +97,57 @@ async def _find_target_row(
     if trace_id:
         q["trace_id"] = trace_id
     else:
-        # Match by salla_order_number (the human-visible id from the
-        # Salla dashboard) — what the operator types in the UI.
-        on = str(order_number)
-        q["$or"] = [
-            {"salla_order_number": on},
-            {"salla_order_id":     on},
-            {"canonical_payload.order_number": on},
-            {"canonical_payload.order_id":     on},
-        ]
+        # Salla persists order ids as integers in JSON payloads; older
+        # rows may have them as strings depending on the adapter path.
+        # Match both representations so the operator never has to
+        # guess what type the data is stored as.
+        on_str = str(order_number)
+        candidates: list[Any] = [on_str]
+        try:
+            candidates.append(int(on_str))
+        except (TypeError, ValueError):
+            pass
+        q["$or"] = []
+        for v in candidates:
+            q["$or"].extend([
+                {"salla_order_number": v},
+                {"salla_order_id":     v},
+                {"canonical_payload.order_number": v},
+                {"canonical_payload.order_id":     v},
+            ])
 
-    rows = await db.integration_inbox.find(q).to_list(length=10)
+    rows = await db.integration_inbox.find(q).to_list(length=20)
     if not rows:
         raise OneShotRefused(
             "row_not_found",
             f"no integration_inbox row matches order_number={order_number} "
             f"trace_id={trace_id}",
             order_number=order_number, trace_id=trace_id)
-    if len(rows) > 1:
-        raise OneShotRefused(
-            "multiple_matches_pick_one_by_trace_id",
-            f"order_number={order_number} matches {len(rows)} rows; "
-            "supply trace_id to disambiguate",
-            order_number=order_number,
-            candidates=[{
-                "trace_id":      r.get("trace_id"),
-                "received_at":   r.get("received_at"),
-                "pipeline_stage": r.get("pipeline_stage"),
-                "idempotency_key": r.get("idempotency_key"),
-            } for r in rows[:10]])
-    return rows[0]
+    if len(rows) == 1:
+        return rows[0]
+
+    # Multiple matches — typical when Salla emits several status
+    # webhooks for the same order (e.g. `under_review` then
+    # `completed`). The operator's intent is "fix the failed one", so
+    # filter to rows that are reprocessable (DEAD_LETTER / FAILED_*).
+    failed_or_terminal = [r for r in rows
+                          if r.get("pipeline_stage") in _REPROCESSABLE_STAGES
+                          and r.get("pipeline_stage") != "SKIPPED"]
+    if len(failed_or_terminal) == 1:
+        return failed_or_terminal[0]
+    if len(failed_or_terminal) > 1:
+        rows = failed_or_terminal     # surface only the actionable ones
+    raise OneShotRefused(
+        "multiple_matches_pick_one_by_trace_id",
+        f"order_number={order_number} matches {len(rows)} rows; "
+        "supply trace_id to disambiguate",
+        order_number=order_number,
+        candidates=[{
+            "trace_id":      r.get("trace_id"),
+            "received_at":   r.get("received_at"),
+            "pipeline_stage": r.get("pipeline_stage"),
+            "idempotency_key": r.get("idempotency_key"),
+        } for r in rows[:10]])
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -227,52 +250,89 @@ async def _quarantine_dry_mappings(
 def _resume_target_for(row: dict, *, force_full: bool) -> str:
     """Choose the stage the row resumes from.
 
-    For one-shot we want the broadest safe re-run: go back to
-    NORMALIZED so customer + product re-resolve from scratch. The
-    only exception is when a caller explicitly opts out of customer
-    re-resolution (not exposed in the MVP UI).
+    For one-shot we want the broadest safe re-run: NORMALIZED so
+    customer + product re-resolve from scratch. The state machine
+    currently only allows `RETRYING → NORMALIZED` and
+    `RETRYING → CUSTOMER_RESOLVED`, so we constrain accordingly.
     """
-    if force_full:
-        return "NORMALIZED"
-    last_failed = row.get("last_failed_stage")
-    # FAILED_INVOICE / FAILED_RECEIPT / FAILED_PRODUCT — products were
-    # the leak source, so we still want to re-resolve from CUSTOMER_RESOLVED
-    # at minimum. NORMALIZED is strictly safer.
-    if last_failed in ("FAILED_PRODUCT", "FAILED_INVOICE", "FAILED_RECEIPT"):
-        return "CUSTOMER_RESOLVED"
     return "NORMALIZED"
+
+
+# Stages from which a one-shot reprocess can lift the row back into
+# the pipeline. Anything outside this set is refused — the operator
+# should not be able to mutate live/in-flight rows.
+_REPROCESSABLE_STAGES: frozenset[str] = frozenset(
+    {"DEAD_LETTER", "PARTIAL_FAILURE", "NORMALIZED", "NEW", "RECEIVED",
+     "VALIDATED", "ELIGIBLE", "SKIPPED"}
+    | set(FAILURE_TO_RESUME.keys())
+)
 
 
 async def _reset_row_to_stage(
     db, row: dict, *, resume_stage: str, actor: str,
 ) -> None:
-    """Two-hop terminal → RETRYING → resume_stage transition. Mirrors
-    the dead_letter_requeue mechanic so stage_history stays auditable.
+    """Two-hop terminal/failed → RETRYING → resume_stage transition.
+    Mirrors the dead_letter_requeue mechanic so stage_history stays
+    auditable.
+
+    The state machine only permits `RETRYING → NORMALIZED` and
+    `RETRYING → CUSTOMER_RESOLVED`, which is why callers should ask
+    for `resume_stage="NORMALIZED"` (the broadest safe re-entry).
     """
     current = row.get("pipeline_stage")
-    if current in ("DEAD_LETTER", "PARTIAL_FAILURE"):
-        note1 = (f"one-shot reprocess: terminal={current} → RETRYING "
-                 f"(actor={actor})")
-        p1 = transition(
-            from_stage=current, to_stage="RETRYING",
-            actor=actor, note=note1,
-        )
+
+    if current == resume_stage:
+        # Already where we want it — no-op (e.g. row was already
+        # NORMALIZED but the worker hasn't picked it up yet).
+        return
+
+    if current not in _REPROCESSABLE_STAGES:
+        raise OneShotRefused(
+            "unsupported_current_stage",
+            f"row is in stage {current!r}; one-shot reprocess only "
+            f"supports terminal / failed / pre-customer stages",
+            current_stage=current)
+
+    # Hop 1: current → RETRYING (only if current is failure/terminal).
+    # NORMALIZED / NEW / RECEIVED / VALIDATED / ELIGIBLE / SKIPPED
+    # are not allowed to hop into RETRYING, so we just write the
+    # resume_stage directly when applicable (defensive — most live
+    # callers will see DEAD_LETTER / FAILED_* and use the two-hop path).
+    needs_retry_hop = (current in FAILURE_TO_RESUME) or \
+                      (current in ("DEAD_LETTER", "PARTIAL_FAILURE"))
+    if needs_retry_hop:
+        try:
+            p1 = transition(
+                from_stage=current, to_stage="RETRYING",
+                actor=actor,
+                note=(f"one-shot reprocess: {current} → RETRYING "
+                      f"(actor={actor})"),
+            )
+        except InvalidTransition as exc:
+            raise OneShotRefused(
+                "invalid_transition_to_retrying",
+                f"state-machine refused {current} → RETRYING: {exc}",
+                current_stage=current)
         p1.setdefault("$set", {}).update({
-            "last_one_shot_at": _now(),
+            "last_one_shot_at":    _now(),
             "last_one_shot_actor": actor,
         })
         await db.integration_inbox.update_one({"id": row["id"]}, p1)
         from_stage = "RETRYING"
     else:
-        # In-flight or already terminal-success: refuse to reset.
-        # Caller validated this earlier; this is defence in depth.
         from_stage = current
 
-    note2 = f"one-shot reprocess resume at {resume_stage}"
-    p2 = transition(
-        from_stage=from_stage, to_stage=resume_stage,
-        actor=actor, note=note2,
-    )
+    try:
+        p2 = transition(
+            from_stage=from_stage, to_stage=resume_stage,
+            actor=actor,
+            note=f"one-shot reprocess resume at {resume_stage}",
+        )
+    except InvalidTransition as exc:
+        raise OneShotRefused(
+            "invalid_transition_to_resume",
+            f"state-machine refused {from_stage} → {resume_stage}: {exc}",
+            current_stage=current, resume_stage=resume_stage)
     await db.integration_inbox.update_one({"id": row["id"]}, p2)
 
 

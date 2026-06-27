@@ -832,6 +832,17 @@ export default function QoyodFirstSyncMonitor() {
                     </ul>
                   </details>
                 )}
+                {reprocError.traceback_tail && (
+                  <details className="mt-2 text-[11px]" data-testid="reproc-traceback">
+                    <summary className="cursor-pointer font-bold text-rose-800">
+                      Traceback (للتشخيص)
+                    </summary>
+                    <pre className="mt-1 bg-slate-900 text-slate-100 p-2 rounded text-[10px] font-mono whitespace-pre-wrap break-words max-h-72 overflow-auto"
+                         dir="ltr">
+{reprocError.traceback_tail}
+                    </pre>
+                  </details>
+                )}
               </div>
             )}
 

@@ -21,6 +21,7 @@ ADR-001 compliance:
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -83,6 +84,8 @@ from integrations.qoyod.webhook_token_store import (
 # MVP runs single-tenant; we still derive user_id from the auth layer
 # so the schema stays multi-tenant ready (ADR-001 #11).
 _MVP_TENANT_ID = "main"
+
+logger = logging.getLogger(__name__)
 
 
 def _tenant_id(user) -> str:
@@ -894,6 +897,29 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                     **exc.to_dict(),
                     "expected_confirm_token": CONFIRM_TOKEN_TEMPLATE.format(
                         order_number=payload.order_number),
+                },
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            # Surface the real error so the operator (and we) can
+            # diagnose without diving into server logs. The traceback
+            # tail is truncated to 1.5 KB to keep responses small.
+            import traceback as _tb
+            tb_tail = "".join(_tb.format_exception(exc))[-1500:]
+            logger.exception(
+                "qoyod one-shot reprocess UNHANDLED for order_number=%s "
+                "trace_id=%s tenant=%s",
+                payload.order_number, payload.trace_id, tenant,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code":    "one_shot_unhandled_exception",
+                    "message": f"{type(exc).__name__}: {exc}",
+                    "traceback_tail": tb_tail,
+                    "order_number": payload.order_number,
+                    "trace_id":     payload.trace_id,
                 },
             )
         return result

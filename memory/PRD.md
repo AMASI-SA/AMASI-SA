@@ -2337,3 +2337,87 @@ After the Iter-267/268 Dry-Run Leak Guard shipped, the operator wants a safe way
 ### NOT in scope (per user directive)
 - ❌ No new alert/counter in First-Sync Monitor for "blocked by DRY guard" — explicitly declined.
 - ❌ Order `268670571` was NOT reprocessed against Production yet — the operator will trigger it from the UI when ready.
+
+---
+
+## 2026-02-27 — Iter-270 (One-Shot Reprocess hardening — diagnose 500 on Production)
+
+### Issue reported
+User got `request_failed / Request failed with status code 500` after clicking the **🎯 إعادة معالجة طلب واحد فقط** button on **PRODUCTION** for order `268670571`. The endpoint shipped in Iter-269 returned a generic 500 with no surfaced error code/traceback — making remote diagnosis impossible.
+
+### Root cause hypotheses (in order of probability)
+1. **Order ID typed as string in lookup, stored as int in Mongo** — Salla persists `order_id` as integer; my Mongo query searched for the string `"268670571"` only → 0 matches → BUT this would be a 400 `row_not_found`, not 500. So this alone isn't the cause, but fixed it preemptively.
+2. **`InvalidTransition` exception** raised by state-machine for an unsupported current stage (e.g. row in `FAILED_INVOICE` rather than `DEAD_LETTER`) — uncaught, becomes 500.
+3. **Any other unhandled exception** in the deep pipeline call — bubbles up as a generic FastAPI 500.
+
+### Hardening applied
+**Backend (`one_shot_reprocess.py`):**
+- `_find_target_row` now matches both string and integer representations of `order_number` (Salla integers + legacy string-typed rows).
+- Multi-match disambiguation: when several rows match (e.g. `under_review` then `completed` webhooks), filter to reprocessable (DEAD_LETTER / FAILED_*) rows first. If exactly one is failed → pick it. Else surface candidate list.
+- `_REPROCESSABLE_STAGES` set expanded to include all `FAILED_*` stages (FAILED_VALIDATION, FAILED_NORMALIZATION, FAILED_CUSTOMER, FAILED_PRODUCT, FAILED_INVOICE, FAILED_RECEIPT, FAILED_ENRICHMENT) plus DEAD_LETTER, PARTIAL_FAILURE, NORMALIZED, NEW, RECEIVED, VALIDATED, ELIGIBLE, SKIPPED.
+- `_reset_row_to_stage` now catches `InvalidTransition` and converts it into a structured `OneShotRefused("invalid_transition_to_*", ...)`.
+
+**Backend (`routes.py`):**
+- Wrapped `reprocess_one_order` call in a try/except that converts **any** unhandled exception into a structured 500 carrying:
+  - `code: "one_shot_unhandled_exception"`
+  - `message: "<ExceptionType>: <message>"`
+  - `traceback_tail: <last 1500 chars of traceback>`
+  - `order_number`, `trace_id`
+- Added `logger.exception(...)` for permanent server-side audit.
+
+**Frontend (`QoyodFirstSyncMonitor.jsx`):**
+- Modal's error block now shows the new `traceback_tail` inside a collapsible `<details>` section so the operator can paste it directly into a support ticket / handoff.
+
+### Verification
+- `pytest tests/test_qoyod_one_shot_reprocess.py` → **11/11 PASS**.
+- `pytest tests/ -k qoyod` (full Qoyod surface) → **547 passed, 2 skipped, 0 failed**.
+- Live curl on preview (real-user token):
+  - `confirm_token_mismatch` → 400 (clean structured body).
+  - `row_not_found` → 400 (clean structured body, no 500).
+- Endpoint registered + auth-protected.
+
+### Next time the user clicks the button on Production
+If a 500 still happens, the modal will show:
+- `code`: `one_shot_unhandled_exception`
+- `message`: the actual Python exception type and message
+- A "Traceback (للتشخيص)" expand → full traceback tail
+
+That's enough for me to diagnose immediately without needing Production log access.
+
+---
+
+## 2026-02-27 — Iter-270b (Qoyod create_product field-name fix)
+
+### What we learned from order 268670571
+The hardened modal surfaced the real failure on Production (no more 500):
+
+- ✅ **Pipeline:** `NORMALIZED → RULES_APPLIED → CUSTOMER_RESOLVED → PRODUCT_RESOLVED`
+- ✅ **DRY mapping quarantined** for SKU `AMS11961` (sale_price=5)
+- ❌ **Stopped at `FAILED_PRODUCT`** with Qoyod 422:
+  `{"base": ["enter at least a purchase price or a sales price to continue."]}`
+- ✅ **No invoice was POSTed** — the leaked DRY id never reached `api.qoyod.com`. The `request_body_json` shown in the modal was a stale snapshot from a previous attempt.
+
+### Root cause
+`_build_product_payload` (in `integrations/qoyod/product_resolver.py`) used the wrong Qoyod field name: `selling_price` instead of `sale_price`. Per the Qoyod V2 docs (apidoc.qoyod.com) the canonical field is `sale_price` — `selling_price` is silently dropped, so Qoyod sees a product create with no price and refuses.
+
+### Fix
+`_build_product_payload`:
+- Renamed `selling_price` → `sale_price` (Qoyod V2 spec).
+- Coerce `unit_price` to `float` defensively (string-typed legacy payloads).
+- Fallback to `0.0` when missing (lets free gifts / packaging items create cleanly).
+
+### New regression tests (`test_qoyod_product_create_payload_field_names.py`)
+- ✅ `test_create_product_payload_uses_qoyod_v2_sale_price_field` — asserts `sale_price` present, `selling_price` absent.
+- ✅ `test_create_product_payload_coerces_string_price_to_float`.
+- ✅ `test_create_product_payload_handles_missing_price_gracefully`.
+- ✅ `test_create_product_payload_preserves_name_sku_type_fields`.
+
+### Verification
+- `pytest tests/test_qoyod_product_create_payload_field_names.py` → **4/4 PASS**.
+- `pytest -k qoyod` (full surface) → **551 passed, 2 skipped, 0 failed**.
+
+### Operator next steps
+Once deployed to Production:
+1. Click `🎯 إعادة معالجة طلب واحد` again for order `268670571`.
+2. The resolver will now create the product with `sale_price=5` (the line's unit_price).
+3. Expected stage sequence: `… → PRODUCT_RESOLVED → INVOICE_CREATED → RECEIPT_CREATED → COMPLETED`.
