@@ -1,5 +1,28 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Products/Customers Lookup Card — Source Transparency (2026-02-26)
+**User question**: where does the "38 موجود في قيود حالياً" number come from?
+
+**Answer**: It comes from a **direct live call to Qoyod API** (`GET /products?limit=1` and `GET /customers?limit=1`) executed every time the QYD-GO checklist endpoint is hit. NO cache. NO local collection. NO migration snapshot. Confirmed by code trace:
+- `go_live.py::go_live_checklist` → `_check_lookup(api_client, …, fn=api_client.list_products(limit=1))`
+- `api_client.list_products` → `self._request("GET", "/products", params={"page": 1, "limit": 1})`
+- No fallback to `qoyod_external_products` or any local table. If Qoyod is down, the card fails (`qoyod_unauthorized` etc.) — never substitutes a stale number.
+
+### Improvements applied
+1. **Labels renamed** to make the source unambiguous:
+   - `"استعلام منتجات قيود"` → `"استعلام مباشر من قيود — المنتجات"`
+   - `"استعلام عملاء قيود"` → `"استعلام مباشر من قيود — العملاء"`
+2. **Detail line** now shows the query timestamp: `"… (استعلام مباشر من قيود): N عنصر — YYYY-MM-DDTHH:MM:SS UTC"`.
+3. **`extra` payload** for each check now carries:
+   - `source: "qoyod_api_live"` (audit tag).
+   - `endpoint: "GET /products?limit=1"` (exact path called).
+   - `queried_at` (ISO timestamp of THIS check).
+   - `qoyod_total` (the count Qoyod returned).
+   - `total_source` ("meta.total" | "len(products)" | "len(data)" | …) so the operator knows whether N is the server-reported total or the page length.
+4. **Count parsing fix**: prefers `meta.total` over `len(products)`. With `limit=1` the old code would have shown "1 موجود" misleadingly; now it shows the actual total.
+
+
+
 ## Root Cause Found — Qoyod Requires BOTH `name` + `contact_name` (2026-02-26)
 **User report**: Order #268316484 had `customer_name = "هيفاء الحيدر الشمري"` in the raw payload but failed at `FAILED_CUSTOMER` with Qoyod returning `contact_name: ["Can't be blank"]`.
 

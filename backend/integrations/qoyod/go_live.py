@@ -220,30 +220,77 @@ async def _check_eligible_orders(
                        "أرسل Test Payload من Make.com أو تأكّد من حالات تفعيل الفاتورة.")}
 
 
-async def _check_lookup(api_client, label: str, fn) -> dict:
+async def _check_lookup(api_client, label: str, fn, *, endpoint: str) -> dict:
+    """Live Qoyod API check.
+
+    This function calls Qoyod's REST API directly (NO cache, NO local
+    collection, NO migration snapshot). Each invocation is a fresh
+    network call. The result carries:
+
+        • `detail`      — human-readable Arabic line for the UI.
+        • `extra.source`              — always 'qoyod_api_live'.
+        • `extra.endpoint`            — the exact path called.
+        • `extra.queried_at`          — ISO timestamp of THIS check
+                                         (Qoyod doesn't return a
+                                         server-side ETag/last-modified).
+        • `extra.qoyod_total`         — the count Qoyod returned
+                                         (from `meta.total` when
+                                         available, else the page len).
+
+    Intentional non-feature: there is no cached count anywhere. If
+    Qoyod is unreachable the check FAILS with `qoyod_*` error code —
+    we never substitute a stale number from a local store.
+    """
+    queried_at = datetime.now(timezone.utc).isoformat()
     if api_client is None:
-        return {"ok": False, "detail": f"{label}: مفتاح API غير متاح."}
+        return {"ok": False,
+                "detail": f"{label}: مفتاح API غير متاح.",
+                "extra": {"source": "qoyod_api_live",
+                          "endpoint": endpoint,
+                          "queried_at": queried_at}}
     try:
         resp = await fn()
+        # Prefer the server-reported total (meta.total) over page length
+        # — `limit=1` would otherwise show "1 موجود" misleadingly.
         n = 0
+        total_source = "page_length"
         if isinstance(resp, dict):
-            # Common Qoyod v2 list shapes
-            for k in ("products", "contacts", "data", "items"):
-                v = resp.get(k)
-                if isinstance(v, list):
-                    n = len(v); break
-            if n == 0 and isinstance(resp.get("meta"), dict):
-                n = resp["meta"].get("total") or 0
+            meta = resp.get("meta")
+            if isinstance(meta, dict) and meta.get("total") is not None:
+                n = int(meta.get("total") or 0)
+                total_source = "meta.total"
+            else:
+                for k in ("products", "contacts", "data", "items"):
+                    v = resp.get(k)
+                    if isinstance(v, list):
+                        n = len(v)
+                        total_source = f"len({k})"
+                        break
         elif isinstance(resp, list):
             n = len(resp)
-        return {"ok": True, "detail": f"{label}: {n} موجود في قيود حالياً."}
+            total_source = "len(root_list)"
+        return {"ok": True,
+                "detail": (f"{label} (استعلام مباشر من قيود): "
+                           f"{n} عنصر — {queried_at[:19]} UTC"),
+                "extra": {"source": "qoyod_api_live",
+                          "endpoint": endpoint,
+                          "queried_at": queried_at,
+                          "qoyod_total": n,
+                          "total_source": total_source}}
     except QoyodAPIError as exc:
         return {"ok": False,
                 "detail": f"{label}: تعذّر الاستعلام — {exc.code}",
-                "extra": exc.to_log_dict()}
+                "extra": {**exc.to_log_dict(),
+                          "source": "qoyod_api_live",
+                          "endpoint": endpoint,
+                          "queried_at": queried_at}}
     except Exception as exc:   # pragma: no cover — defensive
         return {"ok": False,
-                "detail": f"{label}: استثناء {exc.__class__.__name__}"}
+                "detail": f"{label}: استثناء {exc.__class__.__name__}",
+                "extra": {"source": "qoyod_api_live",
+                          "endpoint": endpoint,
+                          "queried_at": queried_at,
+                          "exception": exc.__class__.__name__}}
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -341,14 +388,18 @@ async def go_live_checklist(
          **(await _check_outstanding_failures(db, user_id, settings))},
         {"key": "eligible_orders",   "label": "وجود طلبات مؤهلة",
          **(await _check_eligible_orders(db, user_id, eligible_count, settings))},
-        {"key": "products_lookup",   "label": "استعلام منتجات قيود",
+        {"key": "products_lookup",
+         "label": "استعلام مباشر من قيود — المنتجات",
          **(await _check_lookup(
              api_client, "منتجات قيود",
-             (lambda: api_client.list_products(limit=1)) if api_client else (lambda: None)))},
-        {"key": "customers_lookup",  "label": "استعلام عملاء قيود",
+             (lambda: api_client.list_products(limit=1)) if api_client else (lambda: None),
+             endpoint="GET /products?limit=1"))},
+        {"key": "customers_lookup",
+         "label": "استعلام مباشر من قيود — العملاء",
          **(await _check_lookup(
              api_client, "عملاء قيود",
-             (lambda: api_client.list_contacts(limit=1)) if api_client else (lambda: None)))},
+             (lambda: api_client.list_contacts(limit=1)) if api_client else (lambda: None),
+             endpoint="GET /customers?limit=1"))},
     ]
     all_passed = all(i["ok"] for i in items)
     return {
