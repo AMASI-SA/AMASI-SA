@@ -226,6 +226,11 @@ async def _seed_settings(db, user_id, **overrides):
         "default_tax_id": "TAX-15", "default_branch_id": "BR-1",
         "tax_mode": "mezan_fixed_15",
         "default_product_type": "service",
+        # Iter-287 — Qoyod-required product creation defaults.
+        "default_product_category_id":  "CAT-99",
+        "default_product_tax_id":       "TAX-15",
+        "default_product_unit_type_id": "UNIT-PIECE",
+        "default_sales_account_id":     "ACC-SALES",
         "payment_method_mapping": [{"salla_method":"mada",
                                     "qoyod_account_id":"ACC-9"}],
         "capabilities": {"create_customers": True, "create_products": True,

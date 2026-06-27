@@ -39,10 +39,21 @@ from integrations.qoyod.product_resolver import (
 
 
 # Adapter helper: tests use positional kwarg style for resolve_products.
+_DEFAULTS = {
+    "default_product_category_id":   "CAT-99",
+    "default_product_tax_id":        "TAX-15",
+    "default_product_unit_type_id":  "UNIT-PIECE",
+    "default_sales_account_id":      "ACC-SALES",
+}
+
+
 async def _ensure_products_compat(db, *, api_client, user_id, trace_id,
                                    items, settings):
+    # Iter-287 — auto-stamp the four required ids so the preflight
+    # doesn't refuse Iter-286-era tests that pre-date the fields.
+    merged = {**_DEFAULTS, **(settings or {})}
     return await _ensure_products(
-        db, user_id, items, settings,
+        db, user_id, items, merged,
         trace_id=trace_id, api_client=api_client)
 
 

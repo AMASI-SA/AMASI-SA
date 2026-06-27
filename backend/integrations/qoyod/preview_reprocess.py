@@ -295,6 +295,19 @@ async def preview_reprocess_one_order(
     out["would_send_to_qoyod"]["customer"] = False
 
     # ── 9) Product payload previews (per SKU) ───────────────────────
+    # Iter-287 — surface missing Qoyod product defaults BEFORE building
+    # any payload so the operator sees the actionable gap up-front.
+    from integrations.qoyod.product_resolver import (
+        validate_product_defaults, build_missing_product_defaults_error,
+    )
+    ok_pd, missing_pd = validate_product_defaults(settings)
+    product_defaults_status = {
+        "ok":      ok_pd,
+        "missing": missing_pd,
+    }
+    if not ok_pd:
+        product_defaults_status.update(
+            build_missing_product_defaults_error(missing_pd))
     product_previews = []
     for it in (canonical.get("items") or []):
         try:
@@ -311,6 +324,7 @@ async def preview_reprocess_one_order(
         "ok": True,
         "items": product_previews,
         "would_send_to_qoyod": False,
+        "product_defaults_status": product_defaults_status,
     }
     out["would_send_to_qoyod"]["products"] = False
 

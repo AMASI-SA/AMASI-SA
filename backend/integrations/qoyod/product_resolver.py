@@ -81,32 +81,31 @@ class ProductsResolutionResult:
 def _build_product_payload(item: dict, settings: dict) -> dict:
     """Map a DTO LineItem (as dict) → Qoyod /products POST body.
 
-    Iter-286 — corrected field names per Qoyod live API
-    ──────────────────────────────────────────────────
+    Iter-287 — required Qoyod product fields
+    ────────────────────────────────────────
+    Qoyod's `/products` REQUIRES (post-`sale_item:1` activation):
+      • `category_id`          — product category in the merchant's Qoyod
+      • `tax_id`               — the tax record applied at sale time
+      • `product_unit_type_id` — e.g. "piece" / "service hour"
+      • `sales_account_id`     — GL account credited on each sale
+    All four must come from Mezan settings:
+      settings.default_product_category_id
+      settings.default_product_tax_id
+      settings.default_product_unit_type_id
+      settings.default_sales_account_id
+    `validate_product_defaults(settings)` enforces presence BEFORE any
+    POST so we never hit the 422.
+
+    Iter-286 — corrected activation flags
+    ─────────────────────────────────────
     Qoyod's `/products` endpoint uses the snake_case integer-flag
     convention (`sale_item: 1`, `purchase_item: 0`), NOT the boolean
-    Rails-style `is_sold`/`is_bought` shape we previously tried.
+    Rails-style `is_sold`/`is_bought` shape.
 
-    Production 422 from order 268756329 (2026-02-27):
-        {"base": ["enter at least a purchase price or a sales price
-                  to continue."]}
-    despite sending `is_sold: true` + `selling_price: 5` — confirmed
-    on the wire that Qoyod ignores the `is_*` flags. Switching to
-    `sale_item: 1` clears the validator.
-
-    Required fields (for a sellable, non-stock service):
-      • `name`           — display name
-      • `sku`            — Salla SKU (used by trust gate)
-      • `type`           — "service" | "product"
-      • `is_non_stock`   — true for services
-      • `sale_item: 1`   — activates the sales-side fields
-      • `selling_price`  — REQUIRED whenever `sale_item: 1`
-      • `purchase_item: 0` — explicit OFF; we don't track purchase cost
-
-    A self-healing 422 retry path lives in `api_client.create_product`
+    A self-healing 422 retry path lives in `resolve_products`
     (Iter-286): if Qoyod still complains about prices we fall back to
     the smallest viable payload — `name, sku, sale_item=1,
-    selling_price` only — exactly once.
+    selling_price` PLUS the four required Iter-287 ids — exactly once.
     """
     # Coerce to float so we never accidentally send a string-typed
     # price. Qoyod requires `selling_price` whenever `sale_item: 1`.
@@ -117,7 +116,7 @@ def _build_product_payload(item: dict, settings: dict) -> dict:
         selling_price = 0.0
 
     ptype = (settings.get("default_product_type") or "service")
-    return {"product": {
+    payload = {
         "name":              item.get("name") or item.get("sku") or "منتج",
         "sku":               item.get("sku"),
         "type":              ptype,
@@ -126,25 +125,100 @@ def _build_product_payload(item: dict, settings: dict) -> dict:
         "sale_item":         1,
         "purchase_item":     0,
         "selling_price":     selling_price,
-    }}
+    }
+    # Iter-287 — Qoyod-required ids (validated upstream by
+    # validate_product_defaults). Stamp every key explicitly so audit
+    # readers know which settings drove the create.
+    _stamp_required_ids(payload, settings)
+    return {"product": payload}
 
 
 def _build_product_payload_fallback(item: dict, settings: dict) -> dict:
     """Minimal-fields product payload used by the 422 self-healing
     retry (Iter-286). Strips everything except the four fields Qoyod's
     validator absolutely needs: name, sku, sale_item, selling_price.
-    No type/is_non_stock/purchase_item — let Qoyod default them."""
+    Plus Iter-287's required tenant ids (without which Qoyod always
+    rejects). No type/is_non_stock/purchase_item — let Qoyod default."""
     raw_price = item.get("unit_price")
     try:
         selling_price = float(raw_price) if raw_price is not None else 0.0
     except (TypeError, ValueError):
         selling_price = 0.0
-    return {"product": {
+    payload = {
         "name":          item.get("name") or item.get("sku") or "منتج",
         "sku":           item.get("sku"),
         "sale_item":     1,
         "selling_price": selling_price,
-    }}
+    }
+    _stamp_required_ids(payload, settings)
+    return {"product": payload}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Iter-287 — Qoyod-side required product defaults
+# ─────────────────────────────────────────────────────────────────────
+REQUIRED_PRODUCT_DEFAULT_KEYS = (
+    "default_product_category_id",
+    "default_product_tax_id",
+    "default_product_unit_type_id",
+    "default_sales_account_id",
+)
+
+REQUIRED_PRODUCT_DEFAULT_LABELS_AR = {
+    "default_product_category_id":  "التصنيف (category_id)",
+    "default_product_tax_id":       "الضريبة (tax_id)",
+    "default_product_unit_type_id": "وحدة القياس (product_unit_type_id)",
+    "default_sales_account_id":     "حساب المبيعات (sales_account_id)",
+}
+
+
+def _stamp_required_ids(product: dict, settings: dict) -> None:
+    """Mutates `product` in place — adds the four Qoyod-required ids
+    drawn from settings. Empty/missing values are dropped (the
+    preflight in `validate_product_defaults` will refuse the row
+    upstream so we never actually POST with a missing id)."""
+    cat   = (settings.get("default_product_category_id") or "").strip()
+    tax   = (settings.get("default_product_tax_id") or "").strip()
+    unit  = (settings.get("default_product_unit_type_id") or "").strip()
+    acct  = (settings.get("default_sales_account_id") or "").strip()
+    if cat:
+        product["category_id"] = cat
+    if tax:
+        product["tax_id"] = tax
+    if unit:
+        product["product_unit_type_id"] = unit
+    if acct:
+        product["sales_account_id"] = acct
+
+
+def validate_product_defaults(settings: dict) -> tuple[bool, list[str]]:
+    """Iter-287 preflight — verifies the four Qoyod-required product
+    settings are configured. Returns `(ok, missing_label_keys)`.
+    Called by `resolve_products` BEFORE any POST, and by
+    `preview_reprocess` so the operator sees the gap up-front.
+    """
+    missing: list[str] = []
+    for k in REQUIRED_PRODUCT_DEFAULT_KEYS:
+        v = settings.get(k)
+        if not (isinstance(v, str) and v.strip()):
+            missing.append(k)
+    return (not missing), missing
+
+
+def build_missing_product_defaults_error(missing_keys: list[str]) -> dict:
+    """Structured error returned to the orchestrator when the
+    preflight fails. The Arabic message lists the missing settings
+    so the operator knows exactly which fields to fill in.
+    """
+    labels = [REQUIRED_PRODUCT_DEFAULT_LABELS_AR.get(k, k)
+              for k in missing_keys]
+    return {
+        "code":             "missing_qoyod_product_defaults",
+        "failed_at_stage":  "PREFLIGHT_PRODUCT_DEFAULTS",
+        "missing":          missing_keys,
+        "message": ("إعدادات إنشاء المنتجات في قيود ناقصة: "
+                    + "، ".join(labels)),
+    }
 
 
 def _extract_product_id(resp: Any) -> Optional[str]:
@@ -312,7 +386,14 @@ async def resolve_products(
                 result.items.append(ProductResolutionItem(sku=sku, error=err))
                 return result
 
-        # Need to create in Qoyod.
+        # Need to create in Qoyod. Iter-287 — preflight defaults first.
+        ok_defaults, missing_keys = validate_product_defaults(settings)
+        if not ok_defaults:
+            err = build_missing_product_defaults_error(missing_keys)
+            result.success = False
+            result.error = err
+            result.items.append(ProductResolutionItem(sku=sku, error=err))
+            return result
         idem = f"mzn-{trace_id}-product-{sku}"
         try:
             resp = await api_client.create_product(

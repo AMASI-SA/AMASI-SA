@@ -1,5 +1,59 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-287 — Qoyod Required Product Fields + Preflight Gate (2026-02-27)
+**User-reported production failure** after Iter-286 cleared the `sale_item` 422: order `268756329` hit a SECOND 422 from Qoyod:
+```
+{"category_id":          ["Please Select The Category"],
+ "tax_id":               ["Please select taxes"],
+ "product_unit_type_id": ["Please Select The Unit Type"],
+ "sales_account_id":     ["Can't be blank"]}
+```
+
+### Root cause
+Qoyod's `/products` validator (post-`sale_item:1` activation) requires four additional tenant-scoped ids that must come from Mezan settings (not Salla).
+
+### Backend additions
+
+#### 1. Four required settings keys (Iter-287 SSOT)
+- `default_product_category_id`
+- `default_product_tax_id`
+- `default_product_unit_type_id`
+- `default_sales_account_id`
+
+#### 2. `product_resolver.py` changes
+- `_stamp_required_ids(product, settings)` — adds `category_id`, `tax_id`, `product_unit_type_id`, `sales_account_id` to the payload from settings. Empty/missing values are dropped so we never emit `category_id: ""`.
+- `_build_product_payload` and `_build_product_payload_fallback` both stamp the ids (Qoyod rejects the fallback too without them).
+- `validate_product_defaults(settings) → (ok, missing_keys)` — preflight gate.
+- `build_missing_product_defaults_error(missing_keys)` — structured Arabic error with `code: "missing_qoyod_product_defaults"`, `failed_at_stage: "PREFLIGHT_PRODUCT_DEFAULTS"`, lists missing keys with Arabic labels.
+- `resolve_products` runs the preflight BEFORE any `POST /products`. If settings are missing → refuses immediately, NO Qoyod call, structured error surfaced to orchestrator.
+
+#### 3. `preview_reprocess` surface
+- `stages.products_preview.product_defaults_status` carries `{ok, missing[], code, message, ...}` so the operator sees the configuration gap BEFORE running anything live.
+
+### Tests (Iter-287)
+- **NEW** `tests/test_qoyod_product_required_defaults_iter287.py` — **11/11 pass**:
+  - Full payload stamps all four ids; preserves Iter-286 contract.
+  - Fallback payload also stamps the four ids (still minimal otherwise).
+  - Empty settings → resolver refuses BEFORE any POST (zero `create_product` calls).
+  - With settings configured → POST goes through and carries the four ids.
+  - `validate_product_defaults`: empty/non-string values caught.
+  - Error payload has the canonical code, stage, and Arabic message naming each missing setting.
+  - Preview surfaces the gap in `products_preview.product_defaults_status`.
+- **Updated** 4 brittle test files (`test_qoyod_day5_invoice_receipt.py`, `test_qoyod_dry_run_leak_protection.py`, `test_qoyod_ssot_product_trust_gate.py`, `test_qoyod_product_payload_sale_item_iter286.py`) — added the four defaults so the preflight doesn't refuse legacy tests.
+- **750/750** Qoyod pytest suite passes. 0 regressions. Lint clean.
+
+### Production runbook (after redeploy)
+1. **Operator fills the four Iter-287 settings** in `/integrations/qoyod/settings` (or via PUT API) — values come from Qoyod tenant UI (Categories, Tax records, Unit types, Chart of Accounts).
+2. Re-run preview for `268756329` → `products_preview.product_defaults_status.ok` MUST be `true`.
+3. `one-shot-reprocess` should now clear FAILED_PRODUCT and proceed CUSTOMER → PRODUCT → INVOICE → RECEIPT → COMPLETED.
+4. Customer 268756329 may already exist in Qoyod trial (created in earlier attempt); resolver reuses by phone/email match — no duplicate.
+
+### Backlog (still deferred)
+- No backfill / no batch / no totals-audit / no explain-totals.
+- Frontend rendering of `product_defaults_status`, `reconciliation`, `mezan_vat_diagnostics`, duplicate-group banner.
+- A small `/admin/settings-health` endpoint to list "ready / missing" for ALL Qoyod write paths in one shot.
+
+
 ## Iter-286 — Qoyod `/products` Payload: `sale_item: 1` (2026-02-27)
 **User-reported production failure**: Order `268756329` reached FAILED_PRODUCT with Qoyod 422:
 ```

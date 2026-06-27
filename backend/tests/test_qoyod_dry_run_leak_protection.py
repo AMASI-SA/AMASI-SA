@@ -81,7 +81,12 @@ async def test_resolver_quarantines_dry_mapping_and_creates_real(db, tenant):
             [{"sku": "AMS11961",
               "name": "تغليف انيق معا الورد - أماسي",
               "unit_price": 5}],
-            settings={},
+            settings={
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            },
             trace_id="t-dryleak", api_client=client,
         )
         assert res.success is True
@@ -118,7 +123,12 @@ async def test_resolver_treats_dry_run_only_flag_as_invalid(db, tenant):
         res = await resolve_products(
             db, tenant,
             [{"sku": "SKU-X", "name": "n", "unit_price": 1}],
-            settings={},
+            settings={
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            },
             trace_id="t-flag", api_client=client,
         )
         assert res.success is True

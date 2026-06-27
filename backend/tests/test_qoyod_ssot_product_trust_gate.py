@@ -75,7 +75,12 @@ async def test_resolver_creates_when_sku_not_in_qoyod(db, tenant):
         res = await resolve_products(
             db, tenant,
             [{"sku": "FRESH-001", "name": "منتج جديد", "unit_price": 10}],
-            settings={},
+            settings={
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            },
             trace_id="t-1", api_client=client,
         )
         assert res.success is True
@@ -118,7 +123,12 @@ async def test_resolver_refuses_system_sku_outright(db, tenant, sku):
         client = _RecordingClient()
         res = await resolve_products(
             db, tenant, [{"sku": sku, "name": "x", "unit_price": 1}],
-            settings={}, trace_id="t-sys", api_client=client,
+            settings={
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            }, trace_id="t-sys", api_client=client,
         )
         assert res.success is False
         assert res.error["code"] == "system_product_sku_refused"
@@ -145,7 +155,12 @@ async def test_resolver_accepts_normal_sku_with_system_substring(db, tenant):
         res = await resolve_products(
             db, tenant,
             [{"sku": "shippingbox-blue", "name": "صندوق شحن", "unit_price": 50}],
-            settings={}, trace_id="t-sub", api_client=client,
+            settings={
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            }, trace_id="t-sub", api_client=client,
         )
         assert res.success is True
         assert res.items[0].trust_source == "created"
@@ -165,7 +180,12 @@ async def test_resolver_blocks_qoyod_existing_untrusted(db, tenant):
         res = await resolve_products(
             db, tenant,
             [{"sku": "AMS11903", "name": "New", "unit_price": 50}],
-            settings={},
+            settings={
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            },
             trace_id="t-2", api_client=client,
         )
         assert res.success is False
@@ -196,7 +216,12 @@ async def test_resolver_uses_mezan_mapping_without_gate_lookup(db, tenant):
             existing_skus={"SKU-MAPPED": {"id": 999, "sku": "SKU-MAPPED"}})
         res = await resolve_products(
             db, tenant, [{"sku": "SKU-MAPPED", "name": "x", "unit_price": 1}],
-            settings={}, trace_id="t-3", api_client=client,
+            settings={
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            }, trace_id="t-3", api_client=client,
         )
         assert res.success is True
         assert res.items[0].qoyod_product_id == "999"
@@ -220,7 +245,12 @@ async def test_resolver_uses_adopted_mapping_marks_trust_source(db, tenant):
         client = _RecordingClient()
         res = await resolve_products(
             db, tenant, [{"sku": "ADOPTED-1", "name": "x", "unit_price": 1}],
-            settings={}, trace_id="t-4", api_client=client,
+            settings={
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            }, trace_id="t-4", api_client=client,
         )
         assert res.success is True
         assert res.items[0].trust_source == "adopted"
@@ -238,7 +268,13 @@ async def test_resolver_can_disable_trust_gate(db, tenant):
         res = await resolve_products(
             db, tenant,
             [{"sku": "LEGACY", "name": "x", "unit_price": 1}],
-            settings={"block_untrusted_existing_products": False},
+            settings={
+                "block_untrusted_existing_products": False,
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            },
             trace_id="t-5", api_client=client,
         )
         # Trust gate disabled → resolver proceeds to create (which in
@@ -278,7 +314,12 @@ async def test_adopt_creates_mapping_with_audit_trail(db, tenant):
             existing_skus={"ADOPT-1": {"id": 100, "sku": "ADOPT-1"}})
         rres = await resolve_products(
             db, tenant, [{"sku": "ADOPT-1", "name": "x", "unit_price": 5}],
-            settings={}, trace_id="t-adopt", api_client=client,
+            settings={
+                "default_product_category_id":  "CAT-99",
+                "default_product_tax_id":       "TAX-15",
+                "default_product_unit_type_id": "UNIT-PIECE",
+                "default_sales_account_id":     "ACC-SALES",
+            }, trace_id="t-adopt", api_client=client,
         )
         assert rres.success is True
         assert rres.items[0].trust_source == "adopted"
