@@ -379,6 +379,56 @@ async def process_customer_resolved_row(
         product_resolutions=product_resolutions,
         invoice_date=inv_date, settings=settings,
     )
+
+    # ─── DRY-Run Leak Preflight (Iter-267, P0) ────────────────────
+    # Hard refuse if ANY id we're about to send carries the `DRY:`
+    # prefix from the Dry-Run era. Belt-and-suspenders: the product
+    # resolver already quarantines such mappings, but a single line
+    # that slipped through MUST stop the invoice before it touches
+    # Qoyod. Production order 268670571 hit this on 2026-02-27.
+    #
+    # ONLY active in PRODUCTION (dry_run_mode=False). In dry-run mode
+    # the stub `DRY:*` ids ARE expected and must not be refused.
+    if not settings.get("dry_run_mode", False):
+        leaked: list[str] = []
+        if str(qoyod_customer_id).startswith("DRY:"):
+            leaked.append(f"contact_id={qoyod_customer_id}")
+        for li in (invoice_payload.get("invoice", {}).get("line_items") or []):
+            pid = li.get("product_id")
+            if pid is None or str(pid).startswith("DRY:"):
+                leaked.append(f"product_id={pid}")
+        if leaked:
+            err = {
+                "code":    "dry_run_product_id_leaked_to_production",
+                "message": ("منع الإرسال: تم اكتشاف معرّفات Dry-Run في "
+                            "payload الفاتورة (" + ", ".join(leaked) + "). "
+                            "هذا تسرّب من فترة الاختبار. يجب إعادة "
+                            "إنشاء المنتج/العميل في قيود فعلياً."),
+                "leaked_ids":     leaked,
+                "remediation":    "rebuild_mapping_against_real_qoyod",
+            }
+            await _dead_letter(
+                db, row_id=row["id"],
+                from_stage="PRODUCT_RESOLVED",
+                fail_stage="FAILED_INVOICE",
+                error=err,
+                started_at=row.get("pipeline_started_at"),
+            )
+            await db.integration_inbox.update_one(
+                {"id": row["id"]},
+                {"$set": {
+                    "qoyod_payloads.invoice_blocked_preflight": invoice_payload,
+                    "qoyod_payloads.invoice_blocked_at":         _now(),
+                }},
+            )
+            return {
+                "row_id":   row["id"],
+                "outcome":  "DEAD_LETTER",
+                "reason":   "dry_run_product_id_leaked_to_production",
+                "leaked":   leaked,
+                "trace_id": trace_id,
+            }
+
     # Snapshot BEFORE attempting POST.
     await db.integration_inbox.update_one(
         {"id": row["id"]},

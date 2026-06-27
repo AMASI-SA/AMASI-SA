@@ -9,6 +9,7 @@ All four pre-Day 5 safety rules locked in:
 """
 from __future__ import annotations
 
+import hashlib
 import os, uuid, pytest
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -28,6 +29,20 @@ from integrations.qoyod.pipeline import (
 from integrations.qoyod.state_machine import (
     can_transition, TERMINAL_STAGES, PARTIAL_FAILURE,
 )
+
+
+# ─── Live-mode fake client ─────────────────────────────────────────
+# `DryRunQoyodClient` mints `DRY:*` ids by design — those are the
+# Dry-Run watermark. In production-mode pipeline tests we still need
+# an HTTP-free fake, but it MUST return realistic (non-DRY) ids so
+# the Dry-Run Leak Preflight Guard (pipeline.py, Iter-267) does not
+# block the invoice. This subclass overrides `_fake` to produce
+# `Q-<kind>-<sha8>` ids that mirror what real Qoyod returns.
+class _LiveLikeQoyodClient(DryRunQoyodClient):
+    """HTTP-free Qoyod stub for production-mode tests."""
+    def _fake(self, kind: str, payload: dict) -> str:
+        h = hashlib.sha1(repr(sorted(payload.items())).encode("utf-8")).hexdigest()[:8]
+        return f"Q-{kind}-{h}"
 
 
 @pytest.fixture
@@ -303,7 +318,7 @@ async def test_pipeline_partial_failure_on_receipt_error(db):
                                         order_id=order_id, dto=_make_dto(order_id))
 
     from integrations.qoyod.api_client import QoyodAPIError
-    class _FlakyClient(DryRunQoyodClient):
+    class _FlakyClient(_LiveLikeQoyodClient):
         async def create_receipt(self, payload, *, idem):
             raise QoyodAPIError(status_code=502, code="qoyod_server_error",
                                 message="upstream timeout", endpoint="POST /receipts")
@@ -341,7 +356,7 @@ async def test_pipeline_records_payload_snapshot_before_post(db):
                                         order_id=order_id, dto=_make_dto(order_id))
     try:
         out = await process_customer_resolved_row(db, row,
-                                                  api_client=DryRunQoyodClient())
+                                                  api_client=_LiveLikeQoyodClient())
         assert out["outcome"] == "COMPLETED"
         updated = await db.integration_inbox.find_one({"id": row["id"]})
         # Snapshot timestamps prove they were written BEFORE the COMPLETED ts.

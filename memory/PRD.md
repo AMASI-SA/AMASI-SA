@@ -2256,3 +2256,29 @@ counterparties in Production (per-account blocker / reason histogram).
 - ▶ Then Dry Run with real orders.
 - ▶ Then Go Live (disable `dry_run_mode`).
 
+
+---
+
+## 2026-02-27 — Iter-268 (Day-5 tests + Dry-Run Leak Guard reconciled)
+
+### Context
+Iter-267 added a **DRY-Run Leak Preflight Guard** in `pipeline.py` that hard-refuses any invoice whose `contact_id` or `line_items[].product_id` starts with `DRY:` whenever `settings.dry_run_mode=False`. This protects production from a real incident (Order `268670571`, 2026-02-27, where `DRY:product:e4d875d7` reached `api.qoyod.com`).
+
+The guard caused 2 legacy Day-5 tests to fail because they used `DryRunQoyodClient` (which mints `DRY:*` ids by design) in production mode (`dry_run_mode=False`).
+
+### Fix
+Added a new `_LiveLikeQoyodClient(DryRunQoyodClient)` test helper in `tests/test_qoyod_day5_invoice_receipt.py` that overrides `_fake()` to return `Q-<kind>-<sha8>` ids (no `DRY:` prefix) — mirrors what real Qoyod responses look like. Re-pointed the 2 production-mode tests at it:
+- `test_pipeline_partial_failure_on_receipt_error` (now uses `_LiveLikeQoyodClient` via `_FlakyClient` subclass).
+- `test_pipeline_records_payload_snapshot_before_post`.
+
+The original `DryRunQoyodClient` continues to back the dry-run tests (where `DRY:*` ids are correct semantics).
+
+### Verification
+- `pytest tests/test_qoyod_day5_invoice_receipt.py` → **15/15 PASS**.
+- `pytest tests/test_qoyod_dry_run_leak_protection.py` → **5/5 PASS** (leak guard still blocks `DRY:` in contact_id and product_id).
+- `pytest tests/ -k qoyod` → **536 passed, 2 skipped, 0 failed** across the full Qoyod surface.
+
+### Net result
+- ✅ Dry-Run Leak Protection fully enforced in Production (covers `DRY:contact`, `DRY:product`, `DRY:invoice`, `DRY:receipt` patterns via product_resolver quarantine + pipeline preflight).
+- ✅ No regression — full Qoyod regression suite green.
+- ⏸ Re-processing Order `268670571` on Production explicitly **paused** per user instruction; nothing has been sent to `api.qoyod.com`.

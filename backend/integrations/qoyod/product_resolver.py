@@ -198,12 +198,31 @@ async def resolve_products(
 
         existing = await db.qoyod_products_mapping.find_one(
             {"user_id": user_id, "sku": sku},
-            {"_id": 0, "qoyod_product_id": 1, "adopted": 1},
+            {"_id": 0, "qoyod_product_id": 1, "adopted": 1,
+             "dry_run_only": 1},
         )
-        if existing and existing.get("qoyod_product_id"):
+        existing_pid = existing.get("qoyod_product_id") if existing else None
+        # ─── DRY-Run Leak Guard (Iter-267, P0) ─────────────────────
+        # Any mapping carrying a `DRY:*` id is a Dry-Run artefact and
+        # MUST NOT bind to a production invoice. Production order
+        # 268670571 hit this on 2026-02-27. We treat the mapping as
+        # absent: the resolver falls through to the Trust Gate +
+        # create-fresh path. The existing row is also marked
+        # `dry_run_only=true` so the operator can audit what was
+        # quarantined.
+        if existing_pid and (str(existing_pid).startswith("DRY:")
+                             or existing.get("dry_run_only")):
+            await db.qoyod_products_mapping.update_one(
+                {"user_id": user_id, "sku": sku},
+                {"$set": {"dry_run_only": True,
+                          "quarantined_at": _now(),
+                          "quarantine_reason": "dry_run_id_in_production"}},
+            )
+            existing = None   # fall-through to create-fresh
+        elif existing_pid:
             result.items.append(ProductResolutionItem(
                 sku=sku,
-                qoyod_product_id=str(existing["qoyod_product_id"]),
+                qoyod_product_id=str(existing_pid),
                 created_new=False,
                 trust_source="adopted" if existing.get("adopted") else "mezan",
             ))
