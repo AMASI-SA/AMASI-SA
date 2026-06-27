@@ -113,7 +113,7 @@ async def test_post_go_live_post_activation_production_failures_block(db, tenant
         res = await _check_outstanding_failures(
             db, tenant, settings={"go_live_activated_at": activated_at})
         assert res["ok"] is False
-        assert res["extra"]["stuck_count"] == 2
+        assert res["extra"]["blocking_count"] == 2
     finally:
         await _cleanup(db, tenant)
 
@@ -147,6 +147,6 @@ async def test_legacy_activated_at_field_works(db, tenant):
         res = await _check_outstanding_failures(
             db, tenant, settings={"activated_at": activated_at})
         assert res["ok"] is False
-        assert res["extra"]["stuck_count"] == 1
+        assert res["extra"]["blocking_count"] == 1
     finally:
         await _cleanup(db, tenant)

@@ -36,6 +36,9 @@ from integrations.qoyod.pipeline import (
     process_pending_normalized,
     process_pending_customer_resolved,
 )
+from integrations.qoyod.dead_letter_requeue import (
+    auto_requeue_known_fixed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +56,19 @@ def _now() -> datetime:
 
 async def _one_round(db, *, user_id: str, batch_limit: int) -> dict:
     """Process one batch from each pending bucket. Returns counts."""
+    # ── Step 0: Auto-Requeue (self-healing for KNOWN_FIXED_PATTERNS) ─
+    # Runs BEFORE the drain so any rows it flips back into NORMALIZED
+    # /CUSTOMER_RESOLVED get picked up in this same tick. Strictly
+    # bounded by the pattern registry — generic DEAD_LETTER rows are
+    # untouched. Bounded retries (`requeue_attempts ≤ MAX_REQUEUE_ATTEMPTS`)
+    # prevent infinite loops.
+    try:
+        requeue_result = await auto_requeue_known_fixed(
+            db, user_id=user_id, actor="worker", limit=batch_limit)
+    except Exception:
+        logger.exception("qoyod auto-requeue failed (worker tick)")
+        requeue_result = {"ok": False, "scanned": 0, "requeued": 0}
+
     n_results = await process_pending_normalized(
         db, user_id, limit=batch_limit)
     cr_results = await process_pending_customer_resolved(
@@ -69,6 +85,13 @@ async def _one_round(db, *, user_id: str, batch_limit: int) -> dict:
         return {"processed": len(rows), "outcomes": outcomes}
 
     return {
+        "auto_requeue": {
+            "scanned":  int(requeue_result.get("scanned") or 0),
+            "requeued": int(requeue_result.get("requeued") or 0),
+            "skipped_no_pattern":   int(requeue_result.get("skipped_no_pattern") or 0),
+            "skipped_max_attempts": int(requeue_result.get("skipped_max_attempts") or 0),
+            "failures": int(requeue_result.get("failures") or 0),
+        },
         "normalized":         _summary(n_results),
         "customer_resolved":  _summary(cr_results),
         "at":                 _now().isoformat(),

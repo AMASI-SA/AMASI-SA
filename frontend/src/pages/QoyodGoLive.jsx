@@ -32,8 +32,12 @@ function StatCell({ label, value, tone = "slate", testid, sub }) {
   );
 }
 
-function ChecklistRow({ item }) {
+function ChecklistRow({ item, onRequeue, requeueing }) {
   const ok = item.ok;
+  const extra = item.extra || {};
+  const isFailuresRow = item.key === "outstanding_failures";
+  const autoRecoverable = Number(extra.auto_recoverable_count || 0);
+  const blocking = Number(extra.blocking_count || 0);
   return (
     <li
       className={`flex items-start gap-3 p-3 rounded-lg border ${
@@ -54,6 +58,45 @@ function ChecklistRow({ item }) {
         <div className={`text-xs ${ok ? "text-emerald-800" : "text-rose-800"}`}>
           {item.detail}
         </div>
+        {isFailuresRow && (autoRecoverable > 0 || blocking > 0) && (
+          <div className="mt-2 space-y-2"
+               data-testid="outstanding-failures-detail">
+            {autoRecoverable > 0 && (
+              <div className="flex items-center justify-between gap-2 bg-blue-50 border border-blue-200 rounded p-2"
+                   data-testid="auto-recoverable-banner">
+                <span className="text-[11px] text-blue-900 font-bold">
+                  🔄 {autoRecoverable} فاتورة قابلة للإصلاح تلقائياً (خطأ معروف تم إصلاحه)
+                </span>
+                <button
+                  type="button"
+                  onClick={onRequeue}
+                  disabled={requeueing}
+                  data-testid="btn-trigger-auto-requeue"
+                  className="px-2.5 py-1 text-[11px] font-extrabold rounded
+                             bg-blue-600 text-white hover:bg-blue-700
+                             disabled:opacity-50 whitespace-nowrap">
+                  {requeueing ? "جاري…" : "▶ إعادة المعالجة الآن"}
+                </button>
+              </div>
+            )}
+            {blocking > 0 && Array.isArray(extra.sample_blocking) &&
+             extra.sample_blocking.length > 0 && (
+              <details className="bg-rose-50 border border-rose-200 rounded p-2"
+                       data-testid="blocking-failures-sample">
+                <summary className="text-[11px] font-bold text-rose-900 cursor-pointer">
+                  عرض أول {extra.sample_blocking.length} فاتورة عالقة (تحتاج مراجعة يدوية)
+                </summary>
+                <ul className="mt-2 space-y-1 text-[10px] font-mono" dir="ltr">
+                  {extra.sample_blocking.map((s) => (
+                    <li key={s.row_id} className="text-rose-800">
+                      {s.last_failed_stage} · {s.error_code || "—"} · {s.trace_id?.slice(0, 8)}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
       </div>
     </li>
   );
@@ -65,6 +108,7 @@ export default function QoyodGoLive() {
   const [checklist, setChecklist] = useState(null);
   const [report,    setReport]    = useState(null);
   const [activating, setActivating] = useState(false);
+  const [requeueing, setRequeueing] = useState(false);
   const [diag, setDiag] = useState(null);
   const [diagLoading, setDiagLoading] = useState(false);
   const [identityConfirmed, setIdentityConfirmed] = useState(false);
@@ -102,6 +146,26 @@ export default function QoyodGoLive() {
   };
 
   useEffect(() => { loadAll(); }, []);
+
+  const onAutoRequeue = async () => {
+    setRequeueing(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/dead-letter/auto-requeue`, {});
+      const n = data?.result?.requeued || 0;
+      if (n > 0) {
+        toast.success(`تم إعادة معالجة ${n} فاتورة. سيُكمل العامل الخلفي إرسالها خلال ثوانٍ.`);
+      } else {
+        toast.info("لا توجد فواتير قابلة للإصلاح حالياً.");
+      }
+      // Refresh after the worker has had a moment to drain.
+      setTimeout(() => loadAll(), 2500);
+    } catch (e) {
+      toast.error("تعذّر تشغيل إعادة المعالجة التلقائية");
+    } finally {
+      setRequeueing(false);
+    }
+  };
 
   const onActivate = async () => {
     if (!checklist?.all_passed) {
@@ -522,7 +586,9 @@ export default function QoyodGoLive() {
         ) : (
           <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {(checklist?.items || []).map((it) => (
-              <ChecklistRow key={it.key} item={it} />
+              <ChecklistRow key={it.key} item={it}
+                            onRequeue={onAutoRequeue}
+                            requeueing={requeueing} />
             ))}
           </ul>
         )}

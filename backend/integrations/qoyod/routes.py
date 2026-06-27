@@ -58,6 +58,10 @@ from integrations.qoyod.first_sync_monitor import (
     get_monitor_stats, archive_failed_dry_run_tests, ArchiveRefused,
     ARCHIVE_CONFIRM_TOKEN,
 )
+from integrations.qoyod.dead_letter_requeue import (
+    find_requeue_candidates, auto_requeue_known_fixed, requeue_one,
+    MAX_REQUEUE_ATTEMPTS, KNOWN_FIXED_PATTERNS,
+)
 from salla_integration.service import call_salla, SallaError
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
@@ -130,6 +134,21 @@ class FreshStartExecutePayload(BaseModel):
 class ArchiveFailedTestsBody(BaseModel):
     confirm: str = Field(..., description="Must equal 'CLEAN'.")
     model_config = ConfigDict(extra="forbid")
+
+
+class DeadLetterRequeueOneBody(BaseModel):
+    """Manual single-row requeue payload. Either `row_id` or `trace_id`
+    must be provided."""
+    model_config = ConfigDict(extra="forbid")
+    row_id:   Optional[str] = None
+    trace_id: Optional[str] = None
+
+
+class DeadLetterAutoRequeueBody(BaseModel):
+    """Manual auto-requeue trigger payload. Defaults match the worker
+    behaviour (production rows only)."""
+    model_config = ConfigDict(extra="forbid")
+    include_dry_run: bool = False
 
 
 class TestConnectionResponse(BaseModel):
@@ -586,6 +605,82 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                       "excluded_at": datetime.now(timezone.utc)}},
         )
         return {"ok": True, "excluded": result.modified_count}
+
+    # ── Dead-Letter Auto-Requeue (KNOWN_FIXED_PATTERNS only) ────────
+    # Rationale: when a Qoyod-side bug is patched in our code, rows
+    # that previously DEAD-LETTERed against that bug should self-heal —
+    # NOT block Go-Live forever. Strictly bounded by
+    # `KNOWN_FIXED_PATTERNS`. Per-row attempts capped by
+    # `MAX_REQUEUE_ATTEMPTS`. See dead_letter_requeue.py for the
+    # registry + safety semantics.
+    @router.get("/dead-letter/preview")
+    async def dead_letter_preview(
+        include_dry_run: bool = False,
+        user=Depends(current_user),
+    ):
+        """Read-only preview of rows that would be auto-requeued.
+        Returns the registry too so the operator UI can show which
+        patterns are active."""
+        tenant = _tenant_id(user)
+        candidates = await find_requeue_candidates(
+            db, user_id=tenant, include_dry_run=include_dry_run)
+        return {
+            "ok": True,
+            "candidates": candidates,
+            "candidate_count": len(candidates),
+            "max_requeue_attempts": MAX_REQUEUE_ATTEMPTS,
+            "patterns": [
+                {"id": p.get("id"),
+                 "description": p.get("description"),
+                 "applies_to_failed_stages":
+                    sorted(list(p.get("applies_to_failed_stages") or [])),
+                 "fixed_at": p.get("fixed_at")}
+                for p in KNOWN_FIXED_PATTERNS
+            ],
+        }
+
+    @router.post("/dead-letter/auto-requeue")
+    async def dead_letter_auto_requeue(
+        body: DeadLetterAutoRequeueBody | None = None,
+        user=Depends(current_user),
+    ):
+        """Manually trigger one round of auto-requeue. Same logic the
+        background worker runs every tick — bounded by
+        KNOWN_FIXED_PATTERNS + MAX_REQUEUE_ATTEMPTS."""
+        tenant = _tenant_id(user)
+        include_dry = bool(body and body.include_dry_run)
+        result = await auto_requeue_known_fixed(
+            db, user_id=tenant, include_dry_run=include_dry,
+            actor=f"operator:{getattr(user, 'email', tenant)}",
+        )
+        return {"ok": True, "result": result}
+
+    @router.post("/dead-letter/requeue-one")
+    async def dead_letter_requeue_one(
+        body: DeadLetterRequeueOneBody,
+        user=Depends(current_user),
+    ):
+        """Manually requeue ONE row (by row_id or trace_id). Still
+        bounded by the pattern registry — generic DEAD_LETTER rows
+        cannot be requeued via this endpoint."""
+        if not (body.row_id or body.trace_id):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "row_id_or_trace_id_required",
+                        "message": "either row_id or trace_id is required"})
+        tenant = _tenant_id(user)
+        result = await requeue_one(
+            db, user_id=tenant,
+            row_id=body.row_id, trace_id=body.trace_id,
+            actor=f"operator:{getattr(user, 'email', tenant)}",
+        )
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": result.get("reason", "requeue_refused"),
+                        **{k: v for k, v in result.items()
+                           if k not in {"ok", "reason"}}})
+        return result
 
     # ── Existing-Data Migration (read-only pre-flight) ──────────────
     attach_migration_routes(router, db, current_user, _tenant_id)

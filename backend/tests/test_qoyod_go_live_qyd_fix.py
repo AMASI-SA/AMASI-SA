@@ -45,7 +45,8 @@ def test_branch_passes_for_empty_string_value():
 class _FakeColl:
     def __init__(self, rows=None):
         self.rows = rows or []
-    async def count_documents(self, query):
+
+    def _match_query(self, query):
         def _get(r, path):
             parts = path.split(".")
             v = r
@@ -54,6 +55,7 @@ class _FakeColl:
                     return None
                 v = v.get(p)
             return v
+
         def _match(r):
             for k, v in query.items():
                 rv = _get(r, k)
@@ -67,7 +69,29 @@ class _FakeColl:
                 elif rv != v:
                     return False
             return True
-        return sum(1 for r in self.rows if _match(r))
+        return _match
+
+    async def count_documents(self, query):
+        match = self._match_query(query)
+        return sum(1 for r in self.rows if match(r))
+
+    def find(self, query=None, *args, **kwargs):
+        match = self._match_query(query or {})
+        matched = [r for r in self.rows if match(r)]
+
+        class _Cursor:
+            def __init__(self, rows):
+                self._rows = rows
+            def __aiter__(self):
+                self._i = 0
+                return self
+            async def __anext__(self):
+                if self._i >= len(self._rows):
+                    raise StopAsyncIteration
+                v = self._rows[self._i]
+                self._i += 1
+                return v
+        return _Cursor(matched)
 
 
 class _FakeDB:
@@ -125,7 +149,7 @@ async def test_post_go_live_counts_only_post_activation_production_failures():
     res = await _check_outstanding_failures(
         db, "u1", settings={"go_live_activated_at": _ACTIVATED_AT})
     assert res["ok"] is False
-    assert res["extra"]["stuck_count"] == 2
+    assert res["extra"]["blocking_count"] == 2
 
 
 @pytest.mark.asyncio
@@ -155,7 +179,7 @@ async def test_legacy_activated_at_field_is_honoured():
     res = await _check_outstanding_failures(
         db, "u1", settings={"activated_at": _ACTIVATED_AT})
     assert res["ok"] is False
-    assert res["extra"]["stuck_count"] == 1
+    assert res["extra"]["blocking_count"] == 1
 
 
 @pytest.mark.asyncio

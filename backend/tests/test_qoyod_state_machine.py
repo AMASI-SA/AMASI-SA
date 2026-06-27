@@ -92,11 +92,20 @@ def test_failure_can_be_killed_to_deadletter():
         assert can_transition(fail, "DEAD_LETTER")
 
 
-def test_terminal_stages_have_no_outbound_edges():
+def test_terminal_stages_have_only_auto_requeue_outbound():
+    """Terminal stages are immutable EXCEPT for the bounded auto-requeue
+    edge added 2026-02-27: DEAD_LETTER / PARTIAL_FAILURE → RETRYING.
+    SKIPPED and COMPLETED remain absolutely terminal.
+    """
     for terminal in TERMINAL_STAGES:
-        outbound = [t for (f, t) in ALLOWED_TRANSITIONS if f == terminal]
-        assert outbound == [], \
-            f"terminal {terminal} has outbound edges: {outbound}"
+        outbound = sorted(t for (f, t) in ALLOWED_TRANSITIONS if f == terminal)
+        if terminal in ("DEAD_LETTER", "PARTIAL_FAILURE"):
+            assert outbound == ["RETRYING"], (
+                f"{terminal} should only allow RETRYING (auto-requeue), "
+                f"got {outbound}")
+        else:
+            assert outbound == [], (
+                f"terminal {terminal} has outbound edges: {outbound}")
 
 
 def test_any_prefinal_stage_can_be_skipped():

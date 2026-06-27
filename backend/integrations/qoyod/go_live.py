@@ -147,6 +147,14 @@ async def _check_outstanding_failures(db, user_id: str, settings: dict | None = 
         • `dry_run != True` (real production attempts)
         • `received_at >= go_live_activated_at` (the activation watermark)
 
+    Auto-Requeue Filter (Iter 2026-02-27)
+    ─────────────────────────────────────
+    Rows whose failure matches a `KNOWN_FIXED_PATTERNS` entry AND still
+    have requeue attempts remaining are EXCLUDED from the "blocking"
+    count — they will self-heal in the next worker tick. The detail
+    string surfaces them as `auto_recoverable` so the UI can show "X
+    pending auto-recovery" without blocking Go-Live.
+
     This guarantees old test failures (no matter how broken their
     `dry_run` flag) never block re-activation or stay red after a fix.
     """
@@ -169,21 +177,68 @@ async def _check_outstanding_failures(db, user_id: str, settings: dict | None = 
                 "detail": ("لم يتم تفعيل الإنتاج بعد. السجلات القديمة "
                            "(ما قبل التفعيل) لا تُحسب كفشل إنتاجي.")}
 
-    stuck = await db.integration_inbox.count_documents({
+    # Walk failed production rows and partition them into:
+    #   • auto_recoverable — matches KNOWN_FIXED_PATTERNS + attempts remain
+    #   • blocking         — everything else
+    # Auto-recoverable rows do NOT block QYD-GO — the worker will replay
+    # them on the next tick. The UI still surfaces the count for visibility.
+    from integrations.qoyod.dead_letter_requeue import (
+        match_pattern as _drq_match_pattern,
+        MAX_REQUEUE_ATTEMPTS as _DRQ_MAX_ATTEMPTS,
+    )
+
+    failed_cursor = db.integration_inbox.find({
         "user_id": user_id,
         "pipeline_stage": {"$in": ["DEAD_LETTER", "PARTIAL_FAILURE"]},
         "dry_run": {"$ne": True},
         "received_at": {"$gte": activated_at},
     })
-    if stuck:
+    blocking = 0
+    auto_recoverable = 0
+    sample_blocking: list[dict] = []
+    async for row in failed_cursor:
+        pat = _drq_match_pattern(row)
+        attempts = int(row.get("requeue_attempts") or 0)
+        if pat and attempts < _DRQ_MAX_ATTEMPTS:
+            auto_recoverable += 1
+            continue
+        blocking += 1
+        if len(sample_blocking) < 5:
+            sample_blocking.append({
+                "row_id":            row.get("id"),
+                "trace_id":          row.get("trace_id"),
+                "last_failed_stage": row.get("last_failed_stage"),
+                "error_code":        (row.get("pipeline_error") or {}).get("code"),
+                "received_at":       row.get("received_at"),
+            })
+
+    if blocking:
         return {"ok": False,
-                "detail": (f"{stuck} فاتورة إنتاجية فشلت بعد التفعيل "
-                           f"({activated_at.isoformat()[:19]}) — راجعها."),
-                "extra": {"stuck_count": stuck,
+                "detail": (
+                    f"{blocking} فاتورة إنتاجية فشلت بعد التفعيل "
+                    f"({activated_at.isoformat()[:19]}) — راجعها."
+                    + (f" بالإضافة إلى {auto_recoverable} فاتورة "
+                       f"ستُعاد معالجتها تلقائياً."
+                       if auto_recoverable else "")),
+                "extra": {"blocking_count": blocking,
+                          "auto_recoverable_count": auto_recoverable,
+                          "since": activated_at.isoformat(),
+                          "sample_blocking": sample_blocking}}
+    if auto_recoverable:
+        return {"ok": True,
+                "detail": (
+                    f"لا توجد فواصل إنتاجية مانعة. "
+                    f"{auto_recoverable} فاتورة ستُعاد معالجتها تلقائياً "
+                    "(خطأ معروف تم إصلاحه)."),
+                "extra": {"blocking_count": 0,
+                          "auto_recoverable_count": auto_recoverable,
                           "since": activated_at.isoformat()}}
     return {"ok": True,
             "detail": ("لا توجد فواصل إنتاجية عالقة منذ التفعيل. "
-                       "فشل Dry Run (إن وُجد) معروض في صفحة المراقبة فقط.")}
+                       "فشل Dry Run (إن وُجد) معروض في صفحة المراقبة فقط."),
+            "extra": {"blocking_count": 0,
+                      "auto_recoverable_count": 0,
+                      "since": activated_at.isoformat()}}
 
 
 async def _check_eligible_orders(

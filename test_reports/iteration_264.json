@@ -1,0 +1,30 @@
+{
+  "summary": "Iter-264 — verified the Qoyod Dead-Letter Auto-Requeue P0 fix end-to-end. All 471 Qoyod tests pass (incl. 17 new unit tests in test_qoyod_dead_letter_auto_requeue.py). New HTTP suite (8 tests) hits the three live endpoints (/dead-letter/preview, /dead-letter/auto-requeue, /dead-letter/requeue-one) against the public ingress URL, exercises auth, body validation, all error codes (row_id_or_trace_id_required, row_not_found, no_known_fix_pattern_matches), seeded an actual DEAD_LETTER+FAILED_CUSTOMER+contact_name row and proved (a) stage transitions to NORMALIZED, (b) requeue_attempts=1, (c) stage_history contains RETRYING and NORMALIZED, (d) generic DEAD_LETTER rows with unrelated errors are NOT requeued, (e) go-live checklist no longer counts the requeued row as blocking. Worker auto-requeue confirmed live (seeded row was drained within seconds by the 5s worker tick). Frontend QYD-GO renders correctly, activate button + identity diagnostics intact, conditional rendering of auto-recoverable banner / btn-trigger-auto-requeue / blocking-failures-sample matches spec (none visible in healthy DB state, which is correct).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_qoyod_dead_letter_auto_requeue.py",
+    "/app/backend/tests/test_qoyod_dead_letter_iter264_http.py",
+    "/app/test_reports/pytest/iter264_qoyod_full.xml",
+    "/app/test_reports/pytest/iter264_http.xml",
+    "/app/test_reports/iter264_seed.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "dead_letter_requeue.py: pattern matcher uses str(err).lower() which is robust to error shape changes — good defensive coding. KNOWN_FIXED_PATTERNS registry is intentionally small (one entry) and guarded by MAX_REQUEUE_ATTEMPTS=2 to prevent infinite loops.",
+    "requeue_row() correctly performs the two-hop transition (terminal→RETRYING→NORMALIZED|CUSTOMER_RESOLVED) and preserves pipeline_error for forensics — good design.",
+    "routes.py: /dead-letter/requeue-one returns 409 with code in detail for both row_not_found and no_known_fix_pattern_matches — consistent contract. Validation 400 for missing row_id+trace_id is also enforced.",
+    "go-live checklist outstanding_failures correctly returns ok=true after rows are requeued — partitioning logic working."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_qoyod_dead_letter_iter264_http.py (new)",
+    "/app/test_reports/iter264_seed.py (new helper)"
+  ],
+  "success_rate": {"backend": "100% (471/471 qoyod tests + 8/8 new HTTP tests)", "frontend": "100% (QYD-GO loads, conditional rendering correct, regression intact)"},
+  "test_credentials": "admin@hesab.app / admin123",
+  "seed_data_creation": "Test-prefixed integration_inbox rows (TEST_iter264_*) seeded during tests are cleaned up in fixtures' finally blocks. One leftover UI test row was also cleaned via /app/test_reports/iter264_seed.py clean.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter264 verified the dead-letter auto-requeue P0 fix. To live-observe the banner in QYD-GO, you must (a) stop the worker OR (b) seed a row and visit QYD-GO within ~5s before worker drains; otherwise the worker auto-requeues and clears the banner before render — which is the desired UX (self-healing). The HTTP test suite at /app/backend/tests/test_qoyod_dead_letter_iter264_http.py covers the full backend contract and should be re-run on any future change to dead_letter_requeue.py, routes.py, or go_live.py outstanding_failures partitioning logic. The KNOWN_FIXED_PATTERNS registry currently has exactly ONE entry — any new pattern must require explicit code review per the module docstring.",
+  "rca of the issue": "Original bug: a single Qoyod customer-create failure with `contact_name: Can't be blank` was stuck in DEAD_LETTER blocking QYD-GO at 10/11. Code fix shipped 2026-02-26 (send both `name` + `contact_name`). New auto-requeue module re-drives historical victims through the now-fixed pipeline, capped by MAX_REQUEUE_ATTEMPTS=2 and strict pattern registry. Verified by seeding the exact failure shape and observing requeue_attempts incrementing 0→1 with stage moving DEAD_LETTER→NORMALIZED, and generic unrelated errors untouched."
+}

@@ -54,8 +54,10 @@ def test_state_machine_has_partial_failure_terminal():
     assert "PARTIAL_FAILURE" in TERMINAL_STAGES
     # Edge: FAILED_RECEIPT → PARTIAL_FAILURE is allowed.
     assert can_transition("FAILED_RECEIPT", "PARTIAL_FAILURE")
-    # PARTIAL_FAILURE has no outbound edges (terminal).
-    for to in ("RETRYING", "DEAD_LETTER", "COMPLETED"):
+    # PARTIAL_FAILURE is terminal except for the bounded auto-requeue
+    # edge → RETRYING (added 2026-02-27 to self-heal known-fixed errors).
+    assert can_transition("PARTIAL_FAILURE", "RETRYING")
+    for to in ("DEAD_LETTER", "COMPLETED"):
         assert not can_transition("PARTIAL_FAILURE", to)
 
 

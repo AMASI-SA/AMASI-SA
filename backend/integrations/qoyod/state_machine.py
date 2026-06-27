@@ -159,6 +159,18 @@ def _build_allowed() -> set[tuple[str, str]]:
     allowed.add((NEEDS_ENRICHMENT, "FAILED_ENRICHMENT"))
     allowed.add((NEEDS_ENRICHMENT, "DEAD_LETTER"))
 
+    # ─── Auto-Requeue (2026-02-27) ────────────────────────────────────
+    # Operator/worker-driven recovery path for DEAD_LETTER /
+    # PARTIAL_FAILURE rows whose error matches a `KNOWN_FIXED_PATTERNS`
+    # entry. The row hops DEAD_LETTER → RETRYING → NORMALIZED (the only
+    # stage the background worker drains) so the full pipeline replays
+    # against the now-fixed code. Restricted to specific edges so a
+    # generic DEAD_LETTER row cannot be smuggled back into the pipeline.
+    allowed.add(("DEAD_LETTER",     RETRYING))
+    allowed.add(("PARTIAL_FAILURE", RETRYING))
+    allowed.add((RETRYING, "NORMALIZED"))
+    allowed.add((RETRYING, "CUSTOMER_RESOLVED"))
+
     return allowed
 
 
