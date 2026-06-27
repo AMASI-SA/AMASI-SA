@@ -110,6 +110,12 @@ def validate_totals(
         return TotalsGuardResult(ok=True, details={"items_count": 0})
 
     # ── 2. Compute items sum (excl-tax baseline) ───────────────────
+    # Line-level math (Iter-276):
+    #   line_excl  = unit_price × quantity − discount_amount
+    #   line_incl  = line_excl + tax_amount
+    # The discount is REAL money the merchant gave away; it must
+    # subtract from items_sum_excl so the guard reconciles against
+    # the order-level `subtotal` (which Salla reports POST-discount).
     items_sum_excl = 0.0
     items_sum_incl = 0.0
     parsed_items = []
@@ -117,16 +123,19 @@ def validate_totals(
         unit_price = _safe_float(it.get("unit_price"))
         quantity   = _safe_float(it.get("quantity"))
         item_tax   = _safe_float(it.get("tax_amount"))
-        line_excl  = unit_price * quantity
+        item_disc  = _safe_float(it.get("discount_amount"))
+        line_excl  = unit_price * quantity - item_disc
         line_incl  = line_excl + item_tax
         items_sum_excl += line_excl
         items_sum_incl += line_incl
         parsed_items.append({
-            "sku":         it.get("sku"),
-            "quantity":    quantity,
-            "unit_price":  unit_price,
-            "line_excl":   _round2(line_excl),
-            "line_incl":   _round2(line_incl),
+            "sku":              it.get("sku"),
+            "quantity":         quantity,
+            "unit_price":       unit_price,
+            "discount_amount":  item_disc,
+            "tax_amount":       item_tax,
+            "line_excl":        _round2(line_excl),
+            "line_incl":        _round2(line_incl),
         })
 
     items_sum_excl = _round2(items_sum_excl)

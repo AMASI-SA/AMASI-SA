@@ -437,20 +437,34 @@ def _extract_item_currency(it: dict, amounts: dict,
     return fallback
 
 
+def _extract_item_discount_amount(it: dict, amounts: dict) -> float:
+    """Priority chain (Iter-276, line-level discounts e.g. promo codes):
+       1) `item.discount_amount`
+       2) `item.amounts.total_discount.amount`
+       3) 0.0
+    """
+    if it.get("discount_amount") is not None:
+        return _f(it.get("discount_amount"), 0.0)
+    if amounts and amounts.get("total_discount") is not None:
+        return _money(amounts.get("total_discount"), 0.0)
+    return 0.0
+
+
 def _normalize_item(it: dict) -> LineItemDTO:
     """Convert a Salla / Make item dict to a `LineItemDTO`.
 
     Accepts three shapes of progressively richer nesting:
-      • Mezan canonical: `{sku, name, quantity, unit_price, tax_amount, total}`.
+      • Mezan canonical: `{sku, name, quantity, unit_price, tax_amount,
+                          discount_amount, total}`.
       • Flat Salla:      `{sku, name, quantity, price: {amount, currency}, ...}`.
       • Layered Salla:   `{sku, name, quantity, amounts: {price_without_tax,
-                          tax: {amount: {amount, currency}}, total: {amount, currency}}}`.
+                          tax: {amount: {amount, currency}}, total: {amount, currency},
+                          total_discount: {amount, currency}}}`.
 
-    Iter-275: the layered shape — emitted by Make.com when an Array
-    Aggregator passes through Salla's native `amounts` block — now
-    parses cleanly to the same canonical DTO. Critical for the Totals
-    Guard (Iter-273): without correct per-item totals the guard would
-    raise false-positive `line_items_total_mismatch` errors.
+    Iter-275: layered amounts shape parses cleanly.
+    Iter-276: per-line `discount_amount` is extracted so Qoyod invoices
+    receive the discount column separately from `unit_price` (auditable
+    line-level math: `unit_price * qty − discount + tax = total`).
     """
     if not isinstance(it, dict):
         raise NormalizationError(
@@ -465,10 +479,11 @@ def _normalize_item(it: dict) -> LineItemDTO:
     if not name and isinstance(it.get("product"), dict):
         name = str(it["product"].get("name") or "").strip()
 
-    quantity   = _f(it.get("quantity"), 1.0)
-    unit_price = _extract_item_unit_price(it, amounts)
-    tax_amount = _extract_item_tax_amount(it, amounts)
-    total      = _extract_item_total(it, amounts, unit_price, quantity)
+    quantity        = _f(it.get("quantity"), 1.0)
+    unit_price      = _extract_item_unit_price(it, amounts)
+    tax_amount      = _extract_item_tax_amount(it, amounts)
+    discount_amount = _extract_item_discount_amount(it, amounts)
+    total           = _extract_item_total(it, amounts, unit_price, quantity)
 
     product_id = None
     if isinstance(it.get("product"), dict):
@@ -482,6 +497,7 @@ def _normalize_item(it: dict) -> LineItemDTO:
         quantity=quantity,
         unit_price=unit_price,
         tax_amount=tax_amount,
+        discount_amount=discount_amount,
         total=total,
         product_id=product_id,
     )

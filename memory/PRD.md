@@ -2717,3 +2717,43 @@ User directive: "Make should not be more complex. Mezan must support this `amoun
 1. Deploy Iter-275 to Production.
 2. Simplify Make's Array Aggregator: pick `sku`, `name`, `quantity`, `amounts` (whole sub-object). Drop the manual mapping of `unit_price` / `tax_amount` / `total`.
 3. Send one test order. The monitor should show `pipeline_stage=COMPLETED` with the canonical_payload.items each carrying the flat shape — proving the normalizer collapsed Salla's nested form correctly.
+
+---
+
+## 2026-02-27 — Iter-276 (Per-line `discount_amount` — line-level accounting fix)
+
+### Context
+User-supplied real example (AMS13000) revealed that Salla orders carry **per-line promo-code discounts**:
+- unit_price = 180
+- total_discount = 19.26
+- tax_amount = 12.86
+- total = 173.60   (= 180 − 19.26 + 12.86)
+
+Before Iter-276 the discount was lost in normalization, the Qoyod invoice would carry `unit_price=180` and `discount=0` — so the invoice total would be 192.86 instead of 173.60. A small bug, but a real bookkeeping divergence.
+
+### Minimal change (4 touch points)
+
+**1) `dto.py`** — added `discount_amount: float = 0.0` to `LineItemDTO`.
+
+**2) `normalizer.py`** — new `_extract_item_discount_amount(it, amounts)` with priority chain:
+- `it.discount_amount` → `it.amounts.total_discount.amount` → `0.0`
+
+**3) `invoice_builder.py`** — `build_invoice_payload` now maps `discount_amount` to Qoyod's `discount` column (NOT folded into unit_price; auditability preserved).
+
+**4) `totals_guard.py`** — `validate_totals` now subtracts `discount_amount` per line when computing items_sum_excl. Salla reports `subtotal` POST-discount, so the math now reconciles for orders with promo codes. `parsed_items` audit also surfaces the per-line discount.
+
+### Tests (`test_qoyod_line_discount_iter276.py` → 11/11 PASS)
+- Priority chain matrix (3 levels for discount_amount)
+- ✓ AMS13000 real shape → DTO carries unit_price=180, discount=19.26, tax=12.86, total=173.60
+- ✓ Invoice builder surfaces `discount: 19.26` as separate column (unit_price stays 180)
+- ✓ Invoice builder defaults to `discount: 0` for items without discount (back-compat)
+- ✓ Totals Guard accepts the AMS13000 single-line discount case
+- ✓ Totals Guard still rejects the 268670571 incomplete-items case
+- ✓ Totals Guard `parsed_items` surfaces `discount_amount` column
+- ✓ Multi-item order with mixed discounts (one line discounted, one not) reconciles end-to-end
+
+Full Qoyod regression: **613 passed, 2 skipped, 0 failed** (+11 from Iter-276 baseline).
+
+### NOT in scope (per user directive)
+- ❌ No new UI / Dashboard.
+- ❌ No order-level discount changes (the canonical already has `discount_amount` at the order level; this iter only adds the per-line column).

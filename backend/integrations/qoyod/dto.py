@@ -44,16 +44,23 @@ class CustomerDTO(BaseModel):
 
 
 class LineItemDTO(BaseModel):
-    """One row on the invoice. `total = unit_price * quantity + tax_amount`.
-    Conservative — we don't recompute; we store what Salla sent."""
+    """One row on the invoice.
+
+    Line-level math (Iter-276): `total = unit_price * quantity
+    − discount_amount + tax_amount`. We don't enforce this — we just
+    store what Salla sent and let the Totals Guard reconcile. Qoyod
+    receives `unit_price` and `discount` as separate columns so the
+    discount stays auditable in the merchant's books.
+    """
     model_config = ConfigDict(extra="forbid")
-    sku:        str
-    name:       str
-    quantity:   float
-    unit_price: float          # price excluding tax
-    tax_amount: float = 0.0
-    total:      float = 0.0
-    product_id: Optional[str] = None     # Salla product id (for mapping)
+    sku:              str
+    name:             str
+    quantity:         float
+    unit_price:       float          # price excluding tax, BEFORE discount
+    tax_amount:       float = 0.0
+    discount_amount:  float = 0.0    # per-line discount (e.g. promo codes)
+    total:            float = 0.0
+    product_id:       Optional[str] = None     # Salla product id (for mapping)
 
 
 class AddressDTO(BaseModel):

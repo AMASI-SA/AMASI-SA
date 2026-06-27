@@ -60,12 +60,15 @@ def build_invoice_payload(
     lines = []
     for it in dto_dict.get("items", []):
         pid = res_by_sku.get(it.get("sku"))
+        # Iter-276: per-line discount column. Qoyod accepts `discount` as
+        # an absolute amount per line; we never fold it into unit_price
+        # so the merchant's books match Salla's promo-code attribution.
         line: dict = {
             "product_id":  pid,
             "description": it.get("name"),
             "quantity":    it.get("quantity"),
             "unit_price":  it.get("unit_price"),
-            "discount":    0,
+            "discount":    it.get("discount_amount") or 0,
         }
         if default_tax_id:
             line["tax_id"] = default_tax_id
