@@ -1,35 +1,20 @@
-"""Iter-271 — stage-specific FAILED_PRODUCT diagnostics on one-shot reprocess.
+"""Iter-272 — stage-specific FAILED_PRODUCT diagnostics surface
+`selling_price` + `is_sold` activation flag visibility.
 
-The user wants the one-shot reprocess modal to surface the EXACT product
-create payload (not a stale invoice snapshot from a previous attempt) so
-they can verify the live deploy actually carries the `sale_price` fix.
-
-Coverage:
-  • `_build_failure_response` for FAILED_PRODUCT carries:
-      - `product_create.endpoint`, `status_code`, `request_body`,
-        `response_excerpt`, `sale_price_field_present`,
-        `selling_price_field_present`, `sale_price_in_request_body`,
-        `sku_in_request_body`, `deploy_carries_sale_price_fix`.
-  • The stale invoice snapshot is NOT surfaced for FAILED_PRODUCT.
-  • The verdict flag flips correctly between fixed / unfixed deploys.
+The user must be able to see in the modal that the live deploy is
+sending BOTH:
+  • selling_price (not sale_price)
+  • is_sold: true
+A green verdict ONLY fires when both conditions hold.
 """
 from __future__ import annotations
 
 from integrations.qoyod.one_shot_reprocess import _build_failure_response
 
 
-def _pe_for_product_create(*, sale_price_value=5.0,
-                           field_name="sale_price",
-                           sku="AMS11961"):
-    """Synthesise a `pipeline_error` dict shaped like what
-    `QoyodAPIError.to_log_dict()` produces when /products POST fails."""
-    body = {"product": {
-        "name": "تغليف",
-        "sku":  sku,
-        "type": "service",
-        "is_non_stock": True,
-        field_name: sale_price_value,
-    }}
+def _pe_product_create(*, body=None):
+    """Synthesise a `pipeline_error` dict shaped like
+    `QoyodAPIError.to_log_dict()` from a /products POST 422."""
     return {
         "code":        "qoyod_validation_error",
         "message":     "{'base': ['enter at least a purchase price or a sales price to continue.']}",
@@ -48,63 +33,76 @@ CANONICAL = {
 }
 
 
-# ── FIXED deploy (sale_price present, selling_price absent) ──────────
-def test_failed_product_surfaces_product_create_diagnostic_when_fixed():
-    pe = _pe_for_product_create()
+# ── FIXED deploy: selling_price + is_sold: true ─────────────────────
+def test_failed_product_verdict_is_green_when_full_fix_deployed():
+    body = {"product": {
+        "sku": "AMS11961", "name": "تغليف", "type": "service",
+        "is_non_stock": True, "is_sold": True, "is_bought": False,
+        "selling_price": 5.0,
+    }}
     resp = _build_failure_response(
-        outcome="DEAD_LETTER",
-        row_id="r1", trace_id="t1",
-        pipeline_error=pe,
-        last_failed_stage="FAILED_PRODUCT",
-        canonical_payload=CANONICAL,
-        invoice_snapshot={"invoice": {"contact_id": "109",
-                                      "line_items": [{"product_id": "DRY:product:STALE"}]}},
-        stage_sequence=["NORMALIZED", "CUSTOMER_RESOLVED", "PRODUCT_RESOLVED"],
-        quarantine_summary={"product_mappings_quarantined": []},
-    )
-
-    assert resp["failed_at_stage"] == "FAILED_PRODUCT"
-    pc = resp["product_create"]
-    assert pc["endpoint"] == "POST /products"
-    assert pc["status_code"] == 422
-    assert pc["sku_in_request_body"] == "AMS11961"
-    assert pc["sale_price_field_present"] is True
-    assert pc["selling_price_field_present"] is False
-    assert pc["sale_price_in_request_body"] == 5.0
-    assert pc["deploy_carries_sale_price_fix"] is True
-    assert pc["expected_from_canonical"]["sale_price_we_would_send"] == 5.0
-    # The stale invoice snapshot MUST NOT be surfaced — it confuses
-    # the diagnosis (it's from a pre-fix attempt).
-    assert "invoice_payload" not in resp
-
-
-# ── UNFIXED deploy (still using `selling_price`) ─────────────────────
-def test_failed_product_diagnostic_detects_unfixed_deploy():
-    pe = _pe_for_product_create(field_name="selling_price")
-    resp = _build_failure_response(
-        outcome="DEAD_LETTER",
-        row_id="r2", trace_id="t2",
-        pipeline_error=pe,
+        outcome="DEAD_LETTER", row_id="r1", trace_id="t1",
+        pipeline_error=_pe_product_create(body=body),
         last_failed_stage="FAILED_PRODUCT",
         canonical_payload=CANONICAL,
         invoice_snapshot=None,
-        stage_sequence=["NORMALIZED", "CUSTOMER_RESOLVED"],
+        stage_sequence=["NORMALIZED", "CUSTOMER_RESOLVED", "PRODUCT_RESOLVED"],
         quarantine_summary={},
     )
     pc = resp["product_create"]
-    assert pc["sale_price_field_present"] is False
     assert pc["selling_price_field_present"] is True
-    assert pc["deploy_carries_sale_price_fix"] is False, \
-        "verdict must flip when the live deploy still ships `selling_price`"
+    assert pc["sale_price_field_present"] is False
+    assert pc["is_sold_flag"] is True
+    assert pc["selling_price_in_request_body"] == 5.0
+    assert pc["sku_in_request_body"] == "AMS11961"
+    assert pc["deploy_carries_full_fix"] is True
+    # Stale invoice snapshot must not appear.
+    assert "invoice_payload" not in resp
 
 
-# ── Generic error block (status, endpoint) preserved ─────────────────
-def test_failed_product_error_block_has_full_qoyod_context():
-    pe = _pe_for_product_create()
+# ── Partial deploy: selling_price present BUT is_sold missing ───────
+def test_failed_product_verdict_is_red_when_is_sold_missing():
+    body = {"product": {
+        "sku": "X", "selling_price": 5.0,
+        # NB: no is_sold flag — exactly the bug that caused order 268670571 to fail.
+    }}
     resp = _build_failure_response(
-        outcome="DEAD_LETTER",
-        row_id="r3", trace_id="t3",
-        pipeline_error=pe,
+        outcome="DEAD_LETTER", row_id="r2", trace_id="t2",
+        pipeline_error=_pe_product_create(body=body),
+        last_failed_stage="FAILED_PRODUCT",
+        canonical_payload=CANONICAL,
+        invoice_snapshot=None,
+        stage_sequence=[], quarantine_summary={},
+    )
+    pc = resp["product_create"]
+    assert pc["selling_price_field_present"] is True
+    assert pc["is_sold_flag"] is None      # absent in body
+    assert pc["deploy_carries_full_fix"] is False, \
+        "verdict must be red when is_sold flag is missing — that is the bug"
+
+
+# ── Old deploy: still using sale_price ──────────────────────────────
+def test_failed_product_verdict_is_red_when_using_sale_price():
+    body = {"product": {"sku": "X", "sale_price": 5.0, "is_sold": True}}
+    resp = _build_failure_response(
+        outcome="DEAD_LETTER", row_id="r3", trace_id="t3",
+        pipeline_error=_pe_product_create(body=body),
+        last_failed_stage="FAILED_PRODUCT",
+        canonical_payload=CANONICAL,
+        invoice_snapshot=None,
+        stage_sequence=[], quarantine_summary={},
+    )
+    pc = resp["product_create"]
+    assert pc["sale_price_field_present"]    is True
+    assert pc["selling_price_field_present"] is False
+    assert pc["deploy_carries_full_fix"] is False
+
+
+# ── Error block always carries the full Qoyod context ────────────────
+def test_failed_product_error_block_has_full_qoyod_context():
+    resp = _build_failure_response(
+        outcome="DEAD_LETTER", row_id="r4", trace_id="t4",
+        pipeline_error=_pe_product_create(body={"product": {"sku": "X"}}),
         last_failed_stage="FAILED_PRODUCT",
         canonical_payload=CANONICAL,
         invoice_snapshot=None,
@@ -117,19 +115,30 @@ def test_failed_product_error_block_has_full_qoyod_context():
     assert "enter at least" in (err["qoyod_response_excerpt"] or "")
 
 
-# ── FAILED_INVOICE still surfaces invoice_snapshot ───────────────────
+# ── FAILED_INVOICE / FAILED_RECEIPT still surfaces invoice_snapshot ──
 def test_failed_invoice_still_surfaces_invoice_payload():
     pe = {"code": "qoyod_validation_error", "message": "x",
           "status_code": 422, "endpoint": "POST /invoices"}
     inv = {"invoice": {"contact_id": "109", "line_items": []}}
     resp = _build_failure_response(
-        outcome="DEAD_LETTER",
-        row_id="r4", trace_id="t4",
-        pipeline_error=pe,
-        last_failed_stage="FAILED_INVOICE",
-        canonical_payload=CANONICAL,
-        invoice_snapshot=inv,
+        outcome="DEAD_LETTER", row_id="r5", trace_id="t5",
+        pipeline_error=pe, last_failed_stage="FAILED_INVOICE",
+        canonical_payload=CANONICAL, invoice_snapshot=inv,
         stage_sequence=[], quarantine_summary={},
     )
     assert resp["invoice_payload"] == inv
     assert "product_create" not in resp
+
+
+def test_expected_from_canonical_uses_selling_price_key():
+    """The expected block must mirror the actual field name we send."""
+    resp = _build_failure_response(
+        outcome="DEAD_LETTER", row_id="r6", trace_id="t6",
+        pipeline_error=_pe_product_create(body={"product": {"sku": "X"}}),
+        last_failed_stage="FAILED_PRODUCT",
+        canonical_payload=CANONICAL, invoice_snapshot=None,
+        stage_sequence=[], quarantine_summary={},
+    )
+    expected = resp["product_create"]["expected_from_canonical"]
+    assert expected["sku"] == "AMS11961"
+    assert expected["selling_price_we_would_send"] == 5.0

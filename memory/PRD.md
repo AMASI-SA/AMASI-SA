@@ -2466,3 +2466,61 @@ After Iter-270b shipped, the user retried order `268670571` on Production and sa
 - `pytest tests/test_qoyod_one_shot_failed_product_diagnostic.py + reprocess + field_names` → **19/19 PASS**.
 - `pytest -k qoyod` (full surface) → **555 passed, 2 skipped, 0 failed**.
 - Modal renders cleanly on preview (smoke test screenshot).
+
+---
+
+## 2026-02-27 — Iter-272 (Qoyod product create — REAL fix: selling_price + is_sold:true)
+
+### The truth (after Iter-271 diagnostic surfaced the deploy state)
+The diagnostic from Iter-271 confirmed the live Production deploy WAS sending `sale_price=5` (green verdict). Yet Qoyod still rejected with the SAME 422:
+```
+{"errors": {"base": ["enter at least a purchase price or a sales price to continue."]}}
+```
+
+So Iter-270b's rename `selling_price → sale_price` was **wrong**. Re-investigating Qoyod's docs + knowledge base:
+- Qoyod's GET /products responses use **`selling_price`** (confirmed in `identity_diagnostics.py:229`).
+- Qoyod's legacy /products POST validator requires **two** things:
+  1. Field name **`selling_price`** (NOT `sale_price`).
+  2. Activation flag **`is_sold: true`** — without it Qoyod ignores `selling_price` entirely and emits the misleading "enter at least a purchase price or a sales price" message.
+
+### What changed (Iter-272)
+**`product_resolver.py`:**
+- Reverted: `sale_price` → `selling_price`.
+- **Added activation flags**:
+  - `is_sold: true` — activates `selling_price` validation in Qoyod.
+  - `is_bought: false` — tells Qoyod we don't track purchases (no `buying_price` required).
+
+**`one_shot_reprocess.py` — FAILED_PRODUCT diagnostic block updated:**
+- `deploy_carries_sale_price_fix` (boolean) → `deploy_carries_full_fix` (boolean).
+- New field: `is_sold_flag` (bool|None) — surfaces what the deploy actually sent.
+- New field: `selling_price_in_request_body` (replaces `sale_price_in_request_body`).
+- Green verdict ONLY when BOTH conditions hold (selling_price present AND is_sold=true).
+
+**`QoyodFirstSyncMonitor.jsx`:**
+- Verdict banner text updated: "النشر يستخدم الإصلاح الكامل: selling_price + is_sold:true".
+- 4 verification lines: selling_price field present (must be true), sale_price field present (must be false — wrong name), is_sold flag (must be true), selling_price value vs expected.
+
+### Tests (8 new + diagnostic suite refreshed)
+- `test_qoyod_product_create_payload_selling_price_iter272.py` → **6/6 PASS**:
+  - ✓ Uses `selling_price`, not `sale_price`.
+  - ✓ `is_sold: true` activation flag included.
+  - ✓ `is_bought: false` set.
+  - ✓ String → float coercion.
+  - ✓ Missing unit_price → 0.0 fallback.
+  - ✓ Preserves name/sku/type fields.
+- `test_qoyod_one_shot_failed_product_diagnostic.py` rewritten → **7/7 PASS**:
+  - ✓ Green verdict when full fix deployed.
+  - ✓ Red verdict when is_sold flag missing (the original bug).
+  - ✓ Red verdict when still using sale_price.
+  - ✓ Full Qoyod context preserved in error block.
+  - ✓ FAILED_INVOICE / FAILED_RECEIPT unaffected.
+  - ✓ Expected_from_canonical uses `selling_price_we_would_send`.
+- Removed: obsolete `test_qoyod_product_create_payload_field_names.py` (Iter-270b).
+- Full Qoyod regression: **559 passed, 2 skipped, 0 failed**.
+
+### Operator next steps
+1. Deploy Iter-272 to Production.
+2. Retry order `268670571` in the modal. Expected outcome: 🟩 green verdict (selling_price + is_sold:true), and the product create will succeed → row continues through INVOICE_CREATED → RECEIPT_CREATED → COMPLETED.
+
+### Lesson learned (for the handoff log)
+LLM web-search results for accounting APIs are sometimes contradictory (some sources said `sale_price`, others said `selling_price`). The authoritative signal was **already in the codebase**: `identity_diagnostics.py:229` reads `selling_price` from Qoyod's own GET responses. Next time, **trust READ schemas as the source of truth for WRITE field names** before consulting external docs.

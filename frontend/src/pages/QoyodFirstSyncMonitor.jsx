@@ -795,14 +795,14 @@ export default function QoyodFirstSyncMonitor() {
 
                     {/* Sale-price fix verdict — most important line */}
                     <div className={`text-[12px] font-bold rounded p-2 ${
-                          reprocResult.product_create.deploy_carries_sale_price_fix
+                          reprocResult.product_create.deploy_carries_full_fix
                             ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
                             : "bg-rose-100 text-rose-900 border border-rose-300"
                         }`}
                         data-testid="reproc-sale-price-verdict">
-                      {reprocResult.product_create.deploy_carries_sale_price_fix
-                        ? "✓ النشر يستخدم الإصلاح الجديد: sale_price موجود، selling_price غير موجود"
-                        : "⚠ النشر لا يحتوي على الإصلاح الجديد — sale_price ناقص أو ما زال selling_price مُستخدماً"}
+                      {reprocResult.product_create.deploy_carries_full_fix
+                        ? "✓ النشر يستخدم الإصلاح الكامل: selling_price + is_sold:true"
+                        : "⚠ النشر ناقص — يحتاج: selling_price + is_sold:true"}
                     </div>
 
                     <ul className="mt-2 text-[12px] space-y-0.5 text-amber-900">
@@ -813,22 +813,28 @@ export default function QoyodFirstSyncMonitor() {
                         <code className="font-mono">{reprocResult.product_create.expected_from_canonical?.sku || "—"}</code>)
                       </li>
                       <li>
-                        <strong>sale_price field present:</strong>{" "}
-                        <code className={`font-mono ${reprocResult.product_create.sale_price_field_present ? "text-emerald-700" : "text-rose-700"}`}>
-                          {String(reprocResult.product_create.sale_price_field_present)}
-                        </code>
-                      </li>
-                      <li>
-                        <strong>selling_price field present (يجب false):</strong>{" "}
-                        <code className={`font-mono ${reprocResult.product_create.selling_price_field_present ? "text-rose-700" : "text-emerald-700"}`}>
+                        <strong>selling_price field present (يجب true):</strong>{" "}
+                        <code className={`font-mono ${reprocResult.product_create.selling_price_field_present ? "text-emerald-700" : "text-rose-700"}`}>
                           {String(reprocResult.product_create.selling_price_field_present)}
                         </code>
                       </li>
                       <li>
-                        <strong>sale_price المُرسل:</strong>{" "}
-                        <code className="font-mono">{String(reprocResult.product_create.sale_price_in_request_body ?? "null")}</code>
+                        <strong>sale_price field present (يجب false — اسم خاطئ):</strong>{" "}
+                        <code className={`font-mono ${reprocResult.product_create.sale_price_field_present ? "text-rose-700" : "text-emerald-700"}`}>
+                          {String(reprocResult.product_create.sale_price_field_present)}
+                        </code>
+                      </li>
+                      <li>
+                        <strong>is_sold flag (يجب true):</strong>{" "}
+                        <code className={`font-mono ${reprocResult.product_create.is_sold_flag === true ? "text-emerald-700" : "text-rose-700"}`}>
+                          {String(reprocResult.product_create.is_sold_flag)}
+                        </code>
+                      </li>
+                      <li>
+                        <strong>selling_price المُرسل:</strong>{" "}
+                        <code className="font-mono">{String(reprocResult.product_create.selling_price_in_request_body ?? "null")}</code>
                         {" "}(المتوقع:{" "}
-                        <code className="font-mono">{String(reprocResult.product_create.expected_from_canonical?.sale_price_we_would_send ?? "null")}</code>)
+                        <code className="font-mono">{String(reprocResult.product_create.expected_from_canonical?.selling_price_we_would_send ?? "null")}</code>)
                       </li>
                     </ul>
 

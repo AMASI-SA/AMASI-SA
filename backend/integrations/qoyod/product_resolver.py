@@ -81,27 +81,41 @@ class ProductsResolutionResult:
 def _build_product_payload(item: dict, settings: dict) -> dict:
     """Map a DTO LineItem (as dict) → Qoyod /products POST body.
 
-    Qoyod V2 (apidoc.qoyod.com) uses `sale_price` and `purchase_price`
-    as the canonical price field names — NOT `selling_price`. Using
-    the wrong name causes Qoyod to refuse the create with
-    `enter at least a purchase price or a sales price to continue`.
+    Qoyod's legacy `/products` (Rails-backed) REQUIRES TWO things to
+    accept a price:
+      1. Field name **`selling_price`** (NOT `sale_price`, NOT `price`).
+         Qoyod's own GET /products response uses this exact key.
+      2. The activation flag **`is_sold: true`**. Without it, Qoyod's
+         validator treats the product as not-for-sale and refuses
+         the create with:
+            {"base": ["enter at least a purchase price or a sales price to continue."]}
+         even when `selling_price` is in the payload.
+
+    Iter-270b briefly renamed to `sale_price` on outdated docs; this
+    iteration restores `selling_price` AND adds the activation flag.
+    Verified against Qoyod knowledge-base and on-the-wire 422
+    response from order 268670571 (2026-02-27, Production).
     """
     # Coerce to float so we never accidentally send a string-typed
     # price. Falls back to 0.0 when missing — Qoyod accepts a zero
-    # sale price as long as the field exists, which keeps service /
-    # complimentary products (free gifts, packaging) creatable.
+    # selling price as long as is_sold is true and the field exists.
     raw_price = item.get("unit_price")
     try:
-        sale_price = float(raw_price) if raw_price is not None else 0.0
+        selling_price = float(raw_price) if raw_price is not None else 0.0
     except (TypeError, ValueError):
-        sale_price = 0.0
+        selling_price = 0.0
     return {"product": {
         "name":              item.get("name") or item.get("sku") or "منتج",
         "sku":               item.get("sku"),
         "type":              (settings.get("default_product_type")
                               or "service"),
         "is_non_stock":      (settings.get("default_product_type") or "service") == "service",
-        "sale_price":        sale_price,
+        # Activation flags — without `is_sold` Qoyod ignores `selling_price`
+        # entirely and rejects the create. We don't track purchase prices
+        # in Mezan (we only sell), so `is_bought` is False.
+        "is_sold":           True,
+        "is_bought":         False,
+        "selling_price":     selling_price,
     }}
 
 

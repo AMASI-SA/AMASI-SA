@@ -578,11 +578,11 @@ def _extract_observed_sequence(row: dict) -> list[str]:
 
 
 def _extract_sku_and_sale_price(canonical_payload: dict) -> dict:
-    """Pull the first line item's SKU + the sale_price WE WOULD send.
+    """Pull the first line item's SKU + the selling_price WE WOULD send.
 
     Mirrors `product_resolver._build_product_payload` so the operator
     can verify, side-by-side, that the request body actually carried
-    the fix (`sale_price` field, correct value).
+    the fix (`selling_price` + `is_sold: true`, correct value).
     """
     items = (canonical_payload or {}).get("items") or []
     if not items:
@@ -590,13 +590,13 @@ def _extract_sku_and_sale_price(canonical_payload: dict) -> dict:
     it = items[0]
     raw_price = it.get("unit_price")
     try:
-        sale_price = float(raw_price) if raw_price is not None else 0.0
+        selling_price = float(raw_price) if raw_price is not None else 0.0
     except (TypeError, ValueError):
-        sale_price = 0.0
+        selling_price = 0.0
     return {
         "sku":           it.get("sku"),
-        "sale_price_we_would_send": sale_price,
-        "unit_price_from_canonical": raw_price,
+        "selling_price_we_would_send": selling_price,
+        "unit_price_from_canonical":   raw_price,
     }
 
 
@@ -641,35 +641,40 @@ def _build_failure_response(
         # `pipeline_error.request_body_json` IS the product-create
         # body the resolver tried to POST to `/products`. Surfacing
         # it lets the operator verify the live deploy carries the
-        # `sale_price` fix (vs the old `selling_price`).
+        # full Qoyod-compatible payload:
+        #   • selling_price (not sale_price, not price)
+        #   • is_sold: true (the activation flag — without this
+        #     Qoyod ignores selling_price and rejects the create)
         product_create_body = pe.get("request_body_json")
         # Drill into the wrapped form (resolver sends `{"product": {...}}`).
         inner = (product_create_body or {}).get("product") \
             if isinstance(product_create_body, dict) else None
-        sale_price_field_present = isinstance(inner, dict) and \
-            ("sale_price" in inner)
-        selling_price_field_present = isinstance(inner, dict) and \
-            ("selling_price" in inner)
+        is_dict = isinstance(inner, dict)
+        selling_price_field_present = is_dict and ("selling_price" in inner)
+        sale_price_field_present    = is_dict and ("sale_price"    in inner)
+        is_sold_flag                = (inner or {}).get("is_sold") if is_dict else None
         expected = _extract_sku_and_sale_price(canonical_payload)
         response["product_create"] = {
             "endpoint":     pe.get("endpoint")    or "POST /products",
             "status_code":  pe.get("status_code"),
             "request_body": product_create_body,
             "response_excerpt": pe.get("qoyod_response_excerpt"),
-            "sale_price_field_present":    sale_price_field_present,
             "selling_price_field_present": selling_price_field_present,
-            "sale_price_in_request_body":  (inner or {}).get("sale_price")
-                                            if isinstance(inner, dict) else None,
+            "sale_price_field_present":    sale_price_field_present,
+            "is_sold_flag":                is_sold_flag,
+            "selling_price_in_request_body":
+                (inner or {}).get("selling_price") if is_dict else None,
             "sku_in_request_body":         (inner or {}).get("sku")
-                                            if isinstance(inner, dict) else None,
+                                            if is_dict else None,
             "expected_from_canonical":     expected,
             # Quick verdict the operator can read at a glance.
-            "deploy_carries_sale_price_fix": (
-                sale_price_field_present and not selling_price_field_present
+            # The deploy is "good" only if BOTH conditions hold:
+            #   - selling_price field is present
+            #   - is_sold flag is true (activation flag)
+            "deploy_carries_full_fix": (
+                selling_price_field_present and is_sold_flag is True
             ),
         }
-        # Do NOT include the stale invoice_snapshot here — it confuses
-        # the diagnosis (snapshot is from a PRE-fix attempt).
         return response
 
     if failed_stage in ("FAILED_INVOICE", "FAILED_RECEIPT"):
