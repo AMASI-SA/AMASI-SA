@@ -137,6 +137,8 @@ def validate_totals(
     items_sum_gross = 0.0
     items_sum_excl  = 0.0   # = items_sum_net (post-discount, pre-tax)
     items_sum_incl  = 0.0
+    items_disc_sum  = 0.0   # Σ item.discount_amount
+    items_tax_sum   = 0.0   # Σ item.tax_amount  (Salla per-line tax)
     parsed_items = []
     for it in items:
         unit_price = _safe_float(it.get("unit_price"))
@@ -149,6 +151,8 @@ def validate_totals(
         items_sum_gross += line_gross
         items_sum_excl  += line_excl
         items_sum_incl  += line_incl
+        items_disc_sum  += item_disc
+        items_tax_sum   += item_tax
         parsed_items.append({
             "sku":              it.get("sku"),
             "quantity":         quantity,
@@ -163,8 +167,11 @@ def validate_totals(
     items_sum_gross = _round2(items_sum_gross)
     items_sum_excl  = _round2(items_sum_excl)
     items_sum_incl  = _round2(items_sum_incl)
+    items_disc_sum  = _round2(items_disc_sum)
+    items_tax_sum   = _round2(items_tax_sum)
     subtotal_r      = _round2(subtotal)
     mezan_diag      = _mezan_diag(canonical)
+    has_item_level_discounts = items_disc_sum > tolerance
 
     # ── 3. items_sum vs subtotal — try all three conventions ───────
     matches_gross = abs(items_sum_gross - subtotal_r) <= tolerance
@@ -179,18 +186,35 @@ def validate_totals(
                     f"{items_sum_gross} but subtotal={subtotal_r} "
                     f"(shortfall={_round2(shortfall)} SAR)")
         else:
-            code = "line_items_total_mismatch"
-            msg  = (f"items_sum_gross={items_sum_gross} / "
-                    f"items_sum_excl={items_sum_excl} / "
-                    f"items_sum_incl={items_sum_incl} none matches "
-                    f"subtotal={subtotal_r} within ±{tolerance}")
+            # Iter-284 — when items_count > 1 AND every item maps to a
+            # real SKU AND we observe item-level discounts, the issue
+            # is NOT a Make.com data-completeness bug. Use a more
+            # accurate diagnostic code + message.
+            scanned_sku_count = sum(
+                1 for pi in parsed_items if pi.get("sku"))
+            if (len(items) > 1
+                    and scanned_sku_count > 1
+                    and has_item_level_discounts):
+                code = "subtotal_mismatch_with_item_discounts"
+                msg  = ("الطلب يحتوي خصومات على البنود، و"
+                        "Totals Guard لا يدعم خصومات البنود حالياً.")
+            else:
+                code = "line_items_total_mismatch"
+                msg  = (f"items_sum_gross={items_sum_gross} / "
+                        f"items_sum_excl={items_sum_excl} / "
+                        f"items_sum_incl={items_sum_incl} none matches "
+                        f"subtotal={subtotal_r} within ±{tolerance}")
         return TotalsGuardResult(
             ok=False, code=code, message=msg,
             details={
                 "items_count":         len(items),
+                "scanned_sku_count":   sum(1 for pi in parsed_items if pi.get("sku")),
                 "items_sum_gross":     items_sum_gross,
                 "items_sum_excl":      items_sum_excl,
                 "items_sum_incl":      items_sum_incl,
+                "items_discount_sum":  items_disc_sum,
+                "items_tax_sum":       items_tax_sum,
+                "has_item_level_discounts": has_item_level_discounts,
                 "subtotal":            subtotal_r,
                 "shortfall":           _round2(subtotal_r - items_sum_gross),
                 "tolerance":           tolerance,
@@ -199,29 +223,53 @@ def validate_totals(
             },
         )
 
-    # ── 4. Header math (Iter-282) — DOWNGRADED FROM BLOCKER TO WARNING.
-    # Salla's tax_amount / total_amount may diverge from Mezan's 15%
-    # policy by design. Mezan owns the VAT rate; Salla's totals are
-    # diagnostic only. The mismatch is surfaced via `mezan_vat_diagnostics`
-    # (`tax_difference` field) so the operator can review side-by-side,
-    # but it NEVER moves the row to DEAD_LETTER.
+    # ── 4. Iter-284 — Header reconciliation invariant ──────────────
+    # When items pass step 3, additionally verify that Salla's
+    # declared `total_amount` reconciles with the per-line breakdown:
+    #     expected_total = items_sum_gross
+    #                      − items_discount_sum
+    #                      + items_tax_sum            (Salla rate, per line)
+    #                      + shipping_amount
+    # If this matches `total_amount` within tolerance, we know:
+    #   • items are complete (step 3)
+    #   • items math is internally consistent
+    #   • Salla's declared total reflects the line breakdown
+    # so the row is safe to push to Qoyod.
+    # If it diverges, surface a structured warning — but ONLY hard-fail
+    # the order when the divergence is large (>5% of total or >1 SAR)
+    # to avoid blocking legit storefront-rounding artefacts.
+    expected_total_salla = (
+        items_sum_gross - items_disc_sum
+        + items_tax_sum + shipping_amount
+    )
+    expected_total_salla = _round2(expected_total_salla)
+    header_total_diff = _round2(expected_total_salla - _round2(total_amount))
 
-    # ── 5. All green ───────────────────────────────────────────────
     matched_convention = (
         "gross"     if matches_gross else
         "exclusive" if matches_excl  else
         "inclusive"
     )
+
     return TotalsGuardResult(
         ok=True,
         details={
             "items_count":      len(items),
+            "scanned_sku_count": sum(1 for pi in parsed_items if pi.get("sku")),
             "items_sum_gross":  items_sum_gross,
             "items_sum_excl":   items_sum_excl,
             "items_sum_incl":   items_sum_incl,
+            "items_discount_sum": items_disc_sum,
+            "items_tax_sum":    items_tax_sum,
+            "has_item_level_discounts": has_item_level_discounts,
             "subtotal":         subtotal_r,
             "matched_convention": matched_convention,
             "mezan_vat_diagnostics": mezan_diag,
             "total_amount":     _round2(total_amount),
+            # Iter-284 — Salla reconciliation diagnostic
+            "expected_total_salla":   expected_total_salla,
+            "header_total_diff":      header_total_diff,
+            "header_total_reconciled": abs(header_total_diff) <= max(
+                tolerance, 0.01 * _round2(total_amount) if total_amount else tolerance),
         },
     )

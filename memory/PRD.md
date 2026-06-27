@@ -1,5 +1,51 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-284 — Per-line Discount Aggregation + Clearer Error Codes (2026-02-27)
+**User scenario (production)**: Order `268756329` (3 items, internal math consistent) failed `line_items_total_mismatch` because the normalizer emitted `discount_amount=0` (Salla put discounts only on items, not at order root) and the guard's UI message wrongly accused Make.com.
+
+### Backend fixes
+
+#### 1. `normalizer._aggregate_discount(top, items)`
+When `amounts.discounts` is 0/missing but items carry per-line `total_discount`, the canonical's `discount_amount` is set to `Σ items[].discount_amount`. Top-level Salla discount (when set) is still canonical — never overridden.
+
+#### 2. `totals_guard.validate_totals` improvements
+- New diagnostic fields on EVERY result: `items_discount_sum`, `items_tax_sum`, `has_item_level_discounts`, `scanned_sku_count`, `expected_total_salla`, `header_total_diff`, `header_total_reconciled`.
+- New error code `subtotal_mismatch_with_item_discounts` (Arabic message: "الطلب يحتوي خصومات على البنود...") used when `items_count > 1 AND scanned_sku_count > 1 AND has_item_level_discounts` — so the UI never wrongly blames Make.com. The legacy `line_items_total_mismatch` is kept for the single-item / no-discount path.
+- `expected_total_salla = items_sum_gross − items_discount_sum + items_tax_sum + shipping_amount`. For order 268756329 → `269.10 + 21.53 + 0 = 290.63` matches Salla's declared total exactly. Surfaced as a green-flag in `header_total_reconciled`.
+
+### Order 268756329 — now passes
+```
+items_sum_gross = 304.0 = subtotal  (gross convention)
+items_discount_sum = 34.9
+items_tax_sum = 21.53
+expected_total_salla = 290.63 = total_amount  ✓
+matched_convention = "gross"
+ok = True
+```
+
+### Tests (Iter-284)
+- **NEW** `tests/test_qoyod_per_line_discount_aggregation_iter284.py` — **8/8 pass**:
+  - The exact production order PASSES.
+  - `matched_convention="gross"`, `items_sum_gross=304`, `expected_total_salla=290.63`, `header_total_reconciled=true`.
+  - `items_discount_sum=34.9`, `items_tax_sum=21.53`, `has_item_level_discounts=true`, `scanned_sku_count=3`.
+  - Clearer code `subtotal_mismatch_with_item_discounts` used for multi-SKU + item-discount failures (Arabic message; Make.com NOT blamed).
+  - Single-item failure still uses legacy `line_items_total_mismatch`.
+  - Normalizer aggregates per-line discounts when top-level is 0.
+  - Normalizer KEEPS top-level discount when explicitly set (no override).
+- **709/709** Qoyod pytest suite passes. 0 regressions.
+
+### Open accounting decision (user point #6) — REQUIRES YOUR INPUT
+Two competing policies:
+
+**Option A — "Customer-First"** (recommended for trial validation): Invoice tax = Salla's reported tax. Invoice total = Receipt amount = What customer paid (e.g. 290.63 SAR). Mezan VAT 15% becomes diagnostic only (already surfaced via `mezan_vat_diagnostics`). Books match transaction reality.
+
+**Option B — "Compliance-First"**: Invoice tax = Mezan fixed 15%. Invoice total ≠ Receipt amount; needs a "tax adjustment" GL line to bridge the gap. Books match legal VAT rate but introduces a bookkeeping artefact per order.
+
+**Current behavior**: invoice_builder sends `tax_id` (Qoyod-side rate) — if `default_tax_id` points to Qoyod's 15% tax record, this implicitly chooses Option B but **WITHOUT** the adjustment line, so receipt amount and invoice total don't match. This is what blocks Go-Live.
+
+**Recommendation**: Switch `default_tax_id` to Qoyod's "Salla-rate" tax record (per storefront), OR add a tax-adjustment GL line for Option B. Need user's decision before next Qoyod write.
+
+
 ## Iter-283 — Totals Guard Discount Accounting Fix (2026-02-27)
 **User scenario (production preview)**: Order `268632361` (trace `33c07a10...`) returned PASS for normalize but FAIL on totals_guard:
 - `items_sum_excl = 187.06` (= 199 − 11.94 discount)

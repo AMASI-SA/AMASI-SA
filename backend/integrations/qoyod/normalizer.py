@@ -516,6 +516,22 @@ def _normalize_address(node: Any) -> Optional[AddressDTO]:
     )
 
 
+def _aggregate_discount(*, top: float, items: list) -> float:
+    """Iter-284 — if the order-level discount is 0 / absent but each
+    line item carries its own `discount_amount`, return the sum of
+    per-line discounts. Otherwise keep the top-level value (it is
+    canonical when Salla provides it). Never returns negative."""
+    if top and top > 0:
+        return float(top)
+    agg = 0.0
+    for it in items or []:
+        try:
+            agg += float(getattr(it, "discount_amount", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            pass
+    return round(agg, 2) if agg > 0 else float(top or 0.0)
+
+
 def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrderDTO:
     """Build a `SalesOrderDTO` from a validated raw Salla payload.
 
@@ -589,7 +605,14 @@ def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrde
         subtotal=_money(amounts.get("sub_total") or amounts.get("subtotal")),
         tax_amount=_money(amounts.get("tax")),
         shipping_amount=_money(amounts.get("shipping")),
-        discount_amount=_money(amounts.get("discounts") or amounts.get("discount")),
+        # Iter-284 — if the top-level discount is absent or 0 BUT each
+        # line carries its own `discount_amount`, aggregate them so
+        # downstream invariants (`net_items = gross - discount_amount`)
+        # hold even for orders with per-item discounts.
+        discount_amount=_aggregate_discount(
+            top=_money(amounts.get("discounts") or amounts.get("discount")),
+            items=items,
+        ),
         total_amount=_money(amounts.get("total")),
         customer=_normalize_customer(data, order_number=order_number),
         items=items,
