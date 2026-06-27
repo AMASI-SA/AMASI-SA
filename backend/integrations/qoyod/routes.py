@@ -121,6 +121,9 @@ class SettingsPatch(BaseModel):
     # Legacy-Adapter enrichment toggle (Salla-API fallback when items
     # are missing from the incoming webhook). Default False — opt-in.
     enrichment_fallback_enabled: Optional[bool] = None
+    # Backfill mode — controls whether the worker drains pre-activation
+    # rows after Go-Live (Iter-267). Default = "now_forward_only".
+    backfill_mode:        Optional[str] = None
 
 
 class CredentialsRequest(BaseModel):

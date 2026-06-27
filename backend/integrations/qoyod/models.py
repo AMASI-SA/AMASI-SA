@@ -200,6 +200,26 @@ class QoyodSettings(BaseModel):
     # User policy 2026-06-26: opt-in only. Default OFF.
     enrichment_fallback_enabled: bool = False
 
+    # ─── Backfill mode (Iter-267, user directive 2026-02-27) ────────
+    # Controls what the background worker does with pre-activation rows
+    # still in flight (NORMALIZED / CUSTOMER_RESOLVED / PRODUCT_RESOLVED)
+    # the moment Go-Live is flipped on.
+    #
+    #   "now_forward_only" (DEFAULT, strict)
+    #       Worker IGNORES every row where
+    #       `received_at < go_live_activated_at`. Such pre-activation
+    #       rows are transitioned to SKIPPED with reason
+    #       `pre_activation_skipped` so they show up in the monitor
+    #       but never reach Qoyod. Production receives only webhooks
+    #       arriving AFTER activation.
+    #
+    #   "backfill_unsent" (explicit operator opt-in)
+    #       Worker drains pre-activation rows too. Use only when the
+    #       operator explicitly wants to push old unsent orders.
+    backfill_mode: Literal[
+        "now_forward_only", "backfill_unsent"
+    ] = "now_forward_only"
+
     # ─── Future-ready placeholders (reserved; not used by MVP) ──────
     # These keep the schema stable when we later add refunds, sync
     # cancellations, ZATCA local validation, custom invoice prefixes,

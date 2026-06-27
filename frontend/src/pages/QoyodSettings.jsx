@@ -881,6 +881,7 @@ export default function QoyodSettings() {
         default_product_type: settings.default_product_type || "service",
         payment_method_mapping: pmm,
         capabilities:         settings.capabilities,
+        backfill_mode:        settings.backfill_mode || "now_forward_only",
       };
       await axios.put(`${API}/integrations/qoyod/settings`, patch);
       // Server-side fail-safe revalidation.
@@ -1320,6 +1321,14 @@ export default function QoyodSettings() {
             checked={settings.trigger_once_only !== false}
             onChange={(v) => patch({ trigger_once_only: v })}
             testid="toggle-trigger-once-only"
+          />
+
+          <ToggleRow
+            label="ترحيل الطلبات السابقة غير المرسلة (Backfill)"
+            hint="OFF افتراضياً (مُوصى به): بعد تفعيل الإنتاج، يُرسَل فقط الطلبات الجديدة. الصفوف القديمة العالقة من فترة Dry-Run تُنقَل إلى SKIPPED تلقائياً. لا تُفعّل هذا الخيار إلا إذا أردت إعادة معالجة طلبات قديمة عمداً."
+            checked={settings.backfill_mode === "backfill_unsent"}
+            onChange={(v) => patch({ backfill_mode: v ? "backfill_unsent" : "now_forward_only" })}
+            testid="toggle-backfill-mode"
           />
         </div>
       </Section>

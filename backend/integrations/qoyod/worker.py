@@ -39,6 +39,9 @@ from integrations.qoyod.pipeline import (
 from integrations.qoyod.dead_letter_requeue import (
     auto_requeue_known_fixed,
 )
+from integrations.qoyod.backfill_gate import (
+    skip_pre_activation_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +59,19 @@ def _now() -> datetime:
 
 async def _one_round(db, *, user_id: str, batch_limit: int) -> dict:
     """Process one batch from each pending bucket. Returns counts."""
-    # ── Step 0: Auto-Requeue (self-healing for KNOWN_FIXED_PATTERNS) ─
+    # ── Step 0a: Backfill Gate (user directive 2026-02-27) ──────────
+    # Default `backfill_mode="now_forward_only"`: pre-activation rows
+    # in NORMALIZED / CUSTOMER_RESOLVED / PRODUCT_RESOLVED are SKIPPED
+    # so they never reach Qoyod. Operator must explicitly set
+    # `backfill_mode="backfill_unsent"` to opt in to backfill.
+    try:
+        backfill_result = await skip_pre_activation_rows(
+            db, user_id=user_id, limit=batch_limit)
+    except Exception:
+        logger.exception("qoyod backfill gate failed (worker tick)")
+        backfill_result = {"ok": False, "scanned": 0, "skipped": 0}
+
+    # ── Step 0b: Auto-Requeue (self-healing for KNOWN_FIXED_PATTERNS) ─
     # Runs BEFORE the drain so any rows it flips back into NORMALIZED
     # /CUSTOMER_RESOLVED get picked up in this same tick. Strictly
     # bounded by the pattern registry — generic DEAD_LETTER rows are
@@ -85,6 +100,11 @@ async def _one_round(db, *, user_id: str, batch_limit: int) -> dict:
         return {"processed": len(rows), "outcomes": outcomes}
 
     return {
+        "backfill_gate": {
+            "scanned": int(backfill_result.get("scanned") or 0),
+            "skipped": int(backfill_result.get("skipped") or 0),
+            "mode":    backfill_result.get("mode"),
+        },
         "auto_requeue": {
             "scanned":  int(requeue_result.get("scanned") or 0),
             "requeued": int(requeue_result.get("requeued") or 0),
