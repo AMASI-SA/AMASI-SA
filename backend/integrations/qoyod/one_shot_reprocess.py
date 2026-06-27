@@ -435,12 +435,18 @@ async def reprocess_one_order(
             db, cur, api_client=api_client)
         result_log.append({"step": "normalized", "result": out})
         if out.get("outcome") in ("DEAD_LETTER", "SKIPPED"):
+            after = await _refresh() or {}
             return _build_failure_response(
-                db, row_id=row["id"], outcome=out.get("outcome"),
-                step="customer_resolution",
-                step_result=out,
-                stage_sequence=stage_sequence,
-                quarantine_summary=quarantine_summary)
+                outcome=out.get("outcome"),
+                row_id=row["id"],
+                trace_id=row.get("trace_id"),
+                pipeline_error=after.get("pipeline_error") or {},
+                last_failed_stage=after.get("last_failed_stage"),
+                canonical_payload=after.get("canonical_payload") or {},
+                invoice_snapshot=(after.get("qoyod_payloads") or {}).get("invoice"),
+                stage_sequence=_extract_observed_sequence(after),
+                quarantine_summary=quarantine_summary,
+            )
         if out.get("outcome") == "CUSTOMER_RESOLVED":
             stage_sequence.append("CUSTOMER_RESOLVED")
 
@@ -513,20 +519,18 @@ async def reprocess_one_order(
             "quarantine_summary": quarantine_summary,
         }
 
-    # Everything else = a failure result. Surface request_body_json
-    # from snapshots so the operator can paste the payload directly
-    # into a support ticket.
+    # Everything else = a failure result. Build a stage-specific
+    # diagnostic block so the operator sees the EXACT payload that
+    # failed (e.g. product create body when FAILED_PRODUCT) rather
+    # than a stale invoice snapshot from a previous attempt.
     return _build_failure_response(
-        db_disabled=True,
         outcome=final_stage or "UNKNOWN",
-        step="post_pipeline",
-        step_result={
-            "pipeline_error":  pe,
-            "last_failed_stage": final.get("last_failed_stage"),
-        },
         row_id=row["id"],
         trace_id=row.get("trace_id"),
-        request_body_json=(final.get("qoyod_payloads") or {}).get("invoice"),
+        pipeline_error=pe,
+        last_failed_stage=final.get("last_failed_stage"),
+        canonical_payload=final.get("canonical_payload") or {},
+        invoice_snapshot=(final.get("qoyod_payloads") or {}).get("invoice"),
         stage_sequence=stage_sequence,
         quarantine_summary=quarantine_summary,
     )
@@ -573,30 +577,111 @@ def _extract_observed_sequence(row: dict) -> list[str]:
     return seen
 
 
-def _build_failure_response(
-    *, outcome: str, step: str, step_result: dict,
-    row_id: str, trace_id: Optional[str] = None,
-    stage_sequence: list[str],
-    quarantine_summary: dict,
-    request_body_json: Any = None,
-    db=None, db_disabled: bool = False,
-) -> dict:
-    """Uniform failure shape. Excludes Pydantic / Exception objects so
-    the response is always JSON-serialisable.
+def _extract_sku_and_sale_price(canonical_payload: dict) -> dict:
+    """Pull the first line item's SKU + the sale_price WE WOULD send.
+
+    Mirrors `product_resolver._build_product_payload` so the operator
+    can verify, side-by-side, that the request body actually carried
+    the fix (`sale_price` field, correct value).
     """
-    err = (step_result or {}).get("pipeline_error") or {}
+    items = (canonical_payload or {}).get("items") or []
+    if not items:
+        return {}
+    it = items[0]
+    raw_price = it.get("unit_price")
+    try:
+        sale_price = float(raw_price) if raw_price is not None else 0.0
+    except (TypeError, ValueError):
+        sale_price = 0.0
     return {
+        "sku":           it.get("sku"),
+        "sale_price_we_would_send": sale_price,
+        "unit_price_from_canonical": raw_price,
+    }
+
+
+def _build_failure_response(
+    *, outcome: str, row_id: str, trace_id: Optional[str],
+    pipeline_error: dict, last_failed_stage: Optional[str],
+    canonical_payload: dict, invoice_snapshot: Any,
+    stage_sequence: list[str], quarantine_summary: dict,
+) -> dict:
+    """Uniform failure shape with **stage-specific** diagnostics.
+
+    Critical for `FAILED_PRODUCT` — the operator must see the EXACT
+    `POST /products` body we tried to send, not a stale invoice
+    snapshot from a previous attempt. The Qoyod API client already
+    captures `request_body_json` + `qoyod_response_excerpt` +
+    `endpoint` + `status_code` on every QoyodAPIError, and the
+    pipeline persists that into `row.pipeline_error`. We just need
+    to surface it.
+    """
+    pe = pipeline_error or {}
+    failed_stage = last_failed_stage or pe.get("last_failed_stage") or outcome
+
+    response: dict[str, Any] = {
         "ok":      False,
         "outcome": outcome,
         "row_id":  row_id,
         "trace_id": trace_id,
-        "failed_at_stage": (step_result or {}).get("last_failed_stage") or
-                           (step_result or {}).get("reason") or step,
+        "failed_at_stage": failed_stage,
         "error": {
-            "code":    err.get("code") or (step_result or {}).get("reason"),
-            "message": err.get("message"),
+            "code":         pe.get("code"),
+            "message":      pe.get("message"),
+            "status_code":  pe.get("status_code"),
+            "endpoint":     pe.get("endpoint"),
+            "qoyod_response_excerpt": pe.get("qoyod_response_excerpt"),
         },
-        "request_body_json": request_body_json,
         "stage_sequence_observed": stage_sequence,
-        "quarantine_summary": quarantine_summary,
+        "quarantine_summary":      quarantine_summary,
     }
+
+    # ── Stage-specific payload snapshots ────────────────────────────
+    if failed_stage == "FAILED_PRODUCT":
+        # `pipeline_error.request_body_json` IS the product-create
+        # body the resolver tried to POST to `/products`. Surfacing
+        # it lets the operator verify the live deploy carries the
+        # `sale_price` fix (vs the old `selling_price`).
+        product_create_body = pe.get("request_body_json")
+        # Drill into the wrapped form (resolver sends `{"product": {...}}`).
+        inner = (product_create_body or {}).get("product") \
+            if isinstance(product_create_body, dict) else None
+        sale_price_field_present = isinstance(inner, dict) and \
+            ("sale_price" in inner)
+        selling_price_field_present = isinstance(inner, dict) and \
+            ("selling_price" in inner)
+        expected = _extract_sku_and_sale_price(canonical_payload)
+        response["product_create"] = {
+            "endpoint":     pe.get("endpoint")    or "POST /products",
+            "status_code":  pe.get("status_code"),
+            "request_body": product_create_body,
+            "response_excerpt": pe.get("qoyod_response_excerpt"),
+            "sale_price_field_present":    sale_price_field_present,
+            "selling_price_field_present": selling_price_field_present,
+            "sale_price_in_request_body":  (inner or {}).get("sale_price")
+                                            if isinstance(inner, dict) else None,
+            "sku_in_request_body":         (inner or {}).get("sku")
+                                            if isinstance(inner, dict) else None,
+            "expected_from_canonical":     expected,
+            # Quick verdict the operator can read at a glance.
+            "deploy_carries_sale_price_fix": (
+                sale_price_field_present and not selling_price_field_present
+            ),
+        }
+        # Do NOT include the stale invoice_snapshot here — it confuses
+        # the diagnosis (snapshot is from a PRE-fix attempt).
+        return response
+
+    if failed_stage in ("FAILED_INVOICE", "FAILED_RECEIPT"):
+        # For invoice/receipt failures the offending body is the
+        # invoice payload (and possibly the receipt). The snapshot
+        # captured in `qoyod_payloads.invoice` IS what was attempted.
+        response["invoice_payload"] = invoice_snapshot
+        response["request_body_json"] = pe.get("request_body_json") \
+                                       or invoice_snapshot
+        return response
+
+    # Catch-all (FAILED_CUSTOMER, FAILED_VALIDATION, etc.) — surface
+    # whatever the error block carried.
+    response["request_body_json"] = pe.get("request_body_json")
+    return response

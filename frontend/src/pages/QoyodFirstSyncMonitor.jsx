@@ -779,6 +779,87 @@ export default function QoyodFirstSyncMonitor() {
                   </div>
                 )}
 
+                {/* Stage-specific diagnostic — product_create failures */}
+                {reprocResult.product_create && (
+                  <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3"
+                       data-testid="reproc-product-create-diagnostic">
+                    <div className="text-sm font-extrabold text-amber-900 mb-1">
+                      📦 تشخيص إنشاء المنتج في قيود (FAILED_PRODUCT)
+                    </div>
+                    <div className="text-[12px] font-mono text-amber-900 mb-2" dir="ltr">
+                      {reprocResult.product_create.endpoint}
+                      {reprocResult.product_create.status_code != null && (
+                        <span> · HTTP {reprocResult.product_create.status_code}</span>
+                      )}
+                    </div>
+
+                    {/* Sale-price fix verdict — most important line */}
+                    <div className={`text-[12px] font-bold rounded p-2 ${
+                          reprocResult.product_create.deploy_carries_sale_price_fix
+                            ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                            : "bg-rose-100 text-rose-900 border border-rose-300"
+                        }`}
+                        data-testid="reproc-sale-price-verdict">
+                      {reprocResult.product_create.deploy_carries_sale_price_fix
+                        ? "✓ النشر يستخدم الإصلاح الجديد: sale_price موجود، selling_price غير موجود"
+                        : "⚠ النشر لا يحتوي على الإصلاح الجديد — sale_price ناقص أو ما زال selling_price مُستخدماً"}
+                    </div>
+
+                    <ul className="mt-2 text-[12px] space-y-0.5 text-amber-900">
+                      <li>
+                        <strong>SKU:</strong>{" "}
+                        <code className="font-mono">{reprocResult.product_create.sku_in_request_body || "—"}</code>
+                        {" "}(من canonical:{" "}
+                        <code className="font-mono">{reprocResult.product_create.expected_from_canonical?.sku || "—"}</code>)
+                      </li>
+                      <li>
+                        <strong>sale_price field present:</strong>{" "}
+                        <code className={`font-mono ${reprocResult.product_create.sale_price_field_present ? "text-emerald-700" : "text-rose-700"}`}>
+                          {String(reprocResult.product_create.sale_price_field_present)}
+                        </code>
+                      </li>
+                      <li>
+                        <strong>selling_price field present (يجب false):</strong>{" "}
+                        <code className={`font-mono ${reprocResult.product_create.selling_price_field_present ? "text-rose-700" : "text-emerald-700"}`}>
+                          {String(reprocResult.product_create.selling_price_field_present)}
+                        </code>
+                      </li>
+                      <li>
+                        <strong>sale_price المُرسل:</strong>{" "}
+                        <code className="font-mono">{String(reprocResult.product_create.sale_price_in_request_body ?? "null")}</code>
+                        {" "}(المتوقع:{" "}
+                        <code className="font-mono">{String(reprocResult.product_create.expected_from_canonical?.sale_price_we_would_send ?? "null")}</code>)
+                      </li>
+                    </ul>
+
+                    {reprocResult.product_create.request_body && (
+                      <details className="mt-2 text-[11px]">
+                        <summary className="cursor-pointer font-bold text-amber-900">
+                          product_create_request_body (الـ payload الفعلي المُرسل لقيود)
+                        </summary>
+                        <pre className="mt-1 bg-slate-900 text-slate-100 p-2 rounded text-[11px] font-mono whitespace-pre-wrap break-words max-h-72 overflow-auto"
+                             dir="ltr">
+{JSON.stringify(reprocResult.product_create.request_body, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+
+                    {reprocResult.product_create.response_excerpt && (
+                      <details className="mt-2 text-[11px]" open>
+                        <summary className="cursor-pointer font-bold text-amber-900">
+                          product_create_response_body (ردّ قيود)
+                        </summary>
+                        <pre className="mt-1 bg-slate-900 text-amber-200 p-2 rounded text-[11px] font-mono whitespace-pre-wrap break-words max-h-48 overflow-auto"
+                             dir="ltr">
+{typeof reprocResult.product_create.response_excerpt === "string"
+  ? reprocResult.product_create.response_excerpt
+  : JSON.stringify(reprocResult.product_create.response_excerpt, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
+                )}
+
                 {/* Dry-leak audit */}
                 {reprocResult.dry_leaks_in_final_payload != null && (
                   <div className="mt-2 text-[12px]"

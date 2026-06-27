@@ -2421,3 +2421,48 @@ Once deployed to Production:
 1. Click `🎯 إعادة معالجة طلب واحد` again for order `268670571`.
 2. The resolver will now create the product with `sale_price=5` (the line's unit_price).
 3. Expected stage sequence: `… → PRODUCT_RESOLVED → INVOICE_CREATED → RECEIPT_CREATED → COMPLETED`.
+
+---
+
+## 2026-02-27 — Iter-271 (FAILED_PRODUCT stage-specific diagnostic)
+
+### Context
+After Iter-270b shipped, the user retried order `268670571` on Production and saw the same `enter at least a purchase price or a sales price` error. The modal was still showing a **stale invoice snapshot** from a previous attempt (with the old `DRY:product:e4d875d7` id) — confusing the diagnosis. The operator needs to verify the live deploy is actually executing the new `sale_price` code-path.
+
+### What changed
+**Backend (`one_shot_reprocess.py`):**
+- `_build_failure_response` rewritten to emit **stage-specific** diagnostics. For `failed_at_stage == "FAILED_PRODUCT"` the response now carries a `product_create` block:
+  ```json
+  {
+    "product_create": {
+      "endpoint": "POST /products",
+      "status_code": 422,
+      "request_body": { "product": { "sku": "AMS11961", "sale_price": 5.0, ... } },
+      "response_excerpt": "{\"base\":[\"enter at least a purchase price...\"]}",
+      "sale_price_field_present":    true,
+      "selling_price_field_present": false,
+      "sale_price_in_request_body":  5.0,
+      "sku_in_request_body":         "AMS11961",
+      "expected_from_canonical":     { "sku": "AMS11961", "sale_price_we_would_send": 5.0 },
+      "deploy_carries_sale_price_fix": true   // verdict the operator reads first
+    }
+  }
+  ```
+- For `FAILED_INVOICE` / `FAILED_RECEIPT`, the response keeps the invoice snapshot (since that's the offending body for those stages).
+- The stale invoice snapshot is **no longer surfaced** under FAILED_PRODUCT.
+
+**Frontend (`QoyodFirstSyncMonitor.jsx`):**
+- New amber-bordered "📦 تشخيص إنشاء المنتج في قيود (FAILED_PRODUCT)" block in the modal.
+- Top line is a **verdict badge** (green/red): "النشر يستخدم الإصلاح الجديد: sale_price موجود، selling_price غير موجود" OR "النشر لا يحتوي على الإصلاح الجديد".
+- Bullet list with per-field verification + expandable `product_create_request_body` and `product_create_response_body` panes.
+
+### New regression tests (`test_qoyod_one_shot_failed_product_diagnostic.py`)
+- ✅ `test_failed_product_surfaces_product_create_diagnostic_when_fixed`.
+- ✅ `test_failed_product_diagnostic_detects_unfixed_deploy` — verdict flips to red when the deploy still ships `selling_price`.
+- ✅ `test_failed_product_error_block_has_full_qoyod_context` (status_code, endpoint, response excerpt preserved).
+- ✅ `test_failed_invoice_still_surfaces_invoice_payload` (other failure stages unaffected).
+
+### Verification
+- `pytest tests/test_qoyod_one_shot_failed_product_diagnostic.py + reprocess + field_names` → **19/19 PASS**.
+- `pytest -k qoyod` (full surface) → **555 passed, 2 skipped, 0 failed**.
+- Modal renders cleanly on preview (smoke test screenshot).
