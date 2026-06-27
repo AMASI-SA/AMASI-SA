@@ -1,5 +1,40 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290 — Qoyod /invoices requires `inventory_id` on every line item (2026-02-28)
+**User scenario**: After Iter-289 fixed `tax_id` as array, production order `268756329` reached `PRODUCT_RESOLVED` ✅ then failed at `FAILED_INVOICE` ❌ with:
+```
+POST /invoices → 422
+"inventory id missing in a line item"
+```
+Qoyod's `/invoices` validator demands `inventory_id` on every line — even for `type=service` / `is_non_stock=true` products. The operator has no warehouses configured in Salla but Qoyod still requires one.
+
+### Backend
+- **`api_client.py`**: Added `list_inventories()` → `GET /inventories`.
+- **`routes.py`**: New endpoint `GET /api/integrations/qoyod/qoyod-inventories` proxied via the same catalog-fetcher helper.
+- **`routes.py::SettingsPatch`**: New optional field `default_inventory_id` accepted by `PUT /settings`.
+- **`invoice_builder.py::build_invoice_payload`**: Stamps `inventory_id` on EVERY line from `settings.default_inventory_id`. Omitted entirely when blank (preflight refuses upstream).
+- **`preflight.py`**: New check (#6.5) `missing_default_inventory_id` blocks the row before any POST when the setting is blank.
+
+### Frontend (`QoyodSettings.jsx`)
+- New `inventories` + `inventoriesMeta` state and `qoyod-inventories` fetch in `loadCatalogs`.
+- New `IDInput` for `default_inventory_id` in the Product/Invoice Defaults section, with datalist suggestions from `/qoyod-inventories`.
+- Section title updated to "إعدادات إنشاء المنتجات والفواتير في قيود" + warning note that the warehouse is required even for service products.
+- Validation banner surfaces `missing_default_inventory_id` as a **blocker** when the field is blank.
+
+### Tests
+- New `tests/test_qoyod_inventory_id_on_invoice_lines_iter290.py` — 6 tests covering line stamping, blank/missing setting omission, and preflight refusal/passage.
+- Updated `tests/test_qoyod_day5_invoice_receipt.py` and `tests/test_qoyod_payment_method_aliases.py` to set `default_inventory_id` in fixtures.
+- **773/773 Qoyod pytest passes** post-fix. Lint clean (Python + ESLint).
+- Live `GET /api/integrations/qoyod/qoyod-inventories` returns 401 (auth required) — confirming the route is registered (not 404).
+
+### Deploy
+- Fix lives in preview. **Production redeploy required** to `mezansalla.com`.
+- Operator workflow post-redeploy:
+  1. Create one warehouse in Qoyod (`الإعدادات → المخازن → +`), name it "مستودع افتراضي - ميزان".
+  2. Open Mezan Settings → datalist will load real warehouses from `/qoyod-inventories`. Pick the id.
+  3. Save settings → run `preview-reprocess` for `268756329` → expect no blockers.
+  4. Run `one-shot-reprocess` for `268756329` → expect `INVOICE_CREATED` → `RECEIPT_CREATED`.
+
 ## Iter-289 — Qoyod /products requires `tax_id` as JSON array (2026-02-28)
 **User scenario**: After Iter-288b added the four required product settings in the UI, the operator filled in `default_product_tax_id = "15"` (a valid Qoyod tax id) and re-ran `one-shot-reprocess` for production order `268756329`. Qoyod still rejected the product create with:
 ```

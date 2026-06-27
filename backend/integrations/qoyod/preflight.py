@@ -116,6 +116,21 @@ def run(
                              "code": "already_sent",
                              "message": "an invoice for this order is already 'sent'"})
 
+    # 6.5) Iter-290 — Inventory id required on every invoice line.
+    # Qoyod's /invoices validator rejects the entire payload with
+    # "inventory id missing in a line item" if even one line is bare,
+    # regardless of product.type=service or is_non_stock=true. The
+    # operator must paste one default warehouse id into settings before
+    # any invoice POST.
+    if not (settings.get("default_inventory_id") or "").strip():
+        failures.append({
+            "check": "inventory_id",
+            "code":  "missing_default_inventory_id",
+            "message": "حقل default_inventory_id فارغ — قيود يطلب inventory_id "
+                       "على كل سطر فاتورة. أنشئ مستودعاً افتراضياً في قيود "
+                       "وانسخ id الخاص به إلى الإعدادات.",
+        })
+
     # 7) Iter-285 — Invoice ↔ Receipt reconciliation (customer_first mode).
     # In customer_first mode the invoice total Qoyod will compute MUST
     # equal `canonical.total_amount` (= receipt amount). If it diverges,

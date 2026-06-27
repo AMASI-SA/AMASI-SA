@@ -85,6 +85,7 @@ def _base_payload():
             "invoice_trigger_statuses": ["completed"],
             "default_tax_id": "TAX-15",
             "tax_mode": "mezan_fixed_15",
+            "default_inventory_id": "INV-1",
             "payment_method_mapping": [
                 {"salla_method": "mada", "qoyod_account_id": "ACC-9"}],
         },
@@ -231,6 +232,8 @@ async def _seed_settings(db, user_id, **overrides):
         "default_product_tax_id":       "TAX-15",
         "default_product_unit_type_id": "UNIT-PIECE",
         "default_sales_account_id":     "ACC-SALES",
+        # Iter-290 — Qoyod-required warehouse id on invoice lines.
+        "default_inventory_id":         "INV-1",
         "payment_method_mapping": [{"salla_method":"mada",
                                     "qoyod_account_id":"ACC-9"}],
         "capabilities": {"create_customers": True, "create_products": True,

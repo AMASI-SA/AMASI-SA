@@ -205,6 +205,18 @@ class QoyodAPIClient:
         params = {"kind": kind} if kind else None
         return await self._request("GET", "/accounts", params=params)
 
+    async def list_inventories(self) -> Any:
+        """Iter-290 — Qoyod warehouses (`/inventories`).
+
+        Used by the Settings UI to populate `default_inventory_id`.
+        Qoyod's invoice validator requires `inventory_id` on every
+        line item even for service/non-stock products, so the operator
+        must pick (or create) at least one warehouse and bind it here.
+
+        Read-only — Mezan NEVER posts to /inventories.
+        """
+        return await self._request("GET", "/inventories")
+
     async def list_taxes(self) -> Any:
         return await self._request("GET", "/taxes")
 

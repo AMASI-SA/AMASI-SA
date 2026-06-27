@@ -145,6 +145,10 @@ class SettingsPatch(BaseModel):
     zero_tax_id:                   Optional[str] = None
     # Iter-288 — auto-adopt existing Qoyod products by SKU.
     auto_adopt_existing_qoyod_products: Optional[bool] = None
+    # Iter-290 — Qoyod /invoices requires `inventory_id` on every line
+    # item, even for service/non-stock products. The operator creates
+    # one default warehouse in Qoyod and pastes its id here.
+    default_inventory_id:          Optional[str] = None
 
 
 class CredentialsRequest(BaseModel):
@@ -439,6 +443,12 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     @router.get("/qoyod-taxes")
     async def qoyod_taxes(user=Depends(current_user)):
         return await _proxied_catalog(_tenant_id(user), "list_taxes")
+
+    @router.get("/qoyod-inventories")
+    async def qoyod_inventories(user=Depends(current_user)):
+        # Iter-290 — populate `default_inventory_id` from real Qoyod
+        # warehouses so the operator can't typo a non-existent id.
+        return await _proxied_catalog(_tenant_id(user), "list_inventories")
 
     # ── Tenant identity diagnostics ─────────────────────────────────
     # Surfaces enough Qoyod-side evidence (org/branches + sample

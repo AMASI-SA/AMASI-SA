@@ -138,6 +138,7 @@ def test_preflight_passes_when_variant_resolves_via_alias():
         "default_tax_id": "1",
         "tax_mode": "mezan_fixed_15",
         "invoice_trigger_statuses": ["completed"],
+        "default_inventory_id": "INV-1",
         "payment_method_mapping": [
             {"salla_method": "tamara", "qoyod_account_id": "A-1"},
         ],

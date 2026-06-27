@@ -701,12 +701,14 @@ export default function QoyodSettings() {
   const [branches, setBranches]   = useState([]);
   const [accounts, setAccounts]   = useState([]);
   const [taxes, setTaxes]         = useState([]);
+  const [inventories, setInventories] = useState([]);
   const [testing, setTesting]     = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   const [branchesMeta, setBranchesMeta] = useState({ unsupported: false });
   const [taxesMeta,    setTaxesMeta]    = useState({ unsupported: false });
   const [accountsMeta, setAccountsMeta] = useState({ unsupported: false });
+  const [inventoriesMeta, setInventoriesMeta] = useState({ unsupported: false });
 
   const [pmCatalogue, setPmCatalogue] = useState([]);
   const [pmUsed,      setPmUsed]      = useState([]);
@@ -727,7 +729,7 @@ export default function QoyodSettings() {
         const { data } = await axios.get(`${API}/integrations/qoyod/${path}`);
         setData(Array.isArray(data.data) ? data.data
                 : (data.data?.accounts || data.data?.branches
-                   || data.data?.taxes || []));
+                   || data.data?.taxes || data.data?.inventories || []));
         setMeta({
           unsupported: !!data.unsupported,
           message: data.message || (data.error && data.error.message) || null,
@@ -740,9 +742,10 @@ export default function QoyodSettings() {
       }
     };
     await Promise.all([
-      tryGet("qoyod-branches", setBranches, setBranchesMeta),
-      tryGet("qoyod-accounts", setAccounts, setAccountsMeta),
-      tryGet("qoyod-taxes",    setTaxes,    setTaxesMeta),
+      tryGet("qoyod-branches",    setBranches,    setBranchesMeta),
+      tryGet("qoyod-accounts",    setAccounts,    setAccountsMeta),
+      tryGet("qoyod-taxes",       setTaxes,       setTaxesMeta),
+      tryGet("qoyod-inventories", setInventories, setInventoriesMeta),
     ]);
   };
 
@@ -884,6 +887,8 @@ export default function QoyodSettings() {
         default_product_tax_id:       (settings.default_product_tax_id || "").trim() || null,
         default_product_unit_type_id: (settings.default_product_unit_type_id || "").trim() || null,
         default_sales_account_id:     (settings.default_sales_account_id || "").trim() || null,
+        // Iter-290 — Qoyod-required warehouse id on every invoice line.
+        default_inventory_id:         (settings.default_inventory_id || "").trim() || null,
         // Iter-285 — Tax mode + zero-tax id (for customer_first invoicing).
         tax_mode:                     (settings.tax_mode || "customer_first"),
         zero_tax_id:                  (settings.zero_tax_id || "").trim() || null,
@@ -952,6 +957,13 @@ export default function QoyodSettings() {
       issues.push({ code: "missing_sales_account_id",
         field: "default_sales_account_id", severity: "blocker",
         message: "ناقص: حساب المبيعات الافتراضي (Sales Account ID) — من قيود → الحسابات → دليل الحسابات → اختر حساب الإيرادات." });
+    }
+    // ── Iter-290 — Qoyod requires inventory_id on every invoice line ──
+    const pInv = (settings.default_inventory_id || "").toString().trim();
+    if (!pInv) {
+      issues.push({ code: "missing_default_inventory_id",
+        field: "default_inventory_id", severity: "blocker",
+        message: "ناقص: المستودع الافتراضي (Inventory ID) — قيود يطلب inventory_id على كل سطر فاتورة. أنشئ مستودعاً افتراضياً في قيود (مستودع افتراضي - ميزان) وانسخ id الخاص به." });
     }
     // Payment-method mapping completeness (based on USED methods).
     // A method counts as "mapped" if it has a direct mapping OR its
@@ -1188,19 +1200,18 @@ export default function QoyodSettings() {
         </div>
       </Section>
 
-      {/* 5b) Iter-287 — Qoyod-Required Product Creation Defaults */}
+      {/* 5b) Iter-287 + Iter-290 — Qoyod-Required Product & Invoice Defaults */}
       <Section
-        title="🧾 إعدادات إنشاء المنتجات في قيود"
+        title="🧾 إعدادات إنشاء المنتجات والفواتير في قيود"
         subtitle={
           <>
-            مطلوبة لإنشاء أي منتج جديد في قيود. قيود يرفض إنشاء المنتج
-            بدون هذه الأربعة. القيم تنسخها مرة واحدة من قيود ولا تتغير
-            عادةً.
+            مطلوبة لإنشاء أي منتج جديد وأي فاتورة في قيود. قيود يرفض
+            الإنشاء بدون هذه الإعدادات. القيم تنسخها مرة واحدة من قيود ولا
+            تتغيّر عادةً.
             <br />
             <span className="text-amber-600 dark:text-amber-400 text-xs">
-              ⚠️ إذا كانت المنتجات موجودة في قيود مسبقاً (auto-adopt مفعّل افتراضياً)
-              فلن يحتاج النظام إنشاء، لكن هذه الإعدادات تبقى مطلوبة احتياطاً
-              لأي SKU جديد.
+              ⚠️ المستودع الافتراضي (Inventory ID) مطلوب على كل سطر فاتورة
+              حتى لو كانت كل منتجاتك خدمية — قيود يرفض الفاتورة بدونه.
             </span>
           </>
         }
@@ -1210,6 +1221,7 @@ export default function QoyodSettings() {
             "default_product_tax_id",
             "default_product_unit_type_id",
             "default_sales_account_id",
+            "default_inventory_id",
           ].some(fieldInvalid) ? "danger" : "default"
         }>
         <div className="grid md:grid-cols-2 gap-3">
@@ -1269,6 +1281,25 @@ export default function QoyodSettings() {
                 accountsMeta.unsupported
                   ? "Qoyod 2.0 API لا يكشف القائمة — انسخه من قيود → الحسابات → دليل الحسابات → اختر حساب الإيرادات."
                   : "اختر حساب الإيرادات الذي تُسجّل تحته كل مبيعات Mezan."
+              }
+            />
+          </div>
+
+          <div data-testid="field-default_inventory_id">
+            <IDInput
+              label="المستودع الافتراضي (Inventory ID)" required
+              value={settings.default_inventory_id}
+              onChange={(v) => patch({ default_inventory_id: v })}
+              testid="input-default-inventory"
+              datalistId="inventories-list"
+              suggestions={inventories}
+              placeholder="مثال: 1"
+              disabled={!hasCreds}
+              invalid={fieldInvalid("default_inventory_id")}
+              unsupportedHint={
+                inventoriesMeta.unsupported
+                  ? "Qoyod API لا يكشف القائمة — أنشئ مستودعاً في قيود → الإعدادات → المخازن، وانسخ id الخاص به."
+                  : "قيود يتطلب inventory_id على كل سطر فاتورة (حتى للمنتجات الخدمية). أنشئ مستودعاً واحداً بإسم 'مستودع افتراضي - ميزان' واختره هنا."
               }
             />
           </div>

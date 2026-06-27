@@ -165,6 +165,11 @@ def build_invoice_payload(
     tax_mode = _get_tax_mode(settings)
     res_by_sku = {r["sku"]: r["qoyod_product_id"]
                   for r in product_resolutions if r.get("qoyod_product_id")}
+    # Iter-290 — Qoyod's /invoices validator requires `inventory_id`
+    # on every line item, even when the product is type=service or
+    # is_non_stock. The operator creates one default warehouse in
+    # Qoyod and sets its id in `settings.default_inventory_id`.
+    inventory_id = (settings.get("default_inventory_id") or "").strip() or None
     lines = []
     for it in dto_dict.get("items", []):
         pid = res_by_sku.get(it.get("sku"))
@@ -183,6 +188,12 @@ def build_invoice_payload(
         }
         if line_tax_id:
             line["tax_id"] = line_tax_id
+        if inventory_id:
+            # Stamp on every line — Qoyod rejects the entire invoice if
+            # ANY line is missing it ("inventory id missing in a line
+            # item"). Preflight refuses the row when the setting is
+            # blank so we never reach here without an id.
+            line["inventory_id"] = inventory_id
         lines.append(line)
 
     invoice: dict = {
