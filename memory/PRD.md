@@ -1,5 +1,47 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Tenant Identity Diagnostics — Anti-Mismatch Guard (2026-02-26)
+**User concern**: QYD-GO reported "38 products in Qoyod" via direct API call, but the Qoyod web UI for the user's account shows ZERO products. Demanded: print Qoyod tenant identifier, exact endpoint, first 5 products + customers (id, name, sku), raw `meta.total`. Block Go-Live until the user confirms identity.
+
+### Backend
+- **`integrations/qoyod/identity_diagnostics.py`** (NEW):
+  - `run_identity_diagnostics(db, user_id)` — public entry. Returns:
+    - `mezan`: `base_url`, `user_id`, `api_key_present`, `api_key_fingerprint` (sha256[:12] — raw key NEVER exposed), `queried_at`.
+    - `qoyod.tenant_hints`: organisation name + branches from `/branches`.
+    - `qoyod.branches/products/customers`: each `{ok, endpoint, error, meta, sample}` where `sample` is up to 5 rows `{id, name, sku/phone}`.
+    - `summary`, `next_step`.
+  - `_key_fingerprint(api_key)`: sha256 first 12 hex chars. Empty/None returns "".
+  - `_sample(rows, picker)`: truncates to 5 dicts; tolerates non-list / non-dict inputs.
+  - Graceful partial failure: any sub-endpoint failure surfaces as that section's `ok: false` + `error: {code, message}` — never a 500 crash.
+- **`integrations/qoyod/routes.py`**: `@router.get("/diagnostics/identity")` mounted at `/api/integrations/qoyod/diagnostics/identity`.
+- **`integrations/qoyod/go_live.py::_check_lookup`**: now uses `limit=5` (was `limit=1`), returns `sample` + `qoyod_response_meta` in `extra`.
+
+### Frontend (`pages/QoyodGoLive.jsx`)
+- New amber-bordered section `🔍 تشخيص هوية حساب قيود (إلزامي قبل التفعيل)` between status banner and report.
+- "تشغيل التشخيص الآن" button (testid `btn-run-identity-diag`) calls the endpoint.
+- Renders: Mezan base_url + fingerprint + queried_at; tenant_hints if any; products table (testid `diag-products-table`) + customers table (testid `diag-customers-table`) with id/name/sku/phone; per-section error display when Qoyod rejects.
+- Mandatory confirmation checkbox `أؤكد أن المنتجات والعملاء أعلاه تطابق ما أراه في واجهة قيود لحسابي` (testid `diag-confirm-identity`).
+- ACTIVATE button blocked with label `🔒 يلزم تأكيد الهوية` until BOTH `checklist.all_passed` AND `identityConfirmed` are true. Confirmation resets on every re-run.
+
+### Tests
+- **`tests/test_qoyod_identity_diagnostics.py`** (new, 9 tests, all pass):
+  - Fingerprint stable + never exposes raw key.
+  - Sample picker truncates to 5; tolerates malformed inputs.
+  - `no_api_key` summary returned cleanly when key missing.
+  - Full success path: products+customers samples populated, tenant_hints extracted from /branches.
+  - Graceful partial failure (products=403, customers=200).
+  - All-endpoints-unauthorized still returns 200 with structured errors.
+  - 50-row response truncated to 5 in sample.
+- **Testing agent verified end-to-end** (`/app/test_reports/iteration_261.json`):
+  - Backend: 22/22 pytest pass + live curl returns spec-compliant 200 with `api_key_fingerprint='08cef7386398'`.
+  - Frontend: all testids present + behaviors confirmed (visibility, button, checkbox gating, reset on re-run).
+  - Security: raw key never appears in response — only fingerprint.
+
+### Outcome for the user's actual case
+The preview admin tenant's key fingerprint is **`08cef7386398`** and Qoyod returns 401 for both /products and /customers. So the "38" the user saw earlier almost certainly came from a moment when the key briefly had read scope — OR the key now belongs to a different tenant than the UI account. The user can now compare the fingerprint with what's saved in their Qoyod account, and the checklist refuses to flip live until they explicitly confirm the samples match.
+
+
+
 ## Products/Customers Lookup Card — Source Transparency (2026-02-26)
 **User question**: where does the "38 موجود في قيود حالياً" number come from?
 
