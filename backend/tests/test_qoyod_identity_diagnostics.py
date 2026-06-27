@@ -46,12 +46,18 @@ def test_key_fingerprint_handles_empty():
     assert _key_fingerprint(None) == ""  # type: ignore[arg-type]
 
 
-def test_sample_picker_returns_at_most_five_dicts():
-    rows = [{"id": i, "name": f"p{i}", "sku": f"S{i}"} for i in range(10)]
+def test_sample_picker_returns_at_most_ten_dicts_by_default():
+    rows = [{"id": i, "name": f"p{i}", "sku": f"S{i}"} for i in range(20)]
     out = _sample(rows, lambda r: {"id": r["id"], "name": r["name"]})
-    assert len(out) == 5
+    assert len(out) == 10
     assert out[0] == {"id": 0, "name": "p0"}
-    assert out[4] == {"id": 4, "name": "p4"}
+    assert out[9] == {"id": 9, "name": "p9"}
+
+
+def test_sample_picker_honours_explicit_limit():
+    rows = [{"id": i} for i in range(20)]
+    out = _sample(rows, lambda r: {"id": r["id"]}, limit=3)
+    assert len(out) == 3
 
 
 def test_sample_picker_tolerates_non_list_and_non_dict_items():
@@ -169,17 +175,22 @@ async def test_returns_full_diagnostics_when_all_endpoints_succeed(monkeypatch):
     assert res["qoyod"]["tenant_hints"]["organisation"] == "Tariq Trading Co."
     assert len(res["qoyod"]["tenant_hints"]["branches"]) == 1
 
-    # Products section — endpoint + meta + sample all present.
+    # Products section — endpoint + meta + sample all present + raw_first_row.
     p = res["qoyod"]["products"]
-    assert p["endpoint"] == "GET /products?page=1&limit=5"
+    assert p["endpoint"] == "GET /products?page=1&limit=10"
     assert p["meta"]["total"] == 38
     assert len(p["sample"]) == 2
     assert p["sample"][0]["sku"] == "SKU-1"
+    # raw_first_row exposes ALL fields from the first product —
+    # critical for spotting hidden flags like `archived_at`, `type`.
+    assert p["raw_first_row"] is not None
+    assert p["raw_first_row"]["sku"] == "SKU-1"
 
     # Customers section.
     c = res["qoyod"]["customers"]
     assert c["meta"]["total"] == 5
     assert c["sample"][0]["phone"] == "+966500000001"
+    assert c["raw_first_row"]["name"] == "Cust 1"
 
     # Summary line for the UI.
     assert "المنتجات: 38" in res["summary"]
@@ -240,9 +251,9 @@ async def test_all_endpoints_unauthorized_still_returns_diagnostic(monkeypatch):
 
 # ─── Sample size limit ───────────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_products_response_with_more_than_five_rows_is_truncated(monkeypatch):
-    """Even if Qoyod returns 50 products (limit=5 ignored), the
-    diagnostics never shows more than 5 in the sample."""
+async def test_products_response_with_more_than_ten_rows_is_truncated(monkeypatch):
+    """Even if Qoyod returns 50 products, the diagnostics sample
+    never shows more than 10."""
     fake = _FakeClient({
         "branches": {"branches": []},
         "products": {
@@ -256,5 +267,40 @@ async def test_products_response_with_more_than_five_rows_is_truncated(monkeypat
         "integrations.qoyod.identity_diagnostics.QoyodAPIClient",
         lambda key: fake)
     res = await run_identity_diagnostics(_DB(), "u1")
-    assert len(res["qoyod"]["products"]["sample"]) == 5
+    assert len(res["qoyod"]["products"]["sample"]) == 10
     assert res["qoyod"]["products"]["meta"]["total"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_raw_first_row_exposes_hidden_archived_field(monkeypatch):
+    """The exact user case: Fresh Start was run but Qoyod still returns
+    products that have `archived_at` set. The standard sample picker
+    extracts archived/archived_at, AND `raw_first_row` exposes every
+    field so the operator can spot anything we didn't pick out."""
+    fake = _FakeClient({
+        "branches": {"branches": []},
+        "products": {
+            "meta": {"total": 38},
+            "products": [
+                {"id": 1, "name": None, "sku": "AMS11903",
+                 "type": "service", "archived_at": "2026-06-25T10:00:00Z",
+                 "category": {"name": "Hidden Cat"},
+                 "custom_field_x": "anything"},
+            ],
+        },
+        "contacts": {"meta": {"total": 0}, "contacts": []},
+    })
+    monkeypatch.setattr(
+        "integrations.qoyod.identity_diagnostics.QoyodAPIClient",
+        lambda key: fake)
+    res = await run_identity_diagnostics(_DB(), "u1")
+    sample = res["qoyod"]["products"]["sample"]
+    assert sample[0]["sku"]         == "AMS11903"
+    assert sample[0]["type"]        == "service"
+    assert sample[0]["archived"]    is True
+    assert sample[0]["archived_at"] == "2026-06-25T10:00:00Z"
+    assert sample[0]["category"]    == "Hidden Cat"
+    # raw_first_row keeps EVERYTHING, including custom fields.
+    raw = res["qoyod"]["products"]["raw_first_row"]
+    assert raw["custom_field_x"] == "anything"
+    assert raw["archived_at"]    == "2026-06-25T10:00:00Z"

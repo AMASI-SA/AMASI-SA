@@ -25,7 +25,7 @@ from __future__ import annotations
 import hashlib
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
 from integrations.qoyod.credentials import get_api_key
@@ -44,14 +44,24 @@ def _key_fingerprint(api_key: str) -> str:
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:12]
 
 
-def _sample(rows: Any, picker) -> list[dict]:
+def _sample(rows: Any, picker, limit: int = 10) -> list[dict]:
     out: list[dict] = []
     if not isinstance(rows, list):
         return out
-    for row in rows[:5]:
+    for row in rows[:limit]:
         if isinstance(row, dict):
             out.append(picker(row))
     return out
+
+
+def _raw_first(rows: Any) -> Optional[dict]:
+    """Return the FIRST raw row as Qoyod sent it (truncated to 50 keys
+    max). Used by the operator to inspect fields we don't pick out
+    explicitly — e.g. `type`, `archived_at`, `category_id`, `kind`."""
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        # Cap at 50 keys to keep the response tight.
+        return {k: rows[0][k] for k in list(rows[0].keys())[:50]}
+    return None
 
 
 async def _call(api_client: QoyodAPIClient, fn, endpoint: str) -> dict:
@@ -103,36 +113,60 @@ async def run_identity_diagnostics(db, user_id: str) -> dict:
         client, lambda: client.list_branches(),
         endpoint="GET /branches")
 
-    # 2) First 5 products — the smoking gun. If the user sees no
-    #    products in the Qoyod UI but we get rows here, the key is on
-    #    a different tenant.
+    # 2) First 10 products with FULL diagnostic fields — the smoking
+    #    gun. If the user sees no products in the Qoyod UI but we get
+    #    rows here, the key is on a different tenant OR the products
+    #    are archived/draft (hidden from the UI by default).
     products = await _call(
-        client, lambda: client.list_products(page=1, limit=5),
-        endpoint="GET /products?page=1&limit=5")
+        client, lambda: client.list_products(page=1, limit=10),
+        endpoint="GET /products?page=1&limit=10")
+    products_list = (products.get("response") or {}).get("products") \
+                    if products.get("ok") else []
     products_sample = _sample(
-        (products.get("response") or {}).get("products")
-        if products.get("ok") else [],
-        lambda r: {"id": r.get("id"),
-                   "name": r.get("name"),
-                   "sku":  r.get("sku") or r.get("reference"),
-                   "price": r.get("price")})
+        products_list,
+        lambda r: {
+            "id":          r.get("id"),
+            "name":        r.get("name"),
+            "sku":         r.get("sku") or r.get("reference"),
+            "type":        r.get("type")     or r.get("kind"),
+            "status":      r.get("status"),
+            "active":      r.get("active") if "active" in r else r.get("is_active"),
+            "archived":    r.get("archived") if "archived" in r else (
+                              r.get("archived_at") is not None
+                              if "archived_at" in r else None),
+            "archived_at": r.get("archived_at"),
+            "category":    (r.get("category") or {}).get("name")
+                              if isinstance(r.get("category"), dict)
+                              else r.get("category"),
+            "price":       r.get("price")    or r.get("selling_price"),
+        },
+        limit=10)
+    products_raw_first = _raw_first(products_list)
     products_meta = (products.get("response") or {}).get("meta") \
                     if products.get("ok") else None
 
-    # 3) First 5 customers.
+    # 3) First 10 customers with full diagnostic fields.
     customers = await _call(
-        client, lambda: client.list_contacts(page=1, limit=5),
-        endpoint="GET /customers?page=1&limit=5")
+        client, lambda: client.list_contacts(page=1, limit=10),
+        endpoint="GET /customers?page=1&limit=10")
     customers_root = (customers.get("response") or {}) if customers.get("ok") else {}
     customers_list = (customers_root.get("contacts")
                       or customers_root.get("customers")
                       or [])
     customers_sample = _sample(
         customers_list,
-        lambda r: {"id": r.get("id"),
-                   "name": r.get("name") or r.get("contact_name"),
-                   "phone": r.get("phone_number") or r.get("phone"),
-                   "email": r.get("email")})
+        lambda r: {
+            "id":          r.get("id"),
+            "name":        r.get("name") or r.get("contact_name"),
+            "phone":       r.get("phone_number") or r.get("phone"),
+            "email":       r.get("email"),
+            "type":        r.get("type") or r.get("kind"),
+            "archived":    r.get("archived") if "archived" in r else (
+                              r.get("archived_at") is not None
+                              if "archived_at" in r else None),
+        },
+        limit=10)
+    customers_raw_first = _raw_first(customers_list)
     customers_meta = customers_root.get("meta")
 
     # 4) Tenant identity hints — best-effort. Qoyod doesn't expose a
@@ -166,18 +200,20 @@ async def run_identity_diagnostics(db, user_id: str) -> dict:
             "error":    branches.get("error"),
         },
         "products": {
-            "ok":       products.get("ok"),
-            "endpoint": products["endpoint"],
-            "error":    products.get("error"),
-            "meta":     products_meta,
-            "sample":   products_sample,
+            "ok":             products.get("ok"),
+            "endpoint":       products["endpoint"],
+            "error":          products.get("error"),
+            "meta":           products_meta,
+            "sample":         products_sample,
+            "raw_first_row":  products_raw_first,
         },
         "customers": {
-            "ok":       customers.get("ok"),
-            "endpoint": customers["endpoint"],
-            "error":    customers.get("error"),
-            "meta":     customers_meta,
-            "sample":   customers_sample,
+            "ok":             customers.get("ok"),
+            "endpoint":       customers["endpoint"],
+            "error":          customers.get("error"),
+            "meta":           customers_meta,
+            "sample":         customers_sample,
+            "raw_first_row":  customers_raw_first,
         },
     }
 

@@ -286,20 +286,47 @@ export default function QoyodGoLive() {
                   {diag.qoyod.products.sample?.length > 0 ? (
                     <table className="w-full text-[11px]" data-testid="diag-products-table">
                       <thead className="bg-slate-50">
-                        <tr><th className="text-right p-1">ID</th><th className="text-right p-1">الاسم</th><th className="text-right p-1">SKU</th></tr>
+                        <tr>
+                          <th className="text-right p-1">ID</th>
+                          <th className="text-right p-1">الاسم</th>
+                          <th className="text-right p-1">SKU</th>
+                          <th className="text-right p-1">النوع</th>
+                          <th className="text-right p-1">الحالة</th>
+                          <th className="text-right p-1">مؤرشف</th>
+                        </tr>
                       </thead>
                       <tbody>
                         {diag.qoyod.products.sample.map((p, i) => (
                           <tr key={i} className="border-t border-slate-100">
                             <td className="p-1 font-mono" dir="ltr">{p.id}</td>
-                            <td className="p-1">{p.name || "—"}</td>
+                            <td className="p-1">{p.name || <span className="text-slate-400">—</span>}</td>
                             <td className="p-1 font-mono" dir="ltr">{p.sku || "—"}</td>
+                            <td className="p-1">{p.type || "—"}</td>
+                            <td className="p-1">
+                              {p.active === false ? "غير نشط"
+                                : p.status || (p.active === true ? "نشط" : "—")}
+                            </td>
+                            <td className="p-1">
+                              {p.archived === true || p.archived_at
+                                ? <span className="text-rose-700 font-bold">نعم</span>
+                                : "—"}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   ) : (
                     <div className="text-[11px] text-slate-500 italic">لا توجد منتجات</div>
+                  )}
+                  {diag.qoyod.products.raw_first_row && (
+                    <details className="mt-2 text-[11px]" data-testid="diag-products-raw">
+                      <summary className="cursor-pointer font-bold text-slate-600">
+                        🔎 عرض أول منتج كامل من Qoyod (لكشف الحقول المخفية)
+                      </summary>
+                      <pre className="mt-1 p-2 bg-slate-50 rounded font-mono whitespace-pre-wrap text-[10px]" dir="ltr">
+                        {JSON.stringify(diag.qoyod.products.raw_first_row, null, 2)}
+                      </pre>
+                    </details>
                   )}
                 </>
               ) : (
@@ -327,7 +354,13 @@ export default function QoyodGoLive() {
                   {diag.qoyod.customers.sample?.length > 0 ? (
                     <table className="w-full text-[11px]" data-testid="diag-customers-table">
                       <thead className="bg-slate-50">
-                        <tr><th className="text-right p-1">ID</th><th className="text-right p-1">الاسم</th><th className="text-right p-1">الهاتف</th></tr>
+                        <tr>
+                          <th className="text-right p-1">ID</th>
+                          <th className="text-right p-1">الاسم</th>
+                          <th className="text-right p-1">الهاتف</th>
+                          <th className="text-right p-1">النوع</th>
+                          <th className="text-right p-1">مؤرشف</th>
+                        </tr>
                       </thead>
                       <tbody>
                         {diag.qoyod.customers.sample.map((c, i) => (
@@ -335,12 +368,28 @@ export default function QoyodGoLive() {
                             <td className="p-1 font-mono" dir="ltr">{c.id}</td>
                             <td className="p-1">{c.name || "—"}</td>
                             <td className="p-1 font-mono" dir="ltr">{c.phone || "—"}</td>
+                            <td className="p-1">{c.type || "—"}</td>
+                            <td className="p-1">
+                              {c.archived === true
+                                ? <span className="text-rose-700 font-bold">نعم</span>
+                                : "—"}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   ) : (
                     <div className="text-[11px] text-slate-500 italic">لا توجد عملاء</div>
+                  )}
+                  {diag.qoyod.customers.raw_first_row && (
+                    <details className="mt-2 text-[11px]" data-testid="diag-customers-raw">
+                      <summary className="cursor-pointer font-bold text-slate-600">
+                        🔎 عرض أول عميل كامل من Qoyod
+                      </summary>
+                      <pre className="mt-1 p-2 bg-slate-50 rounded font-mono whitespace-pre-wrap text-[10px]" dir="ltr">
+                        {JSON.stringify(diag.qoyod.customers.raw_first_row, null, 2)}
+                      </pre>
+                    </details>
                   )}
                 </>
               ) : (
