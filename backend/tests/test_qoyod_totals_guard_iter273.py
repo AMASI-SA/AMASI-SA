@@ -147,24 +147,33 @@ def test_empty_items_with_zero_subtotal_passes():
     assert result.ok is True
 
 
-# ── 7. Header math check — total != subtotal + tax + ship − disc ────
-def test_order_total_mismatch_is_refused():
-    """Items match subtotal, but the declared total is wrong."""
+# ── 7. Header math check — Iter-282: DOWNGRADED FROM BLOCKER TO WARNING.
+# Salla's declared total may legitimately differ from Mezan's expected
+# total because Mezan enforces a fixed 15% VAT while Salla may report
+# different tax rates per storefront promo config. The mismatch is
+# now surfaced via `mezan_vat_diagnostics.tax_difference` (warning)
+# but NEVER moves the row to DEAD_LETTER.
+def test_order_total_mismatch_is_now_warning_not_blocker():
+    """Items match subtotal, declared total diverges from Salla math.
+    Pre-Iter-282 this DEAD_LETTERed the order; now it passes and the
+    diff is surfaced in mezan_vat_diagnostics."""
     canonical = {
         "subtotal":         100.0,
         "tax_amount":       15.0,
         "shipping_amount":  20.0,
         "discount_amount":  0.0,
-        "total_amount":     999.0,    # should be 135
+        "total_amount":     999.0,    # diverges from Salla math
         "items": [
             {"sku": "A", "quantity": 1, "unit_price": 100.0},
         ],
     }
     result = validate_totals(canonical)
-    assert result.ok is False
-    assert result.code == "order_total_mismatch"
-    assert result.details["derived_total"] == 135.0
-    assert result.details["declared_total"] == 999.0
+    assert result.ok is True   # No longer a blocker
+    diag = result.details["mezan_vat_diagnostics"]
+    assert diag["mezan_expected_total"] == 138.0   # 100 + 15 + 20 + 3
+    assert diag["salla_declared_total"] == 999.0
+    # tax_difference is surfaced for the operator to review.
+    assert diag["tax_difference"] == 861.0
 
 
 # ── 8. Header math reconciles with shipping + discount ──────────────

@@ -152,12 +152,44 @@ async def process_normalized_row(
 
     settings = await _load_settings(db, user_id)
 
-    # ── Totals Guard (Iter-273) ────────────────────────────────────
-    # Runs BEFORE any Qoyod-bound side-effect. If Make.com / Salla
-    # silently dropped line items (so `items_sum != subtotal`) or the
-    # header math diverges, refuse the row outright. NO auto-retry:
-    # the fix lives upstream, so retrying without a Make.com change
-    # would just fail again. Operator-facing audit + DEAD_LETTER.
+    # ── Status Eligibility Gate (Iter-282) ─────────────────────────
+    # Status gate MUST run BEFORE totals_guard. Orders that are not
+    # in an invoice-eligible status (e.g. `under_review`) must NEVER
+    # touch the totals guard — otherwise a transient Salla payload
+    # would DEAD_LETTER an order that is simply not finished yet.
+    # The user directive (2026-02-27, Iter-282) is explicit:
+    #   "إذا الحالة under_review يجب أن يذهب إلى SKIPPED، وليس DEAD_LETTER."
+    # business_rules.evaluate() already encodes the eligibility
+    # decision against `settings.invoice_trigger_statuses`.
+    existing = await db.qoyod_invoices.find_one(
+        {"user_id": user_id, "salla_order_id": dto.order_id},
+        {"_id": 0, "status": 1},
+    )
+    decision: RulesDecision = evaluate_rules(
+        dto, settings, existing_invoice_row=existing)
+    if not decision.eligible:
+        patch = transition(
+            from_stage="NORMALIZED", to_stage="SKIPPED",
+            actor="worker",
+            note=f"business_rule: {decision.reason}",
+            existing_started_at=row.get("pipeline_started_at"),
+        )
+        patch.setdefault("$set", {})["business_rules_decision"] = \
+            decision.to_log_dict()
+        await _apply(db, row["id"], patch)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "SKIPPED",
+            "reason":   decision.reason,
+            "trace_id": trace_id,
+        }
+
+    # ── Totals Guard (Iter-273, ordering fix Iter-282) ─────────────
+    # Runs AFTER status eligibility. If Make.com / Salla silently
+    # dropped line items (so `items_sum != subtotal`), refuse the
+    # row outright. NO auto-retry: the fix lives upstream.
+    # The guard now also embeds Mezan-VAT-15% diagnostics so the
+    # operator sees salla_total vs mezan_expected_total side-by-side.
     totals = validate_totals(canonical)
     if not totals.ok:
         await db.integration_inbox.update_one(
@@ -191,6 +223,15 @@ async def process_normalized_row(
             "totals_guard": totals.to_log_dict(),
         }
 
+    # Persist the Mezan VAT diagnostics on the inbox row even when
+    # totals_guard passes — useful for audit + UI display.
+    await db.integration_inbox.update_one(
+        {"id": row["id"]},
+        {"$set": {"totals_guard": totals.to_log_dict(),
+                  "mezan_vat_diagnostics":
+                      (totals.details or {}).get("mezan_vat_diagnostics")}},
+    )
+
     # If caller didn't pre-build an API client, build one now —
     # honouring dry_run_mode so the customer resolver doesn't reach
     # Qoyod when the operator is testing.
@@ -208,32 +249,9 @@ async def process_normalized_row(
                     "reason": "no_credentials"}
 
     # Existing invoice row — used by `trigger_once_only`.
-    existing = await db.qoyod_invoices.find_one(
-        {"user_id": user_id, "salla_order_id": dto.order_id},
-        {"_id": 0, "status": 1},
-    )
-
-    decision: RulesDecision = evaluate_rules(
-        dto, settings, existing_invoice_row=existing)
-
-    # ── NORMALIZED → SKIPPED (not eligible) ─────────────────────────
-    if not decision.eligible:
-        patch = transition(
-            from_stage="NORMALIZED", to_stage="SKIPPED",
-            actor="worker",
-            note=f"business_rule: {decision.reason}",
-            existing_started_at=row.get("pipeline_started_at"),
-        )
-        patch.setdefault("$set", {})["business_rules_decision"] = \
-            decision.to_log_dict()
-        await _apply(db, row["id"], patch)
-        return {
-            "row_id":         row["id"],
-            "outcome":        "SKIPPED",
-            "reason":         decision.reason,
-            "trace_id":       trace_id,
-            "decision":       decision.to_log_dict(),
-        }
+    # Note: decision was already evaluated above (Iter-282 status gate
+    # ordering). We now know the order is ELIGIBLE — proceed with
+    # RULES_APPLIED transition and the rest of the pipeline.
 
     # ── NORMALIZED → RULES_APPLIED ──────────────────────────────────
     patch = transition(

@@ -1,5 +1,59 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-282 — Status Gate Before Totals Guard + Mezan VAT 15% SSOT (2026-02-27)
+**User scenario**: Order `268746039` reached DEAD_LETTER with code `line_items_total_mismatch` even though its REAL status was `under_review` (not invoice-eligible) — Make.com was incorrectly sending `event_type: order_completed` for under-review rows, and totals_guard ran BEFORE status gate. Additionally, the mismatch was a Salla-vs-Mezan tax math divergence (Salla `tax.percent=8.00`, Mezan policy is 15%) which should NOT block the row.
+
+### Backend changes
+
+#### 1. Status Eligibility Gate runs BEFORE Totals Guard (`pipeline.py`)
+- `process_normalized_row` now calls `business_rules.evaluate()` immediately after settings load — BEFORE `validate_totals()`.
+- Orders with `order_status NOT in invoice_trigger_statuses` (e.g. `under_review`) → transition to **SKIPPED** with reason `not_in_trigger_statuses`. Never reach totals_guard.
+- Eligible orders continue through totals_guard as before.
+- The duplicate `evaluate_rules` block further down was removed (de-dup).
+
+#### 2. NEW `integrations/qoyod/mezan_vat.py` — SSOT for VAT
+- `VAT_RATE = 0.15` constant.
+- `TAX_SOURCE_LABEL = "mezan_fixed_15"`.
+- `compute_mezan_totals(canonical)` returns side-by-side `salla_*` vs `mezan_*` figures + `tax_difference`. Per-line breakdown with `net_line`, `mezan_tax_line`, `salla_tax_line`, `tax_difference_line`. Never mutates input. Never raises.
+- `expected_line_tax(unit_price, quantity, discount)` helper.
+- Rationale: Salla's tax math is shaped by storefront promo config (BNPL fees, partial-tax SKUs) and historically reports inconsistent percentages. Qoyod's tax records are merchant-mutable. Mezan owns the legal VAT rate as code — auditable and unit-tested.
+
+#### 3. Totals Guard updates (`totals_guard.py`)
+- Header-math check (`order_total_mismatch`) **DOWNGRADED FROM BLOCKER TO WARNING**. Salla's `total_amount` may legitimately differ from `subtotal + tax + ship − disc` because Mezan owns VAT policy. The diff is now surfaced via `mezan_vat_diagnostics.tax_difference` but NEVER moves the row to DEAD_LETTER.
+- `mezan_vat_diagnostics` block is embedded in **every** `validate_totals()` result (success or failure) for uniform UI display.
+- The `line_items_incomplete` / `line_items_total_mismatch` checks (Make.com data integrity) still bite as hard refuses.
+
+#### 4. Preview Reprocess (Iter-281) hoists `mezan_vat` to top-level
+The `/admin/preview-reprocess` response now carries `mezan_vat` at the response root (in addition to `stages.totals_guard.details.mezan_vat_diagnostics`) so the UI can render the Salla-vs-Mezan badge without nested drilling.
+
+### Tests (Iter-282)
+- **NEW** `tests/test_qoyod_status_gate_and_mezan_vat_iter282.py` — **13/13 pass**:
+  - VAT_RATE = 0.15 constant.
+  - `expected_line_tax(180, 1, 10.80) == 25.38`.
+  - `compute_mezan_totals` for order 268746039 returns: `net_items_total=169.20`, `mezan_items_tax=25.38`, `mezan_shipping_tax=3.61`, `mezan_expected_total=222.26`, `tax_difference=-13.52`.
+  - Per-line breakdown surfaces `tax_difference_line`.
+  - Salla columns preserved for forensics.
+  - Totals guard PASSES for order 268746039 despite Salla-vs-Mezan tax diff.
+  - Totals guard still BLOCKS on real items-sum-incomplete (Make data integrity).
+  - `under_review` order is NOT eligible (`decision.reason == "not_in_trigger_statuses"`); `completed` IS eligible.
+- **Updated** existing tests:
+  - `test_qoyod_totals_guard_iter273.py::test_order_total_mismatch_is_now_warning_not_blocker` (was: `_is_refused`).
+  - `test_qoyod_pipeline_totals_guard_e2e_iter273.py::test_pipeline_does_not_dead_letter_order_total_mismatch_iter282` (was: `refuses_*_with_correct_code`).
+- **693/693** Qoyod pytest suite passes. 0 regressions.
+
+### Invoice Builder — already correct
+`build_invoice_payload` passes each line as `{unit_price, discount, tax_id}` (NOT Salla's `tax_amount`). Qoyod computes tax server-side from `tax_id`. As long as `default_tax_id` in settings points to Qoyod's 15% tax record, the invoice receives Mezan's policy. Documented in code comment; no change required.
+
+### What this gives the operator
+- Order `268746039` (under_review) now routes to **SKIPPED**, never DEAD_LETTER.
+- Operator can see Salla's reported `13.54 SAR` tax vs Mezan's expected `25.38 SAR` side-by-side in the First Sync Monitor (once UI surfaces `mezan_vat_diagnostics`).
+- Books are protected: invoice payload carries Qoyod tax_id (15%), not Salla's variable percentage.
+
+### Not done (deferred per user instruction)
+- Order `268746039` was NOT sent to Qoyod (it's `under_review` → SKIPPED).
+- Frontend rendering of `mezan_vat_diagnostics` in First Sync Monitor card.
+
+
 ## Iter-281 — Safe Preview Reprocess (No Qoyod Calls) (2026-02-27)
 **User scenario**: One-shot reprocess button refused with `dry_run_mode_active` (it targets real Qoyod). User did NOT want to flip Dry Run off, nor send anything to Qoyod, but DID want to debug order `268632361` end-to-end. Additionally, the existing button returned a raw 500 when something unhandled went wrong — the UI showed `request_failed Request failed with status code 500` without diagnostic detail.
 

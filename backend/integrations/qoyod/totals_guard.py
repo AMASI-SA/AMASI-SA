@@ -70,6 +70,18 @@ def _round2(x: float) -> float:
     return round(x, 2)
 
 
+def _mezan_diag(canonical: dict) -> dict:
+    """Build the Mezan-VAT-15% diagnostics block. Always called so
+    audit data is uniform whether the guard passes or fails."""
+    # Lazy import to avoid a hard dependency for callers that vendor
+    # totals_guard.py without the full integrations.qoyod package.
+    try:
+        from integrations.qoyod.mezan_vat import compute_mezan_totals
+        return compute_mezan_totals(canonical)
+    except Exception:   # pragma: no cover — defensive
+        return {}
+
+
 def validate_totals(
     canonical: dict, *, tolerance: float = DEFAULT_TOLERANCE,
 ) -> TotalsGuardResult:
@@ -141,6 +153,7 @@ def validate_totals(
     items_sum_excl = _round2(items_sum_excl)
     items_sum_incl = _round2(items_sum_incl)
     subtotal_r     = _round2(subtotal)
+    mezan_diag     = _mezan_diag(canonical)
 
     # ── 3. items_sum vs subtotal — the headline check ──────────────
     # Some adapters report subtotal INCLUSIVE of item-level tax (rare),
@@ -174,40 +187,16 @@ def validate_totals(
                 "shortfall":           _round2(subtotal_r - items_sum_excl),
                 "tolerance":           tolerance,
                 "parsed_items":        parsed_items,
+                "mezan_vat_diagnostics": mezan_diag,
             },
         )
 
-    # ── 4. Header math: subtotal + tax + ship − disc == total ──────
-    # Reconcile against the order-level total. Use the convention
-    # that matched the items check (excl/incl) to avoid double-counting
-    # item-level tax.
-    if matches_excl:
-        derived_total = subtotal + tax_amount + shipping_amount - discount_amount
-    else:
-        derived_total = items_sum_incl + shipping_amount - discount_amount
-    derived_total_r = _round2(derived_total)
-
-    if abs(derived_total_r - _round2(total_amount)) > tolerance:
-        return TotalsGuardResult(
-            ok=False,
-            code="order_total_mismatch",
-            message=(f"derived_total={derived_total_r} (subtotal "
-                     f"{subtotal_r} + tax {_round2(tax_amount)} + "
-                     f"ship {_round2(shipping_amount)} - disc "
-                     f"{_round2(discount_amount)}) != "
-                     f"declared_total={_round2(total_amount)}"),
-            details={
-                "items_count":     len(items),
-                "items_sum_excl":  items_sum_excl,
-                "subtotal":        subtotal_r,
-                "tax_amount":      _round2(tax_amount),
-                "shipping_amount": _round2(shipping_amount),
-                "discount_amount": _round2(discount_amount),
-                "derived_total":   derived_total_r,
-                "declared_total":  _round2(total_amount),
-                "tolerance":       tolerance,
-            },
-        )
+    # ── 4. Header math (Iter-282) — DOWNGRADED FROM BLOCKER TO WARNING.
+    # Salla's tax_amount / total_amount may diverge from Mezan's 15%
+    # policy by design. Mezan owns the VAT rate; Salla's totals are
+    # diagnostic only. The mismatch is surfaced via `mezan_vat_diagnostics`
+    # (`tax_difference` field) so the operator can review side-by-side,
+    # but it NEVER moves the row to DEAD_LETTER.
 
     # ── 5. All green ───────────────────────────────────────────────
     return TotalsGuardResult(
@@ -218,6 +207,7 @@ def validate_totals(
             "items_sum_incl":  items_sum_incl,
             "subtotal":        subtotal_r,
             "matched_convention": "exclusive" if matches_excl else "inclusive",
+            "mezan_vat_diagnostics": mezan_diag,
             "total_amount":    _round2(total_amount),
         },
     )

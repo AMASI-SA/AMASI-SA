@@ -158,9 +158,11 @@ async def test_pipeline_passes_clean_totals_row_to_customer_resolution(db):
 
 
 @pytest.mark.asyncio
-async def test_pipeline_refuses_order_total_mismatch_with_correct_code(db):
-    """items_sum matches subtotal, but declared total doesn't reconcile
-    with subtotal+tax+ship−disc → `order_total_mismatch`."""
+async def test_pipeline_does_not_dead_letter_order_total_mismatch_iter282(db):
+    """Iter-282: items_sum matches subtotal, but declared total doesn't
+    reconcile with subtotal+tax+ship−disc. Pre-Iter-282 this DEAD_LETTERed.
+    Now it passes (mismatch surfaces as `mezan_vat_diagnostics.tax_difference`
+    warning, NOT as a hard block) because Mezan owns the VAT policy, not Salla."""
     user_id = f"tg-totmis-{uuid.uuid4().hex[:6]}"
     row = await _seed_normalized(
         db, user_id=user_id,
@@ -172,13 +174,12 @@ async def test_pipeline_refuses_order_total_mismatch_with_correct_code(db):
     try:
         out = await process_normalized_row(
             db, row, api_client=DryRunQoyodClient())
-        assert out["outcome"] == "DEAD_LETTER"
-        assert out["reason"] == "order_total_mismatch"
+        # NOT dead-lettered. May SKIP (if status not in trigger) or
+        # advance past totals guard.
+        assert out["outcome"] != "DEAD_LETTER", \
+            f"Iter-282 should not DEAD_LETTER on header mismatch: {out}"
         updated = await db.integration_inbox.find_one({"id": row["id"]})
-        assert updated["pipeline_stage"] == "DEAD_LETTER"
-        # CUSTOMER_RESOLVED never happened.
-        assert "CUSTOMER_RESOLVED" not in [h.get("to_stage") for h in
-                                           (updated["stage_history"] or [])]
+        assert updated["pipeline_stage"] != "DEAD_LETTER"
     finally:
         await db.integration_inbox.delete_many({"user_id": user_id})
         await db.qoyod_settings.delete_one({"user_id": user_id})

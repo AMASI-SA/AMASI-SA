@@ -258,6 +258,11 @@ async def preview_reprocess_one_order(
             "message":     tg.message,
             "details":     tg.details,
         }
+        # Hoist mezan_vat_diagnostics to a top-level slot for easy UI
+        # consumption (Iter-282).
+        mvd = (tg.details or {}).get("mezan_vat_diagnostics")
+        if mvd:
+            out["mezan_vat"] = mvd
 
     # ── 6) Settings ─────────────────────────────────────────────────
     settings = await db.qoyod_settings.find_one(
