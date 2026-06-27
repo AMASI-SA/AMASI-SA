@@ -109,6 +109,9 @@ export default function QoyodGoLive() {
   const [report,    setReport]    = useState(null);
   const [activating, setActivating] = useState(false);
   const [requeueing, setRequeueing] = useState(false);
+  const [forensics, setForensics] = useState(null);
+  const [forensicsLoading, setForensicsLoading] = useState(false);
+  const [forcing, setForcing] = useState({});
   const [diag, setDiag] = useState(null);
   const [diagLoading, setDiagLoading] = useState(false);
   const [identityConfirmed, setIdentityConfirmed] = useState(false);
@@ -164,6 +167,43 @@ export default function QoyodGoLive() {
       toast.error("تعذّر تشغيل إعادة المعالجة التلقائية");
     } finally {
       setRequeueing(false);
+    }
+  };
+
+  const loadForensics = async () => {
+    setForensicsLoading(true);
+    try {
+      const { data } = await axios.get(
+        `${API}/integrations/qoyod/dead-letter/forensics`);
+      setForensics(data);
+    } catch (e) {
+      toast.error("تعذّر جلب التشخيص الجنائي");
+    } finally {
+      setForensicsLoading(false);
+    }
+  };
+
+  const onForceRequeueRow = async (rowId) => {
+    if (!window.confirm(
+      "تحذير: إعادة فرض المعالجة تتجاوز سقف المحاولات.\n" +
+      "تأكّد أن الإصلاح الكودي شُحن فعلاً قبل المتابعة.\n" +
+      "سيتم تسجيل العملية في الـaudit trail.")) return;
+    setForcing(prev => ({ ...prev, [rowId]: true }));
+    try {
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/dead-letter/requeue-one`,
+        { row_id: rowId, force: true });
+      if (data?.ok) {
+        toast.success("تم فرض إعادة المعالجة. سيتم إكمالها خلال ثوانٍ.");
+        setTimeout(() => { loadForensics(); loadAll(); }, 2500);
+      } else {
+        toast.error("رُفِض الفرض: " + (data?.result?.reason || "سبب غير معروف"));
+      }
+    } catch (e) {
+      const code = e?.response?.data?.detail?.code;
+      toast.error(`تعذّر فرض الإعادة: ${code || "خطأ غير محدد"}`);
+    } finally {
+      setForcing(prev => ({ ...prev, [rowId]: false }));
     }
   };
 
@@ -517,6 +557,153 @@ export default function QoyodGoLive() {
                 لحسابي. (إلزامي قبل تفعيل الإنتاج)
               </span>
             </label>
+          </div>
+        )}
+      </section>
+
+      {/* ── Quantitative report ──────────────────────────────────── */}
+      {/* ── Forensics Panel (dead-letter deep diagnosis) ─────────── */}
+      <section className="rounded-xl border-2 border-purple-300 bg-purple-50/50 p-4 md:p-5 mb-5"
+               data-testid="qoyod-forensics-card">
+        <header className="mb-3 flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h3 className="text-base font-extrabold text-purple-900">
+              🔬 التشخيص الجنائي للفواتير العالقة (Dead-Letter Forensics)
+            </h3>
+            <p className="text-xs text-purple-800 mt-1 leading-relaxed">
+              لكل صف عالق بعد التفعيل، يكشف هذا التحليل السبب الحالي للفشل
+              (وليس القديم)، ولماذا لم يُعَد معالجته تلقائياً، والإجراء المتاح.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadForensics}
+            disabled={forensicsLoading}
+            data-testid="btn-load-forensics"
+            className="px-3 py-2 text-xs font-extrabold rounded-lg bg-purple-700 text-white
+                       hover:bg-purple-800 disabled:opacity-50 whitespace-nowrap">
+            {forensicsLoading ? "جاري التحليل…" : "▶ تشغيل التشخيص الآن"}
+          </button>
+        </header>
+
+        {!forensics ? (
+          <p className="text-sm text-purple-800 bg-purple-100 rounded p-3"
+             data-testid="forensics-empty">
+            لم يتم التحليل بعد. اضغط الزر لاستعلام الـ Forensics لكل فاتورة عالقة.
+          </p>
+        ) : forensics.total === 0 ? (
+          <p className="text-sm text-emerald-900 bg-emerald-100 border border-emerald-300 rounded p-3"
+             data-testid="forensics-clean">
+            ✅ لا توجد فواتير عالقة بعد التفعيل. النظام نظيف.
+          </p>
+        ) : (
+          <div className="space-y-3" data-testid="forensics-result">
+            {/* Counters */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-[11px]">
+              {Object.entries(forensics.counters || {}).map(([k, v]) => (
+                <div key={k}
+                     className={`p-2 rounded border ${
+                       k === "auto_recoverable_pending" ? "bg-blue-50 border-blue-200" :
+                       k === "max_attempts_reached"     ? "bg-amber-50 border-amber-200" :
+                       k === "no_pattern_match"         ? "bg-rose-50 border-rose-200" :
+                                                          "bg-slate-50 border-slate-200"}`}
+                     data-testid={`forensics-counter-${k}`}>
+                  <div className="text-[10px] font-bold opacity-75">{k}</div>
+                  <div className="text-xl font-extrabold tabular-nums">{v}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Rows */}
+            <div className="space-y-2">
+              {forensics.rows.map((r, idx) => {
+                const cls = r.classification || {};
+                const status = cls.status;
+                const tone = status === "auto_recoverable_pending" ? "blue" :
+                             status === "max_attempts_reached"     ? "amber" :
+                             status === "no_pattern_match"         ? "rose" :
+                                                                      "slate";
+                return (
+                  <div key={r.row_id}
+                       data-testid={`forensics-row-${idx}`}
+                       className={`p-3 rounded-lg border bg-white ${
+                         tone === "blue"  ? "border-blue-300" :
+                         tone === "amber" ? "border-amber-300" :
+                         tone === "rose"  ? "border-rose-300" :
+                                            "border-slate-300"}`}>
+                    <div className="flex items-start justify-between gap-2 flex-wrap mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded ${
+                            tone === "blue"  ? "bg-blue-600 text-white"  :
+                            tone === "amber" ? "bg-amber-600 text-white" :
+                            tone === "rose"  ? "bg-rose-600 text-white"  :
+                                               "bg-slate-600 text-white"}`}>
+                            {status}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500" dir="ltr">
+                            {r.trace_id?.slice(0, 8)} · attempts {r.requeue_attempts}/{r.max_requeue_attempts}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-800">
+                          <strong>{r.last_failed_stage}</strong>
+                          {cls.pattern_id && (
+                            <span className="ms-1 text-[10px] text-slate-500" dir="ltr">
+                              (pattern: {cls.pattern_id})
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] mt-1 text-slate-700">{cls.reason}</div>
+                        {cls.hint && (
+                          <div className="text-[10px] mt-1 italic text-slate-600">
+                            💡 {cls.hint}
+                          </div>
+                        )}
+                      </div>
+                      {status === "max_attempts_reached" && (
+                        <button
+                          type="button"
+                          onClick={() => onForceRequeueRow(r.row_id)}
+                          disabled={!!forcing[r.row_id]}
+                          data-testid={`btn-force-requeue-${idx}`}
+                          className="px-3 py-1.5 text-[11px] font-extrabold rounded
+                                     bg-amber-700 text-white hover:bg-amber-800
+                                     disabled:opacity-50 whitespace-nowrap">
+                          {forcing[r.row_id] ? "جاري…" : "⚡ إعادة فرض المعالجة"}
+                        </button>
+                      )}
+                    </div>
+                    {/* Current pipeline_error — THE log the user demanded */}
+                    <details className="text-[10px]"
+                             data-testid={`forensics-error-${idx}`}>
+                      <summary className="cursor-pointer font-bold text-slate-700">
+                        📜 السبب الحالي للفشل (pipeline_error)
+                      </summary>
+                      <pre className="mt-1 p-2 bg-slate-900 text-slate-100 rounded font-mono whitespace-pre-wrap text-[10px] max-h-64 overflow-auto" dir="ltr">
+                        {JSON.stringify(r.pipeline_error, null, 2)}
+                      </pre>
+                    </details>
+                    {Array.isArray(r.stage_history_tail) && r.stage_history_tail.length > 0 && (
+                      <details className="text-[10px] mt-1"
+                               data-testid={`forensics-history-${idx}`}>
+                        <summary className="cursor-pointer font-bold text-slate-700">
+                          🕒 آخر {r.stage_history_tail.length} مراحل
+                        </summary>
+                        <ul className="mt-1 space-y-0.5 font-mono text-slate-700" dir="ltr">
+                          {r.stage_history_tail.map((h, i) => (
+                            <li key={i}>{h.to_stage} — {h.actor || "system"}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="text-[10px] text-purple-700 italic">
+              آخر تشغيل: {forensics.at?.slice(0, 19)} UTC · أنماط مُسجَّلة: {forensics.patterns_in_registry?.length || 0}
+            </div>
           </div>
         )}
       </section>

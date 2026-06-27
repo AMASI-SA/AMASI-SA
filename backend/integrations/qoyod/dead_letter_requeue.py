@@ -186,6 +186,7 @@ def match_pattern(row: dict) -> dict | None:
 # ─────────────────────────────────────────────────────────────────────
 async def requeue_row(
     db, row: dict, *, pattern: dict, actor: str = "auto-requeue",
+    force: bool = False,
 ) -> dict:
     """Move a single DEAD_LETTER / PARTIAL_FAILURE row back into the
     pipeline. Two-hop transition recorded in `stage_history`:
@@ -195,6 +196,11 @@ async def requeue_row(
     Increments `requeue_attempts` and tags the row with metadata so
     the operator can see in the UI why/when it was requeued. Returns
     `{ok, row_id, resume_stage, requeue_attempts, pattern_id}`.
+
+    `force=True` bypasses MAX_REQUEUE_ATTEMPTS — used ONLY by the
+    operator "إعادة فرض المعالجة" path when they've manually verified
+    the underlying bug is fixed. Forced requeues are tagged with
+    `forced_requeue_at` and `forced_by` in the row for audit.
     """
     row_id = row.get("id")
     if not row_id:
@@ -206,16 +212,18 @@ async def requeue_row(
                 "current_stage": current_stage, "row_id": row_id}
 
     prev_attempts = int(row.get("requeue_attempts") or 0)
-    if prev_attempts >= MAX_REQUEUE_ATTEMPTS:
+    if prev_attempts >= MAX_REQUEUE_ATTEMPTS and not force:
         return {"ok": False, "reason": "max_requeue_attempts_reached",
-                "row_id": row_id, "requeue_attempts": prev_attempts}
+                "row_id": row_id, "requeue_attempts": prev_attempts,
+                "hint": "use force=true to override (operator only)"}
 
     last_failed = row.get("last_failed_stage")
     resume_stage = _resume_target_for(last_failed)
     pattern_id = pattern.get("id")
 
     # Hop 1: <terminal> → RETRYING
-    note1 = (f"auto-requeue: pattern={pattern_id} "
+    forced_tag = " [FORCED]" if force else ""
+    note1 = (f"auto-requeue{forced_tag}: pattern={pattern_id} "
              f"last_failed_stage={last_failed}")
     p1 = transition(
         from_stage=current_stage, to_stage="RETRYING",
@@ -226,6 +234,11 @@ async def requeue_row(
         "last_requeue_at":  _now(),
         "last_requeue_pattern": pattern_id,
     })
+    if force:
+        p1["$set"].update({
+            "forced_requeue_at": _now(),
+            "forced_by":         actor,
+        })
     # Don't clear pipeline_error — keep it for forensics. The
     # `pipeline_stage` change is the visible signal.
     await db.integration_inbox.update_one({"id": row_id}, p1)
@@ -369,10 +382,15 @@ async def auto_requeue_known_fixed(
 async def requeue_one(
     db, *, user_id: str, row_id: Optional[str] = None,
     trace_id: Optional[str] = None, actor: str = "operator",
+    force: bool = False,
 ) -> dict:
     """Manually requeue a single row by `row_id` or `trace_id`.
     Still bounded by the pattern registry — generic DEAD_LETTER rows
     cannot be requeued.
+
+    `force=True` bypasses MAX_REQUEUE_ATTEMPTS for the matched row.
+    The pattern registry guard still applies — generic errors cannot
+    be force-requeued.
 
     Returns `{ok, result}` on success or `{ok: False, reason}`.
     """
@@ -391,5 +409,173 @@ async def requeue_one(
         return {"ok": False, "reason": "no_known_fix_pattern_matches",
                 "last_failed_stage": row.get("last_failed_stage"),
                 "pipeline_error":    row.get("pipeline_error")}
-    res = await requeue_row(db, row, pattern=pat, actor=actor)
+    res = await requeue_row(db, row, pattern=pat, actor=actor, force=force)
     return {"ok": bool(res.get("ok")), "result": res}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Forensics — "why is this row stuck?"
+# ─────────────────────────────────────────────────────────────────────
+# The single most useful debug surface for the operator. Returns the
+# FULL state of every post-Go-Live failure with a precise classification:
+#
+#   • `auto_recoverable_pending`  — matches a pattern, attempts remain.
+#       The worker will requeue this on the next tick (≤5s).
+#   • `max_attempts_reached`      — matched a pattern, attempts exhausted.
+#       Operator can override via /dead-letter/requeue-one?force=true.
+#   • `no_pattern_match`          — does NOT match any KNOWN_FIXED_PATTERNS.
+#       Must be investigated manually — the system is hiding NOTHING.
+#   • `pattern_mismatch_due_to_stage` — error string LOOKS like a known
+#       pattern but the last_failed_stage doesn't match the pattern's
+#       declared stages (defensive: avoids silently fixing different bugs).
+#   • `not_terminal`              — row is no longer DEAD_LETTER (already
+#       requeued or processed). Should not appear under "stuck" lists.
+#
+# This is the page the user demanded:
+#     "إذا كانت ما زالت تفشل، أريد Log كامل لسبب الفشل الحالي،
+#      وليس السبب القديم."
+# ─────────────────────────────────────────────────────────────────────
+def _classify_row(row: dict) -> dict:
+    """Return `{status, reason, pattern_id?, hint}` explaining why
+    this row is (or isn't) auto-recovering. Pure function — no IO."""
+    stage = row.get("pipeline_stage")
+    last_failed = row.get("last_failed_stage")
+    err = row.get("pipeline_error") or {}
+    attempts = int(row.get("requeue_attempts") or 0)
+
+    if stage not in ("DEAD_LETTER", "PARTIAL_FAILURE"):
+        return {"status": "not_terminal",
+                "reason": ("الصف لم يعد في حالة فشل نهائية — "
+                           "ربما أُعيدت معالجته بالفعل."),
+                "current_stage": stage,
+                "hint": "refresh QYD-GO"}
+
+    # Did ANY pattern's stage match?
+    stage_matches = [p for p in KNOWN_FIXED_PATTERNS
+                     if last_failed in p["applies_to_failed_stages"]]
+
+    # Did the matcher itself accept?
+    matched_pattern = match_pattern(row)
+
+    if matched_pattern:
+        if attempts >= MAX_REQUEUE_ATTEMPTS:
+            return {
+                "status":     "max_attempts_reached",
+                "reason":     (f"النمط '{matched_pattern.get('id')}' "
+                               f"ينطبق، لكن استُنفدت محاولات الإعادة "
+                               f"({attempts}/{MAX_REQUEUE_ATTEMPTS})."),
+                "pattern_id": matched_pattern.get("id"),
+                "hint":       ("استخدم force=true عبر "
+                               "/dead-letter/requeue-one — يتطلب توقيع "
+                               "المشغّل ويسجَّل في الـaudit trail."),
+            }
+        return {
+            "status":     "auto_recoverable_pending",
+            "reason":     (f"النمط '{matched_pattern.get('id')}' ينطبق. "
+                           f"العامل سيُعيد المعالجة في الدورة التالية "
+                           f"(محاولة {attempts + 1}/{MAX_REQUEUE_ATTEMPTS})."),
+            "pattern_id": matched_pattern.get("id"),
+            "hint":       "wait ~5s or click 'إعادة المعالجة الآن'",
+        }
+
+    if stage_matches and not matched_pattern:
+        # The stage matched but the matcher itself rejected the error.
+        # This is the most subtle case — defensive against false positives.
+        return {
+            "status": "pattern_mismatch_due_to_error_shape",
+            "reason": (f"مرحلة الفشل ({last_failed}) متطابقة مع نمط "
+                       f"معروف، لكن شكل الخطأ مختلف. لن نُعيد المعالجة "
+                       "لتجنّب إخفاء خطأ إنتاجي حقيقي."),
+            "candidate_pattern_ids": [p.get("id") for p in stage_matches],
+            "hint": ("راجع pipeline_error يدوياً. لو كان فعلاً نفس "
+                     "السبب القديم، أبلغ المطوّر لتحديث matcher."),
+        }
+
+    return {
+        "status": "no_pattern_match",
+        "reason": (f"الخطأ ({err.get('code') or err.get('message') or 'غير محدد'}) "
+                   f"في مرحلة {last_failed} ليس ضمن KNOWN_FIXED_PATTERNS. "
+                   "النظام لا يُخفي شيئاً — هذا فشل إنتاجي حقيقي يحتاج تحقيقاً."),
+        "hint": ("راجع pipeline_error وسجل قيود. لو الإصلاح شُحن، "
+                 "اطلب من المطوّر إضافة نمط (يحتاج مراجعة كود صريحة)."),
+    }
+
+
+async def forensics(
+    db, *, user_id: str, include_dry_run: bool = False,
+    settings: Optional[dict] = None, limit: int = 200,
+) -> dict:
+    """Return a complete forensic report on every post-Go-Live
+    terminal-failure row. Used by the QYD-GO forensics panel.
+
+    Each row gets a precise `classification` (see `_classify_row`)
+    so the operator can answer "why is this stuck?" in one glance —
+    no more searching MongoDB by hand.
+    """
+    if settings is None:
+        s = await db.qoyod_settings.find_one({"user_id": user_id}) or {}
+    else:
+        s = settings
+    activated_at = s.get("go_live_activated_at") or s.get("activated_at")
+    if isinstance(activated_at, str):
+        try:
+            from datetime import datetime as _dt
+            activated_at = _dt.fromisoformat(
+                activated_at.replace("Z", "+00:00"))
+        except ValueError:
+            activated_at = None
+
+    q: dict = {
+        "user_id": user_id,
+        "pipeline_stage": {"$in": ["DEAD_LETTER", "PARTIAL_FAILURE"]},
+    }
+    if not include_dry_run:
+        q["dry_run"] = {"$ne": True}
+    if activated_at:
+        q["received_at"] = {"$gte": activated_at}
+
+    rows_out: list[dict] = []
+    counters: dict[str, int] = {}
+    cursor = db.integration_inbox.find(q, limit=max(1, min(limit, 500)))
+    async for row in cursor:
+        cls = _classify_row(row)
+        counters[cls["status"]] = counters.get(cls["status"], 0) + 1
+        stage_hist = (row.get("stage_history") or [])[-5:]
+        rows_out.append({
+            "row_id":            row.get("id"),
+            "trace_id":          row.get("trace_id"),
+            "pipeline_stage":    row.get("pipeline_stage"),
+            "last_failed_stage": row.get("last_failed_stage"),
+            "pipeline_error":    row.get("pipeline_error"),
+            "received_at":       row.get("received_at"),
+            "requeue_attempts":  int(row.get("requeue_attempts") or 0),
+            "max_requeue_attempts": MAX_REQUEUE_ATTEMPTS,
+            "last_requeue_at":   row.get("last_requeue_at"),
+            "last_requeue_pattern": row.get("last_requeue_pattern"),
+            "forced_requeue_at": row.get("forced_requeue_at"),
+            "forced_by":         row.get("forced_by"),
+            "stage_history_tail": stage_hist,
+            "order_id":          (row.get("canonical_payload") or {}).get(
+                                    "order_id"),
+            "order_number":      (row.get("canonical_payload") or {}).get(
+                                    "order_number"),
+            "classification":    cls,
+        })
+
+    return {
+        "ok":                True,
+        "rows":              rows_out,
+        "total":             len(rows_out),
+        "counters":          counters,
+        "go_live_activated_at": activated_at.isoformat()
+                                 if activated_at else None,
+        "patterns_in_registry": [
+            {"id": p.get("id"),
+             "applies_to_failed_stages":
+                sorted(list(p.get("applies_to_failed_stages") or [])),
+             "fixed_at": p.get("fixed_at")}
+            for p in KNOWN_FIXED_PATTERNS
+        ],
+        "max_requeue_attempts": MAX_REQUEUE_ATTEMPTS,
+        "at": _now().isoformat(),
+    }
