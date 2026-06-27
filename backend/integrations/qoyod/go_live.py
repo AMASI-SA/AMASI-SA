@@ -204,12 +204,34 @@ async def _check_outstanding_failures(db, user_id: str, settings: dict | None = 
             continue
         blocking += 1
         if len(sample_blocking) < 5:
+            err = row.get("pipeline_error") or {}
+            # Why isn't this row auto-requeuing? Encode the precise
+            # reason inline so the operator can decide between:
+            #   • exhausted_attempts → call /requeue-one with force=true
+            #   • no_pattern_match   → real production bug, investigate
+            if pat and attempts >= _DRQ_MAX_ATTEMPTS:
+                requeue_reason = "exhausted_attempts"
+                matched = pat.get("id")
+            elif pat:
+                requeue_reason = "pending"   # should not happen here
+                matched = pat.get("id")
+            else:
+                requeue_reason = "no_pattern_match"
+                matched = None
             sample_blocking.append({
                 "row_id":            row.get("id"),
                 "trace_id":          row.get("trace_id"),
                 "last_failed_stage": row.get("last_failed_stage"),
-                "error_code":        (row.get("pipeline_error") or {}).get("code"),
+                "error_code":        err.get("code"),
+                "error_message":     (err.get("message")
+                                       or str(err.get("details") or "")[:200]),
                 "received_at":       row.get("received_at"),
+                "order_number":      (row.get("canonical_payload") or {}).get(
+                                        "order_number"),
+                "requeue_attempts":  attempts,
+                "max_requeue_attempts": _DRQ_MAX_ATTEMPTS,
+                "matched_pattern":   matched,
+                "requeue_reason":    requeue_reason,
             })
 
     if blocking:

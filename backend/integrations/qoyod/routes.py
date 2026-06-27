@@ -61,7 +61,6 @@ from integrations.qoyod.first_sync_monitor import (
 )
 from integrations.qoyod.dead_letter_requeue import (
     find_requeue_candidates, auto_requeue_known_fixed, requeue_one,
-    forensics as dead_letter_forensics,
     MAX_REQUEUE_ATTEMPTS, KNOWN_FIXED_PATTERNS,
 )
 from salla_integration.service import call_salla, SallaError
@@ -653,32 +652,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 for p in KNOWN_FIXED_PATTERNS
             ],
         }
-
-    @router.get("/dead-letter/forensics")
-    async def dead_letter_forensics_endpoint(
-        include_dry_run: bool = False,
-        user=Depends(current_user),
-    ):
-        """Complete forensic report on every post-Go-Live stuck row.
-
-        For each row, returns the CURRENT pipeline_error, the full
-        `last_failed_stage`, requeue counters, and a precise
-        `classification` explaining WHY the row is (or isn't)
-        auto-recovering:
-
-            • auto_recoverable_pending      — worker will retry next tick
-            • max_attempts_reached          — operator force needed
-            • no_pattern_match              — real production failure
-            • pattern_mismatch_due_to_error_shape — partial match, safe
-            • not_terminal                  — already requeued
-
-        Designed for the QYD-GO forensics panel — answers the
-        operator question 'is this an old bug, or a new one?' in a
-        single API call.
-        """
-        tenant = _tenant_id(user)
-        return await dead_letter_forensics(
-            db, user_id=tenant, include_dry_run=include_dry_run)
 
     @router.post("/dead-letter/auto-requeue")
     async def dead_letter_auto_requeue(
