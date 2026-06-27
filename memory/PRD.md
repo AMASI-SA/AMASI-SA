@@ -1,5 +1,35 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## SSOT Product Trust Gate + Name Display Fallback (2026-02-27)
+**User scenario (P0 pre-Go-Live)**: 38 historical Qoyod products (cod_item, custom_product, old Salla SKUs like AMS11903 with empty names) could silently bind to fresh Mezan orders via SKU match. User also reported that the QYD-GO Identity Diagnostics table displayed "—" for products with only `name_ar` (e.g. "اقمشة متنوعة"). Both gaps had to close before Go-Live.
+
+### 1. Display Fallback (frontend + backend)
+- **Backend** `identity_diagnostics._sample` now exposes `name_ar` and `name_en` as standalone keys (in addition to the picker's `name` + `name_source`). Guard against the picker missing exotic shapes.
+- **Frontend** `QoyodGoLive.jsx` computes `displayName = p.name || p.name_ar || p.name_en` with a `(name_ar)` source badge. Falls back to italic "(بدون اسم)" only when all three are empty.
+
+### 2. SSOT Product Trust Gate (architectural)
+Default-ON (`settings.block_untrusted_existing_products=True`). For every line item:
+- Mezan mapping HIT → use it (trust_source = `mezan` | `adopted`).
+- Mezan mapping MISS + Qoyod returns no product → create fresh (trust_source = `created`, mapping `source='mezan_created'`).
+- Mezan mapping MISS + Qoyod HAS a row → return `qoyod_existing_untrusted` with `{qoyod_product_id, qoyod_product_name, qoyod_product_sku, remediation: "adopt_or_archive"}`. No create call is made.
+
+### 3. Manual Adoption Endpoint
+`POST /api/integrations/qoyod/products/adopt` `{sku, qoyod_product_id, qoyod_product_name?, note?}` — inserts a mapping row with `adopted=True, adopted_by, adopted_at, source='operator_adopted'`. Idempotent.
+
+### Files changed
+- **NEW** code paths in `product_resolver.py` (trust gate + `adopt_qoyod_product()` + `_untrusted_error()`).
+- **NEW** `api_client.find_product_by_sku()` — Ransack `?q[sku_eq]=X` with defensive fallback to legacy flat filter; verifies returned row's SKU before claiming a hit.
+- **NEW** route `POST /products/adopt` + `AdoptProductBody` model.
+- `DryRunQoyodClient.find_product_by_sku` returns None (recorded for audit).
+- Frontend display chain in `QoyodGoLive.jsx`.
+
+### Tests (Iter-265)
+- **8 new unit tests** in `tests/test_qoyod_ssot_product_trust_gate.py` — happy path, block path, mapping short-circuit, adopted trust source, opt-out, adoption audit trail, idempotency, validation.
+- **4 new HTTP tests** in `tests/test_qoyod_ssot_trust_gate_http_iter265.py` — live endpoint contract.
+- Fixed event-loop isolation bug in `test_qoyod_dead_letter_iter264_http.py` (asyncio.run + Motor factory pattern).
+- **491/491** Qoyod pytest suite passes. P0 issue found by testing agent (missing import) fixed.
+
+
 ## Dead-Letter Auto-Requeue — Self-Healing for KNOWN_FIXED_PATTERNS (2026-02-27)
 **User scenario**: QYD-GO was stuck at 10/11 — `1 فاتورة إنتاجية فشلت` — because a Qoyod customer-create call had previously failed with `contact_name: Can't be blank`. The code bug was already fixed (2026-02-26: send both `name` + `contact_name`), but the row was permanently DEAD_LETTER and blocked Go-Live. User explicitly demanded that QYD-GO reflect CURRENT state, not old fixed errors, and that the row reach 11/11 **without manual intervention**.
 
