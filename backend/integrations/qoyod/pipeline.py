@@ -220,6 +220,22 @@ async def process_normalized_row(
             error=res.error,
             started_at=row.get("pipeline_started_at"),
         )
+        # Persist the EXACT payload we sent (or tried to send) to
+        # Qoyod, plus the full customer_resolution log. This is the
+        # only way the operator can verify post-mortem that the
+        # `name` AND `contact_name` fields actually reached the API
+        # — saves a debug round-trip and breaks any "did the fix
+        # deploy?" doubt with concrete evidence.
+        if res.qoyod_request_payload is not None:
+            await db.integration_inbox.update_one(
+                {"id": row["id"]},
+                {"$set": {
+                    "qoyod_payloads.customer_request":
+                        res.qoyod_request_payload,
+                    "qoyod_payloads.customer_request_at": _now(),
+                    "customer_resolution": res.to_log_dict(),
+                }},
+            )
         return {
             "row_id":   row["id"],
             "outcome":  "DEAD_LETTER",
