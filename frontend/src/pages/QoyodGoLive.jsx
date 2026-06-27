@@ -360,22 +360,35 @@ export default function QoyodGoLive() {
                         </tr>
                       </thead>
                       <tbody>
-                        {diag.qoyod.products.sample.map((p, i) => (
+                        {diag.qoyod.products.sample.map((p, i) => {
+                          // Display name fallback order (user directive 2026-02-27):
+                          //   1) name  →  2) name_ar  →  3) name_en  →  "(بدون اسم)"
+                          // The backend now exposes all three so a missing
+                          // `name` field never collapses to "—" when a
+                          // localized variant is available.
+                          const displayName = p.name || p.name_ar || p.name_en;
+                          const displaySource = p.name_source ||
+                                                (p.name_ar ? "name_ar" :
+                                                 p.name_en ? "name_en" : null);
+                          return (
                           <tr key={i} className={`border-t border-slate-100 ${
                                 p.is_system ? "bg-slate-50" : ""}`}
                               data-testid={`diag-product-row-${i}`}>
                             <td className="p-1 font-mono" dir="ltr">{p.id}</td>
                             <td className="p-1">
-                              {p.name ? (
+                              {displayName ? (
                                 <span>
-                                  {p.name}
-                                  {p.name_source && p.name_source !== "name" && (
+                                  {displayName}
+                                  {displaySource && displaySource !== "name" && (
                                     <span className="ms-1 text-[9px] text-slate-500"
-                                          dir="ltr">({p.name_source})</span>
+                                          dir="ltr">({displaySource})</span>
                                   )}
                                 </span>
                               ) : (
-                                <span className="text-slate-400 italic">— (لا يوجد اسم في أي حقل)</span>
+                                <span className="text-slate-400 italic"
+                                      data-testid={`diag-product-noname-${i}`}>
+                                  (بدون اسم)
+                                </span>
                               )}
                               {p.is_system && (
                                 <span
@@ -399,7 +412,8 @@ export default function QoyodGoLive() {
                                 : "—"}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   ) : (

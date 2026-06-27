@@ -207,6 +207,12 @@ async def run_identity_diagnostics(db, user_id: str) -> dict:
             "id":            r.get("id"),
             "name":          _extract_name(r),
             "name_source":   _name_source(r),
+            # Surface the raw localized fields so the frontend can apply
+            # its own ordered fallback (name → name_ar → name_en → بدون اسم).
+            # This guards against the picker missing an exotic shape
+            # (e.g. an older Qoyod row that only has `name_ar`).
+            "name_ar":       r.get("name_ar") or r.get("arabic_name"),
+            "name_en":       r.get("name_en") or r.get("english_name"),
             "sku":           r.get("sku") or r.get("reference"),
             "type":          r.get("type")     or r.get("kind")
                                 or r.get("product_type"),

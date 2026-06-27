@@ -145,6 +145,15 @@ class DryRunQoyodClient:
                            "payload": payload, "returned_id": pid})
         return {"product": {"id": pid}}
 
+    async def find_product_by_sku(self, sku):
+        """Dry-run: no Qoyod state exists, so the trust gate sees no
+        legacy products and always proceeds to create. Recorded for
+        audit so tests can assert the gate WAS consulted."""
+        self.calls.append({"endpoint": "GET /products?q[sku_eq]",
+                           "idem": None, "payload": {"sku": sku},
+                           "returned_id": None})
+        return None
+
     async def create_invoice(self, payload, *, idem):
         iid = self._fake("invoice", payload.get("invoice") or payload)
         self.calls.append({"endpoint": "POST /invoices", "idem": idem,

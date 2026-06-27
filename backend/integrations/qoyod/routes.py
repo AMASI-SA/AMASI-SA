@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
+from integrations.qoyod.product_resolver import adopt_qoyod_product
 from integrations.qoyod.credentials import (
     save_api_key, get_api_key, get_fingerprint, delete_api_key, mark_verified,
 )
@@ -149,6 +150,17 @@ class DeadLetterAutoRequeueBody(BaseModel):
     behaviour (production rows only)."""
     model_config = ConfigDict(extra="forbid")
     include_dry_run: bool = False
+
+
+class AdoptProductBody(BaseModel):
+    """SSOT Trust Gate adoption — operator explicitly onboards a
+    legacy Qoyod product into Mezan's local mapping. After adoption
+    the resolver stops blocking orders that need this SKU."""
+    model_config = ConfigDict(extra="forbid")
+    sku: str
+    qoyod_product_id: str
+    qoyod_product_name: Optional[str] = None
+    note: Optional[str] = None
 
 
 class TestConnectionResponse(BaseModel):
@@ -680,6 +692,35 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 detail={"code": result.get("reason", "requeue_refused"),
                         **{k: v for k, v in result.items()
                            if k not in {"ok", "reason"}}})
+        return result
+
+    # ── SSOT Trust Gate — Product Adoption ──────────────────────────
+    # When the resolver refuses with `qoyod_existing_untrusted`, the
+    # operator must EITHER archive the historical product in Qoyod OR
+    # explicitly adopt it via this endpoint. Adoption inserts the row
+    # into `qoyod_products_mapping` with `adopted=True` so subsequent
+    # orders bind cleanly without re-triggering the gate.
+    @router.post("/products/adopt")
+    async def adopt_product(
+        body: AdoptProductBody,
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        if not body.sku.strip() or not body.qoyod_product_id.strip():
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "sku_and_qoyod_product_id_required"})
+        result = await adopt_qoyod_product(
+            db, user_id=tenant, sku=body.sku.strip(),
+            qoyod_product_id=body.qoyod_product_id.strip(),
+            qoyod_product_name=body.qoyod_product_name,
+            note=body.note,
+            actor=f"operator:{getattr(user, 'email', tenant)}",
+        )
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": result.get("reason", "adopt_refused")})
         return result
 
     # ── Existing-Data Migration (read-only pre-flight) ──────────────

@@ -30,15 +30,30 @@ def client():
 
 @pytest.fixture(scope="module")
 def mongo_db():
+    """Returns a 0-arg factory that builds a fresh Motor client +
+    database handle on demand. Each `_run(...)` call below uses
+    `_db = mongo_db()` INSIDE its coroutine so the Motor client is
+    bound to the same event loop that `asyncio.run` is about to spin
+    up. Sharing a Motor client across pytest modules / loops triggers
+    `RuntimeError: no current event loop`.
+    """
     mongo_url = os.environ.get("MONGO_URL")
     db_name = os.environ.get("DB_NAME")
     assert mongo_url and db_name
-    cli = AsyncIOMotorClient(mongo_url)
-    return cli[db_name]
+
+    def _make():
+        return AsyncIOMotorClient(mongo_url)[db_name]
+    return _make
 
 
-def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+def _run(coro_factory):
+    """Run an async callable in a fresh event loop. `coro_factory()` may
+    return either a coroutine OR a Future/Task (Motor returns the latter
+    via `asyncio.ensure_future`). We await it via a tiny wrapper so
+    `asyncio.run` is happy either way."""
+    async def _await():
+        return await coro_factory()
+    return asyncio.run(_await())
 
 
 # ── 1. preview endpoint ─────────────────────────────────────────────
@@ -65,7 +80,7 @@ def test_preview_returns_registry(client):
 # ── 2. auto-requeue (no candidates path) ────────────────────────────
 def test_auto_requeue_no_candidates(client, mongo_db):
     # Best-effort cleanup of any TEST_ rows first
-    _run(mongo_db.integration_inbox.delete_many({"id": {"$regex": "^TEST_iter264_"}}))
+    _run(lambda: mongo_db().integration_inbox.delete_many({"id": {"$regex": "^TEST_iter264_"}}))
     r = client.post(f"{BASE_URL}/api/integrations/qoyod/dead-letter/auto-requeue", json={})
     assert r.status_code == 200, r.text
     data = r.json()
@@ -97,7 +112,7 @@ def test_requeue_one_no_pattern_match(client, mongo_db):
     # Seed a DEAD_LETTER row with an UNKNOWN error
     row_id = f"TEST_iter264_unknown_{uuid.uuid4().hex[:8]}"
     trace_id = f"TEST_iter264_trace_{uuid.uuid4().hex[:8]}"
-    _run(mongo_db.integration_inbox.insert_one({
+    _run(lambda: mongo_db().integration_inbox.insert_one({
         "id": row_id,
         "trace_id": trace_id,
         "user_id": "main",
@@ -117,7 +132,7 @@ def test_requeue_one_no_pattern_match(client, mongo_db):
         detail = r.json().get("detail", {})
         assert detail.get("code") == "no_known_fix_pattern_matches"
     finally:
-        _run(mongo_db.integration_inbox.delete_one({"id": row_id}))
+        _run(lambda: mongo_db().integration_inbox.delete_one({"id": row_id}))
 
 
 # ── 4. Full e2e: seed → auto-requeue → assert state transition ─────
@@ -126,7 +141,7 @@ def test_auto_requeue_known_pattern_e2e(client, mongo_db):
     trace_id = f"TEST_iter264_trace_{uuid.uuid4().hex[:8]}"
     generic_id = f"TEST_iter264_generic_{uuid.uuid4().hex[:8]}"
 
-    _run(mongo_db.integration_inbox.insert_many([
+    _run(lambda: mongo_db().integration_inbox.insert_many([
         {
             "id": row_id,
             "trace_id": trace_id,
@@ -177,7 +192,7 @@ def test_auto_requeue_known_pattern_e2e(client, mongo_db):
 
         # Re-fetch the row from Mongo — it might be NORMALIZED OR already
         # processed by the worker (5s tick). Accept either path.
-        row = _run(mongo_db.integration_inbox.find_one({"id": row_id}))
+        row = _run(lambda: mongo_db().integration_inbox.find_one({"id": row_id}))
         assert row is not None
         # requeue_attempts must have incremented
         assert int(row.get("requeue_attempts") or 0) == 1
@@ -186,11 +201,11 @@ def test_auto_requeue_known_pattern_e2e(client, mongo_db):
         assert "RETRYING" in history_stages
         assert "NORMALIZED" in history_stages
         # Generic row untouched
-        g = _run(mongo_db.integration_inbox.find_one({"id": generic_id}))
+        g = _run(lambda: mongo_db().integration_inbox.find_one({"id": generic_id}))
         assert g["pipeline_stage"] == "DEAD_LETTER"
         assert int(g.get("requeue_attempts") or 0) == 0
     finally:
-        _run(mongo_db.integration_inbox.delete_many(
+        _run(lambda: mongo_db().integration_inbox.delete_many(
             {"id": {"$in": [row_id, generic_id]}}))
 
 
@@ -200,7 +215,7 @@ def test_go_live_outstanding_failures_partitioning(client, mongo_db):
     drains. The outstanding_failures item must classify the row as
     auto_recoverable (ok=True) instead of blocking."""
     row_id = f"TEST_iter264_gl_{uuid.uuid4().hex[:8]}"
-    _run(mongo_db.integration_inbox.insert_one({
+    _run(lambda: mongo_db().integration_inbox.insert_one({
         "id": row_id,
         "trace_id": f"TEST_iter264_trace_{uuid.uuid4().hex[:8]}",
         "user_id": "main",
@@ -235,4 +250,4 @@ def test_go_live_outstanding_failures_partitioning(client, mongo_db):
             if extra.get("auto_recoverable_count", 0) > 0 and extra.get("blocking_count", 0) == 0:
                 assert outstanding.get("ok") is True, outstanding
     finally:
-        _run(mongo_db.integration_inbox.delete_one({"id": row_id}))
+        _run(lambda: mongo_db().integration_inbox.delete_one({"id": row_id}))

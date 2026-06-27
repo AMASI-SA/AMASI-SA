@@ -1,0 +1,38 @@
+{
+  "summary": "Iter-265 SSOT Product Trust Gate validation. All 8 unit tests in test_qoyod_ssot_product_trust_gate.py PASS. Full Qoyod regression suite is GREEN (487 baseline + 4 new HTTP smoke = 491 passed, 2 skipped). Frontend QYD-GO page loads without console errors and the diagnostics button is functional. Found and fixed ONE P0 bug while running HTTP-level tests: the new POST /api/integrations/qoyod/products/adopt endpoint was raising NameError because routes.py referenced adopt_qoyod_product without importing it — added the missing import. Dead-letter auto-requeue regression (iter-264) verified still working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/integrations/qoyod/products/adopt", "issue": "FIXED by test agent — routes.py was missing 'from integrations.qoyod.product_resolver import adopt_qoyod_product', causing every adoption call to 500 with NameError. Trivial one-line import fix applied at routes.py:30. Main agent should confirm this is the right module path and review whether other resolver helpers (e.g. resolve_products) should also be imported into routes for consistency."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qoyod_ssot_product_trust_gate.py",
+    "/app/backend/tests/test_qoyod_ssot_trust_gate_http_iter265.py"
+  ],
+  "action_items": [
+    "Review the import fix at /app/backend/integrations/qoyod/routes.py:30 — 'from integrations.qoyod.product_resolver import adopt_qoyod_product'. Without it the adoption endpoint cannot work in production. Recommend adding a lint rule or one-line unit test that calls attach_qoyod_routes() and POSTs to /products/adopt to prevent this regression.",
+    "Optional: live verification of the name_ar display fallback requires a tenant whose Qoyod account contains products with only name_ar (e.g. 'اقمشة متنوعة'). The admin@hesab.app tenant on preview has only a test API key (08cef...) that returns 401 against legacy.qoyod.com, so the diagnostics sample is empty. Static code review confirms QoyodGoLive.jsx:365-380 implements the documented fallback chain (p.name || p.name_ar || p.name_en → '(بدون اسم)') and renders the name_source badge."
+  ],
+  "critical_code_review_comments": [
+    "P0 (already fixed): routes.py used adopt_qoyod_product without importing it — only caught via runtime HTTP test, not pytest. The 8 unit tests imported the function directly from product_resolver so they could never have caught this. Consider adding a test that exercises every new route via TestClient before claiming a feature is complete.",
+    "DryRunQoyodClient.find_product_by_sku returns None — good for dev — but the dry-run path now never exercises the qoyod_existing_untrusted code branch end-to-end. Consider a feature-flagged dry-run scenario that simulates a legacy hit.",
+    "The trust-gate error payload puts qoyod_product_id as a string ('1') from a Qoyod-returned int (1). Confirm the dead-letter audit UI expects a string here for stable equality checks."
+  ],
+  "updated_files": [
+    "/app/backend/integrations/qoyod/routes.py (added missing import for adopt_qoyod_product)",
+    "/app/backend/tests/test_qoyod_ssot_trust_gate_http_iter265.py (new HTTP smoke test)"
+  ],
+  "success_rate": {"backend": "100% (491/491 passed, 2 skipped)", "frontend": "100% (QYD-GO renders, diagnostics button functional, no console errors)"},
+  "test_credentials": "admin@hesab.app / admin123 from /app/memory/test_credentials.md",
+  "seed_data_creation": "HTTP test creates ephemeral qoyod_products_mapping rows for tenant 'main' with sku prefix 'TEST_ADOPT_<uuid>'. Test does not clean up via API (no delete endpoint exposed); rows are inert and ignored by other tests.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 8 SSOT trust-gate unit tests + 4 new HTTP smoke tests pass. The one bug found (missing import in routes.py) was fixed by this testing agent. The full Qoyod regression (test_qoyod_*.py) shows 491 passed / 2 skipped. To rerun: cd /app/backend && python -m pytest tests/test_qoyod_*.py -q. For HTTP: tests/test_qoyod_ssot_trust_gate_http_iter265.py uses admin login on preview URL. Frontend verification of the name_ar fallback chain is NOT exercisable end-to-end without a real Qoyod tenant; QoyodGoLive.jsx:365-380 contains the correct fallback (p.name||p.name_ar||p.name_en → '(بدون اسم)' with name_source badge).",
+  "rca of the issue": "P0 — NameError on POST /products/adopt. Root cause: routes.py:712 called adopt_qoyod_product() but the symbol was never imported into the module. The 8 new unit tests imported adopt_qoyod_product directly from integrations.qoyod.product_resolver, so they could not catch the routing-layer omission. Reproduction: with the unfixed code, send POST /api/integrations/qoyod/products/adopt with valid body — server returns 500 + traceback 'NameError: name adopt_qoyod_product is not defined'. Mitigation applied: added 'from integrations.qoyod.product_resolver import adopt_qoyod_product' at routes.py line 30. Re-verified by HTTP smoke test which now passes."
+}

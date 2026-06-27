@@ -207,6 +207,70 @@ class QoyodAPIClient:
         return await self._request(
             "GET", "/products", params={"page": page, "limit": limit})
 
+    async def find_product_by_sku(self, sku: str) -> Optional[dict]:
+        """Look up a Qoyod product by SKU using Ransack filtering.
+
+        Returns the FIRST matching product dict or None if no rows
+        come back. Used by the **SSOT trust gate** (product_resolver):
+        before creating a new product in Qoyod we check whether the
+        SKU already exists from a previous era — if so, the row is
+        flagged `qoyod_existing_untrusted` until the operator explicitly
+        adopts it. See `product_resolver.resolve_products` for usage.
+
+        Two query shapes are attempted (some Qoyod deployments expose
+        Ransack, others expose a top-level `sku` filter). We treat
+        either successful response as authoritative and short-circuit
+        on the first hit. Network/auth errors propagate to the caller
+        as QoyodAPIError, which the resolver maps to FAILED_PRODUCT.
+        """
+        if not sku or not isinstance(sku, str):
+            return None
+        sku = sku.strip()
+        if not sku:
+            return None
+
+        candidates: list[dict[str, Any]] = [
+            {"q[sku_eq]": sku, "limit": 1},   # Ransack (most common)
+            {"sku":       sku, "limit": 1},   # legacy flat filter
+        ]
+        last_err: Optional[Exception] = None
+        for params in candidates:
+            try:
+                body = await self._request(
+                    "GET", "/products", params=params)
+            except QoyodAPIError as exc:
+                last_err = exc
+                continue
+            rows = []
+            if isinstance(body, dict):
+                rows = body.get("products") or body.get("data") or []
+            elif isinstance(body, list):
+                rows = body
+            # Defensive: Qoyod may ignore an unsupported filter and return
+            # the WHOLE collection — verify the SKU actually matches before
+            # claiming a hit.
+            for r in rows:
+                if not isinstance(r, dict):
+                    continue
+                row_sku = (r.get("sku") or r.get("reference") or "")
+                if isinstance(row_sku, str) and row_sku.strip() == sku:
+                    return r
+            # Filter likely worked but returned nothing — done.
+            if rows == [] or (isinstance(rows, list) and rows
+                              and not any(
+                                  isinstance(r, dict)
+                                  and (r.get("sku") or r.get("reference"))
+                                       == sku
+                                  for r in rows
+                              )):
+                # Filter honoured (empty) OR filter ignored (whole list
+                # returned, none matching) — either way, no hit.
+                if rows == []:
+                    return None
+        if last_err is not None and not isinstance(last_err, QoyodAPIError):
+            raise last_err   # pragma: no cover — unreachable
+        return None
+
     async def list_contacts(self, *, page: int = 1, limit: int = 50) -> Any:
         """GET /customers — same purpose as `list_products` but for customers.
 
