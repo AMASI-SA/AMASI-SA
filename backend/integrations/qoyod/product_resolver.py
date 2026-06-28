@@ -138,12 +138,21 @@ def _build_product_payload_fallback(item: dict, settings: dict) -> dict:
     retry (Iter-286). Strips everything except the four fields Qoyod's
     validator absolutely needs: name, sku, sale_item, selling_price.
     Plus Iter-287's required tenant ids (without which Qoyod always
-    rejects). No type/is_non_stock/purchase_item — let Qoyod default."""
+    rejects). No type/is_non_stock/purchase_item — let Qoyod default.
+
+    Iter-290g — Bump zero-price products to 1.0 SAR for *product
+    creation only*. Some Qoyod tenants refuse `selling_price=0` with
+    "enter at least a sales price". The invoice line still uses the
+    real Salla price (0 or the discounted figure under
+    match_salla_total) — this fallback affects ONLY the catalog row.
+    """
     raw_price = item.get("unit_price")
     try:
         selling_price = float(raw_price) if raw_price is not None else 0.0
     except (TypeError, ValueError):
         selling_price = 0.0
+    if selling_price <= 0:
+        selling_price = 1.0
     payload = {
         "name":          item.get("name") or item.get("sku") or "منتج",
         "sku":           item.get("sku"),
@@ -172,42 +181,182 @@ REQUIRED_PRODUCT_DEFAULT_LABELS_AR = {
 }
 
 
+def item_unit_price(item: dict) -> float:
+    """Iter-290g — Defensively extract a numeric unit_price from a DTO
+    line item. Returns 0.0 for missing/garbage input so the diagnostic
+    message can still attribute a price to the failing SKU even when
+    the upstream data is broken."""
+    raw = item.get("unit_price")
+    try:
+        return float(raw) if raw is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _coerce_id_to_int(v: Any) -> Optional[int]:
+    """Iter-290g — Coerce a Qoyod id setting to a clean integer when
+    possible. Returns `None` ONLY when the value is empty / unusable.
+
+    Handles three realistic UI shapes:
+      • Scalar string  ("1" / " 1 ")        → 1
+      • Scalar number  (1, 1.0)             → 1
+      • List/tuple     (["1"], ["1","2"])   → 1   (first non-empty)
+      • Empty/None                          → None
+
+    NOTE on non-numeric strings (e.g. "CAT-99"): some test fixtures and
+    legacy ports use string identifiers. We DO NOT refuse them here —
+    `_unwrap_id_for_payload` falls back to passing them through as the
+    stripped string. Qoyod will surface its own validator response if
+    such an id is invalid in the live API. This matches the user's
+    Iter-290g brief which only mandated the SHAPE fix (array → scalar)
+    and integer coercion as a *best effort*.
+    """
+    # Unwrap list/tuple (multiselect or accidental array shape).
+    if isinstance(v, (list, tuple)):
+        for el in v:
+            res = _coerce_id_to_int(el)
+            if res is not None:
+                return res
+        return None
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    try:
+        f = float(s)
+        return int(f)
+    except (TypeError, ValueError):
+        return None
+
+
+def _unwrap_id_for_payload(v: Any) -> Any:
+    """Iter-290g — Resolve a Qoyod id setting to the scalar value the
+    POST body should carry. Always returns a scalar (never a list).
+
+    Priority:
+      1. Multi-element array  → take the first non-empty element.
+      2. If it parses cleanly to an integer        → return that int.
+      3. Else                                       → return the
+         stripped non-empty string (legacy compatibility).
+      4. Empty / unusable                           → return None
+         (caller drops the key from the payload).
+    """
+    if isinstance(v, (list, tuple)):
+        # Pick the first non-empty element. Recurse if it's nested.
+        for el in v:
+            r = _unwrap_id_for_payload(el)
+            if r not in (None, ""):
+                return r
+        return None
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    try:
+        return int(float(s))
+    except (TypeError, ValueError):
+        return s
+
+
+def _is_array_shape(v: Any) -> bool:
+    """True when `v` is a list/tuple containing more than one element
+    that resolves to a different id. Used by the preflight to surface
+    `product_payload_invalid_id_shape` BEFORE the POST — so a multi-
+    valued multiselect doesn't silently get its first element used."""
+    if not isinstance(v, (list, tuple)):
+        return False
+    seen: set[int] = set()
+    for el in v:
+        i = _coerce_id_to_int(el)
+        if i is not None:
+            seen.add(i)
+    return len(seen) > 1
+
+
 def _stamp_required_ids(product: dict, settings: dict) -> None:
     """Mutates `product` in place — adds the four Qoyod-required ids
-    drawn from settings. Empty/missing values are dropped (the
-    preflight in `validate_product_defaults` will refuse the row
-    upstream so we never actually POST with a missing id)."""
-    cat   = (settings.get("default_product_category_id") or "").strip()
-    tax   = (settings.get("default_product_tax_id") or "").strip()
-    unit  = (settings.get("default_product_unit_type_id") or "").strip()
-    acct  = (settings.get("default_sales_account_id") or "").strip()
-    if cat:
+    drawn from settings as SCALAR values (int when possible, str
+    otherwise) per Iter-290g.
+
+    Empty/missing values are dropped (the preflight in
+    `validate_product_defaults` will refuse the row upstream so we
+    never actually POST with a missing id).
+    """
+    cat   = _unwrap_id_for_payload(settings.get("default_product_category_id"))
+    tax   = _unwrap_id_for_payload(settings.get("default_product_tax_id"))
+    unit  = _unwrap_id_for_payload(settings.get("default_product_unit_type_id"))
+    acct  = _unwrap_id_for_payload(settings.get("default_sales_account_id"))
+    if cat is not None:
         product["category_id"] = cat
-    if tax:
-        # Iter-289 — Qoyod's product validator runs a `:taxes`
-        # has_many check, so `tax_id` MUST be a JSON array even when
-        # we apply a single tax. A scalar value triggers
-        # 422 `{'tax_id': ['Please select taxes']}` despite the field
-        # being present. Confirmed against Qoyod legacy API (2026-02).
-        product["tax_id"] = [tax]
-    if unit:
+    if tax is not None:
+        # Iter-290g — Qoyod's live `/products` validator returns
+        # `{'tax_id': ['Please select taxes']}` when we send an array
+        # (Iter-289 was incorrect — confirmed against production
+        # 2026-02-28 with order 268784455 SKU=AMS11542). The correct
+        # shape is a SCALAR (int when numeric, else string).
+        product["tax_id"] = tax
+    if unit is not None:
         product["product_unit_type_id"] = unit
-    if acct:
+    if acct is not None:
         product["sales_account_id"] = acct
 
 
 def validate_product_defaults(settings: dict) -> tuple[bool, list[str]]:
     """Iter-287 preflight — verifies the four Qoyod-required product
-    settings are configured. Returns `(ok, missing_label_keys)`.
-    Called by `resolve_products` BEFORE any POST, and by
-    `preview_reprocess` so the operator sees the gap up-front.
+    settings are configured. Iter-290g — accepts any non-empty unwrapped
+    value (int, numeric string, single-element multiselect), refusing
+    only empty / None / empty-array / unusable shapes.
+    Returns `(ok, missing_label_keys)`.
     """
     missing: list[str] = []
     for k in REQUIRED_PRODUCT_DEFAULT_KEYS:
-        v = settings.get(k)
-        if not (isinstance(v, str) and v.strip()):
+        v = _unwrap_id_for_payload(settings.get(k))
+        if v is None or (isinstance(v, str) and not v.strip()):
             missing.append(k)
     return (not missing), missing
+
+
+def validate_product_id_shapes(settings: dict) -> tuple[bool, list[dict]]:
+    """Iter-290g — Refuse multi-element arrays in any of the four
+    product-create id settings. A multiselect widget delivering
+    `["1", "2"]` would silently pick the first id, which is the kind
+    of footgun that destroys accounting. We surface a structured
+    error instead so the operator fixes the Setting before any POST.
+
+    Returns `(ok, offenders)` where `offenders` is a list of dicts
+    `{"field": key, "value": raw_value, "issue": "multi_element_array"}`.
+    """
+    offenders: list[dict] = []
+    for k in REQUIRED_PRODUCT_DEFAULT_KEYS:
+        raw = settings.get(k)
+        if _is_array_shape(raw):
+            offenders.append({
+                "field": k,
+                "value": raw,
+                "issue": "multi_element_array",
+            })
+    return (not offenders), offenders
+
+
+def build_invalid_id_shape_error(offenders: list[dict]) -> dict:
+    """Structured error used when `validate_product_id_shapes` fails.
+    Mirrors the Arabic wording of `build_missing_product_defaults_error`
+    so the operator-facing UX is consistent."""
+    fields_ar = [REQUIRED_PRODUCT_DEFAULT_LABELS_AR.get(o["field"], o["field"])
+                 for o in offenders]
+    return {
+        "code":             "product_payload_invalid_id_shape",
+        "failed_at_stage":  "PREFLIGHT_PRODUCT_DEFAULTS",
+        "offenders":        offenders,
+        "message": (
+            "إعدادات إنشاء المنتجات تحتوي قيماً غير مفردة "
+            "(مصفوفات متعددة العناصر): " + "، ".join(fields_ar)
+            + ". قيود يتطلّب رقماً واحداً لكل من هذه الحقول. "
+            "افتح صفحة الإعدادات وحدّد قيمة واحدة فقط."
+        ),
+    }
 
 
 def build_missing_product_defaults_error(missing_keys: list[str]) -> dict:
@@ -474,6 +623,16 @@ async def resolve_products(
             # Otherwise (0 matches) → fall through to the create path.
 
         # Need to create in Qoyod. Iter-287 — preflight defaults first.
+        # Iter-290g — shape validation runs FIRST so an operator who
+        # configured a multi-element array sees the structured error
+        # rather than a misleading "missing" message.
+        ok_shape, offenders = validate_product_id_shapes(settings)
+        if not ok_shape:
+            err = build_invalid_id_shape_error(offenders)
+            result.success = False
+            result.error = err
+            result.items.append(ProductResolutionItem(sku=sku, error=err))
+            return result
         ok_defaults, missing_keys = validate_product_defaults(settings)
         if not ok_defaults:
             err = build_missing_product_defaults_error(missing_keys)
@@ -491,6 +650,11 @@ async def resolve_products(
             #   {"base": ["enter at least a purchase price or a sales price..."]}
             # even when `sale_item: 1` + `selling_price` are present
             # (older tenant template missing `type`/`is_non_stock`).
+            # Iter-290g — also retry on `{'tax_id': ['Please select taxes']}`
+            # as a last-resort defense if a tenant ever flips its
+            # validator shape expectation. The fallback payload still
+            # ships `tax_id` as a scalar int (correct per production)
+            # but with the minimal-field shape that some tenants prefer.
             # Retry ONCE with the minimal-fields payload before
             # surfacing the failure.
             err_payload = exc.to_log_dict() if hasattr(exc, "to_log_dict") else {}
@@ -498,7 +662,13 @@ async def resolve_products(
                    + " " + str(err_payload.get("message") or "")).lower()
             should_retry = (
                 err_payload.get("status_code") == 422
-                and ("purchase price" in msg or "sales price" in msg)
+                and (
+                    "purchase price" in msg
+                    or "sales price"  in msg
+                    or "selling price" in msg
+                    or "please select taxes" in msg     # Iter-290g
+                    or "tax_id"        in msg            # Iter-290g
+                )
             )
             if should_retry:
                 try:
@@ -508,12 +678,23 @@ async def resolve_products(
                 except QoyodAPIError as exc2:
                     err = exc2.to_log_dict() if hasattr(exc2, "to_log_dict") else {}
                     err["fallback_attempted"] = True
+                    # Iter-290g — surface which SKU the diagnostic
+                    # actually came from. Operators were confused when
+                    # the failure of item #2 was logged with item #1's
+                    # SKU/price (because the inbox row only persisted
+                    # the first item's preview). Now every failure
+                    # carries the EXACT sku + price it tried.
+                    err["sku"] = sku
+                    err["attempted_selling_price"] = float(
+                        item_unit_price(it))
                     result.success = False
                     result.error = err
                     result.items.append(ProductResolutionItem(sku=sku, error=err))
                     return result
             else:
                 err = err_payload or {"code": "qoyod_api_error", "message": str(exc)}
+                err["sku"] = sku        # Iter-290g — SKU attribution
+                err["attempted_selling_price"] = float(item_unit_price(it))
                 result.success = False
                 result.error = err
                 result.items.append(ProductResolutionItem(sku=sku, error=err))

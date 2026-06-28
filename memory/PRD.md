@@ -1,5 +1,37 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290g — Qoyod `/products` `tax_id` scalar shape (2026-02-28)
+**User scenario**: Production order `268784455` (SKU `AMS11542` — كرت اهداء حسب الطلب) failed at `FAILED_PRODUCT` with 422 from Qoyod:
+```
+{"tax_id": ["Please select taxes"]}
+```
+We were sending `tax_id: ["1"]` (array) because Iter-289 had wrongly inferred Qoyod's validator wanted a `has_many :taxes` array shape. Production evidence proves the validator wants a **scalar** — preferably an integer.
+
+### Fixes (`product_resolver.py`)
+1. **`_coerce_id_to_int` + `_unwrap_id_for_payload`** — helpers that:
+   - Unwrap multi-select arrays (take first usable element).
+   - Coerce numeric strings → `int`. Non-numeric strings pass through unchanged (legacy compat).
+   - Empty / None / `[]` → `None` (caller drops the key).
+2. **`_stamp_required_ids`** — sends ALL four ids (`category_id`, `tax_id`, `product_unit_type_id`, `sales_account_id`) as SCALARS. The Iter-289 `[tax]` array wrap is reverted.
+3. **`validate_product_id_shapes` + `build_invalid_id_shape_error`** — new preflight that refuses multi-element-array settings with structured `product_payload_invalid_id_shape` before any POST.
+4. **`validate_product_defaults`** — now accepts any non-empty unwrapped value (int, multiselect single, numeric/legacy string), refusing only truly empty configs.
+5. **422 self-heal retry** extended to trigger on `please select taxes` / `tax_id` error messages (defensive — if a future tenant flips shape expectation).
+6. **Fallback payload** bumps `selling_price` 0 → 1.0 for catalog row only (some tenants refuse free products). Invoice line price is untouched — accounting unaffected.
+7. **Diagnostic error attribution** — failure payloads now carry the exact `sku` and `attempted_selling_price` of the failing line item (fixes the confusing "item #2 fails but item #1's SKU is logged" case).
+
+### Tests
+- New `test_qoyod_product_tax_id_scalar_iter290g.py` — 13 tests covering coercion, unwrap, shape detection, payload contract, preflight blocking, end-to-end POST shape, 422 self-heal, and SKU attribution.
+- `test_qoyod_product_tax_id_array_iter289.py` — fully rewritten as a regression guard for the SCALAR contract (Iter-289 inverted).
+- `test_qoyod_product_required_defaults_iter287.py` — 3 assertions updated from array → scalar.
+- **825/825 Qoyod tests pass**, lint clean.
+
+### Operator workflow (post-redeploy)
+1. Redeploy preview → production (mezansalla.com).
+2. Run preview-reprocess on `268784455` → confirm `product_create_request_body` carries `tax_id: 1` (integer scalar).
+3. Then one-shot-reprocess for the order. Expected flow: PRODUCT_CREATED → INVOICE_CREATED → RECEIPT_CREATED.
+
+
+
 ## Iter-290f — Shipping line + preflight reconciliation skip (2026-02-28)
 **User scenario**: After Iter-290e shipped, production order `268860160` (Salla=131.92 = items 106.92 + shipping 25.00) was rejected at preflight:
 ```
