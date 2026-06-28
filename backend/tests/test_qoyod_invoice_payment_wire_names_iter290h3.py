@@ -1,17 +1,14 @@
-"""Iter-290h.3 — Live Qoyod field-name corrections + status accuracy.
+"""Iter-290h.3 + 290h.6 — Live Qoyod field-name corrections + status accuracy.
 
 Production order 269048975 (invoice_id=63, 131.92 SAR) failed the
-payment-link step with:
+payment-link step. The 422 message surfaces the Rails association
+name (`account`) but the canonical wire field is `account_id`.
 
-    {"error":"Invalid resource",
-     "messages":{"date":["Can't be blank"],
-                 "account":["Can't be blank"]}}
-
-…while we were sending `payment_date` + `payment_method_id`. The
-canonical Qoyod /invoice_payments field names are `date` and
-`account`. This file locks in the corrected payload shape AND the
-monitor status accuracy fix that was masking the failure as
-"pending".
+Iter-290h.3 first changed `payment_date`+`payment_method_id` →
+`date`+`account`, and Iter-290h.6 (this update) corrected `account`
+→ `account_id` after a second 422 with `"account": 94` proved Qoyod
+was not reading the field. This file locks in the corrected payload
+shape AND the monitor status accuracy fix.
 """
 from __future__ import annotations
 
@@ -25,10 +22,10 @@ from integrations.qoyod.first_sync_monitor import (
 
 
 # ─── 1. Payload uses the LIVE Qoyod field names ──────────────────────
-def test_payload_uses_date_and_account_not_payment_date_or_payment_method_id():
-    """Live production evidence — order 269048975 proved Qoyod's
-    /invoice_payments validator requires `date` + `account`, NOT
-    `payment_date` + `payment_method_id`."""
+def test_payload_uses_date_and_account_id_not_legacy_names():
+    """Live production evidence — order 269048975 retry with
+    `account: 94` returned 422 again. The wire field is `account_id`
+    per Qoyod docs; the 422 message uses the Rails association name."""
     dto = {
         "order_id": "MZN-269048975", "order_number": "269048975",
         "total_amount": 131.92, "currency": "SAR",
@@ -46,13 +43,15 @@ def test_payload_uses_date_and_account_not_payment_date_or_payment_method_id():
     )
     body = payload["invoice_payment"]
     # CANONICAL field names.
-    assert body["date"]    == "2026-06-28"
-    assert body["account"] == 94
+    assert body["date"]       == "2026-06-28"
+    assert body["account_id"] == 94
     # ANTI-regression — the buggy field names must NOT appear.
     assert "payment_date"      not in body, (
         "Qoyod rejects `payment_date` — must be `date`")
     assert "payment_method_id" not in body, (
-        "Qoyod rejects `payment_method_id` — must be `account`")
+        "Qoyod rejects `payment_method_id` — must be `account_id`")
+    assert "account"           not in body, (
+        "Qoyod rejects bare `account` — must be `account_id`")
     # Other fields untouched.
     assert body["invoice_id"]  == 63
     assert body["amount"]      == 131.92
@@ -60,8 +59,8 @@ def test_payload_uses_date_and_account_not_payment_date_or_payment_method_id():
     assert body["description"] == "Mezan · Salla order MZN-269048975"
 
 
-def test_payload_account_none_when_method_unmapped():
-    """The pre-POST guard expects `account` (not `payment_method_id`)."""
+def test_payload_account_id_none_when_method_unmapped():
+    """The pre-POST guard expects `account_id` (not `account`)."""
     payload, _ = build_invoice_payment_payload(
         qoyod_invoice_id=1,
         dto_dict={"order_id": "X", "total_amount": 10.0,
@@ -69,7 +68,8 @@ def test_payload_account_none_when_method_unmapped():
         invoice_date=datetime.now(timezone.utc),
         settings={"payment_method_mapping": []},
     )
-    assert payload["invoice_payment"]["account"] is None
+    assert payload["invoice_payment"]["account_id"] is None
+    assert "account" not in payload["invoice_payment"]
 
 
 # ─── 2. Monitor reports PAYMENT_LINK_FAILED as "failed", not "pending" ─

@@ -149,7 +149,8 @@ async def retry_payment_only(
     )
 
     # Pre-flight guard 1 — payment_method mapping must resolve.
-    if payment_payload["invoice_payment"].get("account") is None:
+    # Iter-290h.6 — wire field is `account_id` (not `account`).
+    if payment_payload["invoice_payment"].get("account_id") is None:
         return {
             "ok": False,
             "outcome": "REFUSED",

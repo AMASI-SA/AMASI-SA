@@ -692,7 +692,8 @@ async def process_customer_resolved_row(
     )
 
     # ── Pre-POST guard 1: payment account mapping must be set ──────
-    if payment_payload["invoice_payment"].get("account") is None:
+    # Iter-290h.6 — wire field is `account_id` (not `account`).
+    if payment_payload["invoice_payment"].get("account_id") is None:
         err = {
             "code":            "payment_method_mapping_missing",
             "failed_at_stage": "PAYMENT_METHOD_MAPPING_MISSING",

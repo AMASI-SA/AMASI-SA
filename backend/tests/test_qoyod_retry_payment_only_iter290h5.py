@@ -214,10 +214,11 @@ async def test_qoyod_failure_surfaces_fresh_verdict_not_stale(patch_deps):
     # FRESH excerpt — NOT the stale value seeded.
     assert "STALE" not in (out["qoyod_response"] or "")
     assert "Invalid resource" in (out["qoyod_response"] or "")
-    # The new payload — date + account, no payment_date/payment_method_id.
+    # The new payload — date + account_id, no payment_date/payment_method_id/account.
     body = out["request_body_json"]["invoice_payment"]
-    assert body["date"]    == "2026-06-28"
-    assert body["account"] == 94
+    assert body["date"]       == "2026-06-28"
+    assert body["account_id"] == 94
+    assert "account" not in body  # Iter-290h.6 — must be account_id
     # The wire-level fingerprint is correctly attached.
     assert out["existing_qoyod_invoice_id"] == "63"
 

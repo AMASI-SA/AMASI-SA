@@ -478,37 +478,40 @@ def build_invoice_payment_payload(
     guard (per user spec — `order_id + invoice_id + payment_method
     + amount`).
 
-    Payload shape (per LIVE Qoyod 2026-02-28 — order 269048975
-    confirmed against the 422 response from /invoice_payments):
+    Payload shape (per LIVE Qoyod docs + 2026-02-28 retry on order
+    269048975 — see field-name correction below):
         {"invoice_payment": {
             "invoice_id":   <int>,
             "amount":       <decimal>,
             "date":         "YYYY-MM-DD",
-            "account":      <int>,        # Qoyod account/method id
+            "account_id":   <int>,        # Qoyod Chart-of-Accounts id
             "reference":    "<order #>",
             "description":  "Mezan · Salla order <id>"
         }}
 
-    NOTE on field names — Iter-290h.3
-    ──────────────────────────────────
-    Earlier Iter-290h used `payment_date` + `payment_method_id` based
-    on a third-party API summary; Qoyod actually rejects those with
-    `{"date":["Can't be blank"],"account":["Can't be blank"]}` while
-    happily POSTing the invoice itself. The canonical field names in
-    /invoice_payments are `date` and `account`. The internal
-    fingerprint (`payment_method` + `payment_method_id`) keeps the
-    logical names so historical DB rows still match for idempotency.
+    NOTE on field names — Iter-290h.6 (CORRECTION)
+    ──────────────────────────────────────────────
+    Iter-290h.3 read the 422 message `{"account":["Can't be blank"]}`
+    and wrongly concluded the wire field was `account`. The retry on
+    order 269048975 (invoice_id=63) with `"account": 94` still got
+    422 with the SAME message — proving Qoyod was not reading the
+    field at all. The actual wire name per Qoyod's official docs
+    (https://www.qoyod.com/en/knowledge-base/explaining-the-account-
+    id-field-in-api-requests-…) is `account_id`. The 422 message
+    surfaces the Rails `belongs_to :account` association name, which
+    is misleading — the foreign-key column the validator checks is
+    `account_id`. Sending `"account_id": <int>` resolves the
+    association and clears the validation.
 
     The `payment_method_id` is resolved from the existing
     `settings.payment_method_accounts` mapping (operator-configured per
     Salla payment method, e.g. "mada" → 17). The mapping ID was
-    historically called `qoyod_account_id` but per Qoyod's
-    `/invoice_payments` validator it serves as the `payment_method_id`
-    — same numeric reference, different field name.
+    historically called `qoyod_account_id` and that is exactly what
+    Qoyod expects on the wire (`account_id`).
 
-    Returns the payload with `payment_method_id = None` when the
-    mapping is missing — the pipeline's pre-POST guard catches this
-    and routes the row to `PAYMENT_METHOD_MAPPING_MISSING`.
+    Returns the payload with `account_id = None` when the mapping is
+    missing — the pipeline's pre-POST guard catches this and routes
+    the row to `PAYMENT_METHOD_MAPPING_MISSING`.
     """
     pm_native = (dto_dict.get("payment_method")
                  or dto_dict.get("payment_method_native"))
@@ -523,20 +526,16 @@ def build_invoice_payment_payload(
     body = {
         "invoice_id":         invoice_id_int,
         "amount":             amount,
-        # Iter-290h.3 — Live Qoyod evidence (order 269048975, invoice
-        # 63, 2026-02-28) proved the canonical field names are `date`
-        # + `account` — NOT `payment_date` + `payment_method_id` as
-        # the original Iter-290h drew from a third-party API summary.
-        # Sending the wrong names returned:
-        #     {"error":"Invalid resource",
-        #      "messages":{"date":["Can't be blank"],
-        #                  "account":["Can't be blank"]}}
-        # The invoice was created successfully but stayed Approved /
-        # unpaid because the linkage never landed. Confirmed against
-        # production by reading the Qoyod 422 response on
-        # /invoice_payments.
+        # Iter-290h.6 — Live Qoyod evidence (order 269048975, invoice
+        # 63, 2026-06-28 retry) proved the canonical field is
+        # `account_id` — NOT `account`. Sending `"account": 94`
+        # returned 422 `{"account":["Can't be blank"]}` because
+        # Qoyod's validator never reads `account` on the wire; it
+        # reads `account_id` and surfaces the Rails association name
+        # in the error message. Per Qoyod's official docs the field
+        # is `account_id` and it references the Chart-of-Accounts id.
         "date":               payment_date_iso,
-        "account":            _to_int_or_none(method_id),
+        "account_id":         _to_int_or_none(method_id),
         "reference":          reference,
         "description":        f"Mezan · Salla order {dto_dict.get('order_id')}",
     }

@@ -33,7 +33,7 @@ def test_payment_link_failed_surfaces_sent_to_qoyod_with_response_excerpt():
         "request_body_json": {
             "invoice_payment": {
                 "invoice_id": 63, "amount": 131.92,
-                "date": "2026-06-28", "account": 94,
+                "date": "2026-06-28", "account_id": 94,
                 "reference": "269048975",
                 "description": "Mezan · Salla order 269048975",
             }
@@ -55,10 +55,11 @@ def test_payment_link_failed_surfaces_sent_to_qoyod_with_response_excerpt():
     assert resp["skip_reason"]            is None
     # request_body_json carries the NEW correct payload — not a stale one.
     body = resp["request_body_json"]["invoice_payment"]
-    assert body["date"]    == "2026-06-28"
-    assert body["account"] == 94
+    assert body["date"]       == "2026-06-28"
+    assert body["account_id"] == 94
     assert "payment_date" not in body
     assert "payment_method_id" not in body
+    assert "account" not in body  # Iter-290h.6 — must be account_id
 
 
 def test_payment_method_mapping_missing_surfaces_skip_reason_not_sent():
@@ -67,7 +68,7 @@ def test_payment_method_mapping_missing_surfaces_skip_reason_not_sent():
     pe = {
         "code":           "payment_method_mapping_missing",
         "message":        "no mapping for 'mada'",
-        "request_body_json": {"invoice_payment": {"account": None}},
+        "request_body_json": {"invoice_payment": {"account_id": None}},
     }
     resp = _build_failure_response(
         outcome="PARTIAL_FAILURE", row_id="r1", trace_id="t1",

@@ -150,11 +150,12 @@ def test_build_invoice_payment_payload_shape():
     assert body["invoice_id"]        == 55
     assert body["amount"]            == 134.0
     assert body["date"]              == "2026-02-28"
-    assert body["account"]           == 9
+    assert body["account_id"]        == 9
     assert body["reference"]         == "268784455"
-    # Iter-290h.3 — Sanity guard against the original wire-name bug.
+    # Iter-290h.3 / 290h.6 — Sanity guards against past wire-name bugs.
     assert "payment_date" not in body
     assert "payment_method_id" not in body
+    assert "account" not in body  # Iter-290h.6 — must be account_id
     # Idempotency fingerprint per user spec —
     # `order_id + invoice_id + payment_method + amount`.
     # The fingerprint uses INTERNAL logical names so historical DB
@@ -170,14 +171,15 @@ def test_build_invoice_payment_payload_shape():
 
 def test_build_invoice_payment_payload_returns_none_when_method_unmapped():
     """Pre-POST guard fodder: when settings don't map this method,
-    `account` is None so the pipeline halts."""
+    `account_id` is None so the pipeline halts."""
     dto = {"order_id": "X", "total_amount": 50.0, "payment_method": "unknown"}
     settings = {"payment_method_mapping": []}
     payload, fp = build_invoice_payment_payload(
         qoyod_invoice_id=1, dto_dict=dto,
         invoice_date=datetime.now(timezone.utc), settings=settings,
     )
-    assert payload["invoice_payment"]["account"] is None
+    assert payload["invoice_payment"]["account_id"] is None
+    assert "account" not in payload["invoice_payment"]
     assert fp["payment_method_id"] is None
 
 

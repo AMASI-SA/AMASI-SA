@@ -284,12 +284,13 @@ async def test_pipeline_dry_run_completes_without_qoyod_post(db):
         ip_body = updated["qoyod_payloads"]["invoice_payment"]["invoice_payment"]
         assert "invoice_id" in ip_body
         assert ip_body["amount"] == 115.0
-        assert ip_body["account"] == 9   # mapped from "mada"
+        assert ip_body["account_id"] == 9   # mapped from "mada"
         assert ip_body["date"] is not None
         assert ip_body["description"].startswith("Mezan · Salla order")
-        # Iter-290h.3 — guard against the old wire-name bug.
+        # Iter-290h.3 / 290h.6 — guard against past wire-name bugs.
         assert "payment_date" not in ip_body
         assert "payment_method_id" not in ip_body
+        assert "account" not in ip_body  # Iter-290h.6 — must be account_id
         # qoyod_invoices ledger row exists but status is pending (dry-run).
         led = await db.qoyod_invoices.find_one({"salla_order_id": order_id})
         assert led["status"] == "pending"
