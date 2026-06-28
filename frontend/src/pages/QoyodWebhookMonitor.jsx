@@ -19,6 +19,7 @@
  */
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
+import { Term, TermPill } from "../components/Term";
 
 const QOYOD_BASE = "/integrations/qoyod";
 
@@ -203,7 +204,10 @@ export default function QoyodWebhookMonitor() {
           <input type="checkbox" checked={filterSkippedOnly}
                  onChange={(e) => setFilterSkippedOnly(e.target.checked)}
                  data-testid="filter-skipped-only" />
-          الـ skipped فقط
+          <span title="عرض الأحداث التي قرر النظام تجاهلها فقط (لم تُرسل إلى قيود)"
+                className="cursor-help underline decoration-dotted decoration-zinc-400">
+            الأحداث المتجاهلة فقط
+          </span>
         </label>
         <button onClick={() => { setFilterEventType(""); setFilterOrderId(""); setFilterSkippedOnly(false); }}
                 className="px-3 py-1.5 text-xs rounded-lg bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-200"
@@ -258,15 +262,21 @@ export default function QoyodWebhookMonitor() {
                     data-testid={`event-row-${r.id}`}>
                   <td className="px-3 py-2">{tone === "green" ? "🟢" : tone === "yellow" ? "🟡" : "🔴"}</td>
                   <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">{fmtTime(r.received_at)}</td>
-                  <td className="px-3 py-2"><Pill tone={tone}>{r.event_type || "unknown"}</Pill></td>
+                  <td className="px-3 py-2"><Pill tone={tone}>{r.event_type || "غير معروف"}</Pill></td>
                   <td className="px-3 py-2 font-mono">{r.salla_order_id || "—"}</td>
                   <td className="px-3 py-2">{r.items_count ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs">{r.pipeline_stage_after || "—"}</td>
+                  <td className="px-3 py-2 text-xs">
+                    {r.pipeline_stage_after
+                      ? <Term code={r.pipeline_stage_after} kind="stage" />
+                      : "—"}
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs">{r.http_response_status}</td>
                   <td className="px-3 py-2 text-xs">
                     {r.skipped_reason
-                      ? <Pill tone="yellow">{r.skipped_reason}</Pill>
-                      : (r.items_parsed_ok ? <Pill tone="green">accepted</Pill> : <Pill tone="red">parse-failed</Pill>)}
+                      ? <TermPill code={r.skipped_reason} kind="reason" tone="yellow" />
+                      : (r.items_parsed_ok
+                          ? <TermPill code="Accepted" kind="general" tone="green" />
+                          : <TermPill code="ParseFailed" kind="general" tone="red" />)}
                   </td>
                 </tr>
               );
@@ -288,31 +298,48 @@ export default function QoyodWebhookMonitor() {
                       data-testid="drawer-close-btn">✕</button>
             </div>
             <dl className="grid grid-cols-3 gap-2 text-sm mb-4">
-              <dt className="text-zinc-500">trace_id</dt>
+              <dt className="text-zinc-500"
+                  title="معرّف فريد يربط كل خطوات معالجة الطلب من سلة إلى قيود">
+                سجل التتبع
+              </dt>
               <dd className="col-span-2 font-mono text-xs break-all">{selectedRow.trace_id || "—"}</dd>
-              <dt className="text-zinc-500">received_at</dt>
+              <dt className="text-zinc-500">وقت الاستلام</dt>
               <dd className="col-span-2 font-mono text-xs">{fmtTime(selectedRow.received_at)}</dd>
-              <dt className="text-zinc-500">event_type</dt>
+              <dt className="text-zinc-500">نوع الحدث</dt>
               <dd className="col-span-2">{selectedRow.event_type}</dd>
-              <dt className="text-zinc-500">salla_order_id</dt>
+              <dt className="text-zinc-500">رقم الطلب</dt>
               <dd className="col-span-2 font-mono">{selectedRow.salla_order_id || "—"}</dd>
-              <dt className="text-zinc-500">items_count</dt>
+              <dt className="text-zinc-500">عدد العناصر</dt>
               <dd className="col-span-2">{selectedRow.items_count ?? "—"}</dd>
-              <dt className="text-zinc-500">items_parsed_ok</dt>
-              <dd className="col-span-2">{String(selectedRow.items_parsed_ok)}</dd>
-              <dt className="text-zinc-500">skipped_reason</dt>
-              <dd className="col-span-2">{selectedRow.skipped_reason || "—"}</dd>
-              <dt className="text-zinc-500">target_inbox_row_id</dt>
+              <dt className="text-zinc-500"
+                  title="هل البيانات الواردة بصيغة صالحة؟">
+                البيانات صالحة
+              </dt>
+              <dd className="col-span-2">{selectedRow.items_parsed_ok ? "نعم" : "لا"}</dd>
+              <dt className="text-zinc-500">سبب التجاهل</dt>
+              <dd className="col-span-2">
+                {selectedRow.skipped_reason
+                  ? <TermPill code={selectedRow.skipped_reason} kind="reason" tone="yellow" showRaw />
+                  : "—"}
+              </dd>
+              <dt className="text-zinc-500"
+                  title="معرّف الصف المرتبط في صندوق الواردات الداخلي">
+                معرّف صندوق الواردات
+              </dt>
               <dd className="col-span-2 font-mono text-xs break-all">{selectedRow.target_inbox_row_id || "—"}</dd>
-              <dt className="text-zinc-500">pipeline_stage_after</dt>
-              <dd className="col-span-2">{selectedRow.pipeline_stage_after || "—"}</dd>
-              <dt className="text-zinc-500">http_response_status</dt>
+              <dt className="text-zinc-500">المرحلة بعد المعالجة</dt>
+              <dd className="col-span-2">
+                {selectedRow.pipeline_stage_after
+                  ? <Term code={selectedRow.pipeline_stage_after} kind="stage" showRaw />
+                  : "—"}
+              </dd>
+              <dt className="text-zinc-500">رد HTTP</dt>
               <dd className="col-span-2 font-mono">{selectedRow.http_response_status}</dd>
-              <dt className="text-zinc-500">raw_payload_size</dt>
-              <dd className="col-span-2 font-mono">{selectedRow.raw_payload_size} bytes</dd>
+              <dt className="text-zinc-500">حجم البيانات الخام</dt>
+              <dd className="col-span-2 font-mono">{selectedRow.raw_payload_size} بايت</dd>
             </dl>
             <details open>
-              <summary className="cursor-pointer text-sm text-zinc-500 mb-2">JSON الكامل</summary>
+              <summary className="cursor-pointer text-sm text-zinc-500 mb-2">جسم الطلب الكامل (JSON)</summary>
               <pre className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded text-xs overflow-auto"
                    data-testid="event-detail-json">
                 {JSON.stringify(selectedRow, null, 2)}

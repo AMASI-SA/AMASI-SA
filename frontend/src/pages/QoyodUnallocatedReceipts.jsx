@@ -16,6 +16,8 @@
  */
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
+import { Term, TermPill, TermHelpCard } from "../components/Term";
+import { termFor } from "../lib/qoyodTerminology";
 
 const QOYOD_BASE = "/integrations/qoyod";
 
@@ -37,32 +39,24 @@ const StatCard = ({ label, value, tone = "default", testid }) => {
 };
 
 const ConfidenceBadge = ({ confidence }) => {
-  const cfg = {
-    high:   { tone: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-200", label: "مرتفع" },
-    medium: { tone: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-200",         label: "متوسط" },
-    low:    { tone: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-200",     label: "منخفض" },
-    none:   { tone: "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300",                label: "بدون اقتراح" },
-  }[confidence] || { tone: "bg-zinc-100 text-zinc-600", label: confidence };
+  const tone = {
+    high: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-200",
+    medium: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-200",
+    low: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-200",
+    none: "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300",
+  }[confidence] || "bg-zinc-100 text-zinc-600";
+  const { label, description } = termFor(confidence, "confidence");
   return (
     <span data-testid={`confidence-${confidence}`}
-          className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${cfg.tone}`}>
-      {cfg.label}
+          title={description}
+          className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium cursor-help ${tone}`}>
+      {label}
     </span>
   );
 };
 
-const REASON_LABELS = {
-  reference: "رقم المرجع",
-  amount:    "المبلغ",
-  customer:  "العميل",
-  date:      "التاريخ",
-};
-
 const ReasonChip = ({ reason }) => (
-  <span data-testid={`reason-${reason}`}
-        className="inline-block px-2 py-0.5 rounded-md text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 border border-indigo-200/60 dark:border-indigo-800/60">
-    {REASON_LABELS[reason] || reason}
-  </span>
+  <TermPill code={reason} kind="match" tone="indigo" />
 );
 
 const fmtAmount = (v, ccy = "SAR") => {
@@ -134,13 +128,21 @@ export default function QoyodUnallocatedReceipts() {
         <div>
           <h1 className="text-2xl font-semibold"
               data-testid="unallocated-receipts-title">
-            🧾 سندات قبض غير مستعملة في قيود
+            🧾 سندات قبض غير مربوطة بفواتير
           </h1>
           <p className="text-sm text-zinc-500 mt-1 max-w-2xl">
-            هذه السندات أُنشئت قبل تحديث Iter-290h (قبل اعتماد <code>Invoice Payments</code>).
-            تظهر في قيود بحالة &quot;غير مستعمل&quot; ولا تغلق الفواتير.
-            اربط كل سند يدوياً في قيود ثم اضغط <strong>تمت المعالجة يدوياً</strong> حتى يختفي من القائمة.
+            هذه الصفحة تعرض سندات قبض موجودة في قيود لكنها غير مربوطة بفواتير.
+            يتم ربطها يدوياً في قيود، ثم تعليمها كمُراجعة في ميزان.
           </p>
+          <div className="mt-2 inline-flex items-center gap-2 text-xs">
+            <span title="هذه الصفحة لا تنفذ أي تعديل على قيود — للعرض والمراجعة فقط."
+                  className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 cursor-help">
+              👁️ قراءة فقط
+            </span>
+            <span className="text-zinc-400">
+              الربط الفعلي يتم يدوياً في قيود.
+            </span>
+          </div>
         </div>
         <button onClick={fetchReport}
                 disabled={loading}
@@ -148,6 +150,12 @@ export default function QoyodUnallocatedReceipts() {
                 data-testid="refresh-report-btn">
           {loading ? "...جارٍ التحميل" : "🔄 تحديث"}
         </button>
+      </div>
+
+      {/* Explanation cards */}
+      <div className="grid md:grid-cols-2 gap-3" data-testid="page-help">
+        <TermHelpCard code="UnallocatedReceipt" kind="general" />
+        <TermHelpCard code="InvoicePayment" kind="general" />
       </div>
 
       {/* Error banner */}
@@ -162,7 +170,7 @@ export default function QoyodUnallocatedReceipts() {
       {report?.ok && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3"
              data-testid="report-stats">
-          <StatCard label="إجمالي غير مستعملة"
+          <StatCard label="إجمالي السندات غير المربوطة"
                     value={summary.unallocated_count ?? 0}
                     tone="yellow"
                     testid="stat-total" />
@@ -179,7 +187,7 @@ export default function QoyodUnallocatedReceipts() {
                          + (summary?.by_confidence?.low ?? 0)}
                     tone="yellow"
                     testid="stat-confidence-medlow" />
-          <StatCard label="بدون اقتراح"
+          <StatCard label="بدون اقتراح فاتورة"
                     value={summary.without_suggestion ?? 0}
                     tone="red"
                     testid="stat-without-suggestion" />
@@ -191,9 +199,9 @@ export default function QoyodUnallocatedReceipts() {
         <div data-testid="empty-state"
              className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 p-6 text-center">
           <div className="text-3xl mb-2">✅</div>
-          <div className="font-medium">لا توجد سندات غير مستعملة</div>
+          <div className="font-medium">لا توجد سندات قبض غير مربوطة</div>
           <div className="text-sm mt-1 opacity-80">
-            كل السندات إما مربوطة بفواتير أو معلّمة كمعالجة يدوياً.
+            كل السندات إما مربوطة بفواتير في قيود أو معلّمة كمراجعة يدوية في ميزان.
           </div>
         </div>
       )}
@@ -206,13 +214,25 @@ export default function QoyodUnallocatedReceipts() {
                  data-testid="unallocated-table">
             <thead className="bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400">
               <tr className="text-right">
-                <th className="px-3 py-2 font-medium">السند</th>
+                <th className="px-3 py-2 font-medium"
+                    title="السند الموجود في قيود — اضغط الرابط لفتحه">
+                  سند القبض
+                </th>
                 <th className="px-3 py-2 font-medium">العميل</th>
                 <th className="px-3 py-2 font-medium">المبلغ</th>
                 <th className="px-3 py-2 font-medium">التاريخ</th>
-                <th className="px-3 py-2 font-medium">الفاتورة المقترحة</th>
-                <th className="px-3 py-2 font-medium">الثقة</th>
-                <th className="px-3 py-2 font-medium">سبب المطابقة</th>
+                <th className="px-3 py-2 font-medium"
+                    title="الفاتورة التي يرجّح أن السند يخصها بناءً على المطابقة">
+                  الفاتورة المقترحة
+                </th>
+                <th className="px-3 py-2 font-medium"
+                    title="مدى قوة المطابقة بين السند والفاتورة المقترحة">
+                  درجة المطابقة
+                </th>
+                <th className="px-3 py-2 font-medium"
+                    title="على أي أساس تم اقتراح هذه الفاتورة (المرجع/المبلغ/العميل/التاريخ)">
+                  سبب المطابقة
+                </th>
                 <th className="px-3 py-2 font-medium">إجراء</th>
               </tr>
             </thead>
@@ -330,9 +350,9 @@ export default function QoyodUnallocatedReceipts() {
       {report?.ok && (
         <div className="text-xs text-zinc-500"
              data-testid="report-meta">
-          مسحت {report.scanned_receipts} سند و {report.scanned_invoices} فاتورة.
+          مسحت {report.scanned_receipts} سند قبض و {report.scanned_invoices} فاتورة.
           {report.dismissed_count > 0 && (
-            <> · {report.dismissed_count} سند معلّم سابقاً كمعالجة يدوياً (غير ظاهر هنا).</>
+            <> · {report.dismissed_count} سند معلّم سابقاً كمراجعة يدوية (مخفي من القائمة).</>
           )}
         </div>
       )}
