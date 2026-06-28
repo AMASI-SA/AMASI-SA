@@ -386,6 +386,22 @@ def build_invoice_payload(
         # the invoice in the books. Without it the invoice stays as a
         # draft and the receipt POST fails.
         "status":         "Approved",
+        # Iter-290h.7 — Invoice-header `payment_method` is the ZATCA
+        # e-invoicing payment-means code. It's a DISPLAY-ONLY field
+        # (does NOT create a receipt or move any account) and was
+        # left empty in production until this iteration, causing the
+        # "طريقة الدفع" column in the قيود invoice list to show as
+        # blank. Policy per user decision (2026-06-29): always send
+        # `"10"` (Cash / نقدي) regardless of the upstream Salla
+        # payment method. The actual settlement still happens via
+        # POST /invoice_payments with the operator-mapped account_id,
+        # so books reconcile correctly. ZATCA code reference:
+        #   "1"  = Not defined
+        #   "10" = Cash / نقدي              ← what we send
+        #   "30" = Credit / آجل
+        #   "42" = Bank account payment
+        #   "48" = Bank card
+        "payment_method": "10",
         "currency_code":  dto_dict.get("currency") or "SAR",
         "line_items":     lines,
         # Iter-290g — operator-facing audit string. Carries:
