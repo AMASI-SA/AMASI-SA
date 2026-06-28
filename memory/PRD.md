@@ -1,5 +1,51 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-293 + Iter-294 — Webhook Activity Log + Monitor UI (2026-02-28)
+**Context**: After Qoyod MVP closed (Iter-285 → Iter-291 — first end-to-end Salla→Qoyod invoice + receipt on order 268833109 ✅), the operator asked to harden the Make.com integration path with an observable webhook log.
+
+### Backend — Iter-293 (`/app/backend/integrations/qoyod/webhook_activity.py`)
+- New module exposing 4 helpers:
+  - `record_webhook_event(...)` — best-effort write, NEVER raises.
+  - `list_recent_events(...)` — paginated list with filters (event_type, order_id, skipped_only).
+  - `get_event_counts(...)` — facet aggregation: total / accepted / skipped / errors / by_event.
+  - `soft_cap_old_rows(...)` — trims oldest beyond `keep` cap (1000 default).
+- New collection `qoyod_webhook_events` with indexes:
+  - `(user_id, received_at desc)` — listing
+  - `received_at` TTL 7 days
+  - `(user_id, salla_order_id)` sparse — order filter
+  - `(user_id, event_type, received_at desc)` — event-type filter
+- Webhook handler instrumented (try/finally) to log EVERY arrival — duplicates, parse failures, accepted rows — without affecting the live pipeline.
+
+### Backend — Iter-294 endpoints (`routes.py`)
+- `GET /api/integrations/qoyod/admin/webhook-activity` — last 50 events + filters.
+- `GET /api/integrations/qoyod/admin/webhook-activity/counts?hours=24` — facet counts.
+- Soft-cap maintenance fires lazily once per list call.
+
+### Frontend — Iter-294 (`/app/frontend/src/pages/QoyodWebhookMonitor.jsx`)
+- Replaces the `/integrations/qoyod/sync-log` placeholder.
+- Live "tail" with auto-refresh (5s / 15s / 30s / 60s).
+- 4 stat cards (total / accepted / skipped / errors) over selectable window (1h / 24h / 7d).
+- Filters: event_type, order_id, skipped_only.
+- Color-coded rows: 🟢 accepted, 🟡 skipped, 🔴 error.
+- Click row → drawer with full event JSON.
+- Distribution chips for `by_event` breakdown.
+
+### Tests
+- New `tests/test_qoyod_webhook_activity_iter293.py` (7 tests, MongoDB-integration): insert, list filters, count facets, soft cap trim, never-raises safety.
+- **805/805 Qoyod pytest passes**, lint clean (Python + ESLint).
+- Live page verified via Playwright screenshot — renders, fetches data, displays counts and rows correctly.
+
+### Make-side guidance (operator's responsibility)
+The user controls the Make scenario, which we cannot modify. They should:
+- Switch to **Salla Instant Webhook** (not polling) for sub-15s latency.
+- Subscribe to 7 events: `order.created`, `order.updated`, `order.status.updated`, `order.completed`, `order.cancelled`, `order.refunded`, `payment.updated`.
+- Send `items` as a **real JSON array**, not the literal string `[object Object]`. Mezan already detects this and logs to `webhook_parse_failures` — `/admin/webhook-parse-failures` surfaces them.
+
+### Operator workflow
+1. Each webhook from Make is auto-logged to `qoyod_webhook_events`.
+2. The `/integrations/qoyod/sync-log` page tails them live with color-coded states.
+3. Anything red/yellow can be drilled into and forwarded to Make config for fixing.
+
 ## Iter-291 — Idempotent invoice short-circuit for retry scenarios (2026-02-28)
 **User scenario**: After Iter-290d shipped the receipt fix, the operator faces a dilemma — Qoyod already has invoice id `51` from the previous run. Re-running `one-shot-reprocess` would naively POST another invoice → duplicate in قيود.
 

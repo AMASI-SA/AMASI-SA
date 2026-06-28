@@ -506,3 +506,31 @@ async def ensure_qoyod_indexes(db) -> None:
          ("lookup_key", pymongo.ASCENDING)],
         unique=True, name="qoyod_customers_lookup_unique",
     )
+
+    # --- qoyod_webhook_events (Iter-293 audit log) ---
+    # Append-only log of every webhook arrival from Make/Salla. Used
+    # by the Webhook Monitor UI. Separate from integration_inbox so a
+    # noisy upstream can't bloat the processing queue.
+    #   Retention: 7-day TTL + a soft 1000-row cap (enforced by query
+    #   side, not by index — capped collections can't have TTL).
+    await db.qoyod_webhook_events.create_index(
+        [("user_id", pymongo.ASCENDING),
+         ("received_at", pymongo.DESCENDING)],
+        name="qoyod_webhook_events_received",
+    )
+    await db.qoyod_webhook_events.create_index(
+        [("received_at", pymongo.ASCENDING)],
+        name="qoyod_webhook_events_ttl",
+        expireAfterSeconds=7 * 24 * 3600,
+    )
+    await db.qoyod_webhook_events.create_index(
+        [("user_id", pymongo.ASCENDING),
+         ("salla_order_id", pymongo.ASCENDING)],
+        name="qoyod_webhook_events_order_lookup", sparse=True,
+    )
+    await db.qoyod_webhook_events.create_index(
+        [("user_id", pymongo.ASCENDING),
+         ("event_type", pymongo.ASCENDING),
+         ("received_at", pymongo.DESCENDING)],
+        name="qoyod_webhook_events_event_type",
+    )

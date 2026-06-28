@@ -37,6 +37,7 @@ from integrations.qoyod.webhook_token_store import (
 )
 from integrations.qoyod.legacy_adapter import adapt as adapt_legacy
 from integrations.qoyod.eligibility import check_invoice_eligibility
+from integrations.qoyod.webhook_activity import record_webhook_event
 
 
 # Connector key for the inbox row — matches the unique idempotency
@@ -466,101 +467,162 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
         now = _now()
         idem_key = derive_idempotency_key(body, x_idempotency_key)
 
-        # ── 3b) Legacy-shape Adapter ─────────────────────────────────
-        # Make.com (and the legacy /api/webhook/make module) emit a
-        # flat JSON contract. Convert to canonical Salla shape BEFORE
-        # idempotency lookup or persistence runs. The original raw
-        # payload is still kept verbatim in `raw_payload` for audit.
-        adapted_body, adapter_meta = adapt_legacy(body)
-
-        # Pull the (best-effort) order anchor for fast lookup later.
-        data = adapted_body.get("data") if isinstance(adapted_body.get("data"), dict) else adapted_body
-        salla_order_id = (
-            data.get("reference_id") or data.get("id") or data.get("order_id"))
-        if salla_order_id is not None:
-            salla_order_id = str(salla_order_id)
-
-        # ── 4) Save Raw Event (idempotent INSERT) ────────────────────
-        row_id = uuid.uuid4().hex
-        new_row = {
-            "id": row_id,
-            "schema_version": 1,
-            "user_id": tenant,
-            "trace_id": trace_id,
-            "connector_key": CONNECTOR_KEY,
-            "source": "webhook",
-            "received_at": now,
-            "raw_payload": body,
-            "adapted_payload": adapted_body if adapter_meta["adapter_applied"] else None,
-            "adapter_meta": adapter_meta,
-            "enrichment_fallback_used": False,
-            "raw_headers": _capture_headers(request),
-            "signature_status": "verified",
-            "salla_order_id": salla_order_id,
-            "salla_order_number": str(data.get("reference_id") or data.get("id") or "") or None,
-            "idempotency_key": idem_key,
-            "pipeline_stage": "NEW",
-            "pipeline_error": None,
-            "attempts": 0,
-            "next_retry_at": None,
-            "processed_at": None,
-            "canonical_payload": None,
-            "stage_history": [
-                initial_history_entry(actor="webhook",
-                                      note=f"trace_id={trace_id}"
-                                            f" · adapter={adapter_meta['adapter_applied']}"
-                                            f" · items_source={adapter_meta['items_source']}"),
-            ],
-        }
+        # ── Iter-293 audit log scaffolding ───────────────────────────
+        # Capture meta BEFORE any processing so we can record the event
+        # to qoyod_webhook_events from any exit branch.
+        import json as _json
         try:
-            await db.integration_inbox.insert_one(new_row)
-        except DuplicateKeyError:
-            # 3) Idempotency: already received — return the existing trace.
-            existing = await db.integration_inbox.find_one(
-                {"user_id": tenant, "connector_key": CONNECTOR_KEY,
-                 "idempotency_key": idem_key},
-                {"_id": 0, "id": 1, "trace_id": 1, "pipeline_stage": 1,
-                 "received_at": 1, "salla_order_id": 1,
-                 "stage_history": {"$slice": -1}},
-            )
-            return {
-                "ok": True,
-                "duplicate": True,
-                "idempotency_key": idem_key,
-                "trace_id": (existing or {}).get("trace_id"),
-                "pipeline_stage": (existing or {}).get("pipeline_stage"),
-                "salla_order_id": (existing or {}).get("salla_order_id"),
-                "received_at": (existing or {}).get("received_at"),
-            }
-
-        # ── 5-7) Run validation + normalization synchronously ────────
-        final_stage, err = await _process_inbox_row(
-            db, row=new_row, raw_payload=adapted_body,
-            adapter_meta=adapter_meta)
-
-        # Fetch the updated row's audit fields for the response.
-        latest = await db.integration_inbox.find_one(
-            {"id": row_id},
-            {"_id": 0, "pipeline_stage": 1, "pipeline_started_at": 1,
-             "pipeline_finished_at": 1, "pipeline_duration_ms": 1,
-             "last_success_stage": 1, "last_failed_stage": 1,
-             "canonical_payload": 1, "salla_order_id": 1},
-        )
-
-        return {
-            "ok":               err is None,
-            "duplicate":        False,
-            "idempotency_key":  idem_key,
-            "trace_id":         trace_id,
-            "pipeline_stage":   (latest or {}).get("pipeline_stage", final_stage),
-            "salla_order_id":   (latest or {}).get("salla_order_id"),
-            "audit": {
-                "started_at":  (latest or {}).get("pipeline_started_at"),
-                "finished_at": (latest or {}).get("pipeline_finished_at"),
-                "duration_ms": (latest or {}).get("pipeline_duration_ms"),
-                "last_success_stage": (latest or {}).get("last_success_stage"),
-                "last_failed_stage":  (latest or {}).get("last_failed_stage"),
-            },
-            "error": err,
-            "canonical_payload_present": bool((latest or {}).get("canonical_payload")),
+            _raw_size = len(_json.dumps(body, default=str).encode("utf-8"))
+        except Exception:
+            _raw_size = 0
+        _event_type = (body.get("event_type") or body.get("event")
+                       or body.get("type") or None)
+        _audit_state: dict = {
+            "items_parsed_ok": False,
+            "items_count": None,
+            "skipped_reason": None,
+            "target_inbox_row_id": None,
+            "pipeline_stage_after": None,
+            "http_status": 200,
+            "salla_order_id": None,
         }
+
+        try:
+            # ── 3b) Legacy-shape Adapter ─────────────────────────────
+            # Make.com (and the legacy /api/webhook/make module) emit a
+            # flat JSON contract. Convert to canonical Salla shape BEFORE
+            # idempotency lookup or persistence runs. The original raw
+            # payload is still kept verbatim in `raw_payload` for audit.
+            adapted_body, adapter_meta = adapt_legacy(body)
+
+            # Pull the (best-effort) order anchor for fast lookup later.
+            data = adapted_body.get("data") if isinstance(adapted_body.get("data"), dict) else adapted_body
+            salla_order_id = (
+                data.get("reference_id") or data.get("id") or data.get("order_id"))
+            if salla_order_id is not None:
+                salla_order_id = str(salla_order_id)
+            _audit_state["salla_order_id"] = salla_order_id
+
+            # ── 4) Save Raw Event (idempotent INSERT) ────────────────
+            row_id = uuid.uuid4().hex
+            new_row = {
+                "id": row_id,
+                "schema_version": 1,
+                "user_id": tenant,
+                "trace_id": trace_id,
+                "connector_key": CONNECTOR_KEY,
+                "source": "webhook",
+                "received_at": now,
+                "raw_payload": body,
+                "adapted_payload": adapted_body if adapter_meta["adapter_applied"] else None,
+                "adapter_meta": adapter_meta,
+                "enrichment_fallback_used": False,
+                "raw_headers": _capture_headers(request),
+                "signature_status": "verified",
+                "salla_order_id": salla_order_id,
+                "salla_order_number": str(data.get("reference_id") or data.get("id") or "") or None,
+                "idempotency_key": idem_key,
+                "pipeline_stage": "NEW",
+                "pipeline_error": None,
+                "attempts": 0,
+                "next_retry_at": None,
+                "processed_at": None,
+                "canonical_payload": None,
+                "stage_history": [
+                    initial_history_entry(actor="webhook",
+                                          note=f"trace_id={trace_id}"
+                                                f" · adapter={adapter_meta['adapter_applied']}"
+                                                f" · items_source={adapter_meta['items_source']}"),
+                ],
+            }
+            try:
+                await db.integration_inbox.insert_one(new_row)
+            except DuplicateKeyError:
+                # 3) Idempotency: already received — return the existing trace.
+                existing = await db.integration_inbox.find_one(
+                    {"user_id": tenant, "connector_key": CONNECTOR_KEY,
+                     "idempotency_key": idem_key},
+                    {"_id": 0, "id": 1, "trace_id": 1, "pipeline_stage": 1,
+                     "received_at": 1, "salla_order_id": 1,
+                     "stage_history": {"$slice": -1}},
+                )
+                _audit_state["skipped_reason"] = "duplicate_idempotency_key"
+                _audit_state["target_inbox_row_id"] = (existing or {}).get("id")
+                _audit_state["pipeline_stage_after"] = (existing or {}).get("pipeline_stage")
+                return {
+                    "ok": True,
+                    "duplicate": True,
+                    "idempotency_key": idem_key,
+                    "trace_id": (existing or {}).get("trace_id"),
+                    "pipeline_stage": (existing or {}).get("pipeline_stage"),
+                    "salla_order_id": (existing or {}).get("salla_order_id"),
+                    "received_at": (existing or {}).get("received_at"),
+                }
+
+            _audit_state["target_inbox_row_id"] = row_id
+
+            # ── 5-7) Run validation + normalization synchronously ────
+            final_stage, err = await _process_inbox_row(
+                db, row=new_row, raw_payload=adapted_body,
+                adapter_meta=adapter_meta)
+
+            # Fetch the updated row's audit fields for the response.
+            latest = await db.integration_inbox.find_one(
+                {"id": row_id},
+                {"_id": 0, "pipeline_stage": 1, "pipeline_started_at": 1,
+                 "pipeline_finished_at": 1, "pipeline_duration_ms": 1,
+                 "last_success_stage": 1, "last_failed_stage": 1,
+                 "canonical_payload": 1, "salla_order_id": 1},
+            )
+            _audit_state["pipeline_stage_after"] = (latest or {}).get("pipeline_stage", final_stage)
+            _audit_state["items_parsed_ok"] = err is None and bool((latest or {}).get("canonical_payload"))
+            try:
+                canon = (latest or {}).get("canonical_payload") or {}
+                items = canon.get("items") if isinstance(canon, dict) else None
+                _audit_state["items_count"] = len(items) if isinstance(items, list) else None
+            except Exception:
+                pass
+            if err is not None:
+                _audit_state["http_status"] = 200  # endpoint still 200; row in DEAD_LETTER
+
+            return {
+                "ok":               err is None,
+                "duplicate":        False,
+                "idempotency_key":  idem_key,
+                "trace_id":         trace_id,
+                "pipeline_stage":   (latest or {}).get("pipeline_stage", final_stage),
+                "salla_order_id":   (latest or {}).get("salla_order_id"),
+                "audit": {
+                    "started_at":  (latest or {}).get("pipeline_started_at"),
+                    "finished_at": (latest or {}).get("pipeline_finished_at"),
+                    "duration_ms": (latest or {}).get("pipeline_duration_ms"),
+                    "last_success_stage": (latest or {}).get("last_success_stage"),
+                    "last_failed_stage":  (latest or {}).get("last_failed_stage"),
+                },
+                "error": err,
+                "canonical_payload_present": bool((latest or {}).get("canonical_payload")),
+            }
+        except HTTPException as he:
+            _audit_state["http_status"] = he.status_code
+            _audit_state["skipped_reason"] = "http_exception"
+            raise
+        except Exception:
+            _audit_state["http_status"] = 500
+            _audit_state["skipped_reason"] = "uncaught_exception"
+            raise
+        finally:
+            # Best-effort audit log — never raises (Iter-293).
+            await record_webhook_event(
+                db,
+                user_id=tenant,
+                trace_id=trace_id,
+                event_type=_event_type,
+                salla_order_id=_audit_state["salla_order_id"],
+                items_parsed_ok=_audit_state["items_parsed_ok"],
+                items_count=_audit_state["items_count"],
+                skipped_reason=_audit_state["skipped_reason"],
+                target_inbox_row_id=_audit_state["target_inbox_row_id"],
+                pipeline_stage_after=_audit_state["pipeline_stage_after"],
+                http_response_status=_audit_state["http_status"],
+                raw_payload_size=_raw_size,
+            )

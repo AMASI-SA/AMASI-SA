@@ -1278,6 +1278,43 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                         "docs/integrations/make-runbook-build-items-array.md"),
         }
 
+    # ── Iter-293 — Webhook Activity Log ──────────────────────────────
+    # Lightweight tail of EVERY webhook arrival from Make (or future
+    # direct Salla webhook). Operators use this as a live "tail -f" to
+    # spot parsing errors, missed events, or stale upstream config.
+    from integrations.qoyod.webhook_activity import (
+        list_recent_events, get_event_counts, soft_cap_old_rows,
+    )
+
+    @router.get("/admin/webhook-activity")
+    async def admin_webhook_activity(
+        limit: int = Query(50, ge=1, le=200),
+        event_type: Optional[str] = Query(None),
+        order_id: Optional[str] = Query(None),
+        skipped_only: bool = Query(False),
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        rows = await list_recent_events(
+            db, user_id=tenant, limit=limit,
+            event_type=event_type, salla_order_id=order_id,
+            skipped_only=skipped_only)
+        # Soft cap maintenance — lazy trim once per fetch.
+        # Fire-and-forget; never raises (helper swallows).
+        try:
+            await soft_cap_old_rows(db, user_id=tenant, keep=1000)
+        except Exception:  # noqa: BLE001
+            pass
+        return {"count": len(rows), "rows": rows}
+
+    @router.get("/admin/webhook-activity/counts")
+    async def admin_webhook_activity_counts(
+        hours: int = Query(24, ge=1, le=168),
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        return await get_event_counts(db, user_id=tenant, since_hours=hours)
+
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
     # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the
     # tenant's actual status catalogue from Salla so custom statuses
