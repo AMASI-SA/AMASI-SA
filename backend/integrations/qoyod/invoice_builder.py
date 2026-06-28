@@ -441,6 +441,11 @@ def build_receipt_payload(
 ) -> dict:
     """Build the Qoyod `POST /receipts` body.
 
+    DEPRECATED in Iter-290h — kept only for legacy code paths / tests.
+    New pipeline uses `build_invoice_payment_payload` + `POST
+    /invoice_payments` so the payment is REGISTERED ON the invoice
+    (closing balance) instead of creating a standalone receipt.
+
     Iter-290d — Qoyod's `/receipts` validator requires `contact_id`
     on the receipt root (otherwise: 422 `{'contact': ["Can't be blank"]}`).
     Mirror Iter-290c's id-coercion rules: every Qoyod id is sent as
@@ -460,6 +465,68 @@ def build_receipt_payload(
         "external_reference": dto_dict.get("order_id"),
     }
     return {"receipt": receipt}
+
+
+def build_invoice_payment_payload(
+    *, qoyod_invoice_id: str, dto_dict: dict,
+    invoice_date, settings: dict,
+) -> tuple[dict, dict]:
+    """Iter-290h — Build the Qoyod `POST /invoice_payments` body.
+
+    Returns `(payload, idempotency_fingerprint)`. The fingerprint is a
+    structured dict the pipeline uses for its DB-side idempotency
+    guard (per user spec — `order_id + invoice_id + payment_method
+    + amount`).
+
+    Payload shape (per Qoyod apidoc Invoice Payments resource):
+        {"invoice_payment": {
+            "invoice_id":        <int>,
+            "amount":            <decimal>,
+            "payment_date":      "YYYY-MM-DD",
+            "payment_method_id": <int>,
+            "reference":         "<order #>",
+            "description":       "Mezan · Salla order <id>"
+        }}
+
+    The `payment_method_id` is resolved from the existing
+    `settings.payment_method_accounts` mapping (operator-configured per
+    Salla payment method, e.g. "mada" → 17). The mapping ID was
+    historically called `qoyod_account_id` but per Qoyod's
+    `/invoice_payments` validator it serves as the `payment_method_id`
+    — same numeric reference, different field name.
+
+    Returns the payload with `payment_method_id = None` when the
+    mapping is missing — the pipeline's pre-POST guard catches this
+    and routes the row to `PAYMENT_METHOD_MAPPING_MISSING`.
+    """
+    pm_native = (dto_dict.get("payment_method")
+                 or dto_dict.get("payment_method_native"))
+    method_id = _resolve_payment_account(settings, pm_native)
+    invoice_id_int = _to_int_or_none(qoyod_invoice_id)
+    amount = dto_dict.get("total_amount")
+    payment_date_iso = (
+        invoice_date.date().isoformat() if invoice_date else None)
+    reference = (str(dto_dict.get("order_number") or "").strip()
+                 or str(dto_dict.get("order_id") or "").strip()
+                 or None)
+    body = {
+        "invoice_id":         invoice_id_int,
+        "amount":             amount,
+        "payment_date":       payment_date_iso,
+        "payment_method_id":  _to_int_or_none(method_id),
+        "reference":          reference,
+        "description":        f"Mezan · Salla order {dto_dict.get('order_id')}",
+    }
+    # Idempotency fingerprint — exactly per user spec
+    # `order_id + invoice_id + payment_method + amount`.
+    fingerprint = {
+        "order_id":         dto_dict.get("order_id"),
+        "qoyod_invoice_id": invoice_id_int,
+        "payment_method":   pm_native,
+        "payment_method_id": _to_int_or_none(method_id),
+        "amount":           amount,
+    }
+    return ({"invoice_payment": body}, fingerprint)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -523,6 +590,17 @@ class DryRunQoyodClient:
         self.calls.append({"endpoint": "POST /receipts", "idem": idem,
                            "payload": payload, "returned_id": rid})
         return {"receipt": {"id": rid}}
+
+    async def create_invoice_payment(self, payload, *, idem):
+        """Iter-290h — Dry-run mirror of `POST /invoice_payments`. Returns
+        a deterministic `DRY:invoice_payment:<hash>` id so the pipeline
+        can complete the dry-run successfully without contacting Qoyod."""
+        body = payload.get("invoice_payment") or payload
+        pid = self._fake("invoice_payment", body)
+        self.calls.append({"endpoint": "POST /invoice_payments",
+                           "idem": idem, "payload": payload,
+                           "returned_id": pid})
+        return {"invoice_payment": {"id": pid}}
 
 
 def is_dry_run_mode(settings: dict) -> bool:

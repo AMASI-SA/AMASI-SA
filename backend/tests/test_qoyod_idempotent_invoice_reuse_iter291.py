@@ -48,7 +48,8 @@ class _CountingClient(DryRunQoyodClient):
     def __init__(self) -> None:
         super().__init__()
         self.invoice_calls = 0
-        self.receipt_calls = 0
+        self.receipt_calls = 0          # legacy /receipts path
+        self.invoice_payment_calls = 0  # Iter-290h /invoice_payments path
 
     def _fake(self, kind: str, payload: dict) -> str:
         h = hashlib.sha1(repr(sorted(payload.items())).encode()).hexdigest()
@@ -63,6 +64,11 @@ class _CountingClient(DryRunQoyodClient):
         self.receipt_calls += 1
         rcp_id = self._fake("receipt", payload.get("receipt", {}))
         return {"receipt": {"id": rcp_id}}
+
+    async def create_invoice_payment(self, payload, *, idem=None):
+        self.invoice_payment_calls += 1
+        ip_id = self._fake("ip", payload.get("invoice_payment", {}))
+        return {"invoice_payment": {"id": ip_id}}
 
 
 # ── Fixtures shared with test_qoyod_day5_invoice_receipt ─────────────
@@ -170,7 +176,10 @@ async def test_invoice_create_NOT_called_when_qoyod_invoice_id_exists(db):
 
 
 @pytest.mark.asyncio
-async def test_receipt_still_runs_after_invoice_reuse(db):
+async def test_invoice_payment_still_runs_after_invoice_reuse(db):
+    """Iter-290h — When the invoice was reused from a previous run, the
+    pipeline must still post `/invoice_payments` so the invoice balance
+    actually closes. Replaces the Iter-291 receipt assertion."""
     await ensure_qoyod_indexes(db); await _cleanup(db)
     user_id = "iter291"
     order_id = f"ITER291-RCP-{uuid.uuid4().hex[:6]}"
@@ -181,9 +190,13 @@ async def test_receipt_still_runs_after_invoice_reuse(db):
     row = await db.integration_inbox.find_one({"salla_order_id": order_id})
     client = _CountingClient()
     out = await process_customer_resolved_row(db, row, api_client=client)
-    assert client.receipt_calls == 1, (
-        f"create_receipt should fire exactly once; got {client.receipt_calls}. "
-        f"outcome={out}")
+    # New flow — invoice_payment fires; legacy receipt path does NOT.
+    assert client.invoice_payment_calls == 1, (
+        f"create_invoice_payment should fire exactly once; got "
+        f"{client.invoice_payment_calls}. outcome={out}")
+    assert client.receipt_calls == 0, (
+        f"Iter-290h — /receipts path must be dormant in new flow; "
+        f"got {client.receipt_calls} calls. outcome={out}")
 
 
 @pytest.mark.asyncio

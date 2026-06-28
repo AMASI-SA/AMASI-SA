@@ -1,5 +1,56 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290h — POST /invoice_payments replaces standalone POST /receipts (2026-02-28)
+**User report**: After end-to-end success on order 268784455, the receipt showed up in Qoyod's "غير مستعمل" (unallocated) bin and the invoice balance remained > 0. Qoyod's data model distinguishes **Receipts** (standalone) from **Invoice Payments** (registered ON the invoice — the only resource that closes the invoice balance). The old `POST /receipts` flow created orphan receipts that never reconciled.
+
+### Architectural decision (user-approved 1a + 2c)
+- **Replace** `POST /receipts` with `POST /invoice_payments` for ALL new orders. No dual flow.
+- **No fallback** to `/receipts` on payment-link failure (per user spec — "لا يوجد fallback").
+- **Backfill PYT1–PYT8**: read-only admin report listing unallocated receipts with suggested matching invoices; operator links manually in قيود UI for now. Auto-link button postponed.
+
+### Fixes
+**State machine** (`state_machine.py`)
+- `HAPPY_PATH` now: `… INVOICE_CREATED → INVOICE_PAYMENT_CREATED → COMPLETED`
+- Legacy `RECEIPT_CREATED` retained in `ALL_STAGES` for in-flight rows during deploy window.
+- New failure stages: `PAYMENT_LINK_FAILED`, `PAYMENT_METHOD_MAPPING_MISSING` (both resume from `INVOICE_CREATED`).
+
+**API client** (`api_client.py`)
+- New `create_invoice_payment(payload, idem)` → `POST /invoice_payments`.
+
+**Invoice builder** (`invoice_builder.py`)
+- New `build_invoice_payment_payload(...)` returns `(payload, idempotency_fingerprint)`.
+- Payload: `{invoice_payment: {invoice_id, amount, payment_date, payment_method_id, reference, description}}`.
+- Fingerprint per user spec: `order_id + qoyod_invoice_id + payment_method + amount`.
+- `DryRunQoyodClient.create_invoice_payment` added.
+- `build_receipt_payload` marked DEPRECATED but retained.
+
+**Pipeline** (`pipeline.py`)
+- Renamed 4d step from RECEIPT to INVOICE_PAYMENT.
+- Pre-POST guard 1: refuses with `PAYMENT_METHOD_MAPPING_MISSING` when mapping missing.
+- Pre-POST guard 2: DB-side idempotent short-circuit on `qoyod_invoice_payments` collection (fingerprint match).
+- Failure → `PAYMENT_LINK_FAILED` → `PARTIAL_FAILURE` (invoice still in Qoyod; only payment-link missed).
+- Persists request_body_json + Qoyod response excerpt for the operator's diagnostic.
+- New collection: `qoyod_invoice_payments` (ledger + idempotency store).
+
+**First-sync monitor** (`first_sync_monitor.py`)
+- Step renamed `receipt` → `invoice_payment` with legacy fallback for historic rows.
+
+**Admin endpoint** (`routes.py`)
+- `GET /api/integrations/qoyod/admin/unallocated-receipts-report` — lists Qoyod receipts that appear unallocated and proposes the best matching invoice (scored by reference / amount / customer / date).
+
+### Tests (20 new + 5 updated)
+- `test_qoyod_invoice_payments_iter290h.py` — 7 tests covering builder shape, happy path, idempotency, payment_link_failed, no-fallback-to-receipts, preflight mapping guard.
+- `test_qoyod_unallocated_receipts_report_iter290h.py` — 13 tests covering allocation heuristics, suggestion scoring, API stub integration.
+- Updated `test_qoyod_state_machine.py`, `test_qoyod_day5_invoice_receipt.py`, `test_qoyod_idempotent_invoice_reuse_iter291.py`, `test_qoyod_first_sync_monitor.py` to reflect new flow.
+- **849/849 Qoyod tests pass**, lint clean.
+
+### Operator workflow (post-redeploy)
+1. **Deploy** to mezansalla.com.
+2. New order flows through `INVOICE_CREATED → INVOICE_PAYMENT_CREATED → COMPLETED`. The Qoyod invoice MUST show balance=0 and NO new "غير مستعمل" receipt.
+3. PYT1–PYT8 backfill: `GET /api/integrations/qoyod/admin/unallocated-receipts-report` returns the orphan receipts with suggested invoices. Operator links each manually in قيود (only 8 receipts).
+
+
+
 ## Iter-290g — Qoyod `/products` `tax_id` scalar shape (2026-02-28)
 **User scenario**: Production order `268784455` (SKU `AMS11542` — كرت اهداء حسب الطلب) failed at `FAILED_PRODUCT` with 422 from Qoyod:
 ```

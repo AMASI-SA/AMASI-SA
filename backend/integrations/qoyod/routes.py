@@ -1318,6 +1318,32 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         tenant = _tenant_id(user)
         return await get_event_counts(db, user_id=tenant, since_hours=hours)
 
+    @router.get("/admin/unallocated-receipts-report")
+    async def admin_unallocated_receipts_report(
+        max_receipts: int = Query(200, ge=1, le=500),
+        max_invoices: int = Query(500, ge=1, le=2000),
+        user=Depends(current_user),
+    ):
+        """Iter-290h — Manual reconciliation report.
+
+        Lists Qoyod receipts that appear unallocated (the "غير مستعمل"
+        bin in قيود) and proposes a matching invoice for each one,
+        scored by reference / amount / customer / date proximity.
+
+        READ-ONLY. The endpoint never mutates Qoyod state — the
+        operator links receipts manually in قيود UI. A later iteration
+        may add a one-click "تخصيص" button once we've proven the
+        suggestion accuracy on a real sample.
+        """
+        from integrations.qoyod.unallocated_receipts_report import (
+            build_unallocated_receipts_report,
+        )
+        tenant = _tenant_id(user)
+        return await build_unallocated_receipts_report(
+            db, user_id=tenant,
+            max_receipts=max_receipts, max_invoices=max_invoices,
+        )
+
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
     # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the
     # tenant's actual status catalogue from Salla so custom statuses

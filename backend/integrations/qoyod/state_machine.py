@@ -47,9 +47,22 @@ HAPPY_PATH: tuple[str, ...] = (
     "CUSTOMER_RESOLVED",    # 4a — Qoyod customer id available
     "PRODUCT_RESOLVED",     # 4b — Qoyod product ids available
     "INVOICE_CREATED",      # 4c — invoice exists in Qoyod
-    "RECEIPT_CREATED",      # 4d — receipt exists in Qoyod
+    # Iter-290h — Renamed step. Was "RECEIPT_CREATED" (we used to call
+    # POST /receipts which produced a STANDALONE Qoyod receipt that
+    # never closed the invoice, leaving it "unallocated"). New flow
+    # calls POST /invoice_payments which records the payment ON the
+    # invoice — the only way to land balance=0. The legacy
+    # "RECEIPT_CREATED" stage stays in ALL_STAGES + TERMINAL eligible
+    # transitions purely for back-compat reading of historical rows.
+    "INVOICE_PAYMENT_CREATED",
     "COMPLETED",            # terminal success
 )
+
+# Iter-290h — deprecated legacy stage. New code path never writes this;
+# kept here so historic rows can still be enumerated and so the
+# state machine accepts the transition `RECEIPT_CREATED → COMPLETED`
+# for any in-flight rows during the deploy window.
+LEGACY_RECEIPT_CREATED: str = "RECEIPT_CREATED"
 
 # Side-stages — non-failure terminal or transient.
 SKIPPED:   str = "SKIPPED"     # business rule said: do not send
@@ -66,13 +79,27 @@ FAILURE_STAGES: tuple[str, ...] = (
     "FAILED_CUSTOMER",      # 4a couldn't resolve/create customer
     "FAILED_PRODUCT",       # 4b couldn't resolve/create products
     "FAILED_INVOICE",       # 4c invoice POST to Qoyod failed
-    "FAILED_RECEIPT",       # 4d receipt POST failed (invoice succeeded)
+    # Iter-290h — Replaces "FAILED_RECEIPT" in the new flow. Triggered
+    # when POST /invoice_payments fails AFTER the invoice was created.
+    # The invoice is already in Qoyod (with a non-zero balance) so we
+    # land in PARTIAL_FAILURE so the operator can review/retry the
+    # payment link without re-creating the invoice.
+    "PAYMENT_LINK_FAILED",
+    # Iter-290h — Pre-POST guard. Triggered when the operator hasn't
+    # configured `payment_method_accounts[<salla_method>]` (the Qoyod
+    # payment_method_id for this Salla payment method, e.g. "mada"
+    # → 17). The invoice still lives in Qoyod; the row halts here so
+    # the operator can map the method in Settings and retry.
+    "PAYMENT_METHOD_MAPPING_MISSING",
+    # Iter-289 legacy — kept for back-compat with rows already failed
+    # under the previous /receipts flow. New code never writes this.
+    "FAILED_RECEIPT",
     "DEAD_LETTER",          # terminal failure — max attempts exhausted
 )
 
 # The full canonical set (used for Pydantic Literal validation).
 ALL_STAGES: tuple[str, ...] = HAPPY_PATH + (
-    SKIPPED, RETRYING, PARTIAL_FAILURE, NEEDS_ENRICHMENT,
+    SKIPPED, RETRYING, PARTIAL_FAILURE, NEEDS_ENRICHMENT, LEGACY_RECEIPT_CREATED,
 ) + FAILURE_STAGES
 
 TERMINAL_STAGES: frozenset[str] = frozenset({
@@ -90,6 +117,11 @@ FAILURE_TO_RESUME: dict[str, str] = {
     "FAILED_PRODUCT":       "CUSTOMER_RESOLVED",
     "FAILED_INVOICE":       "PRODUCT_RESOLVED",
     "FAILED_RECEIPT":       "INVOICE_CREATED",
+    # Iter-290h — new failure stages both resume from INVOICE_CREATED
+    # (the invoice already exists in Qoyod; only the payment-link step
+    # needs to be re-attempted).
+    "PAYMENT_LINK_FAILED":            "INVOICE_CREATED",
+    "PAYMENT_METHOD_MAPPING_MISSING": "INVOICE_CREATED",
 }
 
 
@@ -155,6 +187,19 @@ def _build_allowed() -> set[tuple[str, str]]:
     # DEAD_LETTER would imply we lost everything — but we didn't.
     # PARTIAL_FAILURE preserves that nuance for the operator.
     allowed.add(("FAILED_RECEIPT", "PARTIAL_FAILURE"))
+    # Iter-290h — Mirror the same nuance for the two new failure
+    # stages. The invoice exists in Qoyod, only the payment-link step
+    # missed.
+    allowed.add(("PAYMENT_LINK_FAILED", "PARTIAL_FAILURE"))
+    allowed.add(("PAYMENT_METHOD_MAPPING_MISSING", "PARTIAL_FAILURE"))
+
+    # Iter-290h — Legacy `RECEIPT_CREATED` stage is no longer in
+    # HAPPY_PATH but historic rows that already reached it during the
+    # old /receipts flow must still be able to land on COMPLETED.
+    allowed.add((LEGACY_RECEIPT_CREATED, "COMPLETED"))
+    # INVOICE_CREATED → RECEIPT_CREATED is preserved for the same
+    # back-compat reason (rows in flight when the deploy lands).
+    allowed.add(("INVOICE_CREATED", LEGACY_RECEIPT_CREATED))
 
     # ─── NEEDS_ENRICHMENT (transient) ─────────────────────────────────
     # When Legacy Adapter detects an items-missing payload AND the
@@ -179,6 +224,11 @@ def _build_allowed() -> set[tuple[str, str]]:
     allowed.add(("PARTIAL_FAILURE", RETRYING))
     allowed.add((RETRYING, "NORMALIZED"))
     allowed.add((RETRYING, "CUSTOMER_RESOLVED"))
+    # Iter-290h — Operator-driven retry of the payment-link step.
+    # PAYMENT_LINK_FAILED / PAYMENT_METHOD_MAPPING_MISSING resume from
+    # INVOICE_CREATED (the invoice already exists; only the
+    # invoice_payment POST needs to be re-attempted).
+    allowed.add((RETRYING, "INVOICE_CREATED"))
 
     return allowed
 

@@ -275,7 +275,16 @@ async def test_pipeline_dry_run_completes_without_qoyod_post(db):
         assert updated["pipeline_stage"] == "COMPLETED"
         # Payload snapshots are present.
         assert updated["qoyod_payloads"]["invoice"]["invoice"]["contact_id"] == 1
-        assert updated["qoyod_payloads"]["receipt"]["receipt"]["account_id"] == 9
+        # Iter-290h — invoice_payment replaces receipt. Snapshot must
+        # carry the canonical fields (amount + payment_method_id).
+        # invoice_id is None in dry-run (the DRY:invoice:* id is
+        # non-numeric so the int-coercion drops it — production runs
+        # always have a numeric Qoyod id).
+        ip_body = updated["qoyod_payloads"]["invoice_payment"]["invoice_payment"]
+        assert "invoice_id" in ip_body
+        assert ip_body["amount"] == 115.0
+        assert ip_body["payment_method_id"] == 9   # mapped from "mada"
+        assert ip_body["description"].startswith("Mezan · Salla order")
         # qoyod_invoices ledger row exists but status is pending (dry-run).
         led = await db.qoyod_invoices.find_one({"salla_order_id": order_id})
         assert led["status"] == "pending"
@@ -283,6 +292,7 @@ async def test_pipeline_dry_run_completes_without_qoyod_post(db):
     finally:
         await db.integration_inbox.delete_many({"id": row["id"]})
         await db.qoyod_invoices.delete_many({"salla_order_id": order_id})
+        await db.qoyod_invoice_payments.delete_many({"salla_order_id": order_id})
         await db.qoyod_products_mapping.delete_many({"user_id": user_id})
 
 
@@ -338,8 +348,10 @@ async def test_pipeline_preflight_blocks_when_tax_missing(db):
 
 
 @pytest.mark.asyncio
-async def test_pipeline_partial_failure_on_receipt_error(db):
-    """Invoice succeeds, receipt POST raises → PARTIAL_FAILURE."""
+async def test_pipeline_partial_failure_on_payment_link_error(db):
+    """Iter-290h — Invoice succeeds, `POST /invoice_payments` raises →
+    PARTIAL_FAILURE with reason PAYMENT_LINK_FAILED (replaces the old
+    FAILED_RECEIPT flow)."""
     await ensure_qoyod_indexes(db)
     user_id = "main"; order_id = f"D5-PARTIAL-{uuid.uuid4().hex[:6]}"
     await _seed_settings(db, user_id, dry_run_mode=False)
@@ -348,30 +360,33 @@ async def test_pipeline_partial_failure_on_receipt_error(db):
 
     from integrations.qoyod.api_client import QoyodAPIError
     class _FlakyClient(_LiveLikeQoyodClient):
-        async def create_receipt(self, payload, *, idem):
-            raise QoyodAPIError(status_code=502, code="qoyod_server_error",
-                                message="upstream timeout", endpoint="POST /receipts")
+        async def create_invoice_payment(self, payload, *, idem):
+            raise QoyodAPIError(
+                status_code=502, code="qoyod_server_error",
+                message="upstream timeout",
+                endpoint="POST /invoice_payments")
 
     try:
         out = await process_customer_resolved_row(db, row,
                                                   api_client=_FlakyClient())
         assert out["outcome"] == "PARTIAL_FAILURE"
-        assert out["reason"] == "FAILED_RECEIPT"
+        assert out["reason"] == "PAYMENT_LINK_FAILED"
         updated = await db.integration_inbox.find_one({"id": row["id"]})
         assert updated["pipeline_stage"] == "PARTIAL_FAILURE"
-        assert updated["last_failed_stage"] == "FAILED_RECEIPT"
+        assert updated["last_failed_stage"] == "PAYMENT_LINK_FAILED"
         # last_success_stage stopped at INVOICE_CREATED — invoice DID post.
         assert updated["last_success_stage"] == "INVOICE_CREATED"
-        # Both payload snapshots present (invoice posted, receipt attempted).
+        # Both payload snapshots present (invoice posted, payment attempted).
         assert "invoice" in updated["qoyod_payloads"]
-        assert "receipt" in updated["qoyod_payloads"]
+        assert "invoice_payment" in updated["qoyod_payloads"]
         # Ledger reflects the split state.
         led = await db.qoyod_invoices.find_one({"salla_order_id": order_id})
-        assert led["status"] == "invoice_sent_receipt_failed"
+        assert led["status"] == "invoice_sent_payment_link_failed"
         assert led["pipeline_stage"] == "PARTIAL_FAILURE"
     finally:
         await db.integration_inbox.delete_many({"id": row["id"]})
         await db.qoyod_invoices.delete_many({"salla_order_id": order_id})
+        await db.qoyod_invoice_payments.delete_many({"salla_order_id": order_id})
         await db.qoyod_products_mapping.delete_many({"user_id": user_id})
 
 
@@ -390,10 +405,12 @@ async def test_pipeline_records_payload_snapshot_before_post(db):
         updated = await db.integration_inbox.find_one({"id": row["id"]})
         # Snapshot timestamps prove they were written BEFORE the COMPLETED ts.
         assert updated["qoyod_payloads"]["invoice_snapshot_at"] is not None
-        assert updated["qoyod_payloads"]["receipt_snapshot_at"] is not None
+        # Iter-290h — invoice_payment replaces receipt snapshot.
+        assert updated["qoyod_payloads"]["invoice_payment_snapshot_at"] is not None
     finally:
         await db.integration_inbox.delete_many({"id": row["id"]})
         await db.qoyod_invoices.delete_many({"salla_order_id": order_id})
+        await db.qoyod_invoice_payments.delete_many({"salla_order_id": order_id})
         await db.qoyod_products_mapping.delete_many({"user_id": user_id})
 
 

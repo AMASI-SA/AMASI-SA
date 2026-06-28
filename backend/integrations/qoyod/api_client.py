@@ -327,6 +327,28 @@ class QoyodAPIClient:
         return await self._request(
             "POST", "/receipts", json_body=payload, idempotency_key=idem)
 
+    async def create_invoice_payment(self, payload: dict, *, idem: str) -> Any:
+        """Iter-290h — `POST /invoice_payments`. Registers a payment ON
+        an invoice (vs. `/receipts` which creates a STANDALONE receipt
+        that does NOT close the invoice balance — operators kept seeing
+        "غير مستعمل" receipts in Qoyod).
+
+        Canonical body shape (per Qoyod apidoc — Invoice Payments
+        resource, confirmed against production 2026-02-28):
+
+            {"invoice_payment": {
+                "invoice_id":         <int>,
+                "amount":             <decimal>,
+                "payment_date":       "YYYY-MM-DD",
+                "payment_method_id":  <int>,   # Qoyod payment-method id
+                "reference":          "<order #>",
+                "description":        "<optional>"
+            }}
+        """
+        return await self._request(
+            "POST", "/invoice_payments",
+            json_body=payload, idempotency_key=idem)
+
     # ── Read-only list endpoints for Fresh-Start Audit ──────────────
     # Strictly READ; never call DELETE/PUT from this client.
     async def list_invoices(self, *, page: int = 1, limit: int = 50) -> Any:

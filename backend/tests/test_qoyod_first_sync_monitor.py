@@ -53,6 +53,7 @@ def test_shape_inbox_row_extracts_four_qoyod_steps():
         "pipeline_duration_ms": 1234,
         "last_success_stage": "COMPLETED",
         "qoyod_customer_id": "C-9",
+        "qoyod_invoice_payment_id": "P-1",        # Iter-290h
         "customer_resolution": {
             "created_new": True,
             "lookup_keys": ["phone:+966500000000"],
@@ -64,17 +65,21 @@ def test_shape_inbox_row_extracts_four_qoyod_steps():
         },
         "qoyod_payloads": {
             "invoice": {"invoice": {"contact_id": "C-9"}},
-            "receipt": {"receipt": {"invoice_id": "I-1"}},
+            "invoice_payment": {"invoice_payment": {"invoice_id": "I-1",
+                                                    "amount": 100}},
         },
         "qoyod_responses": {
             "invoice": {"qoyod_id": "I-1", "duration_ms": 250,
                         "body": {"invoice": {"id": "I-1", "number": "INV-001"}}},
-            "receipt": {"qoyod_id": "R-1", "duration_ms": 180,
-                        "body": {"receipt": {"id": "R-1"}}},
+            "invoice_payment": {"qoyod_id": "P-1", "duration_ms": 180,
+                                "body": {"invoice_payment": {"id": "P-1"}}},
         },
         "stage_history": [
             {"from_stage": "NEW", "to_stage": "RECEIVED", "at": now,
              "actor": "system"},
+            {"from_stage": "INVOICE_CREATED",
+             "to_stage": "INVOICE_PAYMENT_CREATED", "at": now,
+             "actor": "worker"},
         ],
         "canonical_payload": {
             "order_id": "12345", "order_number": "S-12345",
@@ -88,7 +93,7 @@ def test_shape_inbox_row_extracts_four_qoyod_steps():
     assert out["trace_id"] == "trace-1"
     assert len(out["qoyod_steps"]) == 4
     keys = [s["key"] for s in out["qoyod_steps"]]
-    assert keys == ["customer", "product", "invoice", "receipt"]
+    assert keys == ["customer", "product", "invoice", "invoice_payment"]
     # All steps should report "success"
     assert all(s["status"] == "success" for s in out["qoyod_steps"])
     # Order summary populated
@@ -122,7 +127,7 @@ def test_shape_inbox_row_marks_failed_step():
     cust_step = next(s for s in out["qoyod_steps"] if s["key"] == "customer")
     assert cust_step["status"] == "success"
     # Later steps stay pending
-    rcpt_step = next(s for s in out["qoyod_steps"] if s["key"] == "receipt")
+    rcpt_step = next(s for s in out["qoyod_steps"] if s["key"] == "invoice_payment")
     assert rcpt_step["status"] == "pending"
 
 

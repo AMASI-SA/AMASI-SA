@@ -173,17 +173,31 @@ def shape_inbox_row_for_monitor(row: dict) -> dict:
                 "INVOICE_CREATED", row, "FAILED_INVOICE"),
         },
         {
-            "key":     "receipt",
-            "title":   "إنشاء سند القبض في قيود",
-            "stage":   "RECEIPT_CREATED",
-            "payload": payloads.get("receipt"),
-            "response": responses.get("receipt"),
-            "duration_ms": (responses.get("receipt") or {})
-                            .get("duration_ms")
-                          or (timings.get("RECEIPT_CREATED") or {})
-                            .get("duration_ms"),
-            "status": _status_for_stage(
-                "RECEIPT_CREATED", row, "FAILED_RECEIPT"),
+            "key":     "invoice_payment",   # Iter-290h — was "receipt"
+            "title":   "ربط السداد بالفاتورة في قيود",
+            "stage":   "INVOICE_PAYMENT_CREATED",
+            "payload": (payloads.get("invoice_payment")
+                        or payloads.get("receipt")),   # legacy fallback
+            "response": (responses.get("invoice_payment")
+                         or responses.get("receipt")), # legacy fallback
+            "duration_ms": (
+                (responses.get("invoice_payment") or {}).get("duration_ms")
+                or (responses.get("receipt") or {}).get("duration_ms")
+                or (timings.get("INVOICE_PAYMENT_CREATED") or {}).get("duration_ms")
+                or (timings.get("RECEIPT_CREATED") or {}).get("duration_ms")
+            ),
+            "status": (
+                # Try the new flow first; fall back to legacy receipt
+                # stage when we're reading a historic row.
+                _status_for_stage("INVOICE_PAYMENT_CREATED", row,
+                                  "PAYMENT_LINK_FAILED")
+                if (row.get("qoyod_invoice_payment_id")
+                    or "INVOICE_PAYMENT_CREATED" in {
+                        h.get("to_stage") for h in
+                        (row.get("stage_history") or [])
+                    })
+                else _status_for_stage("RECEIPT_CREATED", row, "FAILED_RECEIPT")
+            ),
         },
     ]
 

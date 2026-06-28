@@ -33,6 +33,7 @@ from integrations.qoyod.product_resolver import (
 from integrations.qoyod.preflight import run as preflight_run, PreflightResult
 from integrations.qoyod.invoice_builder import (
     build_invoice_payload, build_receipt_payload,
+    build_invoice_payment_payload,
     DryRunQoyodClient, is_dry_run_mode,
 )
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
@@ -649,91 +650,208 @@ async def process_customer_resolved_row(
         upsert=True,
     )
 
-    # ── 4d RECEIPT ──────────────────────────────────────────────────
+    # ── 4d INVOICE PAYMENT (Iter-290h — replaces standalone Receipt) ──
+    #
+    # Why this exists
+    # ───────────────
+    # The previous flow called `POST /receipts` which produced a
+    # STANDALONE Qoyod receipt — the invoice balance was never closed
+    # and the receipt sat in Qoyod's "غير مستعمل" (unallocated) list.
+    # The correct Qoyod flow per `apidoc.qoyod.com` is `POST
+    # /invoice_payments` which registers the payment ON the invoice.
+    #
+    # New stage flow
+    # ──────────────
+    #     INVOICE_CREATED
+    #     → PAYMENT_METHOD_MAPPING_MISSING (pre-POST guard)
+    #     → PAYMENT_LINK_FAILED            (Qoyod 4xx/5xx)
+    #     → INVOICE_PAYMENT_CREATED        (happy path)
+    #     → COMPLETED
+    #
+    # No fallback to /receipts. Per user spec — "إذا فشل ربط السند
+    # بالفاتورة، لا تسجل الطلب كناجح".
     if not (settings.get("auto_receipt", True)
             and (settings.get("capabilities") or {}).get("create_receipts", True)):
-        # Receipt disabled by capability — stop at INVOICE_CREATED as success.
+        # Invoice-payment step disabled by capability (e.g. tenant
+        # using Qoyod's auto-payment plugin externally). Stop at
+        # INVOICE_CREATED as success.
         return {"row_id": row["id"], "outcome": "INVOICE_CREATED",
-                "reason": "receipt_disabled_by_capability",
+                "reason": "invoice_payment_disabled_by_capability",
                 "dry_run": is_dry,
                 "qoyod_invoice_id": qoyod_invoice_id}
 
-    receipt_payload = build_receipt_payload(
+    payment_payload, idem_fingerprint = build_invoice_payment_payload(
         qoyod_invoice_id=qoyod_invoice_id,
-        qoyod_customer_id=qoyod_customer_id,
         dto_dict=canonical, invoice_date=inv_date, settings=settings)
+
     await db.integration_inbox.update_one(
         {"id": row["id"]},
-        {"$set": {"qoyod_payloads.receipt": receipt_payload,
-                  "qoyod_payloads.receipt_snapshot_at": _now()}},
+        {"$set": {"qoyod_payloads.invoice_payment": payment_payload,
+                  "qoyod_payloads.invoice_payment_fingerprint": idem_fingerprint,
+                  "qoyod_payloads.invoice_payment_snapshot_at": _now()}},
     )
-    receipt_idem = f"mzn-{trace_id}-receipt"
-    qoyod_receipt_id = None
-    rcpt_resp_raw: Any = None
-    rcpt_started_ms = int(_now().timestamp() * 1000)
-    try:
-        rcpt_resp = await api_client.create_receipt(receipt_payload,
-                                                    idem=receipt_idem)
-        rcpt_resp_raw = rcpt_resp
-        if isinstance(rcpt_resp, dict):
-            r = rcpt_resp.get("receipt") if isinstance(rcpt_resp.get("receipt"), dict) else rcpt_resp
-            qoyod_receipt_id = str(r.get("id")) if r.get("id") is not None else None
-    except QoyodAPIError as exc:
+
+    # ── Pre-POST guard 1: payment_method_id mapping must be set ──────
+    if payment_payload["invoice_payment"].get("payment_method_id") is None:
+        err = {
+            "code":            "payment_method_mapping_missing",
+            "failed_at_stage": "PAYMENT_METHOD_MAPPING_MISSING",
+            "salla_payment_method": (canonical.get("payment_method")
+                                     or canonical.get("payment_method_native")),
+            "message": (
+                "لم يتم ضبط Qoyod payment_method_id لطريقة الدفع "
+                f"'{canonical.get('payment_method')}' في الإعدادات. "
+                "افتح إعدادات قيود ← طرق الدفع، وضبط حساب قيود "
+                "لهذه الطريقة قبل إعادة المحاولة."
+            ),
+        }
         await db.integration_inbox.update_one(
             {"id": row["id"]},
-            {"$set": {
-                "qoyod_responses.receipt.error":      exc.to_log_dict(),
-                "qoyod_responses.receipt.received_at": _now(),
-                "qoyod_responses.receipt.duration_ms":
-                    int(_now().timestamp() * 1000) - rcpt_started_ms,
-            }})
-        # Partial failure! Invoice exists, receipt does not.
+            {"$set": {"qoyod_responses.invoice_payment.error": err,
+                      "qoyod_responses.invoice_payment.received_at": _now()}})
         p = transition(from_stage="INVOICE_CREATED",
-                       to_stage="FAILED_RECEIPT", actor="worker",
-                       error=exc.to_log_dict())
-        p.setdefault("$set", {})["pipeline_error"] = exc.to_log_dict()
+                       to_stage="PAYMENT_METHOD_MAPPING_MISSING",
+                       actor="worker", error=err)
+        p.setdefault("$set", {})["pipeline_error"] = err
         await _apply(db, row["id"], p)
-        p2 = transition(from_stage="FAILED_RECEIPT",
+        p2 = transition(from_stage="PAYMENT_METHOD_MAPPING_MISSING",
                         to_stage="PARTIAL_FAILURE", actor="worker",
-                        note="invoice already in Qoyod · manual receipt review",
+                        note="invoice in Qoyod · payment_method mapping needed",
                         existing_started_at=started_at)
         await _apply(db, row["id"], p2)
         await db.qoyod_invoices.update_one(
             {"user_id": user_id, "salla_order_id": canonical.get("order_id")},
-            {"$set": {"status": "invoice_sent_receipt_failed",
+            {"$set": {"status": "invoice_sent_payment_method_missing",
                       "pipeline_stage": "PARTIAL_FAILURE",
-                      "last_error": exc.to_log_dict(),
-                      "updated_at": _now()}})
+                      "last_error": err, "updated_at": _now()}})
         return {"row_id": row["id"], "outcome": "PARTIAL_FAILURE",
-                "reason": "FAILED_RECEIPT",
+                "reason": "PAYMENT_METHOD_MAPPING_MISSING",
                 "qoyod_invoice_id": qoyod_invoice_id}
 
+    # ── Pre-POST guard 2: DB-side idempotency on the fingerprint ─────
+    # Per user spec — `order_id + invoice_id + payment_method + amount`.
+    # If a matching row already exists in `qoyod_invoice_payments` with
+    # a real Qoyod id, short-circuit straight to COMPLETED instead of
+    # double-posting.
+    existing_payment = await db.qoyod_invoice_payments.find_one({
+        "user_id":          user_id,
+        "salla_order_id":   idem_fingerprint["order_id"],
+        "qoyod_invoice_id": idem_fingerprint["qoyod_invoice_id"],
+        "payment_method":   idem_fingerprint["payment_method"],
+        "amount":           idem_fingerprint["amount"],
+    }, {"_id": 0, "qoyod_invoice_payment_id": 1})
+    qoyod_invoice_payment_id: Optional[str] = None
+    payment_resp_raw: Any = None
+    payment_started_ms = int(_now().timestamp() * 1000)
+
+    if existing_payment and existing_payment.get("qoyod_invoice_payment_id"):
+        # Already posted in a previous run — reuse the id.
+        qoyod_invoice_payment_id = str(existing_payment["qoyod_invoice_payment_id"])
+        await db.integration_inbox.update_one(
+            {"id": row["id"]},
+            {"$set": {
+                "qoyod_responses.invoice_payment.idempotent_short_circuit": True,
+                "qoyod_responses.invoice_payment.qoyod_id": qoyod_invoice_payment_id,
+            }})
+    else:
+        payment_idem = (
+            f"mzn-{trace_id}-invoice-payment-{idem_fingerprint['qoyod_invoice_id']}")
+        try:
+            payment_resp = await api_client.create_invoice_payment(
+                payment_payload, idem=payment_idem)
+            payment_resp_raw = payment_resp
+            if isinstance(payment_resp, dict):
+                r = (payment_resp.get("invoice_payment")
+                     if isinstance(payment_resp.get("invoice_payment"), dict)
+                     else payment_resp)
+                qoyod_invoice_payment_id = (
+                    str(r.get("id")) if r.get("id") is not None else None)
+        except QoyodAPIError as exc:
+            err_log = exc.to_log_dict()
+            err_log["request_body_json"] = payment_payload
+            await db.integration_inbox.update_one(
+                {"id": row["id"]},
+                {"$set": {
+                    "qoyod_responses.invoice_payment.error":      err_log,
+                    "qoyod_responses.invoice_payment.received_at": _now(),
+                    "qoyod_responses.invoice_payment.duration_ms":
+                        int(_now().timestamp() * 1000) - payment_started_ms,
+                }})
+            # Partial failure! Invoice exists, payment-link does not.
+            p = transition(from_stage="INVOICE_CREATED",
+                           to_stage="PAYMENT_LINK_FAILED", actor="worker",
+                           error=err_log)
+            p.setdefault("$set", {})["pipeline_error"] = err_log
+            await _apply(db, row["id"], p)
+            p2 = transition(from_stage="PAYMENT_LINK_FAILED",
+                            to_stage="PARTIAL_FAILURE", actor="worker",
+                            note="invoice in Qoyod · payment_link failed · review",
+                            existing_started_at=started_at)
+            await _apply(db, row["id"], p2)
+            await db.qoyod_invoices.update_one(
+                {"user_id": user_id, "salla_order_id": canonical.get("order_id")},
+                {"$set": {"status": "invoice_sent_payment_link_failed",
+                          "pipeline_stage": "PARTIAL_FAILURE",
+                          "last_error": err_log, "updated_at": _now()}})
+            return {"row_id": row["id"], "outcome": "PARTIAL_FAILURE",
+                    "reason": "PAYMENT_LINK_FAILED",
+                    "qoyod_invoice_id": qoyod_invoice_id}
+
+    # ── Happy path: payment linked ──────────────────────────────────
+    # Persist into qoyod_invoice_payments ledger (DB-side idempotency
+    # store + audit). Upsert on the fingerprint tuple.
+    await db.qoyod_invoice_payments.update_one(
+        {
+            "user_id":          user_id,
+            "salla_order_id":   idem_fingerprint["order_id"],
+            "qoyod_invoice_id": idem_fingerprint["qoyod_invoice_id"],
+            "payment_method":   idem_fingerprint["payment_method"],
+            "amount":           idem_fingerprint["amount"],
+        },
+        {"$set": {
+            "user_id":                   user_id,
+            "trace_id":                  trace_id,
+            "salla_order_id":            idem_fingerprint["order_id"],
+            "salla_order_number":        canonical.get("order_number"),
+            "qoyod_invoice_id":          idem_fingerprint["qoyod_invoice_id"],
+            "qoyod_invoice_payment_id":  qoyod_invoice_payment_id,
+            "payment_method":            idem_fingerprint["payment_method"],
+            "payment_method_id":         idem_fingerprint["payment_method_id"],
+            "amount":                    idem_fingerprint["amount"],
+            "currency":                  canonical.get("currency") or "SAR",
+            "dry_run":                   is_dry,
+            "updated_at":                _now(),
+        },
+         "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": _now()}},
+        upsert=True,
+    )
+
     p = transition(from_stage="INVOICE_CREATED",
-                   to_stage="RECEIPT_CREATED", actor="worker",
-                   note=("DRY-RUN: receipt payload built, no POST"
-                         if is_dry else "receipt created in Qoyod"))
-    p.setdefault("$set", {})["qoyod_receipt_id"] = qoyod_receipt_id
+                   to_stage="INVOICE_PAYMENT_CREATED", actor="worker",
+                   note=("DRY-RUN: invoice_payment payload built, no POST"
+                         if is_dry else "invoice_payment recorded ON invoice in Qoyod"))
+    p.setdefault("$set", {})["qoyod_invoice_payment_id"] = qoyod_invoice_payment_id
     await _apply(db, row["id"], p)
-    # Persist raw receipt response (success path) — First-Sync-Monitor.
+    # Persist raw response — First-Sync-Monitor.
     await db.integration_inbox.update_one(
         {"id": row["id"]},
         {"$set": {
-            "qoyod_responses.receipt.body":        rcpt_resp_raw,
-            "qoyod_responses.receipt.received_at": _now(),
-            "qoyod_responses.receipt.duration_ms":
-                int(_now().timestamp() * 1000) - rcpt_started_ms,
-            "qoyod_responses.receipt.qoyod_id":    qoyod_receipt_id,
+            "qoyod_responses.invoice_payment.body":        payment_resp_raw,
+            "qoyod_responses.invoice_payment.received_at": _now(),
+            "qoyod_responses.invoice_payment.duration_ms":
+                int(_now().timestamp() * 1000) - payment_started_ms,
+            "qoyod_responses.invoice_payment.qoyod_id":    qoyod_invoice_payment_id,
         }})
 
-    p = transition(from_stage="RECEIPT_CREATED", to_stage="COMPLETED",
+    p = transition(from_stage="INVOICE_PAYMENT_CREATED", to_stage="COMPLETED",
                    actor="worker",
                    note=("DRY-RUN COMPLETED — no Qoyod POSTs were made"
-                         if is_dry else "invoice + receipt pushed to Qoyod"),
+                         if is_dry else "invoice + invoice_payment pushed to Qoyod"),
                    existing_started_at=started_at)
     await _apply(db, row["id"], p)
     await db.qoyod_invoices.update_one(
         {"user_id": user_id, "salla_order_id": canonical.get("order_id")},
-        {"$set": {"qoyod_receipt_id": qoyod_receipt_id,
+        {"$set": {"qoyod_invoice_payment_id": qoyod_invoice_payment_id,
                   "pipeline_stage":  "COMPLETED",
                   "status":          ("sent" if not is_dry else "pending"),
                   "sent_at":         _now() if not is_dry else None,
@@ -741,8 +859,8 @@ async def process_customer_resolved_row(
 
     return {"row_id": row["id"], "outcome": "COMPLETED",
             "dry_run": is_dry,
-            "qoyod_invoice_id": qoyod_invoice_id,
-            "qoyod_receipt_id": qoyod_receipt_id}
+            "qoyod_invoice_id":         qoyod_invoice_id,
+            "qoyod_invoice_payment_id": qoyod_invoice_payment_id}
 
 
 async def process_pending_customer_resolved(

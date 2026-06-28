@@ -19,24 +19,32 @@ from integrations.qoyod.state_machine import (
 # ─────────────────────────────────────────────────────────────────────
 # A) Vocabulary lock-in
 # ─────────────────────────────────────────────────────────────────────
-def test_happy_path_locked_to_ten_stages():
+def test_happy_path_locked_to_eleven_stages():
+    """Iter-290h — 11 stages: RECEIPT_CREATED replaced with
+    INVOICE_PAYMENT_CREATED. The legacy RECEIPT_CREATED stage stays
+    as a back-compat token (in ALL_STAGES) but is NOT part of the
+    active happy path."""
     assert HAPPY_PATH == (
         "NEW", "RECEIVED", "VALIDATED", "NORMALIZED", "RULES_APPLIED",
         "CUSTOMER_RESOLVED", "PRODUCT_RESOLVED",
-        "INVOICE_CREATED", "RECEIPT_CREATED", "COMPLETED",
+        "INVOICE_CREATED", "INVOICE_PAYMENT_CREATED", "COMPLETED",
     )
+    # RECEIPT_CREATED still exists in the vocabulary for legacy rows
+    # but is NOT in the happy path.
+    assert "RECEIPT_CREATED" in ALL_STAGES
+    assert "RECEIPT_CREATED" not in HAPPY_PATH
 
 
 def test_failure_stages_match_user_spec():
-    # The user listed these failure tokens in the Pre-Day 3 + Day 3 briefs.
-    # FAILED_NORMALIZATION was added at Day 3 so the inbox can record
-    # a normalization-specific failure before falling into DEAD_LETTER.
-    # FAILED_ENRICHMENT was added on 2026-06-26 for the Legacy-Adapter
-    # `enrichment_fallback_enabled` toggle (Salla-API enricher path).
+    """Iter-290h — added PAYMENT_LINK_FAILED + PAYMENT_METHOD_MAPPING_MISSING.
+    FAILED_RECEIPT retained for back-compat with rows already failed
+    under the previous /receipts flow."""
     expected = {
         "FAILED_VALIDATION", "FAILED_NORMALIZATION", "FAILED_ENRICHMENT",
         "FAILED_CUSTOMER", "FAILED_PRODUCT",
         "FAILED_INVOICE", "FAILED_RECEIPT",
+        # Iter-290h new failure stages
+        "PAYMENT_LINK_FAILED", "PAYMENT_METHOD_MAPPING_MISSING",
         "DEAD_LETTER",
     }
     assert set(FAILURE_STAGES) == expected
