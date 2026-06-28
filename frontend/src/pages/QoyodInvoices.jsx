@@ -72,12 +72,20 @@ const STAGE_AR = {
   NEW: "جديد", RECEIVED: "تم الاستقبال", VALIDATED: "تم التحقق",
   NORMALIZED: "تم التطبيع", RULES_APPLIED: "بعد قواعد العمل",
   CUSTOMER_RESOLVED: "تم تجهيز العميل", PRODUCT_RESOLVED: "تم تجهيز المنتجات",
-  INVOICE_CREATED: "أُنشئت الفاتورة", RECEIPT_CREATED: "أُنشئ السند",
+  INVOICE_CREATED: "أُنشئت الفاتورة",
+  // Iter-290h.6 — new payment-link stage name. Kept RECEIPT_CREATED
+  // for legacy rows that completed under the old /receipts flow.
+  INVOICE_PAYMENT_CREATED: "تم ربط السداد بالفاتورة",
+  RECEIPT_CREATED: "أُنشئ السند (قديم)",
   COMPLETED: "اكتمل ✓",
   SKIPPED: "تم التخطّي", RETRYING: "إعادة المحاولة",
+  PARTIAL_FAILURE: "فشل جزئي",
   FAILED_VALIDATION: "فشل التحقق", FAILED_CUSTOMER: "فشل عند العميل",
   FAILED_PRODUCT: "فشل عند المنتج", FAILED_INVOICE: "فشل الفاتورة",
-  FAILED_RECEIPT: "فشل السند", DEAD_LETTER: "متروك (Dead Letter)",
+  FAILED_RECEIPT: "فشل السند",
+  PAYMENT_LINK_FAILED: "فشل ربط السداد",
+  PAYMENT_METHOD_MAPPING_MISSING: "طريقة الدفع غير مرتبطة",
+  DEAD_LETTER: "متروك (Dead Letter)",
 };
 
 // Manual Action placeholders — disabled until Day 4-5
@@ -409,7 +417,8 @@ function InvoicesTable({ invoices, loading, onOpen }) {
               <th className="px-3 py-2 text-right font-bold">الحالة</th>
               <th className="px-3 py-2 text-right font-bold">المرحلة</th>
               <th className="px-3 py-2 text-right font-bold">قيود — فاتورة</th>
-              <th className="px-3 py-2 text-right font-bold">قيود — سند</th>
+              <th className="px-3 py-2 text-right font-bold">قيود — سداد الفاتورة</th>
+              <th className="px-3 py-2 text-right font-bold">Legacy سند</th>
               <th className="px-3 py-2 text-right font-bold">المحاولات</th>
               <th className="px-3 py-2 text-right font-bold">آخر تحديث</th>
               <th className="px-3 py-2 text-right font-bold"></th>
@@ -427,8 +436,22 @@ function InvoicesTable({ invoices, loading, onOpen }) {
                 <td className="px-3 py-2 text-slate-700 text-[11px]">
                   {STAGE_AR[row.pipeline_stage] || row.pipeline_stage || "—"}
                 </td>
-                <td className="px-3 py-2 font-mono text-slate-600">{row.qoyod_invoice_number || "—"}</td>
-                <td className="px-3 py-2 font-mono text-slate-600">{row.qoyod_receipt_id || "—"}</td>
+                <td className="px-3 py-2 font-mono text-slate-600"
+                    data-testid={`invoice-cell-qoyod-invoice-${row.salla_order_id}`}>
+                  {row.qoyod_invoice_number || row.qoyod_invoice_id || "—"}
+                </td>
+                {/* Iter-290h.6 — new column. Empty for legacy rows
+                    that closed via the old /receipts flow. */}
+                <td className="px-3 py-2 font-mono text-emerald-700"
+                    data-testid={`invoice-cell-invoice-payment-${row.salla_order_id}`}>
+                  {row.qoyod_invoice_payment_id || "—"}
+                </td>
+                {/* Legacy Receipt column — only meaningful for rows
+                    completed before Iter-290h. Shows "—" otherwise. */}
+                <td className="px-3 py-2 font-mono text-slate-400"
+                    data-testid={`invoice-cell-legacy-receipt-${row.salla_order_id}`}>
+                  {row.qoyod_receipt_id || "—"}
+                </td>
                 <td className="px-3 py-2 tabular-nums">{row.attempts ?? 0}</td>
                 <td className="px-3 py-2 text-slate-500">{formatDate(row.updated_at)}</td>
                 <td className="px-3 py-2">
@@ -539,6 +562,61 @@ function TimelineDrawer({ open, item, onClose }) {
                   </dd>
                 </div>
               </dl>
+              {/* Iter-290h.6 — Qoyod identifiers row. Surfaces the
+                  invoice id + the NEW invoice-payment id so the
+                  operator can verify the payment-link landed without
+                  cross-referencing /invoice_payments manually. The
+                  legacy receipt id is shown ONLY for historical rows
+                  so it doesn't pollute the new flow's display. */}
+              <div className="mt-3 pt-3 border-t border-slate-200">
+                <h5 className="text-[12px] font-extrabold text-slate-700 mb-2">
+                  🆔 معرّفات قيود
+                </h5>
+                <dl className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[11px]">
+                  <div>
+                    <dt className="text-slate-500 font-bold">رقم فاتورة قيود</dt>
+                    <dd className="font-mono text-slate-800"
+                        data-testid="audit-qoyod-invoice-id">
+                      {item.invoice?.qoyod_invoice_id
+                        || item.invoice?.qoyod_invoice_number
+                        || item.inbox?.qoyod_invoice_id
+                        || "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500 font-bold">رقم سداد الفاتورة</dt>
+                    <dd className="font-mono text-emerald-700 font-extrabold"
+                        data-testid="audit-qoyod-invoice-payment-id">
+                      {item.invoice?.qoyod_invoice_payment_id
+                        || item.inbox?.qoyod_invoice_payment_id
+                        || "—"}
+                    </dd>
+                  </div>
+                  {(item.invoice?.qoyod_receipt_id
+                    || item.inbox?.qoyod_receipt_id) && (
+                    <div>
+                      <dt className="text-slate-500 font-bold">
+                        Legacy سند (قديم)
+                      </dt>
+                      <dd className="font-mono text-slate-400"
+                          data-testid="audit-qoyod-receipt-id">
+                        {item.invoice?.qoyod_receipt_id
+                          || item.inbox?.qoyod_receipt_id}
+                      </dd>
+                    </div>
+                  )}
+                  {(item.invoice?.qoyod_customer_id
+                    || item.inbox?.qoyod_customer_id) && (
+                    <div>
+                      <dt className="text-slate-500 font-bold">رقم العميل</dt>
+                      <dd className="font-mono text-slate-700">
+                        {item.invoice?.qoyod_customer_id
+                          || item.inbox?.qoyod_customer_id}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
             </section>
           )}
 
@@ -611,6 +689,90 @@ function TimelineDrawer({ open, item, onClose }) {
               </ol>
             )}
           </section>
+
+          {/* Iter-290h.6 — Qoyod payloads + responses panel.
+              Surfaces the EXACT bodies we POSTed to قيود (invoice
+              + invoice_payment) and what قيود returned. Without
+              this section the operator could only confirm that the
+              row reached COMPLETED — they had no way to verify the
+              `/invoice_payments` step actually ran from this drawer
+              (which is what the user reported missing for the
+              production order 269077005). */}
+          {(item.inbox?.qoyod_payloads || item.inbox?.qoyod_responses) && (
+            <section className="rounded-xl border border-slate-200 p-4 bg-white"
+                     data-testid="qoyod-bodies-section">
+              <h4 className="text-sm font-extrabold text-slate-700 mb-3">
+                📦 أجسام الطلبات والردود من قيود
+              </h4>
+              {/* Invoice POST body */}
+              {item.inbox?.qoyod_payloads?.invoice && (
+                <div className="mb-3">
+                  <div className="text-[11px] font-bold text-slate-600 mb-1">
+                    POST /invoices — جسم الطلب
+                  </div>
+                  <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-slate-900 text-slate-100 rounded p-2 max-h-72 overflow-auto"
+                       dir="ltr"
+                       data-testid="qoyod-invoice-payload">
+{JSON.stringify(item.inbox.qoyod_payloads.invoice, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {/* Invoice POST response */}
+              {item.inbox?.qoyod_responses?.invoice?.body && (
+                <div className="mb-3">
+                  <div className="text-[11px] font-bold text-slate-600 mb-1">
+                    POST /invoices — رد قيود
+                  </div>
+                  <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-slate-100 text-slate-900 rounded p-2 max-h-48 overflow-auto"
+                       dir="ltr"
+                       data-testid="qoyod-invoice-response">
+{JSON.stringify(item.inbox.qoyod_responses.invoice.body, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {/* Invoice Payment POST body — Iter-290h.6 */}
+              {item.inbox?.qoyod_payloads?.invoice_payment && (
+                <div className="mb-3"
+                     data-testid="qoyod-invoice-payment-payload-section">
+                  <div className="text-[11px] font-bold text-emerald-700 mb-1">
+                    💰 POST /invoice_payments — جسم الطلب
+                  </div>
+                  <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-emerald-950 text-emerald-100 rounded p-2 max-h-72 overflow-auto"
+                       dir="ltr"
+                       data-testid="qoyod-invoice-payment-payload">
+{JSON.stringify(item.inbox.qoyod_payloads.invoice_payment, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {/* Invoice Payment POST response — Iter-290h.6 */}
+              {item.inbox?.qoyod_responses?.invoice_payment?.body && (
+                <div>
+                  <div className="text-[11px] font-bold text-emerald-700 mb-1">
+                    📥 POST /invoice_payments — رد قيود
+                  </div>
+                  <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-slate-100 text-slate-900 rounded p-2 max-h-48 overflow-auto"
+                       dir="ltr"
+                       data-testid="qoyod-invoice-payment-response">
+{JSON.stringify(item.inbox.qoyod_responses.invoice_payment.body, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {/* Surface the LIVE error if قيود rejected the payment
+                  link — operator should see exactly why. */}
+              {item.inbox?.qoyod_responses?.invoice_payment?.error && (
+                <div className="mt-2">
+                  <div className="text-[11px] font-bold text-rose-700 mb-1">
+                    ⚠️ POST /invoice_payments — خطأ من قيود
+                  </div>
+                  <pre className="text-[11px] font-mono whitespace-pre-wrap break-all bg-rose-50 text-rose-900 rounded p-2 max-h-48 overflow-auto"
+                       dir="ltr"
+                       data-testid="qoyod-invoice-payment-error">
+{JSON.stringify(item.inbox.qoyod_responses.invoice_payment.error, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </section>
+          )}
 
           {/* Raw record */}
           {item.invoice && (
@@ -691,11 +853,23 @@ export default function QoyodInvoices() {
       const { data } = await axios.get(
         `${API}/integrations/qoyod/invoices/${encodeURIComponent(row.salla_order_id)}`
       );
+      // Iter-290h.6 — prefer inbox.stage_history (where the pipeline
+      // actually writes its timeline). The previous code defaulted
+      // to `data.invoice?.stage_history || []`, which is ALWAYS an
+      // empty array for the qoyod_invoices collection, and `[]` is
+      // truthy in JS so it shadowed the real inbox history in the
+      // drawer's resolver. User report: production order 269077005
+      // showed "لا يوجد سجل تحوّلات" despite completing fully.
+      const inboxHistory   = data.inbox?.stage_history;
+      const invoiceHistory = data.invoice?.stage_history;
+      const history = (inboxHistory && inboxHistory.length)
+                        ? inboxHistory
+                        : (invoiceHistory || []);
       setSelected({
         salla_order_id: row.salla_order_id,
         invoice: data.invoice,
         inbox:   data.inbox,
-        stage_history: data.invoice?.stage_history || [],
+        stage_history: history,
       });
     } catch (e) {
       // No detail row yet (orphan path) — open a minimal placeholder.

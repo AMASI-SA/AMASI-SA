@@ -571,11 +571,33 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             raise HTTPException(404, "invoice_not_found")
         # Also pull the matching inbox row's history so the Timeline UI
         # shows the full pipeline (inbox-side + invoice-side merged).
+        # Iter-290h.6 — the projection now ALSO carries the قيود
+        # payloads/responses + the new `qoyod_invoice_payment_id` so
+        # the operator can verify, from this drawer alone, that the
+        # `POST /invoice_payments` step ran and what قيود returned.
         inbox = await db.integration_inbox.find_one(
             {"user_id": tenant, "salla_order_id": order_id},
-            {"_id": 0, "stage_history": 1, "pipeline_stage": 1,
-             "pipeline_error": 1, "attempts": 1, "trace_id": 1,
-             "received_at": 1, "connector_key": 1},
+            {"_id": 0,
+             "stage_history": 1, "pipeline_stage": 1, "pipeline_error": 1,
+             "pipeline_outcome": 1, "pipeline_started_at": 1,
+             "pipeline_finished_at": 1, "pipeline_duration_ms": 1,
+             "last_success_stage": 1, "last_failed_stage": 1,
+             "attempts": 1, "trace_id": 1, "received_at": 1,
+             "connector_key": 1,
+             # Iter-290h.6 additions ↓
+             "qoyod_invoice_id": 1,
+             "qoyod_invoice_payment_id": 1,
+             "qoyod_customer_id": 1,
+             "qoyod_receipt_id": 1,
+             "qoyod_payloads.invoice": 1,
+             "qoyod_payloads.invoice_payment": 1,
+             "qoyod_responses.invoice.body": 1,
+             "qoyod_responses.invoice.qoyod_id": 1,
+             "qoyod_responses.invoice_payment.body": 1,
+             "qoyod_responses.invoice_payment.qoyod_id": 1,
+             "qoyod_responses.invoice_payment.error": 1,
+             "qoyod_responses.invoice.error": 1,
+            },
             sort=[("received_at", -1)],
         )
         return {"ok": True, "invoice": row, "inbox": inbox}
