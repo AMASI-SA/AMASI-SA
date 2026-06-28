@@ -164,14 +164,43 @@ async def _quarantine_dry_mappings(
     Dry-Run leak so the pipeline re-resolves the customer cleanly
     on the next pass.
 
-    Returns the audit summary (counts + the actual ids quarantined).
+    Iter-290g — Diagnostic accuracy
+    ───────────────────────────────
+    The summary now distinguishes TWO classes of mapping skip so the
+    operator never sees a real Qoyod id falsely labelled "quarantined":
+
+      • `dry_id_quarantined`         — pid/cid starts with "DRY:" (a
+                                       genuine dry-run fake id we just
+                                       quarantined this pass).
+      • `dry_run_only_flag_carried`  — pid/cid is a REAL Qoyod id, but
+                                       the mapping carries a legacy
+                                       `dry_run_only=True` flag from a
+                                       previous run. The pipeline will
+                                       re-resolve via SKU search and
+                                       (typically) auto-adopt this
+                                       same real id. Surfaced for
+                                       transparency, NOT as a problem.
+
+    The old top-level `product_mappings_quarantined` key is preserved
+    for back-compat with existing dashboards but now contains ONLY the
+    DRY-id entries (no longer pollutes with real ids).
+
+    Returns the audit summary (counts + the actual ids per bucket).
     """
     summary: dict[str, Any] = {
-        "customer_mapping_quarantined": False,
-        "customer_quarantined_id":      None,
-        "row_customer_id_cleared":      False,
-        "product_mappings_quarantined": [],
-        "scanned_sku_count":            0,
+        # ── Customer ──
+        "customer_mapping_quarantined":   False,
+        "customer_quarantined_id":        None,
+        "customer_dry_run_only_carried":  False,    # Iter-290g
+        "customer_carried_real_id":       None,     # Iter-290g
+        "row_customer_id_cleared":        False,
+        # ── Products ──
+        # Back-compat key — DRY-id quarantines ONLY (Iter-290g change).
+        "product_mappings_quarantined":   [],
+        # New buckets — explicit + non-confusing labels.
+        "dry_id_quarantined":             [],       # Iter-290g
+        "dry_run_only_flag_carried":      [],       # Iter-290g
+        "scanned_sku_count":              0,
     }
     canonical = row.get("canonical_payload") or {}
 
@@ -188,11 +217,13 @@ async def _quarantine_dry_mappings(
     for lk in lookup_keys:
         m = await db.qoyod_customers_mapping.find_one(
             {"user_id": user_id, "lookup_key": lk},
-            {"_id": 0, "qoyod_customer_id": 1})
+            {"_id": 0, "qoyod_customer_id": 1, "dry_run_only": 1})
         if not m:
             continue
         cid = m.get("qoyod_customer_id") or ""
-        if str(cid).startswith("DRY:"):
+        cid_is_dry = str(cid).startswith("DRY:")
+        cid_flagged = bool(m.get("dry_run_only"))
+        if cid_is_dry:
             await db.qoyod_customers_mapping.update_one(
                 {"user_id": user_id, "lookup_key": lk},
                 {"$set": {"dry_run_only":       True,
@@ -202,6 +233,12 @@ async def _quarantine_dry_mappings(
             )
             summary["customer_mapping_quarantined"] = True
             summary["customer_quarantined_id"] = cid
+            break
+        if cid_flagged:
+            # Iter-290g — real id, just a stale flag. No write needed;
+            # surface it for transparency.
+            summary["customer_dry_run_only_carried"] = True
+            summary["customer_carried_real_id"] = cid
             break
 
     # Also clear the row's own qoyod_customer_id if it's a DRY leak —
@@ -230,7 +267,9 @@ async def _quarantine_dry_mappings(
         if not m:
             continue
         pid = m.get("qoyod_product_id") or ""
-        if str(pid).startswith("DRY:") or m.get("dry_run_only"):
+        pid_is_dry = str(pid).startswith("DRY:")
+        pid_flagged = bool(m.get("dry_run_only"))
+        if pid_is_dry:
             await db.qoyod_products_mapping.update_one(
                 {"user_id": user_id, "sku": sku},
                 {"$set": {"dry_run_only":       True,
@@ -238,8 +277,16 @@ async def _quarantine_dry_mappings(
                           "quarantine_reason":  "one_shot_reprocess",
                           "quarantined_id":     pid}},
             )
-            summary["product_mappings_quarantined"].append(
-                {"sku": sku, "quarantined_id": pid})
+            entry = {"sku": sku, "quarantined_id": pid}
+            summary["dry_id_quarantined"].append(entry)
+            summary["product_mappings_quarantined"].append(entry)
+        elif pid_flagged:
+            # Iter-290g — real Qoyod id (e.g. pid=21 for AMS10002),
+            # legacy `dry_run_only=True` flag carried forward. Listed
+            # in a separate bucket so the operator-facing diagnostic
+            # never calls a real id "quarantined".
+            summary["dry_run_only_flag_carried"].append(
+                {"sku": sku, "qoyod_product_id": pid})
 
     return summary
 

@@ -388,8 +388,15 @@ def build_invoice_payload(
         "status":         "Approved",
         "currency_code":  dto_dict.get("currency") or "SAR",
         "line_items":     lines,
+        # Iter-290g — operator-facing audit string. Carries:
+        #   • pricing_mode  → the actual invoice math policy in effect
+        #                     (Iter-290e renamed from tax_mode which now
+        #                     just routes customer-create logic).
+        #   • tax_mode      → legacy customer-creation routing tag, kept
+        #                     for backward-compatibility filtering in
+        #                     existing dashboards/reports.
         "notes":          f"Mezan · Salla order {dto_dict.get('order_id')} · "
-                          f"tax_mode={tax_mode}",
+                          f"pricing_mode={policy} · tax_mode={tax_mode}",
         # Provenance — operator can find the source order from Qoyod.
         "external_reference": dto_dict.get("order_id"),
     }
