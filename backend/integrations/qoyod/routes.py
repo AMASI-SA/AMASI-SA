@@ -1386,6 +1386,40 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             db, user_id=tenant, qoyod_receipt_id=str(receipt_id),
         )
 
+    class _RetryPaymentBody(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        salla_order_number: str = Field(..., min_length=1, max_length=64)
+        confirm_token:      str = Field(..., min_length=1, max_length=128)
+
+    @router.post("/admin/retry-payment-only")
+    async def admin_retry_payment_only(
+        body: _RetryPaymentBody, user=Depends(current_user),
+    ):
+        """Iter-290h.5 — Surgical retry of `POST /invoice_payments`
+        for an existing قيود invoice. Touches NOTHING else (no
+        customer/products/invoice/receipt creation, no full pipeline
+        re-run). Carries a structured diagnostic block — including
+        the LIVE قيود verdict, not a stale one from a previous run.
+
+        Confirmation token: `RETRY-PAYMENT-<salla_order_number>`.
+        """
+        from integrations.qoyod.retry_payment_only import (
+            retry_payment_only, RetryPaymentRefused,
+        )
+        tenant = _tenant_id(user)
+        actor = (getattr(user, "email", None)
+                 or getattr(user, "id", None) or "operator")
+        try:
+            return await retry_payment_only(
+                db,
+                user_id=tenant,
+                salla_order_number=body.salla_order_number,
+                confirm_token=body.confirm_token,
+                actor=str(actor),
+            )
+        except RetryPaymentRefused as exc:
+            return exc.to_dict()
+
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
     # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the
     # tenant's actual status catalogue from Salla so custom statuses
