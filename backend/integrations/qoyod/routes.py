@@ -150,6 +150,8 @@ class SettingsPatch(BaseModel):
     # Iter-290e — Qoyod 15% Match Salla Total policy
     invoice_total_policy:          Optional[str] = None      # "match_salla_total" | "legacy_passthrough"
     qoyod_tax_percent:             Optional[float] = None    # default 15
+    # Iter-290f — Shipping product id (Qoyod requires product_id on every line).
+    default_shipping_product_id:   Optional[str] = None
 
 
 class CredentialsRequest(BaseModel):

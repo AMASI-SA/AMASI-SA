@@ -1,6 +1,49 @@
 # PRD — MEZAN E-commerce Accounting App
 
-## Iter-290e — Qoyod 15% Match Salla Total (P0 Go-Live blocker) (2026-02-28)
+## Iter-290f — Shipping line + preflight reconciliation skip (2026-02-28)
+**User scenario**: After Iter-290e shipped, production order `268860160` (Salla=131.92 = items 106.92 + shipping 25.00) was rejected at preflight:
+```
+estimated_invoice_total=130.07 would NOT match receipt_amount=131.92
+(diff=-1.85 SAR, tolerance=0.66)
+```
+Two compounding bugs:
+1. The **old** Iter-285 `invoice_receipt_reconciliation` preflight estimator didn't account for `shipping_amount` and would false-positive on any shipped order.
+2. The **new** Iter-290e payload builder didn't add a shipping line — so even if preflight passed, the Qoyod invoice would still come up short by ~25 SAR.
+
+### Fixes
+**`preflight.py`**
+- Skip the legacy Iter-285 reconciliation check when `invoice_total_policy == "match_salla_total"` (Iter-290e has its own shipping-aware guard).
+- New check #6.6 — `missing_default_shipping_product_id` fires when `shipping_amount > 0` AND the setting is blank.
+
+**`invoice_builder.py`**
+- When `shipping_amount > 0` AND policy is `match_salla_total`:
+  - Append a shipping line bound to `settings.default_shipping_product_id`.
+  - Compute `shipping_target_gross = total_amount − sum(item.total)`.
+  - Apply the same match_salla_total math: `discount = shipping_amount − target_gross/1.15`.
+  - Same negative-discount fallback as product lines.
+
+**`SettingsPatch` (`routes.py`)**: new field `default_shipping_product_id`.
+
+### Tests
+- New `test_qoyod_shipping_line_iter290f.py` — 6 tests including the exact production order numbers and edge cases.
+- **815/815 Qoyod pytest passes**, lint clean.
+
+### Operator workflow (post-redeploy)
+1. **In Qoyod UI**: create a single product called "شحن - ميزان" (or any name), set it as Service / non-stock, get its id.
+2. **In Mezan Settings** (currently via API; UI in Iter-295): PUT `default_shipping_product_id = <id>`.
+3. Redeploy preview → production.
+4. Run `one-shot-reprocess` for `268860160` → expected:
+   - 3 invoice lines (2 products + 1 shipping)
+   - Qoyod invoice total = 131.92 (matches Salla)
+   - INVOICE_CREATED ✅ → RECEIPT_CREATED ✅ → balance = 0
+
+### Quick API call to set the setting before UI lands
+```
+PUT /api/integrations/qoyod/settings
+{ "default_shipping_product_id": "<Qoyod product id>" }
+```
+
+## Iter-290e — Qoyod 15% Match Salla Total (2026-02-28)
 **Business requirement**: Qoyod's standard `tax_percent=15` (Saudi VAT) ≠ Salla's effective per-line tax (~8% empirically on test orders). Iter-290c shipped a working invoice but the totals inflated:
 ```
 268756329:  Salla 290.63  vs  Qoyod 309.47   (Δ +18.84 SAR)

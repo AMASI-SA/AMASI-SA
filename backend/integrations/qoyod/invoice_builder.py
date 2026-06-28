@@ -326,6 +326,57 @@ def build_invoice_payload(
             "fallback_used": shape["_pricing_fallback"],
         })
 
+    # ── Iter-290f — shipping as an additional invoice line ──────────
+    # Salla emits shipping at the order level (`shipping_amount`). When
+    # present, Qoyod won't know about it unless we add it as a line.
+    # We use the same match_salla_total math so the total still lands
+    # on Salla's `total_amount`.
+    shipping_amount = round(_f(dto_dict.get("shipping_amount")), 2)
+    if shipping_amount > 0 and policy == "match_salla_total":
+        # Operator must configure a shipping product in Qoyod and bind
+        # its id here. Without it we cannot add a Qoyod-valid line.
+        shipping_product_id = _to_int_or_none(
+            settings.get("default_shipping_product_id"))
+        # Derive the customer-paid shipping (incl Salla's effective tax).
+        # Salla's `total_amount` = sum(items.total) + shipping_paid.
+        items_total_sum = sum(_f(it.get("total"))
+                              for it in dto_dict.get("items", []))
+        shipping_target_gross = round(
+            _f(dto_dict.get("total_amount")) - items_total_sum, 2)
+        if shipping_target_gross > 0 and shipping_product_id is not None:
+            shipping_target_net = round(shipping_target_gross / tax_factor, 4)
+            shipping_unit_price = round(shipping_amount, 4)
+            shipping_discount = round(shipping_unit_price - shipping_target_net, 4)
+            shipping_fallback = False
+            if shipping_discount < 0:
+                shipping_unit_price = shipping_target_net
+                shipping_discount = 0.0
+                shipping_fallback = True
+            lines.append({
+                "product_id":    shipping_product_id,
+                "description":   "شحن (Shipping)",
+                "quantity":      1,
+                "unit_price":    shipping_unit_price,
+                "discount":      shipping_discount,
+                "discount_type": "amount",
+                "tax_percent":   tax_percent,
+            })
+            line_diagnostics.append({
+                "sku":         "_SHIPPING_",
+                "salla_total": shipping_target_gross,
+                "computed_qoyod_gross": round(
+                    (shipping_unit_price - shipping_discount) * tax_factor, 2),
+                "fallback_used": shipping_fallback,
+            })
+        elif shipping_target_gross > 0 and shipping_product_id is None:
+            # Surface in diagnostics so the pre-POST guard catches it.
+            line_diagnostics.append({
+                "sku":         "_SHIPPING_MISSING_PRODUCT_ID_",
+                "salla_total": shipping_target_gross,
+                "computed_qoyod_gross": 0.0,
+                "fallback_used": False,
+            })
+
     invoice: dict = {
         "contact_id":     _to_int_or_none(qoyod_customer_id),
         "issue_date":     invoice_date.date().isoformat() if invoice_date else None,

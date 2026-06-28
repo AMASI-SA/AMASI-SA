@@ -131,11 +131,32 @@ def run(
                        "وانسخ id الخاص به إلى الإعدادات.",
         })
 
+    # 6.6) Iter-290f — Shipping product id required when shipping > 0.
+    # Qoyod /invoices requires product_id on every line. Salla emits
+    # shipping at the order level; we add it as a line, but it needs
+    # a real Qoyod product to bind to (or Qoyod rejects the line).
+    try:
+        _ship = float(dto_dict.get("shipping_amount") or 0.0)
+    except (TypeError, ValueError):
+        _ship = 0.0
+    if _ship > 0:
+        if not (str(settings.get("default_shipping_product_id") or "")).strip():
+            failures.append({
+                "check": "shipping_product_id",
+                "code":  "missing_default_shipping_product_id",
+                "message": (
+                    "هذا الطلب يحتوي شحن (shipping_amount > 0) لكن إعداد "
+                    "default_shipping_product_id فارغ. أنشئ منتجاً واحداً "
+                    "في قيود اسمه 'شحن - ميزان' وانسخ id الخاص به للإعدادات."),
+            })
+
     # 7) Iter-285 — Invoice ↔ Receipt reconciliation (customer_first mode).
-    # In customer_first mode the invoice total Qoyod will compute MUST
-    # equal `canonical.total_amount` (= receipt amount). If it diverges,
-    # the books would carry a phantom delta; block before any POST.
-    if tax_mode == "customer_first":
+    # Iter-290e — SKIP this check when `invoice_total_policy == match_salla_total`
+    # is active: that policy has its own pre-POST math guard in pipeline.py
+    # which is shipping-aware. The old customer_first estimator predates
+    # shipping support and would false-positive on any order with shipping.
+    policy = (settings.get("invoice_total_policy") or "match_salla_total").lower()
+    if tax_mode == "customer_first" and policy != "match_salla_total":
         from integrations.qoyod.invoice_builder import (
             estimated_invoice_total,
         )
