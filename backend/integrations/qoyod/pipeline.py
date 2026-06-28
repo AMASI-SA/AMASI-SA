@@ -598,6 +598,7 @@ async def process_customer_resolved_row(
 
     receipt_payload = build_receipt_payload(
         qoyod_invoice_id=qoyod_invoice_id,
+        qoyod_customer_id=qoyod_customer_id,
         dto_dict=canonical, invoice_date=inv_date, settings=settings)
     await db.integration_inbox.update_one(
         {"id": row["id"]},

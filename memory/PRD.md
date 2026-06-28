@@ -1,5 +1,32 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290d — Qoyod /receipts requires `contact_id` at root (2026-02-28)
+**User scenario**: After Iter-290c reshaped the invoice payload, production order `268756329` finally reached **INVOICE_CREATED ✅** (Qoyod returned invoice id `51`). However the immediately-next stage failed with:
+```
+POST /receipts → 422
+{"error": "Invalid resource", "messages": {"contact": ["Can't be blank"]}}
+```
+The Mezan receipt builder never stamped `contact_id` — Qoyod's `/receipts` validator requires it just like `/invoices` does.
+
+### Fix (`/app/backend/integrations/qoyod/invoice_builder.py::build_receipt_payload`)
+- New parameter `qoyod_customer_id: Optional[str]` (passed through from row state).
+- Receipt payload now stamps `contact_id` at the receipt root, coerced to int via `_to_int_or_none`.
+- `invoice_id` and `account_id` also int-coerced (consistent with Iter-290c).
+
+### Callers updated
+- `pipeline.py` line 599 — passes `row["qoyod_customer_id"]`.
+- `preview_reprocess.py` line 375 — same.
+
+### Tests
+- New `tests/test_qoyod_receipt_contact_id_iter290d.py` (5 tests): contact_id at root, all-ids-int, missing customer omission, amount/currency preservation, account_id omission when no mapping.
+- Updated `tests/test_qoyod_day5_invoice_receipt.py::test_receipt_payload_resolves_payment_account` — numeric ids, asserts new contact_id presence.
+- Updated `_seed_settings` payment_method_mapping to use numeric account ids.
+- **789/789 Qoyod pytest passes**. Lint clean. (4 pre-existing `qyd_go` failures still unrelated.)
+
+### Deploy
+- Fix lives in preview. **Production redeploy required**.
+- After redeploy: rerun `one-shot-reprocess` for `268756329` → expect `RECEIPT_CREATED` ✅ → **first complete end-to-end Qoyod invoice + receipt!** 🎉
+
 ## Iter-290c — Full Qoyod-canonical invoice payload reshape (2026-02-28)
 **User scenario**: After Iter-290b coerced `inventory_id` to int, production order `268756329` STILL failed with the same Qoyod error even though the JSON visibly carried `inventory_id: 1` on every line. The user located the official Qoyod API docs example and confirmed the payload SHAPE is wrong, not just the value types.
 

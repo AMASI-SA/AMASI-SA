@@ -280,24 +280,31 @@ def build_invoice_payload(
 
 
 def build_receipt_payload(
-    *, qoyod_invoice_id: str, dto_dict: dict,
+    *, qoyod_invoice_id: str, qoyod_customer_id: Optional[str] = None,
+    dto_dict: dict,
     invoice_date, settings: dict,
 ) -> dict:
-    """Build the Qoyod `POST /receipts` body."""
+    """Build the Qoyod `POST /receipts` body.
+
+    Iter-290d — Qoyod's `/receipts` validator requires `contact_id`
+    on the receipt root (otherwise: 422 `{'contact': ["Can't be blank"]}`).
+    Mirror Iter-290c's id-coercion rules: every Qoyod id is sent as
+    an integer.
+    """
     pm_native = dto_dict.get("payment_method") or dto_dict.get("payment_method_native")
     account_id = _resolve_payment_account(settings, pm_native)
-    return {
-        "receipt": {
-            "invoice_id":   qoyod_invoice_id,
-            "date":         invoice_date.date().isoformat() if invoice_date else None,
-            "amount":       dto_dict.get("total_amount"),
-            "currency":     dto_dict.get("currency") or "SAR",
-            "account_id":   account_id,
-            "payment_method": pm_native,
-            "notes":        f"Mezan · Salla order {dto_dict.get('order_id')}",
-            "external_reference": dto_dict.get("order_id"),
-        }
+    receipt: dict = {
+        "invoice_id":   _to_int_or_none(qoyod_invoice_id),
+        "contact_id":   _to_int_or_none(qoyod_customer_id),
+        "date":         invoice_date.date().isoformat() if invoice_date else None,
+        "amount":       dto_dict.get("total_amount"),
+        "currency":     dto_dict.get("currency") or "SAR",
+        "account_id":   _to_int_or_none(account_id),
+        "payment_method": pm_native,
+        "notes":        f"Mezan · Salla order {dto_dict.get('order_id')}",
+        "external_reference": dto_dict.get("order_id"),
     }
+    return {"receipt": receipt}
 
 
 # ─────────────────────────────────────────────────────────────────────

@@ -92,7 +92,7 @@ def _base_payload():
             "tax_mode": "mezan_fixed_15",
             "default_inventory_id": "INV-1",
             "payment_method_mapping": [
-                {"salla_method": "mada", "qoyod_account_id": "ACC-9"}],
+                {"salla_method": "mada", "qoyod_account_id": "9"}],
         },
         "qoyod_customer_id": "1",
         "product_resolutions": [{"sku": "SKU-1", "qoyod_product_id": "1"}],
@@ -171,14 +171,17 @@ def test_invoice_payload_includes_all_required_fields():
 
 
 def test_receipt_payload_resolves_payment_account():
+    """Iter-290d — receipt also has Qoyod ids coerced to int + contact_id at root."""
     dto = _make_dto("RCP-1")
     pl = build_receipt_payload(
-        qoyod_invoice_id="INV-Q-1", dto_dict=dto.model_dump(mode="json"),
+        qoyod_invoice_id="51", qoyod_customer_id="109",
+        dto_dict=dto.model_dump(mode="json"),
         invoice_date=dto.completed_at,
         settings={"payment_method_mapping":[
-            {"salla_method":"mada","qoyod_account_id":"ACC-77"}]})
-    assert pl["receipt"]["account_id"] == "ACC-77"
-    assert pl["receipt"]["invoice_id"] == "INV-Q-1"
+            {"salla_method":"mada","qoyod_account_id":"77"}]})
+    assert pl["receipt"]["account_id"] == 77
+    assert pl["receipt"]["invoice_id"] == 51
+    assert pl["receipt"]["contact_id"] == 109
     assert pl["receipt"]["amount"] == 115.0
 
 
@@ -247,7 +250,7 @@ async def _seed_settings(db, user_id, **overrides):
         # Iter-290 — Qoyod-required warehouse id on invoice lines.
         "default_inventory_id":         "INV-1",
         "payment_method_mapping": [{"salla_method":"mada",
-                                    "qoyod_account_id":"ACC-9"}],
+                                    "qoyod_account_id":"9"}],
         "capabilities": {"create_customers": True, "create_products": True,
                          "create_invoices":  True, "create_receipts":  True},
     }
@@ -272,7 +275,7 @@ async def test_pipeline_dry_run_completes_without_qoyod_post(db):
         assert updated["pipeline_stage"] == "COMPLETED"
         # Payload snapshots are present.
         assert updated["qoyod_payloads"]["invoice"]["invoice"]["contact_id"] == 1
-        assert updated["qoyod_payloads"]["receipt"]["receipt"]["account_id"] == "ACC-9"
+        assert updated["qoyod_payloads"]["receipt"]["receipt"]["account_id"] == 9
         # qoyod_invoices ledger row exists but status is pending (dry-run).
         led = await db.qoyod_invoices.find_one({"salla_order_id": order_id})
         assert led["status"] == "pending"

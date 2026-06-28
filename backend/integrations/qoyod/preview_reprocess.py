@@ -374,6 +374,7 @@ async def preview_reprocess_one_order(
     try:
         receipt_payload = build_receipt_payload(
             qoyod_invoice_id=fake_invoice_id,
+            qoyod_customer_id=row.get("qoyod_customer_id"),
             dto_dict=canonical,
             invoice_date=(getattr(rules, "invoice_date", None) if rules else None)
                          or dto.completed_at
