@@ -356,6 +356,18 @@ class QoyodAPIClient:
         return await self._request(
             "GET", "/invoices", params={"page": page, "limit": limit})
 
+    async def get_invoice(self, invoice_id: str) -> Any:
+        """GET /invoices/{id} — fetch a single invoice as قيود sees it.
+
+        Iter-290h.7 — Used by the payment-method-field probe to diff
+        the structure of an empty-payment-method invoice against a
+        reference invoice that DOES show the payment method, so we
+        can identify the canonical wire field name (if any) without
+        guessing. Strictly READ-ONLY.
+        """
+        return await self._request(
+            "GET", f"/invoices/{invoice_id}")
+
     async def list_receipts(self, *, page: int = 1, limit: int = 50) -> Any:
         """GET /receipts — paginated. Used by Fresh-Start Audit ONLY."""
         return await self._request(

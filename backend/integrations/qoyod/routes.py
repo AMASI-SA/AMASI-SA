@@ -1442,6 +1442,34 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         except RetryPaymentRefused as exc:
             return exc.to_dict()
 
+    # ── Iter-290h.7 — Payment-method field probe (read-only) ────────
+    class _PaymentMethodProbeBody(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        empty_payment_method_invoice_id:   str = Field(
+            ..., min_length=1, max_length=64)
+        reference_invoice_id_with_payment: str = Field(
+            ..., min_length=1, max_length=64)
+
+    @router.post("/admin/payment-method-field-probe")
+    async def admin_payment_method_field_probe(
+        body: _PaymentMethodProbeBody, user=Depends(current_user),
+    ):
+        """Iter-290h.7 — Strictly READ-ONLY diagnostic. Calls
+        `GET /invoices/{id}` on two قيود invoices (one with empty
+        payment method, one with a populated payment method) and
+        returns a structured comparison so the operator can identify
+        the canonical wire field. NO writes against قيود.
+        """
+        from integrations.qoyod.payment_method_field_probe import (
+            probe_payment_method_field,
+        )
+        tenant = _tenant_id(user)
+        return await probe_payment_method_field(
+            db, user_id=tenant,
+            empty_payment_method_invoice_id=body.empty_payment_method_invoice_id,
+            reference_invoice_id_with_payment=body.reference_invoice_id_with_payment,
+        )
+
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
     # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the
     # tenant's actual status catalogue from Salla so custom statuses
