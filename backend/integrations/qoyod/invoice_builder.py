@@ -478,15 +478,26 @@ def build_invoice_payment_payload(
     guard (per user spec — `order_id + invoice_id + payment_method
     + amount`).
 
-    Payload shape (per Qoyod apidoc Invoice Payments resource):
+    Payload shape (per LIVE Qoyod 2026-02-28 — order 269048975
+    confirmed against the 422 response from /invoice_payments):
         {"invoice_payment": {
-            "invoice_id":        <int>,
-            "amount":            <decimal>,
-            "payment_date":      "YYYY-MM-DD",
-            "payment_method_id": <int>,
-            "reference":         "<order #>",
-            "description":       "Mezan · Salla order <id>"
+            "invoice_id":   <int>,
+            "amount":       <decimal>,
+            "date":         "YYYY-MM-DD",
+            "account":      <int>,        # Qoyod account/method id
+            "reference":    "<order #>",
+            "description":  "Mezan · Salla order <id>"
         }}
+
+    NOTE on field names — Iter-290h.3
+    ──────────────────────────────────
+    Earlier Iter-290h used `payment_date` + `payment_method_id` based
+    on a third-party API summary; Qoyod actually rejects those with
+    `{"date":["Can't be blank"],"account":["Can't be blank"]}` while
+    happily POSTing the invoice itself. The canonical field names in
+    /invoice_payments are `date` and `account`. The internal
+    fingerprint (`payment_method` + `payment_method_id`) keeps the
+    logical names so historical DB rows still match for idempotency.
 
     The `payment_method_id` is resolved from the existing
     `settings.payment_method_accounts` mapping (operator-configured per
@@ -512,8 +523,20 @@ def build_invoice_payment_payload(
     body = {
         "invoice_id":         invoice_id_int,
         "amount":             amount,
-        "payment_date":       payment_date_iso,
-        "payment_method_id":  _to_int_or_none(method_id),
+        # Iter-290h.3 — Live Qoyod evidence (order 269048975, invoice
+        # 63, 2026-02-28) proved the canonical field names are `date`
+        # + `account` — NOT `payment_date` + `payment_method_id` as
+        # the original Iter-290h drew from a third-party API summary.
+        # Sending the wrong names returned:
+        #     {"error":"Invalid resource",
+        #      "messages":{"date":["Can't be blank"],
+        #                  "account":["Can't be blank"]}}
+        # The invoice was created successfully but stayed Approved /
+        # unpaid because the linkage never landed. Confirmed against
+        # production by reading the Qoyod 422 response on
+        # /invoice_payments.
+        "date":               payment_date_iso,
+        "account":            _to_int_or_none(method_id),
         "reference":          reference,
         "description":        f"Mezan · Salla order {dto_dict.get('order_id')}",
     }

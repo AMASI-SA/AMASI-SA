@@ -149,30 +149,35 @@ def test_build_invoice_payment_payload_shape():
     body = payload["invoice_payment"]
     assert body["invoice_id"]        == 55
     assert body["amount"]            == 134.0
-    assert body["payment_date"]      == "2026-02-28"
-    assert body["payment_method_id"] == 9
+    assert body["date"]              == "2026-02-28"
+    assert body["account"]           == 9
     assert body["reference"]         == "268784455"
+    # Iter-290h.3 — Sanity guard against the original wire-name bug.
+    assert "payment_date" not in body
+    assert "payment_method_id" not in body
     # Idempotency fingerprint per user spec —
     # `order_id + invoice_id + payment_method + amount`.
+    # The fingerprint uses INTERNAL logical names so historical DB
+    # rows still match after the wire-name fix.
     assert fp == {
-        "order_id":         "MZN-1",
-        "qoyod_invoice_id": 55,
-        "payment_method":   "mada",
+        "order_id":          "MZN-1",
+        "qoyod_invoice_id":  55,
+        "payment_method":    "mada",
         "payment_method_id": 9,
-        "amount":           134.0,
+        "amount":            134.0,
     }
 
 
 def test_build_invoice_payment_payload_returns_none_when_method_unmapped():
     """Pre-POST guard fodder: when settings don't map this method,
-    `payment_method_id` is None so the pipeline halts."""
+    `account` is None so the pipeline halts."""
     dto = {"order_id": "X", "total_amount": 50.0, "payment_method": "unknown"}
     settings = {"payment_method_mapping": []}
     payload, fp = build_invoice_payment_payload(
         qoyod_invoice_id=1, dto_dict=dto,
         invoice_date=datetime.now(timezone.utc), settings=settings,
     )
-    assert payload["invoice_payment"]["payment_method_id"] is None
+    assert payload["invoice_payment"]["account"] is None
     assert fp["payment_method_id"] is None
 
 

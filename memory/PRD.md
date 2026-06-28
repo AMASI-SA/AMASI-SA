@@ -1,5 +1,48 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290h.3 — Live Qoyod field-name correction `date` + `account` (2026-02-28)
+**Production failure**: Order 269048975 (Invoice 63, 131.92 SAR) — invoice created successfully, payment-link step rejected with:
+```
+{"error":"Invalid resource",
+ "messages":{"date":["Can't be blank"],"account":["Can't be blank"]}}
+```
+We were sending `payment_date` + `payment_method_id` based on a third-party API summary. **Live Qoyod evidence** confirms the canonical field names are `date` and `account`.
+
+### Backend fixes
+- **`invoice_builder.py`** — `build_invoice_payment_payload` now emits:
+  ```json
+  {"invoice_payment": {
+      "invoice_id": <int>, "amount": <decimal>,
+      "date": "YYYY-MM-DD", "account": <int>,
+      "reference": "<order#>", "description": "Mezan · Salla order …"
+  }}
+  ```
+- **`pipeline.py`** — Pre-POST guard now reads `account` (not `payment_method_id`).
+- **`api_client.py`** docstring updated with the live shape.
+- **Internal idempotency fingerprint** keeps logical names (`payment_method`, `payment_method_id`) so historical DB rows still match.
+
+### Monitor bug fix
+- **`first_sync_monitor.py`** — New `_status_for_invoice_payment_step` function. Previously, when a row sat in `PARTIAL_FAILURE` with `last_failed_stage=PAYMENT_LINK_FAILED` but no `qoyod_invoice_payment_id`, the monitor returned **"pending"** because it only recognized the legacy `RECEIPT_CREATED`/`FAILED_RECEIPT` tokens. Operator saw a failing call as "in progress". Now explicitly handles `PAYMENT_LINK_FAILED` + `PAYMENT_METHOD_MAPPING_MISSING` → **"failed"** status.
+
+### Tests (7 new, total 863 Qoyod pass)
+- `test_qoyod_invoice_payment_wire_names_iter290h3.py`:
+  - Payload uses `date` + `account`; explicit assertion that `payment_date` + `payment_method_id` are NOT present.
+  - `account` is `None` when method unmapped (pre-POST guard intact).
+  - Monitor surfaces `PAYMENT_LINK_FAILED` as `failed` (not `pending`).
+  - Monitor surfaces `PAYMENT_METHOD_MAPPING_MISSING` as `failed`.
+  - Pending state preserved for true in-progress rows.
+  - Legacy `RECEIPT_CREATED` rows still display as success (back-compat).
+
+### Operator retry instructions (invoice 63 ONLY)
+After deploy:
+1. Use the existing `one-shot-reprocess` endpoint with:
+   - `salla_order_number = "269048975"`
+   - `confirm_token = "REPROCESS-269048975"`
+2. The pipeline auto-skips /customers (already resolved), /products (mappings cached), and **reuses invoice 63** via the idempotent short-circuit. ONLY `POST /invoice_payments` is re-attempted with the corrected field names.
+3. No new invoice is created. No new standalone receipt is created.
+
+
+
 ## Iter-290h.1 — Unallocated Receipts Admin Page (2026-02-28)
 **Operator-facing companion** to Iter-290h. Surfaces PYT1–PYT8 (and any future orphan receipts) for manual reconciliation inside قيود UI.
 

@@ -276,15 +276,20 @@ async def test_pipeline_dry_run_completes_without_qoyod_post(db):
         # Payload snapshots are present.
         assert updated["qoyod_payloads"]["invoice"]["invoice"]["contact_id"] == 1
         # Iter-290h — invoice_payment replaces receipt. Snapshot must
-        # carry the canonical fields (amount + payment_method_id).
+        # carry the canonical fields (amount + account — Iter-290h.3
+        # confirmed Qoyod's actual field names from live evidence).
         # invoice_id is None in dry-run (the DRY:invoice:* id is
         # non-numeric so the int-coercion drops it — production runs
         # always have a numeric Qoyod id).
         ip_body = updated["qoyod_payloads"]["invoice_payment"]["invoice_payment"]
         assert "invoice_id" in ip_body
         assert ip_body["amount"] == 115.0
-        assert ip_body["payment_method_id"] == 9   # mapped from "mada"
+        assert ip_body["account"] == 9   # mapped from "mada"
+        assert ip_body["date"] is not None
         assert ip_body["description"].startswith("Mezan · Salla order")
+        # Iter-290h.3 — guard against the old wire-name bug.
+        assert "payment_date" not in ip_body
+        assert "payment_method_id" not in ip_body
         # qoyod_invoices ledger row exists but status is pending (dry-run).
         led = await db.qoyod_invoices.find_one({"salla_order_id": order_id})
         assert led["status"] == "pending"

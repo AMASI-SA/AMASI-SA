@@ -333,16 +333,16 @@ class QoyodAPIClient:
         that does NOT close the invoice balance — operators kept seeing
         "غير مستعمل" receipts in Qoyod).
 
-        Canonical body shape (per Qoyod apidoc — Invoice Payments
-        resource, confirmed against production 2026-02-28):
+        Canonical body shape (per LIVE Qoyod evidence 2026-02-28 —
+        order 269048975 confirmed):
 
             {"invoice_payment": {
-                "invoice_id":         <int>,
-                "amount":             <decimal>,
-                "payment_date":       "YYYY-MM-DD",
-                "payment_method_id":  <int>,   # Qoyod payment-method id
-                "reference":          "<order #>",
-                "description":        "<optional>"
+                "invoice_id":   <int>,
+                "amount":       <decimal>,
+                "date":         "YYYY-MM-DD",
+                "account":      <int>,        # Qoyod account id
+                "reference":    "<order #>",
+                "description":  "<optional>"
             }}
         """
         return await self._request(

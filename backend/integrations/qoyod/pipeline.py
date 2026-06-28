@@ -691,8 +691,8 @@ async def process_customer_resolved_row(
                   "qoyod_payloads.invoice_payment_snapshot_at": _now()}},
     )
 
-    # ── Pre-POST guard 1: payment_method_id mapping must be set ──────
-    if payment_payload["invoice_payment"].get("payment_method_id") is None:
+    # ── Pre-POST guard 1: payment account mapping must be set ──────
+    if payment_payload["invoice_payment"].get("account") is None:
         err = {
             "code":            "payment_method_mapping_missing",
             "failed_at_stage": "PAYMENT_METHOD_MAPPING_MISSING",

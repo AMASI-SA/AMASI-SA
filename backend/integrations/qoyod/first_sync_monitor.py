@@ -186,18 +186,7 @@ def shape_inbox_row_for_monitor(row: dict) -> dict:
                 or (timings.get("INVOICE_PAYMENT_CREATED") or {}).get("duration_ms")
                 or (timings.get("RECEIPT_CREATED") or {}).get("duration_ms")
             ),
-            "status": (
-                # Try the new flow first; fall back to legacy receipt
-                # stage when we're reading a historic row.
-                _status_for_stage("INVOICE_PAYMENT_CREATED", row,
-                                  "PAYMENT_LINK_FAILED")
-                if (row.get("qoyod_invoice_payment_id")
-                    or "INVOICE_PAYMENT_CREATED" in {
-                        h.get("to_stage") for h in
-                        (row.get("stage_history") or [])
-                    })
-                else _status_for_stage("RECEIPT_CREATED", row, "FAILED_RECEIPT")
-            ),
+            "status": _status_for_invoice_payment_step(row),
         },
     ]
 
@@ -231,6 +220,57 @@ def shape_inbox_row_for_monitor(row: dict) -> dict:
         "business_rules_decision": row.get("business_rules_decision"),
         "preflight":          row.get("preflight"),
     })
+
+
+def _status_for_invoice_payment_step(row: dict) -> str:
+    """Iter-290h.3 — Decide the operator-facing status for the 4d
+    payment-link step. This is more nuanced than the generic
+    `_status_for_stage` because:
+
+      • The step can fail under TWO failure stages (PAYMENT_LINK_FAILED
+        or PAYMENT_METHOD_MAPPING_MISSING).
+      • The success can be recorded under the NEW stage
+        `INVOICE_PAYMENT_CREATED` OR the legacy `RECEIPT_CREATED`
+        token (rows that completed before Iter-290h shipped).
+
+    Bug fixed here — previously, when a row sat in PARTIAL_FAILURE
+    after PAYMENT_LINK_FAILED but had no `qoyod_invoice_payment_id`,
+    the monitor fell through to the legacy `RECEIPT_CREATED` check
+    which returned "pending" instead of "failed". The operator saw
+    the step as still in progress while قيود was actually rejecting
+    the request. Now we explicitly recognise the new failure stages."""
+    last_failed = row.get("last_failed_stage") or ""
+    pipeline_stage = row.get("pipeline_stage") or ""
+
+    # NEW-FLOW failures take priority — they describe the step
+    # accurately even when the row landed in PARTIAL_FAILURE.
+    if last_failed in ("PAYMENT_LINK_FAILED",
+                       "PAYMENT_METHOD_MAPPING_MISSING"):
+        return "failed"
+    if pipeline_stage in ("PAYMENT_LINK_FAILED",
+                          "PAYMENT_METHOD_MAPPING_MISSING"):
+        return "failed"
+
+    # New-flow success path.
+    if row.get("qoyod_invoice_payment_id"):
+        return "success"
+    history_targets = {h.get("to_stage") for h in
+                       (row.get("stage_history") or [])}
+    if "INVOICE_PAYMENT_CREATED" in history_targets:
+        return "success"
+    if pipeline_stage == "COMPLETED":
+        return "success"
+
+    # Legacy /receipts path — historical rows only.
+    if last_failed == "FAILED_RECEIPT" or pipeline_stage == "FAILED_RECEIPT":
+        return "failed"
+    if "RECEIPT_CREATED" in history_targets or row.get("qoyod_receipt_id"):
+        return "success"
+
+    # Default: still in progress.
+    if pipeline_stage == "SKIPPED":
+        return "skipped"
+    return "pending"
 
 
 def _status_for_stage(stage: str, row: dict, fail_stage: str) -> str:
