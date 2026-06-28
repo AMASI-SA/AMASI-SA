@@ -117,6 +117,41 @@ def shape_inbox_row_for_monitor(row: dict) -> dict:
                 "reached_at": at, "duration_ms": int(dur * 1000)}
         last_at = at or last_at
 
+    # ── Build the invoice_payment step's response carefully ─────────
+    # Iter-290h.6 — When a row succeeded after a prior failed attempt,
+    # both `error` (stale from attempt 1) and `body` (fresh from
+    # attempt 2) can sit under `qoyod_responses.invoice_payment`. The
+    # drawer used to render the whole blob, mixing the OLD failure
+    # JSON with the NEW success body. The fix here is to surface ONLY
+    # the segment that matches the step's CURRENT status, plus a
+    # tiny `previous_error` breadcrumb so the operator can still find
+    # the historical attempt if they need it.
+    _ip_step_status = _status_for_invoice_payment_step(row)
+    _ip_raw_response = (responses.get("invoice_payment")
+                        or responses.get("receipt"))
+    if isinstance(_ip_raw_response, dict):
+        if _ip_step_status == "success":
+            # On success, return body + qoyod_id + timing, NOT the
+            # stale 422 error from a previous attempt.
+            _ip_step_response = {
+                k: v for k, v in _ip_raw_response.items()
+                if k != "error"
+            }
+            if _ip_raw_response.get("error"):
+                _ip_step_response["previous_error"] = (
+                    _ip_raw_response.get("error"))
+        elif _ip_step_status == "failed":
+            # On failure, return error + timing, NOT a phantom body
+            # that doesn't exist (defensive — shouldn't happen).
+            _ip_step_response = {
+                k: v for k, v in _ip_raw_response.items()
+                if k != "body"
+            }
+        else:
+            _ip_step_response = _ip_raw_response
+    else:
+        _ip_step_response = _ip_raw_response
+
     # ── Order of steps the operator expects to see ──────────────────
     steps = [
         {
@@ -178,15 +213,14 @@ def shape_inbox_row_for_monitor(row: dict) -> dict:
             "stage":   "INVOICE_PAYMENT_CREATED",
             "payload": (payloads.get("invoice_payment")
                         or payloads.get("receipt")),   # legacy fallback
-            "response": (responses.get("invoice_payment")
-                         or responses.get("receipt")), # legacy fallback
+            "response": _ip_step_response,
             "duration_ms": (
                 (responses.get("invoice_payment") or {}).get("duration_ms")
                 or (responses.get("receipt") or {}).get("duration_ms")
                 or (timings.get("INVOICE_PAYMENT_CREATED") or {}).get("duration_ms")
                 or (timings.get("RECEIPT_CREATED") or {}).get("duration_ms")
             ),
-            "status": _status_for_invoice_payment_step(row),
+            "status": _ip_step_status,
         },
     ]
 
@@ -242,30 +276,39 @@ def _status_for_invoice_payment_step(row: dict) -> str:
     last_failed = row.get("last_failed_stage") or ""
     pipeline_stage = row.get("pipeline_stage") or ""
 
-    # NEW-FLOW failures take priority — they describe the step
-    # accurately even when the row landed in PARTIAL_FAILURE.
+    # Iter-290h.6 — Success FIRST, failure second.
+    # When a payment landed successfully after a prior failed attempt
+    # (`qoyod_invoice_payment_id` is set OR `INVOICE_PAYMENT_CREATED`
+    # is in the row's stage history), that fact is the ground truth.
+    # Previously the function checked `last_failed_stage` first, so a
+    # row that retried successfully — but whose `last_failed_stage`
+    # hadn't been cleared — kept reporting the step as "failed".
+    # Production order 268494278 exposed this on 2026-06-28.
+    history_targets = {h.get("to_stage") for h in
+                       (row.get("stage_history") or [])}
+    if row.get("qoyod_invoice_payment_id"):
+        return "success"
+    if "INVOICE_PAYMENT_CREATED" in history_targets:
+        return "success"
+    if pipeline_stage == "COMPLETED":
+        return "success"
+    # Legacy /receipts path — historical rows only. Surface as
+    # success so old completed orders don't suddenly turn red.
+    if "RECEIPT_CREATED" in history_targets or row.get("qoyod_receipt_id"):
+        if pipeline_stage != "FAILED_RECEIPT":
+            return "success"
+
+    # NEW-FLOW failures — the row is currently in a failed state with
+    # no successful settlement on record.
     if last_failed in ("PAYMENT_LINK_FAILED",
                        "PAYMENT_METHOD_MAPPING_MISSING"):
         return "failed"
     if pipeline_stage in ("PAYMENT_LINK_FAILED",
                           "PAYMENT_METHOD_MAPPING_MISSING"):
         return "failed"
-
-    # New-flow success path.
-    if row.get("qoyod_invoice_payment_id"):
-        return "success"
-    history_targets = {h.get("to_stage") for h in
-                       (row.get("stage_history") or [])}
-    if "INVOICE_PAYMENT_CREATED" in history_targets:
-        return "success"
-    if pipeline_stage == "COMPLETED":
-        return "success"
-
-    # Legacy /receipts path — historical rows only.
+    # Legacy /receipts failure.
     if last_failed == "FAILED_RECEIPT" or pipeline_stage == "FAILED_RECEIPT":
         return "failed"
-    if "RECEIPT_CREATED" in history_targets or row.get("qoyod_receipt_id"):
-        return "success"
 
     # Default: still in progress.
     if pipeline_stage == "SKIPPED":

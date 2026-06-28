@@ -832,6 +832,16 @@ async def process_customer_resolved_row(
                    note=("DRY-RUN: invoice_payment payload built, no POST"
                          if is_dry else "invoice_payment recorded ON invoice in Qoyod"))
     p.setdefault("$set", {})["qoyod_invoice_payment_id"] = qoyod_invoice_payment_id
+    # Iter-290h.6 — Clear stale failure breadcrumbs from any previous
+    # attempt on this row. Without this the monitor's
+    # `_status_for_invoice_payment_step` keeps reporting the step as
+    # "failed" because `last_failed_stage=PAYMENT_LINK_FAILED` is left
+    # over from the first (truly failed) attempt, AND the drawer
+    # shows BOTH a stale `error` and the fresh `body` under the same
+    # step. Once the payment landed on قيود the prior failure is no
+    # longer the source of truth.
+    p["$set"]["last_failed_stage"] = None
+    p["$set"]["pipeline_error"]    = None
     await _apply(db, row["id"], p)
     # Persist raw response — First-Sync-Monitor.
     await db.integration_inbox.update_one(
@@ -842,6 +852,10 @@ async def process_customer_resolved_row(
             "qoyod_responses.invoice_payment.duration_ms":
                 int(_now().timestamp() * 1000) - payment_started_ms,
             "qoyod_responses.invoice_payment.qoyod_id":    qoyod_invoice_payment_id,
+            # Iter-290h.6 — explicitly clear the stale error so the
+            # drawer doesn't mix the old 422 response with the fresh
+            # success body.
+            "qoyod_responses.invoice_payment.error":       None,
         }})
 
     p = transition(from_stage="INVOICE_PAYMENT_CREATED", to_stage="COMPLETED",

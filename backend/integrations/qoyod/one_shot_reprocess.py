@@ -430,14 +430,34 @@ async def reprocess_one_order(
 
     # ── 3. Bail-out if the row is already COMPLETED ─────────────────
     if row.get("pipeline_stage") == "COMPLETED":
+        # Iter-290h.6 — Carry the final-state diagnostics so the UI
+        # can render the full stage path + قيود ids + payloads even
+        # for completed rows. Previously this branch returned
+        # `stage_sequence_observed: []` and the panel showed
+        # "المراحل التي اجتازها: —", masking the fact that the
+        # order had already moved through INVOICE_PAYMENT_CREATED →
+        # COMPLETED successfully.
+        stage_sequence = _extract_observed_sequence(row)
+        payloads = row.get("qoyod_payloads") or {}
+        qoyod_responses = row.get("qoyod_responses") or {}
+        ip_response_obj = qoyod_responses.get("invoice_payment") or {}
         return {
             "ok":       True,
             "outcome":  "ALREADY_COMPLETED",
             "row_id":   row.get("id"),
             "trace_id": row.get("trace_id"),
-            "stage_sequence_observed": [],
-            "message":  ("الطلب مكتمل سابقاً — لم يتم اتخاذ أي إجراء. "
-                         "لإعادة الإرسال يدوياً يجب أرشفته أولاً."),
+            "stage_sequence_observed": stage_sequence,
+            "expected_stage_sequence": list(EXPECTED_STAGE_SEQUENCE),
+            "qoyod_invoice_id":         row.get("qoyod_invoice_id"),
+            "qoyod_invoice_payment_id": row.get("qoyod_invoice_payment_id"),
+            "qoyod_customer_id":        row.get("qoyod_customer_id"),
+            "qoyod_receipt_id":         row.get("qoyod_receipt_id"),
+            "invoice_payload":          payloads.get("invoice"),
+            "invoice_payment_payload":  payloads.get("invoice_payment"),
+            "invoice_payment_response": ip_response_obj.get("body"),
+            "message":  ("الطلب مكتمل سابقاً — لم يُرسَل أي طلب جديد "
+                         "إلى قيود لتجنب التكرار. التفاصيل أدناه من "
+                         "آخر معالجة ناجحة."),
         }
 
     # ── 3b. Idempotency: refuse if a REAL Qoyod invoice already exists

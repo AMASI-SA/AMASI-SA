@@ -758,8 +758,17 @@ function TimelineDrawer({ open, item, onClose }) {
                 </div>
               )}
               {/* Surface the LIVE error if قيود rejected the payment
-                  link — operator should see exactly why. */}
-              {item.inbox?.qoyod_responses?.invoice_payment?.error && (
+                  link — operator should see exactly why. Iter-290h.6:
+                  Only show the error if the row is NOT successfully
+                  completed. After a successful retry, `error` may
+                  still sit in the DB as a stale breadcrumb from the
+                  failed first attempt; showing it would falsely
+                  suggest the step failed even though
+                  `qoyod_invoice_payment_id` is set and the invoice
+                  is paid in قيود. */}
+              {item.inbox?.qoyod_responses?.invoice_payment?.error
+                && !(item.invoice?.qoyod_invoice_payment_id
+                     || item.inbox?.qoyod_invoice_payment_id) && (
                 <div className="mt-2">
                   <div className="text-[11px] font-bold text-rose-700 mb-1">
                     ⚠️ POST /invoice_payments — خطأ من قيود

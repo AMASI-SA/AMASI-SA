@@ -792,11 +792,23 @@ export default function QoyodFirstSyncMonitor() {
                       trace_id: {reprocResult.trace_id}
                     </div>
                   )}
-                  {reprocResult.stage_sequence_observed && (
+                  {reprocResult.stage_sequence_observed && reprocResult.stage_sequence_observed.length > 0 && (
                     <div className="text-[12px] text-slate-700 mt-1"
                          data-testid="reproc-stage-sequence">
                       <strong>المراحل التي اجتازها:</strong>{" "}
-                      {reprocResult.stage_sequence_observed.join(" → ") || "—"}
+                      {reprocResult.stage_sequence_observed.join(" → ")}
+                    </div>
+                  )}
+                  {/* Iter-290h.6 — When ALREADY_COMPLETED comes back
+                      with the row's full state, surface a human
+                      message + the Qoyod ids so the operator sees
+                      what the final pipeline produced without
+                      thinking the panel is broken. */}
+                  {reprocResult.outcome === "ALREADY_COMPLETED"
+                    && reprocResult.message && (
+                    <div className="text-[12px] text-sky-900 mt-1"
+                         data-testid="reproc-already-completed-message">
+                      {reprocResult.message}
                     </div>
                   )}
                   {reprocResult.qoyod_invoice_id && (
@@ -829,8 +841,9 @@ export default function QoyodFirstSyncMonitor() {
                 {(reprocResult.invoice_payload || reprocResult.request_body_json) && (
                   <div className="mt-3">
                     <div className="text-[11px] font-bold text-slate-600 mb-1">
-                      {reprocResult.outcome === "COMPLETED"
-                        ? "📦 جسم فاتورة قيود المُرسل (POST /invoices)"
+                      {(reprocResult.outcome === "COMPLETED" ||
+                        reprocResult.outcome === "ALREADY_COMPLETED")
+                        ? "📦 جسم فاتورة قيود (POST /invoices)"
                         : reprocResult.request_sent_to_qoyod
                           ? "📦 جسم الطلب المُرسل لقيود — قيود رفضه"
                           : "📦 جسم الطلب الذي تم إيقافه قبل إرسالها لقيود"}
@@ -840,14 +853,14 @@ export default function QoyodFirstSyncMonitor() {
                          data-testid="reproc-request-body-json">
 {JSON.stringify(reprocResult.invoice_payload || reprocResult.request_body_json, null, 2)}
                     </pre>
-                    {/* Iter-290h.6 — On the COMPLETED success path,
-                        also render the /invoice_payments payload +
-                        قيود response so the operator can verify the
+                    {/* Iter-290h.6 — On both COMPLETED (just-now) and
+                        ALREADY_COMPLETED (final-state snapshot), also
+                        render the /invoice_payments payload + قيود
+                        response so the operator can verify the
                         payment-link actually landed (not just that
-                        the invoice was created). Closes the loophole
-                        the user spotted on 2026-06-28 where success
-                        was attributed solely to the invoice POST. */}
-                    {reprocResult.outcome === "COMPLETED"
+                        the invoice was created). */}
+                    {(reprocResult.outcome === "COMPLETED"
+                      || reprocResult.outcome === "ALREADY_COMPLETED")
                       && reprocResult.invoice_payment_payload && (
                       <div className="mt-3"
                            data-testid="reproc-invoice-payment-block">
