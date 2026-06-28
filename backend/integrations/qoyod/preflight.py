@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from integrations.qoyod.payment_methods import (
-    resolve_payment_account, provider_family,
+    resolve_payment_account, provider_family, is_pending_payment_status,
 )
 
 
@@ -84,8 +84,15 @@ def run(
 
     # 4) Payment method mapping (alias-aware — Iter 2026-02-26)
     pm_native = dto_dict.get("payment_method") or dto_dict.get("payment_method_native")
-    pm_mapped = resolve_payment_account(settings, pm_native)
-    if not pm_native:
+    # Iter-292 — Pending/transitional statuses (waiting, awaiting_payment,
+    # etc.) are NOT payment methods. We don't require a Qoyod account
+    # mapping for them; the row is simply not eligible for receipt creation.
+    pm_is_pending = is_pending_payment_status(pm_native)
+    pm_mapped = None if pm_is_pending else resolve_payment_account(settings, pm_native)
+    if pm_is_pending:
+        # Soft skip — surface in checks_run but not as a failure.
+        pass
+    elif not pm_native:
         failures.append({"check": "payment_method",
                          "code": "missing_payment_method",
                          "message": "order has no payment_method on the DTO"})

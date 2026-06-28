@@ -79,6 +79,35 @@ PAYMENT_METHOD_ALIASES: dict[str, str] = {
 }
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Iter-292 — Transitional / pending payment statuses
+# ─────────────────────────────────────────────────────────────────────
+# These are NOT real payment methods — they are order-lifecycle states
+# (customer hasn't paid yet OR we're waiting for bank settlement).
+# They must NEVER appear on the Payment Method Mapping screen and they
+# must NEVER trigger a Qoyod receipt POST. They flow through as
+# `skipped_pending_payment` in the Webhook Monitor.
+PENDING_PAYMENT_STATUSES: set[str] = {
+    "waiting", "pending", "pending_payment", "awaiting_payment",
+    "unpaid", "not_paid",
+    "بانتظار_الدفع", "انتظار_الدفع", "في_انتظار_الدفع",
+    "waiting_payment",
+}
+
+
+def is_pending_payment_status(payment_method: Optional[str]) -> bool:
+    """Return True when the value represents a non-payment lifecycle
+    state rather than an actual payment method.
+
+    Used by:
+      • Normalizer: blanks out `payment_method` to None on pending.
+      • Preflight: skips the missing-mapping check when pending.
+      • Receipt step: aborts cleanly with skipped_reason=pending.
+      • Settings UI: filters these values out of the mapping table.
+    """
+    return _norm(payment_method) in PENDING_PAYMENT_STATUSES
+
+
 def _norm(v: Optional[str]) -> str:
     """Lowercase + strip + collapse whitespace to underscore. Mirrors
     the tail of `_canonical_payment_method` so keys compare cleanly."""
