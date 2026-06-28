@@ -54,11 +54,14 @@ def _now() -> datetime:
 CONFIRM_TOKEN_TEMPLATE = "REPROCESS-{order_number}"
 
 # Pipeline stages the row must traverse for a successful one-shot run.
+# Iter-290h.6 — Pipeline now uses `POST /invoice_payments` instead of
+# `/receipts`. The stage name in the row's history is
+# `INVOICE_PAYMENT_CREATED` (no longer `RECEIPT_CREATED`).
 EXPECTED_STAGE_SEQUENCE: tuple[str, ...] = (
     "CUSTOMER_RESOLVED",
     "PRODUCT_RESOLVED",
     "INVOICE_CREATED",
-    "RECEIPT_CREATED",
+    "INVOICE_PAYMENT_CREATED",
     "COMPLETED",
 )
 
@@ -577,6 +580,17 @@ async def reprocess_one_order(
     if final_stage == "COMPLETED":
         payloads = final.get("qoyod_payloads") or {}
         invoice_payload = payloads.get("invoice")
+        # Iter-290h.6 — Surface the /invoice_payments diagnostics so
+        # the operator can see the EXACT body we POSTed to settle the
+        # invoice + Qoyod's response. Without this the success panel
+        # only showed the invoice body, masking whether the payment
+        # link landed (which is the whole point of Iter-290h).
+        invoice_payment_payload = payloads.get("invoice_payment")
+        qoyod_responses = final.get("qoyod_responses") or {}
+        ip_response_obj = qoyod_responses.get("invoice_payment") or {}
+        invoice_payment_response = ip_response_obj.get("body")
+        invoice_payment_status_code = (
+            200 if invoice_payment_response is not None else None)
         # Belt-and-suspenders: re-verify product_ids in the final
         # snapshotted payload are non-DRY. This catches the (theoretical)
         # case where the leak guard had a bug.
@@ -597,7 +611,12 @@ async def reprocess_one_order(
             "qoyod_invoice_number": final.get("qoyod_invoice_number"),
             "qoyod_receipt_id": final.get("qoyod_receipt_id"),
             "qoyod_customer_id": final.get("qoyod_customer_id"),
+            # Iter-290h.6 — new payment-link diagnostics on success path.
+            "qoyod_invoice_payment_id": final.get("qoyod_invoice_payment_id"),
             "invoice_payload": invoice_payload,
+            "invoice_payment_payload": invoice_payment_payload,
+            "invoice_payment_response": invoice_payment_response,
+            "invoice_payment_status_code": invoice_payment_status_code,
             "receipt_payload": payloads.get("receipt"),
             "dry_leaks_in_final_payload": dry_leaks,  # MUST be []
             "quarantine_summary": quarantine_summary,
@@ -650,7 +669,14 @@ def _extract_observed_sequence(row: dict) -> list[str]:
     """
     happy = {
         "NORMALIZED", "RULES_APPLIED", "CUSTOMER_RESOLVED",
-        "PRODUCT_RESOLVED", "INVOICE_CREATED", "RECEIPT_CREATED",
+        "PRODUCT_RESOLVED", "INVOICE_CREATED",
+        # Iter-290h.6 — INVOICE_PAYMENT_CREATED is the new
+        # post-/invoice_payments success stage. RECEIPT_CREATED is
+        # kept for historical rows that completed under the legacy
+        # /receipts flow so their "stages traversed" view stays
+        # truthful.
+        "INVOICE_PAYMENT_CREATED",
+        "RECEIPT_CREATED",
         "COMPLETED",
     }
     seen: list[str] = []

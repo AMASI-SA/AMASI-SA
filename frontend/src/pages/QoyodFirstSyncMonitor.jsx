@@ -802,7 +802,10 @@ export default function QoyodFirstSyncMonitor() {
                   {reprocResult.qoyod_invoice_id && (
                     <div className="text-[12px] font-mono text-slate-800 mt-1">
                       Invoice: {reprocResult.qoyod_invoice_id} ·
-                      Receipt: {reprocResult.qoyod_receipt_id || "—"}
+                      Invoice Payment: {reprocResult.qoyod_invoice_payment_id || "—"}
+                      {reprocResult.qoyod_receipt_id && (
+                        <> · Legacy Receipt: {reprocResult.qoyod_receipt_id}</>
+                      )}
                     </div>
                   )}
                   {reprocResult.error && (
@@ -827,7 +830,7 @@ export default function QoyodFirstSyncMonitor() {
                   <div className="mt-3">
                     <div className="text-[11px] font-bold text-slate-600 mb-1">
                       {reprocResult.outcome === "COMPLETED"
-                        ? "📦 جسم الطلب المُرسل لقيود (نجح)"
+                        ? "📦 جسم فاتورة قيود المُرسل (POST /invoices)"
                         : reprocResult.request_sent_to_qoyod
                           ? "📦 جسم الطلب المُرسل لقيود — قيود رفضه"
                           : "📦 جسم الطلب الذي تم إيقافه قبل إرسالها لقيود"}
@@ -837,6 +840,39 @@ export default function QoyodFirstSyncMonitor() {
                          data-testid="reproc-request-body-json">
 {JSON.stringify(reprocResult.invoice_payload || reprocResult.request_body_json, null, 2)}
                     </pre>
+                    {/* Iter-290h.6 — On the COMPLETED success path,
+                        also render the /invoice_payments payload +
+                        قيود response so the operator can verify the
+                        payment-link actually landed (not just that
+                        the invoice was created). Closes the loophole
+                        the user spotted on 2026-06-28 where success
+                        was attributed solely to the invoice POST. */}
+                    {reprocResult.outcome === "COMPLETED"
+                      && reprocResult.invoice_payment_payload && (
+                      <div className="mt-3"
+                           data-testid="reproc-invoice-payment-block">
+                        <div className="text-[11px] font-bold text-emerald-700 mb-1">
+                          💰 جسم سداد الفاتورة المُرسل (POST /invoice_payments) — نجح
+                        </div>
+                        <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-emerald-950 text-emerald-100 rounded p-2 max-h-72 overflow-auto"
+                             dir="ltr"
+                             data-testid="reproc-invoice-payment-body">
+{JSON.stringify(reprocResult.invoice_payment_payload, null, 2)}
+                        </pre>
+                        {reprocResult.invoice_payment_response != null && (
+                          <>
+                            <div className="text-[11px] font-bold text-emerald-700 mt-2 mb-1">
+                              📥 رد قيود على السداد
+                            </div>
+                            <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-slate-100 text-slate-900 rounded p-2 max-h-48 overflow-auto"
+                                 dir="ltr"
+                                 data-testid="reproc-invoice-payment-response">
+{JSON.stringify(reprocResult.invoice_payment_response, null, 2)}
+                            </pre>
+                          </>
+                        )}
+                      </div>
+                    )}
                     {/* Iter-290h.4 — explicit diagnostics for the
                         payment-link step. Surfaces exactly what
                         قيود returned so the operator no longer has
