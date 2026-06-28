@@ -217,40 +217,114 @@ def build_invoice_payload(
     tax_mode = _get_tax_mode(settings)
     res_by_sku = {r["sku"]: r["qoyod_product_id"]
                   for r in product_resolutions if r.get("qoyod_product_id")}
-    # Iter-290c — inventory_id is now at the invoice ROOT (per Qoyod
-    # apidoc), not per line. Coerce to int because Qoyod's validator
-    # treats string ids as missing.
+    # Iter-290c — inventory_id at root (int).
     inventory_id = _to_int_or_none(settings.get("default_inventory_id"))
-    # Iter-290c — Qoyod's standard tax_percent (15% Saudi VAT). The
-    # operator can override via `settings.tax_percentage` for the rare
-    # case of non-standard rates.
+    # Iter-290e — Qoyod tax percent (default 15%). Operator can override
+    # via `settings.qoyod_tax_percent` (preferred new name) or the older
+    # `tax_percentage` key. The legal Saudi VAT rate.
     try:
-        tax_percent = float(settings.get("tax_percentage") or 15)
+        tax_percent = float(
+            settings.get("qoyod_tax_percent")
+            or settings.get("tax_percentage")
+            or 15)
     except (TypeError, ValueError):
         tax_percent = 15.0
+    tax_factor = 1.0 + tax_percent / 100.0  # e.g. 1.15
+
+    # ── Iter-290e — invoice_total_policy = "match_salla_total" ──────
+    #
+    # Why this policy exists
+    # ──────────────────────
+    # Salla's effective per-line tax (~8% empirically on the test
+    # orders) DIFFERS from Qoyod's tax_percent (15% Saudi VAT). If we
+    # send Salla's net unit_price + Qoyod's 15% tax, the resulting
+    # invoice total is INFLATED (310 vs 291 SAR on order 268756329).
+    # Customers paid Salla's total, so we must reverse-engineer a
+    # discount that lands Qoyod's GROSS line total back on Salla's
+    # `item.total`.
+    #
+    # Per-line math
+    # ─────────────
+    #   target_gross  = item.total                       # what Salla shows
+    #   target_net    = target_gross / (1 + tp/100)      # Qoyod will mark up by tp
+    #   original_base = item.unit_price * item.quantity  # Salla's line base
+    #   qoyod_discount = original_base - target_net
+    #
+    # We then send Qoyod:
+    #   unit_price = item.unit_price (verbatim — auditable to Salla)
+    #   discount   = qoyod_discount  (the math glue)
+    #   tax_percent = tp             (15)
+    #
+    # Edge cases
+    # ──────────
+    # * item.total == 0 (fully discounted): target_net=0, discount=base
+    # * qoyod_discount < 0 (Salla price < target_net — rare/unexpected):
+    #   fallback: shrink unit_price to target_net/qty, discount=0.
+    policy = (settings.get("invoice_total_policy")
+              or "match_salla_total").lower()
+
+    def _line_for_match_salla_total(it: dict) -> dict:
+        qty = _f(it.get("quantity"), 1.0) or 1.0
+        unit_price = _f(it.get("unit_price"))
+        target_gross = _f(it.get("total"))
+        target_net = round(target_gross / tax_factor, 4)
+        original_base = round(unit_price * qty, 4)
+        qoyod_discount = round(original_base - target_net, 4)
+        if qoyod_discount < 0:
+            # Fallback: use target_net as the unit_price, no discount.
+            adj_unit_price = round(target_net / qty, 4) if qty else target_net
+            return {
+                "unit_price":    adj_unit_price,
+                "discount":      0.0,
+                "discount_type": "amount",
+                "tax_percent":   tax_percent,
+                "_pricing_fallback": True,
+            }
+        return {
+            "unit_price":    unit_price,
+            "discount":      qoyod_discount,
+            "discount_type": "amount",
+            "tax_percent":   tax_percent,
+            "_pricing_fallback": False,
+        }
+
     lines = []
+    line_diagnostics: list[dict] = []
     for it in dto_dict.get("items", []):
         pid = _to_int_or_none(res_by_sku.get(it.get("sku")))
-        # Iter-290c — send Salla's NET unit_price (exclusive of tax)
-        # so Qoyod's tax_percent=15 produces the right line total.
-        # The previous customer_first gross-of-tax trick is dropped
-        # in favour of the Qoyod-canonical payload shape.
-        unit_price = _f(it.get("unit_price"))
-        # Iter-276: per-line discount column. Qoyod accepts `discount`
-        # as an absolute amount per line; we never fold it into
-        # unit_price so the merchant's books match Salla's promo-code
-        # attribution. Salla emits discounts in SAR, so we always
-        # declare `discount_type = "amount"`.
+        if policy == "match_salla_total":
+            shape = _line_for_match_salla_total(it)
+        else:
+            # Legacy passthrough — kept for compatibility with old
+            # tests / non-Saudi scenarios.
+            shape = {
+                "unit_price":    _f(it.get("unit_price")),
+                "discount":      _f(it.get("discount_amount")),
+                "discount_type": "amount",
+                "tax_percent":   tax_percent,
+                "_pricing_fallback": False,
+            }
         line: dict = {
             "product_id":    pid,
             "description":   it.get("name"),
             "quantity":      it.get("quantity"),
-            "unit_price":    unit_price,
-            "discount":      _f(it.get("discount_amount")),
-            "discount_type": "amount",
-            "tax_percent":   tax_percent,
+            "unit_price":    shape["unit_price"],
+            "discount":      shape["discount"],
+            "discount_type": shape["discount_type"],
+            "tax_percent":   shape["tax_percent"],
         }
         lines.append(line)
+        # Per-line gross Qoyod will compute server-side — used for
+        # the pre-POST guard and the diagnostics panel.
+        computed_gross = round(
+            (line["unit_price"] * _f(line.get("quantity"), 1.0)
+             - line["discount"]) * tax_factor, 2)
+        line_diagnostics.append({
+            "sku":          it.get("sku"),
+            "salla_total":  _f(it.get("total")),
+            "computed_qoyod_gross": computed_gross,
+            "fallback_used": shape["_pricing_fallback"],
+        })
 
     invoice: dict = {
         "contact_id":     _to_int_or_none(qoyod_customer_id),
@@ -276,7 +350,30 @@ def build_invoice_payload(
     if branch_id is not None:
         invoice["branch_id"] = branch_id
 
-    return {"invoice": invoice}
+    # ── Iter-290e — diagnostics block for traceability ───────────────
+    # IMPORTANT: kept OUTSIDE `invoice` so Qoyod never receives it.
+    # The pipeline lifts this into `qoyod_payloads.invoice_diagnostics`.
+    salla_total = round(_f(dto_dict.get("total_amount")), 2)
+    expected_qoyod_total = round(
+        sum(d["computed_qoyod_gross"] for d in line_diagnostics), 2)
+    # Detect Salla's effective tax rate (informational only).
+    salla_net_sum = sum(_f(it.get("total")) - _f(it.get("tax_amount"))
+                       for it in dto_dict.get("items", []))
+    salla_tax_sum = sum(_f(it.get("tax_amount"))
+                       for it in dto_dict.get("items", []))
+    salla_tax_percent_detected = (
+        round(salla_tax_sum / salla_net_sum * 100, 2)
+        if salla_net_sum > 0 else 0.0)
+    diagnostics = {
+        "pricing_mode":               policy,
+        "salla_total":                salla_total,
+        "expected_qoyod_total":       expected_qoyod_total,
+        "difference":                 round(expected_qoyod_total - salla_total, 2),
+        "salla_tax_percent_detected": salla_tax_percent_detected,
+        "qoyod_tax_percent_used":     tax_percent,
+        "line_diagnostics":           line_diagnostics,
+    }
+    return {"invoice": invoice, "_diagnostics": diagnostics}
 
 
 def build_receipt_payload(

@@ -145,10 +145,11 @@ class SettingsPatch(BaseModel):
     zero_tax_id:                   Optional[str] = None
     # Iter-288 — auto-adopt existing Qoyod products by SKU.
     auto_adopt_existing_qoyod_products: Optional[bool] = None
-    # Iter-290 — Qoyod /invoices requires `inventory_id` on every line
-    # item, even for service/non-stock products. The operator creates
-    # one default warehouse in Qoyod and pastes its id here.
+    # Iter-290 — Qoyod-required warehouse id on every invoice line.
     default_inventory_id:          Optional[str] = None
+    # Iter-290e — Qoyod 15% Match Salla Total policy
+    invoice_total_policy:          Optional[str] = None      # "match_salla_total" | "legacy_passthrough"
+    qoyod_tax_percent:             Optional[float] = None    # default 15
 
 
 class CredentialsRequest(BaseModel):

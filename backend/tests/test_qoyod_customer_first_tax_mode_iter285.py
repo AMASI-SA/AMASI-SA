@@ -77,6 +77,10 @@ def _settings_customer_first(**over):
         "tax_mode":              TAX_MODE_CUSTOMER_FIRST,
         "zero_tax_id":           "TAX-ZERO",
         "default_tax_id":        "TAX-15",      # unused in customer_first
+        # Iter-290e — Iter-285 invoice tests pre-date the
+        # match_salla_total policy; keep them on legacy passthrough
+        # to assert the canonical Iter-290c payload shape.
+        "invoice_total_policy":  "legacy_passthrough",
         "invoice_trigger_statuses": ["completed"],
         "payment_method_mapping": [
             {"salla_method": "tamara", "qoyod_account_id": "ACCT-tamara"},

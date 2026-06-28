@@ -1,5 +1,62 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290e — Qoyod 15% Match Salla Total (P0 Go-Live blocker) (2026-02-28)
+**Business requirement**: Qoyod's standard `tax_percent=15` (Saudi VAT) ≠ Salla's effective per-line tax (~8% empirically on test orders). Iter-290c shipped a working invoice but the totals inflated:
+```
+268756329:  Salla 290.63  vs  Qoyod 309.47   (Δ +18.84 SAR)
+268833109:  Salla  96.23  vs  Qoyod 102.47   (Δ  +6.24 SAR)
+```
+Customer paid Salla's amount → Qoyod invoice MUST land on the same number, else receipt creates an outstanding balance that doesn't reconcile.
+
+### Fix (`/app/backend/integrations/qoyod/invoice_builder.py`)
+New policy `invoice_total_policy = "match_salla_total"` (default):
+- For each line, reverse-engineer the discount so Qoyod's (unit_price·qty − discount)·(1 + tp/100) = item.total.
+- Math: `target_net = item.total / 1.15` → `discount = unit_price·qty − target_net`.
+- unit_price stays verbatim from Salla (auditable).
+- Edge cases handled:
+  - `item.total == 0` → discount = full base.
+  - `discount < 0` (anomalous) → fallback to `unit_price = target_net/qty, discount = 0`.
+
+New settings field: `qoyod_tax_percent` (default 15). Allows future regional override.
+
+### Pre-POST math guard (`pipeline.py`)
+- Before calling `api_client.create_invoice`, extract diagnostics and validate `|expected_qoyod_total − salla_total| ≤ 0.10 SAR`.
+- If exceeded → dead-letter with `invoice_total_mismatch_before_post`. No POST.
+- Diagnostics block kept OUTSIDE the `invoice` dict so Qoyod never receives it.
+
+### Diagnostics in row + preview
+Stored on `qoyod_payloads.invoice_diagnostics`:
+```
+{
+  "pricing_mode":               "match_salla_total",
+  "salla_total":                96.23,
+  "expected_qoyod_total":       96.23,
+  "difference":                 0.00,
+  "salla_tax_percent_detected": 8.00,
+  "qoyod_tax_percent_used":     15,
+  "line_diagnostics":           [...]
+}
+```
+Surfaced via `preview-reprocess` → `stages.invoice_preview.diagnostics`.
+
+### Tests
+- New `tests/test_qoyod_match_salla_total_iter290e.py` — 9 tests including the exact production order numbers (268833109, 268756329) and edge cases.
+- Updated 4 legacy tests to explicitly use `invoice_total_policy="legacy_passthrough"` (test fixtures pre-date this policy).
+- New `SettingsPatch` fields: `invoice_total_policy`, `qoyod_tax_percent`.
+- **809/809 Qoyod pytest passes**. Lint clean.
+
+### Operator workflow (post-redeploy)
+1. **CRITICAL — cleanup Qoyod first**: delete or cancel the wrong invoices already created in قيود for orders `268833109` and `268756329`. Don't mark them as paid (`GetPaid`); they are accounting-invalid.
+2. Redeploy preview → production.
+3. Run `one-shot-reprocess` for one test order → expected `INVOICE_CREATED` with total == Salla total ✅ → `RECEIPT_CREATED` ✅ → `balance = 0`.
+
+### Go-Live gate
+Order is COMPLETED only if:
+- INVOICE_CREATED succeeds
+- RECEIPT_CREATED succeeds
+- receipt.amount == canonical.total_amount
+- Qoyod-reported invoice total ≈ Salla total (±0.10)
+
 ## Iter-293 + Iter-294 — Webhook Activity Log + Monitor UI (2026-02-28)
 **Context**: After Qoyod MVP closed (Iter-285 → Iter-291 — first end-to-end Salla→Qoyod invoice + receipt on order 268833109 ✅), the operator asked to harden the Make.com integration path with an observable webhook log.
 

@@ -364,6 +364,8 @@ async def preview_reprocess_one_order(
     out["stages"]["invoice_preview"] = {
         "ok": True,
         "request_body": invoice_payload,
+        # Iter-290e — surface diagnostics at top level for the UI.
+        "diagnostics":  invoice_payload.get("_diagnostics"),
         "endpoint":     "POST /invoices",
         "would_send_to_qoyod": False,
     }

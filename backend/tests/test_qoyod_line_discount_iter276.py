@@ -86,7 +86,8 @@ def test_invoice_builder_includes_discount_as_separate_column():
         }],
     }
     product_resolutions = [{"sku": "AMS13000", "qoyod_product_id": "1"}]
-    settings = {"default_tax_id": "1", "tax_mode": "mezan_fixed_15"}
+    settings = {"default_tax_id": "1", "tax_mode": "mezan_fixed_15",
+                "invoice_total_policy": "legacy_passthrough"}
     from datetime import datetime, timezone
     payload = build_invoice_payload(
         dto_dict=dto_dict,
@@ -121,7 +122,8 @@ def test_invoice_builder_defaults_discount_to_zero_when_absent():
         dto_dict=dto_dict, qoyod_customer_id="C",
         product_resolutions=[{"sku": "A", "qoyod_product_id": "P"}],
         invoice_date=datetime.now(timezone.utc),
-        settings={"default_tax_id": "1", "tax_mode": "mezan_fixed_15"},
+        settings={"default_tax_id": "1", "tax_mode": "mezan_fixed_15",
+                  "invoice_total_policy": "legacy_passthrough"},
     )
     assert payload["invoice"]["line_items"][0]["discount"] == 0
 

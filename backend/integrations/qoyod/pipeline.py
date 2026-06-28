@@ -489,10 +489,51 @@ async def process_customer_resolved_row(
                 "trace_id": trace_id,
             }
 
+    # ─── Iter-290e — extract diagnostics & pre-POST totals guard ─────
+    # build_invoice_payload returns {"invoice": {...}, "_diagnostics": {...}}
+    # — the diagnostics MUST NOT be sent to Qoyod. Pop and keep for
+    # auditing + the math guard below.
+    invoice_diagnostics = invoice_payload.pop("_diagnostics", None) or {}
+    # Math guard: if our reverse-engineered discount math doesn't land
+    # within 0.10 SAR of Salla's total, refuse to POST. Accounting
+    # correctness > resilience here — a wrong invoice is worse than a
+    # missing one (operator can manually retry once the math is right).
+    if (not settings.get("dry_run_mode", False)
+            and invoice_diagnostics.get("pricing_mode") == "match_salla_total"):
+        diff = abs(float(invoice_diagnostics.get("difference") or 0.0))
+        if diff > 0.10:
+            err = {
+                "code":    "invoice_total_mismatch_before_post",
+                "message": (f"منع الإرسال (Iter-290e): الفرق بين إجمالي قيود "
+                            f"المتوقع ({invoice_diagnostics.get('expected_qoyod_total')}) "
+                            f"وإجمالي سلة ({invoice_diagnostics.get('salla_total')}) "
+                            f"= {diff:.2f} SAR > 0.10. لن تُنشأ فاتورة بمبلغ "
+                            f"غير مطابق للمبلغ المدفوع."),
+                "diagnostics": invoice_diagnostics,
+            }
+            await db.integration_inbox.update_one(
+                {"id": row["id"]},
+                {"$set": {
+                    "qoyod_payloads.invoice_blocked_preflight": invoice_payload,
+                    "qoyod_payloads.invoice_diagnostics":       invoice_diagnostics,
+                    "qoyod_payloads.invoice_blocked_at":        _now(),
+                }})
+            await _dead_letter(
+                db, row_id=row["id"], from_stage="PRODUCT_RESOLVED",
+                fail_stage="FAILED_INVOICE", error=err,
+                started_at=row.get("pipeline_started_at"),
+            )
+            return {
+                "row_id":  row["id"], "outcome": "DEAD_LETTER",
+                "reason":  "invoice_total_mismatch_before_post",
+                "trace_id": trace_id,
+            }
+
     # Snapshot BEFORE attempting POST.
     await db.integration_inbox.update_one(
         {"id": row["id"]},
         {"$set": {"qoyod_payloads.invoice": invoice_payload,
+                  "qoyod_payloads.invoice_diagnostics": invoice_diagnostics,
                   "qoyod_payloads.invoice_snapshot_at": _now(),
                   "preflight": pf.to_log_dict()}},
     )

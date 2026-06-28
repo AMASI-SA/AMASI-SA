@@ -136,6 +136,11 @@ SETTINGS = {
     "user_id":             "main",
     "default_tax_id":      "1",
     "tax_mode":            "mezan_fixed_15",
+    # Iter-290e — this fixture pre-dates the match_salla_total policy;
+    # keep it on legacy passthrough so the discount column assertions
+    # below remain valid (the new policy is exercised in
+    # test_qoyod_match_salla_total_iter290e.py).
+    "invoice_total_policy": "legacy_passthrough",
     "default_branch_id":   "",
     "default_product_type": "service",
     "invoice_trigger_statuses": ["completed"],
