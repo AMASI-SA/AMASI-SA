@@ -1,24 +1,17 @@
-"""Iter-290 — Qoyod /invoices requires `inventory_id` on every line item.
+"""Iter-290 + Iter-290c — `inventory_id` lives on the invoice ROOT.
 
-Why this test exists
-────────────────────
-Production order 268756329 reached PRODUCT_RESOLVED successfully but
-failed at FAILED_INVOICE with:
+History
+───────
+• Iter-290:  added inventory_id to every line item.
+• Iter-290b: coerced inventory_id to int.
+• Iter-290c: Qoyod apidoc proved inventory_id belongs on the INVOICE
+             ROOT, not per line. Moving it surfaced via production
+             rejection of order 268756329 even when every line carried
+             a valid integer inventory_id.
 
-    POST /invoices → 422
-    "inventory id missing in a line item"
-
-Qoyod's invoice validator demands `inventory_id` on every line —
-even when the product is `type=service` or `is_non_stock=true`.
-The operator creates one default warehouse in Qoyod (e.g.
-"مستودع افتراضي - ميزان") and Mezan stamps its id on every line
-via `settings.default_inventory_id`.
-
-Coverage:
-    1) build_invoice_payload stamps inventory_id on every line.
-    2) Blank setting → field is OMITTED (preflight refuses upstream).
-    3) Preflight fails fast when default_inventory_id is missing.
-    4) Inventory id reaches every line — not just the first.
+These tests pin the current contract:
+    invoice.inventory_id   → int  (at root)
+    line.inventory_id      → DROPPED
 """
 from __future__ import annotations
 
@@ -52,66 +45,139 @@ _DTO = {
 }
 
 _RESOLUTIONS = [
-    {"sku": "AMS11961", "qoyod_product_id": "P-1"},
-    {"sku": "AMS11738", "qoyod_product_id": "P-2"},
-    {"sku": "AMS10553", "qoyod_product_id": "P-3"},
+    {"sku": "AMS11961", "qoyod_product_id": "39"},
+    {"sku": "AMS11738", "qoyod_product_id": "40"},
+    {"sku": "AMS10553", "qoyod_product_id": "41"},
 ]
 
 _BASE_SETTINGS = {
     "tax_mode":              "customer_first",
-    "default_branch_id":     "BR-1",
-    # Iter-290b — Qoyod expects integer; we coerce at build time.
-    "default_inventory_id":  "42",
+    "default_branch_id":     "10",
+    "default_inventory_id":  "1",
     "default_tax_id":        "1",
     "zero_tax_id":           "1",
     "invoice_trigger_statuses": ["completed"],
     "payment_method_mapping": [
-        {"salla_method": "mada", "qoyod_account_id": "ACC-9"},
+        {"salla_method": "mada", "qoyod_account_id": "9"},
     ],
 }
 
 
-# ─── Payload builder ────────────────────────────────────────────────
-def test_invoice_payload_stamps_inventory_id_on_every_line():
+# ─── Iter-290c: inventory_id on ROOT, not lines ─────────────────────
+def test_invoice_root_carries_integer_inventory_id():
     pl = build_invoice_payload(
-        dto_dict=_DTO, qoyod_customer_id="C-1",
+        dto_dict=_DTO, qoyod_customer_id="109",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=_BASE_SETTINGS,
+    )
+    inv = pl["invoice"]
+    assert inv["inventory_id"] == 1
+    assert isinstance(inv["inventory_id"], int)
+
+
+def test_invoice_lines_do_NOT_carry_inventory_id():
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="109",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=_BASE_SETTINGS,
+    )
+    for ln in pl["invoice"]["line_items"]:
+        assert "inventory_id" not in ln, (
+            f"Iter-290c moved inventory_id to root; line still has it: {ln!r}"
+        )
+
+
+def test_invoice_root_omits_inventory_id_when_setting_blank():
+    settings = {**_BASE_SETTINGS, "default_inventory_id": "   "}
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="109",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=settings,
+    )
+    assert "inventory_id" not in pl["invoice"]
+
+
+def test_invoice_root_omits_inventory_id_when_setting_missing():
+    settings = {k: v for k, v in _BASE_SETTINGS.items()
+                if k != "default_inventory_id"}
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="109",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=settings,
+    )
+    assert "inventory_id" not in pl["invoice"]
+
+
+# ─── Iter-290c: status = "Approved" required on root ────────────────
+def test_invoice_root_has_status_approved():
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="109",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=_BASE_SETTINGS,
+    )
+    assert pl["invoice"]["status"] == "Approved"
+
+
+# ─── Iter-290c: per-line shape per Qoyod docs example ───────────────
+def test_invoice_lines_carry_tax_percent_not_tax_id():
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="109",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=_BASE_SETTINGS,
+    )
+    for ln in pl["invoice"]["line_items"]:
+        assert "tax_id" not in ln
+        assert ln["tax_percent"] == 15
+
+
+def test_invoice_lines_carry_discount_type_amount():
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="109",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=_BASE_SETTINGS,
+    )
+    for ln in pl["invoice"]["line_items"]:
+        assert ln["discount_type"] == "amount"
+
+
+def test_invoice_lines_unit_price_is_net_from_salla():
+    """Salla emits unit_price as net (excl. tax). Iter-290c sends it
+    verbatim — Qoyod's tax_percent=15 produces the line total."""
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="109",
         product_resolutions=_RESOLUTIONS,
         invoice_date=None, settings=_BASE_SETTINGS,
     )
     lines = pl["invoice"]["line_items"]
-    assert len(lines) == 3
-    for ln in lines:
-        # Iter-290b — must be int (not "42") per Qoyod apidoc.
-        assert ln["inventory_id"] == 42, (
-            f"every line must carry integer inventory_id; got {ln!r}"
-        )
-        assert isinstance(ln["inventory_id"], int)
+    assert lines[0]["unit_price"] == 5.0
+    assert lines[1]["unit_price"] == 199.0
+    assert lines[2]["unit_price"] == 100.0
 
 
-def test_invoice_payload_omits_inventory_id_when_setting_blank():
-    """When `default_inventory_id` is empty/whitespace we drop the
-    key entirely. Preflight is responsible for refusing the row
-    upstream so we never actually POST a bare line."""
-    settings = {**_BASE_SETTINGS, "default_inventory_id": "   "}
+# ─── Iter-290c: type-safety on all ids ──────────────────────────────
+def test_all_ids_on_payload_are_integers_not_strings():
     pl = build_invoice_payload(
-        dto_dict=_DTO, qoyod_customer_id="C-1",
+        dto_dict=_DTO, qoyod_customer_id="109",
+        product_resolutions=_RESOLUTIONS,
+        invoice_date=None, settings=_BASE_SETTINGS,
+    )
+    inv = pl["invoice"]
+    assert isinstance(inv["contact_id"], int) and inv["contact_id"] == 109
+    assert isinstance(inv["inventory_id"], int) and inv["inventory_id"] == 1
+    assert isinstance(inv["branch_id"], int) and inv["branch_id"] == 10
+    for ln, expected_pid in zip(inv["line_items"], [39, 40, 41]):
+        assert isinstance(ln["product_id"], int), f"product_id must be int: {ln!r}"
+        assert ln["product_id"] == expected_pid
+
+
+def test_branch_id_omitted_when_setting_blank():
+    settings = {**_BASE_SETTINGS, "default_branch_id": ""}
+    pl = build_invoice_payload(
+        dto_dict=_DTO, qoyod_customer_id="109",
         product_resolutions=_RESOLUTIONS,
         invoice_date=None, settings=settings,
     )
-    for ln in pl["invoice"]["line_items"]:
-        assert "inventory_id" not in ln
-
-
-def test_invoice_payload_omits_inventory_id_when_setting_missing():
-    settings = {k: v for k, v in _BASE_SETTINGS.items()
-                if k != "default_inventory_id"}
-    pl = build_invoice_payload(
-        dto_dict=_DTO, qoyod_customer_id="C-1",
-        product_resolutions=_RESOLUTIONS,
-        invoice_date=None, settings=settings,
-    )
-    for ln in pl["invoice"]["line_items"]:
-        assert "inventory_id" not in ln
+    assert "branch_id" not in pl["invoice"]
 
 
 # ─── Preflight refusal ──────────────────────────────────────────────
@@ -120,7 +186,7 @@ def test_preflight_refuses_when_default_inventory_id_missing():
                 if k != "default_inventory_id"}
     res = preflight_run(
         dto_dict=_DTO, settings=settings,
-        qoyod_customer_id="C-1",
+        qoyod_customer_id="109",
         product_resolutions=_RESOLUTIONS,
     )
     assert res.passed is False
@@ -132,7 +198,7 @@ def test_preflight_refuses_when_default_inventory_id_blank():
     settings = {**_BASE_SETTINGS, "default_inventory_id": "   "}
     res = preflight_run(
         dto_dict=_DTO, settings=settings,
-        qoyod_customer_id="C-1",
+        qoyod_customer_id="109",
         product_resolutions=_RESOLUTIONS,
     )
     codes = [f["code"] for f in res.failures]
@@ -142,60 +208,50 @@ def test_preflight_refuses_when_default_inventory_id_blank():
 def test_preflight_passes_when_default_inventory_id_set():
     res = preflight_run(
         dto_dict=_DTO, settings=_BASE_SETTINGS,
-        qoyod_customer_id="C-1",
+        qoyod_customer_id="109",
         product_resolutions=_RESOLUTIONS,
     )
     codes = [f["code"] for f in res.failures]
     assert "missing_default_inventory_id" not in codes
 
 
-# ─── Iter-290b — Integer coercion ───────────────────────────────────
-def test_invoice_payload_coerces_string_inventory_id_to_int():
-    """Operator pastes "10" in UI → Qoyod must receive 10 (int).
-    Qoyod's invoice validator rejects strings as 'missing inventory'."""
+# ─── Iter-290b: int coercion of inventory_id setting ────────────────
+def test_coerces_string_inventory_id_to_int_at_root():
     settings = {**_BASE_SETTINGS, "default_inventory_id": "10"}
     pl = build_invoice_payload(
-        dto_dict=_DTO, qoyod_customer_id="C-1",
+        dto_dict=_DTO, qoyod_customer_id="109",
         product_resolutions=_RESOLUTIONS,
         invoice_date=None, settings=settings,
     )
-    for ln in pl["invoice"]["line_items"]:
-        assert ln["inventory_id"] == 10
-        assert isinstance(ln["inventory_id"], int)
+    assert pl["invoice"]["inventory_id"] == 10
+    assert isinstance(pl["invoice"]["inventory_id"], int)
 
 
-def test_invoice_payload_coerces_int_inventory_id_unchanged():
+def test_coerces_int_inventory_id_unchanged_at_root():
     settings = {**_BASE_SETTINGS, "default_inventory_id": 7}
     pl = build_invoice_payload(
-        dto_dict=_DTO, qoyod_customer_id="C-1",
+        dto_dict=_DTO, qoyod_customer_id="109",
         product_resolutions=_RESOLUTIONS,
         invoice_date=None, settings=settings,
     )
-    for ln in pl["invoice"]["line_items"]:
-        assert ln["inventory_id"] == 7
-        assert isinstance(ln["inventory_id"], int)
+    assert pl["invoice"]["inventory_id"] == 7
 
 
-def test_invoice_payload_omits_inventory_id_when_value_non_numeric():
-    """A non-numeric value (e.g. operator pasted the warehouse name
-    by mistake) must NOT be sent — preflight will block the row
-    upstream so this is a safety net only."""
+def test_omits_inventory_id_when_value_non_numeric():
     settings = {**_BASE_SETTINGS, "default_inventory_id": "main-warehouse"}
     pl = build_invoice_payload(
-        dto_dict=_DTO, qoyod_customer_id="C-1",
+        dto_dict=_DTO, qoyod_customer_id="109",
         product_resolutions=_RESOLUTIONS,
         invoice_date=None, settings=settings,
     )
-    for ln in pl["invoice"]["line_items"]:
-        assert "inventory_id" not in ln
+    assert "inventory_id" not in pl["invoice"]
 
 
-def test_invoice_payload_trims_whitespace_around_numeric_string():
+def test_trims_whitespace_around_numeric_string():
     settings = {**_BASE_SETTINGS, "default_inventory_id": "  10  "}
     pl = build_invoice_payload(
-        dto_dict=_DTO, qoyod_customer_id="C-1",
+        dto_dict=_DTO, qoyod_customer_id="109",
         product_resolutions=_RESOLUTIONS,
         invoice_date=None, settings=settings,
     )
-    for ln in pl["invoice"]["line_items"]:
-        assert ln["inventory_id"] == 10
+    assert pl["invoice"]["inventory_id"] == 10

@@ -39,10 +39,15 @@ from integrations.qoyod.state_machine import (
 # block the invoice. This subclass overrides `_fake` to produce
 # `Q-<kind>-<sha8>` ids that mirror what real Qoyod returns.
 class _LiveLikeQoyodClient(DryRunQoyodClient):
-    """HTTP-free Qoyod stub for production-mode tests."""
+    """HTTP-free Qoyod stub for production-mode tests.
+
+    Iter-290c — returns NUMERIC ids (production-realistic) so the
+    invoice builder's int-coercion doesn't drop them. Real Qoyod
+    always returns integer ids."""
     def _fake(self, kind: str, payload: dict) -> str:
-        h = hashlib.sha1(repr(sorted(payload.items())).encode("utf-8")).hexdigest()[:8]
-        return f"Q-{kind}-{h}"
+        h = hashlib.sha1(repr(sorted(payload.items())).encode("utf-8")).hexdigest()
+        # First 6 hex chars → 0..16M, plenty for tests, always numeric.
+        return str(int(h[:6], 16))
 
 
 @pytest.fixture
@@ -89,8 +94,8 @@ def _base_payload():
             "payment_method_mapping": [
                 {"salla_method": "mada", "qoyod_account_id": "ACC-9"}],
         },
-        "qoyod_customer_id": "CUST-1",
-        "product_resolutions": [{"sku": "SKU-1", "qoyod_product_id": "P-1"}],
+        "qoyod_customer_id": "1",
+        "product_resolutions": [{"sku": "SKU-1", "qoyod_product_id": "1"}],
     }
 
 
@@ -144,18 +149,25 @@ def test_invoice_payload_includes_all_required_fields():
     dto = _make_dto("INV-1")
     pl = build_invoice_payload(
         dto_dict=dto.model_dump(mode="json"),
-        qoyod_customer_id="C-9",
-        product_resolutions=[{"sku":"SKU-1","qoyod_product_id":"P-9"}],
+        qoyod_customer_id="9",
+        product_resolutions=[{"sku":"SKU-1","qoyod_product_id":"99"}],
         invoice_date=dto.completed_at,
-        settings={"default_tax_id":"T-15", "default_branch_id":"B-1",
+        settings={"default_tax_id":"1", "default_branch_id":"1",
+                   "default_inventory_id": "1",
                    "tax_mode": "mezan_fixed_15"})
     inv = pl["invoice"]
-    assert inv["contact_id"] == "C-9"
+    # Iter-290c — all ids are integers; tax is tax_percent per line.
+    assert inv["contact_id"] == 9
     assert inv["currency_code"] == "SAR"
-    assert inv["branch_id"] == "B-1"
+    assert inv["branch_id"] == 1
+    assert inv["inventory_id"] == 1
+    assert inv["status"] == "Approved"
     assert inv["external_reference"] == "INV-1"
-    assert inv["line_items"][0]["product_id"] == "P-9"
-    assert inv["line_items"][0]["tax_id"] == "T-15"
+    assert inv["line_items"][0]["product_id"] == 99
+    assert inv["line_items"][0]["tax_percent"] == 15
+    assert inv["line_items"][0]["discount_type"] == "amount"
+    assert "tax_id" not in inv["line_items"][0]
+    assert "inventory_id" not in inv["line_items"][0]
 
 
 def test_receipt_payload_resolves_payment_account():
@@ -188,7 +200,7 @@ async def test_dry_run_client_records_calls_and_returns_fake_ids():
 
 # ─── E2E pipeline tests ─────────────────────────────────────────────
 async def _seed_customer_resolved(db, *, user_id, order_id, dto,
-                                  customer_id="CUST-1"):
+                                  customer_id="1"):
     row = {
         "id": uuid.uuid4().hex, "user_id": user_id,
         "trace_id": uuid.uuid4().hex,
@@ -259,7 +271,7 @@ async def test_pipeline_dry_run_completes_without_qoyod_post(db):
         updated = await db.integration_inbox.find_one({"id": row["id"]})
         assert updated["pipeline_stage"] == "COMPLETED"
         # Payload snapshots are present.
-        assert updated["qoyod_payloads"]["invoice"]["invoice"]["contact_id"] == "CUST-1"
+        assert updated["qoyod_payloads"]["invoice"]["invoice"]["contact_id"] == 1
         assert updated["qoyod_payloads"]["receipt"]["receipt"]["account_id"] == "ACC-9"
         # qoyod_invoices ledger row exists but status is pending (dry-run).
         led = await db.qoyod_invoices.find_one({"salla_order_id": order_id})
@@ -296,7 +308,7 @@ async def test_pipeline_preflight_blocks_when_tax_missing(db):
         "canonical_payload": dto_dict,
         "pipeline_started_at": datetime.now(timezone.utc),
         "last_success_stage": "CUSTOMER_RESOLVED",
-        "qoyod_customer_id": "CUST-1",
+        "qoyod_customer_id": "1",
         "business_rules_decision": {
             "eligible": True, "reason": "eligible",
             "invoice_date": datetime.now(timezone.utc).isoformat(),

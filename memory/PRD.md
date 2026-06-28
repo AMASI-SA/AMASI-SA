@@ -1,5 +1,50 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290c — Full Qoyod-canonical invoice payload reshape (2026-02-28)
+**User scenario**: After Iter-290b coerced `inventory_id` to int, production order `268756329` STILL failed with the same Qoyod error even though the JSON visibly carried `inventory_id: 1` on every line. The user located the official Qoyod API docs example and confirmed the payload SHAPE is wrong, not just the value types.
+
+### What Qoyod's docs actually require (vs what we were sending)
+| Field | Mezan was sending | Qoyod expects |
+|-------|-------------------|---------------|
+| `invoice.inventory_id` | absent | **integer at root** |
+| `line.inventory_id` | int, on every line | **must be omitted** |
+| `invoice.status` | absent | `"Approved"` |
+| `line.tax_id` | string | **dropped** in favour of `tax_percent` |
+| `line.tax_percent` | absent | **number (15)** per line |
+| `line.discount_type` | absent | `"amount"` (or `"percentage"`) |
+| `contact_id` | string `"109"` | **integer** |
+| `product_id` | string `"39"` | **integer** |
+| `branch_id` | string `"10"` | **integer (omit if missing)** |
+
+### Fix (`/app/backend/integrations/qoyod/invoice_builder.py`)
+- New helper `_to_int_or_none(v)` — central id-coercion at the payload boundary. Handles `None`, `bool`, `int`, `float`, `str` cleanly; returns `None` for non-numeric/blank.
+- `build_invoice_payload` reshaped:
+  - `inventory_id` moved from every line → invoice ROOT (int).
+  - `status: "Approved"` added at root.
+  - Every line: `discount_type: "amount"` + `tax_percent` (defaults to 15, override via `settings.tax_percentage`).
+  - Per-line `tax_id` removed (replaced by `tax_percent`).
+  - Per-line `unit_price` is now Salla's raw NET price (the customer_first gross-of-tax trick is dropped — incompatible with Qoyod's tax_percent model).
+  - `contact_id`, `product_id`, `branch_id`, `inventory_id` all int-coerced at emission time.
+  - `branch_id` omitted entirely when non-numeric/blank.
+
+### Trade-off (intentional, user-approved)
+The previous `customer_first` mode guaranteed invoice total = Salla customer-paid total. With Qoyod's standard 15% `tax_percent` and Salla's effective rate sometimes <15%, the Qoyod invoice total may diverge slightly. Receipt amount stays at the customer-paid total → any gap surfaces as an unpaid invoice balance for operator reconciliation. This is the price of the Qoyod-canonical payload shape.
+
+### Tests
+- Rewrote `tests/test_qoyod_inventory_id_on_invoice_lines_iter290.py` with 15 tests pinning the new contract (root inventory_id, no per-line inventory_id, status=Approved, tax_percent per line, discount_type, type-safety on all ids, branch omission, preflight, all coercion paths).
+- Updated `tests/test_qoyod_customer_first_tax_mode_iter285.py` — both modes now emit `tax_percent` + NET unit_price + `discount_type: amount`.
+- Updated `tests/test_qoyod_day5_invoice_receipt.py` — all id assertions now expect integers; `_LiveLikeQoyodClient._fake` returns numeric ids (real-Qoyod-realistic) so the DRY-run leak detector doesn't trip.
+- Updated `tests/test_qoyod_first_sync_monitor.py` — `branch_id` expected as int; `tax_percent` replaces `tax_id` per line.
+- Updated `tests/test_qoyod_line_discount_iter276.py` — same.
+- **784/784 Qoyod pytest passes**. Lint clean. (4 pre-existing `qyd_go` failures still unrelated.)
+
+### Deploy
+- Fix lives in preview. **Production redeploy required**.
+- Operator workflow post-redeploy:
+  1. Settings stay as-is (no value changes needed — `default_inventory_id="1"` already valid).
+  2. Run `preview-reprocess` for `268756329` → verify payload now has `inventory_id` at invoice root + `status: "Approved"` + `tax_percent: 15` per line + no `tax_id`.
+  3. Run `one-shot-reprocess` once → expect `INVOICE_CREATED` ✅ → `RECEIPT_CREATED` ✅.
+
 ## Iter-290b — `inventory_id` must be sent as integer, not string (2026-02-28)
 **User scenario**: After Iter-290 stamped `inventory_id` on every invoice line, production retry of order `268756329` STILL failed with the same Qoyod error:
 ```

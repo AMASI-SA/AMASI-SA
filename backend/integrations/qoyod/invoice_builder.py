@@ -41,6 +41,35 @@ def _f(v: Any, default: float = 0.0) -> float:
         return default
 
 
+def _to_int_or_none(v: Any) -> Optional[int]:
+    """Coerce any id-like value to ``int`` or ``None``.
+
+    Iter-290c — Qoyod's invoice validator strictly rejects string ids
+    (treats them as missing/invalid). All Qoyod ids on the invoice
+    payload (`contact_id`, `product_id`, `inventory_id`, `branch_id`)
+    MUST be JSON numbers. Mezan persists ids as strings in MongoDB so
+    we coerce at the payload boundary.
+
+    Returns ``None`` for blank / non-numeric inputs so the caller can
+    omit the field cleanly (preflight blocks bad rows upstream).
+    """
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v) if v == int(v) else None
+    s = str(v).strip()
+    if not s:
+        return None
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Tax-mode strategies (Iter-285)
 # ─────────────────────────────────────────────────────────────────────
@@ -156,6 +185,29 @@ def build_invoice_payload(
       from invoice total; needs a tax adjustment line — NOT done
       here.
 
+    Iter-290c — Qoyod docs-aligned payload (BREAKING the previous
+    customer_first tax-inclusive trick)
+    ───────────────────────────────────────────────────────────────
+    Per the official Qoyod apidoc invoice example, the canonical
+    payload uses:
+
+        invoice.status        = "Approved"            (required)
+        invoice.inventory_id  = <int>                  (ROOT, not per line)
+        line.product_id       = <int>
+        line.quantity         = <number>
+        line.unit_price       = <NET, exclusive of tax>
+        line.discount         = <amount or percent>
+        line.discount_type    = "amount" | "percentage"
+        line.tax_percent      = <number, e.g. 15>     (per line, NOT tax_id)
+
+    Mezan sends Salla's raw net unit_price + 15% tax_percent. The
+    customer-paid total in Salla may diverge slightly from Qoyod's
+    computed invoice total (Salla's effective rate is not always 15%)
+    — the receipt amount remains the customer-paid amount, so any
+    discrepancy surfaces as an outstanding invoice balance for the
+    operator to reconcile. This is the trade-off the operator chose
+    when picking the Qoyod-canonical payload shape.
+
     Branch handling
     ───────────────
     `branch_id` is OPTIONAL. Some Qoyod accounts are single-branch
@@ -165,56 +217,50 @@ def build_invoice_payload(
     tax_mode = _get_tax_mode(settings)
     res_by_sku = {r["sku"]: r["qoyod_product_id"]
                   for r in product_resolutions if r.get("qoyod_product_id")}
-    # Iter-290 — Qoyod's /invoices validator requires `inventory_id`
-    # on every line item, even when the product is type=service or
-    # is_non_stock. The operator creates one default warehouse in
-    # Qoyod and sets its id in `settings.default_inventory_id`.
-    #
-    # Iter-290b — Qoyod's API expects `inventory_id` as an INTEGER.
-    # When sent as a string ("10") Qoyod's validator treats the field
-    # as missing and returns 422 "inventory id missing in a line
-    # item" even though the field IS present in the JSON. The official
-    # apidoc example uses `inventory_id: 1001` (no quotes). Coerce here
-    # so the operator can paste either "10" or 10 in the UI.
-    inv_raw = (settings.get("default_inventory_id") or "")
-    inv_raw = inv_raw.strip() if isinstance(inv_raw, str) else inv_raw
-    inventory_id = None
-    if inv_raw not in (None, ""):
-        try:
-            inventory_id = int(str(inv_raw).strip())
-        except (TypeError, ValueError):
-            inventory_id = None  # invalid id → omit; preflight blocks upstream
+    # Iter-290c — inventory_id is now at the invoice ROOT (per Qoyod
+    # apidoc), not per line. Coerce to int because Qoyod's validator
+    # treats string ids as missing.
+    inventory_id = _to_int_or_none(settings.get("default_inventory_id"))
+    # Iter-290c — Qoyod's standard tax_percent (15% Saudi VAT). The
+    # operator can override via `settings.tax_percentage` for the rare
+    # case of non-standard rates.
+    try:
+        tax_percent = float(settings.get("tax_percentage") or 15)
+    except (TypeError, ValueError):
+        tax_percent = 15.0
     lines = []
     for it in dto_dict.get("items", []):
-        pid = res_by_sku.get(it.get("sku"))
-        unit_price = _line_unit_price_for_mode(it, tax_mode)
-        line_tax_id = _line_tax_id_for_mode(it, tax_mode, settings)
+        pid = _to_int_or_none(res_by_sku.get(it.get("sku")))
+        # Iter-290c — send Salla's NET unit_price (exclusive of tax)
+        # so Qoyod's tax_percent=15 produces the right line total.
+        # The previous customer_first gross-of-tax trick is dropped
+        # in favour of the Qoyod-canonical payload shape.
+        unit_price = _f(it.get("unit_price"))
         # Iter-276: per-line discount column. Qoyod accepts `discount`
         # as an absolute amount per line; we never fold it into
         # unit_price so the merchant's books match Salla's promo-code
-        # attribution.
+        # attribution. Salla emits discounts in SAR, so we always
+        # declare `discount_type = "amount"`.
         line: dict = {
-            "product_id":  pid,
-            "description": it.get("name"),
-            "quantity":    it.get("quantity"),
-            "unit_price":  unit_price,
-            "discount":    _f(it.get("discount_amount")),
+            "product_id":    pid,
+            "description":   it.get("name"),
+            "quantity":      it.get("quantity"),
+            "unit_price":    unit_price,
+            "discount":      _f(it.get("discount_amount")),
+            "discount_type": "amount",
+            "tax_percent":   tax_percent,
         }
-        if line_tax_id:
-            line["tax_id"] = line_tax_id
-        if inventory_id:
-            # Stamp on every line — Qoyod rejects the entire invoice if
-            # ANY line is missing it ("inventory id missing in a line
-            # item"). Preflight refuses the row when the setting is
-            # blank so we never reach here without an id.
-            line["inventory_id"] = inventory_id
         lines.append(line)
 
     invoice: dict = {
-        "contact_id":     qoyod_customer_id,
+        "contact_id":     _to_int_or_none(qoyod_customer_id),
         "issue_date":     invoice_date.date().isoformat() if invoice_date else None,
         "due_date":       invoice_date.date().isoformat() if invoice_date else None,
         "reference":      dto_dict.get("order_number") or dto_dict.get("order_id"),
+        # Iter-290c — Qoyod requires `status: "Approved"` to materialise
+        # the invoice in the books. Without it the invoice stays as a
+        # draft and the receipt POST fails.
+        "status":         "Approved",
         "currency_code":  dto_dict.get("currency") or "SAR",
         "line_items":     lines,
         "notes":          f"Mezan · Salla order {dto_dict.get('order_id')} · "
@@ -222,9 +268,12 @@ def build_invoice_payload(
         # Provenance — operator can find the source order from Qoyod.
         "external_reference": dto_dict.get("order_id"),
     }
+    # Iter-290c — inventory_id at INVOICE ROOT, not per line.
+    if inventory_id is not None:
+        invoice["inventory_id"] = inventory_id
     # Only include branch_id when the operator has configured one.
-    branch_id = (settings.get("default_branch_id") or "").strip()
-    if branch_id:
+    branch_id = _to_int_or_none(settings.get("default_branch_id"))
+    if branch_id is not None:
         invoice["branch_id"] = branch_id
 
     return {"invoice": invoice}

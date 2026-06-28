@@ -142,32 +142,34 @@ def test_invoice_payload_omits_branch_id_when_settings_blank():
 def test_invoice_payload_includes_branch_id_when_set():
     body = build_invoice_payload(
         dto_dict={"order_id": "9", "items": [], "currency": "SAR"},
-        qoyod_customer_id="C-1",
+        qoyod_customer_id="1",
         product_resolutions=[],
         invoice_date=None,
         settings={"default_branch_id": "5", "default_tax_id": "1",
                    "tax_mode": "mezan_fixed_15"},
     )
-    assert body["invoice"]["branch_id"] == "5"
+    # Iter-290c — ids on the invoice payload are integers.
+    assert body["invoice"]["branch_id"] == 5
 
 
 def test_invoice_line_uses_tax_id_not_rate():
-    """Regression: every line MUST carry `tax_id` (a Qoyod tax ID) not
-    a tax rate. User spec 2026-06-27: Tax ID = 1, VAT Rate = 15%."""
+    """Iter-290c — Qoyod docs use `tax_percent` per line (not tax_id).
+    This test was originally a regression guard against tax_rate leaks;
+    now it pins the new contract: tax_percent on every line, no tax_id."""
     body = build_invoice_payload(
         dto_dict={
             "order_id": "9", "currency": "SAR",
             "items": [{"sku": "S1", "name": "Item",
                        "quantity": 1, "unit_price": 100}],
         },
-        qoyod_customer_id="C-1",
-        product_resolutions=[{"sku": "S1", "qoyod_product_id": "P-1"}],
+        qoyod_customer_id="1",
+        product_resolutions=[{"sku": "S1", "qoyod_product_id": "1"}],
         invoice_date=None,
         settings={"default_tax_id": "1", "tax_mode": "mezan_fixed_15"},
     )
     line = body["invoice"]["line_items"][0]
-    assert line["tax_id"] == "1"
-    # No tax_rate or rate field leaked into the payload.
+    assert line["tax_percent"] == 15
+    assert "tax_id" not in line
     assert "tax_rate" not in line
     assert "rate" not in line
 

@@ -85,12 +85,12 @@ def test_invoice_builder_includes_discount_as_separate_column():
             "total": 173.6,
         }],
     }
-    product_resolutions = [{"sku": "AMS13000", "qoyod_product_id": "Q-PROD-1"}]
+    product_resolutions = [{"sku": "AMS13000", "qoyod_product_id": "1"}]
     settings = {"default_tax_id": "1", "tax_mode": "mezan_fixed_15"}
     from datetime import datetime, timezone
     payload = build_invoice_payload(
         dto_dict=dto_dict,
-        qoyod_customer_id="Q-CUST-1",
+        qoyod_customer_id="1",
         product_resolutions=product_resolutions,
         invoice_date=datetime.now(timezone.utc),
         settings=settings,
@@ -103,7 +103,9 @@ def test_invoice_builder_includes_discount_as_separate_column():
     assert line["discount"] == 19.26, \
         "discount must be surfaced in its own Qoyod column"
     assert line["quantity"] == 1
-    assert line["tax_id"] == "1"
+    # Iter-290c — tax_percent (not tax_id) per Qoyod apidoc.
+    assert line["tax_percent"] == 15
+    assert line["discount_type"] == "amount"
 
 
 def test_invoice_builder_defaults_discount_to_zero_when_absent():

@@ -163,66 +163,83 @@ def test_estimated_invoice_total_mezan_fixed_15_diverges():
 
 # ─── build_invoice_payload — customer_first mode ────────────────────
 def test_invoice_builder_customer_first_uses_tax_inclusive_unit_prices():
+    """Iter-290c — payload reshaped per Qoyod apidoc.
+
+    `customer_first` no longer emits tax-inclusive unit_prices on the
+    invoice payload (Qoyod's tax_percent model would double-tax them).
+    Both tax_modes now send Salla's raw NET unit_price + tax_percent=15
+    per line. The `_line_unit_price_for_mode` helper is kept for any
+    callers that need the inclusive view (diagnostics, totals_guard).
+    """
     dto = _order_268756329_canonical()
     s   = _settings_customer_first()
     payload = build_invoice_payload(
-        dto_dict=dto, qoyod_customer_id="CST-1",
+        dto_dict=dto, qoyod_customer_id="999",
         product_resolutions=[
-            {"sku": "A", "qoyod_product_id": "P-A"},
-            {"sku": "B", "qoyod_product_id": "P-B"},
-            {"sku": "C", "qoyod_product_id": "P-C"},
+            {"sku": "A", "qoyod_product_id": "1"},
+            {"sku": "B", "qoyod_product_id": "2"},
+            {"sku": "C", "qoyod_product_id": "3"},
         ],
         invoice_date=datetime(2026, 6, 27, tzinfo=timezone.utc),
         settings=s,
     )
     lines = payload["invoice"]["line_items"]
     assert len(lines) == 3
-    # Line A: 5 + 0/1 = 5
+    # NET unit_prices straight from Salla.
     assert lines[0]["unit_price"] == 5.0
-    assert lines[0]["tax_id"] == "TAX-ZERO"
+    assert lines[0]["tax_percent"] == 15
     assert lines[0]["discount"] == 5.0
-    # Line B: 199 + 14.33/1 = 213.33
-    assert lines[1]["unit_price"] == 213.33
-    assert lines[1]["tax_id"] == "TAX-ZERO"
+    assert lines[0]["discount_type"] == "amount"
+    assert "tax_id" not in lines[0]
+    assert "inventory_id" not in lines[0]
+
+    assert lines[1]["unit_price"] == 199.0
+    assert lines[1]["tax_percent"] == 15
     assert lines[1]["discount"] == 19.9
-    # Line C: 100 + 7.20/1 = 107.20
-    assert lines[2]["unit_price"] == 107.20
-    assert lines[2]["tax_id"] == "TAX-ZERO"
+
+    assert lines[2]["unit_price"] == 100.0
+    assert lines[2]["tax_percent"] == 15
     assert lines[2]["discount"] == 10.0
 
 
 def test_invoice_builder_customer_first_omits_tax_id_when_zero_tax_id_missing():
+    """Iter-290c — tax_id is never emitted on lines anymore."""
     dto = _order_268756329_canonical()
-    s   = _settings_customer_first(zero_tax_id="")   # explicit empty
+    s   = _settings_customer_first(zero_tax_id="")
     payload = build_invoice_payload(
-        dto_dict=dto, qoyod_customer_id="CST-1",
+        dto_dict=dto, qoyod_customer_id="999",
         product_resolutions=[
-            {"sku": "A", "qoyod_product_id": "P-A"},
-            {"sku": "B", "qoyod_product_id": "P-B"},
-            {"sku": "C", "qoyod_product_id": "P-C"},
+            {"sku": "A", "qoyod_product_id": "1"},
+            {"sku": "B", "qoyod_product_id": "2"},
+            {"sku": "C", "qoyod_product_id": "3"},
         ],
         invoice_date=datetime(2026, 6, 27, tzinfo=timezone.utc),
         settings=s,
     )
     for line in payload["invoice"]["line_items"]:
         assert "tax_id" not in line
+        assert line["tax_percent"] == 15
 
 
 def test_invoice_builder_mezan_fixed_15_uses_default_tax_id():
+    """Iter-290c — both modes now emit tax_percent (not tax_id) and
+    NET unit_price. This test name is kept for traceability."""
     dto = _order_268756329_canonical()
     s   = _settings_mezan_fixed_15()
     payload = build_invoice_payload(
-        dto_dict=dto, qoyod_customer_id="CST-1",
+        dto_dict=dto, qoyod_customer_id="999",
         product_resolutions=[
-            {"sku": "A", "qoyod_product_id": "P-A"},
-            {"sku": "B", "qoyod_product_id": "P-B"},
-            {"sku": "C", "qoyod_product_id": "P-C"},
+            {"sku": "A", "qoyod_product_id": "1"},
+            {"sku": "B", "qoyod_product_id": "2"},
+            {"sku": "C", "qoyod_product_id": "3"},
         ],
         invoice_date=datetime(2026, 6, 27, tzinfo=timezone.utc),
         settings=s,
     )
     for line in payload["invoice"]["line_items"]:
-        assert line["tax_id"] == "TAX-15"
+        assert "tax_id" not in line
+        assert line["tax_percent"] == 15
+        assert line["discount_type"] == "amount"
     # Unit price is Salla's net (no inclusion).
     assert payload["invoice"]["line_items"][1]["unit_price"] == 199.0
 
