@@ -502,30 +502,51 @@ async def process_customer_resolved_row(
     invoice_idem = f"mzn-{trace_id}-invoice"
     inv_resp_raw: Any = None
     inv_started_ms = int(_now().timestamp() * 1000)
-    try:
-        inv_resp = await api_client.create_invoice(invoice_payload,
-                                                   idem=invoice_idem)
-        inv_resp_raw = inv_resp
-        # Extract id/number — tolerant to a few shapes.
-        if isinstance(inv_resp, dict):
-            inv = inv_resp.get("invoice") if isinstance(inv_resp.get("invoice"), dict) else inv_resp
-            qoyod_invoice_id = str(inv.get("id")) if inv.get("id") is not None else None
-            qoyod_invoice_number = inv.get("number") or inv.get("reference")
-    except QoyodAPIError as exc:
+
+    # Iter-291 — Idempotent invoice short-circuit. When a previous run
+    # successfully created the Qoyod invoice but the receipt failed
+    # afterwards (PARTIAL_FAILURE), retrying the row must NOT create a
+    # duplicate invoice in Qoyod. Reuse the stored id and jump straight
+    # to the receipt step.
+    existing_qid = row.get("qoyod_invoice_id")
+    if existing_qid and not is_dry:
+        qoyod_invoice_id = str(existing_qid)
+        qoyod_invoice_number = row.get("qoyod_invoice_number")
         await db.integration_inbox.update_one(
             {"id": row["id"]},
             {"$set": {
-                "qoyod_responses.invoice.error":      exc.to_log_dict(),
-                "qoyod_responses.invoice.received_at": _now(),
-                "qoyod_responses.invoice.duration_ms":
-                    int(_now().timestamp() * 1000) - inv_started_ms,
+                "qoyod_responses.invoice.reused_from_previous_run": True,
+                "qoyod_responses.invoice.reused_qoyod_id": qoyod_invoice_id,
+                "qoyod_responses.invoice.reused_at": _now(),
             }})
-        await _dead_letter(
-            db, row_id=row["id"], from_stage="PRODUCT_RESOLVED",
-            fail_stage="FAILED_INVOICE", error=exc.to_log_dict(),
-            started_at=started_at)
-        return {"row_id": row["id"], "outcome": "DEAD_LETTER",
-                "reason": "FAILED_INVOICE"}
+        # Skip the create_invoice POST entirely and fall through to
+        # the post-success branch which advances the stage to
+        # INVOICE_CREATED (it tolerates re-applying the same stage).
+    else:
+        try:
+            inv_resp = await api_client.create_invoice(invoice_payload,
+                                                       idem=invoice_idem)
+            inv_resp_raw = inv_resp
+            # Extract id/number — tolerant to a few shapes.
+            if isinstance(inv_resp, dict):
+                inv = inv_resp.get("invoice") if isinstance(inv_resp.get("invoice"), dict) else inv_resp
+                qoyod_invoice_id = str(inv.get("id")) if inv.get("id") is not None else None
+                qoyod_invoice_number = inv.get("number") or inv.get("reference")
+        except QoyodAPIError as exc:
+            await db.integration_inbox.update_one(
+                {"id": row["id"]},
+                {"$set": {
+                    "qoyod_responses.invoice.error":      exc.to_log_dict(),
+                    "qoyod_responses.invoice.received_at": _now(),
+                    "qoyod_responses.invoice.duration_ms":
+                        int(_now().timestamp() * 1000) - inv_started_ms,
+                }})
+            await _dead_letter(
+                db, row_id=row["id"], from_stage="PRODUCT_RESOLVED",
+                fail_stage="FAILED_INVOICE", error=exc.to_log_dict(),
+                started_at=started_at)
+            return {"row_id": row["id"], "outcome": "DEAD_LETTER",
+                    "reason": "FAILED_INVOICE"}
 
     # Persist raw invoice response (success path) — First-Sync-Monitor.
     await db.integration_inbox.update_one(

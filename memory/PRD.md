@@ -1,5 +1,36 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-291 — Idempotent invoice short-circuit for retry scenarios (2026-02-28)
+**User scenario**: After Iter-290d shipped the receipt fix, the operator faces a dilemma — Qoyod already has invoice id `51` from the previous run. Re-running `one-shot-reprocess` would naively POST another invoice → duplicate in قيود.
+
+### Fix (`/app/backend/integrations/qoyod/pipeline.py::process_customer_resolved_row`)
+- Before calling `api_client.create_invoice`, check if `row["qoyod_invoice_id"]` is already set AND the row is NOT in dry-run mode.
+- If yes: SKIP the POST entirely. Reuse the stored `qoyod_invoice_id` and proceed straight to the receipt step.
+- Stamp diagnostic markers on the row so an auditor can tell the invoice was reused (not freshly created):
+  - `qoyod_responses.invoice.reused_from_previous_run = True`
+  - `qoyod_responses.invoice.reused_qoyod_id = "51"`
+  - `qoyod_responses.invoice.reused_at = <timestamp>`
+- Fresh rows (no `qoyod_invoice_id`) continue to POST normally — backwards-compatible.
+- Dry-run mode unaffected (stubs always create fresh DRY:* ids).
+
+### Tests
+- New `tests/test_qoyod_idempotent_invoice_reuse_iter291.py` (4 tests, MongoDB-integration):
+  - reuse path: `create_invoice` NOT called
+  - reuse path: `create_receipt` still fires with reused id
+  - fresh path: `create_invoice` IS called
+  - diagnostic markers written to the row
+- **793/793 Qoyod pytest passes**. Lint clean. (4 pre-existing `qyd_go` failures still unrelated.)
+
+### Operator workflow with this fix
+1. Order 268756329 already has invoice id 51 in Qoyod (from previous run).
+2. Redeploy preview → production.
+3. Run `one-shot-reprocess` for 268756329:
+   - Pipeline resets row to NORMALIZED
+   - Re-resolves customer (idempotent) + products (auto-adopt by SKU)
+   - **Invoice step: REUSES id 51, no Qoyod POST** ← Iter-291
+   - Receipt step: POSTs with `contact_id=109` ← Iter-290d
+4. Expected: `INVOICE_CREATED (reused) → RECEIPT_CREATED` ✅
+
 ## Iter-290d — Qoyod /receipts requires `contact_id` at root (2026-02-28)
 **User scenario**: After Iter-290c reshaped the invoice payload, production order `268756329` finally reached **INVOICE_CREATED ✅** (Qoyod returned invoice id `51`). However the immediately-next stage failed with:
 ```
