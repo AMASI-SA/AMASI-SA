@@ -1,5 +1,52 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290h.1 — Unallocated Receipts Admin Page (2026-02-28)
+**Operator-facing companion** to Iter-290h. Surfaces PYT1–PYT8 (and any future orphan receipts) for manual reconciliation inside قيود UI.
+
+### Backend additions
+- **`unallocated_receipts_report.py`**:
+  - `_suggest_invoice` now returns `(invoice, match_reasons, score)`. `match_reasons` is a subset of `{"reference","amount","customer","date"}` — operator-readable chips on the UI.
+  - `_qoyod_deep_links` — emits `receipt_url` + `invoice_url` from `settings.qoyod_ui_base_url` (default `https://www.qoyod.com/tenant`).
+  - `dismiss_receipt(...)` / `undismiss_receipt(...)` — soft toggle on new collection `qoyod_unallocated_dismissals` so the operator can mark a receipt as "تمت المعالجة يدوياً" inside ميزان. Audit trail preserved on un-dismiss.
+  - Report output: `qoyod_receipt_url`, `qoyod_invoice_url`, `match_reasons`, `match_score`, `dismissable` per item; `summary.by_confidence` breakdown.
+
+- **`routes.py`**: New endpoints
+  - `GET    /api/integrations/qoyod/admin/unallocated-receipts-report`
+  - `POST   /api/integrations/qoyod/admin/unallocated-receipts/{receipt_id}/dismiss`
+  - `DELETE /api/integrations/qoyod/admin/unallocated-receipts/{receipt_id}/dismiss`
+
+### Frontend addition
+- **`/app/frontend/src/pages/QoyodUnallocatedReceipts.jsx`** — Admin page with:
+  - 5 stat cards: total unallocated · with suggestion · high confidence · medium/low · without suggestion
+  - Table columns: السند · العميل · المبلغ · التاريخ · الفاتورة المقترحة · الثقة · سبب المطابقة · إجراء
+  - Match-reason chips: reference / amount / customer / date (Arabic labels)
+  - Deep links: "فتح في قيود ↗" for both receipt and invoice
+  - "تمت المعالجة يدوياً" button with inline note input + confirm/cancel
+  - Empty state when no orphans remain
+- Sidebar entry: `nav-qoyod-unallocated-receipts` → "🧾 سندات قبض غير مستعملة"
+- Route: `/integrations/qoyod/unallocated-receipts`
+
+### Tests (7 new, total 856 Qoyod tests pass)
+- `test_qoyod_unallocated_receipts_report_iter290h.py` extended:
+  - `_qoyod_deep_links` (default + override + missing-id)
+  - `match_reasons` in suggestion output
+  - `dismiss_then_report_excludes_receipt`
+  - `dismiss_is_idempotent` (no duplicate rows)
+  - `undismiss_soft_toggles_active_false` (audit-trail preserved)
+
+### Boundaries (per user spec — strict)
+- **No allocation API call**. Mezan never mutates Qoyod state — operator links manually in قيود UI.
+- **No auto-delete + recreate**. PYT1–PYT8 stay intact in Qoyod.
+- **Dismissal is local to ميزان**. Reversible via DELETE endpoint.
+
+### Operator workflow
+1. Open ميزان → التكاملات → سندات قبض غير مستعملة.
+2. For each row: click "فتح الفاتورة في قيود ↗" → in قيود UI, allocate the receipt to that invoice manually.
+3. Back in ميزان → click "✓ تمت المعالجة يدوياً" → optional note → confirm.
+4. Row disappears from the report. Audit row stays in `qoyod_unallocated_dismissals`.
+
+
+
 ## Iter-290h — POST /invoice_payments replaces standalone POST /receipts (2026-02-28)
 **User report**: After end-to-end success on order 268784455, the receipt showed up in Qoyod's "غير مستعمل" (unallocated) bin and the invoice balance remained > 0. Qoyod's data model distinguishes **Receipts** (standalone) from **Invoice Payments** (registered ON the invoice — the only resource that closes the invoice balance). The old `POST /receipts` flow created orphan receipts that never reconciled.
 

@@ -37,6 +37,7 @@ import QoyodMigration from "./pages/QoyodMigration";
 import QoyodFreshStart from "./pages/QoyodFreshStart";
 import QoyodFirstSyncMonitor from "./pages/QoyodFirstSyncMonitor";
 import QoyodWebhookMonitor from "./pages/QoyodWebhookMonitor";
+import QoyodUnallocatedReceipts from "./pages/QoyodUnallocatedReceipts";
 import IntegrationPlaceholder from "./pages/IntegrationPlaceholder";
 import SallaSourceComparison from "./pages/SallaSourceComparison";
 import PaymentSettlements from "./pages/PaymentSettlements";
@@ -173,6 +174,7 @@ function AppRoutes() {
             <Route path="/integrations/qoyod/products" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="منتجات قيود" subtitle="تتبع SKUs المرتبطة بمنتجات قيود وتقارير المنتجات غير المربوطة." icon="📦" phase="Day 4-5" testid="qoyod-products-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"},{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/customers" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="عملاء قيود" subtitle="إدارة ربط العملاء (هاتف/إيميل) مع جهات الاتصال في قيود." icon="👥" phase="Day 4-5" testid="qoyod-customers-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"}]} /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/sync-log" element={<ProtectedRoute><Layout><QoyodWebhookMonitor /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/unallocated-receipts" element={<ProtectedRoute><Layout><QoyodUnallocatedReceipts /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/error-log" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="سجل الأخطاء — قيود" subtitle="جميع حالات الفشل (FAILED_*, DEAD_LETTER) قابلة للفلترة وإعادة المحاولة." icon="⚠️" phase="Day 4-5" testid="qoyod-error-log-placeholder" related={[{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
             <Route path="/integrations/salla/orders" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="مراقبة الطلبات — سلة" subtitle="عرض الطلبات الواردة من سلة وحالتها الحالية في خط الأنابيب." icon="🛒" phase="مرحلة لاحقة" testid="salla-orders-placeholder" related={[{to:"/orders",label:"الطلبات"},{to:"/salla-sources",label:"مقارنة مصادر البيانات"}]} /></Layout></ProtectedRoute>} />
             <Route path="/integrations/salla/events" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="سجل الأحداث — سلة" subtitle="جميع أحداث Webhooks من سلة (طلب جديد، شحن، إلغاء، استرجاع…)." icon="📋" phase="مرحلة لاحقة" testid="salla-events-placeholder" related={[{to:"/make-webhook",label:"ربط Make.com"}]} /></Layout></ProtectedRoute>} />

@@ -162,6 +162,7 @@ const SECTIONS = [
                     { to: "/integrations/qoyod/products", label: "منتجات قيود", icon: Package, testid: "nav-qoyod-products" },
                     { to: "/integrations/qoyod/customers", label: "عملاء قيود", icon: UsersThree, testid: "nav-qoyod-customers" },
                     { to: "/integrations/qoyod/sync-log", label: "سجل المزامنة", icon: Queue, testid: "nav-qoyod-sync-log" },
+                    { to: "/integrations/qoyod/unallocated-receipts", label: "🧾 سندات قبض غير مستعملة", icon: Receipt, testid: "nav-qoyod-unallocated-receipts" },
                     { to: "/integrations/qoyod/error-log", label: "سجل الأخطاء", icon: Receipt, testid: "nav-qoyod-error-log" },
                 ],
             },

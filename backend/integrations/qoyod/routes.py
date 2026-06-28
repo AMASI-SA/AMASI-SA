@@ -1329,6 +1329,8 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         Lists Qoyod receipts that appear unallocated (the "غير مستعمل"
         bin in قيود) and proposes a matching invoice for each one,
         scored by reference / amount / customer / date proximity.
+        Dismissed rows (operator marked as "تمت المعالجة يدوياً") are
+        filtered out.
 
         READ-ONLY. The endpoint never mutates Qoyod state — the
         operator links receipts manually in قيود UI. A later iteration
@@ -1342,6 +1344,46 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         return await build_unallocated_receipts_report(
             db, user_id=tenant,
             max_receipts=max_receipts, max_invoices=max_invoices,
+        )
+
+    class _DismissPatch(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        note: Optional[str] = Field(default=None, max_length=500)
+
+    @router.post("/admin/unallocated-receipts/{receipt_id}/dismiss")
+    async def admin_unallocated_receipt_dismiss(
+        receipt_id: str,
+        body: _DismissPatch = _DismissPatch(),
+        user=Depends(current_user),
+    ):
+        """Iter-290h — Operator marks a Qoyod receipt as 'تمت المعالجة
+        يدوياً' inside ميزان. The report no longer surfaces it.
+        Idempotent — calling twice refreshes `dismissed_at`."""
+        from integrations.qoyod.unallocated_receipts_report import (
+            dismiss_receipt,
+        )
+        tenant = _tenant_id(user)
+        actor = (getattr(user, "email", None)
+                 or getattr(user, "id", None) or "operator")
+        row = await dismiss_receipt(
+            db, user_id=tenant,
+            qoyod_receipt_id=str(receipt_id),
+            actor=str(actor), note=body.note,
+        )
+        return {"ok": True, "dismissed": row}
+
+    @router.delete("/admin/unallocated-receipts/{receipt_id}/dismiss")
+    async def admin_unallocated_receipt_undismiss(
+        receipt_id: str, user=Depends(current_user),
+    ):
+        """Iter-290h — Reverse of dismiss. Soft-toggles `active=False`
+        so the row reappears in the report (audit trail preserved)."""
+        from integrations.qoyod.unallocated_receipts_report import (
+            undismiss_receipt,
+        )
+        tenant = _tenant_id(user)
+        return await undismiss_receipt(
+            db, user_id=tenant, qoyod_receipt_id=str(receipt_id),
         )
 
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
