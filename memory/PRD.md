@@ -1,5 +1,36 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290h.4 — One-shot-reprocess diagnostics for the payment-link step (2026-02-28)
+**User report**: After Iter-290h.3 deployed and the retry ran for order 269048975, the UI showed `request_body_json تم إيقافه (لم يُرسَل لقيود)` — but the diagnostic also displayed a `qoyod_validation_error: Invalid resource`. The user couldn't tell whether the request actually reached قيود or was halted pre-flight.
+
+### Backend (`one_shot_reprocess.py`)
+- `_build_failure_response` now has an explicit branch for `PAYMENT_LINK_FAILED` + `PAYMENT_METHOD_MAPPING_MISSING` that surfaces:
+  - `payment_post_attempted` — was the POST attempted?
+  - `request_sent_to_qoyod` — did the request reach قيود's server?
+  - `qoyod_status_code` — HTTP status code قيود returned
+  - `qoyod_response` — قيود's response excerpt verbatim
+  - `skip_reason` — operator-facing Arabic explanation when halted pre-flight
+  - `request_body_json` — the exact payload the pipeline built (NEW shape with `date` + `account`)
+
+### Frontend (`QoyodFirstSyncMonitor.jsx`)
+- The payload label is now **conditional** — three states:
+  - `"جسم الطلب المُرسل لقيود (نجح)"` — outcome=COMPLETED
+  - `"جسم الطلب المُرسل لقيود — قيود رفضه"` — request_sent_to_qoyod=True
+  - `"جسم الطلب الذي تم إيقافه قبل إرسالها لقيود"` — pre-flight halt
+- New diagnostic grid below the JSON for `PAYMENT_LINK_FAILED` / `PAYMENT_METHOD_MAPPING_MISSING` showing the 5 diagnostic fields in Arabic.
+
+### Tests
+- `test_qoyod_oneshot_payment_link_diagnostics_iter290h4.py` — 2 tests covering both diagnostic branches.
+- **865/865 Qoyod tests pass**, lint clean.
+
+### Idempotency confirmed unchanged
+- The check at `pipeline.py:747` requires `qoyod_invoice_payment_id` to be present — failed attempts never write to `qoyod_invoice_payments` so they don't block retries. (User's concern #4 was already correct in the existing implementation.)
+
+### Next operator step
+After deploy + one-shot-reprocess for 269048975, the user will see the EXACT قيود response. If قيود is genuinely rejecting the payload with `Invalid resource`, the new diagnostic grid reveals which field is missing — and we then open Iter-290h.5 to add it (per official Qoyod doc / GET /invoices/63 evidence, never by guessing).
+
+
+
 ## Iter-290h.3 — Live Qoyod field-name correction `date` + `account` (2026-02-28)
 **Production failure**: Order 269048975 (Invoice 63, 131.92 SAR) — invoice created successfully, payment-link step rejected with:
 ```

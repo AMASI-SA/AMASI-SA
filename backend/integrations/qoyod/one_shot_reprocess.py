@@ -790,6 +790,38 @@ def _build_failure_response(
                                        or invoice_snapshot
         return response
 
+    if failed_stage in ("PAYMENT_LINK_FAILED",
+                        "PAYMENT_METHOD_MAPPING_MISSING"):
+        # Iter-290h.4 — Explicit branch for the payment-link step so
+        # the operator sees diagnostic fields the user demanded:
+        # `payment_post_attempted`, `request_sent_to_qoyod`,
+        # `qoyod_status_code`, `qoyod_response`, `skip_reason`.
+        #
+        # The pipeline writes the invoice_payment error block to
+        # `row.qoyod_responses.invoice_payment.error` AND to
+        # `row.pipeline_error` (same dict). We surface both so the
+        # frontend can label the panel correctly — "تم الإرسال
+        # وقيود رفض" vs "تم الإيقاف قبل الإرسال".
+        attempted    = (failed_stage == "PAYMENT_LINK_FAILED")
+        sent         = attempted   # PAYMENT_LINK_FAILED only fires after the POST
+                                    # raised — the request was on the wire.
+        skip_reason  = None
+        if failed_stage == "PAYMENT_METHOD_MAPPING_MISSING":
+            skip_reason = (
+                "لم يتم ضبط حساب قيود لطريقة الدفع المستخدمة — "
+                "افتح إعدادات قيود ← طرق الدفع وضبط الحساب ثم أعد المحاولة.")
+        response["payment_post_attempted"] = attempted
+        response["request_sent_to_qoyod"]  = sent
+        response["qoyod_status_code"]      = pe.get("status_code")
+        response["qoyod_response"]         = pe.get("qoyod_response_excerpt")
+        response["skip_reason"]            = skip_reason
+        response["request_body_json"]      = pe.get("request_body_json")
+        # Surface the invoice id so the operator can correlate with قيود UI.
+        response["existing_qoyod_invoice_id"] = (
+            (canonical_payload or {}).get("qoyod_invoice_id")
+            or pe.get("qoyod_invoice_id"))
+        return response
+
     # Catch-all (FAILED_CUSTOMER, FAILED_VALIDATION, etc.) — surface
     # whatever the error block carried.
     response["request_body_json"] = pe.get("request_body_json")

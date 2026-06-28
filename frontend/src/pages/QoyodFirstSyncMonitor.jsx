@@ -818,20 +818,71 @@ export default function QoyodFirstSyncMonitor() {
                   )}
                 </div>
 
-                {/* Final invoice payload — only shown on success/leak so
-                    the operator can paste it into a support ticket */}
+                {/* Final invoice payload — labelled conditionally
+                    based on whether the POST actually reached Qoyod.
+                    Iter-290h.4 — the new payment-link diagnostics
+                    carry `request_sent_to_qoyod` so we no longer
+                    mislabel a real 422 from قيود as "halted". */}
                 {(reprocResult.invoice_payload || reprocResult.request_body_json) && (
                   <div className="mt-3">
                     <div className="text-[11px] font-bold text-slate-600 mb-1">
                       {reprocResult.outcome === "COMPLETED"
-                        ? "📦 invoice_payload المُرسل لقيود"
-                        : "📦 request_body_json الذي تم إيقافه (لم يُرسَل لقيود)"}
+                        ? "📦 جسم الطلب المُرسل لقيود (نجح)"
+                        : reprocResult.request_sent_to_qoyod
+                          ? "📦 جسم الطلب المُرسل لقيود — قيود رفضه"
+                          : "📦 جسم الطلب الذي تم إيقافه قبل إرسالها لقيود"}
                     </div>
                     <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-slate-900 text-slate-100 rounded p-2 max-h-72 overflow-auto"
                          dir="ltr"
                          data-testid="reproc-request-body-json">
 {JSON.stringify(reprocResult.invoice_payload || reprocResult.request_body_json, null, 2)}
                     </pre>
+                    {/* Iter-290h.4 — explicit diagnostics for the
+                        payment-link step. Surfaces exactly what
+                        قيود returned so the operator no longer has
+                        to guess whether a request was sent at all. */}
+                    {(reprocResult.failed_at_stage === "PAYMENT_LINK_FAILED"
+                      || reprocResult.failed_at_stage === "PAYMENT_METHOD_MAPPING_MISSING") && (
+                      <div className="mt-2 text-[11px] grid grid-cols-2 gap-1 bg-slate-50 dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700"
+                           data-testid="reproc-payment-link-diagnostics">
+                        <div className="font-bold text-slate-600">
+                          هل تمت محاولة الإرسال؟
+                        </div>
+                        <div className={reprocResult.payment_post_attempted
+                          ? "text-emerald-700" : "text-rose-700"}>
+                          {reprocResult.payment_post_attempted ? "نعم" : "لا"}
+                        </div>
+                        <div className="font-bold text-slate-600">
+                          هل وصل الطلب إلى قيود؟
+                        </div>
+                        <div className={reprocResult.request_sent_to_qoyod
+                          ? "text-emerald-700" : "text-amber-700"}>
+                          {reprocResult.request_sent_to_qoyod ? "نعم" : "لا"}
+                        </div>
+                        {reprocResult.qoyod_status_code != null && (
+                          <>
+                            <div className="font-bold text-slate-600">رمز الاستجابة من قيود</div>
+                            <div className="font-mono">{reprocResult.qoyod_status_code}</div>
+                          </>
+                        )}
+                        {reprocResult.qoyod_response && (
+                          <>
+                            <div className="font-bold text-slate-600">رد قيود</div>
+                            <div className="font-mono text-rose-700 break-all">
+                              {typeof reprocResult.qoyod_response === "string"
+                                ? reprocResult.qoyod_response
+                                : JSON.stringify(reprocResult.qoyod_response)}
+                            </div>
+                          </>
+                        )}
+                        {reprocResult.skip_reason && (
+                          <>
+                            <div className="font-bold text-slate-600">سبب التخطي</div>
+                            <div className="text-amber-700">{reprocResult.skip_reason}</div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
