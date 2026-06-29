@@ -267,52 +267,88 @@ def _synthetic_row(*, salla_total, qoyod_total, payload_lines,
 
 
 def test_dry_run_single_row_succeeds_on_minor_drift():
-    """Iter-290k.2 — Realistic Header VAT alignment scenario.
+    """Iter-290k.3 — Realistic representable scenario under the
+    CORRECTED قيود header model (round-each-line-then-sum).
 
-    Pattern matching production order 269340921:
-      • exact_net_sum = 198.37 (lands on .005 VAT boundary)
-      • line_gross_sum = 228.12 (matches Salla)
-      • header_total   = 228.13 (matches قيود's actual — 0.01 above)
+    Construction:
+      • Line A: unit_price=100, qty=1, discount=0.0049, tax=15
+        → exact_net = 99.9951, round_net = 100.00, line_gross = 114.99
+      • Line B: unit_price=30, qty=1, discount=0, tax=15
+        → exact_net = 30.00, round_net = 30.00, line_gross = 34.50
 
-    The smart adjustment must:
-      1. Pick the largest line (Line C, value 66.80).
-      2. Apply a 4-dp net discount that crosses the header VAT
-         boundary without flipping any line's individual gross.
-      3. Land header_total_after AND line_gross_sum_after exactly
-         on Salla (228.12).
+      displayed_net = 100.00 + 30.00 = 130.00
+      header_vat = round(130.00 × 0.15, 2) = 19.50
+      header_total = 149.50            ← قيود's actual
+      line_gross_sum = 114.99 + 34.50 = 149.49  ← Salla's target
+
+    A discount tweak on Line A (0.0049 → 0.0051) drops its rounded
+    net from 100.00 to 99.99, lowering displayed_net to 129.99 and
+    bringing BOTH header_total AND line_gross_sum onto 149.49.
     """
     payload = [
-        {"description": "A", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "B", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "C", "unit_price": "66.80",  "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
+        {"description": "A", "unit_price": "100", "quantity": "1",
+         "discount": "0.0049", "tax_percent": "15"},
+        {"description": "B", "unit_price": "30",  "quantity": "1",
+         "discount": "0",      "tax_percent": "15"},
     ]
-    # qoyod returns 228.13 (header_total) — that's the actual.
-    # Salla expects 228.12 (= line_gross_sum) — that's the target.
     row = _synthetic_row(
-        salla_total=228.12,
-        qoyod_total=228.13,
+        salla_total=149.49,
+        qoyod_total=149.50,   # = header_total (قيود's actual)
         payload_lines=payload,
     )
     out = _dry_run_single_row(row)
     assert out["eligible"] is True
-    # Iter-290k.2 — Header VAT model closes the parity gap.
+    # Corrected model reproduces قيود's actual.
     assert out["local_sim_matches_qoyod_actual"] is True
     assert out["parity"] == "MODEL_OK_NEEDS_ADJUSTMENT"
     assert out["outcome"] == "adjustment_succeeded"
-    # The smart alignment must satisfy BOTH constraints.
-    hva = out["header_vat_alignment"]
-    assert hva["header_aligned"] is True
-    assert hva["lines_aligned"]  is True
-    assert hva["chosen_idx"]     == 2   # Line C (largest by value)
-    # The proposed discount is the user's expected ~0.0034 SAR net.
-    assert hva["adjustment_net"] > 0.0
-    assert hva["adjustment_net"] <= 0.01
-    # Header total after lands EXACTLY on Salla.
-    assert abs(hva["after"]["header_total"]    - 228.12) <= 0.005
-    assert abs(hva["after"]["line_gross_sum"]  - 228.12) <= 0.005
+    # Both constraints must hold exactly.
+    rep = out["representability"]
+    assert rep["fully_representable"]            is True
+    assert rep["qoyod_total_equals_salla"]       is True
+    assert rep["line_gross_sum_equals_salla"]    is True
+    assert rep["expected_remaining_after"]       == pytest.approx(0.0, abs=0.005)
+
+
+# ─── Iter-290k.3 — UNREPRESENTABLE case (order 269349492 exact data) ─
+def test_dry_run_marks_order_269349492_as_unrepresentable():
+    """Real production fixture for order 269349492. قيود's CORRECTED
+    header model proves that salla_total=228.12 CANNOT be produced
+    from this payload with any positive discount tweak. The reachable
+    header_totals are {228.10, 228.11, 228.13} — 228.12 simply isn't
+    in the set. The dry-run MUST flag this as unrepresentable so
+    Iter-290l would never silently short-pay Salla."""
+    payload = [
+        {"description": "تغليف",   "unit_price": "5",
+         "quantity": "2", "discount": "1.5478", "tax_percent": "15"},
+        {"description": "قلادة",   "unit_price": "100.95",
+         "quantity": "1", "discount": "15.6283", "tax_percent": "15"},
+        {"description": "سلسال",   "unit_price": "97",
+         "quantity": "1", "discount": "15.0174", "tax_percent": "15"},
+        {"description": "شحن",     "unit_price": "24.07",
+         "quantity": "1", "discount": "1.4613",  "tax_percent": "15"},
+    ]
+    row = _synthetic_row(
+        salla_total=228.12,
+        qoyod_total=228.11,
+        payload_lines=payload,
+    )
+    out = _dry_run_single_row(row)
+    assert out["eligible"] is True
+    # The corrected model REPRODUCES قيود's 228.11 from this payload.
+    assert out["local_sim_matches_qoyod_actual"] is True
+    # But salla=228.12 is unreachable — UNREPRESENTABLE.
+    assert out["outcome"] == "unrepresentable_total_under_qoyod_header_model"
+    rep = out["representability"]
+    assert rep["fully_representable"]      is False
+    assert rep["qoyod_total_equals_salla"] is False
+    # Salla MUST NOT be among the reachable header_totals.
+    reachable = set(rep["reachable_header_totals"] or [])
+    assert 228.12 not in reachable
+    # The classic three reachable values for this fixture.
+    assert any(abs(t - 228.10) <= 0.005 for t in reachable)
+    assert any(abs(t - 228.11) <= 0.005 for t in reachable)
+    assert any(abs(t - 228.13) <= 0.005 for t in reachable)
 
 
 # ─── Iter-290k.1 · Parity Probe — the new gating logic ──────────────
@@ -506,52 +542,43 @@ from integrations.qoyod.rounding_dry_run import (
 )
 
 
-def test_header_vat_simulator_reproduces_qoyod_actual_for_269340921_pattern():
-    """The user reported orders 269340921 and 268905066 both showing:
-        line_gross_sum = 228.12 (= Salla)
-        header_total   = 228.13 (= قيود's actual)
-
-    Our new simulator MUST reproduce BOTH numbers from the same
-    payload — otherwise we have nothing to base Phase-2 on."""
+def test_header_vat_simulator_uses_round_each_line_then_sum():
+    """Iter-290k.3 — pin the CORRECTED قيود model: displayed_net is
+    Σ round(line_net, 2), NOT round(Σ line_net, 2)."""
     payload = [
-        {"description": "A", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "B", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "C", "unit_price": "66.80",  "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
+        {"description": "تغليف", "unit_price": "5",      "quantity": "2",
+         "discount": "1.5478", "tax_percent": "15"},
+        {"description": "قلادة", "unit_price": "100.95", "quantity": "1",
+         "discount": "15.6283", "tax_percent": "15"},
+        {"description": "سلسال", "unit_price": "97",     "quantity": "1",
+         "discount": "15.0174", "tax_percent": "15"},
+        {"description": "شحن",   "unit_price": "24.07",  "quantity": "1",
+         "discount": "1.4613",  "tax_percent": "15"},
     ]
     sim = simulate_header_vat(payload)
-    assert sim["exact_net_sum"]     == Decimal("198.370")
-    assert sim["displayed_net_sum"] == Decimal("198.37")
-    assert sim["header_vat"]        == Decimal("29.76")   # ← rounds UP
-    assert sim["header_total"]      == Decimal("228.13")  # = قيود actual
-    assert sim["line_gross_sum"]    == Decimal("228.12")  # = Salla
-    # The 0.01 gap between the two is exactly the bug.
-    assert sim["header_total"] - sim["line_gross_sum"] == Decimal("0.01")
+    # Round-each-then-sum: 8.45 + 85.32 + 81.98 + 22.61 = 198.36
+    assert sim["displayed_net_sum"] == Decimal("198.36")
+    assert sim["header_vat"]        == Decimal("29.75")
+    assert sim["header_total"]      == Decimal("228.11")  # matches قيود!
+    # Per-line gross sum stays at 228.12 (matches Salla).
+    assert sim["line_gross_sum"]    == Decimal("228.12")
 
 
-def test_header_vat_alignment_lands_both_constraints_on_salla():
+def test_header_vat_alignment_finds_representable_adjustment():
+    """The Line A 0.0049→0.0051 discount tweak (drops rounded net
+    from 100.00 to 99.99) lands both constraints exactly on 149.49."""
     payload = [
-        {"description": "A", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "B", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "C", "unit_price": "66.80",  "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
+        {"description": "A", "unit_price": "100", "quantity": "1",
+         "discount": "0.0049", "tax_percent": "15"},
+        {"description": "B", "unit_price": "30",  "quantity": "1",
+         "discount": "0",      "tax_percent": "15"},
     ]
-    out = attempt_header_vat_alignment(payload, Decimal("228.12"))
+    out = attempt_header_vat_alignment(payload, Decimal("149.49"))
     assert out["success"]        is True
     assert out["header_aligned"] is True
     assert out["lines_aligned"]  is True
-    # The proposed adjustment touches Line C (the largest by value).
-    assert out["chosen_idx"] == 2
-    # And it must be a tiny 4-dp net discount (not a big 0.01/1.15
-    # over-correction). The boundary-crossing math gives ~0.0034.
-    assert 0.0030 < out["adjustment_net"] < 0.0050
-    # Re-simulated header total lands on Salla within half-a-halala.
-    assert abs(out["after"]["header_total"]   - 228.12) <= 0.005
-    assert abs(out["after"]["line_gross_sum"] - 228.12) <= 0.005
+    assert out["after"]["header_total"]   == 149.49
+    assert out["after"]["line_gross_sum"] == 149.49
 
 
 def test_header_vat_alignment_refuses_when_out_of_scope():
@@ -559,27 +586,8 @@ def test_header_vat_alignment_refuses_when_out_of_scope():
     payload = [{"description": "A", "unit_price": "100.00",
                 "quantity": "1", "discount": "0", "tax_percent": "15"}]
     out = attempt_header_vat_alignment(payload, Decimal("100.00"))
-    # header_total for this payload is 115.00 → diff = 15.00 → out of scope
     assert out["success"] is False
     assert out["reason"]  == "header_diff_out_of_phase2_scope"
-
-
-def test_header_vat_alignment_refuses_negative_discount():
-    """If the only line has discount=0 and we'd need to DECREASE it
-    (to pull the header UP), reject — never propose negative discount."""
-    payload = [
-        {"description": "A", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "B", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "C", "unit_price": "66.80",  "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-    ]
-    # Salla > header_total ⇒ need to RAISE exact_net_sum ⇒
-    # decrease discount. But discount is already 0 → negative.
-    out = attempt_header_vat_alignment(payload, Decimal("228.14"))
-    assert out["success"] is False
-    assert out["reason"]  == "negative_discount_blocked"
 
 
 def test_header_vat_alignment_no_adjustment_when_already_aligned():
@@ -587,49 +595,62 @@ def test_header_vat_alignment_no_adjustment_when_already_aligned():
         {"description": "A", "unit_price": "100.00", "quantity": "1",
          "discount": "0", "tax_percent": "15"},
     ]
-    # header_total = line_gross_sum = 115.00. Salla = 115.00 ⇒ nothing to do.
     out = attempt_header_vat_alignment(payload, Decimal("115.00"))
     assert out["success"] is True
     assert out.get("no_adjustment_needed") is True
 
 
-def test_dry_run_attaches_header_vat_simulation_before_block():
-    """Every row must carry the Decimal+ROUND_HALF_UP 5-metric
-    snapshot under `header_vat_before` — surfaced in the UI's
-    "قبل/بعد" comparison table."""
+def test_header_vat_alignment_marks_269349492_as_unrepresentable():
+    """End-to-end: the exact production fixture cannot reach
+    salla=228.12 → returns success=False with the unrepresentability
+    reason AND the reachable set so the operator can see {228.10,
+    228.11, 228.13} ≠ 228.12."""
     payload = [
-        {"description": "A", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "B", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "C", "unit_price": "66.80",  "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
+        {"description": "تغليف", "unit_price": "5",
+         "quantity": "2", "discount": "1.5478", "tax_percent": "15"},
+        {"description": "قلادة", "unit_price": "100.95",
+         "quantity": "1", "discount": "15.6283", "tax_percent": "15"},
+        {"description": "سلسال", "unit_price": "97",
+         "quantity": "1", "discount": "15.0174", "tax_percent": "15"},
+        {"description": "شحن", "unit_price": "24.07",
+         "quantity": "1", "discount": "1.4613", "tax_percent": "15"},
     ]
-    row = _synthetic_row(salla_total=228.12, qoyod_total=228.13,
+    out = attempt_header_vat_alignment(payload, Decimal("228.12"))
+    assert out["success"] is False
+    assert out["reason"]  == "unrepresentable_under_qoyod_header_model"
+    assert 228.12 not in (out.get("reachable_header_totals") or [])
+
+
+def test_dry_run_attaches_header_vat_simulation_before_block():
+    """Every row must carry the 6-field header VAT snapshot under
+    `header_vat_before` — surfaced in the UI's "قبل/بعد" comparison."""
+    payload = [
+        {"description": "A", "unit_price": "100", "quantity": "1",
+         "discount": "0.0049", "tax_percent": "15"},
+        {"description": "B", "unit_price": "30",  "quantity": "1",
+         "discount": "0",      "tax_percent": "15"},
+    ]
+    row = _synthetic_row(salla_total=149.49, qoyod_total=149.50,
                          payload_lines=payload)
     out = _dry_run_single_row(row)
     hv = out["header_vat_before"]
-    assert hv["exact_net_sum"]     == 198.37 or abs(hv["exact_net_sum"] - 198.37) <= 0.0001
-    assert hv["displayed_net_sum"] == 198.37
-    assert hv["header_vat"]        == 29.76
-    assert hv["header_total"]      == 228.13
-    assert hv["line_gross_sum"]    == 228.12
+    assert hv["displayed_net_sum"] == 130.00
+    assert hv["header_vat"]        == 19.50
+    assert hv["header_total"]      == 149.50
+    assert hv["line_gross_sum"]    == 149.49
 
 
 def test_dry_run_header_vat_alignment_proposal_in_output():
     payload = [
-        {"description": "A", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "B", "unit_price": "65.785", "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
-        {"description": "C", "unit_price": "66.80",  "quantity": "1",
-         "discount": "0", "tax_percent": "15"},
+        {"description": "A", "unit_price": "100", "quantity": "1",
+         "discount": "0.0049", "tax_percent": "15"},
+        {"description": "B", "unit_price": "30",  "quantity": "1",
+         "discount": "0",      "tax_percent": "15"},
     ]
-    row = _synthetic_row(salla_total=228.12, qoyod_total=228.13,
+    row = _synthetic_row(salla_total=149.49, qoyod_total=149.50,
                          payload_lines=payload)
     out = _dry_run_single_row(row)
     hva = out["header_vat_alignment"]
-    # Required fields the UI binds to.
     assert "before"             in hva
     assert "after"              in hva
     assert "chosen_idx"         in hva

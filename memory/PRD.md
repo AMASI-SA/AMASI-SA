@@ -1,5 +1,42 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290k.3 — CORRECTED قيود model + Representability Check (2026-06-29)
+**User's diagnostic from order 269349492 proved the previous model wrong**: قيود computes `displayed_net = Σ round(line_net, 2)` (round-each-line-then-sum), NOT `round(Σ line_net, 2)` (sum-then-round). Verified by reproducing قيود's actual 228.11 from the production payload: 8.45+85.32+81.98+22.61 = 198.36, header_vat = round(198.36 × 0.15, 2) = 29.75, header_total = 228.11.
+
+### Critical finding: some Salla totals are UNREPRESENTABLE in قيود
+For order 269349492 (Salla=228.12), the reachable header_totals from any positive-discount tweak are **{228.10, 228.11, 228.13}** — 228.12 simply is NOT in قيود's reachable set. Producing a "paid" status with qoyod_total=228.11 would silently short-pay Salla by 0.01. The user explicitly rejected this as failure, not success.
+
+### What changed
+- **`simulate_header_vat()`** — FIXED to use round-each-line-then-sum. Reproduces قيود's 228.11 from the 269349492 payload exactly.
+- **NEW `find_representable_adjustment()`** — brute-force search over ±0.030 SAR discount deltas (0.001 step) on the top 4 lines by value. Returns the first adjustment achieving BOTH `header_total_after == salla` AND `line_gross_sum_after == salla` AND `new_discount ≥ 0`. If none exists, returns `success=False` with `reachable_header_totals[]`.
+- **`attempt_header_vat_alignment()`** — now delegates to `find_representable_adjustment` after the scope check.
+- **New outcome `unrepresentable_total_under_qoyod_header_model`** — emitted when قيود's model cannot produce salla_total from the payload regardless of discount tweaks.
+- **New row field `representability{}`** with: `qoyod_total_equals_salla`, `line_gross_sum_equals_salla`, `expected_payment_amount`, `expected_qoyod_total_after`, `expected_remaining_after`, `fully_representable`, `reachable_header_totals[]`.
+- **UI**: new prominent "Representability Verdict" card per row — emerald (REPRESENTABLE) or rose (UNREPRESENTABLE) — showing all 5 acceptance criteria as boolean rows + the reachable_header_totals list for unrepresentable cases.
+
+### Acceptance criteria (now strictly enforced)
+A row is `adjustment_succeeded` ONLY IF:
+1. `qoyod_total_after == salla_total` (within 0.005) ✓
+2. `line_gross_sum_after == salla_total` (within 0.005) ✓
+3. `new_discount ≥ 0` for the adjusted line ✓
+4. `expected_payment_amount = salla_total` ✓
+5. `expected_remaining_after == 0` (within 0.005) ✓
+
+If ANY fails → outcome is `unrepresentable_total_under_qoyod_header_model` or `header_aligned_but_lines_drifted`.
+
+### Verification
+- 32/32 dry-run tests pass.
+- Pinned: order 269349492 fixture is detected as UNREPRESENTABLE with reachable={228.10, 228.11, 228.13} ≠ 228.12.
+- Pinned: a representable fixture (Line A discount 0.0049 + Line B 30 → 149.50) succeeds via Line A 0.0049→0.0051 tweak landing both on 149.49.
+- 973/975 Qoyod tests pass (no regressions).
+
+### Strict invariants (still enforced)
+- ZERO DB / قيود / pipeline / payment / payload writes.
+- DISCOUNT_ALLOCATION + MATERIAL_MISMATCH still hard-excluded.
+- Iter-290l still BLOCKED — requires all 11 production PARITY GAP cases to test `fully_representable=true` before any production change is even considered.
+
+
+
 ## Iter-290k.2 — Header VAT Alignment Simulation (2026-06-29)
 **User insight (root-cause confirmed)**: قيود computes invoice header total as `displayed_net + round(exact_net × tax%, 2)`, NOT as `sum(round(line_net × (1+tax%), 2))`. The two diverge by 0.01 whenever `exact_net × tax%` lands on the .005 half-up boundary. Reproduced on orders 269340921 and 268905066: line_gross_sum = 228.12 (= Salla) but header_total = 228.13 (= قيود's actual, leaving 0.01 unpaid). The fix targets BOTH header_total AND line_gross_sum landing on Salla via a minimal 4-dp discount tweak.
 

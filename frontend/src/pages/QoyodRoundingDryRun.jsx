@@ -31,6 +31,11 @@ const OUTCOME_META = {
     description: "header_total لحق salla، لكن أحد السطور انتقل بسبب التعديل. يحتاج خوارزمية أدق.",
     tone: "amber",
   },
+  unrepresentable_total_under_qoyod_header_model: {
+    label: "⛔ UNREPRESENTABLE — قيود لا يستطيع إنتاج Salla",
+    description: "أيّاً كان التعديل، Salla لا يقع ضمن الإجماليات الممكنة في قيود لهذه السطور. ممنوع تعديل الإنتاج.",
+    tone: "rose",
+  },
   parity_gap_needs_qoyod_model: {
     label: "⚠ PARITY GAP — نموذج المحاكاة لا يطابق قيود",
     description: "محاكاتنا تطابق Salla لكن قيود الفعلي مختلف. لا يمكن اقتراح إصلاح حتى نجعل المحاكاة تعيد إنتاج قيود فعلياً.",
@@ -110,6 +115,7 @@ function OutcomePill({ outcome }) {
   if (outcome === "adjustment_succeeded") meta = OUTCOME_META.adjustment_succeeded;
   else if (outcome === "no_adjustment_needed") meta = OUTCOME_META.no_adjustment_needed;
   else if (outcome === "header_aligned_but_lines_drifted") meta = OUTCOME_META.header_aligned_but_lines_drifted;
+  else if (outcome === "unrepresentable_total_under_qoyod_header_model") meta = OUTCOME_META.unrepresentable_total_under_qoyod_header_model;
   else if (outcome === "parity_gap_needs_qoyod_model") meta = OUTCOME_META.parity_gap_needs_qoyod_model;
   else if (outcome === "skipped") meta = OUTCOME_META.skipped;
   else if (outcome && outcome.startsWith("adjustment_failed")) {
@@ -193,6 +199,70 @@ function ExpandedDetails({ row }) {
           </tbody>
         </table>
       </div>
+
+      {/* Iter-290k.3 — Representability Verdict. The killer signal:
+          can قيود's model EVEN produce Salla_total from this payload?
+          If not, this row is forever non-fixable under Phase-2 — we
+          MUST NOT make it look "paid" by short-paying Salla. */}
+      {row.representability && (
+        <div className={`border rounded p-3 ${
+          row.representability.fully_representable
+            ? "bg-emerald-50 border-emerald-200"
+            : "bg-rose-50 border-rose-300"
+        }`}
+             data-testid={`representability-${row.order_id}`}>
+          <div className="text-[12px] font-bold mb-1">
+            {row.representability.fully_representable
+              ? "✓ REPRESENTABLE — قيود يستطيع إنتاج Salla من هذه السطور"
+              : "⛔ UNREPRESENTABLE — قيود لا يستطيع إنتاج Salla"}
+          </div>
+          <table className="w-full text-[11px] font-mono mt-2">
+            <tbody>
+              <tr>
+                <td className="py-0.5 text-slate-600 w-1/2">qoyod_total_after = Salla?</td>
+                <td className={`py-0.5 ${row.representability.qoyod_total_equals_salla ? "text-emerald-700 font-bold" : "text-rose-700 font-bold"}`}>
+                  {row.representability.qoyod_total_equals_salla ? "✓ نعم" : "✗ لا"}
+                </td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-slate-600">line_gross_sum_after = Salla?</td>
+                <td className={`py-0.5 ${row.representability.line_gross_sum_equals_salla ? "text-emerald-700 font-bold" : "text-rose-700 font-bold"}`}>
+                  {row.representability.line_gross_sum_equals_salla ? "✓ نعم" : "✗ لا"}
+                </td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-slate-600">expected_payment_amount</td>
+                <td className="py-0.5"><Money value={row.representability.expected_payment_amount} /></td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-slate-600">expected_qoyod_total_after</td>
+                <td className="py-0.5"><Money value={row.representability.expected_qoyod_total_after} /></td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-slate-600">expected_remaining_after</td>
+                <td className={`py-0.5 ${Math.abs(row.representability.expected_remaining_after || 0) <= 0.005 ? "text-emerald-700 font-bold" : "text-rose-700 font-bold"}`}>
+                  <Diff value={row.representability.expected_remaining_after} />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          {!row.representability.fully_representable
+            && row.representability.reachable_header_totals
+            && row.representability.reachable_header_totals.length > 0 && (
+              <div className="mt-2 text-[11px] text-rose-800 bg-rose-100 border border-rose-200 rounded p-2">
+                <strong>الإجماليات الممكنة في قيود من هذه السطور:</strong>{" "}
+                <span className="font-mono">
+                  {row.representability.reachable_header_totals.map(t => Number(t).toFixed(2)).join(" / ")}
+                </span>
+                <br />
+                <strong>Salla المطلوب:</strong>{" "}
+                <span className="font-mono">{Number(row.salla_total).toFixed(2)}</span>
+                {" — "}
+                <span className="font-bold">غير قابل للوصول بأي خصم موجب.</span>
+              </div>
+            )}
+        </div>
+      )}
 
       {/* Iter-290k.2 — Header VAT Alignment side-by-side. THE most
           important new diagnostic: 5 metrics × (before | after) so
