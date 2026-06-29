@@ -152,18 +152,23 @@ def simulate_header_vat(payload_lines: list[dict]) -> dict:
     قيود rounds EACH line's net to 2dp first, THEN sums. The header
     VAT is then computed on the rounded sum, not the exact sum.
 
-    Returns 6 fields:
+    Returns 7 fields:
       • exact_net_sum     — full Decimal precision (informational).
       • displayed_net_sum — Σ round(line_net_exact, 2)   ← قيود's value.
+      • displayed_net_sum_by_round_total — round(Σ exact, 2) ← old model
+                                            (kept for diagnostic).
       • header_vat        — round(displayed_net_sum × rate, 2).
       • header_total      — displayed_net_sum + header_vat.
       • line_gross_sum    — Σ round(line_net_exact × (1+rate), 2).
+      • per_line          — [{line_net_exact, line_net_rounded,
+                              line_gross_rounded}] for the UI table.
       • header_tax_percent.
     """
     exact_net_sum = Decimal("0")
     displayed_net_sum = Decimal("0")
     line_gross_sum = Decimal("0")
     header_tax_pct: Optional[Decimal] = None
+    per_line: list[dict] = []
 
     for li in payload_lines or []:
         unit_price = _q(li.get("unit_price"))
@@ -171,11 +176,18 @@ def simulate_header_vat(payload_lines: list[dict]) -> dict:
         discount   = _q(li.get("discount"))
         tax_pct    = _q(li.get("tax_percent"))
         line_net_exact = (unit_price * qty) - discount
+        line_net_rounded = _round_half_up_2(line_net_exact)
+        line_gross_rounded = _round_half_up_2(
+            line_net_exact * (Decimal("1") + tax_pct / Decimal("100")))
         # قيود rounds EACH line first, then sums:
-        displayed_net_sum += _round_half_up_2(line_net_exact)
+        displayed_net_sum += line_net_rounded
         exact_net_sum += line_net_exact
-        tax_factor = Decimal("1") + (tax_pct / Decimal("100"))
-        line_gross_sum += _round_half_up_2(line_net_exact * tax_factor)
+        line_gross_sum += line_gross_rounded
+        per_line.append({
+            "line_net_exact":     line_net_exact,
+            "line_net_rounded":   line_net_rounded,
+            "line_gross_rounded": line_gross_rounded,
+        })
         if header_tax_pct is None and tax_pct > Decimal("0"):
             header_tax_pct = tax_pct
 
@@ -187,14 +199,20 @@ def simulate_header_vat(payload_lines: list[dict]) -> dict:
     header_vat = _round_half_up_2(
         displayed_net_sum * header_tax_pct / Decimal("100"))
     header_total = _round_half_up_2(displayed_net_sum + header_vat)
+    # Diagnostic: what the OLD (wrong) sum-then-round model produced.
+    displayed_by_round_total = _round_half_up_2(exact_net_sum)
+    delta_models = displayed_net_sum - displayed_by_round_total
 
     return {
         "exact_net_sum":     exact_net_sum,
         "displayed_net_sum": displayed_net_sum,
+        "displayed_net_sum_by_round_total": displayed_by_round_total,
+        "model_delta":       delta_models,
         "header_vat":        header_vat,
         "header_total":      header_total,
         "line_gross_sum":    _round_half_up_2(line_gross_sum),
         "header_tax_percent": header_tax_pct,
+        "per_line":          per_line,
     }
 
 
@@ -849,6 +867,11 @@ async def build_dry_run_report(
 
     return {
         "ok":              True,
+        # Iter-290k.3.fix — build-version marker so we can verify
+        # exactly which version of the simulator the deployed binary
+        # is running. If this isn't "Iter-290k.3" on prod after a
+        # redeploy, the deployment didn't pick up the new code.
+        "_simulator_version": "Iter-290k.3 (round-each-line-then-sum + representability)",
         "scanned_count":   len(results),
         "eligible_count":  len(eligible_results),
         "succeeded_count": n_succeeded,

@@ -200,6 +200,58 @@ function ExpandedDetails({ row }) {
         </table>
       </div>
 
+      {/* Iter-290k.3.fix — Per-line rounding diagnostic. Surfaces
+          EXACTLY what قيود's round-each-then-sum model does to every
+          payload line. The operator should see line_net_rounded
+          sum = 198.36 for order 269349492, NOT 198.37. */}
+      {row.header_vat_before?.per_line && row.header_vat_before.per_line.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded p-2 overflow-x-auto"
+             data-testid={`per-line-rounding-${row.order_id}`}>
+          <div className="text-[11px] font-bold text-slate-700 mb-1">
+            تفكيك التقريب لكل سطر (نموذج قيود الصحيح):
+          </div>
+          <table className="w-full text-[10px] font-mono whitespace-nowrap">
+            <thead className="text-slate-500 border-b border-slate-200">
+              <tr>
+                <th className="text-right py-1 px-1">#</th>
+                <th className="text-right py-1 px-1">line_net_exact</th>
+                <th className="text-right py-1 px-1 bg-sky-50">line_net_rounded</th>
+                <th className="text-right py-1 px-1 bg-emerald-50">line_gross_rounded</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.header_vat_before.per_line.map((pl, i) => (
+                <tr key={i} className="border-t border-slate-100">
+                  <td className="py-0.5 px-1">{i}</td>
+                  <td className="py-0.5 px-1"><Money value={pl.line_net_exact} dp={4} /></td>
+                  <td className="py-0.5 px-1 bg-sky-50/50"><Money value={pl.line_net_rounded} /></td>
+                  <td className="py-0.5 px-1 bg-emerald-50/50"><Money value={pl.line_gross_rounded} /></td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-slate-300 font-bold">
+                <td className="py-0.5 px-1 text-slate-700">Σ</td>
+                <td className="py-0.5 px-1"><Money value={row.header_vat_before.exact_net_sum} dp={4} /></td>
+                <td className="py-0.5 px-1 bg-sky-100"><Money value={row.header_vat_before.displayed_net_sum} /></td>
+                <td className="py-0.5 px-1 bg-emerald-100"><Money value={row.header_vat_before.line_gross_sum} /></td>
+              </tr>
+            </tbody>
+          </table>
+          {row.header_vat_before.model_delta !== undefined && Math.abs(row.header_vat_before.model_delta || 0) > 0.001 && (
+            <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+              <strong>الفرق بين النموذجين:</strong>{" "}
+              <span className="font-mono">
+                round-each-then-sum = {Number(row.header_vat_before.displayed_net_sum).toFixed(2)}
+                {" vs "}
+                round-total = {Number(row.header_vat_before.displayed_net_sum_by_round_total).toFixed(2)}
+              </span>
+              {" — "}
+              <strong>قيود يَستخدم round-each-then-sum</strong> (Δ = {Number(row.header_vat_before.model_delta).toFixed(2)})
+            </div>
+          )}
+        </div>
+      )}
+
+
       {/* Iter-290k.3 — Representability Verdict. The killer signal:
           can قيود's model EVEN produce Salla_total from this payload?
           If not, this row is forever non-fixable under Phase-2 — we
@@ -584,6 +636,17 @@ export default function QoyodRoundingDryRun() {
           {loading ? "جاري المحاكاة..." : "إعادة المحاكاة"}
         </button>
       </header>
+
+      {/* Iter-290k.3.fix — Build-version banner. Lets the operator
+          immediately tell whether the deployed code matches the
+          expected simulator. If MISSING on prod, the latest commit
+          didn't make it into the deployment. */}
+      {report?._simulator_version && (
+        <div className="bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-[10px] font-mono text-slate-600"
+             data-testid="simulator-version-banner">
+          <strong>إصدار المحاكاة:</strong> {report._simulator_version}
+        </div>
+      )}
 
       {/* Phase-2 scope reminder */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 flex items-start gap-2"
