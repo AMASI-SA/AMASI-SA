@@ -1470,6 +1470,30 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             reference_invoice_id_with_payment=body.reference_invoice_id_with_payment,
         )
 
+    # ── Iter-290i — Reference-Lists for the picker UI ───────────────
+    @router.post("/admin/reference-lists/refresh")
+    async def admin_refresh_reference_lists(user=Depends(current_user)):
+        """Iter-290i — Pull every Qoyod reference list (categories,
+        unit_types, inventories, accounts, taxes, branches, customers)
+        and cache them for the settings-page pickers. Strictly
+        READ-ONLY against Qoyod."""
+        from integrations.qoyod.reference_lists import (
+            refresh_reference_lists,
+        )
+        tenant = _tenant_id(user)
+        return await refresh_reference_lists(db, user_id=tenant)
+
+    @router.get("/admin/reference-lists")
+    async def admin_get_reference_lists(user=Depends(current_user)):
+        """Iter-290i — Return the cached reference lists. Empty
+        document with `cached: false` if the operator hasn't refreshed
+        yet."""
+        from integrations.qoyod.reference_lists import (
+            get_reference_lists,
+        )
+        tenant = _tenant_id(user)
+        return await get_reference_lists(db, user_id=tenant)
+
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
     # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the
     # tenant's actual status catalogue from Salla so custom statuses

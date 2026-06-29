@@ -22,6 +22,9 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
+// Iter-290i — Searchable picker for قيود reference lists.
+import { SearchableSelect } from "../components/ui/searchable-select";
+import { RefreshCw } from "lucide-react";
 
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
@@ -716,6 +719,24 @@ export default function QoyodSettings() {
   const [statusesSource, setStatusesSource] = useState(null);
   const [statusesError,  setStatusesError]  = useState(null);
 
+  // ── Iter-290i — Name-first picker lists (cached on the server) ──
+  // Replaces the bare numeric-id inputs with searchable dropdowns
+  // populated from قيود. `referenceLists.lists` is keyed by the
+  // resource name (`categories`, `unit_types`, `inventories`,
+  // `accounts`, `taxes`, `branches`, `customers`). Each entry is
+  // `{id, name, ...extras}`. The lists may be empty until the
+  // operator clicks the refresh button.
+  const [referenceLists, setReferenceLists] = useState({
+    lists: {
+      categories: [], unit_types: [], inventories: [],
+      accounts: [], taxes: [], branches: [], customers: [],
+    },
+    updated_at:   null,
+    cached:       false,
+    fetch_errors: null,
+  });
+  const [refreshingLists, setRefreshingLists] = useState(false);
+
   // ── Loaders ────────────────────────────────────────────────────
   const loadSettings = async () => {
     const { data } = await axios.get(`${API}/integrations/qoyod/settings`);
@@ -776,6 +797,35 @@ export default function QoyodSettings() {
     }
   };
 
+  // Iter-290i — Reference-Lists loaders (cached + refresh).
+  const loadReferenceLists = async () => {
+    try {
+      const { data } = await axios.get(
+        `${API}/integrations/qoyod/admin/reference-lists`);
+      if (data?.ok) setReferenceLists(data);
+    } catch (_) {
+      // Silent — the picker just renders empty lists until refresh.
+    }
+  };
+
+  const refreshReferenceLists = async () => {
+    setRefreshingLists(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/admin/reference-lists/refresh`);
+      if (data?.ok) {
+        setReferenceLists(data);
+      } else {
+        alert(data?.message
+              || "تعذّر تحديث القوائم من قيود. تحقق من مفتاح API.");
+      }
+    } catch (_) {
+      alert("تعذّر الاتصال بقيود لتحديث القوائم.");
+    } finally {
+      setRefreshingLists(false);
+    }
+  };
+
   const revalidate = async () => {
     // Server-side re-check as a fail-safe on save.
     try {
@@ -793,6 +843,8 @@ export default function QoyodSettings() {
       const s = await loadSettings();
       if (s?.credentials?.fingerprint) {
         await loadCatalogs();
+        // Iter-290i — pull the cached picker lists too.
+        await loadReferenceLists();
       }
       await Promise.all([loadPaymentMethods(), loadSallaStatuses()]);
     } catch (_) {
@@ -1142,76 +1194,108 @@ export default function QoyodSettings() {
           testid="toggle-dry-run-mode" />
       </Section>
 
-      {/* 5) Core IDs */}
+      {/* 5) Core IDs — Iter-290i: name-first pickers backed by
+            qoyod_reference_lists. The numeric ids are still what
+            we POST to قيود; the picker only changes the UX so
+            operators don't have to copy-paste ids manually. */}
       <Section title="المعرّفات الأساسية"
                subtitle="القيم الأساسية المطلوبة لإنشاء الفواتير في قيود">
+        {/* Iter-290i — Refresh-from-Qoyod button. Caches the lists
+            on the server so subsequent renders are instant. */}
+        <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-lg bg-sky-50 border border-sky-200">
+          <div className="text-xs text-sky-900">
+            <div className="font-bold">📚 قوائم قيود</div>
+            <div className="text-[11px] text-sky-700 mt-0.5">
+              {referenceLists.updated_at ? (
+                <>آخر تحديث: <span dir="ltr" className="font-mono">{referenceLists.updated_at}</span></>
+              ) : (
+                <>لم تُحدَّث القوائم بعد. اضغط الزر لجلبها من قيود.</>
+              )}
+              {referenceLists.fetch_errors && (
+                <span className="text-amber-700 ms-2">
+                  ⚠️ بعض القوائم لم تُجلب: {Object.keys(referenceLists.fetch_errors).join(", ")}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={refreshReferenceLists}
+            disabled={!hasCreds || refreshingLists}
+            data-testid="btn-refresh-reference-lists"
+            className="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-md bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshingLists ? "animate-spin" : ""}`} />
+            {refreshingLists ? "جاري التحديث..." : "تحديث القوائم من قيود"}
+          </button>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-3">
           <div data-testid="field-default_branch_id">
-            <IDInput
-              label="الفرع الافتراضي (Branch ID — اختياري)"
+            <label className="block text-xs font-bold text-slate-600 mb-1">
+              الفرع الافتراضي <span className="text-slate-400">(اختياري)</span>
+            </label>
+            <SearchableSelect
+              options={referenceLists.lists.branches}
               value={settings.default_branch_id}
               onChange={(v) => patch({ default_branch_id: v })}
               testid="select-branch"
-              datalistId="branches-list"
-              suggestions={branches}
-              placeholder={branches.length ? "" : "اتركه فارغاً إذا كان حسابك بفرع واحد"}
+              placeholder={referenceLists.lists.branches.length
+                ? "اختر فرعاً..."
+                : "اتركه فارغاً إذا كان حسابك بفرع واحد"}
               disabled={!hasCreds}
-              invalid={fieldInvalid("default_branch_id")}
-              unsupportedHint={
-                !hasCreds ? "احفظ مفتاح API أولاً" :
-                branchesMeta.unsupported
-                  ? "ℹ️ اختياري — اتركه فارغاً للحساب أحادي الفرع، أو انسخ Branch ID من قيود → الإعدادات → الفروع."
-                  : null
-              }
             />
           </div>
 
           <div data-testid="field-default_tax_id">
-            <IDInput
-              label="ضريبة القيمة المضافة الافتراضية (Tax ID)" required
+            <label className="block text-xs font-bold text-slate-600 mb-1">
+              ضريبة القيمة المضافة الافتراضية <span className="text-rose-600">*</span>
+            </label>
+            <SearchableSelect
+              options={referenceLists.lists.taxes}
               value={settings.default_tax_id}
               onChange={(v) => patch({ default_tax_id: v })}
               testid="select-tax"
-              datalistId="taxes-list"
-              suggestions={taxes}
-              placeholder={taxes.length ? "" : "مثال: 5678"}
+              secondaryKey="percent"
+              placeholder="اختر ضريبة..."
               disabled={!hasCreds}
-              invalid={fieldInvalid("default_tax_id")}
-              unsupportedHint={
-                taxesMeta.unsupported
-                  ? "ℹ️ Qoyod 2.0 API لا يكشف قائمة الضرائب — انسخ Tax ID من قيود → الإعدادات → الضرائب."
-                  : null
-              }
             />
+            {fieldInvalid("default_tax_id") && (
+              <div className="text-xs text-rose-600 mt-1">
+                مطلوب — اختر ضريبة من القائمة.
+              </div>
+            )}
           </div>
 
           <div data-testid="field-default_customer_id" className="md:col-span-2">
-            <IDInput
-              label="عميل افتراضي للطلبات الضيف (Default Customer ID — اختياري)"
+            <label className="block text-xs font-bold text-slate-600 mb-1">
+              عميل افتراضي للطلبات الضيف <span className="text-slate-400">(اختياري)</span>
+            </label>
+            <SearchableSelect
+              options={referenceLists.lists.customers}
               value={settings.default_customer_id}
               onChange={(v) => patch({ default_customer_id: v })}
-              testid="input-default-customer"
-              placeholder="اختياري — مثال: 222"
+              testid="select-default-customer"
+              secondaryKey="phone"
+              placeholder="عند الفراغ، يُنشَأ عميل جديد لكل طلب ضيف"
               disabled={!hasCreds}
-              invalid={fieldInvalid("default_customer_id")}
-              unsupportedHint="عند تركه فارغاً، يُنشأ عميل جديد لكل طلب ضيف لا يحتوي على هاتف أو إيميل."
             />
           </div>
         </div>
       </Section>
 
-      {/* 5b) Iter-287 + Iter-290 — Qoyod-Required Product & Invoice Defaults */}
+      {/* 5b) Product & Invoice Defaults — Iter-290i pickers */}
       <Section
         title="🧾 إعدادات إنشاء المنتجات والفواتير في قيود"
         subtitle={
           <>
             مطلوبة لإنشاء أي منتج جديد وأي فاتورة في قيود. قيود يرفض
-            الإنشاء بدون هذه الإعدادات. القيم تنسخها مرة واحدة من قيود ولا
-            تتغيّر عادةً.
+            الإنشاء بدون هذه الإعدادات. اختر من القوائم — لا تحتاج
+            لكتابة الأرقام يدوياً.
             <br />
             <span className="text-amber-600 dark:text-amber-400 text-xs">
-              ⚠️ المستودع الافتراضي (Inventory ID) مطلوب على كل سطر فاتورة
-              حتى لو كانت كل منتجاتك خدمية — قيود يرفض الفاتورة بدونه.
+              ⚠️ المستودع الافتراضي مطلوب على كل سطر فاتورة حتى لو
+              كانت كل منتجاتك خدمية — قيود يرفض الفاتورة بدونه.
             </span>
           </>
         }
@@ -1226,82 +1310,90 @@ export default function QoyodSettings() {
         }>
         <div className="grid md:grid-cols-2 gap-3">
           <div data-testid="field-default_product_category_id">
-            <IDInput
-              label="التصنيف الافتراضي (Category ID)" required
+            <label className="block text-xs font-bold text-slate-600 mb-1">
+              التصنيف الافتراضي <span className="text-rose-600">*</span>
+            </label>
+            <SearchableSelect
+              options={referenceLists.lists.categories}
               value={settings.default_product_category_id}
               onChange={(v) => patch({ default_product_category_id: v })}
-              testid="input-default-product-category"
-              placeholder="مثال: 12"
+              testid="select-product-category"
+              placeholder="اختر تصنيفاً..."
               disabled={!hasCreds}
-              invalid={fieldInvalid("default_product_category_id")}
-              unsupportedHint="انسخه من قيود → الإعدادات → التصنيفات → اختر تصنيف المنتجات الافتراضي."
             />
+            {fieldInvalid("default_product_category_id") && (
+              <div className="text-xs text-rose-600 mt-1">مطلوب</div>
+            )}
           </div>
 
           <div data-testid="field-default_product_tax_id">
-            <IDInput
-              label="ضريبة المنتجات الافتراضية (Product Tax ID)" required
+            <label className="block text-xs font-bold text-slate-600 mb-1">
+              ضريبة المنتجات الافتراضية <span className="text-rose-600">*</span>
+            </label>
+            <SearchableSelect
+              options={referenceLists.lists.taxes}
               value={settings.default_product_tax_id}
               onChange={(v) => patch({ default_product_tax_id: v })}
-              testid="input-default-product-tax"
-              datalistId="taxes-list"
-              suggestions={taxes}
-              placeholder="عادة نفس Tax ID الفاتورة"
+              testid="select-product-tax"
+              secondaryKey="percent"
+              placeholder="عادة نفس ضريبة الفاتورة"
               disabled={!hasCreds}
-              invalid={fieldInvalid("default_product_tax_id")}
-              unsupportedHint="ضريبة تُلصق بالمنتج عند إنشائه. غالباً = ضريبة VAT 15% نفسها."
             />
+            {fieldInvalid("default_product_tax_id") && (
+              <div className="text-xs text-rose-600 mt-1">مطلوب</div>
+            )}
           </div>
 
           <div data-testid="field-default_product_unit_type_id">
-            <IDInput
-              label="وحدة القياس الافتراضية (Unit Type ID)" required
+            <label className="block text-xs font-bold text-slate-600 mb-1">
+              وحدة القياس الافتراضية <span className="text-rose-600">*</span>
+            </label>
+            <SearchableSelect
+              options={referenceLists.lists.unit_types}
               value={settings.default_product_unit_type_id}
               onChange={(v) => patch({ default_product_unit_type_id: v })}
-              testid="input-default-unit-type"
-              placeholder="مثال: 1 (قطعة)"
+              testid="select-unit-type"
+              placeholder="مثال: قطعة..."
               disabled={!hasCreds}
-              invalid={fieldInvalid("default_product_unit_type_id")}
-              unsupportedHint="من قيود → الإعدادات → وحدات القياس. مثال: قطعة، ساعة خدمة، كيلو."
             />
+            {fieldInvalid("default_product_unit_type_id") && (
+              <div className="text-xs text-rose-600 mt-1">مطلوب</div>
+            )}
           </div>
 
           <div data-testid="field-default_sales_account_id">
-            <IDInput
-              label="حساب المبيعات الافتراضي (Sales Account ID)" required
+            <label className="block text-xs font-bold text-slate-600 mb-1">
+              حساب المبيعات الافتراضي <span className="text-rose-600">*</span>
+            </label>
+            <SearchableSelect
+              options={referenceLists.lists.accounts}
               value={settings.default_sales_account_id}
               onChange={(v) => patch({ default_sales_account_id: v })}
-              testid="input-default-sales-account"
-              datalistId="accounts-list"
-              suggestions={accounts}
-              placeholder="مثال: 4100"
+              testid="select-sales-account"
+              secondaryKey="code"
+              placeholder="اختر حساب الإيرادات..."
               disabled={!hasCreds}
-              invalid={fieldInvalid("default_sales_account_id")}
-              unsupportedHint={
-                accountsMeta.unsupported
-                  ? "Qoyod 2.0 API لا يكشف القائمة — انسخه من قيود → الحسابات → دليل الحسابات → اختر حساب الإيرادات."
-                  : "اختر حساب الإيرادات الذي تُسجّل تحته كل مبيعات Mezan."
-              }
             />
+            {fieldInvalid("default_sales_account_id") && (
+              <div className="text-xs text-rose-600 mt-1">مطلوب</div>
+            )}
           </div>
 
           <div data-testid="field-default_inventory_id">
-            <IDInput
-              label="المستودع الافتراضي (Inventory ID)" required
+            <label className="block text-xs font-bold text-slate-600 mb-1">
+              المستودع الافتراضي <span className="text-rose-600">*</span>
+            </label>
+            <SearchableSelect
+              options={referenceLists.lists.inventories}
               value={settings.default_inventory_id}
               onChange={(v) => patch({ default_inventory_id: v })}
-              testid="input-default-inventory"
-              datalistId="inventories-list"
-              suggestions={inventories}
-              placeholder="مثال: 1"
+              testid="select-inventory"
+              placeholder="اختر مستودعاً..."
               disabled={!hasCreds}
-              invalid={fieldInvalid("default_inventory_id")}
-              unsupportedHint={
-                inventoriesMeta.unsupported
-                  ? "Qoyod API لا يكشف القائمة — أنشئ مستودعاً في قيود → الإعدادات → المخازن، وانسخ id الخاص به."
-                  : "قيود يتطلب inventory_id على كل سطر فاتورة (حتى للمنتجات الخدمية). أنشئ مستودعاً واحداً بإسم 'مستودع افتراضي - ميزان' واختره هنا."
-              }
             />
+            {fieldInvalid("default_inventory_id") && (
+              <div className="text-xs text-rose-600 mt-1">مطلوب</div>
+            )}
           </div>
         </div>
 
