@@ -46,6 +46,13 @@ export function SearchableSelect({
   testid,
   secondaryKey,
   disabled = false,
+  // Iter-290i.1 — When the list itself failed to load from قيود, we
+  // MUST NOT label saved ids as "missing in قيود" because we can't
+  // tell — the list was never fetched. `listUnavailable=true` puts
+  // the picker in a read-only neutral state that shows the saved id
+  // without judgement, plus a banner asking the operator to retry.
+  listUnavailable = false,
+  unavailableReason = null,
 }) {
   const [open, setOpen] = useState(false);
   const stringValue = value == null ? "" : String(value);
@@ -53,7 +60,9 @@ export function SearchableSelect({
     () => options.find((o) => String(o.id) === stringValue) || null,
     [options, stringValue]
   );
-  const orphan = stringValue && !selected;
+  // Only call it "orphan" when the list DID load and the saved id
+  // truly isn't in it. If the list never loaded, we cannot judge.
+  const orphan = stringValue && !selected && !listUnavailable;
 
   // Optional secondary field (e.g. phone for customers, percent for taxes).
   const secondary = selected && secondaryKey && selected[secondaryKey];
@@ -62,14 +71,16 @@ export function SearchableSelect({
     ? selected.name
     : orphan
       ? `ID ${stringValue} غير موجود في قيود`
-      : placeholder;
+      : listUnavailable && stringValue
+        ? `ID ${stringValue} (لم تُحمّل القائمة)`
+        : placeholder;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          disabled={disabled}
+          disabled={disabled || (listUnavailable && !stringValue)}
           data-testid={testid}
           aria-expanded={open}
           className={[
@@ -77,15 +88,20 @@ export function SearchableSelect({
             "transition focus:outline-none focus:ring-2",
             orphan
               ? "border-amber-400 text-amber-900 focus:ring-amber-300"
-              : selected
-                ? "border-slate-300 text-slate-800 focus:ring-sky-300"
-                : "border-slate-200 text-slate-400 focus:ring-slate-300",
+              : listUnavailable
+                ? "border-slate-300 text-slate-500 focus:ring-slate-300"
+                : selected
+                  ? "border-slate-300 text-slate-800 focus:ring-sky-300"
+                  : "border-slate-200 text-slate-400 focus:ring-slate-300",
             disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
           ].join(" ")}
         >
           <span className="truncate text-right" dir="auto">
             {orphan && (
               <AlertTriangle className="inline-block w-3.5 h-3.5 mr-1 text-amber-600" />
+            )}
+            {listUnavailable && (
+              <AlertTriangle className="inline-block w-3.5 h-3.5 mr-1 text-slate-400" />
             )}
             {triggerLabel}
             {selected && (
@@ -100,9 +116,6 @@ export function SearchableSelect({
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="end">
         <Command
-          // Iter-290i — Filter on BOTH the name and the id so an
-          // operator who only remembers the قيود id can still find
-          // the row instantly.
           filter={(rowValue, search) => {
             const q = search.toLowerCase().trim();
             return rowValue.toLowerCase().includes(q) ? 1 : 0;
@@ -110,59 +123,73 @@ export function SearchableSelect({
         >
           <CommandInput placeholder="بحث..." />
           <CommandList>
-            <CommandEmpty>لا توجد نتائج</CommandEmpty>
-            {/* Clear selection */}
-            {selected && (
-              <CommandGroup>
-                <CommandItem
-                  value="__clear__"
-                  onSelect={() => {
-                    onChange(null);
-                    setOpen(false);
-                  }}
-                  data-testid={testid ? `${testid}-clear` : undefined}
-                >
-                  <span className="text-slate-500">— إلغاء الاختيار —</span>
-                </CommandItem>
-              </CommandGroup>
+            {listUnavailable ? (
+              <div className="px-3 py-4 text-xs text-slate-600 text-center"
+                   data-testid={testid ? `${testid}-unavailable` : undefined}>
+                <AlertTriangle className="w-5 h-5 mx-auto mb-1 text-amber-500" />
+                <div className="font-bold mb-1">تعذّر تحميل القائمة من قيود</div>
+                {unavailableReason && (
+                  <div className="text-[10px] text-slate-500" dir="ltr">
+                    {unavailableReason}
+                  </div>
+                )}
+                <div className="text-[10px] text-slate-500 mt-1">
+                  اضغط "تحديث القوائم من قيود" لإعادة المحاولة.
+                </div>
+              </div>
+            ) : (
+              <>
+                <CommandEmpty>لا توجد نتائج</CommandEmpty>
+                {selected && (
+                  <CommandGroup>
+                    <CommandItem
+                      value="__clear__"
+                      onSelect={() => {
+                        onChange(null);
+                        setOpen(false);
+                      }}
+                      data-testid={testid ? `${testid}-clear` : undefined}
+                    >
+                      <span className="text-slate-500">— إلغاء الاختيار —</span>
+                    </CommandItem>
+                  </CommandGroup>
+                )}
+                <CommandGroup>
+                  {options.map((opt) => {
+                    const idStr = String(opt.id);
+                    const optSecondary = secondaryKey ? opt[secondaryKey] : null;
+                    const searchable = [opt.name, idStr, optSecondary]
+                      .filter(Boolean)
+                      .join(" ");
+                    return (
+                      <CommandItem
+                        key={idStr}
+                        value={searchable}
+                        onSelect={() => {
+                          onChange(idStr);
+                          setOpen(false);
+                        }}
+                        data-testid={testid ? `${testid}-option-${idStr}` : undefined}
+                      >
+                        <Check
+                          className={[
+                            "mr-2 h-4 w-4",
+                            idStr === stringValue ? "opacity-100" : "opacity-0",
+                          ].join(" ")}
+                        />
+                        <span className="flex-1 text-right" dir="auto">
+                          {opt.name}
+                        </span>
+                        <span className="ml-2 text-[10px] font-mono text-slate-400">
+                          ID {idStr}
+                          {optSecondary ? ` · ${optSecondary}` : ""}
+                        </span>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              </>
             )}
-            <CommandGroup>
-              {options.map((opt) => {
-                const idStr = String(opt.id);
-                const optSecondary = secondaryKey ? opt[secondaryKey] : null;
-                // Build a searchable string combining name + id +
-                // any secondary so the user can search by phone /
-                // tax percent / account code.
-                const searchable = [opt.name, idStr, optSecondary]
-                  .filter(Boolean)
-                  .join(" ");
-                return (
-                  <CommandItem
-                    key={idStr}
-                    value={searchable}
-                    onSelect={() => {
-                      onChange(idStr);
-                      setOpen(false);
-                    }}
-                    data-testid={testid ? `${testid}-option-${idStr}` : undefined}
-                  >
-                    <Check
-                      className={[
-                        "mr-2 h-4 w-4",
-                        idStr === stringValue ? "opacity-100" : "opacity-0",
-                      ].join(" ")}
-                    />
-                    <span className="flex-1 text-right" dir="auto">
-                      {opt.name}
-                    </span>
-                    <span className="ml-2 text-[10px] font-mono text-slate-400">
-                      ID {idStr}
-                      {optSecondary ? ` · ${optSecondary}` : ""}
-                    </span>
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
           </CommandList>
         </Command>
       </PopoverContent>

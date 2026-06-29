@@ -3812,3 +3812,122 @@ Full Qoyod regression: **627 passed, 2 skipped, 0 failed**.
 2. `curl /admin/normalizer-self-test` on Production → expect `iter_278_adapter_nested_amounts_fix: true`.
 3. `curl /admin/normalize-row-self-test?trace_id=eac68e664dee48738005a52b15e50a60` → expect `live_first_item.unit_price == 199` (etc.) and `live_vs_stored_drift: true` (because stored canonical is stale from pre-fix attempt).
 4. Use the One-Shot Reprocess button to overwrite the stale canonical with the corrected one (the row's raw_payload is preserved — re-running the pipeline normalizes it cleanly).
+
+---
+
+## Iter-290h.6 — Display-fidelity fixes for post-retry orders (2026-02-28)
+
+### Why
+Production order 268494278 succeeded on the retry but the UI rendered the
+`INVOICE_PAYMENT_CREATED` step as ✗ failed because `last_failed_stage` from
+the FIRST attempt was never cleared, and the drawer mixed the stale `error`
+with the fresh `body` under the same step. `ALREADY_COMPLETED` also returned
+empty `stage_sequence_observed`.
+
+### Changes
+- `pipeline.py`: on `invoice_payment` success → clear `last_failed_stage`,
+  `pipeline_error`, and `qoyod_responses.invoice_payment.error`.
+- `first_sync_monitor._status_for_invoice_payment_step`: success-first.
+- `first_sync_monitor.shape_inbox_row_for_monitor`: drop stale error
+  on success; surface as `previous_error`.
+- `one_shot_reprocess.ALREADY_COMPLETED`: now carries
+  `stage_sequence_observed`, `qoyod_invoice_id`,
+  `qoyod_invoice_payment_id`, payloads + responses.
+- `QoyodInvoices.jsx`: never display the error block when
+  `qoyod_invoice_payment_id` is set.
+
+Tests: +8 (`test_qoyod_post_retry_display_fidelity_iter290h6.py`).
+
+---
+
+## Iter-290h.7 — Invoice header payment_method (2026-06-29)
+
+### Why
+Production invoices showed empty "طريقة الدفع" column in قيود. User
+decision: always display "نقدي" regardless of upstream Salla method.
+
+### Field
+- `POST /invoices` body now carries `payment_method: "10"` (ZATCA Cash code).
+- Display-only; does NOT affect accounting (`account_id` on
+  `/invoice_payments` remains the source of truth for settlement).
+- Independent of `account_id`, validated by test guard.
+
+Tests: +11 (`test_qoyod_invoice_header_payment_method_iter290h7.py`).
+
+---
+
+## Iter-290i + Iter-290i.1 — Name-first picker for Qoyod ids (2026-06-29)
+
+### Why
+Operators were typing numeric ids (category_id, account_id, unit_type_id …)
+by hand. New UX: pull every reference list from قيود, cache it, and let the
+operator pick BY NAME.
+
+### Backend
+- `api_client.list_product_categories` + `list_product_units`.
+- `reference_lists.py` — orchestrates 7 lists fetch + per-list diagnostics:
+  `{status: success | empty | parse_failed | fail, count,
+    used_response_key, sample_keys, error}`.
+- Endpoints:
+  - `POST /admin/reference-lists/refresh` (read-only against قيود).
+  - `GET /admin/reference-lists` (cached read).
+- Storage: `qoyod_reference_lists` (one doc per tenant).
+
+### Frontend
+- `SearchableSelect` (shadcn command + popover) — search by name/id/secondary,
+  copy-friendly ID chip, distinguishes:
+    * orphan id (list loaded, id missing) → amber warning.
+    * list unavailable (fetch failed/parsed badly) → neutral state +
+      "تعذّر تحميل القائمة" inside the popup.
+- `QoyodSettings.jsx` — 8 fields converted (branches, taxes, customers,
+  categories, product_tax, unit_types, sales_account, inventories).
+- Per-list diagnostic chips collapsed under a `<details>` panel — shows
+  endpoint/status/sample_keys for every list.
+
+Tests: +18 (`test_qoyod_reference_lists_iter290i.py` +
+`test_qoyod_reference_lists_diagnostics_iter290i1.py`).
+
+---
+
+## Iter-290j-rounding-fix · Phase 1 (READ-ONLY) — 2026-06-29
+
+### Why
+Some قيود invoices show "دفعت جزئياً" with 0.01 SAR remaining. User
+asked for a strict RCA before any logic change.
+
+### RCA confirmed
+- Mezan sends per-line `unit_price + discount + tax_percent`, قيود
+  re-computes the gross per line then sums to invoice total.
+- Mezan sends `payment_amount = Salla total_amount` — NOT قيود's
+  computed total. If قيود's tax rounding lands on a different halala,
+  invoice_total ≠ payment_amount → partial-paid.
+
+### What shipped
+- `rounding_mismatch_report.py` — read-only scanner of `integration_inbox`.
+- 5-bucket classifier:
+  `PAYMENT_MISMATCH_ONLY`, `SHIPPING_ROUNDING_MISMATCH`,
+  `DISCOUNT_ALLOCATION_MISMATCH`, `MULTI_LINE_CUMULATIVE_ROUNDING`,
+  `INVOICE_TOTAL_ROUNDING_MISMATCH`, plus `NO_MISMATCH` /
+  `INSUFFICIENT_DATA`.
+- `GET /admin/rounding-mismatch-report?limit=N`.
+- `QoyodRoundingReport.jsx` page (sidebar link added).
+- Filters: bucket dropdown, "diff > 0", "has remaining balance".
+- Copy chips for order_id / invoice_id / payment_id.
+
+### NOT shipped (waiting on production data)
+- ❌ No change to payment amount source.
+- ❌ No change to line pricing math.
+- ❌ No Decimal migration.
+- ❌ No قيود-side polling (planned for Phase 2 if `INSUFFICIENT_DATA`
+  dominates).
+
+Tests: +9 (`test_qoyod_rounding_mismatch_report_iter290j.py`).
+
+### Next steps (gated by user)
+Operator deploys + collects bucket distribution + sample rows; we then
+choose ONE of:
+- (a) Payment source switches to قيود-total (fixes `PAYMENT_MISMATCH_ONLY`).
+- (b) Per-line rounding fix (fixes `*_ROUNDING_*` buckets).
+- (c) Decimal/halalas migration (most-invasive).
+
+Full Qoyod regression after Iter-290j: **932 passed, 2 skipped, 0 failed**.

@@ -731,11 +731,29 @@ export default function QoyodSettings() {
       categories: [], unit_types: [], inventories: [],
       accounts: [], taxes: [], branches: [], customers: [],
     },
-    updated_at:   null,
-    cached:       false,
-    fetch_errors: null,
+    updated_at:        null,
+    cached:            false,
+    fetch_errors:      null,
+    fetch_diagnostics: {},
   });
   const [refreshingLists, setRefreshingLists] = useState(false);
+
+  // Iter-290i.1 — helper that decides whether a given list is
+  // "unavailable" (fetch failed / parse failed / empty due to bad
+  // response) so the picker can show the right state. An EMPTY
+  // list whose fetch SUCCEEDED is NOT unavailable — قيود just has
+  // no rows of that kind yet.
+  const listUnavailable = (key) => {
+    const errs = referenceLists.fetch_errors || {};
+    if (errs[key]) return true;
+    const diag = (referenceLists.fetch_diagnostics || {})[key];
+    return diag && diag.status === "parse_failed";
+  };
+  const unavailableReason = (key) => {
+    const err = (referenceLists.fetch_errors || {})[key];
+    if (!err) return null;
+    return `${err.code || "error"}: ${err.message || ""}`.trim();
+  };
 
   // ── Loaders ────────────────────────────────────────────────────
   const loadSettings = async () => {
@@ -1202,32 +1220,80 @@ export default function QoyodSettings() {
                subtitle="القيم الأساسية المطلوبة لإنشاء الفواتير في قيود">
         {/* Iter-290i — Refresh-from-Qoyod button. Caches the lists
             on the server so subsequent renders are instant. */}
-        <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-lg bg-sky-50 border border-sky-200">
-          <div className="text-xs text-sky-900">
-            <div className="font-bold">📚 قوائم قيود</div>
-            <div className="text-[11px] text-sky-700 mt-0.5">
-              {referenceLists.updated_at ? (
-                <>آخر تحديث: <span dir="ltr" className="font-mono">{referenceLists.updated_at}</span></>
-              ) : (
-                <>لم تُحدَّث القوائم بعد. اضغط الزر لجلبها من قيود.</>
-              )}
-              {referenceLists.fetch_errors && (
-                <span className="text-amber-700 ms-2">
-                  ⚠️ بعض القوائم لم تُجلب: {Object.keys(referenceLists.fetch_errors).join(", ")}
-                </span>
-              )}
+        <div className="mb-4 p-3 rounded-lg bg-sky-50 border border-sky-200">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="text-xs text-sky-900">
+              <div className="font-bold">📚 قوائم قيود</div>
+              <div className="text-[11px] text-sky-700 mt-0.5">
+                {referenceLists.updated_at ? (
+                  <>آخر تحديث: <span dir="ltr" className="font-mono">{referenceLists.updated_at}</span></>
+                ) : (
+                  <>لم تُحدَّث القوائم بعد. اضغط الزر لجلبها من قيود.</>
+                )}
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={refreshReferenceLists}
+              disabled={!hasCreds || refreshingLists}
+              data-testid="btn-refresh-reference-lists"
+              className="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-md bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshingLists ? "animate-spin" : ""}`} />
+              {refreshingLists ? "جاري التحديث..." : "تحديث القوائم من قيود"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={refreshReferenceLists}
-            disabled={!hasCreds || refreshingLists}
-            data-testid="btn-refresh-reference-lists"
-            className="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-md bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshingLists ? "animate-spin" : ""}`} />
-            {refreshingLists ? "جاري التحديث..." : "تحديث القوائم من قيود"}
-          </button>
+          {/* Iter-290i.1 — per-list diagnostic chips. Separates
+              "list never loaded" from "list loaded but empty" so
+              the operator never sees a misleading "ID غير موجود". */}
+          {referenceLists.fetch_diagnostics
+            && Object.keys(referenceLists.fetch_diagnostics).length > 0 && (
+            <details className="mt-2" data-testid="reference-lists-diagnostics">
+              <summary className="text-[11px] text-sky-800 cursor-pointer hover:underline">
+                تشخيص جلب القوائم ({Object.keys(referenceLists.fetch_diagnostics).length}/7)
+              </summary>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {Object.entries(referenceLists.fetch_diagnostics).map(([key, d]) => {
+                  const tone = d.status === "success" ? "emerald"
+                             : d.status === "empty"   ? "slate"
+                             : d.status === "parse_failed" ? "amber"
+                             : "rose";
+                  const bg = {
+                    emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
+                    slate:   "bg-slate-50 border-slate-200 text-slate-700",
+                    amber:   "bg-amber-50 border-amber-200 text-amber-900",
+                    rose:    "bg-rose-50 border-rose-200 text-rose-900",
+                  }[tone];
+                  const icon = d.status === "success" ? "✓"
+                             : d.status === "empty"   ? "∅"
+                             : "✗";
+                  return (
+                    <div key={key}
+                         data-testid={`list-diag-${key}`}
+                         className={`text-[10px] rounded border px-2 py-1 ${bg}`}>
+                      <div className="font-bold flex justify-between">
+                        <span>{icon} {key}</span>
+                        <span className="font-mono">{d.count} عنصر</span>
+                      </div>
+                      {d.error && (
+                        <div className="mt-0.5 text-[9px] font-mono break-words" dir="ltr">
+                          {typeof d.error === "string" ? d.error
+                            : `${d.error.code || ""}: ${d.error.message || ""}`}
+                          {d.error.endpoint && <> · {d.error.endpoint}</>}
+                          {d.error.status_code && <> · HTTP {d.error.status_code}</>}
+                        </div>
+                      )}
+                      {d.status === "parse_failed" && d.sample_keys && d.sample_keys.length > 0 && (
+                        <div className="mt-0.5 text-[9px] font-mono" dir="ltr">
+                          response keys: {d.sample_keys.join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          )}
         </div>
 
         <div className="grid md:grid-cols-2 gap-3">
@@ -1244,6 +1310,8 @@ export default function QoyodSettings() {
                 ? "اختر فرعاً..."
                 : "اتركه فارغاً إذا كان حسابك بفرع واحد"}
               disabled={!hasCreds}
+              listUnavailable={listUnavailable("branches")}
+              unavailableReason={unavailableReason("branches")}
             />
           </div>
 
@@ -1259,6 +1327,8 @@ export default function QoyodSettings() {
               secondaryKey="percent"
               placeholder="اختر ضريبة..."
               disabled={!hasCreds}
+              listUnavailable={listUnavailable("taxes")}
+              unavailableReason={unavailableReason("taxes")}
             />
             {fieldInvalid("default_tax_id") && (
               <div className="text-xs text-rose-600 mt-1">
@@ -1279,6 +1349,8 @@ export default function QoyodSettings() {
               secondaryKey="phone"
               placeholder="عند الفراغ، يُنشَأ عميل جديد لكل طلب ضيف"
               disabled={!hasCreds}
+              listUnavailable={listUnavailable("customers")}
+              unavailableReason={unavailableReason("customers")}
             />
           </div>
         </div>
@@ -1320,6 +1392,8 @@ export default function QoyodSettings() {
               testid="select-product-category"
               placeholder="اختر تصنيفاً..."
               disabled={!hasCreds}
+              listUnavailable={listUnavailable("categories")}
+              unavailableReason={unavailableReason("categories")}
             />
             {fieldInvalid("default_product_category_id") && (
               <div className="text-xs text-rose-600 mt-1">مطلوب</div>
@@ -1338,6 +1412,8 @@ export default function QoyodSettings() {
               secondaryKey="percent"
               placeholder="عادة نفس ضريبة الفاتورة"
               disabled={!hasCreds}
+              listUnavailable={listUnavailable("taxes")}
+              unavailableReason={unavailableReason("taxes")}
             />
             {fieldInvalid("default_product_tax_id") && (
               <div className="text-xs text-rose-600 mt-1">مطلوب</div>
@@ -1355,6 +1431,8 @@ export default function QoyodSettings() {
               testid="select-unit-type"
               placeholder="مثال: قطعة..."
               disabled={!hasCreds}
+              listUnavailable={listUnavailable("unit_types")}
+              unavailableReason={unavailableReason("unit_types")}
             />
             {fieldInvalid("default_product_unit_type_id") && (
               <div className="text-xs text-rose-600 mt-1">مطلوب</div>
@@ -1373,6 +1451,8 @@ export default function QoyodSettings() {
               secondaryKey="code"
               placeholder="اختر حساب الإيرادات..."
               disabled={!hasCreds}
+              listUnavailable={listUnavailable("accounts")}
+              unavailableReason={unavailableReason("accounts")}
             />
             {fieldInvalid("default_sales_account_id") && (
               <div className="text-xs text-rose-600 mt-1">مطلوب</div>
@@ -1390,6 +1470,8 @@ export default function QoyodSettings() {
               testid="select-inventory"
               placeholder="اختر مستودعاً..."
               disabled={!hasCreds}
+              listUnavailable={listUnavailable("inventories")}
+              unavailableReason={unavailableReason("inventories")}
             />
             {fieldInvalid("default_inventory_id") && (
               <div className="text-xs text-rose-600 mt-1">مطلوب</div>
