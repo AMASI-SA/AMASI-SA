@@ -1,5 +1,41 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290i.2 — SearchableSelect for Payment Method Mapping (2026-06-29)
+**User request**: Apply the SearchableSelect picker (already rolled out elsewhere in QoyodSettings via Iter-290i) to the Payment Method Mapping table — the only place still using a raw text input for `qoyod_account_id`. Show account NAME instead of bare numeric ID, with `ID · code` as a secondary hint. Empty / failed accounts list must NOT label saved ids as "غير موجود".
+
+### Changes (additive, no schema change, no posting logic touched)
+- **`PaymentMethodMappingTable`** (`QoyodSettings.jsx`):
+  - Replaced `<input type="text">` for `qoyod_account_id` with `<SearchableSelect>`.
+  - New props: `accountsList`, `accountsListUnavailable`, `accountsUnavailableReason`.
+  - Per-row test id: `pm-account-select-<key>`.
+  - Help-hint text updated to match the new search UX.
+- **`SearchableSelect`** (`searchable-select.jsx`):
+  - New optional prop `unavailableLabel` — when provided AND `listUnavailable && value`, renders `${unavailableLabel} (ID ${value})` instead of the generic "ID X (لم تُحمّل القائمة)".
+  - Existing callers unaffected (default null preserves prior behavior).
+- **Parent invocation** (`QoyodSettings.jsx`):
+  - Treats `accounts.length === 0` ALSO as `unavailable` (not just `fetch_errors` non-empty). This is what the user explicitly asked for: never label a saved id as "missing" when the list was never fetched.
+  - Passes `unavailableLabel="تعذر تحميل قائمة حسابات قيود"` so the trigger shows the domain-specific Arabic message.
+- **Display contract**:
+  - Option in dropdown: "إيرادات المبيعات / الخدمات   ID 17 · 4101"
+  - Search filters by name OR id OR code (via `Command.filter` over `[name, id, code].join(" ")`).
+
+### What is NOT changed (per the user's explicit guardrails)
+- `qoyod_account_id` payload structure — still a plain string, persisted exactly as before.
+- Pipeline / `/invoices` / `/invoice_payments` math — untouched.
+- Phase-2 rounding fix — still paused per Iter-290j Phase 1.5 decision.
+- Iter-292 (transitional payment statuses) — still not started.
+
+### Verification
+- `testing_agent_v3_fork` iteration_55: 7/7 acceptance criteria pass.
+  - SearchableSelect renders (`pm-account-select-mada`).
+  - Old raw input is gone.
+  - Trigger label is "تعذر تحميل قائمة حسابات قيود (ID 9)" on empty list (NOT "غير موجود").
+  - Popover shows the `*-unavailable` banner.
+  - Trigger is `<button>`, not `<input>`.
+  - No new console errors.
+
+
+
 ## Iter-290j-rounding-fix · Phase 1.5 — Richer rounding diagnostic (2026-06-29)
 **User report after Phase 1 production scan (70 invoices)**: 43 match, 14 fell into the `INVOICE_TOTAL_ROUNDING_MISMATCH` catch-all, 13 marked `INSUFFICIENT_DATA`, plus drifts as large as 6.24 / 18.84 SAR were being lumped in with halala-scale 0.01 drifts. User explicitly forbade Phase 2 (any math change) until the report explains the catch-all cases and separates real rounding from material mismatches.
 

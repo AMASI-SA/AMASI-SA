@@ -592,7 +592,7 @@ function PaymentMethodMappingTable({
       <div className="text-[11px] text-slate-500 mt-2 leading-relaxed">
         {accountsUnsupported
           ? "ℹ️ مفتاح API الحالي لا يكشف قائمة الحسابات. أدخل Account ID يدوياً من قيود → المحاسبة → دليل الحسابات."
-          : "💡 اكتب Account ID مباشرة أو اختر من الاقتراحات المُحمَّلة من قيود."}
+          : "💡 اضغط على القائمة وابحث باسم الحساب أو كود الحساب أو الـ ID."}
       </div>
     </div>
   );
