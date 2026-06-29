@@ -26,11 +26,25 @@ const OUTCOME_META = {
     description: "محاكاة Decimal الجديدة تطابق سلة دون أي تعديل.",
     tone: "sky",
   },
+  parity_gap_needs_qoyod_model: {
+    label: "⚠ PARITY GAP — نموذج المحاكاة لا يطابق قيود",
+    description: "محاكاتنا تطابق Salla لكن قيود الفعلي مختلف. لا يمكن اقتراح إصلاح حتى نجعل المحاكاة تعيد إنتاج قيود فعلياً.",
+    tone: "amber",
+  },
   skipped: {
     label: "⤴ تخطّى",
     description: "خارج نطاق Phase 2.",
     tone: "slate",
   },
+};
+
+const PARITY_META = {
+  ALIGNED:                       { label: "✓ متطابق",                tone: "emerald" },
+  MODEL_OK_NEEDS_ADJUSTMENT:     { label: "✓ نموذج صحيح — يحتاج تعديل", tone: "sky" },
+  PARITY_GAP_LOCAL_MATCHES_SALLA: { label: "⚠ PARITY GAP",             tone: "amber" },
+  PARITY_GAP_MODEL_OFF:          { label: "⚠ نموذج بعيد",              tone: "rose" },
+  NO_QOYOD_ACTUAL:               { label: "— لا يوجد رد قيود",         tone: "slate" },
+  UNKNOWN:                       { label: "—",                         tone: "slate" },
 };
 
 const SKIP_REASON_LABELS = {
@@ -90,6 +104,7 @@ function OutcomePill({ outcome }) {
   let meta;
   if (outcome === "adjustment_succeeded") meta = OUTCOME_META.adjustment_succeeded;
   else if (outcome === "no_adjustment_needed") meta = OUTCOME_META.no_adjustment_needed;
+  else if (outcome === "parity_gap_needs_qoyod_model") meta = OUTCOME_META.parity_gap_needs_qoyod_model;
   else if (outcome === "skipped") meta = OUTCOME_META.skipped;
   else if (outcome && outcome.startsWith("adjustment_failed")) {
     meta = { label: `✗ فشل: ${outcome.split(":")[1] || ""}`, tone: "rose" };
@@ -100,11 +115,119 @@ function OutcomePill({ outcome }) {
                testid={`outcome-${outcome}`} />;
 }
 
+function ParityPill({ parity }) {
+  const meta = PARITY_META[parity] || PARITY_META.UNKNOWN;
+  return <Pill tone={meta.tone} label={meta.label}
+               testid={`parity-${parity}`} />;
+}
+
 function ExpandedDetails({ row }) {
   const adj = row.adjustment;
+  const qr  = row.qoyod_response || {};
+  const isParityGap = row.outcome === "parity_gap_needs_qoyod_model";
   return (
     <div className="space-y-3">
-      {/* Adjustment proposal */}
+      {/* Iter-290k.1 — Parity callout. The big red sign that
+          "we don't yet have a model that reproduces قيود's actual
+          number — so we MUST NOT propose any production fix here". */}
+      {isParityGap && (
+        <div className="bg-amber-50 border border-amber-300 rounded p-3"
+             data-testid={`parity-gap-callout-${row.order_id}`}>
+          <div className="text-[12px] font-bold text-amber-900 mb-1">
+            ⚠ PARITY GAP — نموذج المحاكاة لا يعيد إنتاج قيود الفعلي
+          </div>
+          <div className="text-[11px] text-amber-800 leading-relaxed">
+            محاكاة Decimal+ROUND_HALF_UP من نفس الـ payload تنتج
+            <span className="font-mono mx-1">{Number(row.simulated_qoyod_invoice_total).toFixed(2)}</span>
+            (مطابق Salla)، لكن قيود فعلياً أعاد إنتاج
+            <span className="font-mono mx-1">{Number(row.qoyod_actual_total).toFixed(2)}</span>
+            (فرق {Number(row.simulated_minus_qoyod_actual ?? 0).toFixed(4)} عن المحاكاة).
+            <strong className="block mt-1">
+              لن يُقترح أي adjustment حتى نُحدّد منطق قيود الداخلي بدقة.
+            </strong>
+          </div>
+        </div>
+      )}
+
+      {/* Triple-comparison summary card — Salla vs Local-sim vs Qoyod-actual */}
+      <div className="bg-white border border-slate-200 rounded p-3"
+           data-testid={`triple-comparison-${row.order_id}`}>
+        <div className="text-[11px] font-bold text-slate-700 mb-2">
+          المقارنة الثلاثية:
+        </div>
+        <table className="w-full text-[11px] font-mono">
+          <tbody>
+            <tr>
+              <td className="py-0.5 text-slate-600 w-1/3">Salla total</td>
+              <td className="py-0.5"><Money value={row.salla_total} /></td>
+              <td className="py-0.5 text-slate-400 text-[10px]">المرجع المتوقع</td>
+            </tr>
+            <tr>
+              <td className="py-0.5 text-slate-600">Local simulated total</td>
+              <td className="py-0.5"><Money value={row.simulated_qoyod_invoice_total} /></td>
+              <td className="py-0.5 text-slate-400 text-[10px]">
+                Decimal+ROUND_HALF_UP من stored payload
+                {row.local_sim_matches_salla
+                  ? <span className="ms-2 text-emerald-700">≈ Salla</span>
+                  : <span className="ms-2 text-rose-700">≠ Salla</span>}
+              </td>
+            </tr>
+            <tr>
+              <td className="py-0.5 text-slate-600">Qoyod actual total</td>
+              <td className="py-0.5"><Money value={row.qoyod_actual_total} /></td>
+              <td className="py-0.5 text-slate-400 text-[10px]">
+                من response body
+                {row.local_sim_matches_qoyod_actual
+                  ? <span className="ms-2 text-emerald-700">≈ Local-sim</span>
+                  : row.qoyod_actual_total !== null
+                    ? <span className="ms-2 text-rose-700">≠ Local-sim</span>
+                    : null}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* قيود response details — invoice id/status/balance/payment */}
+      {qr && (qr.invoice_id || qr.invoice_total !== null) && (
+        <div className="bg-white border border-slate-200 rounded p-3"
+             data-testid={`qoyod-response-summary-${row.order_id}`}>
+          <div className="text-[11px] font-bold text-slate-700 mb-2">
+            تفاصيل فاتورة قيود (Read-Only):
+          </div>
+          <table className="w-full text-[11px] font-mono">
+            <tbody>
+              <tr>
+                <td className="py-0.5 text-slate-600 w-1/3">invoice_id</td>
+                <td className="py-0.5">{qr.invoice_id || "—"}</td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-slate-600">invoice_total</td>
+                <td className="py-0.5"><Money value={qr.invoice_total} /></td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-slate-600">invoice_balance</td>
+                <td className="py-0.5"><Money value={qr.invoice_balance} /></td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-slate-600">invoice_status</td>
+                <td className="py-0.5">{qr.invoice_status || "—"}</td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-slate-600">payment_amount</td>
+                <td className="py-0.5"><Money value={qr.payment_amount} /></td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-slate-600">payment_id</td>
+                <td className="py-0.5">{qr.payment_id || "—"}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Adjustment proposal — but only when the parity gate passed.
+          For PARITY_GAP rows adj is null and this block is skipped. */}
       {adj && (
         <div className="bg-white border border-slate-200 rounded p-3"
              data-testid={`adjustment-${row.order_id}`}>
@@ -169,27 +292,32 @@ function ExpandedDetails({ row }) {
         </div>
       )}
 
-      {/* Payload columns — separately labeled per user requirement */}
+      {/* Payload columns + per-line parity gap */}
       <div className="bg-white border border-slate-200 rounded p-2 overflow-x-auto">
         <div className="text-[11px] font-bold text-slate-700 mb-1">
-          أعمدة Payload المُرسَل إلى قيود (qoyod_payload_*):
+          مقارنة السطور (Payload → Local Sim → Qoyod Response):
         </div>
         <table className="w-full text-[10px] font-mono whitespace-nowrap">
           <thead className="text-slate-500 border-b border-slate-200">
             <tr>
               <th className="text-right py-1 px-1">#</th>
               <th className="text-right py-1 px-1">الوصف</th>
-              <th className="text-right py-1 px-1">qoyod_payload_unit_price</th>
-              <th className="text-right py-1 px-1">qoyod_payload_quantity</th>
-              <th className="text-right py-1 px-1">qoyod_payload_discount</th>
-              <th className="text-right py-1 px-1">qoyod_payload_tax_percent</th>
-              <th className="text-right py-1 px-1">simulated_line_net</th>
-              <th className="text-right py-1 px-1">simulated_line_gross</th>
+              <th className="text-right py-1 px-1">payload_unit_price</th>
+              <th className="text-right py-1 px-1">payload_qty</th>
+              <th className="text-right py-1 px-1">payload_discount</th>
+              <th className="text-right py-1 px-1">payload_tax%</th>
+              <th className="text-right py-1 px-1 bg-sky-50">sim_net</th>
+              <th className="text-right py-1 px-1 bg-sky-50">sim_gross</th>
+              <th className="text-right py-1 px-1 bg-amber-50">qoyod_net</th>
+              <th className="text-right py-1 px-1 bg-amber-50">qoyod_tax</th>
+              <th className="text-right py-1 px-1 bg-amber-50">qoyod_total</th>
+              <th className="text-right py-1 px-1 bg-rose-50">line_gap</th>
             </tr>
           </thead>
           <tbody>
             {(row.payload_columns || []).map((pc, i) => {
               const sim = (row.simulated_lines || [])[i] || {};
+              const qoyodLine = (row.qoyod_response_lines || [])[i] || {};
               return (
                 <tr key={i}
                     data-testid={`payload-line-${row.order_id}-${i}`}
@@ -200,8 +328,14 @@ function ExpandedDetails({ row }) {
                   <td className="py-0.5 px-1"><Money value={pc.qoyod_payload_quantity} dp={0} /></td>
                   <td className="py-0.5 px-1"><Money value={pc.qoyod_payload_discount} dp={4} /></td>
                   <td className="py-0.5 px-1">{Number(pc.qoyod_payload_tax_percent || 0).toFixed(2)}%</td>
-                  <td className="py-0.5 px-1"><Money value={sim.line_net} /></td>
-                  <td className="py-0.5 px-1"><Money value={sim.line_gross} /></td>
+                  <td className="py-0.5 px-1 bg-sky-50/50"><Money value={sim.line_net} /></td>
+                  <td className="py-0.5 px-1 bg-sky-50/50"><Money value={sim.line_gross} /></td>
+                  <td className="py-0.5 px-1 bg-amber-50/50"><Money value={qoyodLine.qoyod_response_line_net} /></td>
+                  <td className="py-0.5 px-1 bg-amber-50/50"><Money value={qoyodLine.qoyod_response_tax} /></td>
+                  <td className="py-0.5 px-1 bg-amber-50/50"><Money value={qoyodLine.qoyod_response_line_total} /></td>
+                  <td className="py-0.5 px-1 bg-rose-50/50">
+                    <Diff value={qoyodLine.local_vs_qoyod_line_gap} />
+                  </td>
                 </tr>
               );
             })}
@@ -246,6 +380,8 @@ export default function QoyodRoundingDryRun() {
     return report.results.filter((r) => {
       if (outcomeFilter === "ALL") return true;
       if (outcomeFilter === "ELIGIBLE") return r.eligible;
+      if (outcomeFilter === "PARITY_GAP")
+        return r.outcome === "parity_gap_needs_qoyod_model";
       if (outcomeFilter === "SKIPPED")  return !r.eligible;
       if (outcomeFilter === "SUCCEEDED")
         return r.outcome === "adjustment_succeeded"
@@ -296,13 +432,14 @@ export default function QoyodRoundingDryRun() {
 
       {/* Summary */}
       {report && (
-        <section className="grid md:grid-cols-5 gap-3"
+        <section className="grid md:grid-cols-6 gap-3"
                  data-testid="dry-run-summary">
           {[
             ["scanned_count",   "مفحوصة",            "slate"],
             ["eligible_count",  "مؤهلة",              "amber"],
             ["succeeded_count", "نجحت بعد تعديل",      "emerald"],
             ["no_adjustment_needed_count", "متطابقة",  "sky"],
+            ["parity_gap_count", "PARITY GAP",         "amber"],
             ["failed_count",    "فشلت",                "rose"],
           ].map(([key, label, tone]) => (
             <div key={key}
@@ -314,6 +451,27 @@ export default function QoyodRoundingDryRun() {
               </div>
             </div>
           ))}
+        </section>
+      )}
+
+      {/* Iter-290k.1 — Parity histogram across ALL scanned rows.
+          If most rows are PARITY_GAP_*, our Decimal simulator is
+          NOT a faithful model of قيود's server-side math yet. */}
+      {report && Object.keys(report.parity_histogram || {}).length > 0 && (
+        <section className="bg-white border border-slate-200 rounded-xl p-3"
+                 data-testid="parity-histogram">
+          <div className="text-[11px] font-bold text-slate-600 mb-2">
+            توزّع الـ Parity (Local-sim vs Qoyod-actual):
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(report.parity_histogram).map(([key, count]) => (
+              <div key={key} className="flex items-center gap-1"
+                   data-testid={`parity-count-${key}`}>
+                <ParityPill parity={key} />
+                <span className="text-[10px] font-mono text-slate-600">× {count}</span>
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
@@ -349,6 +507,7 @@ export default function QoyodRoundingDryRun() {
             className="text-xs border border-slate-300 rounded px-2 py-1 bg-white"
           >
             <option value="ELIGIBLE">المؤهلة فقط</option>
+            <option value="PARITY_GAP">PARITY GAP فقط</option>
             <option value="SUCCEEDED">نجحت / متطابقة</option>
             <option value="FAILED">فشلت</option>
             <option value="SKIPPED">المتخطّاة</option>
@@ -369,23 +528,22 @@ export default function QoyodRoundingDryRun() {
                 <tr>
                   <th className="px-3 py-2 text-right font-bold">رقم الطلب</th>
                   <th className="px-3 py-2 text-right font-bold">Bucket</th>
+                  <th className="px-3 py-2 text-right font-bold">Parity</th>
                   <th className="px-3 py-2 text-right font-bold">Salla</th>
-                  <th className="px-3 py-2 text-right font-bold">simulated_before</th>
-                  <th className="px-3 py-2 text-right font-bold">diff_before</th>
+                  <th className="px-3 py-2 text-right font-bold">Local sim</th>
+                  <th className="px-3 py-2 text-right font-bold">Qoyod actual</th>
+                  <th className="px-3 py-2 text-right font-bold">sim − qoyod</th>
                   <th className="px-3 py-2 text-right font-bold">النتيجة</th>
-                  <th className="px-3 py-2 text-right font-bold">diff_after</th>
                   <th className="w-12"></th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((row) => {
                   const expanded = expandedId === row.row_id;
-                  const adj = row.adjustment || {};
                   return (
                     <RowAndDetails
                       key={row.row_id || row.order_id}
                       row={row}
-                      adj={adj}
                       expanded={expanded}
                       onToggle={() => setExpandedId(
                         expanded ? null : row.row_id || row.order_id)}
@@ -408,7 +566,7 @@ export default function QoyodRoundingDryRun() {
   );
 }
 
-function RowAndDetails({ row, adj, expanded, onToggle }) {
+function RowAndDetails({ row, expanded, onToggle }) {
   return (
     <>
       <tr className="border-t border-slate-100"
@@ -419,11 +577,12 @@ function RowAndDetails({ row, adj, expanded, onToggle }) {
         <td className="px-3 py-2 font-mono text-[10px]">
           {row.bucket}
         </td>
+        <td className="px-3 py-2"><ParityPill parity={row.parity} /></td>
         <td className="px-3 py-2"><Money value={row.salla_total} /></td>
         <td className="px-3 py-2"><Money value={row.simulated_qoyod_invoice_total} /></td>
-        <td className="px-3 py-2"><Diff value={adj.diff_before ?? row.simulated_minus_salla} /></td>
+        <td className="px-3 py-2"><Money value={row.qoyod_actual_total} /></td>
+        <td className="px-3 py-2"><Diff value={row.simulated_minus_qoyod_actual} /></td>
         <td className="px-3 py-2"><OutcomePill outcome={row.outcome} /></td>
-        <td className="px-3 py-2"><Diff value={adj.diff_after} /></td>
         <td className="px-3 py-2">
           <button
             onClick={onToggle}
@@ -436,7 +595,7 @@ function RowAndDetails({ row, adj, expanded, onToggle }) {
       </tr>
       {expanded && (
         <tr className="bg-slate-50">
-          <td colSpan={8} className="px-3 py-3">
+          <td colSpan={9} className="px-3 py-3">
             <ExpandedDetails row={row} />
           </td>
         </tr>

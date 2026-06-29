@@ -276,18 +276,122 @@ def test_dry_run_single_row_succeeds_on_minor_drift():
          "discount": "0", "tax_percent": "15"},
     ]
     sim_before, _ = simulate_invoice(payload)
-    # Simulate قيود drifting +0.01 above the simulated total.
-    qoyod_drifted = sim_before + Decimal("0.01")
+    # Synthesize the row so قيود's actual matches our simulator
+    # exactly (parity ✓), then drifts above Salla by 0.01 ⇒ the
+    # algorithm should attempt the adjustment and land on Salla.
+    salla = float(sim_before) - 0.01
+    qoyod = float(sim_before)  # parity with local sim
     row = _synthetic_row(
-        salla_total=float(sim_before),
-        qoyod_total=float(qoyod_drifted),
+        salla_total=salla,
+        qoyod_total=qoyod,
         payload_lines=payload,
     )
     out = _dry_run_single_row(row)
     assert out["eligible"] is True
-    assert out["outcome"] == "no_adjustment_needed"
-    # When the simulated total already matches Salla exactly, there's
-    # nothing to fix — the dry-run returns no_adjustment_needed.
+    assert out["local_sim_matches_qoyod_actual"] is True
+    assert out["parity"] == "MODEL_OK_NEEDS_ADJUSTMENT"
+    assert out["outcome"] == "adjustment_succeeded"
+    assert abs(out["adjustment"]["diff_after"]) <= 0.005
+
+
+# ─── Iter-290k.1 · Parity Probe — the new gating logic ──────────────
+def test_parity_gap_blocks_adjustment_when_model_does_not_match_qoyod():
+    """The user's order 269043104 pattern: local-sim matches Salla
+    exactly (so the old dry-run said 'no adjustment needed'), but
+    قيود actually returned a +0.01 drift. Our Phase-2 model has
+    NOT been validated for this case — we must surface PARITY_GAP,
+    NOT propose a fake-success adjustment."""
+    payload = [
+        {"description": "A", "unit_price": "100.00", "quantity": "1",
+         "discount": "0", "tax_percent": "15"},
+    ]
+    sim, _ = simulate_invoice(payload)  # = 115.00
+    row = _synthetic_row(
+        salla_total=float(sim),                    # 115.00
+        qoyod_total=float(sim) + 0.01,             # 115.01 — قيود drifted
+        payload_lines=payload,
+    )
+    out = _dry_run_single_row(row)
+    assert out["eligible"] is True
+    assert out["local_sim_matches_salla"]        is True
+    assert out["local_sim_matches_qoyod_actual"] is False
+    assert out["qoyod_actual_matches_salla"]     is False
+    assert out["parity"] == "PARITY_GAP_LOCAL_MATCHES_SALLA"
+    assert out["outcome"] == "parity_gap_needs_qoyod_model"
+    # CRITICAL: no adjustment proposed in this state.
+    assert out["adjustment"] is None
+
+
+def test_parity_aligned_when_all_three_totals_agree():
+    payload = [{"description": "A", "unit_price": "100.00",
+                "quantity": "1", "discount": "0", "tax_percent": "15"}]
+    sim, _ = simulate_invoice(payload)  # = 115.00
+    row = _synthetic_row(
+        salla_total=float(sim),
+        qoyod_total=float(sim),
+        payload_lines=payload,
+    )
+    out = _dry_run_single_row(row)
+    assert out["parity"] == "ALIGNED"
+    # Not eligible — invoice_diff=0 → diff_out_of_phase2_set.
+    assert out["eligible"] is False
+    assert out["outcome"]  == "skipped"
+
+
+def test_parity_no_qoyod_actual_when_response_body_missing():
+    """If we don't have قيود's response body (pre-logging row or
+    pipeline crashed before capture), parity can't be evaluated."""
+    payload = [{"description": "A", "unit_price": "100.00",
+                "quantity": "1", "discount": "0", "tax_percent": "15"}]
+    sim, _ = simulate_invoice(payload)
+    row = _synthetic_row(
+        salla_total=float(sim),
+        qoyod_total=float(sim),
+        payload_lines=payload,
+    )
+    # Wipe out the response body — invoice_diff becomes None,
+    # so this row also becomes ineligible (no_invoice_diff).
+    row["qoyod_responses"] = {}
+    out = _dry_run_single_row(row)
+    assert out["parity"] == "NO_QOYOD_ACTUAL"
+    assert out["qoyod_actual_total"] is None
+
+
+def test_qoyod_response_summary_extracted_when_present():
+    payload = [{"description": "A", "unit_price": "100.00",
+                "quantity": "1", "discount": "0", "tax_percent": "15"}]
+    row = _synthetic_row(salla_total=115.0, qoyod_total=115.01,
+                         payload_lines=payload)
+    row["qoyod_responses"]["invoice"]["body"]["invoice"]["status"]   = "paid"
+    row["qoyod_responses"]["invoice"]["body"]["invoice"]["balance"]  = 0.01
+    out = _dry_run_single_row(row)
+    qr = out["qoyod_response"]
+    assert qr["invoice_id"]      == "63"
+    assert qr["invoice_total"]   == 115.01
+    assert qr["invoice_balance"] == 0.01
+    assert qr["invoice_status"]  == "paid"
+
+
+def test_qoyod_response_lines_per_line_gap_computed():
+    """When قيود echoes the line items back, we attach per-line
+    `local_vs_qoyod_line_gap` so the operator can see WHICH sat
+    drifted, not just that the total drifted."""
+    payload = [
+        {"description": "A", "unit_price": "100.00", "quantity": "1",
+         "discount": "0", "tax_percent": "15"},
+    ]
+    row = _synthetic_row(salla_total=115.00, qoyod_total=115.01,
+                         payload_lines=payload)
+    row["qoyod_responses"]["invoice"]["body"]["invoice"]["line_items"] = [
+        {"subtotal_after_taxes": 115.01, "subtotal_before_taxes": 100.00,
+         "tax_amount": 15.01},
+    ]
+    out = _dry_run_single_row(row)
+    assert len(out["qoyod_response_lines"]) == 1
+    li = out["qoyod_response_lines"][0]
+    assert li["qoyod_response_line_total"] == 115.01
+    assert li["local_sim_line_gross"]      == 115.00
+    assert li["local_vs_qoyod_line_gap"]   == 0.01
 
 
 def test_dry_run_single_row_skips_discount_allocation_bucket():
@@ -337,16 +441,17 @@ class _FakeDB:
 
 @pytest.mark.asyncio
 async def test_dry_run_report_aggregates_outcomes():
-    """One eligible (no-adj-needed), one ineligible (allocation),
-    one ineligible (material drift)."""
+    """One row in PARITY_GAP (qoyod drifted), one ineligible
+    (allocation), one ineligible (material drift)."""
     payload_ok = [
         {"description": "A", "unit_price": "100.00", "quantity": "1",
          "discount": "0", "tax_percent": "15"},
     ]
     sim, _ = simulate_invoice(payload_ok)
-    row_ok = _synthetic_row(salla_total=float(sim),
-                            qoyod_total=float(sim + Decimal("0.01")),
-                            payload_lines=payload_ok)
+    # local sim matches Salla but قيود drifted +0.01 → PARITY_GAP
+    row_parity_gap = _synthetic_row(salla_total=float(sim),
+                                    qoyod_total=float(sim + Decimal("0.01")),
+                                    payload_lines=payload_ok)
     row_alloc = _synthetic_row(salla_total=230.0, qoyod_total=229.99,
                                payload_lines=payload_ok)
     row_alloc["qoyod_payloads"]["invoice_diagnostics"]["line_diagnostics"] = [
@@ -356,16 +461,15 @@ async def test_dry_run_report_aggregates_outcomes():
                                   qoyod_total=float(sim + Decimal("6.24")),
                                   payload_lines=payload_ok)
 
-    db = _FakeDB([row_ok, row_alloc, row_material])
+    db = _FakeDB([row_parity_gap, row_alloc, row_material])
     rep = await build_dry_run_report(db, user_id="t", limit=10)
     assert rep["ok"] is True
     assert rep["scanned_count"]  == 3
     assert rep["eligible_count"] >= 1
-    assert rep["skipped_count"]  >= 2
-    # Skipped reasons should include the bucket excludes and the
-    # material-severity exclusion.
-    assert "excluded_bucket" in rep["skip_histogram"] \
-        or "non_minor_severity" in rep["skip_histogram"]
+    # Iter-290k.1 — parity_gap_count must be surfaced at the top level.
+    assert rep["parity_gap_count"] >= 1
+    # New parity histogram includes the PARITY_GAP key.
+    assert "PARITY_GAP_LOCAL_MATCHES_SALLA" in rep["parity_histogram"]
 
 
 def test_phase2_adjustable_diffs_pinned_to_user_scope():

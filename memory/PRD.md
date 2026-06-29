@@ -1,5 +1,55 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290k.1 — Parity Probe (BLOCKS Iter-290l) (2026-06-29)
+**User report**: Phase-2 Dry-Run on prod shows 11 eligible cases ALL marked `no_adjustment_needed`, but the same orders show `Qoyod=248.60 vs Salla=248.59` (+0.01 drift) in the rounding mismatch report. The local Decimal simulator is reproducing Salla's expected total, NOT قيود's actual server-side recomputation. Therefore the proposed Phase-2 algorithm has NOT been validated yet and any "success" it reports is fake.
+
+### What this iteration changes
+- **NEW outcome `parity_gap_needs_qoyod_model`** — emitted when `local_sim_matches_salla=true` but `local_sim_matches_qoyod_actual=false`. Adjustment is NULL for these rows; no fix is proposed.
+- **NEW parity gate**: `_dry_run_single_row` refuses to call `attempt_adjustment` unless `local_sim_matches_qoyod_actual` is true (within 0.005). Acceptance criteria from the user:
+  - Step 1: `simulated_before ≈ qoyod_actual_total` (model parity)
+  - Step 2: `simulated_after ≈ salla_total` (fix validity)
+- **NEW three-way parity flags** on every row: `local_sim_matches_salla`, `local_sim_matches_qoyod_actual`, `qoyod_actual_matches_salla`.
+- **NEW `parity` label** values: `ALIGNED` / `MODEL_OK_NEEDS_ADJUSTMENT` / `PARITY_GAP_LOCAL_MATCHES_SALLA` / `PARITY_GAP_MODEL_OFF` / `NO_QOYOD_ACTUAL`.
+- **NEW `qoyod_response{}`** per row — invoice_id, invoice_total, invoice_balance, invoice_status, payment_amount, payment_id (all from `qoyod_responses.invoice.body`, no fresh قيود calls).
+- **NEW `qoyod_response_lines[]`** — per-line {net, tax, total, local_sim_gross, local_vs_qoyod_line_gap}; surfaces WHICH line drifted, not just that the total drifted.
+- **NEW top-level counters** `parity_gap_count` and `parity_histogram`.
+
+### Frontend (`QoyodRoundingDryRun.jsx`)
+- 6-tile summary now includes PARITY GAP card (amber).
+- New parity histogram across all rows.
+- Table columns: رقم الطلب / Bucket / **Parity** / Salla / **Local sim** / **Qoyod actual** / sim−qoyod / النتيجة / تفاصيل.
+- Expanded row now shows: **Parity Gap callout** (when applicable), **triple comparison** card (Salla vs Local-sim vs Qoyod-actual), **قيود response** card (invoice_id/balance/status/payment), and a **line-comparison table** with sky-tinted local-sim columns + amber-tinted قيود-response columns + rose-tinted `line_gap` column.
+- New "PARITY GAP فقط" filter option.
+
+### Strict invariants (preserved)
+- No DB writes.
+- No قيود calls.
+- No pipeline / payload / payment / DB mutations.
+- DISCOUNT_ALLOCATION still hard-excluded.
+- MATERIAL_MISMATCH still hard-excluded.
+- Iter-290l (production change) BLOCKED until parity_gap_count drops to 0.
+
+### Verification
+- 24/24 dry-run tests pass (5 new + 19 updated). Critical pins:
+  - PARITY_GAP_LOCAL_MATCHES_SALLA outcome emits NULL adjustment.
+  - `qoyod_response` summary fields extracted correctly.
+  - `qoyod_response_lines[].local_vs_qoyod_line_gap` computed.
+  - `ALIGNED` parity when all three totals agree.
+- 965/967 Qoyod tests pass (no regressions; 2 pre-existing skipped).
+- API now returns `parity_gap_count`, `parity_histogram` at top level.
+- Smoke screenshot confirms 6-tile summary with PARITY GAP card.
+
+### Decision blocked on user
+Re-run the dry-run on prod. If parity_gap_count > 0 (expected for the 11 cases), then the Decimal+ROUND_HALF_UP model is NOT a faithful replica of قيود's server-side math. Possible roots:
+1. قيود applies a different rounding rule (e.g., banker's rounding or per-line gross-then-net).
+2. قيود recomputes line totals from a different basis (e.g. unit_price+tax then subtract discount).
+3. Stored `qoyod_payloads.invoice` differs from what قيود actually received (encoding/serialization).
+4. قيود's tax calc has a per-invoice rounding step we're not modeling.
+
+Next step (after Iter-290k.1 ships): inspect prod `qoyod_response_lines` line-by-line to identify which line(s) قيود computed differently. That tells us the rounding rule difference. ONLY after parity is reached do we open Iter-290l.
+
+
+
 ## Iter-290k — Phase-2 DRY-RUN Simulation (Decimal + ROUND_HALF_UP) (2026-06-29)
 **User direction**: Before any production change, simulate the proposed Phase-2 fix on real recent invoices to validate it lands `simulated_qoyod_total == salla_total` for halala-scale drift. ZERO writes to DB or قيود.
 

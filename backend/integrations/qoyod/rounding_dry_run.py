@@ -274,18 +274,171 @@ def _build_payload_columns(row: dict) -> list[dict]:
     return out
 
 
+# ── Iter-290k.1 · Parity Probe — read-only قيود-response extraction ──
+def _safe_field(obj: dict, keys: list[str]) -> Optional[float]:
+    """Return the first numeric field found among `keys`. Used to
+    smooth over قيود's response key variance across API versions."""
+    for k in keys:
+        if obj.get(k) is not None:
+            try:
+                return float(obj.get(k))
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _extract_qoyod_invoice_inner_local(row: dict) -> dict:
+    """Re-implements the lookup locally to avoid a cross-module
+    import cycle with rounding_mismatch_report — same lookup logic."""
+    responses = row.get("qoyod_responses") or {}
+    inv = ((responses.get("invoice") or {}).get("body") or {})
+    if not isinstance(inv, dict):
+        return {}
+    inner = inv.get("invoice") if isinstance(inv.get("invoice"), dict) else inv
+    return inner if isinstance(inner, dict) else {}
+
+
+def _extract_qoyod_response_summary(row: dict) -> dict:
+    """Pull the قيود-side invoice metadata we have on file. The
+    parity probe needs this to compare local simulation against
+    قيود's ACTUAL totals — not Salla's expected totals."""
+    inner = _extract_qoyod_invoice_inner_local(row)
+    responses = row.get("qoyod_responses") or {}
+    payment_body = ((responses.get("invoice_payment") or {}).get("body") or {})
+    payment_inner = (payment_body.get("invoice_payment")
+                     if isinstance(payment_body.get("invoice_payment"), dict)
+                     else payment_body)
+
+    return {
+        "invoice_id":      row.get("qoyod_invoice_id"),
+        "invoice_total":   _safe_field(inner, ["total", "total_amount",
+                                               "amount", "amount_due"]),
+        "invoice_balance": _safe_field(inner, ["balance", "remaining",
+                                               "due_amount",
+                                               "remaining_amount"]),
+        "invoice_status":  inner.get("status"),
+        "payment_amount":  (_safe_field(payment_inner, ["amount"])
+                            if isinstance(payment_inner, dict) else None),
+        "payment_id":      row.get("qoyod_invoice_payment_id"),
+    }
+
+
+def _extract_qoyod_response_lines_detailed(
+    row: dict, sim_lines: list[dict],
+) -> list[dict]:
+    """Per-line view from قيود's response body. We map قيود's
+    echoed `line_items[i]` to our simulated `sim_lines[i]` BY INDEX
+    (the قيود pipeline builds both in the same order). For each
+    line we compute `local_vs_qoyod_line_gap` so the operator can
+    see WHERE the rounding diverges, not just the total drift."""
+    inner = _extract_qoyod_invoice_inner_local(row)
+    raw = inner.get("line_items") or []
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    for i, li in enumerate(raw):
+        if not isinstance(li, dict):
+            continue
+        # قيود's API uses different field names across versions —
+        # try every common shape so we don't silently drop signal.
+        net   = _safe_field(li, ["subtotal_before_taxes", "subtotal",
+                                 "amount_before_tax", "net",
+                                 "amount", "line_net"])
+        tax   = _safe_field(li, ["tax_amount", "vat_amount",
+                                 "tax", "tax_value"])
+        total = _safe_field(li, ["subtotal_after_taxes",
+                                 "total_after_tax", "total_with_tax",
+                                 "total_amount", "line_total",
+                                 "gross_amount", "total"])
+        sim_li = sim_lines[i] if i < len(sim_lines) else None
+        sim_gross = float(sim_li["line_gross"]) if sim_li else None
+        sim_net   = float(sim_li["line_net"])   if sim_li else None
+        gap = None
+        if total is not None and sim_gross is not None:
+            gap = round(total - sim_gross, 4)
+        out.append({
+            "qoyod_response_line_net":   net,
+            "qoyod_response_tax":        tax,
+            "qoyod_response_line_total": total,
+            "local_sim_line_net":        sim_net,
+            "local_sim_line_gross":      sim_gross,
+            "local_vs_qoyod_line_gap":   gap,
+        })
+    return out
+
+
+def _parity_status(local_sim_matches_qoyod_actual: bool,
+                   local_sim_matches_salla: bool,
+                   qoyod_actual_matches_salla: bool,
+                   qoyod_actual_available: bool) -> str:
+    """Compact label for the parity column in the UI table."""
+    if not qoyod_actual_available:
+        return "NO_QOYOD_ACTUAL"
+    if local_sim_matches_qoyod_actual and qoyod_actual_matches_salla:
+        return "ALIGNED"
+    if local_sim_matches_qoyod_actual and not qoyod_actual_matches_salla:
+        return "MODEL_OK_NEEDS_ADJUSTMENT"
+    if local_sim_matches_salla and not local_sim_matches_qoyod_actual:
+        return "PARITY_GAP_LOCAL_MATCHES_SALLA"
+    return "PARITY_GAP_MODEL_OFF"
+
+
 def _dry_run_single_row(row: dict) -> dict:
-    """Classify + simulate + propose adjustment for one inbox row.
-    Returns a structured `result` even for ineligible rows so the
-    operator can see WHY a row was skipped."""
+    """Classify + simulate + parity-check + propose adjustment for
+    one inbox row.
+
+    Iter-290k.1 — Parity Probe
+    ──────────────────────────
+    Before proposing an adjustment, we now require that our local
+    Decimal+ROUND_HALF_UP simulator REPRODUCES قيود's actual total
+    (within 0.005). Without that parity, an adjustment is just
+    guesswork — it might "succeed" in our model and still leave a
+    0.01 drift in قيود.
+
+    Outcomes
+    ────────
+      • skipped                          — out of Phase-2 scope.
+      • no_adjustment_needed             — model & قيود & Salla all
+                                            already agree.
+      • parity_gap_needs_qoyod_model     — local-sim matches Salla
+                                            (or doesn't) but does NOT
+                                            match قيود-actual. We
+                                            DO NOT propose any
+                                            adjustment in this case.
+      • adjustment_succeeded / failed    — only emitted AFTER parity
+                                            with قيود-actual was
+                                            established.
+    """
     classified = _classify_row(row)
     payload_lines = _extract_payload_line_items(row)
 
     eligible, skip_reason = _row_eligible(classified, payload_lines)
 
     salla_total = _q(classified.get("salla_total"))
-    qoyod_total = classified.get("qoyod_invoice_total")
+    qoyod_actual_raw = classified.get("qoyod_invoice_total")
+    qoyod_actual = (_q(qoyod_actual_raw)
+                    if qoyod_actual_raw is not None else None)
     sim_before, sim_lines = simulate_invoice(payload_lines)
+
+    # Three-way parity gauge — the heart of Iter-290k.1.
+    local_sim_matches_salla = abs(sim_before - salla_total) <= ZERO_TOL_EPS
+    qoyod_actual_available  = qoyod_actual is not None
+    local_sim_matches_qoyod_actual = (
+        qoyod_actual_available
+        and abs(sim_before - qoyod_actual) <= ZERO_TOL_EPS)
+    qoyod_actual_matches_salla = (
+        qoyod_actual_available
+        and abs(qoyod_actual - salla_total) <= ZERO_TOL_EPS)
+
+    parity = _parity_status(
+        local_sim_matches_qoyod_actual,
+        local_sim_matches_salla,
+        qoyod_actual_matches_salla,
+        qoyod_actual_available)
+
+    qoyod_response = _extract_qoyod_response_summary(row)
+    qoyod_response_lines = _extract_qoyod_response_lines_detailed(
+        row, sim_lines)
 
     base = {
         "row_id":          classified.get("row_id"),
@@ -294,20 +447,31 @@ def _dry_run_single_row(row: dict) -> dict:
         "bucket":          classified.get("bucket"),
         "severity":        classified.get("severity"),
         "salla_total":     float(salla_total),
-        "reported_qoyod_total": qoyod_total,
+        "qoyod_actual_total":            (float(qoyod_actual)
+                                          if qoyod_actual is not None
+                                          else None),
+        # Kept for backwards-compat with the v1 UI.
+        "reported_qoyod_total":          qoyod_actual_raw,
         "simulated_qoyod_invoice_total": float(sim_before),
         "simulated_minus_salla":         float(sim_before - salla_total),
-        "simulated_minus_reported_qoyod":
-            (float(sim_before - _q(qoyod_total))
-             if qoyod_total is not None else None),
-        "payload_columns": _build_payload_columns(row),
-        "simulated_lines": [
+        "simulated_minus_qoyod_actual":  (
+            float(sim_before - qoyod_actual)
+            if qoyod_actual is not None else None),
+        # Iter-290k.1 — three-way parity flags surfaced to the UI.
+        "local_sim_matches_salla":        local_sim_matches_salla,
+        "local_sim_matches_qoyod_actual": local_sim_matches_qoyod_actual,
+        "qoyod_actual_matches_salla":     qoyod_actual_matches_salla,
+        "parity":                         parity,
+        "payload_columns":     _build_payload_columns(row),
+        "simulated_lines":     [
             {"line_net":   float(li["line_net"]),
              "line_gross": float(li["line_gross"])}
             for li in sim_lines
         ],
-        "eligible":        eligible,
-        "skip_reason":     skip_reason,
+        "qoyod_response":      qoyod_response,
+        "qoyod_response_lines": qoyod_response_lines,
+        "eligible":            eligible,
+        "skip_reason":         skip_reason,
     }
 
     if not eligible:
@@ -315,6 +479,19 @@ def _dry_run_single_row(row: dict) -> dict:
         base["outcome"]    = "skipped"
         return base
 
+    # ── PARITY GATE ───────────────────────────────────────────────
+    # If qoyod_actual exists and our model didn't reproduce it,
+    # STOP. Any adjustment we'd propose is built on a model we
+    # haven't validated. Surface this as PARITY_GAP_NEEDS_QOYOD_MODEL
+    # so the operator (and a future fix) treat this as a model bug,
+    # NOT a payload bug.
+    if qoyod_actual_available and not local_sim_matches_qoyod_actual:
+        base["adjustment"] = None
+        base["outcome"]    = "parity_gap_needs_qoyod_model"
+        return base
+
+    # ── Parity confirmed (or no qoyod_actual to compare against) ──
+    # Now and only now do we try the discount adjustment.
     adj = attempt_adjustment(payload_lines, salla_total)
     base["adjustment"] = {
         k: (float(v) if isinstance(v, Decimal) else v)
@@ -374,6 +551,11 @@ async def build_dry_run_report(
                       if r["outcome"] == "no_adjustment_needed")
     n_failed    = sum(1 for r in eligible_results
                       if r["outcome"].startswith("adjustment_failed"))
+    # Iter-290k.1 — count rows where the local simulator failed to
+    # reproduce قيود's actual total. These rows BLOCK any Phase-2
+    # implementation until we get the simulator parity right.
+    n_parity_gap = sum(1 for r in eligible_results
+                       if r["outcome"] == "parity_gap_needs_qoyod_model")
 
     skip_histogram: dict[str, int] = {}
     for r in results:
@@ -382,6 +564,14 @@ async def build_dry_run_report(
             key = r["skip_reason"].split(":")[0]
             skip_histogram[key] = skip_histogram.get(key, 0) + 1
 
+    # Iter-290k.1 — parity histogram across ALL rows (eligible or not)
+    # so the operator can see how often our simulator agrees with قيود
+    # in absolute terms, not just within Phase-2 scope.
+    parity_histogram: dict[str, int] = {}
+    for r in results:
+        key = r.get("parity") or "UNKNOWN"
+        parity_histogram[key] = parity_histogram.get(key, 0) + 1
+
     return {
         "ok":              True,
         "scanned_count":   len(results),
@@ -389,7 +579,9 @@ async def build_dry_run_report(
         "succeeded_count": n_succeeded,
         "no_adjustment_needed_count": n_no_adj,
         "failed_count":    n_failed,
+        "parity_gap_count": n_parity_gap,
         "skipped_count":   len(results) - len(eligible_results),
         "skip_histogram":  skip_histogram,
+        "parity_histogram": parity_histogram,
         "results":         results,
     }
