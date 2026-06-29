@@ -17,14 +17,19 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const OUTCOME_META = {
   adjustment_succeeded: {
-    label: "✓ التصحيح نجح",
-    description: "بعد تعديل خصم أكبر سطر، أصبح إجمالي المحاكاة = إجمالي سلة.",
+    label: "✓ التصحيح نجح (Header VAT aligned)",
+    description: "بعد تعديل صغير على discount أكبر سطر، header_total ولـ line_gross_sum أصبحا = Salla.",
     tone: "emerald",
   },
   no_adjustment_needed: {
     label: "✓ متطابق أصلاً",
     description: "محاكاة Decimal الجديدة تطابق سلة دون أي تعديل.",
     tone: "sky",
+  },
+  header_aligned_but_lines_drifted: {
+    label: "⚠ Header تطابق لكن سطر انزاح",
+    description: "header_total لحق salla، لكن أحد السطور انتقل بسبب التعديل. يحتاج خوارزمية أدق.",
+    tone: "amber",
   },
   parity_gap_needs_qoyod_model: {
     label: "⚠ PARITY GAP — نموذج المحاكاة لا يطابق قيود",
@@ -104,6 +109,7 @@ function OutcomePill({ outcome }) {
   let meta;
   if (outcome === "adjustment_succeeded") meta = OUTCOME_META.adjustment_succeeded;
   else if (outcome === "no_adjustment_needed") meta = OUTCOME_META.no_adjustment_needed;
+  else if (outcome === "header_aligned_but_lines_drifted") meta = OUTCOME_META.header_aligned_but_lines_drifted;
   else if (outcome === "parity_gap_needs_qoyod_model") meta = OUTCOME_META.parity_gap_needs_qoyod_model;
   else if (outcome === "skipped") meta = OUTCOME_META.skipped;
   else if (outcome && outcome.startsWith("adjustment_failed")) {
@@ -187,6 +193,99 @@ function ExpandedDetails({ row }) {
           </tbody>
         </table>
       </div>
+
+      {/* Iter-290k.2 — Header VAT Alignment side-by-side. THE most
+          important new diagnostic: 5 metrics × (before | after) so
+          the operator can verify both header_total AND line_gross_sum
+          land on Salla. */}
+      {row.header_vat_before && (
+        <div className="bg-white border border-slate-200 rounded p-3 overflow-x-auto"
+             data-testid={`header-vat-alignment-${row.order_id}`}>
+          <div className="text-[11px] font-bold text-slate-700 mb-2">
+            Header VAT Alignment (محاكاة قبل/بعد):
+          </div>
+          <table className="w-full text-[11px] font-mono">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-500">
+                <th className="text-right py-1 px-1">المقياس</th>
+                <th className="text-right py-1 px-1 bg-slate-50">قبل</th>
+                {row.header_vat_alignment?.after && (
+                  <th className="text-right py-1 px-1 bg-emerald-50">بعد</th>
+                )}
+                <th className="text-right py-1 px-1 bg-amber-50">Salla</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["exact_net_sum",     "exact_net_sum",     4],
+                ["displayed_net_sum", "displayed_net_sum", 2],
+                ["header_vat",        "header_vat",        2],
+                ["header_total",      "header_total",      2],
+                ["line_gross_sum",    "line_gross_sum",    2],
+              ].map(([key, label, dp]) => {
+                const beforeVal = row.header_vat_before[key];
+                const afterVal  = row.header_vat_alignment?.after?.[key];
+                const sallaRef  = (key === "header_total" || key === "line_gross_sum")
+                                  ? row.salla_total : null;
+                const beforeMatchesSalla = sallaRef !== null
+                  && Math.abs(beforeVal - sallaRef) <= 0.005;
+                const afterMatchesSalla  = sallaRef !== null && afterVal !== undefined
+                  && Math.abs(afterVal - sallaRef) <= 0.005;
+                return (
+                  <tr key={key} className="border-t border-slate-100">
+                    <td className="py-0.5 px-1 text-slate-600">{label}</td>
+                    <td className={`py-0.5 px-1 bg-slate-50 ${beforeMatchesSalla ? "text-emerald-700 font-bold" : "text-slate-800"}`}>
+                      <Money value={beforeVal} dp={dp} />
+                    </td>
+                    {row.header_vat_alignment?.after && (
+                      <td className={`py-0.5 px-1 bg-emerald-50 ${afterMatchesSalla ? "text-emerald-700 font-bold" : "text-rose-700"}`}>
+                        <Money value={afterVal} dp={dp} />
+                      </td>
+                    )}
+                    <td className="py-0.5 px-1 bg-amber-50">
+                      {sallaRef !== null
+                        ? <Money value={sallaRef} dp={dp} />
+                        : <span className="text-slate-300">—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {row.header_vat_alignment && !row.header_vat_alignment.no_adjustment_needed
+            && !row.header_vat_alignment.reason && row.header_vat_alignment.chosen_idx !== undefined && (
+              <div className="mt-2 text-[11px] text-slate-700 leading-relaxed bg-slate-50 border border-slate-200 rounded p-2">
+                <strong>التعديل المقترح:</strong>{" "}
+                السطر #{row.header_vat_alignment.chosen_idx}
+                {row.header_vat_alignment.chosen_line_description
+                  && <span> ({row.header_vat_alignment.chosen_line_description})</span>}
+                {" · "}
+                old_discount =
+                <span className="font-mono mx-1">{Number(row.header_vat_alignment.current_discount).toFixed(4)}</span>
+                · adjustment_net =
+                <span className="font-mono mx-1 font-bold text-sky-700">
+                  +{Number(row.header_vat_alignment.adjustment_net).toFixed(4)}
+                </span>
+                · new_discount =
+                <span className="font-mono mx-1">{Number(row.header_vat_alignment.new_discount).toFixed(4)}</span>
+                {" · "}
+                <span className={row.header_vat_alignment.header_aligned ? "text-emerald-700" : "text-rose-700"}>
+                  header_aligned = {String(row.header_vat_alignment.header_aligned)}
+                </span>
+                {" · "}
+                <span className={row.header_vat_alignment.lines_aligned ? "text-emerald-700" : "text-rose-700"}>
+                  lines_aligned = {String(row.header_vat_alignment.lines_aligned)}
+                </span>
+              </div>
+            )}
+          {row.header_vat_alignment?.reason && (
+            <div className="mt-2 text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">
+              <strong>تعذّر التصحيح:</strong>{" "}
+              <span className="font-mono">{row.header_vat_alignment.reason}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* قيود response details — invoice id/status/balance/payment */}
       {qr && (qr.invoice_id || qr.invoice_total !== null) && (

@@ -1,5 +1,69 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290k.2 — Header VAT Alignment Simulation (2026-06-29)
+**User insight (root-cause confirmed)**: قيود computes invoice header total as `displayed_net + round(exact_net × tax%, 2)`, NOT as `sum(round(line_net × (1+tax%), 2))`. The two diverge by 0.01 whenever `exact_net × tax%` lands on the .005 half-up boundary. Reproduced on orders 269340921 and 268905066: line_gross_sum = 228.12 (= Salla) but header_total = 228.13 (= قيود's actual, leaving 0.01 unpaid). The fix targets BOTH header_total AND line_gross_sum landing on Salla via a minimal 4-dp discount tweak.
+
+### Algorithm (pure simulation, no production writes)
+```
+simulate_header_vat(payload_lines) →
+    exact_net_sum     = Σ (unit_price * qty - discount)         # full Decimal precision
+    displayed_net_sum = round_half_up_2(exact_net_sum)
+    header_vat        = round_half_up_2(exact_net_sum × rate)
+    header_total      = displayed_net_sum + header_vat          ← قيود returns THIS
+    line_gross_sum    = Σ round_half_up_2(line_net × (1+rate))  ← what we used to track
+
+attempt_header_vat_alignment(payload_lines, salla_total) →
+    diff = header_total - salla_total
+    target_header_vat = header_vat - diff
+    boundary = (target_header_vat ± 0.005) / rate              ← cross THIS half-up boundary
+    target_exact_net = boundary - 0.00005
+    adjustment_net = exact_net_sum - target_exact_net          ← rounded to 4 dp HALF_UP
+    apply to largest line by (unit_price × qty)
+    re-simulate → verify header_aligned AND lines_aligned
+```
+
+### Acceptance criteria (pinned by tests)
+- `header_total_after  == salla_total` (within 0.005)
+- `line_gross_sum_after == salla_total` (within 0.005)
+- The proposed adjustment is **minimal** (typically 0.003–0.005 SAR net) — boundary-crossing math, not the over-correcting `diff/1.15`.
+- Refuse if it would make any line's discount negative.
+- Refuse if |header_diff| > 0.025 (out of Phase-2 scope).
+
+### Backend files
+- `/app/backend/integrations/qoyod/rounding_dry_run.py`:
+  - **NEW** `simulate_header_vat(payload_lines)` returns 6-field dict.
+  - **NEW** `attempt_header_vat_alignment(payload_lines, salla_total)` returns `before/after` snapshots + `header_aligned/lines_aligned` flags.
+  - `_dry_run_single_row` now compares `header_total` to `qoyod_actual` for parity (closes the parity gap for قيود's pattern).
+  - New row fields: `header_vat_before{}`, `header_vat_alignment{}`.
+  - New outcome `header_aligned_but_lines_drifted` for cases where the smart adjustment fixed the header but moved a line's individual gross.
+- `tests/test_qoyod_rounding_dry_run_iter290k.py`:
+  - **31/31 tests pass** (7 new, 24 carried over).
+  - Pinned the order 269340921 fixture: lines [65.785, 65.785, 66.80] reproduce header_total=228.13 vs line_gross_sum=228.12 EXACTLY.
+  - Pinned that the smart alignment lands both metrics on 228.12 by adjusting Line C's discount by ~0.0034 SAR net.
+
+### Frontend (`QoyodRoundingDryRun.jsx`)
+- New 5-row "Header VAT Alignment" table per row showing each metric × (قبل | بعد | Salla), color-coded green when metric matches Salla.
+- Adjustment proposal line displays: chosen line idx + description, old/new discount, adjustment_net, header_aligned/lines_aligned booleans.
+- New outcome pill `header_aligned_but_lines_drifted` (amber) for partial wins.
+
+### Strict guardrails (still enforced)
+- ZERO DB writes.
+- ZERO قيود calls.
+- ZERO pipeline / payload / payment / live-DB mutations.
+- DISCOUNT_ALLOCATION + MATERIAL_MISMATCH still hard-excluded.
+- Iter-290l (production change) STILL BLOCKED — requires explicit user approval after reviewing prod simulation results.
+
+### Decision blocked on user
+Re-run dry-run on prod and confirm for the 11 PARITY_GAP cases:
+1. `local_sim_matches_qoyod_actual` flips from `false` to `true` (parity closed by the new header VAT model).
+2. `outcome` changes from `parity_gap_needs_qoyod_model` to `adjustment_succeeded`.
+3. Per row, the "Header VAT Alignment قبل/بعد" table shows `header_total` and `line_gross_sum` both landing on Salla.
+4. `adjustment_net` per row is a small fraction (~0.003–0.005), NOT a whole halala.
+
+If all 11 cases meet criteria 1–4, then Iter-290l (production change) becomes a candidate. Phase-2 implementation only proceeds with separate user approval and only for NEW orders going forward.
+
+
+
 ## Iter-290k.1 — Parity Probe (BLOCKS Iter-290l) (2026-06-29)
 **User report**: Phase-2 Dry-Run on prod shows 11 eligible cases ALL marked `no_adjustment_needed`, but the same orders show `Qoyod=248.60 vs Salla=248.59` (+0.01 drift) in the rounding mismatch report. The local Decimal simulator is reproducing Salla's expected total, NOT قيود's actual server-side recomputation. Therefore the proposed Phase-2 algorithm has NOT been validated yet and any "success" it reports is fake.
 

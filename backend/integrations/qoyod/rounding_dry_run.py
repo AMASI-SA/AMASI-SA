@@ -119,6 +119,197 @@ def simulate_invoice(payload_lines: list[dict]) -> tuple[Decimal, list[dict]]:
     return _round_half_up_2(total), per_line
 
 
+# ─── Iter-290k.2 — Header VAT modeling (the missing piece) ───────────
+#
+# قيود's invoice page displays the HEADER total, which is built as:
+#
+#     displayed_net_sum = round_half_up_2(Σ exact_line_net)
+#     header_vat        = round_half_up_2(Σ exact_line_net × tax%/100)
+#     header_total      = displayed_net_sum + header_vat
+#
+# This DIFFERS from the per-line-grossed sum:
+#
+#     line_gross_sum    = Σ round_half_up_2(exact_line_net × (1 + tax%/100))
+#
+# The two diverge by 0.01 whenever (Σ exact_line_net) × tax% sits on
+# the half-up boundary (.005). That's the root of every PARITY_GAP
+# row in production — قيود returns the header_total but our older
+# simulator was computing the line_gross_sum.
+def simulate_header_vat(payload_lines: list[dict]) -> dict:
+    """Full قيود-side simulation including both the line-level and
+    header-level VAT computations. Returns every metric the
+    operator needs to reason about which constraint is satisfied.
+
+    Notes on tax_percent
+    ────────────────────
+    قيود's invoice header VAT uses a SINGLE tax rate (a per-invoice
+    rate, not a per-line one — قيود's UI shows one VAT column at the
+    bottom). In our payloads every product line carries the same
+    `tax_percent` (15 by default), so we read the rate from the
+    first non-shipping line. Lines with `tax_percent=0` are still
+    summed into `exact_net_sum` so the bottom-line math matches.
+    """
+    exact_net_sum = Decimal("0")
+    line_gross_sum = Decimal("0")
+    header_tax_pct: Optional[Decimal] = None
+
+    for li in payload_lines or []:
+        unit_price = _q(li.get("unit_price"))
+        qty        = _q(li.get("quantity"))
+        discount   = _q(li.get("discount"))
+        tax_pct    = _q(li.get("tax_percent"))
+        line_net   = (unit_price * qty) - discount
+        exact_net_sum += line_net
+        tax_factor   = Decimal("1") + (tax_pct / Decimal("100"))
+        line_gross_sum += _round_half_up_2(line_net * tax_factor)
+        # First non-zero rate wins — قيود uses a single header rate.
+        if header_tax_pct is None and tax_pct > Decimal("0"):
+            header_tax_pct = tax_pct
+
+    if header_tax_pct is None:
+        header_tax_pct = Decimal("15")  # safety default
+
+    displayed_net_sum = _round_half_up_2(exact_net_sum)
+    header_vat = _round_half_up_2(
+        exact_net_sum * header_tax_pct / Decimal("100"))
+    header_total = _round_half_up_2(displayed_net_sum + header_vat)
+
+    return {
+        "exact_net_sum":     exact_net_sum,
+        "displayed_net_sum": displayed_net_sum,
+        "header_vat":        header_vat,
+        "header_total":      header_total,
+        "line_gross_sum":    _round_half_up_2(line_gross_sum),
+        "header_tax_percent": header_tax_pct,
+    }
+
+
+def attempt_header_vat_alignment(
+    payload_lines: list[dict],
+    salla_total: Decimal,
+    *, max_diff: Decimal = Decimal("0.025"),
+) -> dict:
+    """Iter-290k.2 — Smart adjustment targeting BOTH:
+
+        (a) header_total_after  == salla_total
+        (b) line_gross_sum_after == salla_total
+
+    Strategy
+    ────────
+    قيود's header_vat flips by 0.01 at boundaries of the form
+    `exact_net × rate = .005 above an integer cent`. To pull
+    header_total down by 0.01 (or up by 0.01) we must move
+    exact_net_sum across the NEAREST half-up boundary — that's the
+    MINIMUM adjustment needed. Smaller adjustments don't move the
+    rounded VAT; larger adjustments risk also moving a line's
+    individual gross (and breaking constraint b).
+
+    The function:
+      1. Picks the largest line by `unit_price × quantity`.
+      2. Computes the boundary-crossing adjustment to flip header_vat.
+      3. Applies it to that line's discount (rounded to 4 dp).
+      4. Re-simulates and reports whether BOTH (a) and (b) landed
+         within 0.005 of `salla_total`.
+
+    Returns a dict with `before` and `after` snapshots of the full
+    5-metric simulation, plus alignment flags.
+    """
+    before = simulate_header_vat(payload_lines)
+    diff = before["header_total"] - salla_total
+
+    out: dict = {
+        "before":           {k: (float(v) if isinstance(v, Decimal) else v)
+                             for k, v in before.items()},
+        "salla_total":      float(salla_total),
+        "header_total_diff": float(diff),
+    }
+
+    # Already aligned — nothing to do.
+    if abs(diff) <= ZERO_TOL_EPS:
+        out.update({
+            "success":          True,
+            "no_adjustment_needed": True,
+            "header_aligned":   True,
+            "lines_aligned":
+                abs(before["line_gross_sum"] - salla_total) <= ZERO_TOL_EPS,
+        })
+        return out
+
+    if abs(diff) > max_diff:
+        out["success"] = False
+        out["reason"]  = "header_diff_out_of_phase2_scope"
+        return out
+
+    if not payload_lines:
+        out["success"] = False
+        out["reason"]  = "no_payload_lines"
+        return out
+
+    # Boundary-crossing math. The current header_vat rounds to N. We
+    # want it to round to N - diff (which is exactly 0.01 or 0.02
+    # closer to salla). The new exact_net_sum must land STRICTLY
+    # inside the new rounding region, just over the boundary.
+    tax_factor = before["header_tax_percent"] / Decimal("100")
+    target_header_vat = before["header_vat"] - diff
+
+    if diff > Decimal("0"):
+        # Need to LOWER exact_net_sum so that exact × rate is JUST
+        # below (target_header_vat + 0.005). One halala below the
+        # boundary is enough to flip the rounded VAT.
+        boundary = (target_header_vat + Decimal("0.005")) / tax_factor
+        target_exact_net = boundary - Decimal("0.00005")
+    else:
+        # Need to RAISE exact_net_sum to the lower boundary of the
+        # new rounding region.
+        boundary = (target_header_vat - Decimal("0.005")) / tax_factor
+        target_exact_net = boundary
+
+    adjustment_net_raw = before["exact_net_sum"] - target_exact_net
+    adjustment_net = _round_half_up_4(adjustment_net_raw)
+
+    # Pick the largest line by value (= unit_price × quantity).
+    by_value = sorted(
+        enumerate(payload_lines),
+        key=lambda kv: _q(kv[1].get("unit_price")) * _q(kv[1].get("quantity")),
+        reverse=True,
+    )
+    chosen_idx, chosen_line = by_value[0]
+    current_discount = _q(chosen_line.get("discount"))
+    new_discount = _round_half_up_4(current_discount + adjustment_net)
+
+    if new_discount < Decimal("0"):
+        out.update({
+            "success":          False,
+            "reason":           "negative_discount_blocked",
+            "chosen_idx":       chosen_idx,
+            "chosen_line_description": chosen_line.get("description"),
+            "current_discount": float(current_discount),
+            "attempted_adjustment_net": float(adjustment_net),
+        })
+        return out
+
+    adjusted = list(payload_lines)
+    adjusted[chosen_idx] = {**chosen_line, "discount": new_discount}
+    after = simulate_header_vat(adjusted)
+
+    header_aligned = abs(after["header_total"] - salla_total) <= ZERO_TOL_EPS
+    lines_aligned  = abs(after["line_gross_sum"] - salla_total) <= ZERO_TOL_EPS
+
+    out.update({
+        "success":            header_aligned and lines_aligned,
+        "header_aligned":     header_aligned,
+        "lines_aligned":      lines_aligned,
+        "chosen_idx":         chosen_idx,
+        "chosen_line_description": chosen_line.get("description"),
+        "current_discount":   float(current_discount),
+        "adjustment_net":     float(adjustment_net),
+        "new_discount":       float(new_discount),
+        "after":              {k: (float(v) if isinstance(v, Decimal) else v)
+                               for k, v in after.items()},
+    })
+    return out
+
+
 def attempt_adjustment(payload_lines: list[dict],
                        target_total: Decimal,
                        *, max_diff: Decimal = Decimal("0.025")) -> dict:
@@ -420,12 +611,19 @@ def _dry_run_single_row(row: dict) -> dict:
                     if qoyod_actual_raw is not None else None)
     sim_before, sim_lines = simulate_invoice(payload_lines)
 
-    # Three-way parity gauge — the heart of Iter-290k.1.
-    local_sim_matches_salla = abs(sim_before - salla_total) <= ZERO_TOL_EPS
+    # Iter-290k.2 — Full Header VAT simulation. قيود displays the
+    # header total (displayed_net + header_vat), NOT the line gross
+    # sum. Comparing this against qoyod_actual closes the parity gap.
+    hv_before = simulate_header_vat(payload_lines)
+
+    # Three-way parity gauge — now compared against header_total
+    # because that's what قيود returns in its invoice page.
+    local_sim_matches_salla = (
+        abs(hv_before["line_gross_sum"] - salla_total) <= ZERO_TOL_EPS)
     qoyod_actual_available  = qoyod_actual is not None
     local_sim_matches_qoyod_actual = (
         qoyod_actual_available
-        and abs(sim_before - qoyod_actual) <= ZERO_TOL_EPS)
+        and abs(hv_before["header_total"] - qoyod_actual) <= ZERO_TOL_EPS)
     qoyod_actual_matches_salla = (
         qoyod_actual_available
         and abs(qoyod_actual - salla_total) <= ZERO_TOL_EPS)
@@ -457,6 +655,9 @@ def _dry_run_single_row(row: dict) -> dict:
         "simulated_minus_qoyod_actual":  (
             float(sim_before - qoyod_actual)
             if qoyod_actual is not None else None),
+        # Iter-290k.2 — full Header VAT model surfaced to the UI.
+        "header_vat_before": {k: (float(v) if isinstance(v, Decimal) else v)
+                              for k, v in hv_before.items()},
         # Iter-290k.1 — three-way parity flags surfaced to the UI.
         "local_sim_matches_salla":        local_sim_matches_salla,
         "local_sim_matches_qoyod_actual": local_sim_matches_qoyod_actual,
@@ -476,33 +677,48 @@ def _dry_run_single_row(row: dict) -> dict:
 
     if not eligible:
         base["adjustment"] = None
+        base["header_vat_alignment"] = None
         base["outcome"]    = "skipped"
         return base
 
-    # ── PARITY GATE ───────────────────────────────────────────────
-    # If qoyod_actual exists and our model didn't reproduce it,
-    # STOP. Any adjustment we'd propose is built on a model we
-    # haven't validated. Surface this as PARITY_GAP_NEEDS_QOYOD_MODEL
-    # so the operator (and a future fix) treat this as a model bug,
-    # NOT a payload bug.
+    # ── PARITY GATE (Iter-290k.1, refined by Iter-290k.2) ─────────
+    # Now we compare header_total (not line_gross_sum) to قيود's
+    # actual. If قيود's behavior is the half-up header VAT model,
+    # this comparison should pass for the 0.01-drift cases.
     if qoyod_actual_available and not local_sim_matches_qoyod_actual:
         base["adjustment"] = None
+        base["header_vat_alignment"] = None
         base["outcome"]    = "parity_gap_needs_qoyod_model"
         return base
 
-    # ── Parity confirmed (or no qoyod_actual to compare against) ──
-    # Now and only now do we try the discount adjustment.
-    adj = attempt_adjustment(payload_lines, salla_total)
+    # ── Iter-290k.2 — Header VAT Alignment Simulation ─────────────
+    # Parity confirmed (or no قيود-actual to compare): run the
+    # smart discount adjustment that targets BOTH header_total ==
+    # salla_total AND line_gross_sum == salla_total.
+    align = attempt_header_vat_alignment(payload_lines, salla_total)
+    base["header_vat_alignment"] = align
+
+    # Backwards-compat — keep the legacy `adjustment` field populated
+    # too so the older UI columns still render.
+    legacy_adj = attempt_adjustment(payload_lines, salla_total)
     base["adjustment"] = {
         k: (float(v) if isinstance(v, Decimal) else v)
-        for k, v in adj.items()
+        for k, v in legacy_adj.items()
     }
-    if adj.get("success"):
+
+    if align.get("success"):
         base["outcome"] = ("no_adjustment_needed"
-                           if adj.get("no_adjustment_needed")
+                           if align.get("no_adjustment_needed")
                            else "adjustment_succeeded")
+    elif align.get("header_aligned") and not align.get("lines_aligned"):
+        # The smart adjustment landed the header on salla but a per-line
+        # gross rounded the other way. Surface this distinctly — it's
+        # a different remediation path than "model unknown".
+        base["outcome"] = "header_aligned_but_lines_drifted"
+    elif align.get("reason"):
+        base["outcome"] = f"adjustment_failed:{align.get('reason')}"
     else:
-        base["outcome"] = f"adjustment_failed:{adj.get('reason') or 'unknown'}"
+        base["outcome"] = "adjustment_failed:unknown"
     return base
 
 
