@@ -1,0 +1,27 @@
+{
+  "summary": "Iter-290i.2 — Verified PaymentMethodMappingTable now uses the new SearchableSelect (pm-account-select-*) for the قيود account picker. All 7 acceptance criteria from the review request pass: (1) NEW SearchableSelect renders with data-testid 'pm-account-select-mada', (2) OLD raw text input pm-input-* is GONE (0 matches), (3) trigger text for the existing mada row shows 'تعذر تحميل قائمة حسابات قيود (ID 9)' — the domain-specific unavailableLabel, (4) trigger does NOT contain 'غير موجود في قيود' (the orphan path is correctly suppressed because accountsListUnavailable=true on empty list), (5) clicking the trigger opens a popover containing the data-testid 'pm-account-select-mada-unavailable' with the 'تعذّر تحميل القائمة من قيود' banner, (6) trigger element tag is BUTTON, not INPUT (schema/UX contract preserved), (7) no functional console errors — only pre-existing 401/400 from disconnected Salla polling. Frontend-only review, no backend tests run.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    ".screenshots/pm_section.png",
+    ".screenshots/pm_popover.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "QoyodSettings.jsx is 1768 lines — exceeds the 700-line guideline. Consider splitting PaymentMethodMappingTable, IDInput, Section, and other sub-components into their own files for maintainability. (Pre-existing — not introduced by this iteration.)",
+    "The parent treats `referenceLists.lists.accounts.length === 0` as 'unavailable' which is correct per the user requirement, but it conflates 'never fetched' with 'legitimately empty قيود chart of accounts'. If a real merchant truly has zero accounts (edge case), the trigger will mis-label saved ids. Acceptable trade-off for now, but worth a comment if not already documented elsewhere.",
+    "The static help-hint at line 593-595 still says 'اكتب Account ID مباشرة أو اختر من الاقتراحات' — the 'اكتب' (type) verb is now obsolete since the raw input is removed. Update to 'ابحث' or 'اختر' to match the new SearchableSelect UX."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not in scope)", "frontend": "100% (7/7 criteria)"},
+  "test_credentials": "admin@hesab.app / admin123",
+  "seed_data_creation": "None — used the pre-seeded mada row (qoyod_account_id=9).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter-290i.2 SearchableSelect rollout to payment-method mapping is complete and verified. The empty-accounts-list path correctly shows the 'تعذر تحميل قائمة حسابات قيود (ID 9)' message and the popover 'تعذّر تحميل القائمة' banner via the new `unavailableLabel` prop. Next testing agent: when Qoyod creds are actually connected and the accounts list is populated, re-test that (a) options show name + 'ID 17 · 4101' secondary, (b) search filters by name/code/id, (c) pm-account-select-mada-option-<id> testids exist, (d) selecting an option persists qoyod_account_id (string) unchanged.",
+  "rca of the issue": "N/A — no bugs found."
+}

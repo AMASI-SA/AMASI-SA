@@ -53,6 +53,12 @@ export function SearchableSelect({
   // without judgement, plus a banner asking the operator to retry.
   listUnavailable = false,
   unavailableReason = null,
+  // Iter-290i.2 — caller-supplied trigger label for when
+  // `listUnavailable && value` — defaults to a generic message but
+  // can be overridden so the user sees a domain-specific hint
+  // (e.g. "تعذر تحميل قائمة حسابات قيود" for the payment-method
+  // mapping picker).
+  unavailableLabel = null,
 }) {
   const [open, setOpen] = useState(false);
   const stringValue = value == null ? "" : String(value);
@@ -72,7 +78,9 @@ export function SearchableSelect({
     : orphan
       ? `ID ${stringValue} غير موجود في قيود`
       : listUnavailable && stringValue
-        ? `ID ${stringValue} (لم تُحمّل القائمة)`
+        ? (unavailableLabel
+            ? `${unavailableLabel} (ID ${stringValue})`
+            : `ID ${stringValue} (لم تُحمّل القائمة)`)
         : placeholder;
 
   return (

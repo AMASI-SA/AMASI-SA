@@ -342,6 +342,13 @@ function SetupStatusBanner({ validation, onJumpTo }) {
 // ─── Payment Method Mapping table ─────────────────────────────────
 function PaymentMethodMappingTable({
   mapping, onChange, catalogue, used, accountsSuggestions, accountsUnsupported,
+  // Iter-290i.2 — Account picker (replaces raw text input).
+  // `accountsList` is the full {id,name,code,type,kind}[] fetched from
+  // qoyod reference-lists; `accountsListUnavailable` is true when the
+  // fetch failed (so we never label saved ids as "missing").
+  accountsList = [],
+  accountsListUnavailable = false,
+  accountsUnavailableReason = null,
 }) {
   // Indexed access for fast lookup
   const usedByKey = useMemo(() => {
@@ -491,18 +498,24 @@ function PaymentMethodMappingTable({
                       </div>
                     </td>
                     <td className="px-3 py-2 align-middle">
-                      <input
-                        type="text"
+                      {/* Iter-290i.2 — SearchableSelect replaces raw
+                          ID input. Shows the account NAME as primary
+                          label + `ID 17 · 4101` as the secondary
+                          (code) hint. Searches across name / id /
+                          code. Persisted value remains qoyod_account_id
+                          (string) — schema unchanged. */}
+                      <SearchableSelect
+                        options={accountsList}
                         value={accId}
-                        onChange={(e) => updateRow(key, e.target.value.trim())}
+                        onChange={(v) => updateRow(key, v || "")}
+                        testid={`pm-account-select-${key}`}
+                        secondaryKey="code"
                         placeholder={resolvedViaAlias
                           ? `(اختياري — يستخدم ${usedRow.matched_key})`
-                          : "مثال: 9876"}
-                        list="qoyod-accounts-list"
-                        data-testid={`pm-input-${key}`}
-                        className={`w-full px-2 py-1.5 border rounded text-sm font-mono
-                                    ${missing ? "border-rose-400 bg-rose-50"
-                                              : "border-slate-300"}`}
+                          : "اختر حساب قيود..."}
+                        listUnavailable={accountsListUnavailable}
+                        unavailableReason={accountsUnavailableReason}
+                        unavailableLabel="تعذر تحميل قائمة حسابات قيود"
                       />
                     </td>
                     <td className="px-3 py-2 align-middle">
@@ -1521,6 +1534,19 @@ export default function QoyodSettings() {
             used={pmUsed}
             accountsSuggestions={accounts}
             accountsUnsupported={accountsMeta.unsupported || !hasCreds}
+            accountsList={referenceLists.lists.accounts}
+            // Iter-290i.2 — Treat an EMPTY accounts list as
+            // "unavailable" too, not just as "ID not found in قيود".
+            // The list may simply not have been fetched yet
+            // (e.g. fresh login, or قيود-side error masked as []),
+            // and the user explicitly asked NOT to flag saved ids
+            // as missing in that case — show a "تعذّر تحميل" hint
+            // instead so the operator clicks the refresh-lists CTA.
+            accountsListUnavailable={
+              listUnavailable("accounts")
+              || (referenceLists.lists.accounts || []).length === 0
+            }
+            accountsUnavailableReason={unavailableReason("accounts")}
           />
         </div>
       </Section>
