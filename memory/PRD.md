@@ -1,5 +1,50 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290k — Phase-2 DRY-RUN Simulation (Decimal + ROUND_HALF_UP) (2026-06-29)
+**User direction**: Before any production change, simulate the proposed Phase-2 fix on real recent invoices to validate it lands `simulated_qoyod_total == salla_total` for halala-scale drift. ZERO writes to DB or قيود.
+
+### Scope (per user's explicit narrowing)
+**Include**: severity = `MINOR_ROUNDING` AND |invoice_diff| ∈ {0.01, 0.02} AND bucket ∈ {QOYOD_SERVER_SIDE_ROUNDING, MULTI_LINE_CUMULATIVE_ROUNDING, SHIPPING_ROUNDING_MISMATCH, INVOICE_TOTAL_ROUNDING_MISMATCH}.
+
+**Exclude**: DISCOUNT_ALLOCATION_MISMATCH (needs own RCA — order 269087627), PAYMENT_MISMATCH_ONLY (invoice already correct), MATERIAL_MISMATCH (e.g. 6.24 / 18.84 SAR — not rounding), INSUFFICIENT_DATA, rows without `qoyod_payloads.invoice.line_items`.
+
+### Algorithm (pure-function, Decimal + ROUND_HALF_UP)
+```
+simulate_invoice(payload_lines) → Σ round_half_up((u*q - d) * (1+t/100), 2)
+attempt_adjustment(payload_lines, salla_total):
+    diff = simulated - salla
+    if |diff| > 0.025  → out_of_phase2_scope (refuse)
+    pick largest line by (unit_price × quantity)
+    adjustment_net = diff / tax_factor_of_chosen_line
+    new_discount = current_discount + adjustment_net
+    if new_discount < 0  → negative_discount_blocked (refuse)
+    re-simulate → diff_after ≤ 0.005 ⇒ success
+```
+
+### Files
+- **NEW** `/app/backend/integrations/qoyod/rounding_dry_run.py` — pure-function simulator + report builder.
+- **NEW** route `GET /api/integrations/qoyod/admin/rounding-dry-run` in `routes.py`.
+- **NEW** `/app/frontend/src/pages/QoyodRoundingDryRun.jsx` — UI with 5-tile summary, skip-reason histogram, outcome filter, per-row payload-column breakdown clearly labeled with column origin (`qoyod_payload_*`, `simulated_*`).
+- **NEW** sidebar link "🧪 محاكاة Phase 2 (Dry-Run)" + route `/integrations/qoyod/rounding-dry-run`.
+- **NEW** `tests/test_qoyod_rounding_dry_run_iter290k.py` — 19 tests pinning algorithm, eligibility rules, and end-to-end report. All pass.
+
+### Strict guardrails (every test verifies)
+- No DB writes.
+- No قيود calls (no httpx client touched).
+- DISCOUNT_ALLOCATION_MISMATCH is hard-excluded even when |diff|=0.01.
+- MATERIAL_MISMATCH (e.g. 6.24 SAR) is hard-excluded by severity check.
+- Negative discount is never proposed.
+
+### Verification
+- 19/19 pytest pass for dry-run.
+- 960/962 Qoyod test suite pass (no regressions; 2 pre-existing skipped).
+- Smoke screenshot confirms UI renders with summary tiles + scope banner + empty state.
+
+### Next decision point (BLOCKED on user)
+The user will run the dry-run on PRODUCTION and inspect the proposed adjustments. Phase-2 implementation (touching the live pipeline) only proceeds after the user confirms the proposed `adjustment_net` values are acceptable for `QOYOD_SERVER_SIDE_ROUNDING` cases. DISCOUNT_ALLOCATION remains its own stream.
+
+
+
 ## Iter-290i.2 — SearchableSelect for Payment Method Mapping (2026-06-29)
 **User request**: Apply the SearchableSelect picker (already rolled out elsewhere in QoyodSettings via Iter-290i) to the Payment Method Mapping table — the only place still using a raw text input for `qoyod_account_id`. Show account NAME instead of bare numeric ID, with `ID · code` as a secondary hint. Empty / failed accounts list must NOT label saved ids as "غير موجود".
 

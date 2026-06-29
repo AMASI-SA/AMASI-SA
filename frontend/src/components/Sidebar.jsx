@@ -164,6 +164,7 @@ const SECTIONS = [
                     { to: "/integrations/qoyod/sync-log", label: "سجل المزامنة", icon: Queue, testid: "nav-qoyod-sync-log" },
                     { to: "/integrations/qoyod/unallocated-receipts", label: "🧾 سندات قبض غير مربوطة", icon: Receipt, testid: "nav-qoyod-unallocated-receipts" },
                     { to: "/integrations/qoyod/rounding-report", label: "🔬 تقرير فروق التقريب", icon: Receipt, testid: "nav-qoyod-rounding-report" },
+                    { to: "/integrations/qoyod/rounding-dry-run", label: "🧪 محاكاة Phase 2 (Dry-Run)", icon: Receipt, testid: "nav-qoyod-rounding-dry-run" },
                     { to: "/integrations/qoyod/error-log", label: "سجل الأخطاء", icon: Receipt, testid: "nav-qoyod-error-log" },
                 ],
             },

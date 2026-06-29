@@ -1510,6 +1510,25 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         return await build_rounding_mismatch_report(
             db, user_id=tenant, limit=max(1, min(limit, 500)))
 
+    # ── Iter-290k · Phase-2 DRY-RUN — Strictly READ-ONLY simulation ─
+    # Simulates the proposed قيود-internal-rounding fix using
+    # Decimal + ROUND_HALF_UP on the actual invoice payload we sent.
+    # Zero DB writes, zero قيود calls — pure projection.
+    @router.get("/admin/rounding-dry-run")
+    async def admin_rounding_dry_run(
+        limit: int = 200, user=Depends(current_user),
+    ):
+        """Iter-290k Phase-2 DRY-RUN — never mutates anything.
+        Returns per-eligible-row simulation results showing whether
+        a single-line discount adjustment would land the قيود total
+        exactly on the Salla total."""
+        from integrations.qoyod.rounding_dry_run import (
+            build_dry_run_report,
+        )
+        tenant = _tenant_id(user)
+        return await build_dry_run_report(
+            db, user_id=tenant, limit=max(1, min(limit, 500)))
+
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
     # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the
     # tenant's actual status catalogue from Salla so custom statuses

@@ -39,6 +39,7 @@ import QoyodFirstSyncMonitor from "./pages/QoyodFirstSyncMonitor";
 import QoyodWebhookMonitor from "./pages/QoyodWebhookMonitor";
 import QoyodUnallocatedReceipts from "./pages/QoyodUnallocatedReceipts";
 import QoyodRoundingReport from "./pages/QoyodRoundingReport";
+import QoyodRoundingDryRun from "./pages/QoyodRoundingDryRun";
 import IntegrationPlaceholder from "./pages/IntegrationPlaceholder";
 import SallaSourceComparison from "./pages/SallaSourceComparison";
 import PaymentSettlements from "./pages/PaymentSettlements";
@@ -173,6 +174,7 @@ function AppRoutes() {
             <Route path="/integrations/qoyod/first-sync-monitor" element={<ProtectedRoute><Layout><QoyodFirstSyncMonitor /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/invoices" element={<ProtectedRoute><Layout><QoyodInvoices /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/rounding-report" element={<ProtectedRoute><Layout><QoyodRoundingReport /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/rounding-dry-run" element={<ProtectedRoute><Layout><QoyodRoundingDryRun /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/products" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="منتجات قيود" subtitle="تتبع SKUs المرتبطة بمنتجات قيود وتقارير المنتجات غير المربوطة." icon="📦" phase="Day 4-5" testid="qoyod-products-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"},{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/customers" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="عملاء قيود" subtitle="إدارة ربط العملاء (هاتف/إيميل) مع جهات الاتصال في قيود." icon="👥" phase="Day 4-5" testid="qoyod-customers-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"}]} /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/sync-log" element={<ProtectedRoute><Layout><QoyodWebhookMonitor /></Layout></ProtectedRoute>} />
