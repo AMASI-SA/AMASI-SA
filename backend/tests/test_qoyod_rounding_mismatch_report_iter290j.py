@@ -1,12 +1,21 @@
-"""Iter-290j-rounding-fix · Phase 1 — Classifier tests.
+"""Iter-290j-rounding-fix · Phase 1.5 — Classifier tests.
 
-Pins the five-bucket classifier so a future "switch payment to قيود
-total" fix can be tested against the same fixtures and we don't
-regress the bucket-detection logic.
+Pins the bucket / severity / data-gap classifier so a future "switch
+payment to قيود total" fix can be tested against the same fixtures
+and we don't regress the detection logic.
 
-The classifier is the ONLY public surface in Phase 1 that has
-behaviour to validate — `build_rounding_mismatch_report` itself is
-a thin scan-and-filter wrapper around it.
+What Phase 1.5 added on top of Phase 1
+──────────────────────────────────────
+  • New bucket: QOYOD_SERVER_SIDE_ROUNDING — replaces the old
+    catch-all for the case where ميزان's expected total matched
+    Salla but قيود recomputed differently.
+  • Severity tag (MINOR_ROUNDING / MODERATE_DRIFT / MATERIAL_MISMATCH
+    / UNKNOWN) so halala drift and multi-SAR mismatches are no
+    longer lumped together.
+  • `data_gaps[]` for INSUFFICIENT_DATA rows so the operator can
+    see WHICH telemetry slice is missing.
+  • Richer `lines[]` array fusing canonical items + diagnostics.
+  • Per-row `summary{}` block with primary_cause.
 """
 from __future__ import annotations
 
@@ -57,8 +66,10 @@ def _row(**overrides) -> dict:
 def test_classifier_no_mismatch_when_all_totals_align():
     out = _classify_row(_row())
     assert out["bucket"]        == "NO_MISMATCH"
+    assert out["severity"]      == "MINOR_ROUNDING"  # diff = 0.0 → minor
     assert out["invoice_diff"]  == 0.0
     assert out["payment_diff"]  == 0.0
+    assert out["summary"]["primary_cause"] == "none"
 
 
 # ─── PAYMENT_MISMATCH_ONLY ───────────────────────────────────────────
@@ -75,19 +86,20 @@ def test_classifier_payment_mismatch_only_when_invoice_total_ties_but_payment_dr
     assert out["payment_diff"]      == pytest.approx(-0.01, abs=1e-9)
     assert out["payment_amount_sent"] == 312.46
     assert out["qoyod_invoice_total"] == 312.47
+    assert out["summary"]["primary_cause"] == "payment_only"
 
 
 # ─── SHIPPING_ROUNDING_MISMATCH ──────────────────────────────────────
 def test_classifier_shipping_drift_when_only_shipping_line_diverges():
     row = _row()
-    # قيود's invoice total drifted up by 1 halala — all of it
-    # originates on the shipping line.
     row["qoyod_responses"]["invoice"]["body"]["invoice"]["total"] = 312.48
     row["qoyod_payloads"]["invoice_diagnostics"]["line_diagnostics"][1][
         "computed_qoyod_gross"] = 26.01
     out = _classify_row(row)
     assert out["bucket"]       == "SHIPPING_ROUNDING_MISMATCH"
     assert out["invoice_diff"] == pytest.approx(0.01, abs=1e-9)
+    assert out["summary"]["is_shipping_cause"] is True
+    assert out["summary"]["primary_cause"]    == "shipping_line"
 
 
 # ─── DISCOUNT_ALLOCATION_MISMATCH ────────────────────────────────────
@@ -102,15 +114,13 @@ def test_classifier_discount_allocation_when_one_product_line_carries_diff():
     out = _classify_row(row)
     assert out["bucket"]       == "DISCOUNT_ALLOCATION_MISMATCH"
     assert "AMS-1" in (out["rationale"] or "")
+    assert out["summary"]["primary_cause"]      == "single_product_line"
+    assert out["summary"]["is_single_line_cause"] is True
 
 
 # ─── MULTI_LINE_CUMULATIVE_ROUNDING ──────────────────────────────────
 def test_classifier_multi_line_cumulative_when_each_line_drifts_a_little():
-    """Two or more lines each carry a tiny per-line gap; the totals
-    diverge but no single line is the culprit."""
     row = _row()
-    # Salla total stays at 312.47; قيود says 312.48; both lines drift
-    # by half a halala each (above LINE_EPS but below the per-line EPS).
     row["canonical_payload"]["total_amount"] = 312.47
     row["qoyod_responses"]["invoice"]["body"]["invoice"]["total"] = 312.48
     row["qoyod_payloads"]["invoice_diagnostics"]["line_diagnostics"] = [
@@ -120,32 +130,140 @@ def test_classifier_multi_line_cumulative_when_each_line_drifts_a_little():
     ]
     out = _classify_row(row)
     assert out["bucket"] == "MULTI_LINE_CUMULATIVE_ROUNDING"
-    assert "2" in (out["rationale"] or "") or "3" in (out["rationale"] or "")
+    assert out["summary"]["is_multi_line_cumulative"] is True
+    assert out["summary"]["offender_count"] >= 2
+
+
+# ─── QOYOD_SERVER_SIDE_ROUNDING — NEW in Phase 1.5 ───────────────────
+def test_classifier_qoyod_server_side_when_mezan_estimate_ties_but_qoyod_drifts():
+    """ميزان's pre-POST estimate matched Salla exactly, but قيود's
+    POST-POST total drifted — this is قيود's own rounding logic
+    diverging from ours. Was previously misclassified as the catch-all
+    INVOICE_TOTAL_ROUNDING_MISMATCH bucket."""
+    row = _row()
+    # Mezan thinks it matches Salla (expected = 312.47, lines tie),
+    # but قيود's response says 312.48.
+    row["qoyod_responses"]["invoice"]["body"]["invoice"]["total"] = 312.48
+    # diagnostics stay clean: expected_qoyod_total = 312.47, lines tie.
+    out = _classify_row(row)
+    assert out["bucket"] == "QOYOD_SERVER_SIDE_ROUNDING"
+    assert out["summary"]["primary_cause"] == "qoyod_server_rounding"
+    assert out["severity"] == "MINOR_ROUNDING"
 
 
 # ─── INVOICE_TOTAL_ROUNDING_MISMATCH catch-all ───────────────────────
-def test_classifier_invoice_total_catch_all_when_no_specific_line_culprit():
+def test_classifier_invoice_total_catch_all_when_diagnostics_block_missing():
+    """Drift exists, but we have NO diagnostics AND Mezan's expected
+    total is missing — so we can't even decide if it's قيود-side
+    rounding. True catch-all."""
     row = _row()
-    # Invoice total drifted but the line diagnostics block is empty —
-    # so the classifier can't pin it on any specific line.
     row["qoyod_responses"]["invoice"]["body"]["invoice"]["total"] = 312.48
-    row["qoyod_payloads"]["invoice_diagnostics"]["line_diagnostics"] = []
+    row["qoyod_payloads"]["invoice_diagnostics"] = {}
     out = _classify_row(row)
     assert out["bucket"] == "INVOICE_TOTAL_ROUNDING_MISMATCH"
 
 
-# ─── INSUFFICIENT_DATA when Qoyod response wasn't captured ───────────
+# ─── INSUFFICIENT_DATA when قيود response wasn't captured ────────────
 def test_classifier_insufficient_data_when_no_qoyod_invoice_response():
     row = _row()
     row["qoyod_responses"] = {}
     row["qoyod_payloads"]["invoice_payment"] = {}
     out = _classify_row(row)
     assert out["bucket"] == "INSUFFICIENT_DATA"
+    assert "no_invoice_response" in out["data_gaps"]
+    assert "no_payment_response" in out["data_gaps"]
+    assert out["summary"]["primary_cause"] == "insufficient_data"
+
+
+def test_classifier_data_gaps_flags_pre_logging_row():
+    """Old rows that have a قيود invoice id on file but no body and
+    no diagnostics — typical for orders processed before we started
+    logging payloads/responses. Surface this as a distinct reason."""
+    row = _row()
+    row["qoyod_responses"] = {}
+    row["qoyod_payloads"] = {"invoice_diagnostics": {}}
+    out = _classify_row(row)
+    assert out["bucket"] == "INSUFFICIENT_DATA"
+    assert "pre_logging_row"     in out["data_gaps"]
+    assert "no_line_diagnostics" in out["data_gaps"]
+
+
+def test_classifier_data_gaps_flags_missing_invoice_id():
+    row = _row()
+    row["qoyod_invoice_id"] = None
+    row["qoyod_responses"] = {}
+    row["qoyod_payloads"]["invoice_payment"] = {}
+    out = _classify_row(row)
+    assert out["bucket"] == "INSUFFICIENT_DATA"
+    assert "no_qoyod_invoice_id" in out["data_gaps"]
+
+
+# ─── Severity ────────────────────────────────────────────────────────
+def test_severity_minor_rounding_when_diff_is_one_halala():
+    row = _row()
+    row["qoyod_responses"]["invoice"]["body"]["invoice"]["total"] = 312.48
+    out = _classify_row(row)
+    assert out["severity"] == "MINOR_ROUNDING"
+
+
+def test_severity_material_mismatch_when_diff_is_multi_sar():
+    """A 6.24 SAR drift is NOT rounding — must be separated from
+    halala-scale drift so it isn't accidentally "fixed" by a payment
+    override patch."""
+    row = _row()
+    row["qoyod_responses"]["invoice"]["body"]["invoice"]["total"] = 318.71
+    out = _classify_row(row)
+    assert out["severity"] == "MATERIAL_MISMATCH"
+
+
+def test_severity_moderate_drift_between_minor_and_material():
+    row = _row()
+    row["qoyod_responses"]["invoice"]["body"]["invoice"]["total"] = 312.51
+    out = _classify_row(row)
+    assert out["severity"] == "MODERATE_DRIFT"
+
+
+# ─── Richer lines[] breakdown ────────────────────────────────────────
+def test_lines_breakdown_fuses_canonical_items_with_diagnostics():
+    row = _row()
+    row["canonical_payload"]["items"] = [{
+        "sku":             "AMS-1",
+        "name":            "Camera",
+        "quantity":        2,
+        "unit_price":      130.00,
+        "discount_amount": 0.0,
+        "tax_amount":      37.37,
+        "total":           286.47,
+    }]
+    row["canonical_payload"]["shipping_amount"] = 22.61
+    out = _classify_row(row)
+    product_lines = [l for l in out["lines"] if l["kind"] == "product"]
+    shipping_lines = [l for l in out["lines"] if l["kind"] == "shipping"]
+    assert len(product_lines) == 1
+    assert product_lines[0]["sku"]               == "AMS-1"
+    assert product_lines[0]["quantity"]          == 2.0
+    assert product_lines[0]["unit_price"]        == 130.00
+    assert product_lines[0]["tax_amount"]        == 37.37
+    assert product_lines[0]["salla_target_gross"] == 286.47
+    assert product_lines[0]["mezan_computed_gross"] == 286.47
+    assert len(shipping_lines) == 1
+    assert shipping_lines[0]["unit_price"]       == 22.61
+
+
+def test_lines_breakdown_pulls_qoyod_line_gross_when_response_carries_it():
+    row = _row()
+    # قيود sometimes echoes the line items back — surface them.
+    row["qoyod_responses"]["invoice"]["body"]["invoice"]["line_items"] = [
+        {"sku": "AMS-1", "subtotal_after_taxes": 286.48},
+    ]
+    out = _classify_row(row)
+    ams1 = next(l for l in out["lines"]
+                if l["kind"] == "product" and l["sku"] == "AMS-1")
+    assert ams1["qoyod_line_gross"] == 286.48
 
 
 # ─── Tolerance — half a halala counts as zero ────────────────────────
 def test_classifier_treats_half_halala_drifts_as_no_mismatch():
-    """0.005 SAR is the threshold — anything strictly above counts."""
     row = _row()
     row["qoyod_responses"]["invoice"]["body"]["invoice"]["total"] = 312.473
     row["qoyod_responses"]["invoice_payment"]["body"]["invoice_payment"][
@@ -160,8 +278,7 @@ class _FakeInboxCol:
         self.rows = rows
 
     def find(self, query, projection=None, sort=None, limit=None):
-        rows = list(self.rows)
-        return _AsyncIter(rows)
+        return _AsyncIter(list(self.rows))
 
 
 class _AsyncIter:
@@ -184,9 +301,6 @@ class _FakeDB:
 
 @pytest.mark.asyncio
 async def test_report_returns_only_mismatch_rows_plus_histogram():
-    """Clean rows are filtered out of `rows`, but they still count
-    toward the bucket histogram so the operator can see what
-    fraction of the scanned set was healthy."""
     clean_row = _row(id="clean-1")
     drift_row = _row(id="drift-1")
     drift_row["qoyod_responses"]["invoice_payment"][
@@ -202,5 +316,20 @@ async def test_report_returns_only_mismatch_rows_plus_histogram():
     assert out["mismatch_count"]  == 1
     assert out["by_bucket"]["NO_MISMATCH"]            == 1
     assert out["by_bucket"]["PAYMENT_MISMATCH_ONLY"]  == 1
-    # Only the drift row surfaces in `rows`.
+    # Severity histogram only counts rows that actually have a drift.
+    assert "MINOR_ROUNDING" in out["by_severity"]
+    assert out["by_severity"]["MINOR_ROUNDING"] == 1
     assert {r["row_id"] for r in out["rows"]} == {"drift-1"}
+
+
+@pytest.mark.asyncio
+async def test_report_emits_gap_reason_histogram_for_insufficient_data():
+    gap_row = _row(id="gap-1")
+    gap_row["qoyod_responses"] = {}
+    gap_row["qoyod_payloads"]["invoice_payment"] = {}
+    db = _FakeDB([gap_row])
+    out = await build_rounding_mismatch_report(
+        db, user_id="tenant-a", limit=100)
+    assert out["by_bucket"]["INSUFFICIENT_DATA"] == 1
+    assert out["by_gap_reason"].get("no_invoice_response", 0) >= 1
+    assert out["by_gap_reason"].get("no_payment_response", 0) >= 1

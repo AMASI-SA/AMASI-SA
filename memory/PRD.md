@@ -1,5 +1,39 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-290j-rounding-fix · Phase 1.5 — Richer rounding diagnostic (2026-06-29)
+**User report after Phase 1 production scan (70 invoices)**: 43 match, 14 fell into the `INVOICE_TOTAL_ROUNDING_MISMATCH` catch-all, 13 marked `INSUFFICIENT_DATA`, plus drifts as large as 6.24 / 18.84 SAR were being lumped in with halala-scale 0.01 drifts. User explicitly forbade Phase 2 (any math change) until the report explains the catch-all cases and separates real rounding from material mismatches.
+
+### What this iteration adds (all read-only, no math changes)
+- **NEW bucket `QOYOD_SERVER_SIDE_ROUNDING`** — replaces the catch-all for cases where ميزان's `expected_qoyod_total` matched Salla but قيود recomputed differently. This was the silent majority of the 14 catch-all rows.
+- **Severity tag per row**:
+  - `MINOR_ROUNDING` for `|invoice_diff| ≤ 0.02`
+  - `MODERATE_DRIFT` for `0.02 < |invoice_diff| ≤ 0.05`
+  - `MATERIAL_MISMATCH` for `|invoice_diff| > 0.05`  ← these are NOT rounding; need their own remediation
+- **`data_gaps[]` per INSUFFICIENT_DATA row** — exact reason codes (`no_invoice_response`, `no_payment_response`, `no_line_diagnostics`, `no_canonical_items`, `no_qoyod_invoice_id`, `pre_logging_row`) so the operator stops seeing the opaque "بيانات ناقصة".
+- **Richer per-line table** — fuses `canonical_payload.items` (qty, unit_price, discount, tax_amount), `invoice_diagnostics.line_diagnostics` (Mezan-computed), and `qoyod_responses.invoice.body.invoice.line_items` (قيود-line gross when echoed back).
+- **Per-row `summary{}`** — `primary_cause`, `offender_count`, `shipping_contribution`, `non_shipping_contribution`, `largest_offender`.
+- **Two new histograms**: `by_severity`, `by_gap_reason`.
+
+### API shape extensions (additive, no breaking changes)
+- `GET /api/integrations/qoyod/admin/rounding-mismatch-report` now also returns `by_severity` and `by_gap_reason` at the top level. Each row carries `severity`, `data_gaps`, `lines`, `summary` (legacy `line_diffs` kept for backward compat).
+
+### Frontend (`QoyodRoundingReport.jsx`)
+- Three histograms (bucket / severity / data-gap).
+- Severity pill alongside bucket pill on every row.
+- Expanded row now shows: invoice summary card → richer line table (نوع/SKU/qty/unit_price/discount/tax%/Salla-target/Mezan-computed/Qoyod-line/Δ).
+- New filters: severity dropdown, gap-reason dropdown.
+
+### Tests
+- `tests/test_qoyod_rounding_mismatch_report_iter290j.py` — rewritten with 18 tests covering all new buckets, severity tiers, gap reasoning, and `lines[]` fusion. **All 18 pass.**
+
+### Explicit non-goals (per user)
+- **No** Phase-2 math change yet.
+- **No** payment override.
+- **No** invoice rebuilding.
+- The user will inspect the enhanced report on production, then decide which slice (qoyod_server_rounding vs discount allocation vs material mismatch) gets its own targeted Phase-2 fix.
+
+
+
 ## Iter-290h.4 — One-shot-reprocess diagnostics for the payment-link step (2026-02-28)
 **User report**: After Iter-290h.3 deployed and the retry ran for order 269048975, the UI showed `request_body_json تم إيقافه (لم يُرسَل لقيود)` — but the diagnostic also displayed a `qoyod_validation_error: Invalid resource`. The user couldn't tell whether the request actually reached قيود or was halted pre-flight.
 
