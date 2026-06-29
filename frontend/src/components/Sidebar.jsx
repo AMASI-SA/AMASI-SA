@@ -163,6 +163,7 @@ const SECTIONS = [
                     { to: "/integrations/qoyod/customers", label: "عملاء قيود", icon: UsersThree, testid: "nav-qoyod-customers" },
                     { to: "/integrations/qoyod/sync-log", label: "سجل المزامنة", icon: Queue, testid: "nav-qoyod-sync-log" },
                     { to: "/integrations/qoyod/unallocated-receipts", label: "🧾 سندات قبض غير مربوطة", icon: Receipt, testid: "nav-qoyod-unallocated-receipts" },
+                    { to: "/integrations/qoyod/rounding-report", label: "🔬 تقرير فروق التقريب", icon: Receipt, testid: "nav-qoyod-rounding-report" },
                     { to: "/integrations/qoyod/error-log", label: "سجل الأخطاء", icon: Receipt, testid: "nav-qoyod-error-log" },
                 ],
             },

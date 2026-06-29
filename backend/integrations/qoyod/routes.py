@@ -1494,6 +1494,22 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         tenant = _tenant_id(user)
         return await get_reference_lists(db, user_id=tenant)
 
+    # ── Iter-290j-rounding-fix · Phase 1 — Read-only diagnostic ─────
+    @router.get("/admin/rounding-mismatch-report")
+    async def admin_rounding_mismatch_report(
+        limit: int = 200, user=Depends(current_user),
+    ):
+        """Iter-290j-rounding-fix Phase 1 — Strictly READ-ONLY scan
+        of completed/partial inbox rows that classifies each
+        discrepancy into one of five buckets so the operator can
+        decide which fix to apply. NO writes against قيود or DB."""
+        from integrations.qoyod.rounding_mismatch_report import (
+            build_rounding_mismatch_report,
+        )
+        tenant = _tenant_id(user)
+        return await build_rounding_mismatch_report(
+            db, user_id=tenant, limit=max(1, min(limit, 500)))
+
     # ── Salla Order Statuses — dynamic source for the trigger picker ─
     # Avoids hardcoding "completed"/"delivered"/"paid" — pulls the
     # tenant's actual status catalogue from Salla so custom statuses
