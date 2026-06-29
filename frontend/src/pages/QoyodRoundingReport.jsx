@@ -4,9 +4,9 @@
    that mutate state — pure inspection so we can decide which fix
    to apply.
 */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { RefreshCw, AlertTriangle, Info } from "lucide-react";
+import { RefreshCw, AlertTriangle, Info, Copy, Check } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -93,10 +93,43 @@ function BucketPill({ bucket }) {
   );
 }
 
+/* Tiny copy-to-clipboard pill for order_id / invoice_id values.
+   Iter-290j Phase 1 — operator asked to be able to grab the id
+   without selecting it manually. */
+function CopyChip({ value, testid }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return <span className="text-slate-300 font-mono text-[10px]">—</span>;
+  const onClick = async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(String(value));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch (_) { /* fail silently */ }
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testid}
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-[10px] transition"
+      title="نسخ"
+    >
+      <span>{value}</span>
+      {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+    </button>
+  );
+}
+
 export default function QoyodRoundingReport() {
   const [loading, setLoading] = useState(false);
   const [report,  setReport]  = useState(null);
   const [expandedRowId, setExpandedRowId] = useState(null);
+
+  // Iter-290j Phase 1 — filters (UI-only; do not change the API).
+  const [bucketFilter,        setBucketFilter]        = useState("ALL");
+  const [onlyNonZeroDiff,     setOnlyNonZeroDiff]     = useState(false);
+  const [onlyRemainingBal,    setOnlyRemainingBal]    = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -113,6 +146,32 @@ export default function QoyodRoundingReport() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Iter-290j Phase 1 — derive the visible rows from filters.
+  const visibleRows = useMemo(() => {
+    if (!report?.rows) return [];
+    return report.rows.filter((row) => {
+      if (bucketFilter !== "ALL" && row.bucket !== bucketFilter) return false;
+      if (onlyNonZeroDiff) {
+        const hasDiff = (row.invoice_diff && Math.abs(row.invoice_diff) > 0.005)
+                     || (row.payment_diff && Math.abs(row.payment_diff) > 0.005);
+        if (!hasDiff) return false;
+      }
+      if (onlyRemainingBal) {
+        // "Remaining balance" — قيود's invoice total exceeds what we
+        // settled. payment_diff < 0 means we paid LESS than the
+        // invoice — that's the partial-paid signature.
+        if (!(row.payment_diff !== null && row.payment_diff < -0.005)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [report, bucketFilter, onlyNonZeroDiff, onlyRemainingBal]);
+
+  const bucketKeys = report
+    ? Object.keys(report.by_bucket || {}).filter((k) => k !== "NO_MISMATCH")
+    : [];
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-5" dir="rtl">
@@ -178,8 +237,51 @@ export default function QoyodRoundingReport() {
         </section>
       )}
 
+      {/* Filters — Iter-290j Phase 1 (UI-only) */}
+      {report && (
+        <section
+          className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center gap-3"
+          data-testid="rounding-report-filters"
+        >
+          <div className="text-[11px] font-bold text-slate-600">فلاتر:</div>
+          <select
+            value={bucketFilter}
+            onChange={(e) => setBucketFilter(e.target.value)}
+            data-testid="filter-bucket"
+            className="text-xs border border-slate-300 rounded px-2 py-1 bg-white"
+          >
+            <option value="ALL">كل التصنيفات</option>
+            {bucketKeys.map((k) => (
+              <option key={k} value={k}>{BUCKET_META[k]?.label || k}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={onlyNonZeroDiff}
+              onChange={(e) => setOnlyNonZeroDiff(e.target.checked)}
+              data-testid="filter-only-nonzero-diff"
+            />
+            فرق أكبر من 0
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={onlyRemainingBal}
+              onChange={(e) => setOnlyRemainingBal(e.target.checked)}
+              data-testid="filter-only-remaining-balance"
+            />
+            فيه رصيد متبقّي فقط
+          </label>
+          <div className="ms-auto text-[11px] text-slate-500">
+            <strong>{visibleRows.length}</strong> فاتورة معروضة
+            من <strong>{report.rows.length}</strong> فيها فرق
+          </div>
+        </section>
+      )}
+
       {/* Mismatch rows */}
-      {report && report.rows.length > 0 && (
+      {report && visibleRows.length > 0 && (
         <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -196,7 +298,7 @@ export default function QoyodRoundingReport() {
                 </tr>
               </thead>
               <tbody>
-                {report.rows.map((row) => {
+                {visibleRows.map((row) => {
                   const expanded = expandedRowId === row.row_id;
                   return (
                     <>
@@ -205,13 +307,22 @@ export default function QoyodRoundingReport() {
                         className="border-t border-slate-100"
                         data-testid={`rounding-row-${row.order_id}`}
                       >
-                        <td className="px-3 py-2 font-mono text-slate-700">
-                          {row.order_number || row.order_id}
+                        <td className="px-3 py-2">
+                          <CopyChip
+                            value={row.order_number || row.order_id}
+                            testid={`copy-order-${row.order_id}`}
+                          />
                           {row.qoyod_invoice_id && (
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              Inv: {row.qoyod_invoice_id}
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              <CopyChip
+                                value={`Inv ${row.qoyod_invoice_id}`}
+                                testid={`copy-invoice-${row.qoyod_invoice_id}`}
+                              />
                               {row.qoyod_invoice_payment_id && (
-                                <> · Pay: {row.qoyod_invoice_payment_id}</>
+                                <CopyChip
+                                  value={`Pay ${row.qoyod_invoice_payment_id}`}
+                                  testid={`copy-payment-${row.qoyod_invoice_payment_id}`}
+                                />
                               )}
                             </div>
                           )}
@@ -290,6 +401,25 @@ export default function QoyodRoundingReport() {
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {/* Filter empty state — different from "no mismatch" state */}
+      {report && report.rows.length > 0 && visibleRows.length === 0 && (
+        <section className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center text-sm text-slate-600"
+                 data-testid="filter-empty-state">
+          لا توجد نتائج للفلاتر المختارة.{" "}
+          <button
+            onClick={() => {
+              setBucketFilter("ALL");
+              setOnlyNonZeroDiff(false);
+              setOnlyRemainingBal(false);
+            }}
+            className="text-sky-700 hover:underline"
+            data-testid="btn-clear-filters"
+          >
+            مسح الفلاتر
+          </button>
         </section>
       )}
 
