@@ -1,5 +1,98 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-293.4-rev2 — Preview/Audit fixes from operator review (2026-XX)
+
+**Operator demand** after running Dry-run on order 269571122 (COD):
+> "write-lock-report لا يسجل محاولة القفل / receipt_preview يظهر رغم
+> أن COD = credit_invoice_only / invoice_preview يحتوي IDs ناقصة /
+> reconciliation يعرض diff -1.85 لطلب COD لا يحتوي receipt أصلاً."
+
+### Four targeted fixes (no architecture changes)
+
+**Fix 1 — Pipeline pre-check writes to `qoyod_write_lock_attempts`**
+- `pipeline.process_customer_resolved_row` had a `production_writes_locked`
+  pre-check that short-circuited BEFORE the api_client call. The audit
+  collection (which only fires inside `api_client._request`) was never
+  written. Result: a blocked order showed as `LOCKED_AWAITING_APPROVAL`
+  in the inbox but was INVISIBLE to `/admin/write-lock-report`.
+- Both pre-checks (invoice + invoice_payment steps) now call
+  `record_blocked_attempt(...)` directly. The audit row carries
+  `order_number`, `trace_id`, `callsite`, full locked_payload, and hints.
+- Inbox row also stores `lock_attempt_id` for cross-correlation.
+
+**Fix 2 — `receipt_preview` skipped for `credit_invoice_only`**
+- `preview_reprocess.py` now computes `resolved_mode` BEFORE building
+  the receipt preview.
+- When `resolved_mode == POSTING_MODE_CREDIT_INVOICE_ONLY`, the block
+  becomes:
+```json
+{ "skipped_by_posting_mode": true,
+  "posting_mode": "credit_invoice_only",
+  "would_send_to_qoyod": false,
+  "request_body": null,
+  "endpoint": null,
+  "note": "Posting mode = credit_invoice_only — ..." }
+```
+
+**Fix 3 — `invoice_preview.dependency_status`**
+- New block surfacing whether customer/products are resolved against
+  `qoyod_customers_mapping` / `qoyod_products_mapping`:
+```json
+{ "customer_resolved": bool,
+  "products_resolved": bool,
+  "will_create_customer": bool,
+  "will_create_products": [{sku, name, qoyod_product_id, adopted, would_create}],
+  "sendable": bool,
+  "status": "ready_to_send" | "invoice_payload_not_sendable_until_dependencies_resolved",
+  "note": ar-SA explanation
+}
+```
+- `safety_summary` also lifts `dependencies_sendable`,
+  `will_create_customer`, `will_create_products_count` to the top
+  level so an approver can refuse explicitly.
+
+**Fix 4 — `reconciliation` skipped for `credit_invoice_only`**
+- Receipt-vs-invoice diff is meaningless for COD/BNPL (no receipt).
+- Block becomes:
+```json
+{ "skipped_for_credit_invoice_only": true,
+  "posting_mode": "credit_invoice_only",
+  "tax_mode": "...", "salla_declared_total": 213.78,
+  "estimated_invoice_total": 213.78,
+  "receipt_amount": null, "diff": null,
+  "invoice_receipt_reconciled": null,
+  "note": ar-SA explanation }
+```
+- Operator must use `safety_summary.difference` (salla vs invoice) for
+  COD reconciliation, NOT this block.
+
+### Tests (15 new)
+`/app/backend/tests/test_qoyod_preview_audit_fixes_iter293_4_rev2.py`:
+- 3 unit tests: pipeline pre-check audit persistence.
+- 5 end-to-end tests against `preview_reprocess_one_order` with a real
+  COD payload (order 269571122 scenario):
+  - `receipt_preview.skipped_by_posting_mode == True`.
+  - `reconciliation.skipped_for_credit_invoice_only == True`.
+  - `dependency_status.sendable == False` for fresh order.
+  - `safety_summary` surfaces dependency gate.
+  - **ZERO httpx calls** during preview (mock + `assert_not_called`).
+
+### Verification (live)
+- 1125/1125 Qoyod tests PASS (was 1110, +15 new, 0 regressions).
+- Live smoke: blocked attempt persisted + log emitted + visible in
+  `/admin/write-lock-report?order_number=269571122` with full hints.
+
+### Operator-facing changes summary
+On the next Dry-run for order 269571122, the JSON will now show:
+- `stages.receipt_preview.skipped_by_posting_mode: true` (was a misleading "POST /receipts" plan).
+- `stages.invoice_preview.dependency_status.sendable: false` (new — exposes that PROD-A / customer need creation first).
+- `reconciliation.skipped_for_credit_invoice_only: true` (no more -1.85 diff red herring).
+- `safety_summary.dependencies_sendable: false` + `will_create_customer: true` + `will_create_products_count: N` (new).
+- AND when the live webhook hits a locked tenant, the blocked attempt
+  appears in `/admin/write-lock-report` with `action: create_invoice`,
+  `callsite: pipeline.process_customer_resolved_row`, and the full
+  `locked_payload`.
+
 ## Iter-293.4 — Global Qoyod Production Write Lock (2026-02-XX)
 
 > Note (organisational): `Iter-294` remains reserved for the Bank Transfer

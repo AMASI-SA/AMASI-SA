@@ -39,7 +39,7 @@ from integrations.qoyod.invoice_builder import (
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
 from integrations.qoyod.write_lock import (
     QoyodWriteLockedError, set_write_lock_context, reset_write_lock_context,
-    is_locked,
+    is_locked, record_blocked_attempt,
 )
 from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.dto import SalesOrderDTO
@@ -674,6 +674,17 @@ async def process_customer_resolved_row(
         # ids and is intended for offline simulation). Production
         # writes lock keeps real ids but skips the POST.
         if is_locked(settings):
+            # Iter-293.4-rev2 — Pre-check must ALSO write to the audit
+            # collection so /admin/write-lock-report surfaces the
+            # blocked attempt. Previously only the api_client._request
+            # path persisted; the pre-check short-circuited BEFORE
+            # the client was called and the audit log missed it.
+            attempt_id = await record_blocked_attempt(
+                db, user_id=user_id, action="create_invoice",
+                method="POST", path="/invoices",
+                payload=invoice_payload,
+                idempotency_key=invoice_idem,
+            )
             await db.integration_inbox.update_one(
                 {"id": row["id"]},
                 {"$set": {
@@ -681,18 +692,22 @@ async def process_customer_resolved_row(
                     "qoyod_payloads.invoice_locked_at":      _now(),
                     "pipeline_stage":                        "LOCKED_AWAITING_APPROVAL",
                     "lock_reason":                           "production_writes_locked",
+                    "lock_step":                             "invoice",
+                    "lock_attempt_id":                       attempt_id,
                     "lock_diagnostics":                      invoice_diagnostics,
                 }},
             )
             return {
-                "row_id":   row["id"],
-                "outcome":  "LOCKED_AWAITING_APPROVAL",
-                "reason":   "production_writes_locked",
-                "trace_id": trace_id,
-                "note":     ("Production writes are locked. Use the "
-                             "Preview-Reprocess endpoint to review, "
-                             "then one_shot_reprocess to send after "
-                             "explicit per-order approval."),
+                "row_id":     row["id"],
+                "outcome":    "LOCKED_AWAITING_APPROVAL",
+                "reason":     "production_writes_locked",
+                "step":       "invoice",
+                "attempt_id": attempt_id,
+                "trace_id":   trace_id,
+                "note":       ("Production writes are locked. Use the "
+                               "Preview-Reprocess endpoint to review, "
+                               "then one_shot_reprocess to send after "
+                               "explicit per-order approval."),
             }
 
         try:
@@ -985,6 +1000,16 @@ async def process_customer_resolved_row(
         # instead of an exception bubbling up from api_client._request.
         # The API client itself enforces the lock as a safety net.
         if is_locked(settings):
+            # Iter-293.4-rev2 — Persist to audit log so /admin/write-lock-report
+            # surfaces this attempt (previously invisible to the report).
+            payment_idem = (
+                f"mzn-{trace_id}-invoice-payment-{idem_fingerprint['qoyod_invoice_id']}")
+            attempt_id = await record_blocked_attempt(
+                db, user_id=user_id, action="create_invoice_payment",
+                method="POST", path="/invoice_payments",
+                payload=payment_payload,
+                idempotency_key=payment_idem,
+            )
             await db.integration_inbox.update_one(
                 {"id": row["id"]},
                 {"$set": {
@@ -993,19 +1018,21 @@ async def process_customer_resolved_row(
                     "pipeline_stage":                                "LOCKED_AWAITING_APPROVAL",
                     "lock_reason":                                   "production_writes_locked",
                     "lock_step":                                     "invoice_payment",
+                    "lock_attempt_id":                               attempt_id,
                 }},
             )
             return {
-                "row_id":   row["id"],
-                "outcome":  "LOCKED_AWAITING_APPROVAL",
-                "reason":   "production_writes_locked",
-                "step":     "invoice_payment",
+                "row_id":     row["id"],
+                "outcome":    "LOCKED_AWAITING_APPROVAL",
+                "reason":     "production_writes_locked",
+                "step":       "invoice_payment",
+                "attempt_id": attempt_id,
                 "qoyod_invoice_id": qoyod_invoice_id,
-                "trace_id": trace_id,
-                "note":     ("Production writes are locked. The "
-                             "invoice was already created in Qoyod; "
-                             "the invoice_payment step has been parked "
-                             "for explicit approval."),
+                "trace_id":   trace_id,
+                "note":       ("Production writes are locked. The "
+                               "invoice was already created in Qoyod; "
+                               "the invoice_payment step has been parked "
+                               "for explicit approval."),
             }
 
         payment_idem = (

@@ -372,68 +372,178 @@ async def preview_reprocess_one_order(
     }
     out["would_send_to_qoyod"]["invoice"] = False
 
-    # ── 11) Receipt payload preview ─────────────────────────────────
-    fake_invoice_id = "PREVIEW:invoice:<pending>"
-    try:
-        receipt_payload = build_receipt_payload(
-            qoyod_invoice_id=fake_invoice_id,
-            qoyod_customer_id=row.get("qoyod_customer_id"),
-            dto_dict=canonical,
-            invoice_date=(getattr(rules, "invoice_date", None) if rules else None)
-                         or dto.completed_at
-                         or dto.paid_at
-                         or dto.order_date,
-            settings=settings,
-        )
-    except Exception as exc:   # pragma: no cover
-        return _err(out, "receipt_builder_exception",
-                    f"{type(exc).__name__}: {exc}",
-                    stage="build_receipt_payload")
-    payment_account = resolve_payment_account(
-        settings, canonical.get("payment_method")
-                 or canonical.get("payment_method_native"))
-    out["stages"]["receipt_preview"] = {
-        "ok": True,
-        "request_body": receipt_payload,
-        "endpoint":     "POST /receipts",
-        "would_send_to_qoyod": False,
-        "resolved_account_id": payment_account,
+    # ── 10b) Iter-293.4-rev2 — Dependency status for the invoice ─────
+    # Operator must NOT treat the invoice request_body as "ready to
+    # send" while customer/products carry PREVIEW placeholders. Surface
+    # the real resolution state so a sane reviewer can spot the gap.
+    customer_resolved = bool(
+        row.get("qoyod_customer_id")
+        and not str(row.get("qoyod_customer_id")).startswith(("PREVIEW:", "DRY:")))
+    product_dep_items: list[dict] = []
+    for it in (canonical.get("items") or []):
+        sku = it.get("sku")
+        mapped = None
+        if sku:
+            try:
+                mp = await db.qoyod_products_mapping.find_one(
+                    {"user_id": user_id, "sku": sku},
+                    {"_id": 0, "qoyod_product_id": 1, "adopted": 1,
+                     "dry_run_only": 1})
+                mapped = mp
+            except Exception:    # pragma: no cover
+                mapped = None
+        product_dep_items.append({
+            "sku":              sku,
+            "name":             it.get("name"),
+            "qoyod_product_id": (mapped or {}).get("qoyod_product_id"),
+            "adopted":          (mapped or {}).get("adopted", False),
+            "would_create":     mapped is None,
+        })
+    products_resolved = bool(product_dep_items) and all(
+        p["qoyod_product_id"] and not p["would_create"]
+        for p in product_dep_items)
+    will_create_customer = not customer_resolved
+    will_create_products = [p for p in product_dep_items if p["would_create"]]
+    sendable = customer_resolved and products_resolved
+    out["stages"]["invoice_preview"]["dependency_status"] = {
+        "customer_resolved":  customer_resolved,
+        "products_resolved":  products_resolved,
+        "will_create_customer": will_create_customer,
+        "will_create_products": will_create_products,
+        "products":           product_dep_items,
+        "sendable":           sendable,
+        "status":             ("ready_to_send" if sendable
+                               else "invoice_payload_not_sendable_until_dependencies_resolved"),
+        "note":               (
+            "كل dependencies جاهزة — request_body مكتمل."
+            if sendable else
+            "Customer أو المنتجات غير مُعرَّفة في قيود بعد؛ "
+            "request_body يحتوي PREVIEW:* placeholders ولا يصلح للإرسال "
+            "كما هو. يجب الموافقة على إنشاء كل من dependencies المعلَّمة "
+            "`would_create=True` كجزء من write plan قبل أي one_shot_reprocess."),
     }
-    out["would_send_to_qoyod"]["receipt"] = False
+
+    # ── 10c) Iter-293.4-rev2 — Resolve posting mode early ───────────
+    # The receipt_preview + reconciliation below depend on whether the
+    # order will go down the credit_invoice_only path. Computing the
+    # mode here keeps the rest of the function honest.
+    from integrations.qoyod.payment_methods import (
+        resolve_posting_mode,
+        POSTING_MODE_CREDIT_INVOICE_ONLY,
+        POSTING_MODE_DISABLED,
+    )
+    pm_for_mode = (canonical.get("payment_method")
+                   or canonical.get("payment_method_native"))
+    resolved_mode = resolve_posting_mode(settings, pm_for_mode)
+    is_credit_only = resolved_mode == POSTING_MODE_CREDIT_INVOICE_ONLY
+
+    # ── 11) Receipt payload preview ─────────────────────────────────
+    # Iter-293.4-rev2 — Suppress receipt_preview entirely for
+    # credit_invoice_only orders (COD, BNPL, etc). Showing a receipt
+    # plan for a payment-method that explicitly will NOT create a
+    # sand qabd is misleading and was flagged by the operator review.
+    if is_credit_only:
+        out["stages"]["receipt_preview"] = {
+            "ok":                       True,
+            "skipped_by_posting_mode":  True,
+            "posting_mode":             resolved_mode,
+            "would_send_to_qoyod":      False,
+            "request_body":             None,
+            "endpoint":                 None,
+            "note":                     (
+                "Posting mode = credit_invoice_only — لا يتم إنشاء سند "
+                "قبض. هذا السلوك مقصود لطلبات الدفع عند الاستلام "
+                "والشراء بالأقساط. الـ receipt preview غير معروض حتى "
+                "لا يبدو أن النظام سيُرسِل receipt إلى قيود."),
+        }
+        out["would_send_to_qoyod"]["receipt"] = False
+    else:
+        fake_invoice_id = "PREVIEW:invoice:<pending>"
+        try:
+            receipt_payload = build_receipt_payload(
+                qoyod_invoice_id=fake_invoice_id,
+                qoyod_customer_id=row.get("qoyod_customer_id"),
+                dto_dict=canonical,
+                invoice_date=(getattr(rules, "invoice_date", None) if rules else None)
+                             or dto.completed_at
+                             or dto.paid_at
+                             or dto.order_date,
+                settings=settings,
+            )
+        except Exception as exc:   # pragma: no cover
+            return _err(out, "receipt_builder_exception",
+                        f"{type(exc).__name__}: {exc}",
+                        stage="build_receipt_payload")
+        payment_account = resolve_payment_account(
+            settings, canonical.get("payment_method")
+                     or canonical.get("payment_method_native"))
+        out["stages"]["receipt_preview"] = {
+            "ok": True,
+            "request_body": receipt_payload,
+            "endpoint":     "POST /receipts",
+            "would_send_to_qoyod": False,
+            "resolved_account_id": payment_account,
+            "posting_mode":        resolved_mode,
+        }
+        out["would_send_to_qoyod"]["receipt"] = False
 
     # ── 11b) Iter-285 — Invoice/Receipt reconciliation summary ─────
-    # Surfaces the tax-mode contract: estimated invoice total Qoyod
-    # WILL compute vs the receipt amount we WILL post. UI uses these
-    # to render the "Customer-First" / "Mezan 15%" badges and the
-    # green/red reconciled state.
+    # Iter-293.4-rev2 — Skip reconciliation entirely for
+    # credit_invoice_only orders. There is NO receipt for COD/BNPL,
+    # so a "diff" between invoice and a (non-existent) receipt is
+    # meaningless and should NEVER be used as a blocker.
     from integrations.qoyod.invoice_builder import (
         estimated_invoice_total, _get_tax_mode,
     )
-    try:
-        est_invoice_total = estimated_invoice_total(canonical, settings)
-    except Exception as exc:   # pragma: no cover
-        est_invoice_total = None
-    receipt_amount = canonical.get("total_amount") or 0.0
-    tax_mode = _get_tax_mode(settings)
-    mvd = (totals_guard_check(canonical).details
-           if False else (out.get("mezan_vat") or {}))
-    diff = (round(est_invoice_total - float(receipt_amount), 2)
-            if est_invoice_total is not None else None)
-    tolerance = max(0.10, 0.005 * float(receipt_amount or 0))
-    out["tax_mode"] = tax_mode
-    out["reconciliation"] = {
-        "tax_mode":                  tax_mode,
-        "salla_declared_total":      round(float(receipt_amount), 2),
-        "mezan_expected_total":      (mvd or {}).get("mezan_expected_total"),
-        "tax_difference":            (mvd or {}).get("tax_difference"),
-        "estimated_invoice_total":   est_invoice_total,
-        "receipt_amount":            round(float(receipt_amount), 2),
-        "tolerance":                 round(tolerance, 2),
-        "invoice_receipt_reconciled": (
-            est_invoice_total is not None
-            and abs(diff) <= tolerance),
-        "diff":                      diff,
-    }
+    if is_credit_only:
+        tax_mode = _get_tax_mode(settings)
+        try:
+            est_invoice_total = estimated_invoice_total(canonical, settings)
+        except Exception:   # pragma: no cover
+            est_invoice_total = None
+        out["tax_mode"] = tax_mode
+        out["reconciliation"] = {
+            "skipped_for_credit_invoice_only": True,
+            "posting_mode":              resolved_mode,
+            "tax_mode":                  tax_mode,
+            "salla_declared_total":      round(float(
+                canonical.get("total_amount") or 0.0), 2),
+            "estimated_invoice_total":   est_invoice_total,
+            "receipt_amount":            None,
+            "diff":                      None,
+            "invoice_receipt_reconciled": None,
+            "note":                      (
+                "لا تتم مطابقة سند القبض مع الفاتورة لطلبات "
+                "credit_invoice_only — السند غير موجود أصلاً. تتم "
+                "مطابقة إجمالي سلة مع إجمالي الفاتورة فقط (لاحظ "
+                "safety_summary.difference)."),
+        }
+    else:
+        try:
+            est_invoice_total = estimated_invoice_total(canonical, settings)
+        except Exception as exc:   # pragma: no cover
+            est_invoice_total = None
+        receipt_amount = canonical.get("total_amount") or 0.0
+        tax_mode = _get_tax_mode(settings)
+        mvd = (totals_guard_check(canonical).details
+               if False else (out.get("mezan_vat") or {}))
+        diff = (round(est_invoice_total - float(receipt_amount), 2)
+                if est_invoice_total is not None else None)
+        tolerance = max(0.10, 0.005 * float(receipt_amount or 0))
+        out["tax_mode"] = tax_mode
+        out["reconciliation"] = {
+            "tax_mode":                  tax_mode,
+            "salla_declared_total":      round(float(receipt_amount), 2),
+            "mezan_expected_total":      (mvd or {}).get("mezan_expected_total"),
+            "tax_difference":            (mvd or {}).get("tax_difference"),
+            "estimated_invoice_total":   est_invoice_total,
+            "receipt_amount":            round(float(receipt_amount), 2),
+            "tolerance":                 round(tolerance, 2),
+            "invoice_receipt_reconciled": (
+                est_invoice_total is not None
+                and abs(diff) <= tolerance),
+            "diff":                      diff,
+        }
 
     # ── 12) Preflight summary ───────────────────────────────────────
     try:
@@ -457,15 +567,9 @@ async def preview_reprocess_one_order(
     # Single condensed block the operator reads BEFORE granting
     # explicit approval to send the order to Qoyod for real. All
     # values come from the simulation above — no fresh computation.
-    from integrations.qoyod.payment_methods import (
-        resolve_posting_mode,
-        POSTING_MODE_CREDIT_INVOICE_ONLY,
-        POSTING_MODE_DISABLED,
-    )
-    pm_for_mode = (canonical.get("payment_method")
-                   or canonical.get("payment_method_native"))
-    resolved_mode = resolve_posting_mode(settings, pm_for_mode)
+    # NOTE: `resolved_mode` / `pm_for_mode` were computed in step 10c.
     inv_diag = (out["stages"].get("invoice_preview") or {}).get("diagnostics") or {}
+    dep_status = (out["stages"].get("invoice_preview") or {}).get("dependency_status") or {}
     out["safety_summary"] = {
         # What the pipeline WOULD do if approved:
         "payment_method":              pm_for_mode,
@@ -474,6 +578,12 @@ async def preview_reprocess_one_order(
         "will_create_invoice_payment": resolved_mode not in (
             POSTING_MODE_CREDIT_INVOICE_ONLY, POSTING_MODE_DISABLED,
         ),
+        # Iter-293.4-rev2 — surface the dependency gate at the top
+        # level so an operator can refuse approval if any customer/
+        # product still needs to be created in qoyod first.
+        "dependencies_sendable":       bool(dep_status.get("sendable")),
+        "will_create_customer":        bool(dep_status.get("will_create_customer")),
+        "will_create_products_count":  len(dep_status.get("will_create_products") or []),
         "preflight_passed":            bool((out["stages"].get("preflight") or {}).get("ok")),
         # Totals reconciliation (Iter-290e/293.1):
         "salla_total":                 inv_diag.get("salla_total"),
