@@ -1,4 +1,4 @@
-"""Iter-294 — Global Qoyod Production Write Lock.
+"""Iter-293.4 — Global Qoyod Production Write Lock.
 
 ZATCA-sensitive guard: when `production_writes_locked=True` in
 qoyod_settings, NO write (POST/PUT/PATCH/DELETE) to api.qoyod.com is
@@ -13,10 +13,17 @@ Defense-in-depth: enforced at the QoyodAPIClient._request layer itself
 so even if a pipeline / resolver / retry / repair tool forgets to
 check the lock at its callsite, the client itself refuses to send.
 
-Blocked attempts are persisted to `qoyod_write_lock_attempts` (audit
-collection) and surfaced via:
+Fail-Closed on Production:
+    Setting `QOYOD_FAIL_CLOSED_DEFAULT=true` in backend/.env makes a
+    MISSING `production_writes_locked` field behave as True. This
+    protects newly-deployed Production tenants from accidental writes
+    during the window between Deploy and the operator explicitly
+    setting the flag.
 
-    GET /api/integrations/qoyod/admin/write-lock-report
+Blocked attempts are persisted to `qoyod_write_lock_attempts` (audit
+collection) AND emitted to stdout/journal at WARNING level in the
+format:
+    BLOCKED_QOYOD_WRITE action=<x> order=<y> reason=production_writes_locked
 
 The recorder NEVER raises — it is best-effort and must not break the
 write-block path.
@@ -24,9 +31,14 @@ write-block path.
 from __future__ import annotations
 
 import contextvars
+import logging
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+
+
+logger = logging.getLogger("qoyod.write_lock")
 
 
 # HTTP methods that mutate state on Qoyod's side.
@@ -264,6 +276,13 @@ async def record_blocked_attempt(
     except Exception:
         # Best-effort audit — never break the lock path.
         pass
+
+    # Iter-293.4 — stdout/journal log alongside the DB audit.
+    emit_blocked_log(
+        action=action, method=method, path=path,
+        order_number=order_number, trace_id=trace_id,
+        hints=hints, attempt_id=attempt_id,
+    )
     return attempt_id
 
 
@@ -317,7 +336,66 @@ async def count_blocked_attempts_by_action(
 
 
 def is_locked(settings: dict | None) -> bool:
-    """Single source of truth for the lock flag."""
-    if not settings:
-        return False
-    return bool(settings.get("production_writes_locked", False))
+    """Single source of truth for the lock flag.
+
+    Iter-293.4 Fail-Closed semantics:
+        • If `production_writes_locked` is explicitly True/False in
+          settings → honour exactly.
+        • If MISSING (None / key absent):
+            – Env `QOYOD_FAIL_CLOSED_DEFAULT=true` → LOCKED.
+            – Otherwise → unlocked (legacy / dev / preview behaviour).
+
+    The env-driven default lets Production deploys land already-locked
+    so a webhook can NEVER write to api.qoyod.com during the window
+    between Deploy and the operator explicitly setting the flag.
+    """
+    if settings is not None:
+        v = settings.get("production_writes_locked")
+        if v is True:
+            return True
+        if v is False:
+            return False
+    # Explicitly unset — fall back to env-driven default.
+    return os.environ.get(
+        "QOYOD_FAIL_CLOSED_DEFAULT", "").strip().lower() in ("1", "true", "yes")
+
+
+def fail_closed_default_enabled() -> bool:
+    """Return True if the env-driven fail-closed default is active.
+    Exposed so the operator UI / reports can surface the policy."""
+    return os.environ.get(
+        "QOYOD_FAIL_CLOSED_DEFAULT", "").strip().lower() in ("1", "true", "yes")
+
+
+def emit_blocked_log(
+    *, action: str, method: str, path: str,
+    order_number: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    hints: Optional[dict] = None,
+    attempt_id: Optional[str] = None,
+) -> None:
+    """Emit a single-line WARNING to stdout/journal so operators can
+    grep the live log without opening MongoDB.
+
+    Format (stable — pinned by tests):
+        BLOCKED_QOYOD_WRITE action=<x> method=<M> path=<p> order=<o>
+        trace=<t> reason=production_writes_locked attempt_id=<id> [extras]
+    """
+    extras: list[str] = []
+    if hints:
+        if hints.get("sku"):
+            extras.append(f"sku={hints['sku']}")
+        if hints.get("customer_email_masked"):
+            extras.append(f"email_masked={hints['customer_email_masked']}")
+        if hints.get("reference"):
+            extras.append(f"reference={hints['reference']}")
+        if hints.get("amount") is not None:
+            extras.append(f"amount={hints['amount']}")
+    extras_str = (" " + " ".join(extras)) if extras else ""
+    logger.warning(
+        "BLOCKED_QOYOD_WRITE action=%s method=%s path=%s order=%s "
+        "trace=%s reason=production_writes_locked attempt_id=%s%s",
+        action, method, path,
+        order_number or "-", trace_id or "-",
+        attempt_id or "-", extras_str,
+    )

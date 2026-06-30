@@ -34,7 +34,7 @@ from typing import Any, Optional
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
 from integrations.qoyod.write_lock import (
-    QoyodWriteLockedError, set_write_lock_context,
+    QoyodWriteLockedError, set_write_lock_context, is_locked,
 )
 from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.invoice_builder import build_invoice_payment_payload
@@ -218,7 +218,7 @@ async def retry_payment_only(
     api = QoyodAPIClient(
         api_key,
         db=db, user_id=user_id,
-        write_lock_enabled=bool(settings.get("production_writes_locked", False)),
+        write_lock_enabled=is_locked(settings),
     )
     # Iter-294 — audit context for any write-block record.
     set_write_lock_context(

@@ -1,4 +1,4 @@
-"""Iter-294 — Global Qoyod Production Write Lock.
+"""Iter-293.4 — Global Qoyod Production Write Lock.
 
 User mandate (2026-02-XX):
     "production_writes_locked يجب أن يغطي كل مسارات الكتابة إلى Qoyod
@@ -40,7 +40,9 @@ from integrations.qoyod.api_client import QoyodAPIClient  # noqa: E402
 from integrations.qoyod.write_lock import (  # noqa: E402
     QoyodWriteLockedError,
     classify_action,
+    emit_blocked_log,
     extract_payload_hints,
+    fail_closed_default_enabled,
     is_locked,
     mask_email,
     record_blocked_attempt,
@@ -234,9 +236,121 @@ class TestIsLocked:
         assert is_locked({"production_writes_locked": True}) is True
 
     def test_false_by_default(self):
+        # No env override → unlocked when field missing.
+        os.environ.pop("QOYOD_FAIL_CLOSED_DEFAULT", None)
         assert is_locked({}) is False
         assert is_locked(None) is False
         assert is_locked({"production_writes_locked": False}) is False
+
+
+class TestFailClosedDefault:
+    """Iter-293.4 Fail-Closed semantics for Production deploys."""
+
+    def setup_method(self):
+        # Snapshot existing env to restore in teardown.
+        self._snapshot = os.environ.get("QOYOD_FAIL_CLOSED_DEFAULT")
+
+    def teardown_method(self):
+        if self._snapshot is None:
+            os.environ.pop("QOYOD_FAIL_CLOSED_DEFAULT", None)
+        else:
+            os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = self._snapshot
+
+    def test_missing_field_with_env_true_means_locked(self):
+        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "true"
+        # Empty settings dict (Production deploy day-0 state).
+        assert is_locked({}) is True
+        assert is_locked(None) is True
+
+    def test_missing_field_with_env_false_means_unlocked(self):
+        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "false"
+        assert is_locked({}) is False
+
+    def test_explicit_false_overrides_env_default(self):
+        """Operator can EXPLICITLY unlock in Preview even when env says
+        fail-closed. The explicit value always wins."""
+        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "true"
+        assert is_locked({"production_writes_locked": False}) is False
+
+    def test_explicit_true_with_env_unset_means_locked(self):
+        os.environ.pop("QOYOD_FAIL_CLOSED_DEFAULT", None)
+        assert is_locked({"production_writes_locked": True}) is True
+
+    def test_env_accepts_multiple_truthy_values(self):
+        for v in ("true", "TRUE", "1", "yes", "Yes"):
+            os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = v
+            assert is_locked({}) is True, f"failed for value={v!r}"
+
+    def test_fail_closed_default_enabled_reports_correctly(self):
+        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "true"
+        assert fail_closed_default_enabled() is True
+        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "false"
+        assert fail_closed_default_enabled() is False
+        os.environ.pop("QOYOD_FAIL_CLOSED_DEFAULT", None)
+        assert fail_closed_default_enabled() is False
+
+
+class TestEmitBlockedLog:
+    """Iter-293.4 — BLOCKED_QOYOD_WRITE stdout/journal log."""
+
+    def test_log_format_pinned(self, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING, logger="qoyod.write_lock"):
+            emit_blocked_log(
+                action="create_invoice", method="POST", path="/invoices",
+                order_number="269547100", trace_id="tr-1",
+                attempt_id="abc-123",
+                hints={"reference": "269547100", "amount": 131.92},
+            )
+        # Exactly one log line emitted.
+        recs = [r for r in caplog.records if "BLOCKED_QOYOD_WRITE" in r.message]
+        assert len(recs) == 1
+        msg = recs[0].message
+        # Core fields present.
+        assert "action=create_invoice" in msg
+        assert "method=POST" in msg
+        assert "path=/invoices" in msg
+        assert "order=269547100" in msg
+        assert "trace=tr-1" in msg
+        assert "reason=production_writes_locked" in msg
+        assert "attempt_id=abc-123" in msg
+        assert "reference=269547100" in msg
+        assert "amount=131.92" in msg
+
+    def test_log_for_create_product_includes_sku(self, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING, logger="qoyod.write_lock"):
+            emit_blocked_log(
+                action="create_product", method="POST", path="/products",
+                order_number=None, trace_id=None, attempt_id="x",
+                hints={"sku": "AMS123", "product_name": "كرت اهداء"},
+            )
+        recs = [r for r in caplog.records if "BLOCKED_QOYOD_WRITE" in r.message]
+        assert "action=create_product" in recs[0].message
+        assert "sku=AMS123" in recs[0].message
+
+    def test_log_for_create_contact_includes_masked_email(self, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING, logger="qoyod.write_lock"):
+            emit_blocked_log(
+                action="create_contact", method="POST", path="/customers",
+                order_number=None, trace_id=None, attempt_id="x",
+                hints={"customer_email_masked": "a***@example.com"},
+            )
+        recs = [r for r in caplog.records if "BLOCKED_QOYOD_WRITE" in r.message]
+        assert "email_masked=a***@example.com" in recs[0].message
+
+    def test_log_missing_optional_fields_uses_dashes(self, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING, logger="qoyod.write_lock"):
+            emit_blocked_log(
+                action="create_invoice", method="POST", path="/invoices",
+            )
+        recs = [r for r in caplog.records if "BLOCKED_QOYOD_WRITE" in r.message]
+        msg = recs[0].message
+        assert "order=-" in msg
+        assert "trace=-" in msg
+        assert "attempt_id=-" in msg
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -392,6 +506,45 @@ class TestApiClientWriteLock:
         assert row["order_number"] == "269547100"
         assert row["trace_id"] == "trace-abc"
         assert row["callsite"] == "pytest"
+
+    async def test_write_block_emits_stdout_log(self, caplog):
+        """Iter-293.4 — confirm api_client._request triggers the
+        BLOCKED_QOYOD_WRITE log AND the DB audit on the same code path."""
+        import logging
+        db = _InMemoryDB()
+        client = QoyodAPIClient(
+            "test-key", db=db, user_id="main", write_lock_enabled=True)
+        set_write_lock_context(
+            order_number="269547100", trace_id="t-1", callsite="pytest")
+        with caplog.at_level(logging.WARNING, logger="qoyod.write_lock"):
+            with patch("httpx.AsyncClient.request", new_callable=AsyncMock):
+                with pytest.raises(QoyodWriteLockedError):
+                    await client.create_invoice(
+                        {"invoice": {"reference": "269547100", "total": 100}},
+                        idem="x")
+        # Log emitted with the expected shape.
+        recs = [r for r in caplog.records if "BLOCKED_QOYOD_WRITE" in r.message]
+        assert len(recs) == 1
+        assert "action=create_invoice" in recs[0].message
+        assert "order=269547100" in recs[0].message
+        assert "reason=production_writes_locked" in recs[0].message
+        # DB audit also recorded.
+        assert len(db.qoyod_write_lock_attempts.rows) == 1
+
+    async def test_no_db_path_still_emits_stdout_log(self, caplog):
+        """Even without DB the operator still sees the block in journalctl."""
+        import logging
+        client = QoyodAPIClient(
+            "test-key", db=None, user_id=None, write_lock_enabled=True)
+        with caplog.at_level(logging.WARNING, logger="qoyod.write_lock"):
+            with patch("httpx.AsyncClient.request", new_callable=AsyncMock):
+                with pytest.raises(QoyodWriteLockedError):
+                    await client.create_product(
+                        {"product": {"sku": "X-9"}}, idem="x")
+        recs = [r for r in caplog.records if "BLOCKED_QOYOD_WRITE" in r.message]
+        assert len(recs) == 1
+        assert "action=create_product" in recs[0].message
+        assert "sku=X-9" in recs[0].message
 
     async def test_lock_refusal_without_db_still_raises(self):
         """Defense-in-depth: even with NO db/user_id, the lock still

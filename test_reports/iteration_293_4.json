@@ -1,0 +1,36 @@
+{
+  "summary": "Iter-293.4 Global Qoyod Production Write Lock — backend HTTP & in-process verification. All 10 new HTTP tests + the 55-test existing pytest suite + 2 kill-switch tests PASS (67/67 = 100%). Verified: (a) PUT /settings persists production_writes_locked true/false and rejects unknown fields (Pydantic extra='forbid'), (b) GET /admin/write-lock-report returns all required keys (ok, production_writes_locked, production_writes_locked_field, fail_closed_default_enabled, lock_source, summary.{total_blocked_24h,by_action_24h,operator_note}, items), with lock_source='explicit_setting' when the field is explicitly true OR false, (c) POST /admin/preview-reprocess works when locked AND never sets qoyod_request_sent=true (no api.qoyod.com call), (d) POST /test-connection returns 400 no_credentials (no creds configured) — confirming the lock does NOT intercept the GET probe, (e) In-process: QoyodAPIClient._request raises QoyodWriteLockedError BEFORE httpx fires (mock_request.await_count==0) for POST, while GET /products IS allowed through. State was restored to original (False) after the run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qoyod_write_lock_iter293_4_http.py",
+    "/app/test_reports/pytest/iter293_4_http.xml",
+    "/app/backend/tests/test_qoyod_global_write_lock_iter293_4.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "write_lock.py is_locked() correctly honours explicit True/False before falling back to QOYOD_FAIL_CLOSED_DEFAULT env — semantics match the spec.",
+    "QoyodAPIClient._request enforces the lock BEFORE any httpx call (verified by mock_request.await_count==0 assertion). Defense-in-depth correctly placed at the lowest write boundary.",
+    "GET requests are correctly excluded (WRITE_METHODS = {POST, PUT, PATCH, DELETE}) — test-connection (/me, GET) and list_products (GET) both pass through when locked.",
+    "Preview-reprocess does not call api.qoyod.com regardless of lock state — verified via qoyod_request_sent flag in response.",
+    "SettingsPatch uses extra='forbid' — unknown fields rejected with 422; toggle PUTs are atomic and persisted (verified by GET round-trip).",
+    "Minor: in-process write-blocked test relies on _request kwarg `json_body` (private API). If the kwarg name ever changes, this test will need a touch. Public-API equivalent (`create_invoice`) requires an `idem=` kwarg which is fine for callers but slightly less ergonomic for ad-hoc tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_qoyod_write_lock_iter293_4_http.py (NEW)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "admin@hesab.app / admin123 (login OK)",
+  "seed_data_creation": "none — restored production_writes_locked to its pre-test value (False) via module-scoped fixture teardown",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "10 HTTP tests in /app/backend/tests/test_qoyod_write_lock_iter293_4_http.py + 55 existing in test_qoyod_global_write_lock_iter293_4.py + 2 kill-switch tests all pass (67 total). The HTTP test uses /app/frontend/.env REACT_APP_BACKEND_URL for the public URL. The in-process tests mock httpx.AsyncClient.request to assert the lock fires BEFORE the network call. No real Qoyod API key required. The module-scope fixture restores the lock to False at teardown; if you need it locked, set it explicitly per test.",
+  "rca of the issue": "Not a bug fix — verification only. Lock implementation is sound at the QoyodAPIClient._request layer (defense in depth); audit collection qoyod_write_lock_attempts captures attempts; report endpoint surfaces 24h stats correctly; preview/test-connection are correctly NOT gated since they don't write."
+}

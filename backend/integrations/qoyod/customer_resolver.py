@@ -35,7 +35,7 @@ from typing import Any, Optional
 
 from integrations.qoyod.dto import CustomerDTO
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
-from integrations.qoyod.write_lock import QoyodWriteLockedError
+from integrations.qoyod.write_lock import QoyodWriteLockedError, is_locked
 from integrations.qoyod.credentials import get_api_key
 
 
@@ -248,14 +248,14 @@ async def resolve_customer(
                 error={"code": "credentials_missing",
                        "message": "Qoyod API key not configured"},
             )
-        # Iter-294 — honour the global write lock even on direct
+        # Iter-293.4 — honour the global write lock even on direct
         # resolver entry points (no pipeline above).
         _settings = await db.qoyod_settings.find_one(
             {"user_id": user_id}, {"_id": 0, "production_writes_locked": 1}) or {}
         api_client = QoyodAPIClient(
             key,
             db=db, user_id=user_id,
-            write_lock_enabled=bool(_settings.get("production_writes_locked", False)),
+            write_lock_enabled=is_locked(_settings),
         )
 
     payload = _build_contact_payload(customer)

@@ -1,6 +1,11 @@
 # PRD — MEZAN E-commerce Accounting App
 
-## Iter-294 — Global Qoyod Production Write Lock (2026-02-XX)
+## Iter-293.4 — Global Qoyod Production Write Lock (2026-02-XX)
+
+> Note (organisational): `Iter-294` remains reserved for the Bank Transfer
+> Routing-by-receiving-bank work that depends on Production payload
+> samples. The Global Write Lock is tagged as `Iter-293.4` to keep the
+> changelog coherent with the user's planning sequence.
 
 **User mandate** (post Iter-293.3 review):
 > "Production writes must be locked across ALL write paths — حتى لو نسي
@@ -32,7 +37,13 @@ list_inventories, etc. all keep working).
   - `classify_action(method, path)` — POST /invoices → `create_invoice` etc.
   - `extract_payload_hints(action, payload)` — sku, masked_email, name, reference, amount.
   - `mask_email`, `WRITE_METHODS` constant.
-  - `record_blocked_attempt(db, ...)` — best-effort audit insert (never raises).
+  - `is_locked(settings)` — Fail-Closed aware: missing field + env
+    `QOYOD_FAIL_CLOSED_DEFAULT=true` → True; explicit value always wins.
+  - `fail_closed_default_enabled()` — env state reporter.
+  - `emit_blocked_log(...)` — emits `BLOCKED_QOYOD_WRITE action=… order=… reason=…`
+    to stdout/journal at WARNING level. Format pinned by tests.
+  - `record_blocked_attempt(db, ...)` — best-effort audit insert + log
+    emission (never raises).
   - `list_blocked_attempts`, `count_blocked_attempts_by_action`.
   - `set_write_lock_context(order_number, trace_id, callsite)` — contextvar
     so audit records carry order context without API signature pollution.
@@ -88,12 +99,42 @@ list_inventories, etc. all keep working).
 - Audit query helpers (`list_blocked_attempts`, counts) work.
 
 ### Verification
-- **1087/1087 Qoyod tests pass** (was 1042, +45 new for Iter-294).
+- **1099/1099 Qoyod tests pass** (was 1042, +57 new for Iter-293.4).
 - Live smoke: PUT /settings with `production_writes_locked=true` → all
   5 write methods (invoice/invoice_payment/product/contact/receipt)
-  blocked, ZERO httpx calls, 5 audit rows persisted with proper hints.
-- Endpoint `/admin/write-lock-report` returns clean structured response
-  with `production_writes_locked` flag + operator note in Arabic.
+  blocked, ZERO httpx calls, 5 audit rows persisted with proper hints,
+  5 BLOCKED_QOYOD_WRITE log lines emitted to stdout/journal.
+- Endpoint `/admin/write-lock-report` returns:
+  - `production_writes_locked` (effective state)
+  - `production_writes_locked_field` (raw setting; None if missing)
+  - `fail_closed_default_enabled` (env state)
+  - `lock_source` = `explicit_setting | env_fail_closed_default | unlocked_default`
+- Fail-Closed verified: env `QOYOD_FAIL_CLOSED_DEFAULT=true` + missing
+  setting → `is_locked == True`. Explicit `False` always overrides.
+
+### Fail-Closed on Production
+**Operator action required on Production .env:**
+```
+QOYOD_FAIL_CLOSED_DEFAULT=true
+```
+With this set, a webhook arriving BEFORE the operator has explicitly
+set `production_writes_locked` will be refused. Preview/dev .env
+omits the variable so the lock defaults to off.
+
+### Log format (pinned by `TestEmitBlockedLog`)
+```
+BLOCKED_QOYOD_WRITE action=create_invoice method=POST path=/invoices
+  order=269547100 trace=trace-abc reason=production_writes_locked
+  attempt_id=<uuid> reference=269547100 amount=131.92
+BLOCKED_QOYOD_WRITE action=create_product method=POST path=/products
+  order=- trace=- reason=production_writes_locked
+  attempt_id=<uuid> sku=AMS-TEST
+BLOCKED_QOYOD_WRITE action=create_contact method=POST path=/customers
+  order=- trace=- reason=production_writes_locked
+  attempt_id=<uuid> email_masked=b***r@example.com
+```
+(Logger name: `qoyod.write_lock`, level: WARNING. Visible in
+`journalctl -u backend` / `tail -f /var/log/supervisor/backend.*.log`.)
 
 ### Operator workflow
 1. `PUT /api/integrations/qoyod/settings` body `{"production_writes_locked": true}`.

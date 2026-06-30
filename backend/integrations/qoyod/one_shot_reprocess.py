@@ -528,10 +528,11 @@ async def reprocess_one_order(
             row_id=row.get("id"))
 
     # ── 7. Drive the pipeline — manually, single row, real client ───
+    from integrations.qoyod.write_lock import is_locked as _is_locked
     api_client = QoyodAPIClient(
         api_key,
         db=db, user_id=user_id,
-        write_lock_enabled=bool(settings.get("production_writes_locked", False)),
+        write_lock_enabled=_is_locked(settings),
     )
     stage_sequence: list[str] = []
     result_log: list[dict] = []

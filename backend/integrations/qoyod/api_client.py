@@ -25,6 +25,8 @@ from integrations.qoyod.write_lock import (
     WRITE_METHODS,
     QoyodWriteLockedError,
     classify_action,
+    emit_blocked_log,
+    extract_payload_hints,
     record_blocked_attempt,
 )
 
@@ -175,12 +177,13 @@ class QoyodAPIClient:
         params: Optional[dict] = None,
         idempotency_key: Optional[str] = None,
     ) -> Any:
-        # ── Iter-294: Global Write Lock guard ───────────────────────
+        # ── Iter-293.4: Global Write Lock guard ─────────────────────
         # Defense-in-depth. Fires for ANY POST/PUT/PATCH/DELETE when
         # `production_writes_locked=True` was snapshotted at client
         # construction. Records the attempt to `qoyod_write_lock_attempts`
-        # for audit and raises QoyodWriteLockedError so the caller
-        # surfaces a clean "BLOCKED" outcome instead of a silent skip.
+        # for audit, emits a `BLOCKED_QOYOD_WRITE` log line to stdout,
+        # then raises QoyodWriteLockedError so the caller surfaces a
+        # clean "BLOCKED" outcome instead of a silent skip.
         if self._write_lock_enabled and method.upper() in WRITE_METHODS:
             action = classify_action(method, path)
             attempt_id: Optional[str] = None
@@ -193,6 +196,13 @@ class QoyodAPIClient:
                     path=path,
                     payload=json_body,
                     idempotency_key=idempotency_key,
+                )
+            else:
+                # No DB available — still emit the stdout log so the
+                # operator sees the block in journalctl.
+                emit_blocked_log(
+                    action=action, method=method, path=path,
+                    hints=extract_payload_hints(action, json_body),
                 )
             raise QoyodWriteLockedError(
                 action=action,

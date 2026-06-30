@@ -39,6 +39,7 @@ from integrations.qoyod.invoice_builder import (
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
 from integrations.qoyod.write_lock import (
     QoyodWriteLockedError, set_write_lock_context, reset_write_lock_context,
+    is_locked,
 )
 from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.dto import SalesOrderDTO
@@ -350,7 +351,7 @@ async def _get_api_client(db, user_id: str, settings: dict):
     return QoyodAPIClient(
         key,
         db=db, user_id=user_id,
-        write_lock_enabled=bool(settings.get("production_writes_locked", False)),
+        write_lock_enabled=is_locked(settings),
     ), False
 
 
@@ -672,7 +673,7 @@ async def process_customer_resolved_row(
         # This is INDEPENDENT of `dry_run_mode` (which uses DRY:* stub
         # ids and is intended for offline simulation). Production
         # writes lock keeps real ids but skips the POST.
-        if settings.get("production_writes_locked", False):
+        if is_locked(settings):
             await db.integration_inbox.update_one(
                 {"id": row["id"]},
                 {"$set": {
@@ -978,12 +979,12 @@ async def process_customer_resolved_row(
                 "qoyod_responses.invoice_payment.qoyod_id": qoyod_invoice_payment_id,
             }})
     else:
-        # ── Iter-294 — Global Write Lock pre-check for invoice_payment ─
+        # ── Iter-293.4 — Global Write Lock pre-check for invoice_payment ─
         # Mirror the pre-check on the create_invoice path (line 652)
         # so the operator sees a clean LOCKED_AWAITING_APPROVAL outcome
         # instead of an exception bubbling up from api_client._request.
         # The API client itself enforces the lock as a safety net.
-        if settings.get("production_writes_locked", False):
+        if is_locked(settings):
             await db.integration_inbox.update_one(
                 {"id": row["id"]},
                 {"$set": {

@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
 from integrations.qoyod.write_lock import (
-    QoyodWriteLockedError, is_locked,
+    QoyodWriteLockedError, is_locked, fail_closed_default_enabled,
     list_blocked_attempts, count_blocked_attempts_by_action,
     set_write_lock_context, reset_write_lock_context,
 )
@@ -116,16 +116,20 @@ async def _build_qoyod_client_for(db, tenant: str, key: str) -> QoyodAPIClient:
     """Construct a QoyodAPIClient with the global write lock snapshotted
     from the current `production_writes_locked` flag in qoyod_settings.
 
+    Iter-293.4 Fail-Closed:
+        When the flag is missing AND env `QOYOD_FAIL_CLOSED_DEFAULT=true`,
+        the lock defaults to True. Production deploys land already-safe.
+
     Any write (POST/PUT/PATCH/DELETE) through this client will be
-    refused with `QoyodWriteLockedError` when the flag is True, AND
-    the attempt is recorded to `qoyod_write_lock_attempts` for audit.
+    refused with `QoyodWriteLockedError` when locked, AND the attempt
+    is recorded to `qoyod_write_lock_attempts` for audit.
     """
     settings_doc = await db.qoyod_settings.find_one(
         {"user_id": tenant}, {"_id": 0, "production_writes_locked": 1}) or {}
     return QoyodAPIClient(
         key,
         db=db, user_id=tenant,
-        write_lock_enabled=bool(settings_doc.get("production_writes_locked", False)),
+        write_lock_enabled=is_locked(settings_doc),
     )
 
 
@@ -1710,7 +1714,10 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         settings_doc = await db.qoyod_settings.find_one(
             {"user_id": tenant},
             {"_id": 0, "production_writes_locked": 1}) or {}
-        lock_state = bool(settings_doc.get("production_writes_locked", False))
+        # Iter-293.4 — `effective_lock_state` honours fail-closed default.
+        effective_locked = is_locked(settings_doc)
+        explicit_value = settings_doc.get("production_writes_locked")
+        fail_closed_env = fail_closed_default_enabled()
 
         rows = await list_blocked_attempts(
             db, user_id=tenant, limit=limit,
@@ -1722,9 +1729,30 @@ def make_qoyod_router(db, current_user) -> APIRouter:
 
         # Operator-facing summary card.
         total_attempts = sum(counts_24h.values())
+        if effective_locked:
+            note = (
+                "القفل مفعل: كل محاولة كتابة لقيود محفوظة هنا للمراجعة. "
+                "لا يتم الإرسال إلا عبر one-shot-reprocess بعد موافقة صريحة.")
+            if explicit_value is None and fail_closed_env:
+                note = (
+                    "القفل مفعل (Fail-Closed افتراضي على Production): الحقل "
+                    "production_writes_locked غير مضبوط صراحةً، والـ env "
+                    "QOYOD_FAIL_CLOSED_DEFAULT=true يفرض القفل افتراضياً. "
+                    "هذا يضمن أن أي webhook بعد Deploy لن يكتب لقيود تلقائياً.")
+        else:
+            note = ("القفل غير مفعل حالياً — أي كتابة جديدة ستذهب مباشرة "
+                    "لقيود. لتفعيل القفل: PUT /settings "
+                    "{production_writes_locked: true}.")
+
         return {
             "ok": True,
-            "production_writes_locked": lock_state,
+            "production_writes_locked":        effective_locked,
+            "production_writes_locked_field":  explicit_value,    # None means missing
+            "fail_closed_default_enabled":     fail_closed_env,
+            "lock_source": (
+                "explicit_setting" if explicit_value is not None
+                else ("env_fail_closed_default" if fail_closed_env else "unlocked_default")
+            ),
             "summary": {
                 "total_blocked_24h":  total_attempts,
                 "by_action_24h":      counts_24h,
@@ -1734,14 +1762,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                     "action":       action,
                     "order_number": order_number,
                 },
-                "operator_note": (
-                    "القفل مفعل: كل محاولة كتابة لقيود محفوظة هنا "
-                    "للمراجعة. لا يتم الإرسال إلا عبر "
-                    "one-shot-reprocess بعد موافقة صريحة."
-                    if lock_state else
-                    "القفل غير مفعل حالياً — أي كتابة جديدة ستذهب "
-                    "مباشرة لقيود. لتفعيل القفل: PUT /settings "
-                    "{production_writes_locked: true}."),
+                "operator_note": note,
             },
             "items": rows,
         }

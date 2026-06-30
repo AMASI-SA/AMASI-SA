@@ -45,6 +45,7 @@ from integrations.qoyod.totals_guard import (
     validate_totals as totals_guard_check,
 )
 from integrations.qoyod.payment_methods import resolve_payment_account
+from integrations.qoyod.write_lock import is_locked as _ip_is_locked
 
 from datetime import datetime
 
@@ -498,11 +499,9 @@ async def preview_reprocess_one_order(
         "extra_charges":               inv_diag.get("extra_charges") or {},
         # The operator MUST explicitly approve before a real POST.
         "approval_required_to_send":   True,
-        # Iter-293.3 — Visibility of the production kill switch.
-        # When True, NO live webhook can push to api.qoyod.com — even
-        # a newly arrived order_completed event sits in
-        # LOCKED_AWAITING_APPROVAL until an operator approves it.
-        "production_writes_locked":    bool(settings.get("production_writes_locked", False)),
+        # Iter-293.3/293.4 — Visibility of the production kill switch
+        # (effective state — honours fail-closed default on Production).
+        "production_writes_locked":    _ip_is_locked(settings),
     }
     return out
 
