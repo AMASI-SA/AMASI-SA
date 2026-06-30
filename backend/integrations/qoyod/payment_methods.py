@@ -214,13 +214,24 @@ def coerce_cod_rows(mapping: list[dict]) -> list[dict]:
     Returns a NEW list (original is not mutated). Any other rows pass
     through with whatever the operator submitted (subject to per-field
     validation elsewhere).
+
+    Iter-293.1 — Additional invariant for `bank_transfer`:
+        bank_transfer family rows MUST NOT use credit_invoice_only.
+        Per user policy (2026-06-30), bank_transfer is paid_receipt
+        per receiving bank (Iter-294) — NEVER an open credit invoice.
+        Until Iter-294 ships, the row stays on paid_receipt (Legacy
+        general-bank mapping). Any attempt to save it as
+        credit_invoice_only raises `ValueError` so the API caller
+        gets a 400 with an actionable message — far better than a
+        silent payment-method-mapping-missing failure on a real order.
     """
     out: list[dict] = []
     for row in mapping or []:
         if not isinstance(row, dict):
             continue
         new_row = dict(row)
-        if is_cod_family(new_row.get("salla_method")):
+        salla_method = new_row.get("salla_method")
+        if is_cod_family(salla_method):
             new_row["posting_mode"] = POSTING_MODE_CREDIT_INVOICE_ONLY
             new_row["qoyod_account_id"] = None
         else:
@@ -228,8 +239,25 @@ def coerce_cod_rows(mapping: list[dict]) -> list[dict]:
             pm = (new_row.get("posting_mode") or "").strip()
             if pm not in VALID_POSTING_MODES:
                 new_row["posting_mode"] = POSTING_MODE_PAID_RECEIPT
+            # bank_transfer guard (Iter-293.1).
+            if _is_bank_transfer_family(salla_method) \
+               and new_row["posting_mode"] == POSTING_MODE_CREDIT_INVOICE_ONLY:
+                raise ValueError(
+                    "bank_transfer cannot be credit_invoice_only. "
+                    "It must use receiving-bank routing (Iter-294)."
+                )
         out.append(new_row)
     return out
+
+
+def _is_bank_transfer_family(salla_method) -> bool:
+    """Return True iff this payment method collapses to the
+    bank_transfer family (any alias). Used by `coerce_cod_rows` to
+    block the credit_invoice_only mis-configuration."""
+    key = _norm(salla_method)
+    if not key:
+        return False
+    return key == "bank_transfer" or PAYMENT_METHOD_ALIASES.get(key) == "bank_transfer"
 
 
 def _norm(v: Optional[str]) -> str:

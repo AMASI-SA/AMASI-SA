@@ -317,8 +317,19 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             update["payment_method_mapping"], list,
         ):
             from integrations.qoyod.payment_methods import coerce_cod_rows
-            update["payment_method_mapping"] = coerce_cod_rows(
-                update["payment_method_mapping"])
+            try:
+                update["payment_method_mapping"] = coerce_cod_rows(
+                    update["payment_method_mapping"])
+            except ValueError as ve:
+                # Iter-293.1 — `coerce_cod_rows` raises on the
+                # bank_transfer = credit_invoice_only mis-configuration.
+                # Translate to a proper HTTP 400 with the operator-facing
+                # message intact.
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "INVALID_POSTING_MODE_FOR_BANK_TRANSFER",
+                            "message": str(ve)},
+                )
         # Validate the merged result via Pydantic so we never persist
         # an invalid combination (ADR-001 #4 Canonical Domain).
         merged = {**current, **update,

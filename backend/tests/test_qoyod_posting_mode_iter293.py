@@ -164,6 +164,46 @@ class TestCoerceCodRows:
         coerce_cod_rows(original)
         assert list(original[0].items()) == snapshot
 
+    # ── Iter-293.1 — bank_transfer ≠ credit_invoice_only ────────────
+    def test_bank_transfer_credit_invoice_only_raises(self):
+        """The bank_transfer family MUST NEVER be saved as
+        credit_invoice_only. Per spec: bank_transfer = paid_receipt
+        per receiving bank (Iter-294)."""
+        import pytest
+        with pytest.raises(ValueError, match="bank_transfer"):
+            coerce_cod_rows([
+                {"salla_method": "bank_transfer",
+                 "posting_mode": "credit_invoice_only"},
+            ])
+
+    def test_bank_transfer_aliases_also_blocked(self):
+        """Aliases like `bank`, `wire_transfer` must hit the same guard."""
+        import pytest
+        for alias in ("bank", "wire_transfer"):
+            with pytest.raises(ValueError):
+                coerce_cod_rows([
+                    {"salla_method": alias,
+                     "posting_mode": "credit_invoice_only"},
+                ])
+
+    def test_bank_transfer_paid_receipt_allowed(self):
+        """bank_transfer = paid_receipt is the only allowed mode."""
+        out = coerce_cod_rows([
+            {"salla_method": "bank_transfer",
+             "posting_mode": "paid_receipt",
+             "qoyod_account_id": "17"},
+        ])
+        assert out[0]["posting_mode"] == "paid_receipt"
+        assert out[0]["qoyod_account_id"] == "17"
+
+    def test_bank_transfer_disabled_allowed(self):
+        """bank_transfer = disabled is allowed (operator may turn off
+        the legacy general mapping temporarily)."""
+        out = coerce_cod_rows([
+            {"salla_method": "bank_transfer", "posting_mode": "disabled"},
+        ])
+        assert out[0]["posting_mode"] == "disabled"
+
 
 class TestNeedsQoyodAccount:
     def test_only_paid_receipt_needs_account(self):

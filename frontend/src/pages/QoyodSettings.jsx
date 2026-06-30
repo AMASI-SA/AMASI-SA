@@ -438,9 +438,15 @@ function PaymentMethodMappingTable({
       newRow.qoyod_account_id = null;
     } else {
       if (posting_mode !== undefined) {
-        newRow.posting_mode = posting_mode;
+        // Iter-293.1 — bank_transfer can never be credit_invoice_only.
+        // Defense-in-depth: even if the dropdown's filter is bypassed,
+        // we coerce the value back to paid_receipt before persisting.
+        const safeMode = (isBankTransferKey(key)
+                          && posting_mode === "credit_invoice_only")
+          ? "paid_receipt" : posting_mode;
+        newRow.posting_mode = safeMode;
         // Disabled / credit_invoice_only don't need an account, clear it.
-        if (posting_mode !== "paid_receipt") newRow.qoyod_account_id = null;
+        if (safeMode !== "paid_receipt") newRow.qoyod_account_id = null;
       }
       if (account_id !== undefined) {
         newRow.qoyod_account_id = account_id || "";
@@ -561,7 +567,10 @@ function PaymentMethodMappingTable({
                         )}
                       </div>
                     </td>
-                    {/* Posting mode picker — locked for COD rows */}
+                    {/* Posting mode picker — locked for COD rows.
+                        Iter-293.1: bank_transfer rows cannot be
+                        credit_invoice_only (must use receiving-bank
+                        routing in Iter-294). */}
                     <td className="px-3 py-2 align-middle">
                       <select
                         value={mode}
@@ -571,14 +580,23 @@ function PaymentMethodMappingTable({
                         className={`w-full px-2 py-1.5 border rounded text-xs
                                     ${codLock ? "bg-amber-50 text-amber-900 cursor-not-allowed border-amber-200"
                                               : "border-slate-300 bg-white"}`}>
-                        {POSTING_MODE_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
+                        {POSTING_MODE_OPTIONS
+                          .filter((o) => !(bankTransferRow && o.value === "credit_invoice_only"))
+                          .map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
                       </select>
                       {codLock && (
                         <div className="text-[10px] text-amber-700 font-bold mt-1"
                              data-testid={`pm-cod-locked-${key}`}>
                           🔒 COD لا يحتاج حساب قبض — مرحّل كفاتورة آجلة فقط
+                        </div>
+                      )}
+                      {bankTransferRow && (
+                        <div className="text-[10px] text-orange-800 font-bold mt-1"
+                             data-testid={`pm-bank-no-credit-${key}`}>
+                          🔒 التحويل البنكي يجب أن يكون مدفوع — حسب البنك المستلم (Iter-294).
+                          غير مسموح بـ "آجل".
                         </div>
                       )}
                       {mode === "disabled" && (
