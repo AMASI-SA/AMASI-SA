@@ -29,6 +29,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
+from integrations.qoyod.write_lock import (
+    QoyodWriteLockedError, is_locked,
+    list_blocked_attempts, count_blocked_attempts_by_action,
+    set_write_lock_context, reset_write_lock_context,
+)
 from integrations.qoyod.product_resolver import adopt_qoyod_product
 from integrations.qoyod.credentials import (
     save_api_key, get_api_key, get_fingerprint, delete_api_key, mark_verified,
@@ -102,6 +107,26 @@ def _tenant_id(user) -> str:
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Iter-294 — Global Qoyod Write Lock helpers
+# ─────────────────────────────────────────────────────────────────────
+async def _build_qoyod_client_for(db, tenant: str, key: str) -> QoyodAPIClient:
+    """Construct a QoyodAPIClient with the global write lock snapshotted
+    from the current `production_writes_locked` flag in qoyod_settings.
+
+    Any write (POST/PUT/PATCH/DELETE) through this client will be
+    refused with `QoyodWriteLockedError` when the flag is True, AND
+    the attempt is recorded to `qoyod_write_lock_attempts` for audit.
+    """
+    settings_doc = await db.qoyod_settings.find_one(
+        {"user_id": tenant}, {"_id": 0, "production_writes_locked": 1}) or {}
+    return QoyodAPIClient(
+        key,
+        db=db, user_id=tenant,
+        write_lock_enabled=bool(settings_doc.get("production_writes_locked", False)),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -905,7 +930,8 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         if not key:
             raise HTTPException(400, "no_credentials")
         result = await run_fresh_start_audit(
-            db, user_id=tenant, api_client=QoyodAPIClient(key))
+            db, user_id=tenant,
+            api_client=await _build_qoyod_client_for(db, tenant, key))
         return result
 
     @router.get("/fresh-start/audit")
@@ -923,7 +949,8 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             raise HTTPException(400, "no_credentials")
         try:
             plan = await build_plan(
-                db, user_id=tenant, api_client=QoyodAPIClient(key))
+                db, user_id=tenant,
+                api_client=await _build_qoyod_client_for(db, tenant, key))
         except QoyodAPIError as exc:
             return {"ok": False, "error": exc.to_log_dict()}
         return {"ok": True, "plan": plan,
@@ -950,7 +977,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 db, user_id=tenant,
                 job_id=payload.job_id,
                 confirm_token=payload.confirm,
-                api_client=QoyodAPIClient(key))
+                api_client=await _build_qoyod_client_for(db, tenant, key))
         except CleanupRefused as exc:
             raise HTTPException(400, str(exc))
         return result
@@ -1658,5 +1685,65 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                     })
         return {"ok": True, "statuses": statuses,
                 "source": source, "error": error}
+
+    # ── Iter-294 — Global Qoyod Production Write Lock report ────────
+    # Read-only audit endpoint. Shows every write attempt that was
+    # refused by the global lock, with the locked payload, action,
+    # order_number, trace_id, and operator recommendation per row.
+    @router.get("/admin/write-lock-report")
+    async def write_lock_report(
+        user=Depends(current_user),
+        limit:        int            = Query(100, ge=1, le=500),
+        since_hours:  Optional[int]  = Query(None, ge=1, le=720),
+        action:       Optional[str]  = Query(None),
+        order_number: Optional[str]  = Query(None),
+    ):
+        """Return blocked-write attempts + counts.
+
+        Filters:
+          • `since_hours` — only rows blocked within the last N hours.
+          • `action`      — `create_invoice` / `create_invoice_payment` /
+                            `create_product` / `create_contact` / etc.
+          • `order_number` — single-order drill-down.
+        """
+        tenant = _tenant_id(user)
+        settings_doc = await db.qoyod_settings.find_one(
+            {"user_id": tenant},
+            {"_id": 0, "production_writes_locked": 1}) or {}
+        lock_state = bool(settings_doc.get("production_writes_locked", False))
+
+        rows = await list_blocked_attempts(
+            db, user_id=tenant, limit=limit,
+            action=action, order_number=order_number,
+            since_hours=since_hours,
+        )
+        counts_24h = await count_blocked_attempts_by_action(
+            db, user_id=tenant, since_hours=24)
+
+        # Operator-facing summary card.
+        total_attempts = sum(counts_24h.values())
+        return {
+            "ok": True,
+            "production_writes_locked": lock_state,
+            "summary": {
+                "total_blocked_24h":  total_attempts,
+                "by_action_24h":      counts_24h,
+                "filters": {
+                    "limit":        limit,
+                    "since_hours":  since_hours,
+                    "action":       action,
+                    "order_number": order_number,
+                },
+                "operator_note": (
+                    "القفل مفعل: كل محاولة كتابة لقيود محفوظة هنا "
+                    "للمراجعة. لا يتم الإرسال إلا عبر "
+                    "one-shot-reprocess بعد موافقة صريحة."
+                    if lock_state else
+                    "القفل غير مفعل حالياً — أي كتابة جديدة ستذهب "
+                    "مباشرة لقيود. لتفعيل القفل: PUT /settings "
+                    "{production_writes_locked: true}."),
+            },
+            "items": rows,
+        }
 
     return router

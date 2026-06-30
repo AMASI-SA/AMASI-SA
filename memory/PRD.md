@@ -1,5 +1,121 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-294 — Global Qoyod Production Write Lock (2026-02-XX)
+
+**User mandate** (post Iter-293.3 review):
+> "Production writes must be locked across ALL write paths — حتى لو نسي
+> المطور فحص القفل في pipeline أو resolver، الـ API client نفسه يمنع
+> الإرسال. لا Deploy قبل اكتمال القفل الشامل."
+
+The Iter-293.3 Kill Switch only covered `create_invoice` inside
+`pipeline.process_customer_resolved_row`. Critical gaps surfaced:
+`create_invoice_payment` (paid orders), `create_product` (new SKUs),
+`create_contact` (new customers), `retry_payment_only.create_invoice_payment`,
+and all `delete_*` paths (fresh_start_cleanup) were ALL unprotected.
+
+### Defense-in-depth architecture
+Lock enforcement moved into `QoyodAPIClient._request` itself. Every
+POST/PUT/PATCH/DELETE is intercepted BEFORE the HTTPS call:
+
+1. Method classified to a human action (`create_invoice`, `delete_product`, etc.).
+2. Outbound payload + audit hints (sku, masked email, reference, amount)
+   persisted to `qoyod_write_lock_attempts` collection.
+3. `QoyodWriteLockedError` raised — caller surfaces clean
+   `LOCKED_AWAITING_APPROVAL` outcome.
+
+GET requests pass through untouched (test-connection, list_products,
+list_inventories, etc. all keep working).
+
+### Files changed
+- **NEW** `/app/backend/integrations/qoyod/write_lock.py`:
+  - `QoyodWriteLockedError` exception with `action`, `attempt_id`, `method`, `path`.
+  - `classify_action(method, path)` — POST /invoices → `create_invoice` etc.
+  - `extract_payload_hints(action, payload)` — sku, masked_email, name, reference, amount.
+  - `mask_email`, `WRITE_METHODS` constant.
+  - `record_blocked_attempt(db, ...)` — best-effort audit insert (never raises).
+  - `list_blocked_attempts`, `count_blocked_attempts_by_action`.
+  - `set_write_lock_context(order_number, trace_id, callsite)` — contextvar
+    so audit records carry order context without API signature pollution.
+- **`api_client.py`**:
+  - Constructor accepts optional `db, user_id, write_lock_enabled`.
+  - `_request` checks lock for write methods BEFORE httpx call. Records
+    audit + raises `QoyodWriteLockedError`.
+- **`pipeline.py`**:
+  - `_get_api_client` snapshots `production_writes_locked` flag at
+    construction time.
+  - `process_customer_resolved_row` sets the audit context (order_number, trace_id).
+  - Pre-check on `create_invoice` step (already existed via Iter-293.3).
+  - **NEW** pre-check on `create_invoice_payment` step (symmetric).
+  - **NEW** safety-net `except QoyodWriteLockedError` on both steps —
+    saves `*_locked_payload` and returns `LOCKED_AWAITING_APPROVAL`.
+- **`retry_payment_only.py`**:
+  - API client constructed with `write_lock_enabled` snapshot.
+  - `except QoyodWriteLockedError` returns clean `LOCKED_AWAITING_APPROVAL`
+    response with `lock_attempt_id`.
+- **`customer_resolver.py`**:
+  - Direct-entry path constructs client with lock snapshot.
+  - `except QoyodWriteLockedError` returns `ResolutionResult(success=False)`
+    with `code=qoyod_write_locked` so pipeline routes it gracefully.
+- **`product_resolver.py`**:
+  - `except QoyodWriteLockedError` returns clean error with SKU + attempt_id.
+- **`one_shot_reprocess.py`**:
+  - API client constructed with lock snapshot (rest of code unchanged —
+    underlying pipeline catches the locked error).
+- **`routes.py`**:
+  - Helper `_build_qoyod_client_for(db, tenant, key)` for consistent
+    locked-client construction.
+  - `/fresh-start/audit/run`, `/fresh-start/plan/build`, `/fresh-start/execute`
+    now use the helper (delete_* operations protected).
+  - **NEW** endpoint `GET /api/integrations/qoyod/admin/write-lock-report`:
+    - Returns blocked attempts (paginated, filterable by action / order_number / since_hours).
+    - Returns 24h counts by action.
+    - Returns the live lock flag + operator-facing Arabic note.
+
+### Tests (45 new, all pass)
+`/app/backend/tests/test_qoyod_global_write_lock_iter294.py`:
+- `classify_action` for all known POST/PUT/PATCH/DELETE paths.
+- `mask_email` edge cases (short, no-@, None, empty).
+- `extract_payload_hints` for product/contact/invoice/invoice_payment.
+- **Core contract** — every write method raises `QoyodWriteLockedError`
+  + persists audit row + makes ZERO http calls:
+  - `create_invoice`, `create_invoice_payment`, `create_product`,
+    `create_contact`, `create_receipt`.
+  - `delete_invoice`, `delete_receipt`, `delete_product`, `delete_customer`.
+- Read methods (`list_products`) pass through normally with lock=True.
+- Writes flow normally with lock=False (no audit row created).
+- Audit context (trace_id, order_number) captured per attempt.
+- Lock refusal raises even with no db (defense without dependency).
+- Audit query helpers (`list_blocked_attempts`, counts) work.
+
+### Verification
+- **1087/1087 Qoyod tests pass** (was 1042, +45 new for Iter-294).
+- Live smoke: PUT /settings with `production_writes_locked=true` → all
+  5 write methods (invoice/invoice_payment/product/contact/receipt)
+  blocked, ZERO httpx calls, 5 audit rows persisted with proper hints.
+- Endpoint `/admin/write-lock-report` returns clean structured response
+  with `production_writes_locked` flag + operator note in Arabic.
+
+### Operator workflow
+1. `PUT /api/integrations/qoyod/settings` body `{"production_writes_locked": true}`.
+2. All live webhooks + retry tools + one_shot + fresh_start now refuse writes.
+3. Per-order review via `POST /admin/preview-reprocess` (dry run).
+4. Explicit per-order approval via `one_shot_reprocess` with token
+   `REPROCESS-<order_number>` (still respects the lock — operator must
+   FIRST disable `production_writes_locked` to send).
+5. Audit log via `GET /admin/write-lock-report?since_hours=24` shows
+   every blocked attempt with the exact payload that was refused.
+
+### Guarantees (pinned by tests)
+- `WRITE_METHODS == {POST, PUT, PATCH, DELETE}` — adding a new mutating
+  HTTP method requires updating this set (covered by test).
+- Lock check happens BEFORE `httpx.AsyncClient.request` is called —
+  api.qoyod.com NEVER receives the request (verified via patched
+  AsyncMock that `mock_req.assert_not_called()`).
+- Audit hints NEVER include raw emails (masked: `f***r@example.com`)
+  or full phone numbers (last 4 only).
+- Record-blocked-attempt NEVER raises — silent best-effort persist.
+
+
 ## Iter-293.1 — COD Fee as Separate Line + Audit-Grade Sourcing (2026-06-30)
 
 **Symptom**: COD order `269532761` fell into DEAD_LETTER with `invoice_total_mismatch_before_post`. Salla total = 174.91, sum(items) = 169.89, delta = 5.02 SAR — the missing **COD fee**, an order-level charge not present in `items[]`.

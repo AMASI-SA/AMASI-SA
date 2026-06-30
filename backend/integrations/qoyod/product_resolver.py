@@ -42,6 +42,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from integrations.qoyod.api_client import QoyodAPIError
+from integrations.qoyod.write_lock import QoyodWriteLockedError
 
 
 def _now() -> datetime:
@@ -644,6 +645,20 @@ async def resolve_products(
         try:
             resp = await api_client.create_product(
                 _build_product_payload(it, settings), idem=idem)
+        except QoyodWriteLockedError as exc:
+            # Iter-294 — Global Write Lock refused the product create.
+            err = {
+                "code":       "qoyod_write_locked",
+                "message":    ("إنتاج قيود مقفول — لم يُنشَأ منتج جديد. "
+                               "تم حفظ payload المنتج للمراجعة."),
+                "attempt_id": exc.attempt_id,
+                "action":     exc.action,
+                "sku":        sku,
+            }
+            result.success = False
+            result.error = err
+            result.items.append(ProductResolutionItem(sku=sku, error=err))
+            return result
         except QoyodAPIError as exc:
             # Iter-286 — self-healing 422 retry. Some Qoyod tenants
             # reject the canonical payload with:

@@ -35,6 +35,7 @@ from typing import Any, Optional
 
 from integrations.qoyod.dto import CustomerDTO
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
+from integrations.qoyod.write_lock import QoyodWriteLockedError
 from integrations.qoyod.credentials import get_api_key
 
 
@@ -247,13 +248,37 @@ async def resolve_customer(
                 error={"code": "credentials_missing",
                        "message": "Qoyod API key not configured"},
             )
-        api_client = QoyodAPIClient(key)
+        # Iter-294 — honour the global write lock even on direct
+        # resolver entry points (no pipeline above).
+        _settings = await db.qoyod_settings.find_one(
+            {"user_id": user_id}, {"_id": 0, "production_writes_locked": 1}) or {}
+        api_client = QoyodAPIClient(
+            key,
+            db=db, user_id=user_id,
+            write_lock_enabled=bool(_settings.get("production_writes_locked", False)),
+        )
 
     payload = _build_contact_payload(customer)
     # Idempotency: same trace_id + same lookup_key → same Qoyod result.
     idem = f"mzn-{trace_id}-contact-{lookup_kind}-{lookup_key}"
     try:
         resp = await api_client.create_contact(payload, idem=idem)
+    except QoyodWriteLockedError as exc:
+        # Iter-294 — Global Write Lock refused the contact create.
+        # Surface as a graceful error the pipeline can route to
+        # LOCKED_AWAITING_APPROVAL instead of a hard crash.
+        return ResolutionResult(
+            success=False,
+            lookup_key=lookup_key, lookup_kind=lookup_kind,
+            error={
+                "code":       "qoyod_write_locked",
+                "message":    ("إنتاج قيود مقفول — لم يُنشَأ العميل في قيود. "
+                               "تم حفظ payload للمراجعة."),
+                "attempt_id": exc.attempt_id,
+                "action":     exc.action,
+            },
+            qoyod_request_payload=payload,
+        )
     except QoyodAPIError as exc:
         # Attach the payload we DID send so the operator can verify
         # the name/contact_name pair without needing to recreate the run.

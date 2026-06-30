@@ -21,6 +21,13 @@ from typing import Any, Optional
 
 import httpx
 
+from integrations.qoyod.write_lock import (
+    WRITE_METHODS,
+    QoyodWriteLockedError,
+    classify_action,
+    record_blocked_attempt,
+)
+
 
 # Version identifier sent with every Qoyod request (Day-1 review).
 # Bump whenever the Qoyod payload contract changes — helps trace the
@@ -97,7 +104,19 @@ def _short(body: Any, fallback: str = "") -> str:
 class QoyodAPIClient:
     """Per-call construction is cheap; kept stateless so the
     orchestrator can swap api_keys (testing / retry) without leaking
-    state between requests."""
+    state between requests.
+
+    Iter-294 — `write_lock_enabled=True` activates the Global Qoyod
+    Production Write Lock. When the lock is on, every POST/PUT/PATCH/
+    DELETE to api.qoyod.com is intercepted at `_request` BEFORE the
+    HTTP call. The outbound payload is persisted to
+    `qoyod_write_lock_attempts` for audit, then `QoyodWriteLockedError`
+    is raised. Read endpoints (GET) pass through untouched.
+
+    The lock requires `db` + `user_id` for the audit record. If either
+    is missing AND write_lock_enabled=True, the client still refuses
+    the write (defense-in-depth) but cannot persist the audit row.
+    """
 
     def __init__(
         self,
@@ -105,6 +124,10 @@ class QoyodAPIClient:
         *,
         base_url: Optional[str] = None,
         timeout: float = 15.0,
+        # ── Iter-294: Global Write Lock ────────────────────────────────
+        db: Any = None,
+        user_id: Optional[str] = None,
+        write_lock_enabled: bool = False,
     ):
         if not api_key:
             raise ValueError("Qoyod API key is required")
@@ -114,10 +137,18 @@ class QoyodAPIClient:
             raise RuntimeError(
                 "QOYOD_API_BASE is not set in backend/.env")
         self._timeout = timeout
+        # Lock state — snapshot at construction time. Callers MUST
+        # rebuild the client between iterations if they need to honour
+        # a live flag change. The pipeline does this naturally because
+        # `_get_api_client` runs once per row.
+        self._db = db
+        self._user_id = user_id
+        self._write_lock_enabled = bool(write_lock_enabled)
 
     # Redact secrets in any debug print.
     def __repr__(self) -> str:  # pragma: no cover
-        return f"QoyodAPIClient(base_url={self._base_url!r}, api_key=***)"
+        return (f"QoyodAPIClient(base_url={self._base_url!r}, "
+                f"api_key=***, write_lock={self._write_lock_enabled})")
 
     def _headers(self, idempotency_key: Optional[str] = None) -> dict:
         # `X-Mezan-Version` is a diagnostic header per Day-1 review.
@@ -144,6 +175,32 @@ class QoyodAPIClient:
         params: Optional[dict] = None,
         idempotency_key: Optional[str] = None,
     ) -> Any:
+        # ── Iter-294: Global Write Lock guard ───────────────────────
+        # Defense-in-depth. Fires for ANY POST/PUT/PATCH/DELETE when
+        # `production_writes_locked=True` was snapshotted at client
+        # construction. Records the attempt to `qoyod_write_lock_attempts`
+        # for audit and raises QoyodWriteLockedError so the caller
+        # surfaces a clean "BLOCKED" outcome instead of a silent skip.
+        if self._write_lock_enabled and method.upper() in WRITE_METHODS:
+            action = classify_action(method, path)
+            attempt_id: Optional[str] = None
+            if self._db is not None and self._user_id:
+                attempt_id = await record_blocked_attempt(
+                    self._db,
+                    user_id=self._user_id,
+                    action=action,
+                    method=method,
+                    path=path,
+                    payload=json_body,
+                    idempotency_key=idempotency_key,
+                )
+            raise QoyodWriteLockedError(
+                action=action,
+                attempt_id=attempt_id,
+                method=method.upper(),
+                path=path,
+            )
+
         url = f"{self._base_url}{path}"
         # `follow_redirects=True` is a safety belt against Qoyod's
         # domain migration (www.qoyod.com → legacy.qoyod.com). Without

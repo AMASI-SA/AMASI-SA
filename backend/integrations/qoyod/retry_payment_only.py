@@ -33,6 +33,9 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
+from integrations.qoyod.write_lock import (
+    QoyodWriteLockedError, set_write_lock_context,
+)
 from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.invoice_builder import build_invoice_payment_payload
 from integrations.qoyod.state_machine import transition
@@ -212,12 +215,52 @@ async def retry_payment_only(
             "request_body_json":      payment_payload,
             "human_message": "مفتاح API قيود غير مُهيّأ في الإعدادات.",
         }
-    api = QoyodAPIClient(api_key)
+    api = QoyodAPIClient(
+        api_key,
+        db=db, user_id=user_id,
+        write_lock_enabled=bool(settings.get("production_writes_locked", False)),
+    )
+    # Iter-294 — audit context for any write-block record.
+    set_write_lock_context(
+        order_number=str(salla_order_number),
+        trace_id=row.get("trace_id"),
+        callsite="retry_payment_only",
+    )
     idem_key = (f"mzn-retry-payment-{qoyod_invoice_id}-"
                 f"{fingerprint['amount']}-{fingerprint['payment_method']}")
     started_ms = int(_NOW().timestamp() * 1000)
     try:
         resp = await api.create_invoice_payment(payment_payload, idem=idem_key)
+    except QoyodWriteLockedError as exc:
+        # Iter-294 — Global Write Lock refused the POST. Surface a
+        # clean structured response with the locked payload + attempt_id.
+        await db.integration_inbox.update_one(
+            {"id": row["id"]},
+            {"$set": {
+                "qoyod_payloads.invoice_payment_locked_payload": payment_payload,
+                "qoyod_payloads.invoice_payment_locked_at":      _NOW(),
+                "pipeline_stage":                                "LOCKED_AWAITING_APPROVAL",
+                "lock_reason":                                   "production_writes_locked",
+                "lock_step":                                     "invoice_payment",
+                "lock_attempt_id":                               exc.attempt_id,
+            }})
+        return {
+            "ok": False,
+            "outcome": "LOCKED_AWAITING_APPROVAL",
+            "skip_reason": "production_writes_locked",
+            "payment_post_attempted": False,
+            "request_sent_to_qoyod":  False,
+            "qoyod_status_code":      None,
+            "qoyod_response":         None,
+            "request_body_json":      payment_payload,
+            "existing_qoyod_invoice_id": qoyod_invoice_id,
+            "lock_attempt_id":           exc.attempt_id,
+            "human_message": (
+                "إنتاج قيود مقفول حالياً (production_writes_locked=True). "
+                "تم حفظ payload الكامل للسداد للمراجعة، ولم يُرسَل أي "
+                "طلب لـ api.qoyod.com. راجع تقرير قفل الإنتاج ثم وافق "
+                "صراحةً قبل الإرسال."),
+        }
     except QoyodAPIError as exc:
         err_log = exc.to_log_dict()
         err_log["request_body_json"] = payment_payload

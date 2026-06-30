@@ -181,7 +181,7 @@ async def test_payment_method_mapping_missing_returns_structured_refusal(patch_d
     db = _DB()
     await _seed(db, with_mapping=False)
     from integrations.qoyod import retry_payment_only as mod
-    patch_deps.setattr(mod, "QoyodAPIClient", lambda key: _OK())
+    patch_deps.setattr(mod, "QoyodAPIClient", lambda key, **kw: _OK())
     out = await retry_payment_only(
         db, user_id="main", salla_order_number="269048975",
         confirm_token="RETRY-PAYMENT-269048975", actor="ops")
@@ -199,7 +199,7 @@ async def test_qoyod_failure_surfaces_fresh_verdict_not_stale(patch_deps):
     await _seed(db, stale_error=True)
     qoyod = _FlakyQoyod()
     from integrations.qoyod import retry_payment_only as mod
-    patch_deps.setattr(mod, "QoyodAPIClient", lambda key: qoyod)
+    patch_deps.setattr(mod, "QoyodAPIClient", lambda key, **kw: qoyod)
 
     out = await retry_payment_only(
         db, user_id="main", salla_order_number="269048975",
@@ -238,7 +238,7 @@ async def test_idempotency_skips_only_on_real_success(patch_deps):
     })
     qoyod = _OK()
     from integrations.qoyod import retry_payment_only as mod
-    patch_deps.setattr(mod, "QoyodAPIClient", lambda key: qoyod)
+    patch_deps.setattr(mod, "QoyodAPIClient", lambda key, **kw: qoyod)
     out = await retry_payment_only(
         db, user_id="main", salla_order_number="269048975",
         confirm_token="RETRY-PAYMENT-269048975", actor="ops")
@@ -257,7 +257,7 @@ async def test_success_transitions_row_to_completed_and_writes_ledger(patch_deps
     await _seed(db)
     qoyod = _OK()
     from integrations.qoyod import retry_payment_only as mod
-    patch_deps.setattr(mod, "QoyodAPIClient", lambda key: qoyod)
+    patch_deps.setattr(mod, "QoyodAPIClient", lambda key, **kw: qoyod)
     out = await retry_payment_only(
         db, user_id="main", salla_order_number="269048975",
         confirm_token="RETRY-PAYMENT-269048975", actor="ops")

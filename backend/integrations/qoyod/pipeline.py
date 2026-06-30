@@ -37,6 +37,9 @@ from integrations.qoyod.invoice_builder import (
     DryRunQoyodClient, is_dry_run_mode,
 )
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
+from integrations.qoyod.write_lock import (
+    QoyodWriteLockedError, set_write_lock_context, reset_write_lock_context,
+)
 from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.dto import SalesOrderDTO
 from integrations.qoyod.state_machine import transition
@@ -333,13 +336,22 @@ async def process_normalized_row(
 # calls. Strict Day-4 ceiling: stops at CUSTOMER_RESOLVED.
 # ─────────────────────────────────────────────────────────────────────
 async def _get_api_client(db, user_id: str, settings: dict):
-    """Return a Qoyod client (real or DryRun) based on settings."""
+    """Return a Qoyod client (real or DryRun) based on settings.
+
+    Iter-294 — Real clients always carry the Global Write Lock snapshot
+    so writes are refused at the api_client layer when
+    `production_writes_locked=True`.
+    """
     if is_dry_run_mode(settings):
         return DryRunQoyodClient(), True
     key = await get_api_key(db, user_id)
     if not key:
         return None, False
-    return QoyodAPIClient(key), False
+    return QoyodAPIClient(
+        key,
+        db=db, user_id=user_id,
+        write_lock_enabled=bool(settings.get("production_writes_locked", False)),
+    ), False
 
 
 async def process_customer_resolved_row(
@@ -362,6 +374,17 @@ async def process_customer_resolved_row(
     canonical = row.get("canonical_payload") or {}
     qoyod_customer_id = row.get("qoyod_customer_id")
     settings = await _load_settings(db, user_id)
+
+    # Iter-294 — Stamp write-lock audit context for this row so any
+    # api_client write-block records this order_number + trace_id.
+    # contextvars are task-isolated; the set value naturally goes out
+    # of scope when this coroutine returns.
+    set_write_lock_context(
+        order_number=str(canonical.get("order_number")
+                         or row.get("salla_order_number") or "") or None,
+        trace_id=trace_id,
+        callsite="pipeline.process_customer_resolved_row",
+    )
 
     # Resolve client (real or dry-run).
     client_provided = api_client is not None
@@ -680,6 +703,27 @@ async def process_customer_resolved_row(
                 inv = inv_resp.get("invoice") if isinstance(inv_resp.get("invoice"), dict) else inv_resp
                 qoyod_invoice_id = str(inv.get("id")) if inv.get("id") is not None else None
                 qoyod_invoice_number = inv.get("number") or inv.get("reference")
+        except QoyodWriteLockedError as exc:
+            # Iter-294 — Safety-net catch (api_client refused the write
+            # because production_writes_locked flipped to True after the
+            # pre-check above). Snapshot and surface cleanly.
+            await db.integration_inbox.update_one(
+                {"id": row["id"]},
+                {"$set": {
+                    "qoyod_payloads.invoice_locked_payload": invoice_payload,
+                    "qoyod_payloads.invoice_locked_at":      _now(),
+                    "pipeline_stage":                        "LOCKED_AWAITING_APPROVAL",
+                    "lock_reason":                           "production_writes_locked",
+                    "lock_step":                             "invoice",
+                    "lock_attempt_id":                       exc.attempt_id,
+                    "lock_diagnostics":                      invoice_diagnostics,
+                }})
+            return {"row_id": row["id"],
+                    "outcome": "LOCKED_AWAITING_APPROVAL",
+                    "reason":  "production_writes_locked",
+                    "step":    "invoice",
+                    "attempt_id": exc.attempt_id,
+                    "trace_id": trace_id}
         except QoyodAPIError as exc:
             await db.integration_inbox.update_one(
                 {"id": row["id"]},
@@ -934,6 +978,35 @@ async def process_customer_resolved_row(
                 "qoyod_responses.invoice_payment.qoyod_id": qoyod_invoice_payment_id,
             }})
     else:
+        # ── Iter-294 — Global Write Lock pre-check for invoice_payment ─
+        # Mirror the pre-check on the create_invoice path (line 652)
+        # so the operator sees a clean LOCKED_AWAITING_APPROVAL outcome
+        # instead of an exception bubbling up from api_client._request.
+        # The API client itself enforces the lock as a safety net.
+        if settings.get("production_writes_locked", False):
+            await db.integration_inbox.update_one(
+                {"id": row["id"]},
+                {"$set": {
+                    "qoyod_payloads.invoice_payment_locked_payload": payment_payload,
+                    "qoyod_payloads.invoice_payment_locked_at":      _now(),
+                    "pipeline_stage":                                "LOCKED_AWAITING_APPROVAL",
+                    "lock_reason":                                   "production_writes_locked",
+                    "lock_step":                                     "invoice_payment",
+                }},
+            )
+            return {
+                "row_id":   row["id"],
+                "outcome":  "LOCKED_AWAITING_APPROVAL",
+                "reason":   "production_writes_locked",
+                "step":     "invoice_payment",
+                "qoyod_invoice_id": qoyod_invoice_id,
+                "trace_id": trace_id,
+                "note":     ("Production writes are locked. The "
+                             "invoice was already created in Qoyod; "
+                             "the invoice_payment step has been parked "
+                             "for explicit approval."),
+            }
+
         payment_idem = (
             f"mzn-{trace_id}-invoice-payment-{idem_fingerprint['qoyod_invoice_id']}")
         try:
@@ -946,6 +1019,27 @@ async def process_customer_resolved_row(
                      else payment_resp)
                 qoyod_invoice_payment_id = (
                     str(r.get("id")) if r.get("id") is not None else None)
+        except QoyodWriteLockedError as exc:
+            # Safety net — should be unreachable thanks to the pre-check
+            # above, but if the lock was toggled to True mid-request the
+            # api_client raised this. Persist locked snapshot + surface
+            # cleanly.
+            await db.integration_inbox.update_one(
+                {"id": row["id"]},
+                {"$set": {
+                    "qoyod_payloads.invoice_payment_locked_payload": payment_payload,
+                    "qoyod_payloads.invoice_payment_locked_at":      _now(),
+                    "pipeline_stage":                                "LOCKED_AWAITING_APPROVAL",
+                    "lock_reason":                                   "production_writes_locked",
+                    "lock_step":                                     "invoice_payment",
+                    "lock_attempt_id":                               exc.attempt_id,
+                }})
+            return {"row_id": row["id"],
+                    "outcome": "LOCKED_AWAITING_APPROVAL",
+                    "reason": "production_writes_locked",
+                    "step":   "invoice_payment",
+                    "attempt_id": exc.attempt_id,
+                    "qoyod_invoice_id": qoyod_invoice_id}
         except QoyodAPIError as exc:
             err_log = exc.to_log_dict()
             err_log["request_body_json"] = payment_payload
