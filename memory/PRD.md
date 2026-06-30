@@ -1,5 +1,57 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-293 — COD = Credit Invoice Only (2026-06-30)
+**Symptom**: COD (Cash-on-Delivery) orders were wrongly booked as PAID in Qoyod (balance=0 + invoice_payment), because the pipeline blindly created `/invoice_payments` for every order mapped to a Qoyod account.
+
+**Root cause**: No notion of "posting mode" — every payment-method mapping forced an account_id and triggered the receipt step. Accounting reality: COD must remain as a credit (unpaid) invoice in Qoyod until the courier remits cash.
+
+### What changed
+- **Backend `payment_methods.py`** — new constants + helpers:
+  - `POSTING_MODE_PAID_RECEIPT` (default for instant payments).
+  - `POSTING_MODE_CREDIT_INVOICE_ONLY` (COD: invoice only, no receipt, no account).
+  - `POSTING_MODE_DISABLED` (intentionally not synced).
+  - `is_cod_family()` — recognises COD across en/ar + alias variants (`cash`, `cash_on_delivery`, `الدفع_عند_الاستلام`, etc.).
+  - `resolve_posting_mode()` — **forces COD → credit_invoice_only**, ignoring any operator override (defense in depth).
+  - `coerce_cod_rows()` — same enforcement at API write boundary.
+  - `needs_qoyod_account()` — only `paid_receipt` requires an account.
+- **Backend `pipeline.py`** — new branch before the invoice_payment step:
+  - `credit_invoice_only` → skips `build_invoice_payment_payload`, `/invoice_payments` POST, account_id check. Marks row `COMPLETED` with `qoyod_invoice_payment_id=null`, `paid_amount=0`, `remaining_amount=total`.
+  - `disabled` → stops at `INVOICE_CREATED` with reason `posting_mode_disabled`.
+  - `paid_receipt` → existing behaviour unchanged.
+- **Backend `models.py`** — `PaymentMethodMappingRow.qoyod_account_id` is now `Optional[str]` and `posting_mode` is a new optional field.
+- **Backend `routes.py`** — PUT `/settings` runs `coerce_cod_rows` on the mapping before persisting.
+- **NEW endpoints** (read-only, admin-gated):
+  - `GET /api/integrations/qoyod/admin/cod-receipts-report` — lists every Qoyod invoice in the COD family that has a `qoyod_invoice_payment_id` (i.e. wrongly booked as paid). Per-row recommendation in Arabic. Filters: `from`, `to`, `limit`.
+  - `GET /api/integrations/qoyod/admin/bank-transfer-discovery` — Iter-294 prep. Scans `qoyod_payloads` for orders with `payment_method=bank_transfer` and returns redacted candidate JSON paths (e.g. `$.order.transactions[0].bank_name`) so we can pinpoint where Salla encodes the receiving bank before designing per-bank routing.
+- **Frontend `QoyodSettings.jsx` — `PaymentMethodMappingTable`**:
+  - New column **وضع الترحيل لقيود** with 3-option dropdown.
+  - COD rows: dropdown **disabled + locked** on `credit_invoice_only` + amber-tinted row + 🔒 hint "COD لا يحتاج حساب قبض".
+  - Bank-transfer rows: **Legacy badge** in orange — "يحتاج Routing حسب البنك".
+  - Account picker is hidden for `credit_invoice_only` / `disabled` rows ("غير مطلوب").
+  - Save sanitiser coerces COD client-side AND validator excludes COD from `unmapped_payment_methods` blockers.
+- **Frontend NEW page `/integrations/qoyod/cod-receipts-report`** — cards (total/with_receipt/without_receipt) + filters + table with red row-highlighting for mismatches.
+- **Sidebar** — new nav entry `nav-qoyod-cod-receipts-report`.
+
+### Tests
+- `/app/backend/tests/test_qoyod_posting_mode_iter293.py` — 39 tests pass (unit + E2E coercion via PUT/GET roundtrip).
+- Testing-agent `iter293_http.py` — 10 additional HTTP smoke tests, 49/49 pass.
+- Iter-291 / Iter-292 backwards-compat verified (no regressions).
+
+### Operator action on Production
+1. Save to GitHub + Deploy to `mezansalla.com`.
+2. Open Settings → Qoyod → طرق الدفع. Verify the COD row shows the 🔒 lock + "آجل" status, and bank_transfer shows the "Legacy" orange badge.
+3. Open the new page from sidebar → "🧾 تقرير COD المُرحَّل كمدفوع".
+4. Filter by date range, identify the wrongly-booked invoices (e.g. order #269349492), and manually void those `invoice_payment` records inside Qoyod's UI. **Mezan does not auto-cleanup Qoyod data.**
+
+### Out of scope (intentionally — moved to Iter-294)
+- `bank_transfer` routing by receiving bank — needs a real payload sample first. Use the new `/admin/bank-transfer-discovery` endpoint to capture candidate field paths from incoming orders.
+
+### Acceptance gate for ZATCA (per user)
+- ✅ COD fixed (credit-invoice-only, no receipt).
+- ⛔ `bank_transfer` still blocked (Legacy mapping warning visible). ZATCA work cannot start until Iter-294 lands.
+
+
+
 ## Iter-291 — Salla OAuth `invalid_scope` Fix (2026-06-30)
 **Symptom**: Merchants get `فشل الربط: invalid_scope` when trying to install Mezan from Salla store. OAuth fails BEFORE any order sync or webhook activity.
 
