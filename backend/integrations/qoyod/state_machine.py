@@ -100,6 +100,8 @@ FAILURE_STAGES: tuple[str, ...] = (
 # The full canonical set (used for Pydantic Literal validation).
 ALL_STAGES: tuple[str, ...] = HAPPY_PATH + (
     SKIPPED, RETRYING, PARTIAL_FAILURE, NEEDS_ENRICHMENT, LEGACY_RECEIPT_CREATED,
+    # Iter-293.4-rev3 — Global Write Lock hold stage.
+    "LOCKED_AWAITING_APPROVAL",
 ) + FAILURE_STAGES
 
 TERMINAL_STAGES: frozenset[str] = frozenset({
@@ -229,6 +231,19 @@ def _build_allowed() -> set[tuple[str, str]]:
     # INVOICE_CREATED (the invoice already exists; only the
     # invoice_payment POST needs to be re-attempted).
     allowed.add((RETRYING, "INVOICE_CREATED"))
+
+    # ─── Iter-293.4-rev3 — LOCKED_AWAITING_APPROVAL hold + release ────
+    # The Global Write Lock parks rows in LOCKED_AWAITING_APPROVAL
+    # at the create_invoice and create_invoice_payment pre-checks.
+    # Operator-driven release via one-shot-reprocess hops:
+    #   LOCKED_AWAITING_APPROVAL → RETRYING → NORMALIZED
+    # (rebuild from scratch — no stale locked_payload reuse).
+    # Pipeline → LOCKED edges: from PRODUCT_RESOLVED (invoice step)
+    # and from INVOICE_CREATED (invoice_payment step).
+    allowed.add(("PRODUCT_RESOLVED",        "LOCKED_AWAITING_APPROVAL"))
+    allowed.add(("INVOICE_CREATED",         "LOCKED_AWAITING_APPROVAL"))
+    allowed.add(("LOCKED_AWAITING_APPROVAL", RETRYING))
+    allowed.add(("LOCKED_AWAITING_APPROVAL", "DEAD_LETTER"))
 
     return allowed
 

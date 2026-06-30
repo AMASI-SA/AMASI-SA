@@ -362,3 +362,165 @@ class TestPhraseTemplateInDocstring:
     def test_template_format(self):
         assert APPROVAL_PHRASE_TEMPLATE.format(
             order_number="X") == "Approved to send order X only"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Iter-293.4-rev3 — LOCKED_AWAITING_APPROVAL support (operator review)
+# ─────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+class TestLockedAwaitingApprovalSupport:
+    """The operator hit `unsupported_current_stage` when trying to
+    one-shot a row that the Global Write Lock had parked in
+    `LOCKED_AWAITING_APPROVAL`. These tests pin the new contract:
+
+      1. LOCKED rows ARE reprocessable via approval phrase.
+      2. The reset path takes the row through RETRYING → NORMALIZED
+         (full rebuild — no stale locked_payload reuse).
+      3. Wrong phrase still refused for LOCKED rows.
+      4. Sendability check refuses if dependencies still unresolved
+         (DRY/PREVIEW/null IDs in the freshly-built request_body).
+    """
+
+    async def _patched_run(self, db, **kwargs):
+        with patch(
+            "integrations.qoyod.one_shot_reprocess.get_api_key",
+            new_callable=AsyncMock, return_value="fake-key",
+        ), patch(
+            "integrations.qoyod.one_shot_reprocess._quarantine_dry_mappings",
+            new_callable=AsyncMock, return_value={"quarantined": 0},
+        ), patch(
+            "integrations.qoyod.one_shot_reprocess._reset_row_to_stage",
+            new_callable=AsyncMock,
+        ), patch(
+            "integrations.qoyod.one_shot_reprocess.process_normalized_row",
+            new_callable=AsyncMock,
+            return_value={"outcome": "SKIPPED",
+                          "reason": "test_stub_short_circuit"},
+        ):
+            return await reprocess_one_order(db, **kwargs)
+
+    async def test_locked_row_is_reprocessable_with_approval(self):
+        db = _DB(locked=True)
+        _seed_inbox(db, order_number="269571122",
+                    trace_id="a89313",
+                    stage="LOCKED_AWAITING_APPROVAL")
+        # Pre-send preview check passes by mock.
+        with patch(
+            "integrations.qoyod.preview_reprocess.preview_reprocess_one_order",
+            new_callable=AsyncMock,
+            return_value={
+                "ok": True,
+                "stages": {
+                    "invoice_preview": {
+                        "dependency_status": {
+                            "sendable": True,
+                            "request_body_unresolved": [],
+                            "status": "ready_to_send",
+                        }}},
+            },
+        ):
+            try:
+                await self._patched_run(
+                    db, user_id="main",
+                    order_number="269571122",
+                    trace_id="a89313",
+                    confirm="REPROCESS-269571122",
+                    approval_phrase="Approved to send order 269571122 only",
+                    actor="op@example.com",
+                )
+            except OneShotRefused as exc:
+                pytest.fail(f"LOCKED row should accept approval: "
+                            f"{exc.code} {exc.message}")
+        assert len(db.qoyod_per_order_approvals.rows) == 1
+
+    async def test_locked_row_refused_with_wrong_phrase(self):
+        db = _DB(locked=True)
+        _seed_inbox(db, order_number="269571122",
+                    trace_id="a89313",
+                    stage="LOCKED_AWAITING_APPROVAL")
+        with patch(
+            "integrations.qoyod.one_shot_reprocess.get_api_key",
+            new_callable=AsyncMock, return_value="fake-key",
+        ), patch(
+            "integrations.qoyod.one_shot_reprocess._quarantine_dry_mappings",
+            new_callable=AsyncMock, return_value={"quarantined": 0},
+        ), patch(
+            "integrations.qoyod.one_shot_reprocess._reset_row_to_stage",
+            new_callable=AsyncMock,
+        ):
+            with pytest.raises(OneShotRefused) as exc:
+                await reprocess_one_order(
+                    db, user_id="main",
+                    order_number="269571122",
+                    trace_id="a89313",
+                    confirm="REPROCESS-269571122",
+                    approval_phrase="wrong phrase",
+                )
+        assert exc.value.code == "approval_phrase_mismatch"
+        assert len(db.qoyod_per_order_approvals.rows) == 0
+
+    async def test_locked_row_refused_when_sendability_fails(self):
+        """Even with valid approval, if pre-send preview shows the
+        request_body still has null/DRY/PREVIEW IDs, REFUSE the send."""
+        db = _DB(locked=True)
+        _seed_inbox(db, order_number="269571122",
+                    trace_id="a89313",
+                    stage="LOCKED_AWAITING_APPROVAL")
+        with patch(
+            "integrations.qoyod.preview_reprocess.preview_reprocess_one_order",
+            new_callable=AsyncMock,
+            return_value={
+                "ok": True,
+                "stages": {
+                    "invoice_preview": {
+                        "dependency_status": {
+                            "sendable": False,
+                            "request_body_unresolved": [
+                                {"field": "line_items[0].product_id",
+                                 "sku": "AMS11961",
+                                 "value": None,
+                                 "reason": "null_or_missing"},
+                            ],
+                            "status": "UNRESOLVED_QOYOD_DEPENDENCY",
+                            "will_create_customer": False,
+                            "will_create_products": [
+                                {"sku": "AMS11961", "would_create": True},
+                            ],
+                        }}},
+            },
+        ):
+            with pytest.raises(OneShotRefused) as exc:
+                await self._patched_run(
+                    db, user_id="main",
+                    order_number="269571122",
+                    trace_id="a89313",
+                    confirm="REPROCESS-269571122",
+                    approval_phrase="Approved to send order 269571122 only",
+                    actor="op@example.com",
+                )
+        assert exc.value.code == "sendability_check_failed"
+        assert "UNRESOLVED_QOYOD_DEPENDENCY" in exc.value.message
+        # The error surfaces the actionable details.
+        assert exc.value.extra["sendable"] is False
+        assert exc.value.extra["status"] == "UNRESOLVED_QOYOD_DEPENDENCY"
+        assert len(exc.value.extra["request_body_unresolved"]) == 1
+        # Approval row WAS persisted (we record the intent even when
+        # the pre-send check rejects, for audit completeness).
+        assert len(db.qoyod_per_order_approvals.rows) == 1
+
+    async def test_state_machine_allows_locked_to_retrying_to_normalized(self):
+        """Direct test on the state machine: the new transitions exist."""
+        from integrations.qoyod.state_machine import (
+            can_transition, ALL_STAGES)
+        assert "LOCKED_AWAITING_APPROVAL" in ALL_STAGES
+        assert can_transition("LOCKED_AWAITING_APPROVAL", "RETRYING") is True
+        assert can_transition("RETRYING", "NORMALIZED") is True
+        assert can_transition("PRODUCT_RESOLVED",
+                              "LOCKED_AWAITING_APPROVAL") is True
+        assert can_transition("INVOICE_CREATED",
+                              "LOCKED_AWAITING_APPROVAL") is True
+
+    async def test_locked_is_in_reprocessable_stages(self):
+        from integrations.qoyod.one_shot_reprocess import (
+            _REPROCESSABLE_STAGES)
+        assert "LOCKED_AWAITING_APPROVAL" in _REPROCESSABLE_STAGES

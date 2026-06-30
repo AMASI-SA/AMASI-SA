@@ -320,7 +320,12 @@ def _resume_target_for(row: dict, *, force_full: bool) -> str:
 # should not be able to mutate live/in-flight rows.
 _REPROCESSABLE_STAGES: frozenset[str] = frozenset(
     {"DEAD_LETTER", "PARTIAL_FAILURE", "NORMALIZED", "NEW", "RECEIVED",
-     "VALIDATED", "ELIGIBLE", "SKIPPED"}
+     "VALIDATED", "ELIGIBLE", "SKIPPED",
+     # Iter-293.4-rev3 — Locked rows are reprocessable via per-order
+     # approval. The reset path takes them through RETRYING → NORMALIZED
+     # so customer/product/preflight/payload are rebuilt from scratch
+     # (NO blind reuse of the stale locked_payload).
+     "LOCKED_AWAITING_APPROVAL"}
     | set(FAILURE_TO_RESUME.keys())
 )
 
@@ -356,7 +361,8 @@ async def _reset_row_to_stage(
     # resume_stage directly when applicable (defensive — most live
     # callers will see DEAD_LETTER / FAILED_* and use the two-hop path).
     needs_retry_hop = (current in FAILURE_TO_RESUME) or \
-                      (current in ("DEAD_LETTER", "PARTIAL_FAILURE"))
+                      (current in ("DEAD_LETTER", "PARTIAL_FAILURE",
+                                   "LOCKED_AWAITING_APPROVAL"))
     if needs_retry_hop:
         try:
             p1 = transition(
@@ -607,6 +613,50 @@ async def reprocess_one_order(
             "approval_id=%s scope=single_order",
             actor, order_number, row.get("trace_id"), approval_id)
         use_unlocked_client = True
+
+    # ── 7b. Iter-293.4-rev3 — Pre-send sendability check ─────────────
+    # Re-run the preview-reprocess to make sure the latest state of
+    # mappings + canonical produces a sendable payload. This catches:
+    #   • DRY/PREVIEW IDs still lurking in product/customer mappings.
+    #   • Order canceled/refunded since the approval was granted.
+    #   • request_body that would contain null contact_id/product_id.
+    # If ANY check fails, refuse to send — even though approval was
+    # granted. The operator must fix the dependencies first.
+    if use_unlocked_client:
+        try:
+            from integrations.qoyod.preview_reprocess import (
+                preview_reprocess_one_order)
+            preview = await preview_reprocess_one_order(
+                db, user_id=user_id, trace_id=row.get("trace_id"))
+        except Exception as _exc:    # pragma: no cover
+            logger.warning("pre-send preview failed: %s", _exc)
+            preview = {"ok": False, "error": str(_exc)}
+        # Surface refusal cleanly if the preview reports not sendable.
+        if preview.get("ok") is True:
+            dep = ((preview.get("stages") or {}).get("invoice_preview")
+                   or {}).get("dependency_status") or {}
+            unresolved = dep.get("request_body_unresolved") or []
+            if dep.get("sendable") is False or unresolved:
+                raise OneShotRefused(
+                    "sendability_check_failed",
+                    ("approval granted but pre-send check found the "
+                     "payload is NOT sendable: " +
+                     (f"{len(unresolved)} unresolved field(s) — " if unresolved else "") +
+                     str(dep.get("status") or "dependency_not_sendable")),
+                    order_number=order_number,
+                    sendable=bool(dep.get("sendable")),
+                    status=dep.get("status"),
+                    request_body_unresolved=unresolved,
+                    will_create_customer=bool(dep.get("will_create_customer")),
+                    will_create_products_count=len(
+                        dep.get("will_create_products") or []),
+                    hint=("Fix DRY/PREVIEW mappings via "
+                          "POST /products/adopt or "
+                          "GET /admin/products/dry-mappings, then "
+                          "retry with the same approval_phrase."),
+                )
+        # else: preview itself errored — let the pipeline below surface
+        # the real failure rather than blocking on a flaky preview run.
 
     api_client = QoyodAPIClient(
         api_key,
