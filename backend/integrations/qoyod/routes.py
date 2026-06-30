@@ -1733,12 +1733,13 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             note = (
                 "القفل مفعل: كل محاولة كتابة لقيود محفوظة هنا للمراجعة. "
                 "لا يتم الإرسال إلا عبر one-shot-reprocess بعد موافقة صريحة.")
-            if explicit_value is None and fail_closed_env:
+            if explicit_value is None:
+                # Fail-closed by default — code-level safety net.
                 note = (
-                    "القفل مفعل (Fail-Closed افتراضي على Production): الحقل "
-                    "production_writes_locked غير مضبوط صراحةً، والـ env "
-                    "QOYOD_FAIL_CLOSED_DEFAULT=true يفرض القفل افتراضياً. "
-                    "هذا يضمن أن أي webhook بعد Deploy لن يكتب لقيود تلقائياً.")
+                    "القفل مفعل (Fail-Closed افتراضي): الحقل "
+                    "production_writes_locked غير مضبوط، والكود يفرض "
+                    "القفل افتراضياً لحماية بيئة قيود الإنتاجية. "
+                    "اضبط الحقل صراحةً (true/false) من إعدادات قيود.")
         else:
             note = ("القفل غير مفعل حالياً — أي كتابة جديدة ستذهب مباشرة "
                     "لقيود. لتفعيل القفل: PUT /settings "
@@ -1751,7 +1752,8 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             "fail_closed_default_enabled":     fail_closed_env,
             "lock_source": (
                 "explicit_setting" if explicit_value is not None
-                else ("env_fail_closed_default" if fail_closed_env else "unlocked_default")
+                else ("fail_closed_default" if fail_closed_env
+                      else "dev_escape_hatch_unlocked")
             ),
             "summary": {
                 "total_blocked_24h":  total_attempts,

@@ -338,16 +338,26 @@ async def count_blocked_attempts_by_action(
 def is_locked(settings: dict | None) -> bool:
     """Single source of truth for the lock flag.
 
-    Iter-293.4 Fail-Closed semantics:
-        • If `production_writes_locked` is explicitly True/False in
-          settings → honour exactly.
-        • If MISSING (None / key absent):
-            – Env `QOYOD_FAIL_CLOSED_DEFAULT=true` → LOCKED.
-            – Otherwise → unlocked (legacy / dev / preview behaviour).
+    Iter-293.4 Fail-Closed-By-Default semantics (hardened 2026-XX after
+    operator review):
 
-    The env-driven default lets Production deploys land already-locked
-    so a webhook can NEVER write to api.qoyod.com during the window
-    between Deploy and the operator explicitly setting the flag.
+        1. Explicit `production_writes_locked: True`  in settings → LOCKED.
+        2. Explicit `production_writes_locked: False` in settings → UNLOCKED.
+        3. Field MISSING (key absent or None):
+             • Default → LOCKED. Production-safe out of the box; a
+               freshly-deployed tenant cannot write to api.qoyod.com
+               until the operator EXPLICITLY sets the flag to False.
+             • Escape hatch for dev/CI: set env
+               `QOYOD_MISSING_FIELD_UNLOCKED=true` to revert to the
+               previous "missing → unlocked" behaviour. Production
+               .env MUST omit this variable.
+             • Legacy env `QOYOD_FAIL_CLOSED_DEFAULT=true` is honoured
+               as a no-op (it now matches the default).
+
+    The previous default (missing → unlocked) was a footgun: a tenant
+    whose `qoyod_settings` doc had not been created yet could receive
+    a webhook BEFORE the operator hit Settings → Save, and the write
+    would slip through. The new default eliminates that race.
     """
     if settings is not None:
         v = settings.get("production_writes_locked")
@@ -355,16 +365,22 @@ def is_locked(settings: dict | None) -> bool:
             return True
         if v is False:
             return False
-    # Explicitly unset — fall back to env-driven default.
-    return os.environ.get(
-        "QOYOD_FAIL_CLOSED_DEFAULT", "").strip().lower() in ("1", "true", "yes")
+    # Field is missing. Honour the dev escape hatch ONLY when it is
+    # explicitly set; otherwise fail-closed.
+    if os.environ.get(
+            "QOYOD_MISSING_FIELD_UNLOCKED", "").strip().lower() in (
+                "1", "true", "yes"):
+        return False
+    return True
 
 
 def fail_closed_default_enabled() -> bool:
-    """Return True if the env-driven fail-closed default is active.
-    Exposed so the operator UI / reports can surface the policy."""
-    return os.environ.get(
-        "QOYOD_FAIL_CLOSED_DEFAULT", "").strip().lower() in ("1", "true", "yes")
+    """Return True when missing-field-defaults-to-locked is the active
+    policy. After the 2026-XX hardening this is ALWAYS True unless
+    `QOYOD_MISSING_FIELD_UNLOCKED=true` is set in the environment."""
+    return not (os.environ.get(
+        "QOYOD_MISSING_FIELD_UNLOCKED", "").strip().lower() in (
+        "1", "true", "yes"))
 
 
 def emit_blocked_log(

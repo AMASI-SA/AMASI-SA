@@ -112,14 +112,35 @@ list_inventories, etc. all keep working).
 - Fail-Closed verified: env `QOYOD_FAIL_CLOSED_DEFAULT=true` + missing
   setting → `is_locked == True`. Explicit `False` always overrides.
 
-### Fail-Closed on Production
-**Operator action required on Production .env:**
-```
-QOYOD_FAIL_CLOSED_DEFAULT=true
-```
-With this set, a webhook arriving BEFORE the operator has explicitly
-set `production_writes_locked` will be refused. Preview/dev .env
-omits the variable so the lock defaults to off.
+### Fail-Closed BY DEFAULT (hardened post-review)
+**Code-level safety net — NO env var required on Production.**
+
+`is_locked(settings)` resolves to:
+| Settings field value | Env `QOYOD_MISSING_FIELD_UNLOCKED` | Result |
+|---|---|---|
+| `True` (explicit)    | (any)              | LOCKED   |
+| `False` (explicit)   | (any)              | UNLOCKED |
+| missing / `None`     | unset / `false`    | **LOCKED** (fail-closed default) |
+| missing / `None`     | `true`             | UNLOCKED (dev/CI escape hatch only) |
+
+Rationale: a freshly-deployed Production tenant whose `qoyod_settings`
+doc has not been created yet would previously allow writes
+(missing → False). The hardened default flips this to LOCKED so
+a webhook arriving BEFORE the operator hits Settings → Save can NEVER
+slip through to api.qoyod.com.
+
+The `QOYOD_MISSING_FIELD_UNLOCKED=true` env var is reserved for
+development / CI use ONLY. Production .env must NOT set it.
+
+### Operator Action on Production
+After Deploy:
+1. **Verify** `GET /api/integrations/qoyod/admin/write-lock-report` shows
+   `production_writes_locked: true` and `lock_source: fail_closed_default`
+   (assuming the settings doc is missing) OR `explicit_setting` if you
+   already set it.
+2. To process a specific order: `POST /admin/preview-reprocess` for review.
+3. To send: explicitly disable the lock per-batch via the existing
+   `one_shot_reprocess` flow + per-order confirm token.
 
 ### Log format (pinned by `TestEmitBlockedLog`)
 ```

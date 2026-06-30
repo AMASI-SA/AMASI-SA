@@ -114,6 +114,9 @@ async def _seed_settings(db, user_id: str) -> None:
             "enabled": True, "auto_send": True, "auto_receipt": True,
             "trigger_once_only": True,
             "dry_run_mode": False,
+            # Iter-293.4 hardening — missing field now defaults to LOCKED.
+            # Existing tests exercise the happy path, so explicitly unlock.
+            "production_writes_locked": False,
             "invoice_trigger_statuses": ["completed"],
             "default_tax_id": "1",
             "default_branch_id": "1",

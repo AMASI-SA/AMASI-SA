@@ -232,62 +232,88 @@ class TestExtractPayloadHints:
 
 
 class TestIsLocked:
-    def test_true_when_set(self):
+    def setup_method(self):
+        self._snap = os.environ.get("QOYOD_MISSING_FIELD_UNLOCKED")
+
+    def teardown_method(self):
+        if self._snap is None:
+            os.environ.pop("QOYOD_MISSING_FIELD_UNLOCKED", None)
+        else:
+            os.environ["QOYOD_MISSING_FIELD_UNLOCKED"] = self._snap
+
+    def test_explicit_true_is_locked(self):
         assert is_locked({"production_writes_locked": True}) is True
 
-    def test_false_by_default(self):
-        # No env override → unlocked when field missing.
-        os.environ.pop("QOYOD_FAIL_CLOSED_DEFAULT", None)
+    def test_explicit_false_is_unlocked(self):
+        assert is_locked({"production_writes_locked": False}) is False
+
+    def test_missing_field_defaults_to_LOCKED(self):
+        """Iter-293.4 hardening: missing field → LOCKED (fail-closed)."""
+        os.environ.pop("QOYOD_MISSING_FIELD_UNLOCKED", None)
+        assert is_locked({}) is True
+        assert is_locked(None) is True
+        assert is_locked({"other_field": "x"}) is True
+
+    def test_missing_field_unlocked_with_dev_escape_hatch(self):
+        """Dev/CI can opt OUT of fail-closed by setting the env var."""
+        os.environ["QOYOD_MISSING_FIELD_UNLOCKED"] = "true"
         assert is_locked({}) is False
         assert is_locked(None) is False
+
+    def test_explicit_false_overrides_dev_default(self):
+        """Even with the env var unset (= fail-closed), an EXPLICIT
+        False in settings means unlocked. Explicit always wins."""
+        os.environ.pop("QOYOD_MISSING_FIELD_UNLOCKED", None)
         assert is_locked({"production_writes_locked": False}) is False
 
 
 class TestFailClosedDefault:
-    """Iter-293.4 Fail-Closed semantics for Production deploys."""
+    """Iter-293.4 — confirm the fail-closed-by-default policy is active
+    out of the box and the dev escape hatch toggles correctly."""
 
     def setup_method(self):
-        # Snapshot existing env to restore in teardown.
-        self._snapshot = os.environ.get("QOYOD_FAIL_CLOSED_DEFAULT")
+        self._snap = os.environ.get("QOYOD_MISSING_FIELD_UNLOCKED")
 
     def teardown_method(self):
-        if self._snapshot is None:
-            os.environ.pop("QOYOD_FAIL_CLOSED_DEFAULT", None)
+        if self._snap is None:
+            os.environ.pop("QOYOD_MISSING_FIELD_UNLOCKED", None)
         else:
-            os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = self._snapshot
+            os.environ["QOYOD_MISSING_FIELD_UNLOCKED"] = self._snap
 
-    def test_missing_field_with_env_true_means_locked(self):
-        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "true"
-        # Empty settings dict (Production deploy day-0 state).
+    def test_default_is_fail_closed(self):
+        """No env vars set → fail_closed_default_enabled() is True."""
+        os.environ.pop("QOYOD_MISSING_FIELD_UNLOCKED", None)
+        assert fail_closed_default_enabled() is True
+        # And practically: missing settings field → LOCKED.
         assert is_locked({}) is True
-        assert is_locked(None) is True
 
-    def test_missing_field_with_env_false_means_unlocked(self):
-        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "false"
+    def test_dev_escape_hatch_disables_fail_closed(self):
+        os.environ["QOYOD_MISSING_FIELD_UNLOCKED"] = "true"
+        assert fail_closed_default_enabled() is False
         assert is_locked({}) is False
 
-    def test_explicit_false_overrides_env_default(self):
-        """Operator can EXPLICITLY unlock in Preview even when env says
-        fail-closed. The explicit value always wins."""
-        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "true"
-        assert is_locked({"production_writes_locked": False}) is False
-
-    def test_explicit_true_with_env_unset_means_locked(self):
-        os.environ.pop("QOYOD_FAIL_CLOSED_DEFAULT", None)
-        assert is_locked({"production_writes_locked": True}) is True
-
-    def test_env_accepts_multiple_truthy_values(self):
+    def test_dev_escape_hatch_accepts_multiple_truthy_values(self):
         for v in ("true", "TRUE", "1", "yes", "Yes"):
-            os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = v
-            assert is_locked({}) is True, f"failed for value={v!r}"
+            os.environ["QOYOD_MISSING_FIELD_UNLOCKED"] = v
+            assert is_locked({}) is False, f"failed for value={v!r}"
+        os.environ["QOYOD_MISSING_FIELD_UNLOCKED"] = "false"
+        assert is_locked({}) is True
+        os.environ["QOYOD_MISSING_FIELD_UNLOCKED"] = ""
+        assert is_locked({}) is True
 
-    def test_fail_closed_default_enabled_reports_correctly(self):
-        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "true"
-        assert fail_closed_default_enabled() is True
-        os.environ["QOYOD_FAIL_CLOSED_DEFAULT"] = "false"
-        assert fail_closed_default_enabled() is False
-        os.environ.pop("QOYOD_FAIL_CLOSED_DEFAULT", None)
-        assert fail_closed_default_enabled() is False
+    def test_production_deploy_day_zero_is_locked(self):
+        """Scenario: fresh tenant on Production, NO qoyod_settings doc
+        in MongoDB yet, NO env vars set. The very first webhook MUST
+        be blocked."""
+        os.environ.pop("QOYOD_MISSING_FIELD_UNLOCKED", None)
+        # Mimics what `_load_settings` would return for a fresh tenant.
+        fresh_settings = {
+            "invoice_trigger_statuses": ["completed"],
+            "trigger_once_only": True,
+            "dry_run_mode": False,
+            # NOTE: no `production_writes_locked` key.
+        }
+        assert is_locked(fresh_settings) is True
 
 
 class TestEmitBlockedLog:
