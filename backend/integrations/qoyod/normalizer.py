@@ -571,6 +571,18 @@ def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrde
     # name in their order API). We also accept two common fallbacks
     # used by older webhook payloads / Make pass-throughs.
     #
+    # CRITICAL POLICY (user, 2026-06-30): the fee is ONLY recognised
+    # when it comes from an EXPLICIT, named field in the payload. We
+    # NEVER infer it from `total - sum(items)`. The mismatch guard
+    # downstream raises `MISSING_ORDER_LEVEL_CHARGE` in that case so
+    # the operator can investigate (often the Make scenario needs to
+    # be updated to forward the full `amounts` object).
+    #
+    # The `cod_fee_source_path` + `cod_fee_source_type` fields make
+    # this audit-grade: every populated cod_fee_amount carries proof
+    # of where it came from, and `inferred_from_delta` is ALWAYS False
+    # for this code path (no delta-based fallback exists).
+    #
     # Anything we DON'T recognise stays in `extra_charges` for the
     # diagnostic block — so if Salla introduces a new fee key tomorrow
     # (e.g. `installment_fee`), the operator sees it immediately
@@ -581,11 +593,21 @@ def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrde
         "shipping_cost", "discount", "discounts",
         "cash_on_delivery", "cod_fee", "payment_fee",
     }
-    cod_fee_amount = _money(
-        amounts.get("cash_on_delivery")
-        or amounts.get("cod_fee")
-        or amounts.get("payment_fee")
-    )
+    cod_fee_amount = 0.0
+    cod_fee_source_path: Optional[str] = None
+    cod_fee_source_type: Optional[str] = None
+    # Probe each candidate key in priority order. The first hit with a
+    # non-zero numeric amount wins; we record the exact JSON path so
+    # the auditor can replay the normalisation against the stored
+    # payload.
+    for _key in ("cash_on_delivery", "cod_fee", "payment_fee"):
+        if _key in amounts:
+            _val = _money(amounts.get(_key))
+            if _val and _val > 0:
+                cod_fee_amount = _val
+                cod_fee_source_path = f"data.amounts.{_key}"
+                cod_fee_source_type = "explicit_payload"
+                break
     extra_charges: dict = {}
     if isinstance(amounts, dict):
         for k, v in amounts.items():
@@ -648,7 +670,11 @@ def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrde
         ),
         total_amount=_money(amounts.get("total")),
         # Iter-293.1 — Order-level extra charges (extracted above).
+        # cod_fee_source_path/type are ONLY set when an explicit payload
+        # field was found — never inferred from totals math.
         cod_fee_amount=cod_fee_amount,
+        cod_fee_source_path=cod_fee_source_path,
+        cod_fee_source_type=cod_fee_source_type,
         extra_charges=extra_charges,
         customer=_normalize_customer(data, order_number=order_number),
         items=items,

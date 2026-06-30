@@ -528,9 +528,15 @@ async def process_customer_resolved_row(
             if cod_fee_missing_product:
                 err = {
                     "code":    "MISSING_COD_FEE_PRODUCT_ID",
+                    "cod_fee_detected":    True,
+                    "cod_fee_amount":      cod_fee_amt,
+                    "cod_fee_source_path": invoice_diagnostics.get("cod_fee_source_path"),
+                    "cod_fee_source_type": invoice_diagnostics.get("cod_fee_source_type"),
+                    "inferred_from_delta": False,
                     "message": (
-                        f"الطلب يحوي رسوم COD = {cod_fee_amt} SAR لكن "
-                        "إعدادات قيود لا تحوي `default_cod_fee_product_id`. "
+                        f"الطلب يحوي رسوم COD = {cod_fee_amt} SAR (من مصدر "
+                        f"{invoice_diagnostics.get('cod_fee_source_path')}) "
+                        "لكن إعدادات قيود لا تحوي `default_cod_fee_product_id`. "
                         "افتح إعدادات قيود → معرّفات افتراضية، وأضف منتج "
                         "قيود لرسوم COD (SKU = MEZAN_COD_FEE)."
                     ),
@@ -539,6 +545,9 @@ async def process_customer_resolved_row(
             elif is_cod and cod_fee_amt == 0:
                 err = {
                     "code":            "MISSING_ORDER_LEVEL_CHARGE",
+                    "cod_fee_detected": False,
+                    "inferred_from_delta": True,  # the delta exists but
+                                                  # we REFUSE to act on it
                     "salla_total":     invoice_diagnostics.get("salla_total"),
                     "items_total":     invoice_diagnostics.get("expected_qoyod_total"),
                     "missing_delta":   round(diff, 2),
@@ -549,9 +558,10 @@ async def process_customer_resolved_row(
                         f"({invoice_diagnostics.get('salla_total')}) "
                         f"وإجمالي أسطر المنتجات "
                         f"({invoice_diagnostics.get('expected_qoyod_total')}) "
-                        f"يبدو أنه رسوم COD غير مرسلة في الـ payload. "
-                        "تحقق من سيناريو Make: تأكد أن `amounts.cash_on_delivery` "
-                        "ضمن البيانات المُرسَلة إلى ميزان."
+                        f"غير مدعوم بحقل صريح في Payload. "
+                        "لن يُحوَّل تلقائياً إلى COD Fee — قد يحتاج "
+                        "سيناريو Make إعادة ضبط ليُرسل `amounts.cash_on_delivery` "
+                        "أو أي حقل رسوم أصلي من سلة."
                     ),
                     "diagnostics": invoice_diagnostics,
                 }

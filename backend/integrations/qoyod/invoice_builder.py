@@ -494,8 +494,20 @@ def build_invoice_payload(
         "qoyod_tax_percent_used":     tax_percent,
         "line_diagnostics":           line_diagnostics,
         # Iter-293.1 — Order-level extra charge breadcrumbs.
+        # AUDIT INVARIANTS:
+        #   • `inferred_from_delta` is ALWAYS False — the code never
+        #     guesses the COD fee from `total - sum(items)`. It only
+        #     ever reads explicit payload fields (proven by
+        #     `cod_fee_source_path`).
+        #   • When `cod_fee_detected` is False but the math doesn't
+        #     close, the pipeline guard raises MISSING_ORDER_LEVEL_CHARGE
+        #     (NOT MISSING_COD_FEE_PRODUCT_ID).
         "cod_fee_amount":             cod_fee_amount,
+        "cod_fee_detected":           cod_fee_amount > 0,
+        "cod_fee_source_path":        dto_dict.get("cod_fee_source_path"),
+        "cod_fee_source_type":        dto_dict.get("cod_fee_source_type"),
         "cod_fee_missing_product":    cod_fee_missing_product,
+        "inferred_from_delta":        False,
         "extra_charges":              dict(dto_dict.get("extra_charges") or {}),
     }
     return {"invoice": invoice, "_diagnostics": diagnostics}

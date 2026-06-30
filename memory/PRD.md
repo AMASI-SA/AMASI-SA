@@ -1,5 +1,74 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-293.1 — COD Fee as Separate Line + Audit-Grade Sourcing (2026-06-30)
+
+**Symptom**: COD order `269532761` fell into DEAD_LETTER with `invoice_total_mismatch_before_post`. Salla total = 174.91, sum(items) = 169.89, delta = 5.02 SAR — the missing **COD fee**, an order-level charge not present in `items[]`.
+
+**Root cause**: Normalizer extracted only `subtotal/tax/shipping/discount/total` from `amounts`. Order-level fees (COD fee, payment fee, etc.) were silently dropped, and the totals-guard correctly refused to send a mismatched invoice.
+
+### What changed
+- **`dto.py`** — three new fields on `SalesOrderDTO`:
+  - `cod_fee_amount: float` — value from explicit payload key.
+  - `cod_fee_source_path: Optional[str]` — exact JSON path the value came from (e.g. `data.amounts.cash_on_delivery`). Audit-proof.
+  - `cod_fee_source_type: Optional[str]` — `"explicit_payload"` (or future `"salla_full_fetch"`). NEVER `"inferred_from_delta"` — that code path does not exist.
+  - `extra_charges: dict` — verbatim capture of every unrecognised key in `amounts` (forward-compat for new Salla fee fields).
+- **`normalizer.py`** — probes `amounts.cash_on_delivery` → `cod_fee` → `payment_fee` in priority order. First positive value wins. Records the JSON path for auditing. Zero values produce no source attribution.
+- **`invoice_builder.py`**:
+  - When `cod_fee_amount > 0` AND `default_cod_fee_product_id` configured → adds line **"رسوم الدفع عند الاستلام (COD Fee)"** with `discount` glue so the line's gross matches the fee exactly (no double-tax). Net mechanism identical to the existing shipping-line math.
+  - When `cod_fee_amount > 0` but no product id → emits `_COD_FEE_MISSING_PRODUCT_ID_` diagnostic line and lets the guard refuse.
+  - Diagnostics now expose: `cod_fee_detected`, `cod_fee_source_path`, `cod_fee_source_type`, `cod_fee_missing_product`, `inferred_from_delta: false` (always — invariant).
+- **`pipeline.py`** — error codes now distinguish three failure modes:
+  - `MISSING_COD_FEE_PRODUCT_ID` — explicit COD fee detected, operator needs to configure the Qoyod product.
+  - `MISSING_ORDER_LEVEL_CHARGE` — payment_method=COD but NO explicit fee field + total mismatches. Carries `suspected_charge: "cod_fee"`, `missing_delta`, and `inferred_from_delta: true` (meaning "we COULD have guessed but REFUSED"). Operator needs to fix Make scenario to forward `amounts`.
+  - `invoice_total_mismatch_before_post` — legacy fall-through (non-COD orders only).
+- **`routes.py`** — Settings model accepts `default_cod_fee_product_id`.
+- **`QoyodSettings.jsx`** — save() persists `default_cod_fee_product_id`.
+- **NEW tests** (`/app/backend/tests/test_qoyod_cod_fee_iter293_1.py`) — 11 tests:
+  - Normalizer extracts from all 3 candidate keys + records source path.
+  - Zero/missing keys produce `source_path = None` (never invents a source).
+  - Invoice builder adds line ONLY when explicit source exists, even if product id is configured.
+  - Regression: non-COD paid orders still flow through unchanged.
+  - Diagnostic asserts `inferred_from_delta: False` always.
+
+### Audit guarantees (user-mandated invariants)
+1. **No silent delta-to-COD-fee conversion.** The code has no path that infers `cod_fee_amount` from `total - sum(items)`. Proven by the test `test_no_explicit_source_means_no_cod_line_even_if_product_configured`.
+2. **Every populated cod_fee carries a JSON path.** `cod_fee_source_path` is None ⇔ `cod_fee_amount == 0`. Auditor can replay the path against the stored payload.
+3. **Distinct error codes per failure mode.** Operators see exactly what's wrong (product missing vs. Make scenario incomplete) instead of a generic mismatch.
+4. **Forward-compat.** Any new fee key in `amounts` (e.g. `installment_fee`) is captured into `extra_charges` for visibility; the guard catches the resulting mismatch.
+
+### Acceptance test (run on Production after Deploy)
+1. Create Qoyod product: name="رسوم الدفع عند الاستلام", SKU=`MEZAN_COD_FEE`, type=Service, no inventory.
+2. Set `default_cod_fee_product_id=<that_product_id>` via Settings PUT (or UI when added).
+3. Reprocess order 269532761 OR create a new COD order with `amounts.cash_on_delivery > 0`.
+4. Verify in Qoyod:
+   - Invoice total = Salla total (e.g. 174.91).
+   - 3 invoice lines: 2 items + COD Fee.
+   - No invoice_payment / receipt (credit_invoice_only branch).
+   - Remaining amount = invoice total.
+5. Verify `inbox.qoyod_payloads.invoice_diagnostics`:
+   - `cod_fee_detected: true`
+   - `cod_fee_source_path: "data.amounts.cash_on_delivery"`
+   - `inferred_from_delta: false`
+
+### If acceptance test STILL fails
+If a COD order arrives WITHOUT `amounts.cash_on_delivery` (or `cod_fee`/`payment_fee`) and has a delta:
+- Guard raises `MISSING_ORDER_LEVEL_CHARGE` (not a generic mismatch).
+- Action: fix Make.com scenario to forward the full `amounts` object, OR enable Salla Full Fetch integration (future Iter) to fill the gap server-side. Mezan will NOT auto-balance the difference.
+
+### Acceptance gate update
+```
+Paid orders OK                             ✅
+COD invoice (explicit fee + product id)    ✅ in code, ⏳ on Production
+COD failure modes (specific codes)         ✅
+Audit invariants (no delta inference)      ✅
+bank_transfer routing (Iter-294)           ⛔ blocked on Production payload
+waiting status exclude                     ⛔
+simulator_version verify                   ⛔
+ZATCA                                      🚫
+```
+
+
+
 ## Iter-293 — COD = Credit Invoice Only (2026-06-30)
 **Symptom**: COD (Cash-on-Delivery) orders were wrongly booked as PAID in Qoyod (balance=0 + invoice_payment), because the pipeline blindly created `/invoice_payments` for every order mapped to a Qoyod account.
 

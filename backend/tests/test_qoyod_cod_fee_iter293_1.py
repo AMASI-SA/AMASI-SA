@@ -81,6 +81,9 @@ class TestNormalizerExtractsCodFee:
         assert dto.cod_fee_amount == 5.02, (
             f"expected 5.02, got {dto.cod_fee_amount}")
         assert dto.total_amount == 174.91
+        # AUDIT: explicit source must be traceable.
+        assert dto.cod_fee_source_path == "data.amounts.cash_on_delivery"
+        assert dto.cod_fee_source_type == "explicit_payload"
 
     def test_cod_fee_fallback_to_cod_fee_key(self):
         p = _order_269532761_payload()
@@ -88,6 +91,8 @@ class TestNormalizerExtractsCodFee:
         p["data"]["amounts"]["cod_fee"] = {"amount": 5.02, "currency": "SAR"}
         dto = normalize(p)
         assert dto.cod_fee_amount == 5.02
+        assert dto.cod_fee_source_path == "data.amounts.cod_fee"
+        assert dto.cod_fee_source_type == "explicit_payload"
 
     def test_cod_fee_fallback_to_payment_fee_key(self):
         p = _order_269532761_payload()
@@ -95,12 +100,17 @@ class TestNormalizerExtractsCodFee:
         p["data"]["amounts"]["payment_fee"] = {"amount": 5.02, "currency": "SAR"}
         dto = normalize(p)
         assert dto.cod_fee_amount == 5.02
+        assert dto.cod_fee_source_path == "data.amounts.payment_fee"
 
     def test_no_cod_fee_returns_zero_not_none(self):
         p = _order_269532761_payload()
         p["data"]["amounts"].pop("cash_on_delivery")
         dto = normalize(p)
         assert dto.cod_fee_amount == 0.0
+        # AUDIT: when no explicit source, BOTH must be None — proves
+        # the normalizer never invents a source.
+        assert dto.cod_fee_source_path is None
+        assert dto.cod_fee_source_type is None
 
     def test_unknown_amount_keys_captured_in_extra_charges(self):
         """Forward-compat: if Salla introduces a new fee key tomorrow,
@@ -119,16 +129,36 @@ class TestNormalizerExtractsCodFee:
         assert "cash_on_delivery" not in dto.extra_charges
         assert "total" not in dto.extra_charges
 
+    def test_zero_explicit_fee_does_not_trigger_source(self):
+        """If `cash_on_delivery` exists but equals 0, source must NOT
+        be set — only positive explicit values count as 'detected'."""
+        p = _order_269532761_payload()
+        p["data"]["amounts"]["cash_on_delivery"] = {"amount": 0, "currency": "SAR"}
+        dto = normalize(p)
+        assert dto.cod_fee_amount == 0.0
+        assert dto.cod_fee_source_path is None
+
 
 # ── Invoice builder ──────────────────────────────────────────────────
-def _dto_dict_for_builder(*, cod_fee=5.02, shipping=0.0) -> dict:
-    """Shape the builder expects (dict, not the DTO model)."""
+def _dto_dict_for_builder(*, cod_fee=5.02, shipping=0.0,
+                          cod_fee_source_path=None, cod_fee_source_type=None) -> dict:
+    """Shape the builder expects (dict, not the DTO model).
+
+    `cod_fee_source_path`/`cod_fee_source_type` mirror the audit fields
+    the normalizer sets when an EXPLICIT payload field was found. When
+    `cod_fee=0`, these MUST be None too.
+    """
+    if cod_fee > 0 and cod_fee_source_path is None:
+        cod_fee_source_path = "data.amounts.cash_on_delivery"
+        cod_fee_source_type = "explicit_payload"
     return {
         "order_id":      "269532761",
         "order_number":  "269532761",
         "total_amount":  174.91,
         "shipping_amount": shipping,
         "cod_fee_amount": cod_fee,
+        "cod_fee_source_path": cod_fee_source_path,
+        "cod_fee_source_type": cod_fee_source_type,
         "currency":      "SAR",
         "items": [
             {"sku": "A1", "name": "Item A", "quantity": 1,
@@ -176,7 +206,11 @@ class TestInvoiceBuilderCodFeeLine:
         assert abs(diag["difference"]) < 0.10, (
             f"after adding COD line, mismatch persists: {diag}")
         assert diag["cod_fee_amount"] == 5.02
+        assert diag["cod_fee_detected"] is True
+        assert diag["cod_fee_source_path"] == "data.amounts.cash_on_delivery"
+        assert diag["cod_fee_source_type"] == "explicit_payload"
         assert diag["cod_fee_missing_product"] is False
+        assert diag["inferred_from_delta"] is False
 
     def test_cod_fee_missing_product_flagged_in_diagnostics(self):
         result = self._call_builder(
@@ -187,14 +221,46 @@ class TestInvoiceBuilderCodFeeLine:
         diag = result["_diagnostics"]
         assert diag["cod_fee_missing_product"] is True
         assert abs(diag["difference"]) >= 0.10
+        assert diag["cod_fee_detected"] is True
+        assert diag["cod_fee_source_path"] == "data.amounts.cash_on_delivery"
+        assert diag["inferred_from_delta"] is False
         skus = [d.get("sku") for d in diag["line_diagnostics"]]
         assert "_COD_FEE_MISSING_PRODUCT_ID_" in skus
+
+    def test_no_explicit_source_means_no_cod_line_even_if_product_configured(self):
+        """AUDIT-CRITICAL: if the payload didn't carry an explicit
+        cod_fee field, the builder MUST NOT add a COD line — even
+        when `default_cod_fee_product_id` is set. The mismatch must
+        propagate so the pipeline raises MISSING_ORDER_LEVEL_CHARGE.
+
+        This is the regression test for the user's mandate (2026-06-30):
+        "never auto-convert delta to COD Fee".
+        """
+        result = self._call_builder(
+            # cod_fee=0 (no explicit source). Source fields stay None.
+            _dto_dict_for_builder(cod_fee=0.0,
+                                  cod_fee_source_path=None,
+                                  cod_fee_source_type=None),
+            {"invoice_total_policy": "match_salla_total",
+             "default_cod_fee_product_id": "999",  # configured but unused
+             "qoyod_tax_percent": 0},
+        )
+        diag = result["_diagnostics"]
+        assert diag["cod_fee_detected"] is False
+        assert diag["cod_fee_source_path"] is None
+        assert diag["cod_fee_source_type"] is None
+        assert diag["inferred_from_delta"] is False
+        # No COD line added.
+        descs = [l.get("description") for l in result["invoice"]["line_items"]]
+        assert all("COD Fee" not in (d or "") for d in descs), (
+            f"COD line wrongly added without explicit source: {descs}")
 
     def test_no_cod_fee_zero_diff_for_paid_order(self):
         result = self._call_builder(
             {"order_id": "1001", "order_number": "1001",
              "total_amount": 100.0, "shipping_amount": 0,
              "cod_fee_amount": 0.0, "currency": "SAR",
+             "cod_fee_source_path": None, "cod_fee_source_type": None,
              "items": [{"sku": "X", "name": "X", "quantity": 1,
                         "price": 100.0, "total": 100.0,
                         "tax_amount": 0.0, "discount_amount": 0.0}],
@@ -204,7 +270,9 @@ class TestInvoiceBuilderCodFeeLine:
         )
         diag = result["_diagnostics"]
         assert diag["cod_fee_amount"] == 0.0
+        assert diag["cod_fee_detected"] is False
         assert diag["cod_fee_missing_product"] is False
+        assert diag["inferred_from_delta"] is False
         assert abs(diag["difference"]) < 0.10
 
 

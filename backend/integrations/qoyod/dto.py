@@ -111,7 +111,20 @@ class SalesOrderDTO(BaseModel):
     # invoice_builder MUST add a dedicated line ("رسوم الدفع عند الاستلام")
     # so the Qoyod total matches Salla's total — otherwise the totals
     # guard refuses to send the invoice.
-    cod_fee_amount:   float = 0.0
+    #
+    # AUDIT FIELDS (user policy 2026-06-30): the COD fee is ONLY ever
+    # populated from an EXPLICIT payload field. We NEVER infer it from
+    # `total - sum(items)`. These two fields prove the source:
+    #
+    #   • cod_fee_source_path : the exact JSON path the value came from
+    #       (e.g. "data.amounts.cash_on_delivery"). None when no fee.
+    #   • cod_fee_source_type : "explicit_payload" | "salla_full_fetch"
+    #       | None. NEVER "inferred_from_delta" — that path doesn't
+    #       exist in the code (the guard raises MISSING_ORDER_LEVEL_CHARGE
+    #       in those cases).
+    cod_fee_amount:       float = 0.0
+    cod_fee_source_path:  Optional[str] = None
+    cod_fee_source_type:  Optional[str] = None
     # `extra_charges` — any *other* unrecognised key inside `amounts`,
     # captured verbatim for diagnostics. The pipeline does NOT consume
     # these for arithmetic; they exist so operators can spot a new
