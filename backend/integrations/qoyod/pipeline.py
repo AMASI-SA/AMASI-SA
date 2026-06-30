@@ -503,15 +503,68 @@ async def process_customer_resolved_row(
             and invoice_diagnostics.get("pricing_mode") == "match_salla_total"):
         diff = abs(float(invoice_diagnostics.get("difference") or 0.0))
         if diff > 0.10:
-            err = {
-                "code":    "invoice_total_mismatch_before_post",
-                "message": (f"منع الإرسال (Iter-290e): الفرق بين إجمالي قيود "
-                            f"المتوقع ({invoice_diagnostics.get('expected_qoyod_total')}) "
-                            f"وإجمالي سلة ({invoice_diagnostics.get('salla_total')}) "
-                            f"= {diff:.2f} SAR > 0.10. لن تُنشأ فاتورة بمبلغ "
-                            f"غير مطابق للمبلغ المدفوع."),
-                "diagnostics": invoice_diagnostics,
-            }
+            # ── Iter-293.1 — Refine the error code so operators see a
+            # specific actionable diagnostic instead of a generic
+            # "mismatch". Three cases, ordered by specificity:
+            #
+            #   (a) COD fee exists but `default_cod_fee_product_id` is
+            #       missing → MISSING_COD_FEE_PRODUCT_ID.
+            #   (b) Diff is large AND payment_method is COD AND no
+            #       cod_fee surfaced in the payload → strong signal
+            #       that Make.com / Salla webhook isn't sending the
+            #       order-level fee. MISSING_ORDER_LEVEL_CHARGE with
+            #       suspected_charge=cod_fee.
+            #   (c) Anything else → fall back to the legacy mismatch
+            #       code (defensive — should never fire on COD orders
+            #       after the two checks above).
+            cod_fee_amt = float(invoice_diagnostics.get("cod_fee_amount") or 0.0)
+            cod_fee_missing_product = bool(
+                invoice_diagnostics.get("cod_fee_missing_product"))
+            pm = (canonical.get("payment_method")
+                  or canonical.get("payment_method_native") or "").lower()
+            from .payment_methods import is_cod_family
+            is_cod = is_cod_family(pm)
+
+            if cod_fee_missing_product:
+                err = {
+                    "code":    "MISSING_COD_FEE_PRODUCT_ID",
+                    "message": (
+                        f"الطلب يحوي رسوم COD = {cod_fee_amt} SAR لكن "
+                        "إعدادات قيود لا تحوي `default_cod_fee_product_id`. "
+                        "افتح إعدادات قيود → معرّفات افتراضية، وأضف منتج "
+                        "قيود لرسوم COD (SKU = MEZAN_COD_FEE)."
+                    ),
+                    "diagnostics": invoice_diagnostics,
+                }
+            elif is_cod and cod_fee_amt == 0:
+                err = {
+                    "code":            "MISSING_ORDER_LEVEL_CHARGE",
+                    "salla_total":     invoice_diagnostics.get("salla_total"),
+                    "items_total":     invoice_diagnostics.get("expected_qoyod_total"),
+                    "missing_delta":   round(diff, 2),
+                    "payment_method":  pm,
+                    "suspected_charge": "cod_fee",
+                    "message": (
+                        f"الفرق {diff:.2f} SAR بين إجمالي سلة "
+                        f"({invoice_diagnostics.get('salla_total')}) "
+                        f"وإجمالي أسطر المنتجات "
+                        f"({invoice_diagnostics.get('expected_qoyod_total')}) "
+                        f"يبدو أنه رسوم COD غير مرسلة في الـ payload. "
+                        "تحقق من سيناريو Make: تأكد أن `amounts.cash_on_delivery` "
+                        "ضمن البيانات المُرسَلة إلى ميزان."
+                    ),
+                    "diagnostics": invoice_diagnostics,
+                }
+            else:
+                err = {
+                    "code":    "invoice_total_mismatch_before_post",
+                    "message": (f"منع الإرسال (Iter-290e): الفرق بين إجمالي قيود "
+                                f"المتوقع ({invoice_diagnostics.get('expected_qoyod_total')}) "
+                                f"وإجمالي سلة ({invoice_diagnostics.get('salla_total')}) "
+                                f"= {diff:.2f} SAR > 0.10. لن تُنشأ فاتورة بمبلغ "
+                                f"غير مطابق للمبلغ المدفوع."),
+                    "diagnostics": invoice_diagnostics,
+                }
             await db.integration_inbox.update_one(
                 {"id": row["id"]},
                 {"$set": {
@@ -526,7 +579,7 @@ async def process_customer_resolved_row(
             )
             return {
                 "row_id":  row["id"], "outcome": "DEAD_LETTER",
-                "reason":  "invoice_total_mismatch_before_post",
+                "reason":  err["code"],
                 "trace_id": trace_id,
             }
 

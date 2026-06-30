@@ -102,6 +102,21 @@ class SalesOrderDTO(BaseModel):
     shipping_amount:  float = 0.0
     discount_amount:  float = 0.0
     total_amount:     float = 0.0
+    # Iter-293.1 — Order-level extra charges (NOT in line-items).
+    #
+    # `cod_fee_amount` — Cash-on-Delivery service fee that Salla charges
+    # the customer separately from items. Appears in payload as
+    # `amounts.cash_on_delivery` (Salla's canonical field name) but we
+    # also accept `cod_fee` / `payment_fee` as fallbacks. When > 0 the
+    # invoice_builder MUST add a dedicated line ("رسوم الدفع عند الاستلام")
+    # so the Qoyod total matches Salla's total — otherwise the totals
+    # guard refuses to send the invoice.
+    cod_fee_amount:   float = 0.0
+    # `extra_charges` — any *other* unrecognised key inside `amounts`,
+    # captured verbatim for diagnostics. The pipeline does NOT consume
+    # these for arithmetic; they exist so operators can spot a new
+    # Salla field that's silently inflating the total.
+    extra_charges:    dict  = Field(default_factory=dict)
 
     # Parties
     customer: CustomerDTO

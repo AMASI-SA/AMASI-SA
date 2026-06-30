@@ -377,6 +377,53 @@ def build_invoice_payload(
                 "fallback_used": False,
             })
 
+    # ── Iter-293.1 — Cash-on-Delivery fee as its own invoice line ────
+    # Salla emits the COD fee at the order level (`amounts.cash_on_delivery`).
+    # The normalizer surfaces it as `dto.cod_fee_amount`. Without a
+    # dedicated invoice line, the totals-guard would refuse to send
+    # the invoice (the line-items sum would be 5.02 SAR short of the
+    # Salla total). User policy (2026-06-30): COD fee is a SEPARATE
+    # service line under SKU MEZAN_COD_FEE — never lumped into shipping
+    # or absorbed into an item discount, because its accounting
+    # category (revenue / payment-processing income) differs.
+    cod_fee_amount = round(_f(dto_dict.get("cod_fee_amount")), 2)
+    cod_fee_missing_product = False
+    if cod_fee_amount > 0 and policy == "match_salla_total":
+        cod_fee_product_id = _to_int_or_none(
+            settings.get("default_cod_fee_product_id"))
+        if cod_fee_product_id is not None:
+            # Same gross→net math as item lines so the final invoice
+            # total still lands exactly on Salla's total_amount.
+            cod_fee_net = round(cod_fee_amount / tax_factor, 4)
+            lines.append({
+                "product_id":    cod_fee_product_id,
+                "description":   "رسوم الدفع عند الاستلام (COD Fee)",
+                "quantity":      1,
+                "unit_price":    round(cod_fee_amount, 4),
+                "discount":      round(cod_fee_amount - cod_fee_net, 4),
+                "discount_type": "amount",
+                "tax_percent":   tax_percent,
+            })
+            line_diagnostics.append({
+                "sku":         "MEZAN_COD_FEE",
+                "salla_total": cod_fee_amount,
+                "computed_qoyod_gross": round(
+                    (cod_fee_amount - (cod_fee_amount - cod_fee_net))
+                    * tax_factor, 2),
+                "fallback_used": False,
+            })
+        else:
+            # Operator hasn't created the COD-fee product in Qoyod yet.
+            # Mark in diagnostics so the pre-POST guard refuses with a
+            # specific operator-actionable error (NOT a generic mismatch).
+            cod_fee_missing_product = True
+            line_diagnostics.append({
+                "sku":         "_COD_FEE_MISSING_PRODUCT_ID_",
+                "salla_total": cod_fee_amount,
+                "computed_qoyod_gross": 0.0,
+                "fallback_used": False,
+            })
+
     invoice: dict = {
         "contact_id":     _to_int_or_none(qoyod_customer_id),
         "issue_date":     invoice_date.date().isoformat() if invoice_date else None,
@@ -446,6 +493,10 @@ def build_invoice_payload(
         "salla_tax_percent_detected": salla_tax_percent_detected,
         "qoyod_tax_percent_used":     tax_percent,
         "line_diagnostics":           line_diagnostics,
+        # Iter-293.1 — Order-level extra charge breadcrumbs.
+        "cod_fee_amount":             cod_fee_amount,
+        "cod_fee_missing_product":    cod_fee_missing_product,
+        "extra_charges":              dict(dto_dict.get("extra_charges") or {}),
     }
     return {"invoice": invoice, "_diagnostics": diagnostics}
 

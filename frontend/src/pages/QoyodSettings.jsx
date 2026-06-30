@@ -1108,6 +1108,12 @@ export default function QoyodSettings() {
         default_sales_account_id:     (settings.default_sales_account_id || "").trim() || null,
         // Iter-290 — Qoyod-required warehouse id on every invoice line.
         default_inventory_id:         (settings.default_inventory_id || "").trim() || null,
+        // Iter-293.1 — COD-fee product id (Qoyod product representing
+        // the "رسوم الدفع عند الاستلام" charge). Required only when
+        // incoming COD orders carry `amounts.cash_on_delivery > 0`.
+        default_cod_fee_product_id:   (settings.default_cod_fee_product_id || "").trim() || null,
+        // Optional shipping product id (kept for parity with backend).
+        default_shipping_product_id:  (settings.default_shipping_product_id || "").trim() || null,
         // Iter-285 — Tax mode + zero-tax id (for customer_first invoicing).
         tax_mode:                     (settings.tax_mode || "customer_first"),
         zero_tax_id:                  (settings.zero_tax_id || "").trim() || null,

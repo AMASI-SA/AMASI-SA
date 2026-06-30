@@ -566,6 +566,39 @@ def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrde
     currency = _currency(amounts.get("total")
                          or amounts.get("sub_total"), "SAR")
 
+    # ── Iter-293.1 — Order-level extra charges (COD fee etc.) ────────
+    # Salla emits COD fees under `amounts.cash_on_delivery` (canonical
+    # name in their order API). We also accept two common fallbacks
+    # used by older webhook payloads / Make pass-throughs.
+    #
+    # Anything we DON'T recognise stays in `extra_charges` for the
+    # diagnostic block — so if Salla introduces a new fee key tomorrow
+    # (e.g. `installment_fee`), the operator sees it immediately
+    # instead of silently losing money to the totals-guard refusal.
+    _KNOWN_AMOUNT_KEYS = {
+        # Recognised + used for invoice math:
+        "total", "sub_total", "subtotal", "tax", "shipping",
+        "shipping_cost", "discount", "discounts",
+        "cash_on_delivery", "cod_fee", "payment_fee",
+    }
+    cod_fee_amount = _money(
+        amounts.get("cash_on_delivery")
+        or amounts.get("cod_fee")
+        or amounts.get("payment_fee")
+    )
+    extra_charges: dict = {}
+    if isinstance(amounts, dict):
+        for k, v in amounts.items():
+            if k in _KNOWN_AMOUNT_KEYS:
+                continue
+            # Only surface dict-shaped amount entries (Salla's typical
+            # `{amount, currency}` envelope) or numeric values. Skip
+            # arbitrary nested objects to keep diagnostics readable.
+            try:
+                extra_charges[k] = _money(v)
+            except Exception:  # noqa: BLE001
+                extra_charges[k] = v
+
     # Lines — accumulate as DTOs, raising on the first shape error so
     # the state machine can record exactly which item broke.
     items_raw = data.get("items") or []
@@ -614,6 +647,9 @@ def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrde
             items=items,
         ),
         total_amount=_money(amounts.get("total")),
+        # Iter-293.1 — Order-level extra charges (extracted above).
+        cod_fee_amount=cod_fee_amount,
+        extra_charges=extra_charges,
         customer=_normalize_customer(data, order_number=order_number),
         items=items,
         payment_method=_canonical_payment_method(pm_native),

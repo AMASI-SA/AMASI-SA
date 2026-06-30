@@ -152,6 +152,12 @@ class SettingsPatch(BaseModel):
     qoyod_tax_percent:             Optional[float] = None    # default 15
     # Iter-290f — Shipping product id (Qoyod requires product_id on every line).
     default_shipping_product_id:   Optional[str] = None
+    # Iter-293.1 — COD-fee product id (Qoyod product representing the
+    # "رسوم الدفع عند الاستلام" service charge). Required ONLY when
+    # incoming orders carry `amounts.cash_on_delivery > 0`. Without
+    # this set, the pre-POST totals guard refuses to send the invoice
+    # rather than silently dropping the fee on the floor.
+    default_cod_fee_product_id:    Optional[str] = None
 
 
 class CredentialsRequest(BaseModel):
