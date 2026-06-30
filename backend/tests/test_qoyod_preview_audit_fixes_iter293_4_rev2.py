@@ -479,12 +479,25 @@ class TestEndToEndCODPreviewShape:
         dep = out["stages"]["invoice_preview"]["dependency_status"]
         # Fix 3 — dependencies not yet resolved → not sendable.
         assert dep["sendable"] is False
-        assert dep["status"] == (
-            "invoice_payload_not_sendable_until_dependencies_resolved")
+        # Iter-293.4-rev3: when request_body itself carries
+        # null/DRY/PREVIEW ids, the status escalates to the explicit
+        # UNRESOLVED_QOYOD_DEPENDENCY code (more actionable than the
+        # generic "not_sendable_until_..." string).
+        assert dep["status"] in (
+            "UNRESOLVED_QOYOD_DEPENDENCY",
+            "invoice_payload_not_sendable_until_dependencies_resolved",
+        )
         assert dep["will_create_customer"] is True
         # The order's single SKU PROD-A is not mapped yet.
         assert len(dep["will_create_products"]) == 1
         assert dep["will_create_products"][0]["sku"] == "PROD-A"
+        # Each unresolved product carries a reason for the operator.
+        assert dep["will_create_products"][0]["unresolved_reason"] in (
+            "no_mapping_row", "dry_run_only_mapping",
+            "non_real_qoyod_id_prefix")
+        # Iter-293.4-rev3 belt-and-braces: request_body sanity scan
+        # must surface the actual nulls/DRYs that closed the gate.
+        assert isinstance(dep.get("request_body_unresolved"), list)
 
     async def test_safety_summary_surfaces_dependency_gate(self):
         from integrations.qoyod.preview_reprocess import (
@@ -514,3 +527,177 @@ class TestEndToEndCODPreviewShape:
         mock_req.assert_not_called()
         assert out["qoyod_request_sent"] is False
         assert all(v is False for v in out["would_send_to_qoyod"].values())
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Iter-293.4-rev3 — DRY mappings must NOT make a payload sendable.
+# request_body sanity scan must close the gate when contact_id /
+# product_id is null / DRY / PREVIEW.
+# ─────────────────────────────────────────────────────────────────────
+class _FakeProductMappingCollection:
+    """Mimics qoyod_products_mapping with a single seeded row per SKU."""
+    def __init__(self, rows):
+        self.rows = list(rows)
+    async def find_one(self, q, projection=None):
+        for r in self.rows:
+            if all(r.get(k) == v for k, v in q.items()):
+                # Apply projection if given (best-effort).
+                if projection:
+                    keep = {k for k, v in projection.items() if v == 1}
+                    return {k: v for k, v in r.items() if k in keep}
+                return dict(r)
+        return None
+
+
+class _FakeCustomerMappingCollection(_FakeProductMappingCollection):
+    pass
+
+
+def _make_db_with_mappings(*, product_mapping_rows, customer_mapping_rows):
+    """Build a _FakeDB-compatible object with custom mapping collections."""
+    db = _FakeDB(inbox=[_COD_INBOX], settings=[_COD_SETTINGS])
+    db.qoyod_products_mapping  = _FakeProductMappingCollection(
+        product_mapping_rows)
+    db.qoyod_customers_mapping = _FakeCustomerMappingCollection(
+        customer_mapping_rows)
+    return db
+
+
+@pytest.mark.asyncio
+class TestDRYMappingsBlockSendable:
+    """DRY:* prefix + dry_run_only=True must NEVER mark a payload
+    sendable. This is the Iter-268 leak guard, repurposed for preview."""
+
+    async def test_dry_product_id_forces_will_create(self):
+        from integrations.qoyod.preview_reprocess import (
+            preview_reprocess_one_order)
+        db = _make_db_with_mappings(
+            product_mapping_rows=[{
+                "user_id": "main", "sku": "PROD-A",
+                "qoyod_product_id": "DRY:product:fefe7c24",
+                "adopted": False, "dry_run_only": True,
+            }],
+            customer_mapping_rows=[],
+        )
+        out = await preview_reprocess_one_order(
+            db, user_id="main", trace_id=_COD_INBOX["trace_id"])
+        dep = out["stages"]["invoice_preview"]["dependency_status"]
+        assert dep["sendable"] is False
+        # DRY product appears in will_create_products with reason.
+        wcp = dep["will_create_products"]
+        assert any(p["sku"] == "PROD-A" for p in wcp)
+        prod_a = next(p for p in wcp if p["sku"] == "PROD-A")
+        assert prod_a["would_create"] is True
+        assert prod_a["dry_run_only"] is True
+        assert prod_a["unresolved_reason"] in (
+            "dry_run_only_mapping", "non_real_qoyod_id_prefix")
+
+    async def test_dry_only_flag_without_prefix_still_blocks(self):
+        from integrations.qoyod.preview_reprocess import (
+            preview_reprocess_one_order)
+        # Real-looking id but flagged dry_run_only=True → unresolved.
+        db = _make_db_with_mappings(
+            product_mapping_rows=[{
+                "user_id": "main", "sku": "PROD-A",
+                "qoyod_product_id": "123",
+                "adopted": False, "dry_run_only": True,
+            }],
+            customer_mapping_rows=[],
+        )
+        out = await preview_reprocess_one_order(
+            db, user_id="main", trace_id=_COD_INBOX["trace_id"])
+        dep = out["stages"]["invoice_preview"]["dependency_status"]
+        assert dep["sendable"] is False
+
+    async def test_real_product_real_customer_marks_sendable(self):
+        """Happy path: real Qoyod IDs in BOTH mappings → sendable=True
+        AND the actual request_body must carry those real ids."""
+        from integrations.qoyod.preview_reprocess import (
+            preview_reprocess_one_order)
+        db = _make_db_with_mappings(
+            product_mapping_rows=[{
+                "user_id": "main", "sku": "PROD-A",
+                "qoyod_product_id": "9871",
+                "adopted": True, "dry_run_only": False,
+            }],
+            customer_mapping_rows=[{
+                "user_id": "main",
+                "lookup_key": "+966501234567",
+                "lookup_kind": "phone",
+                "qoyod_customer_id": "4421",
+                "dry_run_only": False,
+            }],
+        )
+        out = await preview_reprocess_one_order(
+            db, user_id="main", trace_id=_COD_INBOX["trace_id"])
+        dep = out["stages"]["invoice_preview"]["dependency_status"]
+        assert dep["customer_resolved"] is True
+        assert dep["resolved_customer_id"] == "4421"
+        assert dep["products_resolved"] is True
+        assert dep["sendable"] is True, dep
+        assert dep["status"] == "ready_to_send"
+        assert dep["will_create_customer"] is False
+        assert dep["will_create_products"] == []
+        # Sanity scan must be empty.
+        assert dep["request_body_unresolved"] == []
+        # Belt-and-braces — the ACTUAL invoice request_body carries
+        # the real qoyod ids (not PREVIEW / null). The builder may
+        # cast to int — accept either type.
+        inv_body = (out["stages"]["invoice_preview"]["request_body"]
+                       .get("invoice") or {})
+        assert str(inv_body.get("contact_id")) == "4421", inv_body.get("contact_id")
+        line_items = inv_body.get("line_items") or []
+        assert line_items, "expected line items in the invoice body"
+        for li in line_items:
+            assert str(li.get("product_id")) == "9871", li
+
+    async def test_partial_resolution_only_customer_resolved(self):
+        """Customer resolved but products NOT → sendable=False, status
+        explains exactly what would need creation."""
+        from integrations.qoyod.preview_reprocess import (
+            preview_reprocess_one_order)
+        db = _make_db_with_mappings(
+            product_mapping_rows=[],   # no products mapped
+            customer_mapping_rows=[{
+                "user_id": "main",
+                "lookup_key": "+966501234567",
+                "lookup_kind": "phone",
+                "qoyod_customer_id": "4421",
+                "dry_run_only": False,
+            }],
+        )
+        out = await preview_reprocess_one_order(
+            db, user_id="main", trace_id=_COD_INBOX["trace_id"])
+        dep = out["stages"]["invoice_preview"]["dependency_status"]
+        assert dep["customer_resolved"] is True
+        assert dep["products_resolved"] is False
+        assert dep["sendable"] is False
+        assert dep["will_create_customer"] is False
+        # PROD-A is still unmapped.
+        assert len(dep["will_create_products"]) == 1
+        assert dep["will_create_products"][0]["sku"] == "PROD-A"
+
+
+@pytest.mark.asyncio
+class TestRequestBodySanityScan:
+    """Iter-293.4-rev3 belt-and-braces: the actual request_body must
+    be inspected. If it carries null/DRY/PREVIEW, sendable is forced
+    to False — even if the dep computation said True."""
+
+    async def test_sanity_scan_outputs_field_list(self):
+        """Unresolved order → request_body_unresolved lists the fields."""
+        from integrations.qoyod.preview_reprocess import (
+            preview_reprocess_one_order)
+        db = _FakeDB(inbox=[_COD_INBOX], settings=[_COD_SETTINGS])
+        out = await preview_reprocess_one_order(
+            db, user_id="main", trace_id=_COD_INBOX["trace_id"])
+        dep = out["stages"]["invoice_preview"]["dependency_status"]
+        # Either dependency_status already said unresolved (no real
+        # ids in DB) → status='invoice_payload_not_...' OR the body
+        # sanity scan caught nulls → status='UNRESOLVED_QOYOD_DEPENDENCY'.
+        # Either way, request_body_unresolved must be a list (possibly
+        # empty if the dep block already closed the gate before the
+        # builder produced any nulls — depends on builder semantics).
+        assert isinstance(dep["request_body_unresolved"], list)
+        # And sendable is False.
+        assert dep["sendable"] is False

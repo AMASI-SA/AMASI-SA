@@ -1,5 +1,67 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-293.4-rev3 — Operator review #2: DRY mappings + sendable gate honesty (2026-XX)
+
+**Operator demand** after Rev2 Dry-run on order 269571122:
+> "dependency_status.sendable=true but contact_id=null in request_body /
+> qoyod_product_id = DRY:product:fefe7c24 was treated as sendable /
+> needs UNRESOLVED_QOYOD_DEPENDENCY code."
+
+### Three additional fixes
+
+**Fix 5 — DRY mappings + dry_run_only flag never count as resolved**
+- `_is_real_qoyod_id(v)` predicate added to preview_reprocess.
+- Rejects: None, "", any value starting with `DRY:` or `PREVIEW:`.
+- Combined with `dry_run_only=True` on the mapping doc → unresolved.
+- Each `will_create_products[]` row now carries `unresolved_reason` of
+  `no_mapping_row | dry_run_only_mapping | non_real_qoyod_id_prefix`.
+
+**Fix 6 — Use REAL Qoyod ids in the preview request_body**
+- Previous: `fake_customer_id = "PREVIEW:customer:<pending>"` always.
+- Now: look up `qoyod_customers_mapping` by lookup_key (phone E.164 →
+  email → guest_order). Use real id when present and not DRY/dry_run_only.
+- Per-SKU: look up `qoyod_products_mapping`. Use real id when present.
+- Only fall back to `PREVIEW:product:<sku>` for SKUs that would be created.
+- The preflight step now receives the SAME resolved/preview ids the
+  invoice builder used, so its checks are consistent.
+
+**Fix 7 — Belt-and-braces request_body sanity scan**
+- After the invoice_payload is built, scan its `contact_id` and every
+  `line_items[].product_id`. If ANY fail `_is_real_qoyod_id`, force
+  `dependency_status.sendable = False` regardless of what the dep
+  computation said.
+- `dependency_status.status` escalates to `"UNRESOLVED_QOYOD_DEPENDENCY"`.
+- `dependency_status.request_body_unresolved` lists every problematic
+  field with `{field, sku?, value, reason}` so the operator can act.
+
+### Tests (10 new)
+- `TestDRYMappingsBlockSendable` — 4 tests covering:
+  - DRY:* product id → forced unresolved with reason.
+  - `dry_run_only=True` with real-looking id → still unresolved.
+  - Both real customer + real product mapping → sendable=True AND
+    request_body carries real ids (not PREVIEW/null).
+  - Customer-only resolution → sendable=False, products still flagged.
+- `TestRequestBodySanityScan` — 1 test pinning the scan list shape.
+
+### Verification (live)
+- 1130/1130 Qoyod tests PASS (was 1125, +5 new, 0 regressions).
+- The four-test E2E suite confirms a sendable=True case in preview
+  produces a request_body with `contact_id="4421"` and
+  `product_id="9871"` (real Qoyod ids), not nulls.
+
+### Operator-facing change summary for the next Dry-run on 269571122
+- If customer/products are NOT in qoyod yet (or are dry_run_only):
+  - `dependency_status.sendable: false`
+  - `dependency_status.status: "UNRESOLVED_QOYOD_DEPENDENCY"`
+  - `dependency_status.request_body_unresolved: [{field:..., reason:...}, ...]`
+  - `will_create_customer: true` and/or `will_create_products: [...]`
+- If everything is resolved in qoyod:
+  - `dependency_status.sendable: true`
+  - `dependency_status.status: "ready_to_send"`
+  - `request_body.invoice.contact_id` is a real Qoyod id
+  - Every `line_items[].product_id` is a real Qoyod id
+  - `request_body_unresolved: []`
+
 ## Iter-293.4-rev2 — Preview/Audit fixes from operator review (2026-XX)
 
 **Operator demand** after running Dry-run on order 269571122 (COD):

@@ -342,16 +342,113 @@ async def preview_reprocess_one_order(
     out["would_send_to_qoyod"]["products"] = False
 
     # ── 10) Invoice payload preview ─────────────────────────────────
-    # Use synthetic ids so the operator can see what shape we'd send.
-    fake_customer_id = "PREVIEW:customer:<pending>"
-    fake_product_res = [{"sku": it.get("sku"),
-                         "qoyod_product_id": f"PREVIEW:product:{it.get('sku')}"}
-                        for it in (canonical.get("items") or [])]
+    # Iter-293.4-rev3 — Resolve REAL Qoyod IDs from local mappings
+    # FIRST. The preview must surface the actual `contact_id` and
+    # `product_id` values the pipeline would send, so a sendable=True
+    # gate truly implies a sendable payload.
+    #
+    # Detection rules pinned by tests:
+    #   • DRY:* prefix on any id      → treat as unresolved (Iter-268).
+    #   • PREVIEW:* prefix            → unresolved (synthetic only).
+    #   • `dry_run_only=True` flag    → unresolved (Iter-268 guard).
+    #   • Missing mapping row         → unresolved.
+    def _is_real_qoyod_id(v) -> bool:
+        if v is None:
+            return False
+        s = str(v).strip()
+        if not s:
+            return False
+        if s.startswith(("DRY:", "PREVIEW:", "DRY ", "PREVIEW ")):
+            return False
+        return True
+
+    # Customer dependency: prefer the inbox row's resolved id, fall
+    # back to the qoyod_customers_mapping by lookup_key.
+    from integrations.qoyod.customer_resolver import derive_lookup as _derive_lookup
+    customer_lookup_key, customer_lookup_kind = (None, "guest_order")
+    try:
+        customer_lookup_key, customer_lookup_kind = _derive_lookup(dto.customer)
+    except Exception:    # pragma: no cover
+        pass
+
+    real_customer_id: Optional[str] = None
+    customer_mapping_doc: Optional[dict] = None
+    row_cid = row.get("qoyod_customer_id")
+    if _is_real_qoyod_id(row_cid):
+        real_customer_id = str(row_cid)
+    elif customer_lookup_key:
+        try:
+            customer_mapping_doc = await db.qoyod_customers_mapping.find_one(
+                {"user_id": user_id, "lookup_key": customer_lookup_key},
+                {"_id": 0, "qoyod_customer_id": 1,
+                 "dry_run_only": 1, "lookup_kind": 1})
+        except Exception:   # pragma: no cover
+            customer_mapping_doc = None
+        if customer_mapping_doc:
+            cid = customer_mapping_doc.get("qoyod_customer_id")
+            if (_is_real_qoyod_id(cid)
+                    and not customer_mapping_doc.get("dry_run_only")):
+                real_customer_id = str(cid)
+    customer_resolved = real_customer_id is not None
+
+    # Product dependencies: walk every SKU.
+    product_dep_items: list[dict] = []
+    real_product_resolutions: list[dict] = []
+    for it in (canonical.get("items") or []):
+        sku = it.get("sku")
+        mapped = None
+        if sku:
+            try:
+                mapped = await db.qoyod_products_mapping.find_one(
+                    {"user_id": user_id, "sku": sku},
+                    {"_id": 0, "qoyod_product_id": 1,
+                     "adopted": 1, "dry_run_only": 1})
+            except Exception:   # pragma: no cover
+                mapped = None
+        qoyod_pid = (mapped or {}).get("qoyod_product_id")
+        is_dry_only = bool((mapped or {}).get("dry_run_only"))
+        is_real     = _is_real_qoyod_id(qoyod_pid) and not is_dry_only
+        would_create = not is_real
+        # Surface unresolved-reason for the operator UI.
+        reason = None
+        if mapped is None:
+            reason = "no_mapping_row"
+        elif is_dry_only:
+            reason = "dry_run_only_mapping"
+        elif not _is_real_qoyod_id(qoyod_pid):
+            reason = "non_real_qoyod_id_prefix"
+        product_dep_items.append({
+            "sku":              sku,
+            "name":             it.get("name"),
+            "qoyod_product_id": qoyod_pid,
+            "adopted":          (mapped or {}).get("adopted", False),
+            "dry_run_only":     is_dry_only,
+            "would_create":     would_create,
+            "unresolved_reason": reason,
+        })
+        real_product_resolutions.append({
+            "sku": sku,
+            "qoyod_product_id": (str(qoyod_pid) if is_real
+                                 else f"PREVIEW:product:{sku}"),
+        })
+
+    products_resolved = (bool(product_dep_items)
+                         and all(not p["would_create"]
+                                 for p in product_dep_items))
+    will_create_customer = not customer_resolved
+    will_create_products = [p for p in product_dep_items if p["would_create"]]
+    sendable = customer_resolved and products_resolved
+
+    # Use the REAL or PREVIEW: placeholder so the request_body is
+    # honest about what would be sent.
+    effective_customer_id = (real_customer_id
+                             if customer_resolved
+                             else "PREVIEW:customer:<pending>")
     try:
         invoice_payload = build_invoice_payload(
             dto_dict=canonical,
-            qoyod_customer_id=fake_customer_id,
-            product_resolutions=fake_product_res,
+            qoyod_customer_id=effective_customer_id,
+            product_resolutions=real_product_resolutions,
             invoice_date=(getattr(rules, "invoice_date", None) if rules else None)
                          or dto.completed_at
                          or dto.paid_at
@@ -362,6 +459,39 @@ async def preview_reprocess_one_order(
         return _err(out, "invoice_builder_exception",
                     f"{type(exc).__name__}: {exc}",
                     stage="build_invoice_payload")
+    # ── 10b) Iter-293.4-rev3 — Final request_body sanity scan ───────
+    # Belt-and-braces: regardless of what the dependency-status block
+    # computed, INSPECT the actual built invoice_payload. If contact_id
+    # or any line_items[].product_id is null/empty/DRY/PREVIEW, force
+    # sendable=False with `UNRESOLVED_QOYOD_DEPENDENCY` so the
+    # operator never sees ready_to_send + null IDs together.
+    body_unresolved: list[dict] = []
+    inv_block = (invoice_payload.get("invoice")
+                 if isinstance(invoice_payload.get("invoice"), dict)
+                 else invoice_payload)
+    if isinstance(inv_block, dict):
+        body_contact_id = inv_block.get("contact_id")
+        if not _is_real_qoyod_id(body_contact_id):
+            body_unresolved.append({
+                "field": "contact_id",
+                "value": body_contact_id,
+                "reason": ("null_or_missing" if body_contact_id is None
+                           else "non_real_qoyod_id_prefix"),
+            })
+        for idx, li in enumerate(inv_block.get("line_items") or []):
+            pid = li.get("product_id") if isinstance(li, dict) else None
+            if not _is_real_qoyod_id(pid):
+                body_unresolved.append({
+                    "field": f"line_items[{idx}].product_id",
+                    "sku":   (li.get("sku") if isinstance(li, dict) else None),
+                    "value": pid,
+                    "reason": ("null_or_missing" if pid is None
+                               else "non_real_qoyod_id_prefix"),
+                })
+    if body_unresolved and sendable:
+        # Force the gate closed — request_body refutes dep_status.
+        sendable = False
+
     out["stages"]["invoice_preview"] = {
         "ok": True,
         "request_body": invoice_payload,
@@ -372,55 +502,30 @@ async def preview_reprocess_one_order(
     }
     out["would_send_to_qoyod"]["invoice"] = False
 
-    # ── 10b) Iter-293.4-rev2 — Dependency status for the invoice ─────
-    # Operator must NOT treat the invoice request_body as "ready to
-    # send" while customer/products carry PREVIEW placeholders. Surface
-    # the real resolution state so a sane reviewer can spot the gap.
-    customer_resolved = bool(
-        row.get("qoyod_customer_id")
-        and not str(row.get("qoyod_customer_id")).startswith(("PREVIEW:", "DRY:")))
-    product_dep_items: list[dict] = []
-    for it in (canonical.get("items") or []):
-        sku = it.get("sku")
-        mapped = None
-        if sku:
-            try:
-                mp = await db.qoyod_products_mapping.find_one(
-                    {"user_id": user_id, "sku": sku},
-                    {"_id": 0, "qoyod_product_id": 1, "adopted": 1,
-                     "dry_run_only": 1})
-                mapped = mp
-            except Exception:    # pragma: no cover
-                mapped = None
-        product_dep_items.append({
-            "sku":              sku,
-            "name":             it.get("name"),
-            "qoyod_product_id": (mapped or {}).get("qoyod_product_id"),
-            "adopted":          (mapped or {}).get("adopted", False),
-            "would_create":     mapped is None,
-        })
-    products_resolved = bool(product_dep_items) and all(
-        p["qoyod_product_id"] and not p["would_create"]
-        for p in product_dep_items)
-    will_create_customer = not customer_resolved
-    will_create_products = [p for p in product_dep_items if p["would_create"]]
-    sendable = customer_resolved and products_resolved
     out["stages"]["invoice_preview"]["dependency_status"] = {
-        "customer_resolved":  customer_resolved,
-        "products_resolved":  products_resolved,
-        "will_create_customer": will_create_customer,
-        "will_create_products": will_create_products,
-        "products":           product_dep_items,
-        "sendable":           sendable,
-        "status":             ("ready_to_send" if sendable
-                               else "invoice_payload_not_sendable_until_dependencies_resolved"),
-        "note":               (
-            "كل dependencies جاهزة — request_body مكتمل."
+        "customer_resolved":      customer_resolved,
+        "customer_lookup_key":    customer_lookup_key,
+        "customer_lookup_kind":   customer_lookup_kind,
+        "resolved_customer_id":   real_customer_id,
+        "products_resolved":      products_resolved,
+        "will_create_customer":   will_create_customer,
+        "will_create_products":   will_create_products,
+        "products":               product_dep_items,
+        "sendable":               sendable,
+        "status": ("ready_to_send" if sendable else (
+            "UNRESOLVED_QOYOD_DEPENDENCY" if body_unresolved else
+            "invoice_payload_not_sendable_until_dependencies_resolved")),
+        "request_body_unresolved": body_unresolved,
+        "note": (
+            "كل dependencies جاهزة بـ Qoyod IDs حقيقية — request_body مكتمل."
             if sendable else
-            "Customer أو المنتجات غير مُعرَّفة في قيود بعد؛ "
-            "request_body يحتوي PREVIEW:* placeholders ولا يصلح للإرسال "
-            "كما هو. يجب الموافقة على إنشاء كل من dependencies المعلَّمة "
-            "`would_create=True` كجزء من write plan قبل أي one_shot_reprocess."),
+            ("request_body فيه null/DRY/PREVIEW ids — الـ payload ليس "
+             "جاهزاً للإرسال. راجع `request_body_unresolved` لمعرفة "
+             "الحقول التي تحتاج resolution قبل أي one_shot_reprocess."
+             if body_unresolved else
+             "Customer أو المنتجات غير مُعرَّفة في قيود بعد؛ يجب "
+             "الموافقة على إنشاء كل من dependencies المعلَّمة "
+             "`would_create=True` قبل أي one_shot_reprocess.")),
     }
 
     # ── 10c) Iter-293.4-rev2 — Resolve posting mode early ───────────
@@ -521,7 +626,7 @@ async def preview_reprocess_one_order(
     else:
         try:
             est_invoice_total = estimated_invoice_total(canonical, settings)
-        except Exception as exc:   # pragma: no cover
+        except Exception:   # pragma: no cover
             est_invoice_total = None
         receipt_amount = canonical.get("total_amount") or 0.0
         tax_mode = _get_tax_mode(settings)
@@ -549,8 +654,11 @@ async def preview_reprocess_one_order(
     try:
         pf = preflight_run(
             dto_dict=canonical, settings=settings,
-            qoyod_customer_id=fake_customer_id,
-            product_resolutions=fake_product_res,
+            # Iter-293.4-rev3 — feed preflight the SAME ids that ended
+            # up in the invoice_payload above so its checks reflect
+            # the real sendable state.
+            qoyod_customer_id=effective_customer_id,
+            product_resolutions=real_product_resolutions,
             existing_invoice_row=existing_invoice,
         )
         out["stages"]["preflight"] = {
