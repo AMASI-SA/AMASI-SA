@@ -628,6 +628,49 @@ async def process_customer_resolved_row(
         # the post-success branch which advances the stage to
         # INVOICE_CREATED (it tolerates re-applying the same stage).
     else:
+        # ── Iter-293.3 — Production Writes Kill Switch ────────────
+        # ZATCA-sensitive guard: AFTER the Mezan↔Qoyod↔ZATCA chain is
+        # live, any uncontrolled POST to `api.qoyod.com` could push a
+        # tax-incorrect invoice to ZATCA. To prevent that the operator
+        # can set `production_writes_locked = true` in settings.
+        #
+        # While locked:
+        #   • The pipeline runs all the way through (normalize →
+        #     preflight → product/customer resolve → invoice payload
+        #     build → totals guard). NOTHING is sent to Qoyod.
+        #   • The fully-built `invoice_payload` is persisted in
+        #     `qoyod_payloads.invoice_locked_payload` for review.
+        #   • The row's pipeline_stage becomes `LOCKED_AWAITING_APPROVAL`.
+        #   • Operator reviews via the Preview-Reprocess endpoint,
+        #     then explicitly approves the order via the existing
+        #     `one_shot_reprocess` (which honours its own approval
+        #     flow). New webhooks DO NOT auto-retry.
+        #
+        # This is INDEPENDENT of `dry_run_mode` (which uses DRY:* stub
+        # ids and is intended for offline simulation). Production
+        # writes lock keeps real ids but skips the POST.
+        if settings.get("production_writes_locked", False):
+            await db.integration_inbox.update_one(
+                {"id": row["id"]},
+                {"$set": {
+                    "qoyod_payloads.invoice_locked_payload": invoice_payload,
+                    "qoyod_payloads.invoice_locked_at":      _now(),
+                    "pipeline_stage":                        "LOCKED_AWAITING_APPROVAL",
+                    "lock_reason":                           "production_writes_locked",
+                    "lock_diagnostics":                      invoice_diagnostics,
+                }},
+            )
+            return {
+                "row_id":   row["id"],
+                "outcome":  "LOCKED_AWAITING_APPROVAL",
+                "reason":   "production_writes_locked",
+                "trace_id": trace_id,
+                "note":     ("Production writes are locked. Use the "
+                             "Preview-Reprocess endpoint to review, "
+                             "then one_shot_reprocess to send after "
+                             "explicit per-order approval."),
+            }
+
         try:
             inv_resp = await api_client.create_invoice(invoice_payload,
                                                        idem=invoice_idem)

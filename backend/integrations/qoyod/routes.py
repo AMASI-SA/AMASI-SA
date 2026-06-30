@@ -158,6 +158,13 @@ class SettingsPatch(BaseModel):
     # this set, the pre-POST totals guard refuses to send the invoice
     # rather than silently dropping the fee on the floor.
     default_cod_fee_product_id:    Optional[str] = None
+    # Iter-293.3 — Production Writes Kill Switch. When True, the live
+    # webhook pipeline runs every stage (normalize/preflight/builders)
+    # but STOPS before any POST to api.qoyod.com. Each order is parked
+    # in stage LOCKED_AWAITING_APPROVAL with its fully-built payload
+    # so the operator can review via Preview-Reprocess, then approve
+    # per-order via one_shot_reprocess. Independent of dry_run_mode.
+    production_writes_locked:      Optional[bool] = None
 
 
 class CredentialsRequest(BaseModel):
