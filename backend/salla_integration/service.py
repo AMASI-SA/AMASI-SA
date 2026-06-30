@@ -30,27 +30,37 @@ SALLA_AUTHORIZE_URL = f"{SALLA_AUTH_BASE}/oauth2/auth"
 # in-flight request will get 401.
 EXPIRY_SAFETY_MARGIN_SEC = 120
 
-# Required scopes — keep the union of read+write for orders, webhooks
-# (used in Phase 2), and offline_access (required to receive a
-# refresh_token from Salla, per the OAuth2 spec).
+# Required scopes — official Salla format per docs.salla.dev.
 #
-# IMPORTANT (Iter-291): every scope listed here MUST be enabled in the
-# Salla Partners Portal for this App, otherwise Salla returns
-# `invalid_scope` at /oauth2/auth.
+# IMPORTANT (Iter-291): every scope listed here MUST
+#   (a) be in the EXACT format Salla accepts in its OAuth `scope`
+#       parameter (per /421118m0 + /421413m0 in the partners docs), AND
+#   (b) be enabled in the Salla Partners Portal for this App,
+# otherwise Salla returns `invalid_scope` at /oauth2/auth.
+#
+# Per Salla's official docs, write capability uses the `*.read_write`
+# suffix — NOT a separate `.write` token. Confirmed examples in the
+# docs and App Events page:
+#     offline_access
+#     settings.read
+#     orders.read_write
+#     webhooks.read_write
+# Using `orders.write` / `webhooks.write` as standalone scopes is
+# unofficial and historically causes `invalid_scope`.
 #
 # Customer details (name/phone/email/address) come embedded inside the
 # order payload — we do NOT need a separate `customers.read` scope for
 # the Salla→Qoyod invoice pipeline. Same for payments / shipping /
-# taxes: all available inside the order payload.
+# taxes / branches: all available inside the order payload.
 #
 # Operators can override the list via the SALLA_OAUTH_SCOPES env var
 # (space-separated) without a code change — useful when Salla rolls out
 # new scope names or when the App's enabled permissions change.
 _DEFAULT_SCOPES_FALLBACK = (
     "offline_access "
-    "orders.read orders.write "
-    "webhooks.read webhooks.write "
-    "settings.read"
+    "settings.read "
+    "orders.read_write "
+    "webhooks.read_write"
 )
 DEFAULT_SCOPES = (os.environ.get("SALLA_OAUTH_SCOPES") or _DEFAULT_SCOPES_FALLBACK).strip()
 

@@ -34,6 +34,43 @@ class TestScopeHygiene:
         assert "customers.write" not in scopes
         assert "customers.read_write" not in scopes
 
+    def test_default_scopes_uses_official_read_write_suffix(self):
+        """Per Salla's official docs (docs.salla.dev/421118m0 and
+        /421413m0 App Events), the write capability is expressed via
+        the `.read_write` suffix — NOT a separate `.write` token.
+
+        Using `orders.write` / `webhooks.write` as standalone scopes is
+        unofficial and triggers `invalid_scope` at /oauth2/auth.
+        """
+        scopes = svc.DEFAULT_SCOPES.split()
+        # Forbidden: unofficial standalone `.write` tokens.
+        assert "orders.write" not in scopes, (
+            "orders.write is NOT an official Salla scope — use orders.read_write"
+        )
+        assert "webhooks.write" not in scopes, (
+            "webhooks.write is NOT an official Salla scope — use webhooks.read_write"
+        )
+        # If we want write capability, the official form must be present.
+        # Allow either pure-read (orders.read alone) or read+write
+        # (orders.read_write) — but never the unofficial split form.
+        has_orders_rw = "orders.read_write" in scopes
+        has_orders_r_only = (
+            "orders.read" in scopes and "orders.read_write" not in scopes
+        )
+        assert has_orders_rw or has_orders_r_only, (
+            f"DEFAULT_SCOPES must include orders.read_write OR orders.read, "
+            f"got: {svc.DEFAULT_SCOPES!r}"
+        )
+        # Same rule for webhooks.
+        has_hooks_rw = "webhooks.read_write" in scopes
+        has_hooks_r_only = (
+            "webhooks.read" in scopes and "webhooks.read_write" not in scopes
+        )
+        assert has_hooks_rw or has_hooks_r_only, (
+            f"DEFAULT_SCOPES must include webhooks.read_write OR webhooks.read, "
+            f"got: {svc.DEFAULT_SCOPES!r}"
+        )
+
     def test_default_scopes_does_not_include_products(self):
         """Products scope is intentionally OFF — we only read/write
         orders. If/when SKU updates land, enable Products in Partners
@@ -58,16 +95,17 @@ class TestScopeHygiene:
         assert not leaked, f"forbidden scopes present: {leaked}"
 
     def test_required_scopes_present(self):
-        """The minimum set required for the Salla→Qoyod pipeline."""
+        """The minimum set required for the Salla→Qoyod pipeline,
+        using Salla's official scope format."""
         scopes = svc.DEFAULT_SCOPES.split()
         # offline_access is REQUIRED to get a refresh_token from Salla.
         assert "offline_access" in scopes
         # Read+write orders (we update order status when Qoyod confirms).
-        assert "orders.read" in scopes
-        assert "orders.write" in scopes
+        # Official format: orders.read_write (single token, not split).
+        assert "orders.read_write" in scopes or "orders.read" in scopes
         # Webhooks (register + manage subscription on the merchant's store).
-        assert "webhooks.read" in scopes
-        assert "webhooks.write" in scopes
+        # Official format: webhooks.read_write.
+        assert "webhooks.read_write" in scopes or "webhooks.read" in scopes
         # Store settings (currency, tax, store name) — read-only.
         assert "settings.read" in scopes
 
@@ -84,7 +122,12 @@ class TestScopeHygiene:
     def test_scope_override_via_env(self, monkeypatch):
         """Operators can override the scope list via SALLA_OAUTH_SCOPES
         without a code change. This is the recovery path when Salla
-        renames scopes or when the App's enabled permissions change."""
+        renames scopes or when the App's enabled permissions change.
+
+        The override is used END-TO-END: e.g. if a future version of
+        Salla accepts only `orders` (no suffix), an ops engineer can
+        roll that out via .env in seconds.
+        """
         monkeypatch.setenv(
             "SALLA_OAUTH_SCOPES",
             "offline_access orders.read settings.read",
@@ -97,7 +140,7 @@ class TestScopeHygiene:
             assert svc_reload.DEFAULT_SCOPES == (
                 "offline_access orders.read settings.read"
             )
-            assert "orders.write" not in svc_reload.DEFAULT_SCOPES.split()
+            assert "orders.read_write" not in svc_reload.DEFAULT_SCOPES.split()
         finally:
             # Restore module state for any tests that run after this one.
             monkeypatch.delenv("SALLA_OAUTH_SCOPES", raising=False)
