@@ -35,5 +35,21 @@ def _make_xlsx(path: str) -> None:
 
 
 def pytest_configure(config):
+    # Iter-292 — load backend/.env into pytest's os.environ so tests
+    # that touch encryption keys, Mongo URL, or webhook secrets work
+    # without needing the operator to export them manually.
+    try:
+        with open("/app/backend/.env") as _envf:
+            for _line in _envf:
+                _line = _line.strip()
+                if not _line or _line.startswith("#") or "=" not in _line:
+                    continue
+                _k, _v = _line.split("=", 1)
+                _v = _v.strip().strip('"').strip("'")
+                # Don't clobber explicit env (CI might set its own values).
+                os.environ.setdefault(_k.strip(), _v)
+    except FileNotFoundError:
+        pass
+
     if not os.path.exists(SAMPLE_XLSX):
         _make_xlsx(SAMPLE_XLSX)

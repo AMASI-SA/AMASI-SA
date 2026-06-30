@@ -431,4 +431,9 @@ def integration_to_public(doc: Optional[dict]) -> dict:
         "last_error": doc.get("last_error"),
         "last_error_at": last_err_at.isoformat() if last_err_at else None,
         "created_at": created_at.isoformat() if created_at else None,
+        # Iter-292 — surfaces whether this install came from Easy Mode
+        # (Salla App Store webhook) or Custom Mode (browser OAuth flow).
+        # Useful for support: "how was the merchant connected?".
+        "install_mode": doc.get("install_mode") or "custom",
+        "easy_mode_owner_email": doc.get("easy_mode_owner_email"),
     }

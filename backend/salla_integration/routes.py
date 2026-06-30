@@ -104,6 +104,80 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
 
     router = APIRouter(prefix="/salla", tags=["salla"])
 
+    # ── 0. Easy Mode webhook (PUBLIC — gated by HMAC) ─────────────────
+    # Iter-292 — Salla Easy Mode delivers tokens via webhook instead of
+    # a redirect-based OAuth code exchange. This route is INTENTIONALLY
+    # mounted before the auth-gated routes so its public nature is
+    # obvious during code review.
+    #
+    # Security invariants (see easy_mode_webhook.py for full doc):
+    #   • Returns 503 if SALLA_WEBHOOK_SECRET is unset (NEVER silently
+    #     accepts unsigned webhooks).
+    #   • Verifies HMAC-SHA256 over the RAW body with constant-time
+    #     comparison BEFORE any JSON parsing.
+    #   • NO token is persisted if verification fails.
+    from .easy_mode_webhook import (  # noqa: E402 — local import keeps module load order safe
+        SIGNATURE_HEADER,
+        dispatch_event,
+        get_webhook_secret,
+        verify_signature,
+    )
+
+    @router.post("/webhooks/app")
+    async def salla_app_webhook(request: Request):
+        # 1. Secret must be configured. Refusing 503 (vs. 401) makes the
+        #    operational error distinguishable in monitoring from a bad
+        #    signature attack.
+        secret = get_webhook_secret()
+        if not secret:
+            import logging
+            logging.getLogger("salla.easy_mode").error(
+                "easy_mode.webhook_received_but_secret_unset path=%s",
+                request.url.path,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "SALLA_WEBHOOK_SECRET_NOT_CONFIGURED",
+                        "message": "Set SALLA_WEBHOOK_SECRET in backend/.env then restart backend."},
+            )
+
+        # 2. Read the RAW body for HMAC verification. Doing this before
+        #    JSON parsing is critical — once parsed, key-order /
+        #    whitespace differences would change the hash.
+        raw_body = await request.body()
+        provided_sig = request.headers.get(SIGNATURE_HEADER) or ""
+        if not verify_signature(raw_body, provided_sig, secret):
+            import logging
+            logging.getLogger("salla.easy_mode").warning(
+                "easy_mode.invalid_signature ip=%s sig_present=%s body_len=%d",
+                getattr(request.client, "host", None),
+                bool(provided_sig),
+                len(raw_body),
+            )
+            raise HTTPException(
+                status_code=401,
+                detail={"code": "INVALID_SIGNATURE",
+                        "message": "x-salla-signature missing or does not match."},
+            )
+
+        # 3. Now safe to parse JSON. A malformed body after a valid HMAC
+        #    is essentially impossible (signature would be wrong) — but
+        #    we still guard against it to avoid 500s in Salla retry loops.
+        import json
+        try:
+            body = json.loads(raw_body.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_JSON", "message": str(e)},
+            )
+
+        # 4. Dispatch. Unknown events return 200 (Salla will keep
+        #    retrying on non-2xx — so we MUST 200 anything we don't
+        #    care about to avoid retry storms).
+        result = await dispatch_event(db, body)
+        return result
+
     # ── 1. Status (always safe — never returns tokens) ────────────────
     @router.get("/status")
     async def status(user: dict = Depends(current_user)):
