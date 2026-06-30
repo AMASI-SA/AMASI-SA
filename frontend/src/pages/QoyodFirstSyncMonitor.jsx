@@ -363,31 +363,30 @@ export default function QoyodFirstSyncMonitor() {
 
   const runReprocess = async () => {
     const orderNo = (reprocOrderNo || "").trim();
-    const confirmTok = (reprocConfirm || "").trim();
     if (!orderNo) {
       toast.error("أدخل رقم الطلب أولاً");
-      return;
-    }
-    if (confirmTok !== expectedReprocToken) {
-      toast.error(`أدخل التأكيد بالضبط: ${expectedReprocToken}`);
       return;
     }
     setReproc(true);
     setReprocError(null);
     setReprocResult(null);
     try {
-      const body = { order_number: orderNo, confirm: confirmTok };
+      // Iter-293.4-rev5 — Preview-Only mode.
+      // The UI button is intentionally restricted to the SAFE
+      // preview-reprocess endpoint until a proper per-order-approval
+      // UI ships. Live sends now require the operator to run the
+      // documented Browser Console `fetch` with an explicit
+      // `approval_phrase`. No path from this modal touches قيود.
+      const body = { order_number: orderNo };
       const traceTrim = (reprocTraceId || "").trim();
       if (traceTrim) body.trace_id = traceTrim;
       const { data } = await axios.post(
-        `${API}/integrations/qoyod/admin/one-shot-reprocess`, body);
+        `${API}/integrations/qoyod/admin/preview-reprocess`, body);
       setReprocResult(data);
-      if (data?.outcome === "COMPLETED") {
-        toast.success(`نجحت إعادة معالجة الطلب ${orderNo}`);
-      } else if (data?.outcome === "ALREADY_COMPLETED") {
-        toast.info(`الطلب ${orderNo} مكتمل سابقاً`);
+      if (data?.ok === true) {
+        toast.success(`تم بناء معاينة للطلب ${orderNo} (لم تُرسَل إلى قيود)`);
       } else {
-        toast.error(`فشل: ${data?.outcome || "غير معروف"}`);
+        toast.error(`فشلت المعاينة: ${data?.failed_at_stage || data?.error?.code || "غير معروف"}`);
       }
       await load(true);
     } catch (e) {
@@ -528,8 +527,9 @@ export default function QoyodFirstSyncMonitor() {
                   setReprocError(null);
                 }}
                 data-testid="btn-open-one-shot-reprocess"
-                className="px-3 py-1.5 text-xs font-bold rounded bg-indigo-600 text-white hover:bg-indigo-700">
-          🎯 إعادة معالجة طلب واحد
+                title="معاينة فقط — لا يلامس قيود. الإرسال الفعلي يستلزم Browser Console fetch مع approval_phrase."
+                className="px-3 py-1.5 text-xs font-bold rounded bg-sky-600 text-white hover:bg-sky-700">
+          🔍 معاينة طلب (Preview)
         </button>
         <div className="text-[11px] text-slate-500 ms-auto flex items-center gap-3"
              data-testid="monitor-count">
@@ -702,7 +702,15 @@ export default function QoyodFirstSyncMonitor() {
         </div>
       )}
 
-      {/* One-Shot Reprocess modal — single order, REPROCESS-<order_number> */}
+      {/* Preview-Reprocess modal (Iter-293.4-rev5)
+          ───────────────────────────────────────────
+          Previously: directly POSTed to /admin/one-shot-reprocess (live send).
+          Now: SAFE preview only — calls /admin/preview-reprocess which
+          NEVER touches قيود. The live send path requires the operator
+          to run a Browser Console `fetch` with an explicit
+          `approval_phrase` (documented in CHANGELOG / runbook). This
+          guarantees no accidental live POST from the UI while the
+          Per-Order Approval flow + dedicated UI are being designed. */}
       {reprocOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
              data-testid="reproc-modal-backdrop"
@@ -711,16 +719,42 @@ export default function QoyodFirstSyncMonitor() {
                data-testid="reproc-modal"
                onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xl font-extrabold text-slate-900 mb-2">
-              🎯 إعادة معالجة طلب واحد فقط
+              🔍 معاينة طلب واحد (Preview — لا يلامس قيود)
             </h2>
-            <p className="text-sm text-slate-700 leading-relaxed">
-              تستهدف <strong>طلباً واحداً فقط</strong> وتُرسله إلى Qoyod الإنتاجي.
-              لا تُشغّل Backfill ولا تُلامس أي سجل آخر.
-            </p>
-            <ul className="text-[12px] text-slate-600 list-disc pe-5 mt-2 space-y-1">
-              <li>إذا وجد أي <code className="font-mono">DRY:</code> في contact_id أو product_id يتم إيقاف الإرسال فوراً.</li>
-              <li>الخرائط (mappings) القديمة بـ <code className="font-mono">DRY:*</code> يتم عزلها قبل إعادة المعالجة.</li>
-              <li>عند الفشل: لا إعادة محاولة. سيظهر <code className="font-mono">request_body_json</code> + المرحلة التي فشلت عندها فقط.</li>
+            <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 mb-3"
+                 data-testid="reproc-preview-only-banner">
+              <div className="text-[13px] font-extrabold text-amber-900 mb-1">
+                ⚠ معاينة فقط — لا يتم إرسال أي شيء إلى قيود
+              </div>
+              <p className="text-[12px] text-amber-900 leading-relaxed">
+                هذه الواجهة تشغّل <code className="font-mono">preview-reprocess</code> فقط:
+                تبني الـ payload وتفحص الـ dependencies (contact/products)
+                دون أي مكالمة لـ <code className="font-mono">api.qoyod.com</code>.
+              </p>
+              <p className="text-[12px] text-amber-900 leading-relaxed mt-2">
+                <strong>للإرسال الفعلي إلى قيود</strong>:
+                <span className="block mt-1">
+                  استخدم Browser Console <code className="font-mono">fetch</code>
+                  إلى <code className="font-mono" dir="ltr">/api/integrations/qoyod/admin/one-shot-reprocess</code>
+                  مع تمرير <code className="font-mono">approval_phrase</code>
+                  المطابق تماماً للقالب:
+                </span>
+                <code className="block mt-1 font-mono bg-amber-100 px-2 py-1 rounded text-[11px]" dir="ltr">
+                  Approved to send order &lt;order_number&gt; only
+                </code>
+              </p>
+              <p className="text-[12px] text-amber-900 leading-relaxed mt-2">
+                Global Write Lock (<code className="font-mono">production_writes_locked</code>)
+                يبقى مفعّلاً دائماً — الموافقة الفردية لا تفتحه.
+              </p>
+            </div>
+            <ul className="text-[12px] text-slate-600 list-disc pe-5 mb-3 space-y-1">
+              <li>لا يُلامس Qoyod الإنتاجي. لا يُنشئ فاتورة، لا سند قبض، لا invoice_payment.</li>
+              <li>يكشف وجود معرّفات <code className="font-mono">DRY:</code> / <code className="font-mono">PREVIEW:</code> في الـ mappings.</li>
+              <li>يُظهر <code className="font-mono">dependency_status.sendable</code> و<code className="font-mono">request_body_unresolved</code> قبل أي قرار إرسال.</li>
+              <li>طلب واحد فقط في كل استدعاء — لا batch، لا backfill.</li>
+              <li>طلبات COD ستظهر مع <code className="font-mono">posting_mode=credit_invoice_only</code> (فاتورة آجلة فقط، بدون سند قبض).</li>
+              <li>طلبات Bank Transfer محجوزة حتى Iter-294.</li>
             </ul>
 
             {!reprocResult && !reprocError && (
@@ -734,10 +768,10 @@ export default function QoyodFirstSyncMonitor() {
                     value={reprocOrderNo}
                     onChange={(e) => setReprocOrderNo(e.target.value)}
                     dir="ltr"
-                    placeholder="268670571"
+                    placeholder="269571122"
                     data-testid="reproc-order-no-input"
                     autoFocus
-                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg font-mono text-sm focus:border-indigo-500 outline-none"
+                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg font-mono text-sm focus:border-sky-500 outline-none"
                   />
                 </div>
 
@@ -755,69 +789,37 @@ export default function QoyodFirstSyncMonitor() {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-[12px] font-bold text-slate-700 mb-1">
-                    للتأكيد، اكتب: <code className="font-mono text-rose-700">{expectedReprocToken || "REPROCESS-<order_number>"}</code>
-                  </label>
-                  <input
-                    type="text"
-                    value={reprocConfirm}
-                    onChange={(e) => setReprocConfirm(e.target.value)}
-                    dir="ltr"
-                    placeholder={expectedReprocToken || "REPROCESS-..."}
-                    data-testid="reproc-confirm-input"
-                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg font-mono text-sm focus:border-indigo-500 outline-none"
-                  />
-                </div>
               </div>
             )}
 
-            {/* Success / failure result */}
+            {/* Preview result (Iter-293.4-rev5)
+                ───────────────────────────────
+                Shape matches `preview_reprocess_one_order` response:
+                  { ok, mode:"preview", qoyod_request_sent:false,
+                    row, idempotency, stages: { ..., invoice_preview },
+                    errors, would_send_to_qoyod, created_ids } */}
             {reprocResult && (
               <div className="mt-4" data-testid="reproc-result">
                 <div className={`rounded-lg border p-3 ${
-                       reprocResult.outcome === "COMPLETED"
+                       reprocResult.ok
                          ? "border-emerald-300 bg-emerald-50"
-                         : reprocResult.outcome === "ALREADY_COMPLETED"
-                           ? "border-sky-300 bg-sky-50"
-                           : "border-rose-300 bg-rose-50"}`}>
+                         : "border-rose-300 bg-rose-50"}`}>
                   <div className="text-sm font-extrabold mb-1">
-                    {reprocResult.outcome === "COMPLETED" && "✓ تم بنجاح"}
-                    {reprocResult.outcome === "ALREADY_COMPLETED" && "ℹ مكتمل سابقاً"}
-                    {!["COMPLETED", "ALREADY_COMPLETED"].includes(reprocResult.outcome) && `✗ فشل: ${reprocResult.outcome}`}
+                    {reprocResult.ok
+                      ? "🔍 تمت المعاينة (لم يُرسَل أي شيء إلى قيود)"
+                      : `✗ فشلت المعاينة عند: ${reprocResult.failed_at_stage || reprocResult.error?.code || "غير معروف"}`}
                   </div>
-                  {reprocResult.trace_id && (
-                    <div className="text-[11px] font-mono text-slate-600">
-                      trace_id: {reprocResult.trace_id}
-                    </div>
-                  )}
-                  {reprocResult.stage_sequence_observed && reprocResult.stage_sequence_observed.length > 0 && (
-                    <div className="text-[12px] text-slate-700 mt-1"
-                         data-testid="reproc-stage-sequence">
-                      <strong>المراحل التي اجتازها:</strong>{" "}
-                      {reprocResult.stage_sequence_observed.join(" → ")}
-                    </div>
-                  )}
-                  {/* Iter-290h.6 — When ALREADY_COMPLETED comes back
-                      with the row's full state, surface a human
-                      message + the Qoyod ids so the operator sees
-                      what the final pipeline produced without
-                      thinking the panel is broken. */}
-                  {reprocResult.outcome === "ALREADY_COMPLETED"
-                    && reprocResult.message && (
-                    <div className="text-[12px] text-sky-900 mt-1"
-                         data-testid="reproc-already-completed-message">
-                      {reprocResult.message}
-                    </div>
-                  )}
-                  {reprocResult.qoyod_invoice_id && (
-                    <div className="text-[12px] font-mono text-slate-800 mt-1">
-                      Invoice: {reprocResult.qoyod_invoice_id} ·
-                      Invoice Payment: {reprocResult.qoyod_invoice_payment_id || "—"}
-                      {reprocResult.qoyod_receipt_id && (
-                        <> · Legacy Receipt: {reprocResult.qoyod_receipt_id}</>
-                      )}
+                  <div className="text-[11px] font-mono text-slate-600"
+                       data-testid="reproc-no-send-confirm">
+                    qoyod_request_sent: <code>{String(reprocResult.qoyod_request_sent ?? false)}</code>
+                    {" · "}
+                    mode: <code>{reprocResult.mode || "preview"}</code>
+                  </div>
+                  {reprocResult.row?.trace_id && (
+                    <div className="text-[11px] font-mono text-slate-600 mt-1">
+                      trace_id: {reprocResult.row.trace_id}
+                      {" · "}
+                      stage: <code>{reprocResult.row.pipeline_stage}</code>
                     </div>
                   )}
                   {reprocResult.error && (
@@ -825,270 +827,133 @@ export default function QoyodFirstSyncMonitor() {
                       <strong>{reprocResult.error.code}</strong>: {reprocResult.error.message}
                     </div>
                   )}
-                  {reprocResult.failed_at_stage && (
-                    <div className="text-[12px] text-slate-700 mt-1">
-                      <strong>المرحلة التي فشل عندها:</strong>{" "}
-                      <code className="font-mono">{reprocResult.failed_at_stage}</code>
-                    </div>
-                  )}
                 </div>
 
-                {/* Final invoice payload — labelled conditionally
-                    based on whether the POST actually reached Qoyod.
-                    Iter-290h.4 — the new payment-link diagnostics
-                    carry `request_sent_to_qoyod` so we no longer
-                    mislabel a real 422 from قيود as "halted". */}
-                {(reprocResult.invoice_payload || reprocResult.request_body_json) && (
+                {/* Idempotency surface */}
+                {reprocResult.idempotency && (
+                  <div className={`mt-3 rounded-lg border p-3 ${
+                          reprocResult.idempotency.blocked
+                            ? "border-amber-300 bg-amber-50"
+                            : "border-slate-200 bg-slate-50"}`}
+                       data-testid="reproc-idempotency">
+                    <div className="text-[12px] font-bold mb-1">
+                      🧾 فحص التكرار (Idempotency)
+                    </div>
+                    {reprocResult.idempotency.blocked ? (
+                      <div className="text-[12px] text-amber-900">
+                        <strong>محجوب</strong>: {reprocResult.idempotency.message}
+                        {reprocResult.idempotency.existing_qoyod_invoice_id && (
+                          <div className="font-mono mt-1">
+                            قيود invoice موجود: {reprocResult.idempotency.existing_qoyod_invoice_id}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[12px] text-slate-700">
+                        لا توجد فاتورة قيود سابقة لهذا الطلب.
+                        {reprocResult.idempotency.existing_qoyod_invoice_id && (
+                          <span className="font-mono ms-1">
+                            (سجل سابق: {reprocResult.idempotency.existing_qoyod_invoice_id})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Dependency / sendability — the most actionable signal */}
+                {reprocResult.stages?.invoice_preview?.dependency_status && (
+                  <div className={`mt-3 rounded-lg border p-3 ${
+                          reprocResult.stages.invoice_preview.dependency_status.sendable
+                            ? "border-emerald-300 bg-emerald-50"
+                            : "border-rose-300 bg-rose-50"}`}
+                       data-testid="reproc-dependency-status">
+                    <div className="text-[12px] font-bold mb-1">
+                      🔗 فحص الـ Dependencies (هل الـ payload جاهز للإرسال؟)
+                    </div>
+                    <div className="text-[12px]">
+                      sendable:{" "}
+                      <code className={`font-mono ${reprocResult.stages.invoice_preview.dependency_status.sendable ? "text-emerald-700 font-extrabold" : "text-rose-700 font-extrabold"}`}>
+                        {String(reprocResult.stages.invoice_preview.dependency_status.sendable)}
+                      </code>
+                      {reprocResult.stages.invoice_preview.dependency_status.status && (
+                        <>
+                          {" · status: "}
+                          <code className="font-mono">{reprocResult.stages.invoice_preview.dependency_status.status}</code>
+                        </>
+                      )}
+                    </div>
+                    {(reprocResult.stages.invoice_preview.dependency_status.request_body_unresolved || []).length > 0 && (
+                      <div className="mt-2 text-[12px] text-rose-800">
+                        <strong>حقول غير محلولة في الـ payload:</strong>
+                        <ul className="list-disc pe-5 mt-1 font-mono">
+                          {reprocResult.stages.invoice_preview.dependency_status.request_body_unresolved.map((f, i) => (
+                            <li key={i}>{f}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {reprocResult.stages.invoice_preview.dependency_status.will_create_customer && (
+                      <div className="text-[11px] text-amber-800 mt-1">
+                        ⚠ سيتم إنشاء عميل جديد في قيود عند الإرسال الفعلي.
+                      </div>
+                    )}
+                    {(reprocResult.stages.invoice_preview.dependency_status.will_create_products || []).length > 0 && (
+                      <div className="text-[11px] text-amber-800 mt-1">
+                        ⚠ سيتم إنشاء {reprocResult.stages.invoice_preview.dependency_status.will_create_products.length} منتج/منتجات جديدة في قيود عند الإرسال الفعلي.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Posting mode + COD/Bank-transfer guard */}
+                {reprocResult.stages?.invoice_preview?.posting_mode && (
+                  <div className="mt-3 rounded-lg border border-sky-300 bg-sky-50 p-3"
+                       data-testid="reproc-posting-mode">
+                    <div className="text-[12px] font-bold mb-1">
+                      📋 وضع الترحيل (Posting Mode)
+                    </div>
+                    <div className="text-[12px]">
+                      <code className="font-mono font-extrabold">{reprocResult.stages.invoice_preview.posting_mode}</code>
+                      {reprocResult.stages.invoice_preview.posting_mode === "credit_invoice_only" && (
+                        <span className="text-emerald-800 ms-2">
+                          → فاتورة آجلة فقط (COD)، بدون سند قبض ولا invoice_payment.
+                        </span>
+                      )}
+                      {reprocResult.stages.invoice_preview.posting_mode === "disabled" && (
+                        <span className="text-amber-800 ms-2">
+                          → غير مفعّل (Bank Transfer أو طريقة دفع غير مربوطة) — محجوز.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* The would-be invoice payload */}
+                {reprocResult.stages?.invoice_preview?.payload && (
                   <div className="mt-3">
                     <div className="text-[11px] font-bold text-slate-600 mb-1">
-                      {(reprocResult.outcome === "COMPLETED" ||
-                        reprocResult.outcome === "ALREADY_COMPLETED")
-                        ? "📦 جسم فاتورة قيود (POST /invoices)"
-                        : reprocResult.request_sent_to_qoyod
-                          ? "📦 جسم الطلب المُرسل لقيود — قيود رفضه"
-                          : "📦 جسم الطلب الذي تم إيقافه قبل إرسالها لقيود"}
+                      📦 جسم فاتورة قيود الذي كان <strong>سيُرسَل</strong> (لم يُرسَل)
                     </div>
                     <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-slate-900 text-slate-100 rounded p-2 max-h-72 overflow-auto"
                          dir="ltr"
                          data-testid="reproc-request-body-json">
-{JSON.stringify(reprocResult.invoice_payload || reprocResult.request_body_json, null, 2)}
+{JSON.stringify(reprocResult.stages.invoice_preview.payload, null, 2)}
                     </pre>
-                    {/* Iter-290h.6 — On both COMPLETED (just-now) and
-                        ALREADY_COMPLETED (final-state snapshot), also
-                        render the /invoice_payments payload + قيود
-                        response so the operator can verify the
-                        payment-link actually landed (not just that
-                        the invoice was created). */}
-                    {(reprocResult.outcome === "COMPLETED"
-                      || reprocResult.outcome === "ALREADY_COMPLETED")
-                      && reprocResult.invoice_payment_payload && (
-                      <div className="mt-3"
-                           data-testid="reproc-invoice-payment-block">
-                        <div className="text-[11px] font-bold text-emerald-700 mb-1">
-                          💰 جسم سداد الفاتورة المُرسل (POST /invoice_payments) — نجح
-                        </div>
-                        <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-emerald-950 text-emerald-100 rounded p-2 max-h-72 overflow-auto"
-                             dir="ltr"
-                             data-testid="reproc-invoice-payment-body">
-{JSON.stringify(reprocResult.invoice_payment_payload, null, 2)}
-                        </pre>
-                        {reprocResult.invoice_payment_response != null && (
-                          <>
-                            <div className="text-[11px] font-bold text-emerald-700 mt-2 mb-1">
-                              📥 رد قيود على السداد
-                            </div>
-                            <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-slate-100 text-slate-900 rounded p-2 max-h-48 overflow-auto"
-                                 dir="ltr"
-                                 data-testid="reproc-invoice-payment-response">
-{JSON.stringify(reprocResult.invoice_payment_response, null, 2)}
-                            </pre>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {/* Iter-290h.4 — explicit diagnostics for the
-                        payment-link step. Surfaces exactly what
-                        قيود returned so the operator no longer has
-                        to guess whether a request was sent at all. */}
-                    {(reprocResult.failed_at_stage === "PAYMENT_LINK_FAILED"
-                      || reprocResult.failed_at_stage === "PAYMENT_METHOD_MAPPING_MISSING") && (
-                      <div className="mt-2 text-[11px] grid grid-cols-2 gap-1 bg-slate-50 dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700"
-                           data-testid="reproc-payment-link-diagnostics">
-                        <div className="font-bold text-slate-600">
-                          هل تمت محاولة الإرسال؟
-                        </div>
-                        <div className={reprocResult.payment_post_attempted
-                          ? "text-emerald-700" : "text-rose-700"}>
-                          {reprocResult.payment_post_attempted ? "نعم" : "لا"}
-                        </div>
-                        <div className="font-bold text-slate-600">
-                          هل وصل الطلب إلى قيود؟
-                        </div>
-                        <div className={reprocResult.request_sent_to_qoyod
-                          ? "text-emerald-700" : "text-amber-700"}>
-                          {reprocResult.request_sent_to_qoyod ? "نعم" : "لا"}
-                        </div>
-                        {reprocResult.qoyod_status_code != null && (
-                          <>
-                            <div className="font-bold text-slate-600">رمز الاستجابة من قيود</div>
-                            <div className="font-mono">{reprocResult.qoyod_status_code}</div>
-                          </>
-                        )}
-                        {reprocResult.qoyod_response && (
-                          <>
-                            <div className="font-bold text-slate-600">رد قيود</div>
-                            <div className="font-mono text-rose-700 break-all">
-                              {typeof reprocResult.qoyod_response === "string"
-                                ? reprocResult.qoyod_response
-                                : JSON.stringify(reprocResult.qoyod_response)}
-                            </div>
-                          </>
-                        )}
-                        {reprocResult.skip_reason && (
-                          <>
-                            <div className="font-bold text-slate-600">سبب التخطي</div>
-                            <div className="text-amber-700">{reprocResult.skip_reason}</div>
-                          </>
-                        )}
-                      </div>
-                    )}
                   </div>
                 )}
 
-                {/* Totals Guard refusal (Iter-273) — line item / total mismatch */}
-                {reprocResult.totals_guard && (
-                  <div className="mt-3 rounded-lg border border-orange-300 bg-orange-50 p-3"
-                       data-testid="reproc-totals-guard">
-                    <div className="text-sm font-extrabold text-orange-900 mb-1">
-                      ⚠ Totals Guard أوقف الإرسال (لم يُلامس قيود)
-                    </div>
-                    <div className="text-[12px] font-mono text-orange-900 mb-2">
-                      {reprocResult.totals_guard.code}
-                    </div>
-                    <div className="text-[12px] text-orange-900 mb-2">
-                      {reprocResult.totals_guard.message}
-                    </div>
-                    {reprocResult.totals_guard.details && (
-                      <ul className="text-[12px] space-y-0.5 text-orange-900 list-disc pe-5">
-                        {Object.entries(reprocResult.totals_guard.details)
-                          .filter(([k]) => k !== "parsed_items")
-                          .map(([k, v]) => (
-                            <li key={k}>
-                              <strong>{k}:</strong>{" "}
-                              <code className="font-mono">{
-                                typeof v === "object" && v !== null
-                                  ? JSON.stringify(v)
-                                  : String(v)
-                              }</code>
-                            </li>
-                          ))}
-                      </ul>
-                    )}
-                    {reprocResult.totals_guard.details?.parsed_items && (
-                      <details className="mt-2 text-[11px]">
-                        <summary className="cursor-pointer font-bold text-orange-900">
-                          parsed_items (ما وصلنا منه من Make)
-                        </summary>
-                        <pre className="mt-1 bg-slate-900 text-slate-100 p-2 rounded font-mono whitespace-pre-wrap break-words max-h-48 overflow-auto"
-                             dir="ltr">
-{JSON.stringify(reprocResult.totals_guard.details.parsed_items, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-                    <div className="mt-2 text-[11px] text-orange-800">
-                      الحل: راجع Make.com Runbook — يجب أن يُرسل
-                      <code className="font-mono mx-1">data.items[]</code>
-                      كاملاً وليس بنداً واحداً.
-                    </div>
-                  </div>
-                )}
-
-                {/* Stage-specific diagnostic — product_create failures */}
-                {reprocResult.product_create && (
-                  <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3"
-                       data-testid="reproc-product-create-diagnostic">
-                    <div className="text-sm font-extrabold text-amber-900 mb-1">
-                      📦 تشخيص إنشاء المنتج في قيود (FAILED_PRODUCT)
-                    </div>
-                    <div className="text-[12px] font-mono text-amber-900 mb-2" dir="ltr">
-                      {reprocResult.product_create.endpoint}
-                      {reprocResult.product_create.status_code != null && (
-                        <span> · HTTP {reprocResult.product_create.status_code}</span>
-                      )}
-                    </div>
-
-                    {/* Sale-price fix verdict — most important line */}
-                    <div className={`text-[12px] font-bold rounded p-2 ${
-                          reprocResult.product_create.deploy_carries_full_fix
-                            ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                            : "bg-rose-100 text-rose-900 border border-rose-300"
-                        }`}
-                        data-testid="reproc-sale-price-verdict">
-                      {reprocResult.product_create.deploy_carries_full_fix
-                        ? "✓ النشر يستخدم الإصلاح الكامل: selling_price + is_sold:true"
-                        : "⚠ النشر ناقص — يحتاج: selling_price + is_sold:true"}
-                    </div>
-
-                    <ul className="mt-2 text-[12px] space-y-0.5 text-amber-900">
-                      <li>
-                        <strong>SKU:</strong>{" "}
-                        <code className="font-mono">{reprocResult.product_create.sku_in_request_body || "—"}</code>
-                        {" "}(من canonical:{" "}
-                        <code className="font-mono">{reprocResult.product_create.expected_from_canonical?.sku || "—"}</code>)
-                      </li>
-                      <li>
-                        <strong>selling_price field present (يجب true):</strong>{" "}
-                        <code className={`font-mono ${reprocResult.product_create.selling_price_field_present ? "text-emerald-700" : "text-rose-700"}`}>
-                          {String(reprocResult.product_create.selling_price_field_present)}
-                        </code>
-                      </li>
-                      <li>
-                        <strong>sale_price field present (يجب false — اسم خاطئ):</strong>{" "}
-                        <code className={`font-mono ${reprocResult.product_create.sale_price_field_present ? "text-rose-700" : "text-emerald-700"}`}>
-                          {String(reprocResult.product_create.sale_price_field_present)}
-                        </code>
-                      </li>
-                      <li>
-                        <strong>is_sold flag (يجب true):</strong>{" "}
-                        <code className={`font-mono ${reprocResult.product_create.is_sold_flag === true ? "text-emerald-700" : "text-rose-700"}`}>
-                          {String(reprocResult.product_create.is_sold_flag)}
-                        </code>
-                      </li>
-                      <li>
-                        <strong>selling_price المُرسل:</strong>{" "}
-                        <code className="font-mono">{String(reprocResult.product_create.selling_price_in_request_body ?? "null")}</code>
-                        {" "}(المتوقع:{" "}
-                        <code className="font-mono">{String(reprocResult.product_create.expected_from_canonical?.selling_price_we_would_send ?? "null")}</code>)
-                      </li>
-                    </ul>
-
-                    {reprocResult.product_create.request_body && (
-                      <details className="mt-2 text-[11px]">
-                        <summary className="cursor-pointer font-bold text-amber-900">
-                          product_create_request_body (الـ payload الفعلي المُرسل لقيود)
-                        </summary>
-                        <pre className="mt-1 bg-slate-900 text-slate-100 p-2 rounded text-[11px] font-mono whitespace-pre-wrap break-words max-h-72 overflow-auto"
-                             dir="ltr">
-{JSON.stringify(reprocResult.product_create.request_body, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-
-                    {reprocResult.product_create.response_excerpt && (
-                      <details className="mt-2 text-[11px]" open>
-                        <summary className="cursor-pointer font-bold text-amber-900">
-                          product_create_response_body (ردّ قيود)
-                        </summary>
-                        <pre className="mt-1 bg-slate-900 text-amber-200 p-2 rounded text-[11px] font-mono whitespace-pre-wrap break-words max-h-48 overflow-auto"
-                             dir="ltr">
-{typeof reprocResult.product_create.response_excerpt === "string"
-  ? reprocResult.product_create.response_excerpt
-  : JSON.stringify(reprocResult.product_create.response_excerpt, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                )}
-
-                {/* Dry-leak audit */}
-                {reprocResult.dry_leaks_in_final_payload != null && (
-                  <div className="mt-2 text-[12px]"
-                       data-testid="reproc-dry-leak-audit">
-                    <strong>فحص DRY: في الـ payload النهائي:</strong>{" "}
-                    {reprocResult.dry_leaks_in_final_payload.length === 0
-                      ? <span className="text-emerald-700 font-bold">✓ نظيف (0)</span>
-                      : <span className="text-rose-700 font-bold">⚠ {reprocResult.dry_leaks_in_final_payload.join(", ")}</span>}
-                  </div>
-                )}
-
-                {reprocResult.quarantine_summary && (
-                  <details className="mt-2 text-[11px] text-slate-600">
-                    <summary className="cursor-pointer font-bold">سجل العزل (DRY mappings)</summary>
-                    <pre className="mt-1 bg-slate-100 p-2 rounded" dir="ltr">
-{JSON.stringify(reprocResult.quarantine_summary, null, 2)}
-                    </pre>
-                  </details>
-                )}
+                {/* Raw preview response — collapsed by default */}
+                <details className="mt-3 text-[11px] text-slate-600">
+                  <summary className="cursor-pointer font-bold">
+                    عرض الرد الكامل من preview-reprocess (JSON)
+                  </summary>
+                  <pre className="mt-1 bg-slate-100 p-2 rounded font-mono whitespace-pre-wrap break-words max-h-72 overflow-auto"
+                       dir="ltr"
+                       data-testid="reproc-raw-response">
+{JSON.stringify(reprocResult, null, 2)}
+                  </pre>
+                </details>
               </div>
             )}
 
@@ -1151,13 +1016,11 @@ export default function QoyodFirstSyncMonitor() {
                 <button
                   type="button"
                   onClick={runReprocess}
-                  disabled={reproc ||
-                            !(reprocOrderNo || "").trim() ||
-                            (reprocConfirm || "").trim() !== expectedReprocToken}
+                  disabled={reproc || !(reprocOrderNo || "").trim()}
                   data-testid="btn-reproc-confirm"
-                  className="px-4 py-2 text-sm font-extrabold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40"
+                  className="px-4 py-2 text-sm font-extrabold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40"
                 >
-                  {reproc ? "جاري المعالجة…" : "🎯 تنفيذ إعادة المعالجة"}
+                  {reproc ? "جاري بناء المعاينة…" : "🔍 تشغيل المعاينة (لا يُرسل)"}
                 </button>
               )}
             </div>
