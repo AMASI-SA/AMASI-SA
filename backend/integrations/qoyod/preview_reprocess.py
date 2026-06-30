@@ -451,6 +451,54 @@ async def preview_reprocess_one_order(
             "ok": False,
             "exception": f"{type(exc).__name__}: {exc}",
         }
+
+    # ── 13) Iter-293.2 — Production safety summary block ───────────
+    # Single condensed block the operator reads BEFORE granting
+    # explicit approval to send the order to Qoyod for real. All
+    # values come from the simulation above — no fresh computation.
+    from integrations.qoyod.payment_methods import (
+        resolve_posting_mode,
+        POSTING_MODE_CREDIT_INVOICE_ONLY,
+        POSTING_MODE_DISABLED,
+    )
+    pm_for_mode = (canonical.get("payment_method")
+                   or canonical.get("payment_method_native"))
+    resolved_mode = resolve_posting_mode(settings, pm_for_mode)
+    inv_diag = (out["stages"].get("invoice_preview") or {}).get("diagnostics") or {}
+    out["safety_summary"] = {
+        # What the pipeline WOULD do if approved:
+        "payment_method":              pm_for_mode,
+        "posting_mode":                resolved_mode,
+        "will_create_invoice":         True,   # always true if preflight passes
+        "will_create_invoice_payment": resolved_mode not in (
+            POSTING_MODE_CREDIT_INVOICE_ONLY, POSTING_MODE_DISABLED,
+        ),
+        "preflight_passed":            bool((out["stages"].get("preflight") or {}).get("ok")),
+        # Totals reconciliation (Iter-290e/293.1):
+        "salla_total":                 inv_diag.get("salla_total"),
+        "expected_qoyod_total":        inv_diag.get("expected_qoyod_total"),
+        "difference":                  inv_diag.get("difference"),
+        "within_tolerance":            (abs(inv_diag.get("difference") or 0) <= 0.10),
+        # COD-fee audit trail (must be `inferred_from_delta=false`):
+        "cod_fee_detected":            inv_diag.get("cod_fee_detected"),
+        "cod_fee_amount":              inv_diag.get("cod_fee_amount"),
+        "cod_fee_source_path":         inv_diag.get("cod_fee_source_path"),
+        "cod_fee_missing_product":     inv_diag.get("cod_fee_missing_product"),
+        "inferred_from_delta":         inv_diag.get("inferred_from_delta", False),
+        # Shipping diagnostics — surfaced explicitly so the operator
+        # can spot a shipping-tax gap (e.g. the 1.85 SAR case where
+        # Salla sends shipping NET while the rest is GROSS):
+        "shipping_amount":             canonical.get("shipping_amount"),
+        "shipping_diagnostics":        [
+            d for d in (inv_diag.get("line_diagnostics") or [])
+            if "_SHIPPING_" in (d.get("sku") or "")
+            or "shipping" in (d.get("sku") or "").lower()
+        ],
+        # Any unknown amount keys (forward-compat).
+        "extra_charges":               inv_diag.get("extra_charges") or {},
+        # The operator MUST explicitly approve before a real POST.
+        "approval_required_to_send":   True,
+    }
     return out
 
 
