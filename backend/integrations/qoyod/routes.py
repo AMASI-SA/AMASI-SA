@@ -302,6 +302,17 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 [legacy_val] if legacy_val else ["completed"])
         if not update:
             raise HTTPException(400, "no fields to update")
+        # Iter-293 — Enforce the COD invariant at the API write boundary.
+        # ANY row whose salla_method is in the COD family is coerced to
+        # posting_mode=credit_invoice_only + qoyod_account_id=None, even
+        # if the UI submits otherwise (defense in depth — the UI lock is
+        # one layer, this is the second).
+        if "payment_method_mapping" in update and isinstance(
+            update["payment_method_mapping"], list,
+        ):
+            from integrations.qoyod.payment_methods import coerce_cod_rows
+            update["payment_method_mapping"] = coerce_cod_rows(
+                update["payment_method_mapping"])
         # Validate the merged result via Pydantic so we never persist
         # an invalid combination (ADR-001 #4 Canonical Domain).
         merged = {**current, **update,
@@ -625,6 +636,44 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def compliance_reconciliation(user=Depends(current_user)):
         tenant = _tenant_id(user)
         return {"ok": True, "reconciliation": await reconciliation_check(db, tenant)}
+
+    # ── Iter-293 — Admin diagnostics (READ-ONLY, no Qoyod mutations) ──
+    @router.get("/admin/cod-receipts-report")
+    async def admin_cod_receipts_report(
+        user=Depends(current_user),
+        from_date: Optional[str] = Query(None, alias="from"),
+        to_date:   Optional[str] = Query(None, alias="to"),
+        limit:     int = Query(500, ge=1, le=5000),
+    ):
+        """Iter-293 — Lists COD invoices that wrongly produced a Qoyod
+        invoice_payment/receipt under the old pipeline (pre-Iter-293).
+
+        Read-only. The accountant uses the output to manually
+        delete/void the wrong payment in Qoyod — Mezan does NOT do
+        any automated cleanup here (per user spec)."""
+        from integrations.qoyod.cod_receipts_report import cod_receipts_report
+        tenant = _tenant_id(user)
+        return await cod_receipts_report(
+            db, tenant,
+            from_iso=from_date, to_iso=to_date, limit=limit,
+        )
+
+    @router.get("/admin/bank-transfer-discovery")
+    async def admin_bank_transfer_discovery(
+        user=Depends(current_user),
+        limit: int = Query(10, ge=1, le=50),
+    ):
+        """Iter-293 companion (preparation for Iter-294) — Scans historical
+        qoyod_payloads for orders paid via bank_transfer and returns the
+        candidate JSON paths where Salla might encode the receiving
+        bank. The user inspects this to confirm the authoritative field
+        before Iter-294 implements per-bank routing.
+
+        Read-only. No Qoyod calls. Sensitive fields (card/email/phone)
+        are redacted in the response."""
+        from integrations.qoyod.bank_transfer_discovery import scan_existing_payloads
+        tenant = _tenant_id(user)
+        return await scan_existing_payloads(db, user_id=tenant, limit=limit)
 
     # ── POST /webhook — Day 3 entry point (no JWT, token-protected) ──
     # Token check + idempotency + validation + normalization, nothing more.

@@ -350,6 +350,41 @@ function PaymentMethodMappingTable({
   accountsListUnavailable = false,
   accountsUnavailableReason = null,
 }) {
+  // ── Iter-293 helpers — posting_mode + COD family detection ─────────
+  // Keep these in sync with backend/payment_methods.py (`is_cod_family`
+  // + PAYMENT_METHOD_ALIASES). The UI does its own normalisation to
+  // (a) lock the COD row before the user saves, and (b) NOT mark COD
+  // rows as "blocker — needs account".
+  const COD_DIRECT_KEYS = ["cod"];
+  const COD_ALIAS_KEYS = [
+    "cash_on_delivery", "cash",
+    "الدفع_عند_الاستلام", "النوع_عند_الاستلام",
+    "الدفع_نقدا_عند_الاستلام", "نقد_عند_الاستلام", "نقدًا_عند_الاستلام",
+  ];
+  const isCodKey = (k) => {
+    const norm = String(k || "").trim().toLowerCase().replace(/\s+/g, "_");
+    return COD_DIRECT_KEYS.includes(norm) || COD_ALIAS_KEYS.includes(norm);
+  };
+  const isBankTransferKey = (k) => {
+    const norm = String(k || "").trim().toLowerCase().replace(/\s+/g, "_");
+    return norm === "bank_transfer" || norm === "bank"
+        || norm === "wire_transfer" || norm === "تحويل_بنكي";
+  };
+  const POSTING_MODE_OPTIONS = [
+    { value: "paid_receipt", label: "مدفوع — ينشئ سند قبض" },
+    { value: "credit_invoice_only", label: "آجل — فاتورة فقط (بدون سند)" },
+    { value: "disabled", label: "غير مفعّل" },
+  ];
+  // Derive the effective posting_mode for a row, applying the COD lock.
+  // This is the same rule the backend enforces via `coerce_cod_rows` —
+  // we run it client-side so the UI shows the truth even before save.
+  const effectiveMode = (key, row) => {
+    if (isCodKey(key)) return "credit_invoice_only";
+    const raw = row?.posting_mode || "paid_receipt";
+    return ["paid_receipt", "credit_invoice_only", "disabled"].includes(raw)
+      ? raw : "paid_receipt";
+  };
+
   // Indexed access for fast lookup
   const usedByKey = useMemo(() => {
     const m = new Map();
@@ -386,21 +421,32 @@ function PaymentMethodMappingTable({
   const addableKeys = allCatalogueKeys.filter((k) => !visibleKeys.includes(k));
   const [selectedAddKey, setSelectedAddKey] = useState("");
 
-  const updateRow = (key, account_id) => {
+  // Iter-293 — Update account_id OR posting_mode on a row. For COD
+  // rows we IGNORE attempted mode changes (the UI dropdown is also
+  // disabled, but defense in depth) AND clear any stale account_id.
+  const updateRow = (key, { account_id, posting_mode } = {}) => {
     const next = [...(mapping || [])];
     const idx = next.findIndex(
       (r) => (r.salla_method || "").toLowerCase() === key);
-    if (idx >= 0) {
-      if (account_id) {
-        next[idx] = { ...next[idx], qoyod_account_id: account_id,
-                      label_ar: labelFor(key) };
-      } else {
-        next[idx] = { ...next[idx], qoyod_account_id: "" };
+    const codLock = isCodKey(key);
+    const baseRow = idx >= 0 ? next[idx] : {
+      salla_method: key, qoyod_account_id: "", label_ar: labelFor(key),
+    };
+    const newRow = { ...baseRow };
+    if (codLock) {
+      newRow.posting_mode = "credit_invoice_only";
+      newRow.qoyod_account_id = null;
+    } else {
+      if (posting_mode !== undefined) {
+        newRow.posting_mode = posting_mode;
+        // Disabled / credit_invoice_only don't need an account, clear it.
+        if (posting_mode !== "paid_receipt") newRow.qoyod_account_id = null;
       }
-    } else if (account_id) {
-      next.push({ salla_method: key, qoyod_account_id: account_id,
-                  label_ar: labelFor(key) });
+      if (account_id !== undefined) {
+        newRow.qoyod_account_id = account_id || "";
+      }
     }
+    if (idx >= 0) next[idx] = newRow; else next.push(newRow);
     onChange(next);
   };
 
@@ -436,11 +482,14 @@ function PaymentMethodMappingTable({
           <table className="w-full text-sm" dir="rtl">
             <thead className="bg-slate-50 text-slate-700 text-xs">
               <tr>
-                <th className="text-right font-bold px-3 py-2 w-1/3">
+                <th className="text-right font-bold px-3 py-2 w-1/4">
                   طريقة الدفع في سلة
                 </th>
+                <th className="text-right font-bold px-3 py-2 w-56">
+                  وضع الترحيل لقيود
+                </th>
                 <th className="text-right font-bold px-3 py-2">
-                  معرّف الحساب في قيود (Account ID)
+                  حساب قيود
                 </th>
                 <th className="text-right font-bold px-3 py-2 w-24">الحالة</th>
                 <th className="w-12"></th>
@@ -450,25 +499,31 @@ function PaymentMethodMappingTable({
               {visibleKeys.map((key) => {
                 const row = mappingByKey.get(key);
                 const accId = row?.qoyod_account_id || "";
+                const mode = effectiveMode(key, row);
+                const codLock = isCodKey(key);
+                const bankTransferRow = isBankTransferKey(key);
                 const usedRow = usedByKey.get(key);
                 const isUsed = !!usedRow;
                 const resolvedViaAlias =
                   !accId && usedRow?.mapped_via === "alias"
                   && usedRow?.matched_key;
-                const missing = isUsed && !accId && !resolvedViaAlias;
+                // Iter-293 — A row "needs an account" ONLY when its
+                // posting_mode is paid_receipt. COD and disabled rows
+                // are intentionally accountless.
+                const needsAccount = mode === "paid_receipt";
+                const missing = needsAccount && isUsed && !accId
+                                && !resolvedViaAlias;
                 return (
                   <tr key={key}
                       className={`${missing ? "bg-rose-50/40"
+                                 : codLock ? "bg-amber-50/40"
+                                 : bankTransferRow ? "bg-orange-50/40"
                                  : resolvedViaAlias ? "bg-sky-50/40" : ""}`}
                       data-testid={`pm-row-${key}`}>
                     <td className="px-3 py-2 align-middle">
                       <div className="font-bold text-slate-800">{labelFor(key)}</div>
                       <div className="text-[10px] text-slate-500 font-mono">
                         {key}
-                        {/* Show the original Salla string when it differs
-                            from the canonical key — helps the user
-                            recognise vendor-side labels (e.g. Arabic
-                            "النوع عند الاستلام" → key=cod). */}
                         {usedRow?.native_examples?.length > 0
                           && usedRow.native_examples[0] !== key && (
                           <span
@@ -495,31 +550,74 @@ function PaymentMethodMappingTable({
                             عبر {labelFor(usedRow.matched_key)}
                           </span>
                         )}
+                        {bankTransferRow && (
+                          <span
+                            title="حالياً مربوط بحساب عام مؤقت — لا يعتبر جاهزاً للزكاة والضريبة حتى يتم Iter-294 (Routing حسب البنك المستلم)"
+                            className="mr-2 inline-block px-1.5 py-0.5 rounded
+                                       bg-orange-100 text-orange-900 font-extrabold"
+                            data-testid={`pm-bank-warn-${key}`}>
+                            Legacy — يحتاج Routing حسب البنك
+                          </span>
+                        )}
                       </div>
                     </td>
+                    {/* Posting mode picker — locked for COD rows */}
                     <td className="px-3 py-2 align-middle">
-                      {/* Iter-290i.2 — SearchableSelect replaces raw
-                          ID input. Shows the account NAME as primary
-                          label + `ID 17 · 4101` as the secondary
-                          (code) hint. Searches across name / id /
-                          code. Persisted value remains qoyod_account_id
-                          (string) — schema unchanged. */}
-                      <SearchableSelect
-                        options={accountsList}
-                        value={accId}
-                        onChange={(v) => updateRow(key, v || "")}
-                        testid={`pm-account-select-${key}`}
-                        secondaryKey="code"
-                        placeholder={resolvedViaAlias
-                          ? `(اختياري — يستخدم ${usedRow.matched_key})`
-                          : "اختر حساب قيود..."}
-                        listUnavailable={accountsListUnavailable}
-                        unavailableReason={accountsUnavailableReason}
-                        unavailableLabel="تعذر تحميل قائمة حسابات قيود"
-                      />
+                      <select
+                        value={mode}
+                        disabled={codLock}
+                        onChange={(e) => updateRow(key, { posting_mode: e.target.value })}
+                        data-testid={`pm-mode-select-${key}`}
+                        className={`w-full px-2 py-1.5 border rounded text-xs
+                                    ${codLock ? "bg-amber-50 text-amber-900 cursor-not-allowed border-amber-200"
+                                              : "border-slate-300 bg-white"}`}>
+                        {POSTING_MODE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      {codLock && (
+                        <div className="text-[10px] text-amber-700 font-bold mt-1"
+                             data-testid={`pm-cod-locked-${key}`}>
+                          🔒 COD لا يحتاج حساب قبض — مرحّل كفاتورة آجلة فقط
+                        </div>
+                      )}
+                      {mode === "disabled" && (
+                        <div className="text-[10px] text-slate-500 mt-1"
+                             data-testid={`pm-disabled-hint-${key}`}>
+                          لن يُرحَّل إلى قيود
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2 align-middle">
-                      {accId ? (
+                      {needsAccount ? (
+                        <SearchableSelect
+                          options={accountsList}
+                          value={accId}
+                          onChange={(v) => updateRow(key, { account_id: v || "" })}
+                          testid={`pm-account-select-${key}`}
+                          secondaryKey="code"
+                          placeholder={resolvedViaAlias
+                            ? `(اختياري — يستخدم ${usedRow.matched_key})`
+                            : "اختر حساب قيود..."}
+                          listUnavailable={accountsListUnavailable}
+                          unavailableReason={accountsUnavailableReason}
+                          unavailableLabel="تعذر تحميل قائمة حسابات قيود"
+                        />
+                      ) : (
+                        <div className="text-[11px] text-slate-400 italic px-2"
+                             data-testid={`pm-no-account-${key}`}>
+                          غير مطلوب
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-middle">
+                      {!needsAccount && codLock ? (
+                        <span className="text-[11px] text-amber-700 font-bold"
+                              data-testid={`pm-status-${key}`}>آجل</span>
+                      ) : !needsAccount && mode === "disabled" ? (
+                        <span className="text-[11px] text-slate-500 font-bold"
+                              data-testid={`pm-status-${key}`}>معطّل</span>
+                      ) : accId ? (
                         <span className="text-[11px] text-emerald-700 font-bold"
                               data-testid={`pm-status-${key}`}>✓ مربوط</span>
                       ) : resolvedViaAlias ? (
@@ -937,15 +1035,53 @@ export default function QoyodSettings() {
     }
     setSaving(true);
     try {
-      // Sanitise payment_method_mapping: drop empty rows.
+      // Iter-293 — Sanitise payment_method_mapping with posting_mode:
+      //   • COD-family rows are FORCED to credit_invoice_only with no
+      //     qoyod_account_id, regardless of what's in memory (defense
+      //     in depth — the table UI also locks them, and the backend
+      //     `coerce_cod_rows` does the same enforcement on PUT).
+      //   • Disabled rows are kept (no account needed).
+      //   • paid_receipt rows must have qoyod_account_id, otherwise
+      //     drop them (the validator already flagged this as a blocker).
+      const codDirect = new Set(["cod"]);
+      const codAliases = new Set([
+        "cash_on_delivery", "cash",
+        "الدفع_عند_الاستلام", "النوع_عند_الاستلام",
+        "الدفع_نقدا_عند_الاستلام", "نقد_عند_الاستلام", "نقدًا_عند_الاستلام",
+      ]);
+      const isCodKeyLocal = (k) => {
+        const n = (k || "").trim().toLowerCase().replace(/\s+/g, "_");
+        return codDirect.has(n) || codAliases.has(n);
+      };
+      const validModes = ["paid_receipt", "credit_invoice_only", "disabled"];
       const pmm = (settings.payment_method_mapping || [])
-        .filter((r) => (r.salla_method || "").trim()
-                       && (r.qoyod_account_id || "").trim())
-        .map((r) => ({
-          salla_method: (r.salla_method || "").trim().toLowerCase(),
-          qoyod_account_id: (r.qoyod_account_id || "").trim(),
-          label_ar: r.label_ar || null,
-        }));
+        .filter((r) => (r.salla_method || "").trim())
+        .map((r) => {
+          const sm = (r.salla_method || "").trim().toLowerCase();
+          if (isCodKeyLocal(sm)) {
+            return {
+              salla_method:     sm,
+              qoyod_account_id: null,
+              posting_mode:     "credit_invoice_only",
+              label_ar:         r.label_ar || null,
+            };
+          }
+          const mode = validModes.includes(r.posting_mode)
+            ? r.posting_mode : "paid_receipt";
+          return {
+            salla_method:     sm,
+            qoyod_account_id: mode === "paid_receipt"
+              ? ((r.qoyod_account_id || "").trim() || "")
+              : null,
+            posting_mode:     mode,
+            label_ar:         r.label_ar || null,
+          };
+        })
+        // Drop paid_receipt rows that ended up without an account —
+        // the validator already showed a blocker; nothing useful to
+        // persist for them.
+        .filter((r) => r.posting_mode !== "paid_receipt"
+                       || (r.qoyod_account_id || "").trim());
 
       const patch = {
         enabled:              !!settings.enabled,
@@ -1055,15 +1191,37 @@ export default function QoyodSettings() {
     // each used row for the alias case; the in-memory user edit only
     // affects DIRECT entries so we recompute `direct` here and trust
     // `mapped_via === "alias"` for the rest.
+    //
+    // Iter-293 — Two new exclusions:
+    //   • COD-family keys are ALWAYS credit_invoice_only and don't
+    //     need an account. Never block save on them.
+    //   • Rows whose posting_mode is `credit_invoice_only` or
+    //     `disabled` don't need an account either.
+    const codDirect = new Set(["cod"]);
+    const codAliases = new Set([
+      "cash_on_delivery", "cash",
+      "الدفع_عند_الاستلام", "النوع_عند_الاستلام",
+      "الدفع_نقدا_عند_الاستلام", "نقد_عند_الاستلام", "نقدًا_عند_الاستلام",
+    ]);
+    const isCodKeyVal = (k) => {
+      const n = (k || "").trim().toLowerCase().replace(/\s+/g, "_");
+      return codDirect.has(n) || codAliases.has(n);
+    };
     const mappingByKey = new Map(
       (settings.payment_method_mapping || [])
-        .filter((r) => (r.salla_method || "").trim() && (r.qoyod_account_id || "").trim())
         .map((r) => [(r.salla_method || "").toLowerCase(), r]));
     const missing = (pmUsed || [])
       .filter((u) => u.key)
       .filter((u) => {
-        if (mappingByKey.has(u.key)) return false;       // direct edit
-        if (u.mapped_via === "alias") return false;      // alias cover
+        // COD family: never a blocker.
+        if (isCodKeyVal(u.key)) return false;
+        const row = mappingByKey.get(u.key);
+        const mode = row?.posting_mode || "paid_receipt";
+        // Non-paid_receipt modes don't need an account.
+        if (mode === "credit_invoice_only" || mode === "disabled") return false;
+        // Direct mapping with a real account → covered.
+        if (row && (row.qoyod_account_id || "").trim()) return false;
+        if (u.mapped_via === "alias") return false;
         return true;
       })
       .map((u) => u.key);

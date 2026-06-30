@@ -103,10 +103,19 @@ def _now() -> datetime:
 # Settings — single-row connector config
 # ─────────────────────────────────────────────────────────────────────
 class QoyodPaymentMethodMapping(BaseModel):
-    """Salla payment-method key → Qoyod account_id used on the Receipt."""
-    salla_method:  str
-    qoyod_account_id: str
-    label_ar:      Optional[str] = None
+    """Salla payment-method key → Qoyod account_id used on the Receipt.
+
+    Iter-293 — Two new fields:
+      • posting_mode: paid_receipt | credit_invoice_only | disabled.
+        Defaults to paid_receipt for backwards-compat with rows that
+        pre-date this field.
+      • qoyod_account_id is now Optional[str] because COD rows
+        (posting_mode=credit_invoice_only) MUST NOT have an account.
+    """
+    salla_method:     str
+    qoyod_account_id: Optional[str] = None
+    posting_mode:     Optional[str] = "paid_receipt"
+    label_ar:         Optional[str] = None
 
 
 class QoyodCapabilityFlags(BaseModel):

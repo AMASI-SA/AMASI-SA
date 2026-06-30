@@ -680,6 +680,79 @@ async def process_customer_resolved_row(
                 "dry_run": is_dry,
                 "qoyod_invoice_id": qoyod_invoice_id}
 
+    # ── Iter-293 — posting_mode branch BEFORE building any payment payload ──
+    # Strict accounting rule per user (2026-06-30):
+    #
+    #   credit_invoice_only  → Invoice ONLY. NO invoice_payment is built,
+    #                          NO Qoyod call is made for /invoice_payments,
+    #                          NO qoyod_account_id is required. The full
+    #                          amount stays as receivable in Qoyod, which
+    #                          is the correct accounting for COD (collected
+    #                          later when courier delivers + remits cash).
+    #
+    #   disabled             → Payment method is configured as not-synced.
+    #                          Order ends at INVOICE_CREATED. We did create
+    #                          the invoice above, but skip everything else.
+    #
+    # Resolved via `resolve_posting_mode` which BAKES IN the rule that
+    # any COD-family method ALWAYS produces credit_invoice_only,
+    # regardless of what the operator saved in settings — defense in
+    # depth against a buggy UI or a malicious API consumer.
+    from .payment_methods import (
+        resolve_posting_mode,
+        POSTING_MODE_CREDIT_INVOICE_ONLY,
+        POSTING_MODE_DISABLED,
+    )
+    pm_for_mode = (canonical.get("payment_method")
+                   or canonical.get("payment_method_native"))
+    _posting_mode = resolve_posting_mode(settings, pm_for_mode)
+
+    if _posting_mode == POSTING_MODE_CREDIT_INVOICE_ONLY:
+        # COD path — invoice exists in Qoyod, no receipt. Mark row + invoice
+        # as COMPLETED so the monitor doesn't think the payment step
+        # failed. qoyod_invoice_payment_id stays NULL by design.
+        await db.qoyod_invoices.update_one(
+            {"user_id": user_id, "salla_order_id": canonical.get("order_id")},
+            {"$set": {
+                "status":                "sent",
+                "pipeline_stage":        "COMPLETED",
+                "posting_mode":          _posting_mode,
+                "qoyod_invoice_payment_id": None,
+                "qoyod_receipt_id":      None,
+                "paid_amount":           0,
+                "remaining_amount":      canonical.get("total_amount"),
+                "updated_at":            _now(),
+            }})
+        p = transition(from_stage="INVOICE_CREATED",
+                       to_stage="COMPLETED", actor="worker",
+                       note=("credit_invoice_only — COD posted as credit "
+                             "invoice, no receipt (correct accounting)"),
+                       existing_started_at=started_at)
+        p.setdefault("$set", {})["posting_mode"] = _posting_mode
+        await _apply(db, row["id"], p)
+        return {"row_id":               row["id"],
+                "outcome":              "COMPLETED",
+                "reason":               "credit_invoice_only",
+                "posting_mode":         _posting_mode,
+                "qoyod_invoice_id":     qoyod_invoice_id,
+                "qoyod_invoice_payment_id": None,
+                "dry_run":              is_dry}
+
+    if _posting_mode == POSTING_MODE_DISABLED:
+        # Payment method is intentionally not synced. We've already
+        # created the invoice (4c) — that may not be ideal, but it's
+        # the conservative default until the operator removes the
+        # invoice_trigger_status for these methods. Mark as INVOICE_CREATED.
+        await db.qoyod_invoices.update_one(
+            {"user_id": user_id, "salla_order_id": canonical.get("order_id")},
+            {"$set": {"posting_mode": _posting_mode,
+                      "pipeline_stage": "INVOICE_CREATED",
+                      "updated_at": _now()}})
+        return {"row_id": row["id"], "outcome": "INVOICE_CREATED",
+                "reason": "posting_mode_disabled",
+                "posting_mode": _posting_mode,
+                "qoyod_invoice_id": qoyod_invoice_id, "dry_run": is_dry}
+
     payment_payload, idem_fingerprint = build_invoice_payment_payload(
         qoyod_invoice_id=qoyod_invoice_id,
         dto_dict=canonical, invoice_date=inv_date, settings=settings)

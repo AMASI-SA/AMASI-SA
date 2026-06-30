@@ -108,6 +108,130 @@ def is_pending_payment_status(payment_method: Optional[str]) -> bool:
     return _norm(payment_method) in PENDING_PAYMENT_STATUSES
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Iter-293 — Posting modes (paid_receipt | credit_invoice_only | disabled)
+# ─────────────────────────────────────────────────────────────────────
+# Accounting policy for how a payment method is posted to Qoyod:
+#
+#   paid_receipt        — Instant payments (Mada / Apple Pay / Visa /
+#                         STC Pay / bank_transfer with confirmed receipt).
+#                         Pipeline creates BOTH an invoice AND an
+#                         invoice_payment (closes the balance to zero).
+#                         REQUIRES qoyod_account_id.
+#
+#   credit_invoice_only — Cash on Delivery (COD) ONLY for now.
+#                         Pipeline creates ONLY an invoice. NO
+#                         invoice_payment, NO qoyod_account_id needed.
+#                         The full amount stays as receivable in Qoyod
+#                         and is collected later when the courier
+#                         delivers + remits cash.
+#
+#   disabled            — Payment method exists in Salla data but is
+#                         intentionally NOT synced to Qoyod (e.g. test
+#                         methods, deprecated methods). Pipeline skips
+#                         the order entirely with SKIPPED_DISABLED.
+
+POSTING_MODE_PAID_RECEIPT        = "paid_receipt"
+POSTING_MODE_CREDIT_INVOICE_ONLY = "credit_invoice_only"
+POSTING_MODE_DISABLED            = "disabled"
+
+VALID_POSTING_MODES: set[str] = {
+    POSTING_MODE_PAID_RECEIPT,
+    POSTING_MODE_CREDIT_INVOICE_ONLY,
+    POSTING_MODE_DISABLED,
+}
+
+
+def is_cod_family(payment_method: Optional[str]) -> bool:
+    """Return True iff this payment method collapses to the COD family
+    (cash on delivery, in any language / spelling variant). This is the
+    SOURCE OF TRUTH for the rule: "COD = credit_invoice_only, ALWAYS".
+
+    Resolution: direct match against "cod" OR alias collapses to "cod".
+    """
+    key = _norm(payment_method)
+    if not key:
+        return False
+    return key == "cod" or PAYMENT_METHOD_ALIASES.get(key) == "cod"
+
+
+def resolve_posting_mode(
+    settings: dict, payment_method: Optional[str],
+) -> str:
+    """Return the posting_mode for an incoming payment method.
+
+    Strict rule (Iter-293, user-mandated): if `is_cod_family` returns
+    True, posting_mode is ALWAYS `credit_invoice_only`. The user's
+    explicit Settings selection is IGNORED for COD — this is enforced
+    at both the API write boundary (routes.py validates + coerces)
+    AND at the pipeline read boundary (this function), so even a
+    bypass of the API won't book a COD order as paid.
+
+    For non-COD methods:
+        1. Direct row in payment_method_mapping → use its posting_mode.
+        2. Alias-family row in payment_method_mapping → use that row's
+           posting_mode.
+        3. Otherwise default to `paid_receipt` (backwards-compatible
+           with rows that pre-date the posting_mode field).
+    """
+    # 0) Iron-clad COD override.
+    if is_cod_family(payment_method):
+        return POSTING_MODE_CREDIT_INVOICE_ONLY
+
+    key = _norm(payment_method)
+    if not key:
+        return POSTING_MODE_PAID_RECEIPT
+
+    mapping = settings.get("payment_method_mapping") or []
+    by_key: dict[str, str] = {}
+    for m in mapping:
+        sm = _norm(m.get("salla_method"))
+        pm = (m.get("posting_mode") or "").strip()
+        if sm and pm in VALID_POSTING_MODES:
+            by_key[sm] = pm
+
+    if key in by_key:
+        return by_key[key]
+    base = PAYMENT_METHOD_ALIASES.get(key)
+    if base and base in by_key:
+        return by_key[base]
+    return POSTING_MODE_PAID_RECEIPT
+
+
+def needs_qoyod_account(posting_mode: str) -> bool:
+    """Only `paid_receipt` requires a qoyod_account_id. Used by both
+    Settings validation (block save if missing) and the pipeline
+    pre-POST guard (block invoice_payment step if missing)."""
+    return posting_mode == POSTING_MODE_PAID_RECEIPT
+
+
+def coerce_cod_rows(mapping: list[dict]) -> list[dict]:
+    """Iter-293 — Enforce the COD invariant at the API boundary:
+
+        salla_method ∈ COD family  →  posting_mode = credit_invoice_only
+                                       qoyod_account_id = None
+
+    Returns a NEW list (original is not mutated). Any other rows pass
+    through with whatever the operator submitted (subject to per-field
+    validation elsewhere).
+    """
+    out: list[dict] = []
+    for row in mapping or []:
+        if not isinstance(row, dict):
+            continue
+        new_row = dict(row)
+        if is_cod_family(new_row.get("salla_method")):
+            new_row["posting_mode"] = POSTING_MODE_CREDIT_INVOICE_ONLY
+            new_row["qoyod_account_id"] = None
+        else:
+            # Default any unset/invalid posting_mode to paid_receipt.
+            pm = (new_row.get("posting_mode") or "").strip()
+            if pm not in VALID_POSTING_MODES:
+                new_row["posting_mode"] = POSTING_MODE_PAID_RECEIPT
+        out.append(new_row)
+    return out
+
+
 def _norm(v: Optional[str]) -> str:
     """Lowercase + strip + collapse whitespace to underscore. Mirrors
     the tail of `_canonical_payment_method` so keys compare cleanly."""

@@ -165,6 +165,7 @@ const SECTIONS = [
                     { to: "/integrations/qoyod/unallocated-receipts", label: "🧾 سندات قبض غير مربوطة", icon: Receipt, testid: "nav-qoyod-unallocated-receipts" },
                     { to: "/integrations/qoyod/rounding-report", label: "🔬 تقرير فروق التقريب", icon: Receipt, testid: "nav-qoyod-rounding-report" },
                     { to: "/integrations/qoyod/rounding-dry-run", label: "🧪 محاكاة Phase 2 (Dry-Run)", icon: Receipt, testid: "nav-qoyod-rounding-dry-run" },
+                    { to: "/integrations/qoyod/cod-receipts-report", label: "🧾 تقرير COD المُرحَّل كمدفوع", icon: Receipt, testid: "nav-qoyod-cod-receipts-report" },
                     { to: "/integrations/qoyod/error-log", label: "سجل الأخطاء", icon: Receipt, testid: "nav-qoyod-error-log" },
                 ],
             },

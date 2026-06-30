@@ -1,0 +1,35 @@
+{
+  "summary": "Iter-293 (Qoyod posting_mode + COD diagnostics) fully verified end-to-end. Backend: all 39 existing tests in test_qoyod_posting_mode_iter293.py PASS; added 10 new HTTP smoke tests (9 PASS, 1 originally skipped then fixed → PASS). Frontend: COD receipts report page renders with all testids and shows cod-empty for empty DB; Qoyod Settings PaymentMethodMappingTable renders 4 pm-mode-select rows (apple_pay, cod, mada, stc_pay), the cod row dropdown is DISABLED with pm-cod-locked-cod showing the exact spec text '🔒 COD لا يحتاج حساب قبض — مرحّل كفاتورة آجلة فقط' and 2 pm-no-account-* hints replace the account picker; sidebar nav-qoyod-cod-receipts-report link is present and points to /integrations/qoyod/cod-receipts-report. Iter-291 (Salla OAuth scopes) and Iter-292 (Easy Mode webhook at /api/salla/webhooks/app) smoke checks both PASS.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qoyod_posting_mode_iter293.py",
+    "/app/backend/tests/test_qoyod_posting_mode_iter293_http.py",
+    "/app/test_reports/pytest/iter293_results.xml",
+    "/app/test_reports/pytest/iter293_http_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Defense-in-depth coercion (coerce_cod_rows on PUT + resolve_posting_mode at pipeline-time) works correctly: GET /settings after PUT with {salla_method:'cod', posting_mode:'paid_receipt', qoyod_account_id:'999'} returns posting_mode='credit_invoice_only' and qoyod_account_id=null as required.",
+    "Admin diagnostic endpoints (/admin/cod-receipts-report and /admin/bank-transfer-discovery) properly gated — return 401/403 without auth and the full {ok, ...} schema with admin token.",
+    "Frontend gracefully shows cod-empty when DB has no COD orders — no JS errors in console (only unrelated 400/401 pre-login resource errors).",
+    "Minor (informational, not a bug): pm-bank-warn-bank_transfer is conditional on a 'bank_transfer' row existing in payment_method_mapping. The current admin mapping has no such row, so the warn badge is not visible. The implementation source in QoyodSettings.jsx contains the correct conditional render at line 558. Verified by code inspection."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_qoyod_posting_mode_iter293_http.py (NEW — 10 HTTP smoke tests covering admin diagnostics auth+shape, COD/mada/apple_pay/disabled coercion via PUT+GET roundtrip, and Iter-291/292 backwards compat)"
+  ],
+  "success_rate": {"backend": "100% (49/49 — 39 unit + 10 http)", "frontend": "100% (all required testids present and behaving correctly)"},
+  "test_credentials": "admin@hesab.app / admin123 (loaded from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — verified DB-empty path (cod-empty) instead.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-293 fully verified. All 39 unit tests in test_qoyod_posting_mode_iter293.py pass. New HTTP smoke file test_qoyod_posting_mode_iter293_http.py exercises live endpoints under admin auth and validates coercion. Easy-mode webhook (Iter-292) lives at POST /api/salla/webhooks/app — useful to know for future smoke tests.",
+  "rca of the issue": "N/A — no issues found."
+}
