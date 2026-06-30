@@ -52,6 +52,13 @@ def _now() -> datetime:
 
 
 CONFIRM_TOKEN_TEMPLATE = "REPROCESS-{order_number}"
+# Iter-293.4-rev3 — Per-Order Approval Phrase.
+# When `production_writes_locked=True` (the master kill switch), the
+# operator must additionally supply this exact phrase to unlock the
+# api_client for a single order — WITHOUT flipping the global
+# setting. The order_number is interpolated so a phrase approving
+# order A cannot be reused for order B.
+APPROVAL_PHRASE_TEMPLATE = "Approved to send order {order_number} only"
 
 # Pipeline stages the row must traverse for a successful one-shot run.
 # Iter-290h.6 — Pipeline now uses `POST /invoice_payments` instead of
@@ -394,6 +401,7 @@ async def reprocess_one_order(
     order_number: Optional[str] = None,
     trace_id: Optional[str] = None,
     confirm: str,
+    approval_phrase: Optional[str] = None,
     actor: str = "operator",
 ) -> dict:
     """Reprocess exactly one Salla order against real Qoyod.
@@ -404,6 +412,14 @@ async def reprocess_one_order(
     Raises `OneShotRefused` ONLY for input/safety errors — pipeline
     failures (DEAD_LETTER, leak guard tripped, Qoyod 4xx/5xx) are
     returned as normal results with `outcome` set.
+
+    Iter-293.4-rev3 — Per-Order Approval Phrase:
+        When `production_writes_locked=True`, the operator must also
+        pass `approval_phrase` exactly equal to
+            "Approved to send order <order_number> only"
+        to unlock the api_client for THIS one run. The global
+        `production_writes_locked` setting is NEVER toggled. A row is
+        inserted into `qoyod_per_order_approvals` for ZATCA audit.
     """
     # ── 1. Confirm token (order-specific, typo-resistant) ───────────
     if not (order_number or trace_id):
@@ -528,11 +544,76 @@ async def reprocess_one_order(
             row_id=row.get("id"))
 
     # ── 7. Drive the pipeline — manually, single row, real client ───
+    # Iter-293.4-rev3 — Per-Order Approval Phrase.
+    # If `production_writes_locked=True`, the operator MUST have
+    # supplied an `approval_phrase` exactly equal to
+    #     "Approved to send order <order_number> only"
+    # When matched, the api_client is constructed UNLOCKED for THIS
+    # run only. The global setting is NEVER toggled. Every approval
+    # is persisted to `qoyod_per_order_approvals` for ZATCA audit.
     from integrations.qoyod.write_lock import is_locked as _is_locked
+    global_lock_active = _is_locked(settings)
+    approval_audit: Optional[dict] = None
+    use_unlocked_client = False
+    if global_lock_active:
+        if not approval_phrase:
+            raise OneShotRefused(
+                "approval_phrase_required",
+                "production_writes_locked=true يتطلب موافقة per-order "
+                "صريحة. مرّر approval_phrase = "
+                f"'{APPROVAL_PHRASE_TEMPLATE.format(order_number=order_number)}' "
+                "حتى يتم فك القفل لهذا الطلب فقط.",
+                order_number=order_number,
+                expected=APPROVAL_PHRASE_TEMPLATE.format(
+                    order_number=order_number),
+            )
+        expected_phrase = APPROVAL_PHRASE_TEMPLATE.format(
+            order_number=order_number)
+        if (approval_phrase or "").strip() != expected_phrase:
+            raise OneShotRefused(
+                "approval_phrase_mismatch",
+                "approval_phrase doesn't match the order being sent. "
+                "Must equal exactly: '" + expected_phrase + "'. "
+                "Phrases are order-specific and cannot be reused.",
+                expected=expected_phrase,
+                received=(approval_phrase or "")[:128],
+                order_number=order_number,
+            )
+        # Persist the approval BEFORE constructing the unlocked client
+        # so the audit trail captures the intent even if the run later
+        # fails for an unrelated reason.
+        import uuid as _uuid
+        approval_id = str(_uuid.uuid4())
+        approval_audit = {
+            "approval_id":             approval_id,
+            "user_id":                 user_id,
+            "order_number":            order_number,
+            "trace_id":                row.get("trace_id"),
+            "row_id":                  row.get("id"),
+            "actor":                   actor,
+            "approval_phrase":         approval_phrase,
+            "expected_phrase":         expected_phrase,
+            "approved_at":             _now(),
+            "global_lock_was_active":  True,
+            "scope":                   "single_order",
+            "unlocked_api_client":     True,
+        }
+        try:
+            await db.qoyod_per_order_approvals.insert_one(approval_audit)
+        except Exception as _exc:    # pragma: no cover
+            logger.warning("qoyod_per_order_approvals insert failed: %s", _exc)
+        logger.warning(
+            "PER_ORDER_APPROVAL granted actor=%s order=%s trace=%s "
+            "approval_id=%s scope=single_order",
+            actor, order_number, row.get("trace_id"), approval_id)
+        use_unlocked_client = True
+
     api_client = QoyodAPIClient(
         api_key,
         db=db, user_id=user_id,
-        write_lock_enabled=_is_locked(settings),
+        # Use UNLOCKED client only when per-order approval validated.
+        write_lock_enabled=(False if use_unlocked_client
+                            else global_lock_active),
     )
     stage_sequence: list[str] = []
     result_log: list[dict] = []
@@ -645,6 +726,15 @@ async def reprocess_one_order(
             "receipt_payload": payloads.get("receipt"),
             "dry_leaks_in_final_payload": dry_leaks,  # MUST be []
             "quarantine_summary": quarantine_summary,
+            # Iter-293.4-rev3 — Per-order approval audit reference.
+            "per_order_approval": (
+                {"approval_id":     approval_audit.get("approval_id"),
+                 "approved_at":     approval_audit.get("approved_at").isoformat()
+                                    if hasattr(approval_audit.get("approved_at"),
+                                               "isoformat") else None,
+                 "scope":           "single_order",
+                 "global_lock_was_active": True}
+                if approval_audit else None),
         }
 
     # Everything else = a failure result. Build a stage-specific

@@ -1,5 +1,65 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-293.4-rev3-per-order-approval — First live send unlock mechanism (2026-XX)
+
+**Operator mandate** (verbatim phrase used as the unlock key):
+> "Approved to send order 269571122 only. لا فتح production_writes_locked=false
+> بشكل عام. إذا الإرسال الفردي لا يعمل إلا بفتح القفل العام، توقف ولا ترسل."
+
+### Mechanism
+`reprocess_one_order` accepts a new optional parameter `approval_phrase`.
+When `production_writes_locked=True`:
+- If `approval_phrase` is missing → `OneShotRefused(approval_phrase_required)`.
+- If it doesn't equal exactly `"Approved to send order <order_number> only"` →
+  `OneShotRefused(approval_phrase_mismatch)`.
+- If correct → the api_client is constructed with
+  `write_lock_enabled=False` **for this single run only**.
+- The global `qoyod_settings.production_writes_locked` is NEVER read
+  or modified — the override is purely scoped to the function call.
+
+### Audit
+Every granted approval is persisted to `qoyod_per_order_approvals`:
+```
+{ approval_id, user_id, order_number, trace_id, row_id, actor,
+  approval_phrase, expected_phrase, approved_at,
+  global_lock_was_active=True, scope="single_order",
+  unlocked_api_client=True }
+```
+A WARNING log is also emitted to stdout:
+```
+PER_ORDER_APPROVAL granted actor=… order=… trace=… approval_id=… scope=single_order
+```
+The successful one-shot response surfaces `per_order_approval.approval_id`
++ `approved_at` so operators can link Qoyod invoice → audit row.
+
+### New read-only endpoint
+`GET /api/integrations/qoyod/admin/per-order-approvals`
+Lists every granted approval (filterable by `order_number`).
+
+### Phrase format
+Phrase template is order-specific and cannot be reused:
+```python
+APPROVAL_PHRASE_TEMPLATE = "Approved to send order {order_number} only"
+```
+Pinned by `TestPhraseTemplateInDocstring`.
+
+### Tests (9 new)
+`tests/test_qoyod_per_order_approval_iter293_4.py`:
+- **Refusals (4 tests):** locked + no phrase → `approval_phrase_required`,
+  wrong phrase → `approval_phrase_mismatch`, phrase for different order
+  → `approval_phrase_mismatch`, template stability pinned.
+- **Granted flow (4 tests):** correct phrase persists audit row with
+  all required fields, no approval needed when lock=False,
+  api_client constructed with `write_lock_enabled=False`, global
+  setting NEVER modified.
+- **Total Qoyod regression:** 1146/1146 PASS (was 1137, +9 new, 0 regressions).
+
+### Live curl-tested (locally)
+With production_writes_locked=true + seed inbox row:
+- No phrase → HTTP 400 with `approval_phrase_required` + expected phrase in error.
+- Wrong phrase → HTTP 400 with `approval_phrase_mismatch` + expected vs received in error.
+- (Correct phrase live-tested by operator on Production for order 269571122.)
+
 ## Iter-293.4-rev3-cleanup — Product mapping repair workflow (2026-XX)
 
 **Operator demand** after Dry-run on order 269571122:

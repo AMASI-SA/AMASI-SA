@@ -255,11 +255,26 @@ class OneShotReprocessBody(BaseModel):
     `order_number` (the human-readable Salla order id) plus a
     `confirm` token that equals `REPROCESS-<order_number>`. The
     optional `trace_id` disambiguates when multiple inbox rows exist
-    for the same order_number (e.g. multiple status webhooks)."""
+    for the same order_number (e.g. multiple status webhooks).
+
+    Iter-293.4-rev3 — Per-Order Approval Phrase:
+    When `production_writes_locked=True` (the global kill switch is
+    on), the operator MUST also supply an `approval_phrase` equal to
+    exactly:
+        "Approved to send order <order_number> only"
+    The phrase unlocks the api_client for THIS one order only — the
+    global `production_writes_locked` setting is NEVER toggled. The
+    approval is audited to `qoyod_per_order_approvals`.
+    """
     model_config = ConfigDict(extra="forbid")
     order_number: str = Field(..., min_length=1, max_length=64)
     confirm:      str = Field(..., min_length=1, max_length=128)
     trace_id:     Optional[str] = None
+    approval_phrase: Optional[str] = Field(
+        default=None, max_length=256,
+        description=("Per-order approval that overrides "
+                     "production_writes_locked for this single order. "
+                     "Must equal 'Approved to send order <N> only'."))
 
 
 class PreviewReprocessBody(BaseModel):
@@ -920,6 +935,34 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 detail={"code": result.get("reason", "adopt_refused")})
         return result
 
+    # ── Iter-293.4-rev3 — Per-Order Approval audit ──────────────────
+    # Read-only list of every per-order approval granted via the
+    # one-shot-reprocess endpoint. For ZATCA evidence trail.
+    @router.get("/admin/per-order-approvals")
+    async def list_per_order_approvals(
+        user=Depends(current_user),
+        limit: int = Query(100, ge=1, le=500),
+        order_number: Optional[str] = Query(None),
+    ):
+        tenant = _tenant_id(user)
+        q: dict = {"user_id": tenant}
+        if order_number:
+            q["order_number"] = order_number
+        rows = []
+        async for r in db.qoyod_per_order_approvals.find(
+                q, {"_id": 0}).sort("approved_at", -1).limit(limit):
+            if hasattr(r.get("approved_at"), "isoformat"):
+                r["approved_at"] = r["approved_at"].isoformat()
+            rows.append(r)
+        return {
+            "ok":    True,
+            "count": len(rows),
+            "items": rows,
+            "note":  ("سجل القراءة فقط لكل موافقات per-order التي مُنحت "
+                      "عبر one-shot-reprocess. كل موافقة مرتبطة بطلب "
+                      "واحد ولا يمكن استخدامها لطلب آخر."),
+        }
+
     # ── Iter-293.4-rev3 — DRY/PREVIEW mappings audit ────────────────
     # Read-only list of every product SKU whose `qoyod_product_id`
     # carries a DRY:/PREVIEW:* prefix OR is flagged `dry_run_only=True`.
@@ -1163,6 +1206,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 order_number=payload.order_number,
                 trace_id=payload.trace_id,
                 confirm=payload.confirm,
+                approval_phrase=payload.approval_phrase,
                 actor=actor,
             )
         except OneShotRefused as exc:
