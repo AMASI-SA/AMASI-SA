@@ -88,9 +88,31 @@ def run(
     # etc.) are NOT payment methods. We don't require a Qoyod account
     # mapping for them; the row is simply not eligible for receipt creation.
     pm_is_pending = is_pending_payment_status(pm_native)
-    pm_mapped = None if pm_is_pending else resolve_payment_account(settings, pm_native)
-    if pm_is_pending:
+    # Iter-293 — Resolve the posting_mode BEFORE the account-mapping
+    # check. COD-family methods (and any row set to credit_invoice_only
+    # or disabled) MUST NOT require a qoyod_account_id — those rows
+    # never trigger an invoice_payment, so the account is irrelevant.
+    # Without this branch, the bug from order 269547100 reoccurs:
+    # preflight fails with `payment_method_mapping_missing` for COD
+    # orders that posting_mode=credit_invoice_only should let through.
+    from integrations.qoyod.payment_methods import (
+        POSTING_MODE_CREDIT_INVOICE_ONLY,
+        POSTING_MODE_DISABLED,
+        is_cod_family,
+        resolve_posting_mode,
+    )
+    posting_mode = resolve_posting_mode(settings, pm_native)
+    pm_skips_account_check = (
+        pm_is_pending
+        or is_cod_family(pm_native)
+        or posting_mode in (POSTING_MODE_CREDIT_INVOICE_ONLY,
+                            POSTING_MODE_DISABLED)
+    )
+    pm_mapped = None if pm_skips_account_check \
+                else resolve_payment_account(settings, pm_native)
+    if pm_skips_account_check:
         # Soft skip — surface in checks_run but not as a failure.
+        # This is the COD / credit_invoice_only / disabled / pending path.
         pass
     elif not pm_native:
         failures.append({"check": "payment_method",
@@ -106,7 +128,8 @@ def run(
                          "code": "payment_method_mapping_missing",
                          "message": msg,
                          "extra": {"payment_method": pm_native,
-                                   "provider_family": family}})
+                                   "provider_family": family,
+                                   "posting_mode": posting_mode}})
 
     # 5) Status
     triggers = settings.get("invoice_trigger_statuses") or ["completed"]
