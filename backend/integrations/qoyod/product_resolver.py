@@ -788,6 +788,10 @@ async def adopt_qoyod_product(
             "adoption_note":      note,
             "source":             "operator_adopted",
             "auto_created":       False,
+            # Iter-293.4-rev3 — Adoption MUST clear the dry_run_only
+            # flag so the preview/sendable gate recognises this mapping
+            # as a real Qoyod binding (not a stale dry-run artifact).
+            "dry_run_only":       False,
         },
          "$setOnInsert": {"created_at": now}},
         upsert=True,
@@ -799,4 +803,5 @@ async def adopt_qoyod_product(
         "qoyod_product_name": qoyod_product_name,
         "adopted_by":         actor,
         "adopted_at":         now.isoformat(),
+        "dry_run_only":       False,
     }

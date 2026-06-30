@@ -1,5 +1,58 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-293.4-rev3-cleanup — Product mapping repair workflow (2026-XX)
+
+**Operator demand** after Dry-run on order 269571122:
+> "المنتج AMS11961 موجود فعلاً في قيود — Qoyod product_id = 39. لا تنشئ
+> منتج جديد. حدِّث mapping في ميزان واستبدل DRY:product:fefe7c24."
+
+### Two changes
+1. **`adopt_qoyod_product` clears `dry_run_only=False`**.
+   The existing manual-adoption helper upserted `adopted=True` but
+   left the `dry_run_only` flag in place. After Iter-293.4-rev3 added
+   `dry_run_only` as a sendable blocker in `preview_reprocess`, this
+   stale flag would keep `dependency_status.sendable=False` even after
+   the operator adopted the SKU. Fixed: every adoption call now
+   explicitly sets `dry_run_only: False` in the `$set` block.
+
+2. **NEW `GET /api/integrations/qoyod/admin/products/dry-mappings`**.
+   Read-only audit listing every SKU whose mapping is still in the
+   "needs repair" state — either `qoyod_product_id` starts with
+   `DRY:`/`PREVIEW:` OR `dry_run_only=True`. Each row carries:
+     - `sku`, `qoyod_product_id`, `qoyod_product_name`
+     - `dry_run_only`, `adopted`, `source`, `created_at`
+     - `needs_repair_via`: "POST /products/adopt"
+     - `reason`: "dry_run_only=true" | "qoyod_product_id has DRY:/PREVIEW: prefix"
+
+### Operator repair flow (no Qoyod write — just local mapping)
+```
+GET  /admin/products/dry-mappings        # see what needs repair
+POST /products/adopt {sku, qoyod_product_id}   # bind real id, clear dry_run_only
+GET  /admin/products/dry-mappings        # confirm empty list
+POST /admin/preview-reprocess {trace_id} # re-run dry-run, expect sendable=true
+```
+
+### Tests (7 new)
+`tests/test_qoyod_product_adopt_dry_cleanup_iter293_4_rev3.py`:
+- 3 tests on `adopt_qoyod_product` clearing `dry_run_only` (replacing
+  DRY mapping, fresh SKU, refusing empty inputs).
+- 4 tests on the listing matcher (DRY prefix, PREVIEW prefix, real
+  id without dry flag NOT listed, real id WITH dry flag IS listed).
+
+### Verification (live)
+- 1137/1137 Qoyod tests PASS (was 1130, +7 new, 0 regressions).
+- Live smoke (local DB): seed DRY mapping → GET /admin/products/dry-mappings
+  shows AMS11961 with reason=`dry_run_only=true` → POST /products/adopt
+  with qoyod_product_id=39 → DB shows real id + dry_run_only=False +
+  adopted=True + source=operator_adopted → second GET shows count=0.
+
+### Rolled back (per operator decision)
+- `Iter-293.4-rev4` (Selective Live Send Gate / Safe Live Posting):
+  the `live_send_gate.py` module was created and the 3 new
+  SettingsPatch fields were added — both have been REMOVED. The
+  decision was to close Rev3 first (mapping repair) and only THEN
+  open the conversation about selective live posting.
+
 ## Iter-293.4-rev3 — Operator review #2: DRY mappings + sendable gate honesty (2026-XX)
 
 **Operator demand** after Rev2 Dry-run on order 269571122:

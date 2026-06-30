@@ -920,6 +920,58 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 detail={"code": result.get("reason", "adopt_refused")})
         return result
 
+    # ── Iter-293.4-rev3 — DRY/PREVIEW mappings audit ────────────────
+    # Read-only list of every product SKU whose `qoyod_product_id`
+    # carries a DRY:/PREVIEW:* prefix OR is flagged `dry_run_only=True`.
+    # Surfaces exactly what the operator needs to repair via
+    # `POST /products/adopt` before any live invoice can be sent for
+    # an order containing those SKUs.
+    @router.get("/admin/products/dry-mappings")
+    async def list_dry_product_mappings(
+        user=Depends(current_user),
+        limit: int = Query(200, ge=1, le=2000),
+    ):
+        tenant = _tenant_id(user)
+        # Match: dry_run_only=True OR qoyod_product_id starts with
+        # DRY:/PREVIEW: (case-insensitive).
+        q = {
+            "user_id": tenant,
+            "$or": [
+                {"dry_run_only": True},
+                {"qoyod_product_id": {
+                    "$regex": r"^(DRY:|PREVIEW:)", "$options": "i"}},
+            ],
+        }
+        rows = []
+        async for r in db.qoyod_products_mapping.find(
+                q, {"_id": 0}).limit(limit):
+            rows.append({
+                "sku":                r.get("sku"),
+                "qoyod_product_id":   r.get("qoyod_product_id"),
+                "qoyod_product_name": r.get("qoyod_product_name"),
+                "dry_run_only":       bool(r.get("dry_run_only", False)),
+                "adopted":            bool(r.get("adopted", False)),
+                "source":             r.get("source"),
+                "created_at":         (r.get("created_at").isoformat()
+                                       if hasattr(r.get("created_at"),
+                                                  "isoformat") else None),
+                "needs_repair_via":   "POST /products/adopt",
+                "reason": (
+                    "dry_run_only=true"
+                    if r.get("dry_run_only")
+                    else "qoyod_product_id has DRY:/PREVIEW: prefix"
+                ),
+            })
+        return {
+            "ok":      True,
+            "count":   len(rows),
+            "items":   rows,
+            "note":    (
+                "كل SKU في هذه القائمة يحتاج adoption يدوي بـ qoyod_product_id "
+                "حقيقي. استخدم `POST /products/adopt` لكل SKU. هذا يُحدِّث "
+                "الـ mapping ويُفعِّل dependency_status.sendable في الـ preview."),
+        }
+
     # ── Existing-Data Migration (read-only pre-flight) ──────────────
     attach_migration_routes(router, db, current_user, _tenant_id)
 
