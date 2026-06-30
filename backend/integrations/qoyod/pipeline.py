@@ -83,6 +83,51 @@ async def _apply(db, row_id: str, patch: dict) -> None:
     await db.integration_inbox.update_one({"id": row_id}, patch)
 
 
+def _writes_blocked(api_client: Any, settings: dict) -> bool:
+    """Iter-293.4-rev5 — Single source of truth for the pipeline's
+    PRE-flight lock check.
+
+    Why this exists
+    ───────────────
+    The Global Write Lock has TWO independent enforcers:
+
+      • `api_client._request` — defense-in-depth at the HTTP layer.
+        Honoured by EVERY caller via `QoyodWriteLockedError`.
+
+      • `pipeline.process_customer_resolved_row` — short-circuits
+        BEFORE the network call so the row gets parked in
+        `LOCKED_AWAITING_APPROVAL` cleanly (no exception traceback,
+        no half-built audit). Previously this used `is_locked(settings)`
+        which read the DB flag DIRECTLY and ignored the lock state of
+        the api_client passed in.
+
+    The bug
+    ───────
+    `one_shot_reprocess.reprocess_one_order` builds the api_client
+    with `write_lock_enabled=False` when a valid per-order approval
+    phrase is supplied (Iter-293.4-rev3). But the pipeline's pre-flight
+    `is_locked(settings)` short-circuit returned True because the DB
+    flag is intentionally still True. Result: the approved single
+    order got parked at LOCKED_AWAITING_APPROVAL and never reached
+    `create_invoice`.
+
+    The fix
+    ───────
+    Trust the api_client's own lock state when one is supplied — that
+    is the SOLE construct that knows whether the caller has been
+    granted a per-order bypass. Fall back to `is_locked(settings)`
+    only when no api_client is supplied (defensive — should not happen
+    on the live paths, but keeps tests / direct invocations safe).
+    """
+    if api_client is not None:
+        # An api_client was supplied — honour its lock state.
+        # NOTE: Both real `QoyodAPIClient` and `DryRunQoyodClient`
+        # carry a `write_lock_enabled` attribute (DryRun = always
+        # False so the pre-check never trips in dry-run mode).
+        return bool(getattr(api_client, "write_lock_enabled", False))
+    return is_locked(settings)
+
+
 async def _dead_letter(
     db, *, row_id: str, from_stage: str, fail_stage: str,
     error: dict, started_at: Optional[datetime] = None,
@@ -673,7 +718,7 @@ async def process_customer_resolved_row(
         # This is INDEPENDENT of `dry_run_mode` (which uses DRY:* stub
         # ids and is intended for offline simulation). Production
         # writes lock keeps real ids but skips the POST.
-        if is_locked(settings):
+        if _writes_blocked(api_client, settings):
             # Iter-293.4-rev2 — Pre-check must ALSO write to the audit
             # collection so /admin/write-lock-report surfaces the
             # blocked attempt. Previously only the api_client._request
@@ -999,7 +1044,7 @@ async def process_customer_resolved_row(
         # so the operator sees a clean LOCKED_AWAITING_APPROVAL outcome
         # instead of an exception bubbling up from api_client._request.
         # The API client itself enforces the lock as a safety net.
-        if is_locked(settings):
+        if _writes_blocked(api_client, settings):
             # Iter-293.4-rev2 — Persist to audit log so /admin/write-lock-report
             # surfaces this attempt (previously invisible to the report).
             payment_idem = (

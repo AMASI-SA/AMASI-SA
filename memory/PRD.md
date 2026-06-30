@@ -4809,3 +4809,51 @@ choose ONE of:
 - (c) Decimal/halalas migration (most-invasive).
 
 Full Qoyod regression after Iter-290j: **932 passed, 2 skipped, 0 failed**.
+
+────────────────────────────────────────────────────────────────────
+## Iter-293.4-rev5 — Pipeline Per-Order Unlock + COD Completion Fix (2026-02-27)
+
+### Bug found
+Per-order approval grants an UNLOCKED api_client, but
+`pipeline.process_customer_resolved_row` was calling
+`is_locked(settings)` DIRECTLY (DB flag) and parking the row at
+`LOCKED_AWAITING_APPROVAL` BEFORE invoking the api_client. Operator
+saw `HTTP 200, ok=false, outcome=LOCKED_AWAITING_APPROVAL,
+qoyod_invoice_id=undefined, per_order_approval=undefined` for the
+269571122 order despite supplying the correct approval_phrase.
+
+Second bug uncovered while writing the regression: COD
+`credit_invoice_only` branch transitions `INVOICE_CREATED → COMPLETED`
+directly, but the state machine did NOT permit this edge. Hidden by
+the global lock; would have crashed every COD order the moment per-
+order approval lifted the lock.
+
+### Fix
+1. `api_client.QoyodAPIClient.write_lock_enabled` — new read-only
+   public property exposing the construction-time lock state.
+2. `pipeline._writes_blocked(api_client, settings)` — single source of
+   truth for the pipeline's pre-flight lock check. Trusts the
+   supplied api_client's lock state; falls back to `is_locked(settings)`
+   when no client is supplied.
+3. Both `is_locked(settings)` pre-checks in `process_customer_resolved_row`
+   (create_invoice + create_invoice_payment paths) replaced with
+   `_writes_blocked(api_client, settings)`.
+4. `state_machine` — added `INVOICE_CREATED → COMPLETED` to allowed
+   transitions for the COD `credit_invoice_only` accounting path.
+
+### Tests
+- `tests/test_qoyod_pipeline_per_order_unlock_iter293_4_rev5.py` (+7)
+  Drives the REAL `process_customer_resolved_row` (no mock of the
+  pipeline) and asserts `create_invoice` IS called when an unlocked
+  api_client is supplied. Previous tests passed because they mocked
+  out the pipeline path; this regression test catches the actual bug.
+- Full per-order approval + global write lock + one-shot suites
+  (88 tests) still pass. Larger qoyod suite: 1157 passed, 1 unrelated
+  flaky test.
+
+### Contract pinned
+- `production_writes_locked` setting is NEVER toggled by approval.
+- COD orders POST invoice only (`credit_invoice_only`) — no
+  `invoice_payment`, no `receipt`.
+- Per-order approval bypass is scoped to ONE run only; the api_client
+  carries the unlock signal, not a global flag.

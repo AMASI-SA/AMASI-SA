@@ -245,6 +245,21 @@ def _build_allowed() -> set[tuple[str, str]]:
     allowed.add(("LOCKED_AWAITING_APPROVAL", RETRYING))
     allowed.add(("LOCKED_AWAITING_APPROVAL", "DEAD_LETTER"))
 
+    # ─── Iter-293.4-rev5 — COD credit_invoice_only direct completion ──
+    # COD (cash-on-delivery) orders post the invoice as a CREDIT
+    # invoice — they intentionally SKIP the invoice_payment step
+    # because the money is collected later by the courier. The
+    # pipeline's posting_mode resolver (`credit_invoice_only`)
+    # transitions the row directly from INVOICE_CREATED to COMPLETED
+    # without ever creating an invoice_payment. The state machine
+    # must permit this edge OR the row crashes with InvalidTransition
+    # the moment per-order approval unlocks a COD invoice.
+    #
+    # Note: this is COD-specific accounting. Pre-paid methods (mada,
+    # apple_pay, etc.) still flow through the full
+    # INVOICE_CREATED → INVOICE_PAYMENT_CREATED → COMPLETED path.
+    allowed.add(("INVOICE_CREATED", "COMPLETED"))
+
     return allowed
 
 

@@ -147,6 +147,14 @@ class QoyodAPIClient:
         self._user_id = user_id
         self._write_lock_enabled = bool(write_lock_enabled)
 
+    # Iter-293.4-rev5 — Public read-only view of the lock state so the
+    # pipeline can honour the per-order approval bypass. Callers MUST
+    # NOT mutate this; rebuild a fresh QoyodAPIClient if the desired
+    # state changes (e.g. between rows / between runs).
+    @property
+    def write_lock_enabled(self) -> bool:
+        return self._write_lock_enabled
+
     # Redact secrets in any debug print.
     def __repr__(self) -> str:  # pragma: no cover
         return (f"QoyodAPIClient(base_url={self._base_url!r}, "
