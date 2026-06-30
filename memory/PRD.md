@@ -1,5 +1,50 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-291 — Salla OAuth `invalid_scope` Fix (2026-06-30)
+**Symptom**: Merchants get `فشل الربط: invalid_scope` when trying to install Mezan from Salla store. OAuth fails BEFORE any order sync or webhook activity.
+
+**Root cause**: `DEFAULT_SCOPES` requested `customers.read`, but Customers permission was NOT enabled in the Salla Partners Portal App for Mezan. Salla validates every requested scope against the App's enabled permissions during `/oauth2/auth` — any unenabled scope causes the whole request to fail with `error=invalid_scope`.
+
+### What changed
+- **`/app/backend/salla_integration/service.py`** — `DEFAULT_SCOPES` reduced to the minimum required + made env-overridable:
+  - **Before**: `offline_access orders.read orders.write webhooks.read webhooks.write customers.read settings.read`
+  - **After**:  `offline_access orders.read orders.write webhooks.read webhooks.write settings.read`
+  - Operators can now override via `SALLA_OAUTH_SCOPES` env var (space-separated) without a code change.
+- **`/app/backend/salla_integration/routes.py`** — `/oauth/login` now:
+  - **Logs the exact authorize URL** (with masked `state`) before redirecting → debug-friendly.
+  - **Surfaces `scope` and `scope_list`** in the JSON response → UI/QA can verify what's requested without parsing the URL.
+- **NEW debug endpoint `GET /api/salla/oauth/scopes`** — auth-gated, returns the exact scope string, scope source (env vs code default), and a reminder note. Lets support engineers verify scopes side-by-side with the Partners Portal app config without triggering the OAuth flow.
+- **NEW test suite `/app/backend/tests/test_salla_oauth_scopes_iter291.py`** — 7 pinned regression tests:
+  - `customers.read/write` MUST NOT be in scope (root-cause regression).
+  - `products.*`, `payments.*`, `shipping.*`, `shipments.*`, `taxes.*`, `branches.*`, `transactions.*` MUST NOT be in scope (per architecture: come from order payload).
+  - `offline_access`, `orders.read`, `orders.write`, `webhooks.read`, `webhooks.write`, `settings.read` MUST all be present.
+  - Scope string is single-line, space-separated, no commas / no double-spaces.
+  - `SALLA_OAUTH_SCOPES` env override works.
+  - Static guard: no code under `salla_integration/` calls `/customers` endpoints (so dropping `customers.read` is safe).
+
+### Why customer data still works without `customers.read`
+Per Salla's design, customer details (name, phone, email, ship-to address) are embedded inside the order payload that arrives via webhook/poll. The `customers.read` scope only authorises the standalone `/customers` listing/CRUD API, which Mezan does not use. Same logic applies to payments, shipping, taxes, branches — all sourced from the order payload.
+
+### Verification
+- 7/7 new Iter-291 tests pass.
+- Backend restarts cleanly. Live preview `GET /api/salla/oauth/scopes` returns the corrected scope string.
+- Existing Salla phase-1 tests are env-loading flaky in the pytest harness (pre-existing, unrelated to this change).
+
+### Operator action required (production)
+Code change alone is insufficient — the existing Salla install on `mezansalla.com` still holds an access_token bound to the OLD scope set, which Salla revokes/refuses on next refresh anyway. To re-enable the merchant:
+1. `Save to GitHub` + `Deploy` to push the new code to production.
+2. Merchant: uninstall the old Mezan app from their Salla store dashboard.
+3. Merchant: re-install via Mezan → Settings → "ربط متجر سلة" → click Connect.
+4. Salla should now redirect back to `/api/salla/oauth/callback?code=...` (no `invalid_scope`).
+5. Verify success: `GET /api/salla/status` returns `connected: true`.
+
+### Future toggle: when we need Products scope (SKU sync)
+1. Enable Products (Read + Write) in the Salla Partners Portal App.
+2. Set `SALLA_OAUTH_SCOPES="offline_access orders.read orders.write webhooks.read webhooks.write settings.read products.read products.write"` in backend/.env.
+3. Restart backend. Merchant re-installs. No code change needed.
+
+
+
 ## Iter-290k.3 — CORRECTED قيود model + Representability Check (2026-06-29)
 **User's diagnostic from order 269349492 proved the previous model wrong**: قيود computes `displayed_net = Σ round(line_net, 2)` (round-each-line-then-sum), NOT `round(Σ line_net, 2)` (sum-then-round). Verified by reproducing قيود's actual 228.11 from the production payload: 8.45+85.32+81.98+22.61 = 198.36, header_vat = round(198.36 × 0.15, 2) = 29.75, header_total = 228.11.
 

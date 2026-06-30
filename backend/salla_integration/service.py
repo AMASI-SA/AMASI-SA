@@ -33,7 +33,26 @@ EXPIRY_SAFETY_MARGIN_SEC = 120
 # Required scopes — keep the union of read+write for orders, webhooks
 # (used in Phase 2), and offline_access (required to receive a
 # refresh_token from Salla, per the OAuth2 spec).
-DEFAULT_SCOPES = "offline_access orders.read orders.write webhooks.read webhooks.write customers.read settings.read"
+#
+# IMPORTANT (Iter-291): every scope listed here MUST be enabled in the
+# Salla Partners Portal for this App, otherwise Salla returns
+# `invalid_scope` at /oauth2/auth.
+#
+# Customer details (name/phone/email/address) come embedded inside the
+# order payload — we do NOT need a separate `customers.read` scope for
+# the Salla→Qoyod invoice pipeline. Same for payments / shipping /
+# taxes: all available inside the order payload.
+#
+# Operators can override the list via the SALLA_OAUTH_SCOPES env var
+# (space-separated) without a code change — useful when Salla rolls out
+# new scope names or when the App's enabled permissions change.
+_DEFAULT_SCOPES_FALLBACK = (
+    "offline_access "
+    "orders.read orders.write "
+    "webhooks.read webhooks.write "
+    "settings.read"
+)
+DEFAULT_SCOPES = (os.environ.get("SALLA_OAUTH_SCOPES") or _DEFAULT_SCOPES_FALLBACK).strip()
 
 
 class SallaError(Exception):

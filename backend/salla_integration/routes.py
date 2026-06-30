@@ -138,9 +138,57 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             "scope": DEFAULT_SCOPES,
             "state": state,
         }
+        authorize_url = f"{SALLA_AUTHORIZE_URL}?{urlencode(params)}"
+        # Iter-291 — Log the *exact* OAuth URL we send the merchant to.
+        # No secrets are in the URL (client_secret is only used at the
+        # /oauth2/token step, never in the authorize redirect). The
+        # `state` is a one-shot CSRF token, so logging it is harmless.
+        # This makes Salla `invalid_scope` failures debuggable without
+        # asking the merchant to copy the URL from their browser bar.
+        try:
+            import logging
+            logging.getLogger("salla.oauth").info(
+                "salla.oauth.authorize_url user_id=%s client_id=%s redirect_uri=%s scope=%r state=%s url=%s",
+                user.get("id"),
+                params["client_id"],
+                redirect_uri,
+                DEFAULT_SCOPES,
+                state[:8] + "…",
+                authorize_url,
+            )
+        except Exception:  # noqa: BLE001 — logging must never break OAuth
+            pass
         return {
-            "authorize_url": f"{SALLA_AUTHORIZE_URL}?{urlencode(params)}",
+            "authorize_url": authorize_url,
             "redirect_uri": redirect_uri,
+            # Iter-291 — surface scope explicitly so the frontend can show
+            # "we will request these permissions" and so curl/QA can
+            # verify what's being requested without parsing the URL.
+            "scope": DEFAULT_SCOPES,
+            "scope_list": DEFAULT_SCOPES.split(),
+        }
+
+    # ── 2b. Debug: what scopes will we request? (no state, no redirect)
+    # Iter-291 — Lets the merchant / support engineer verify the exact
+    # scope string Mezan sends to Salla, without triggering the OAuth
+    # flow. Critical when chasing `invalid_scope` errors: if a scope is
+    # not enabled in the Salla Partners Portal, Salla rejects the whole
+    # request — this endpoint lets you compare side-by-side.
+    @router.get("/oauth/scopes")
+    async def oauth_scopes(user: dict = Depends(current_user)):  # noqa: ARG001 — auth-gated
+        return {
+            "scope": DEFAULT_SCOPES,
+            "scope_list": DEFAULT_SCOPES.split(),
+            "source": (
+                "env:SALLA_OAUTH_SCOPES"
+                if os.environ.get("SALLA_OAUTH_SCOPES")
+                else "code_default"
+            ),
+            "note": (
+                "Every scope above MUST be enabled in your Salla Partners "
+                "Portal App. Any unenabled scope will cause `invalid_scope` "
+                "during /oauth2/auth."
+            ),
         }
 
     # ── 3. OAuth callback ─────────────────────────────────────────────
