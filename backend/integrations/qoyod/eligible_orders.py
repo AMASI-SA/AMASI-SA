@@ -329,23 +329,71 @@ async def _check_products(db, user_id: str, order: dict) -> dict:
 
 
 def _check_totals(order: dict) -> dict:
-    """Validate line-item + shipping + tax ≈ order total."""
+    """Iter-001k+ (2026-02-27) — Mezan-VAT-15% guard.
+
+    Historical formula `items_sum + shipping + canonical.tax_amount`
+    is STRUCTURALLY WRONG because it depends on Salla's per-order
+    tax field, which may be missing/zero/8%/anything. The real Qoyod
+    invoice builder (`invoice_builder.build_invoice_payload`) uses
+    Mezan's fixed 15% VAT via `match_salla_total` policy, which
+    reconciles Σ(qoyod_gross) to `salla.total_amount` by construction.
+
+    This guard now uses the SAME Mezan-VAT simulation the real
+    payload builder uses. `valid` is decided by
+    `simulated_qoyod_diff_vs_salla_total` — NOT by Salla tax.
+
+    Returned keys:
+        valid                 — decision boolean (Mezan diff ≤ 0.01)
+        total                 — Salla official total (unchanged)
+        expected              — Mezan simulated Qoyod gross
+        diff                  — Mezan simulated diff vs Salla
+        legacy_expected       — old `items+shipping+tax` (diagnostic)
+        legacy_diff           — old diff (diagnostic)
+        mezan_vat_rate        — 0.15 (Mezan SSOT)
+        payload_date_source   — "send_date"
+        guard_engine          — "mezan_vat_15_simulation"
+    """
+    # ── Local import to avoid a circular dep with qoyod_simulation
+    #    which imports helpers from order_totals_breakdown.
+    from integrations.qoyod.qoyod_simulation import (
+        build_qoyod_simulation, MEZAN_VAT_RATE, PAYLOAD_DATE_SOURCE,
+    )
+
     total = float(order.get("total_amount") or 0)
-    items = order.get("items") or []
+
+    # ── Legacy formula (diagnostic only — not used for decision) ─
     items_sum = 0.0
-    for it in items:
+    for it in order.get("items") or []:
         qty = float(it.get("quantity") or 1)
         price = float(it.get("unit_price") or it.get("price") or 0)
         items_sum += qty * price
     shipping = float(order.get("shipping_amount") or 0)
-    tax = float(order.get("tax_amount") or 0)
-    expected = round(items_sum + shipping + tax, 2)
-    diff = round(total - expected, 2)
+    salla_tax_ignored = float(order.get("tax_amount") or 0)
+    legacy_expected = round(
+        items_sum + shipping + salla_tax_ignored, 2)
+    legacy_diff = round(total - legacy_expected, 2)
+
+    # ── Mezan-VAT simulation (SOURCE OF TRUTH for `valid`) ───────
+    # The order dict IS the canonical payload the pipeline uses;
+    # wrap in an inbox-shaped row for the simulator.
+    sim = build_qoyod_simulation(
+        inbox_row={"canonical_payload": order})
+    mezan_expected = sim.get(
+        "simulated_qoyod_total_using_mezan_vat_15") or 0.0
+    mezan_diff = sim.get(
+        "simulated_qoyod_diff_vs_salla_total") or 0.0
+
     return {
-        "valid": abs(diff) <= _TOLERANCE,
-        "total": total,
-        "expected": expected,
-        "diff": diff,
+        "valid":                abs(float(mezan_diff)) <= _TOLERANCE,
+        "total":                total,
+        "expected":             mezan_expected,
+        "diff":                 mezan_diff,
+        # ── Diagnostics ─────────────────────────────────────────
+        "legacy_expected":      legacy_expected,
+        "legacy_diff":          legacy_diff,
+        "mezan_vat_rate":       MEZAN_VAT_RATE,
+        "payload_date_source":  PAYLOAD_DATE_SOURCE,
+        "guard_engine":         "mezan_vat_15_simulation",
     }
 
 
@@ -383,16 +431,21 @@ def _classify(
                 "لا حاجة لإجراء — الفاتورة موجودة في قيود.",
         }
 
-    # 2. Totals mismatch?
+    # 2. Totals mismatch? (Iter-001k+ — Mezan-VAT-15% guard)
     if not totals_check["valid"]:
         return {
             "classification": "totals_mismatch",
             "blocker_reason":
-                f"total={totals_check['total']} vs expected="
-                f"{totals_check['expected']} (diff={totals_check['diff']})",
+                f"mezan_vat_15 simulation: "
+                f"salla_total={totals_check['total']} vs "
+                f"simulated_qoyod={totals_check['expected']} "
+                f"(diff={totals_check['diff']}). "
+                f"legacy_check diff={totals_check.get('legacy_diff')}"
+                f" — diagnostic only.",
             "posting_mode": None,
             "recommended_next_action":
-                "افحص أسعار البنود والشحن والضريبة على الطلب.",
+                "افحص canonical.items[].total والشحن — قد يكون "
+                "normalizer لم يلتقط item.total من سلة بشكل صحيح.",
         }
 
     # 3. Bank transfer routing?
@@ -817,10 +870,21 @@ async def build_eligible_orders_report(
                 "missing":        products_check["missing"],
             },
             "totals_status": {
-                "valid":    totals_check["valid"],
-                "total":    totals_check["total"],
-                "expected": totals_check["expected"],
-                "diff":     totals_check["diff"],
+                "valid":            totals_check["valid"],
+                "total":            totals_check["total"],
+                "expected":         totals_check["expected"],
+                "diff":             totals_check["diff"],
+                # ── Iter-001k+ diagnostics ──────────────────────
+                "legacy_expected":       totals_check.get(
+                                            "legacy_expected"),
+                "legacy_diff":           totals_check.get(
+                                            "legacy_diff"),
+                "mezan_vat_rate":        totals_check.get(
+                                            "mezan_vat_rate"),
+                "payload_date_source":   totals_check.get(
+                                            "payload_date_source"),
+                "guard_engine":          totals_check.get(
+                                            "guard_engine"),
             },
             "posting_mode":            verdict["posting_mode"],
             "classification":          cls,
