@@ -559,6 +559,122 @@ def emit_selective_send_decision_log(
     )
 
 
+def _compute_readiness_blockers(
+    *,
+    order: dict,
+    settings: dict,
+    sync_start_date: Optional[date] = None,
+) -> list[str]:
+    """Iter-001k+ — Read-only diagnostic inspector.
+
+    Returns the COMPLETE list of substantive blockers that would
+    still refuse this order EVEN IF the master gate and write lock
+    were flipped open. Unlike `should_allow_selective_live_send`
+    which short-circuits at the first blocker, this walks EVERY
+    substantive check independently so the operator can see the
+    full remediation list.
+
+    Deliberately excludes `gate_disabled` and `write_lock_active` —
+    those are the two blockers the operator toggles explicitly.
+
+    Pure. No DB. No I/O. No side effects.
+    """
+    blockers: list[str] = []
+
+    order_number       = order.get("order_number")
+    created_at_raw     = order.get("salla_order_created_at")
+    status             = (order.get("status")
+                          or order.get("order_status") or "")
+    payment_method     = (order.get("payment_method") or "").strip().lower()
+    existing_inv       = order.get("existing_qoyod_invoice_id")
+    customer_status    = order.get("customer_status") or {}
+    products_status    = order.get("products_status") or {}
+    totals_status      = order.get("totals_status") or {}
+    diff               = float(totals_status.get("diff") or 0.0)
+
+    cutoff_str = settings.get("qoyod_sync_start_date",
+                              QOYOD_SYNC_START_DATE)
+    cutoff = sync_start_date or _parse_iso_date(cutoff_str) or \
+        _parse_iso_date(QOYOD_SYNC_START_DATE)
+
+    enabled_trigger_statuses_raw = settings.get(
+        "qoyod_enabled_invoice_trigger_statuses")
+    if enabled_trigger_statuses_raw is None:
+        enabled_trigger_statuses = list(
+            QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT)
+    else:
+        enabled_trigger_statuses = [
+            str(s) for s in enabled_trigger_statuses_raw if s]
+    _enabled_normalized = {
+        _normalize_status(s) for s in enabled_trigger_statuses}
+
+    # ── Missing / Q2 cutoff on order_created_at ─────────────────
+    created_at = (created_at_raw if isinstance(created_at_raw, date)
+                  else _parse_iso_date(created_at_raw))
+    if created_at is None:
+        blockers.append("missing_order_created_at")
+    elif cutoff is not None and created_at < cutoff:
+        blockers.append("q2_cutoff")
+
+    # ── Existing invoice sentinel + already-sent ────────────────
+    if _looks_like_preview_id(existing_inv):
+        blockers.append("preview_id_detected")
+    if _looks_like_dry_id(existing_inv):
+        blockers.append("dry_invoice_id")
+    if _is_real_invoice_id(existing_inv):
+        blockers.append("existing_real_qoyod_invoice_id")
+
+    # ── Trigger status enablement ───────────────────────────────
+    normalized_status = _normalize_status(status)
+    if normalized_status not in _enabled_normalized:
+        blockers.append("invoice_trigger_status_not_enabled")
+
+    # ── Bank transfer hold (Iter-294) ───────────────────────────
+    if payment_method in _BANK:
+        blockers.append("bank_transfer_on_hold_iter_294")
+
+    # ── Customer resolution / DRY / null ────────────────────────
+    qcid = customer_status.get("qoyod_id")
+    if qcid is None:
+        blockers.append("null_contact_id")
+    elif _looks_like_dry_id(qcid):
+        blockers.append("dry_customer_id")
+    elif _looks_like_preview_id(qcid):
+        blockers.append("preview_id_detected")
+
+    # ── Product resolution / DRY / null ─────────────────────────
+    missing_skus = products_status.get("missing") or []
+    if missing_skus:
+        blockers.append("null_product_id")
+    if int(products_status.get("dry_run_only") or 0) > 0:
+        blockers.append("dry_product_id")
+
+    # ── Totals mismatch > 0.01 ──────────────────────────────────
+    if abs(diff) > _TOTALS_ALLOW_TOLERANCE:
+        blockers.append("totals_mismatch_gt_0_01")
+
+    # Preserve insertion order and dedupe (preview_id may appear
+    # via existing_inv AND customer_status.qoyod_id).
+    seen: set[str] = set()
+    unique_blockers: list[str] = []
+    for b in blockers:
+        if b not in seen:
+            seen.add(b)
+            unique_blockers.append(b)
+    return unique_blockers
+
+
+def _aggregate_readiness_blockers(
+        decisions: list[dict]) -> dict[str, int]:
+    """Count readiness_blocker occurrences across all decision rows.
+    Read-only. Pure."""
+    counts: dict[str, int] = {}
+    for row in decisions:
+        for code in row.get("readiness_blockers") or []:
+            counts[code] = counts.get(code, 0) + 1
+    return counts
+
+
 async def build_selective_send_policy_report(
     db,
     *,
@@ -658,6 +774,16 @@ async def build_selective_send_policy_report(
         row["manual_send_confirmation_phrase"] = expected_phrase
         row["manual_send_blocker_code"] = manual_probe.blocker_code
         row["manual_send_blocker_reason"] = manual_probe.blocker_reason
+        # ── Iter-001k+ — Read-only readiness diagnostic ─────────
+        # What blockers would still refuse this order even if the
+        # master gate + write lock were flipped open? Independent
+        # of the effective blocker_code above (which is nearly
+        # always `gate_disabled` while the gate is closed).
+        readiness_blockers = _compute_readiness_blockers(
+            order=item, settings=settings)
+        row["readiness_blockers"] = readiness_blockers
+        row["readiness_ready_if_gate_opened"] = (
+            len(readiness_blockers) == 0)
         decisions.append(row)
 
     # 4. Assemble the report.
@@ -698,6 +824,11 @@ async def build_selective_send_policy_report(
         "would_send_to_qoyod_count": sum(1 for d in decisions
                                          if d["would_send_to_qoyod"]),
         "manual_send_available_count": manual_send_available_count,
+        # ── Iter-001k+ — Read-only readiness rollup ─────────────
+        "readiness_ready_if_gate_opened_count": sum(
+            1 for d in decisions if d["readiness_ready_if_gate_opened"]),
+        "readiness_blocker_code_counts": _aggregate_readiness_blockers(
+            decisions),
         "decisions":                 decisions,
         "notes": [
             "READ-ONLY POLICY REPORT — لا استدعاء لـ Qoyod، "
@@ -727,5 +858,9 @@ async def build_selective_send_policy_report(
             "(bank_transfer_routing_enabled=false).",
             "المسموح لاحقاً: mada / apple_pay / credit_card / visa / "
             "mastercard / stc_pay / tabby / tamara / emkan / cod فقط.",
+            "readiness_blockers (Iter-001k+): قائمة تشخيصية للقيود "
+            "الجوهرية التي ستمنع كل طلب حتى لو فُتحت البوابة. لا تؤثر "
+            "على blocker_code الحالي. مفيدة لتحديد ما يحتاج إصلاح قبل "
+            "الفتح المحدود لاحقاً.",
         ],
     }
