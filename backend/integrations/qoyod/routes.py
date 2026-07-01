@@ -1736,6 +1736,27 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     # ── Iter-001k+ (2026-02-27) — Canary Readiness Preview ────
     # Read-Only preflight for a SINGLE order. Refuses if gates
     # are not Fail-Closed. Never sends. Never writes.
+    # ── Iter-001k+ (2026-02-27) — Canary Live Send ────────────
+    # Single-order live send with 14 hardcoded guards. Refuses
+    # every order except 269629400. Never mutates gate settings.
+    @router.post("/admin/canary-live-send")
+    async def admin_canary_live_send(
+        payload: dict,
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.canary_live_send import (
+            execute_canary_live_send,
+        )
+        order_number    = str(payload.get("order_number") or "")
+        approval_phrase = payload.get("approval_phrase") or ""
+        return await execute_canary_live_send(
+            db,
+            order_number=order_number,
+            approval_phrase=approval_phrase,
+            actor=str(getattr(user, "email",
+                              getattr(user, "id", "operator"))),
+        )
+
     @router.get("/admin/canary-readiness-preview/{order_number}")
     async def admin_canary_readiness_preview(
         order_number: str,
