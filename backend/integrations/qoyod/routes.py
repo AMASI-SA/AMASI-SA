@@ -1641,6 +1641,29 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             debug=debug,
         )
 
+    # ── Phase C.0 (2026-07-01) — Selective Send Policy Report ─
+    # Read-Only diagnostic that runs the Selective Live Send policy
+    # against every order the tenant has and returns one decision
+    # (`allow`/`block` + blocker_code + reason) per row. This endpoint
+    # NEVER opens the write lock, NEVER calls Qoyod, NEVER writes to
+    # the DB. It exists so operators can preview what the gate would
+    # do BEFORE flipping `selective_live_send_enabled` to true.
+    @router.get("/admin/selective-send-policy-report")
+    async def admin_selective_send_policy_report(
+        since_days: int = 90,
+        limit: int = 200,
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.selective_send_policy import (
+            build_selective_send_policy_report,
+        )
+        return await build_selective_send_policy_report(
+            db,
+            user_id=_tenant_id(user),
+            since_days=since_days,
+            limit=limit,
+        )
+
     @router.get("/admin/qoyod/pending-orders")
     async def admin_qoyod_pending_orders(
         limit: int = 200,

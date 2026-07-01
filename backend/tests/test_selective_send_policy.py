@@ -1,0 +1,506 @@
+"""Selective Live Send Gate — Policy layer tests (Phase C.0).
+
+Coverage matches user directive verbatim:
+    • Q2 order blocked
+    • Q3 eligible paid order allowed by policy فقط إذا كل الشروط صحيحة
+    • COD Q3 allowed as credit_invoice_only فقط
+    • bank_transfer blocked
+    • DRY customer blocked
+    • DRY product blocked
+    • PREVIEW IDs blocked
+    • totals mismatch > 0.01 blocked
+    • missing created_at blocked
+    • already sent blocked
+    • selective_live_send_enabled=false يمنع أي Qoyod API call
+    • production_writes_locked=true يبقى true
+"""
+from __future__ import annotations
+
+import os
+import uuid
+from datetime import datetime, date, timedelta, timezone
+
+import pytest
+
+from integrations.qoyod.selective_send_policy import (
+    BlockerCode,
+    SelectiveSendDecision,
+    build_selective_send_policy_report,
+    should_allow_selective_live_send,
+    _ALLOWED_PAYMENT_METHODS,
+)
+
+
+@pytest.fixture
+def db():
+    from motor.motor_asyncio import AsyncIOMotorClient
+    client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+    return client[os.environ["DB_NAME"]]
+
+
+# ── Sanity helpers ──────────────────────────────────────────────────
+def _base_order(**overrides):
+    """A canonical 'green' order that should pass every check when the
+    two master gates are open. Tests override the specific field they
+    want to isolate."""
+    o = {
+        "order_number": "TEST-001",
+        "salla_order_id": "TEST-001",
+        "salla_order_created_at": "2026-07-05",  # Q3, post-cutoff
+        "status": "delivered",
+        "payment_method": "mada",
+        "existing_qoyod_invoice_id": None,
+        "customer_status": {"resolved": True, "qoyod_id": 223,
+                            "reason": None},
+        "products_status": {"resolved": True, "resolved_count": 1,
+                            "dry_run_only": 0, "missing": []},
+        "totals_status": {"valid": True, "total": 100.0,
+                          "expected": 100.0, "diff": 0.0},
+    }
+    o.update(overrides)
+    return o
+
+
+def _gates_OPEN():
+    """A tests-only settings snapshot with BOTH master gates open.
+    Production must NEVER see this — Fail-Closed is the real default."""
+    return {
+        "selective_live_send_enabled": True,
+        "production_writes_locked":    False,
+        "qoyod_sync_start_date":       "2026-07-01",
+        "qoyod_tax_period":            "Q3-2026",
+        "bank_transfer_routing_enabled": False,
+    }
+
+
+def _gates_CLOSED():
+    """Fail-Closed default — production reality until go-live."""
+    return {
+        "selective_live_send_enabled": False,
+        "production_writes_locked":    True,
+        "qoyod_sync_start_date":       "2026-07-01",
+        "qoyod_tax_period":            "Q3-2026",
+        "bank_transfer_routing_enabled": False,
+    }
+
+
+# ── Master gates — Fail-Closed contract ─────────────────────────────
+class TestMasterGates:
+    def test_default_settings_dict_is_fail_closed(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(), settings={})
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.GATE_DISABLED
+        assert d.would_send_to_qoyod is False
+
+    def test_gate_disabled_blocks_everything(self):
+        # Perfect green order but gate is closed.
+        d = should_allow_selective_live_send(
+            order=_base_order(), settings=_gates_CLOSED())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.GATE_DISABLED
+
+    def test_write_lock_active_blocks_even_when_gate_open(self):
+        s = _gates_OPEN()
+        s["production_writes_locked"] = True
+        d = should_allow_selective_live_send(
+            order=_base_order(), settings=s)
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.WRITE_LOCK_ACTIVE
+
+    def test_gates_snapshot_included_in_decision(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(), settings=_gates_OPEN())
+        g = d.gates_snapshot
+        assert g["selective_live_send_enabled"] is True
+        assert g["production_writes_locked"] is False
+        assert g["qoyod_sync_start_date"] == "2026-07-01"
+
+
+# ── Cutoff / date checks ────────────────────────────────────────────
+class TestSyncCutoff:
+    def test_q2_order_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(salla_order_created_at="2026-06-30"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.BEFORE_SYNC_START_DATE
+        assert "2026-06-30" in (d.blocker_reason or "")
+
+    def test_missing_created_at_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(salla_order_created_at=None),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.MISSING_ORDER_CREATED_AT
+
+    def test_on_cutoff_allowed(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(salla_order_created_at="2026-07-01"),
+            settings=_gates_OPEN())
+        assert d.decision == "allow"
+        assert d.would_send_to_qoyod is True
+
+
+# ── Status / already-sent checks ────────────────────────────────────
+class TestStatusAndSent:
+    def test_ineligible_status_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(status="waiting"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.STATUS_NOT_ELIGIBLE
+
+    def test_underscore_arabic_status_allowed(self):
+        # Iter-001e — underscore Arabic normalises to space.
+        d = should_allow_selective_live_send(
+            order=_base_order(status="جاري_التوصيل"),
+            settings=_gates_OPEN())
+        assert d.decision == "allow"
+
+    def test_already_sent_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(existing_qoyod_invoice_id="Q-REAL-9001"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.ALREADY_SENT
+
+    def test_dry_invoice_id_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(existing_qoyod_invoice_id="DRY:temp-1"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.DRY_INVOICE_ID_DETECTED
+
+    def test_preview_id_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(existing_qoyod_invoice_id="PREVIEW:abc"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.PREVIEW_ID_DETECTED
+
+
+# ── Payment method rules ────────────────────────────────────────────
+class TestPaymentMethods:
+    def test_bank_transfer_hold_iter_294(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(payment_method="bank_transfer"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.BANK_TRANSFER_ON_HOLD
+
+    def test_cod_allowed_as_credit_invoice_only(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(payment_method="cod"),
+            settings=_gates_OPEN())
+        assert d.decision == "allow"
+        assert d.posting_mode == "credit_invoice_only"
+
+    def test_prepaid_allowed_as_paid_receipt(self):
+        for pm in ("mada", "apple_pay", "stc_pay", "credit_card",
+                   "visa", "mastercard"):
+            d = should_allow_selective_live_send(
+                order=_base_order(payment_method=pm),
+                settings=_gates_OPEN())
+            assert d.decision == "allow", f"{pm} should allow"
+            assert d.posting_mode == "paid_receipt"
+
+    def test_bnpl_allowed_as_paid_receipt(self):
+        for pm in ("tabby", "tabby_installment", "tamara",
+                   "tamara_installment", "emkan"):
+            d = should_allow_selective_live_send(
+                order=_base_order(payment_method=pm),
+                settings=_gates_OPEN())
+            assert d.decision == "allow", f"{pm} should allow"
+            assert d.posting_mode == "paid_receipt"
+
+    def test_unknown_payment_method_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(payment_method="crypto"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.PAYMENT_METHOD_NOT_ALLOWED
+
+    def test_empty_payment_method_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(payment_method=""),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.PAYMENT_METHOD_NOT_ALLOWED
+
+
+# ── Customer / product resolution checks ────────────────────────────
+class TestCustomerAndProducts:
+    def test_customer_not_resolved_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(customer_status={
+                "resolved": False, "qoyod_id": None,
+                "reason": "no mapping"}),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.CUSTOMER_NOT_RESOLVED
+
+    def test_customer_dry_qoyod_id_blocked(self):
+        # `resolved=True` accidentally but qoyod_id is a DRY sentinel.
+        d = should_allow_selective_live_send(
+            order=_base_order(customer_status={
+                "resolved": True, "qoyod_id": "DRY:1",
+                "reason": None}),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.CUSTOMER_DRY_OR_NULL
+
+    def test_customer_null_qoyod_id_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(customer_status={
+                "resolved": True, "qoyod_id": None, "reason": None}),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.CUSTOMER_DRY_OR_NULL
+
+    def test_products_missing_mapping_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(products_status={
+                "resolved": False, "resolved_count": 0,
+                "dry_run_only": 0, "missing": ["SKU-Z"]}),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.PRODUCT_MISSING_MAPPING
+
+    def test_products_dry_run_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(products_status={
+                "resolved": False, "resolved_count": 0,
+                "dry_run_only": 1, "missing": []}),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.PRODUCT_DRY_OR_NULL
+
+    def test_products_not_resolved_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(products_status={
+                "resolved": False, "resolved_count": 0,
+                "dry_run_only": 0, "missing": []}),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.PRODUCT_NOT_RESOLVED
+
+
+# ── Totals rules ────────────────────────────────────────────────────
+class TestTotals:
+    def test_zero_diff_allowed(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(totals_status={
+                "valid": True, "total": 100.0, "expected": 100.0,
+                "diff": 0.0}),
+            settings=_gates_OPEN())
+        assert d.decision == "allow"
+        assert d.totals_warning is False
+
+    def test_small_diff_within_tolerance_warns(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(totals_status={
+                "valid": True, "total": 100.01, "expected": 100.0,
+                "diff": 0.01}),
+            settings=_gates_OPEN())
+        assert d.decision == "allow"
+        assert d.totals_warning is True
+        assert any("rounding" in w for w in d.warnings)
+
+    def test_hard_diff_blocked(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(totals_status={
+                "valid": False, "total": 100.50, "expected": 100.0,
+                "diff": 0.50}),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.TOTALS_MISMATCH_HARD
+
+
+# ── The "perfect green" path ─────────────────────────────────────────
+class TestGreenPath:
+    def test_paid_order_allowed_only_when_all_conditions_true(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(), settings=_gates_OPEN())
+        assert d.decision == "allow"
+        assert d.would_send_to_qoyod is True
+        assert d.blocker_reason is None
+        assert d.blocker_code is None
+        assert d.posting_mode == "paid_receipt"
+
+    def test_cod_green_path_is_credit_invoice_only(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(payment_method="cod"),
+            settings=_gates_OPEN())
+        assert d.decision == "allow"
+        assert d.posting_mode == "credit_invoice_only"
+
+
+# ── Report builder (end-to-end DB) ──────────────────────────────────
+@pytest.mark.asyncio
+class TestReportBuilder:
+    async def _clean(self, db, uid):
+        for c in ("unified_orders", "integration_inbox",
+                  "qoyod_invoices", "qoyod_customers_mapping",
+                  "qoyod_products_mapping", "qoyod_settings"):
+            await db[c].delete_many({"user_id": uid})
+
+    def _uid(self):
+        return f"pol-test-{uuid.uuid4().hex[:8]}"
+
+    async def _seed_customer(self, db, uid, phone="+966554681361"):
+        await db.qoyod_customers_mapping.insert_one({
+            "user_id": uid, "lookup_key": phone,
+            "lookup_kind": "phone",
+            "qoyod_customer_id": 223, "dry_run_only": False})
+
+    async def _seed_product(self, db, uid, sku="X"):
+        await db.qoyod_products_mapping.insert_one({
+            "user_id": uid, "sku": sku,
+            "qoyod_product_id": 42, "dry_run_only": False})
+
+    async def _seed_order(self, db, uid, *, status="delivered",
+                          pm="mada", order_date="2026-07-05",
+                          total=100.0):
+        oid = f"O-{uuid.uuid4().hex[:8]}"
+        await db.unified_orders.insert_one({
+            "user_id": uid, "order_id": oid, "order_number": oid,
+            "order_status": status, "order_status_slug": status,
+            "payment_method": pm,
+            "total_amount": total,
+            "shipping_amount": 0, "tax_amount": 0,
+            "items": [{"sku": "X", "quantity": 1,
+                       "unit_price": total}],
+            "customer": {"phone": "+966554681361"},
+            "customer_mobile": "+966554681361",
+            "order_date": order_date,
+            "created_at": f"{order_date}T10:00:00+03:00",
+            "received_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await db.integration_inbox.insert_one({
+            "user_id": uid, "salla_order_id": oid,
+            "salla_order_number": oid,
+            "connector_key": f"salla-{oid}",
+            "idempotency_key": f"idem-{oid}",
+            "trace_id": f"t-{uuid.uuid4().hex[:8]}",
+            "pipeline_stage": "COMPLETED",
+            "received_at": datetime.now(timezone.utc),
+        })
+        return oid
+
+    async def test_report_default_settings_blocks_everything(self, db):
+        """Without qoyod_settings row (Fail-Closed defaults) every
+        decision must be `block:gate_disabled`. This is the crucial
+        production invariant."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid)
+            await self._seed_order(db, uid)
+            r = await build_selective_send_policy_report(
+                db, user_id=uid)
+            assert r["gates_snapshot"]["selective_live_send_enabled"] \
+                is False
+            assert r["gates_snapshot"]["production_writes_locked"] \
+                is True
+            assert r["counts"]["allow"] == 0
+            assert r["would_send_to_qoyod_count"] == 0
+            assert r["counts"]["block"] == r["total_decisions"]
+            assert r["blocker_code_counts"].get(
+                BlockerCode.GATE_DISABLED, 0) == r["total_decisions"]
+        finally:
+            await self._clean(db, uid)
+
+    async def test_report_with_open_gates_computes_real_decisions(
+            self, db):
+        """With BOTH master gates opened (test-only), the report
+        should show real per-order decisions."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid)
+            # 2 Q3 mada orders (green) + 1 Q2 order (cutoff-blocked)
+            # + 1 bank_transfer Q3 (hold).
+            await self._seed_order(db, uid, pm="mada",
+                                   order_date="2026-07-05")
+            await self._seed_order(db, uid, pm="cod",
+                                   order_date="2026-07-10")
+            await self._seed_order(db, uid, pm="mada",
+                                   order_date="2026-06-15")
+            await self._seed_order(db, uid, pm="bank_transfer",
+                                   order_date="2026-07-20")
+            # Simulate open gates.
+            await db.qoyod_settings.insert_one({
+                "user_id": uid,
+                "selective_live_send_enabled": True,
+                "production_writes_locked":    False,
+                "qoyod_sync_start_date":       "2026-07-01",
+                "qoyod_tax_period":            "Q3-2026",
+                "bank_transfer_routing_enabled": False,
+            })
+            r = await build_selective_send_policy_report(
+                db, user_id=uid, since_days=180)
+            # Q2 order was excluded upstream by eligible_orders, so
+            # the report only sees 3 decisions.
+            assert r["total_decisions"] == 3
+            assert r["counts"]["allow"] == 2
+            assert r["counts"]["block"] == 1
+            assert r["blocker_code_counts"].get(
+                BlockerCode.BANK_TRANSFER_ON_HOLD) == 1
+        finally:
+            await self._clean(db, uid)
+
+    async def test_report_is_read_only(self, db):
+        """Running the report must not modify any collection."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid)
+            await self._seed_order(db, uid)
+            before = {}
+            for c in ("unified_orders", "integration_inbox",
+                      "qoyod_invoices", "qoyod_customers_mapping",
+                      "qoyod_products_mapping", "qoyod_settings"):
+                before[c] = await db[c].count_documents(
+                    {"user_id": uid})
+            _ = await build_selective_send_policy_report(
+                db, user_id=uid)
+            for c, n in before.items():
+                after = await db[c].count_documents({"user_id": uid})
+                assert after == n, f"{c} was written to!"
+        finally:
+            await self._clean(db, uid)
+
+    async def test_report_notes_advertise_fail_closed_defaults(self, db):
+        uid = self._uid()
+        try:
+            r = await build_selective_send_policy_report(
+                db, user_id=uid)
+            notes = " ".join(r["notes"])
+            assert "selective_live_send_enabled" in notes
+            assert "production_writes_locked"    in notes
+            assert "2026-07-01"                  in notes
+        finally:
+            await self._clean(db, uid)
+
+
+# ── Contract test — allow-list content matches user directive ────────
+class TestPaymentAllowListContract:
+    def test_allow_list_matches_user_directive(self):
+        # Directive verbatim: mada, apple_pay, credit_card, visa,
+        # mastercard, stc_pay, tabby/tabby_installment, tamara/
+        # tamara_installment, emkan, cod.
+        for pm in ("mada", "apple_pay", "credit_card", "visa",
+                   "mastercard", "stc_pay",
+                   "tabby", "tabby_installment",
+                   "tamara", "tamara_installment",
+                   "emkan", "cod"):
+            assert pm in _ALLOWED_PAYMENT_METHODS, \
+                f"{pm} MUST be on the allow-list"
+
+    def test_bank_transfer_NOT_on_allow_list(self):
+        assert "bank_transfer" not in _ALLOWED_PAYMENT_METHODS
+
+
+if __name__ == "__main__":  # pragma: no cover
+    pytest.main([__file__, "-v"])

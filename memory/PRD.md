@@ -1,5 +1,79 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Phase C.0 — Selective Live Send Gate Preparation (2026-07-01)
+
+### Scope
+Read-Only policy layer that answers "IF Selective Live Send were
+flipped on, would قيود accept this order safely?" — for every order.
+**NO activation.** Master gate remains OFF. Global write lock remains
+ON. No Qoyod API calls, no writes, no send buttons.
+
+### Deliverables
+- **NEW** `backend/integrations/qoyod/selective_send_policy.py`
+  - `should_allow_selective_live_send(order, settings, sync_start_date)`
+    — pure decider returning `SelectiveSendDecision` with:
+    `decision` (allow/block), `blocker_code`, `blocker_reason`,
+    `would_send_to_qoyod`, `posting_mode`, `diff`, `totals_warning`,
+    `dry_ids_detected`, `existing_qoyod_invoice_id`, `warnings`,
+    `gates_snapshot`.
+  - Machine-readable `BlockerCode` enum:
+    `gate_disabled`, `write_lock_active`, `before_sync_start_date`,
+    `missing_order_created_at`, `status_not_eligible`, `already_sent`,
+    `bank_transfer_on_hold_iter_294`, `payment_method_not_allowed`,
+    `customer_not_resolved`, `customer_dry_or_null`,
+    `product_not_resolved`, `product_dry_or_null`,
+    `product_missing_mapping`, `dry_invoice_id_detected`,
+    `preview_id_detected`, `totals_mismatch_hard_diff_gt_0.01`.
+  - `build_selective_send_policy_report(db, user_id, since_days, limit)`
+    — aggregates decisions per order + counts + blocker code
+    histogram + payment method breakdown. Wraps
+    `build_eligible_orders_report(show_already_sent=True)` for
+    enrichment; adds no new DB reads.
+  - `emit_selective_send_decision_log(...)` — stdout audit
+    without DB persistence.
+- **NEW** `GET /api/integrations/qoyod/admin/selective-send-policy-report`
+  registered in `routes.py`.
+- **NEW** `backend/tests/test_selective_send_policy.py` — 35 tests
+  (all pass). Covers every scenario in user directive verbatim:
+  Q2 blocked, Q3 paid green, COD credit-invoice-only, bank_transfer
+  hold, DRY customer, DRY/PREVIEW invoice ID, missing skus, totals
+  mismatch > 0.01, missing created_at, already_sent, gate closed
+  → no Qoyod calls, write lock true → block, allow-list contract.
+
+### Payment method allow-list (activated later, not now)
+`mada`, `apple_pay`, `stc_pay`, `credit_card`, `visa`, `mastercard`,
+`amex`, `tabby*`, `tamara*`, `emkan*`, `cod`.
+`bank_transfer` → HOLD until Iter-294 (`bank_transfer_routing_enabled=false`).
+
+### Fail-Closed contract (pinned in Preview DB)
+Preview `qoyod_settings.main` explicitly pinned to:
+- `selective_live_send_enabled = false`
+- `production_writes_locked   = true` (was false — TIGHTENED)
+- `qoyod_sync_start_date      = "2026-07-01"`
+- `qoyod_tax_period           = "Q3-2026"`
+- `bank_transfer_routing_enabled = false`
+- `phase_c0_settings_pinned_at = <iso timestamp>` (audit marker)
+
+Policy defaults in code are ALSO Fail-Closed — if the DB is missing
+those keys the decider returns `block:gate_disabled` (verified by
+`test_default_settings_dict_is_fail_closed`).
+
+### Totals policy (Iter-001g)
+- `diff == 0.00` → allow
+- `0.00 < |diff| ≤ 0.01` → allow with `totals_warning=true`
+- `|diff| > 0.01` → block (`totals_mismatch_hard_diff_gt_0.01`)
+
+### Verified impact (5-order synthetic set, gates OPEN for demo tenant)
+- Q2 order (`created_at=2026-06-20`) → excluded upstream by cutoff.
+- `bank_transfer` Q3 → block: `bank_transfer_on_hold_iter_294`.
+- `crypto` Q3 → block: `payment_method_not_allowed`.
+- `mada` Q3 (green) → allow, `posting_mode=paid_receipt`.
+- `cod` جاري_التوصيل Q3 → allow, `posting_mode=credit_invoice_only`.
+- `counts.allow=2`, `counts.block=2`, no Qoyod API call, no DB writes
+  outside test fixtures.
+
+
+
 ## Iter-001f — Tax-Period Sync Cutoff (Q3-2026 start) (2026-07-01)
 
 ### Business Rule
