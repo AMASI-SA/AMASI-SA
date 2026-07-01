@@ -1626,6 +1626,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         since_days: int = 90,
         limit: int = 200,
         show_already_sent: bool = False,
+        debug: bool = False,
         user=Depends(current_user),
     ):
         from integrations.qoyod.eligible_orders import (
@@ -1637,6 +1638,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             since_days=since_days,
             limit=limit,
             show_already_sent=show_already_sent,
+            debug=debug,
         )
 
     @router.get("/admin/qoyod/pending-orders")

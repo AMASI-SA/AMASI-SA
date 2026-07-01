@@ -270,16 +270,21 @@ class TestEndToEndReport:
                           pm="tabby_installment", total=100.0,
                           items=None, phone="+966554681361"):
         oid = f"O-{uuid.uuid4().hex[:8]}"
+        # Iter-001b: real `unified_orders` schema uses `order_status`
+        # + `order_date` (YYYY-MM-DD), NOT `status` / `created_at`.
+        from datetime import date
         await db.unified_orders.insert_one({
             "user_id": uid, "order_id": oid, "order_number": oid,
-            "status": status, "status_slug": status,
+            "order_status": status, "order_status_slug": status,
             "payment_method": pm,
             "total_amount": total,
             "shipping_amount": 0, "tax_amount": 0,
             "items": items or [{"sku": "X", "quantity": 1,
                                 "unit_price": total}],
             "customer": {"phone": phone},
-            "created_at": self._now_iso(),
+            "customer_mobile": phone,
+            "order_date": date.today().isoformat(),
+            "received_at": self._now_iso(),
         })
         return oid
 
@@ -443,6 +448,56 @@ class TestEndToEndReport:
             assert "selective_live_send_enabled" in gates
             assert "settlements_write_gate" in gates
             assert "receiving_bank_configured" in gates
+        finally:
+            await self._clean(db, uid)
+
+    async def test_debug_diagnostic_block_when_enabled(self, db):
+        """Iter-001b — `debug=true` emits collection totals + samples
+        + status breakdowns without changing counts. Read-only."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            oid = await self._seed_order(db, uid)
+            await self._seed_inbox(db, uid, oid)
+            report = await build_eligible_orders_report(
+                db, user_id=uid, debug=True)
+            assert "_diagnostic" in report
+            d = report["_diagnostic"]
+            assert d["user_id_used_in_query"] == uid
+            assert d["unified_orders_total_all_time"] >= 1
+            assert d["unified_orders_total_90d"] >= 1
+            assert d["integration_inbox_total_all_time"] >= 1
+            assert isinstance(
+                d["unified_orders_status_breakdown_all_time"], dict)
+            assert isinstance(
+                d["sample_unified_orders_all_time"], list)
+            assert len(d["sample_unified_orders_all_time"]) >= 1
+            assert d["eligible_statuses_configured"]
+        finally:
+            await self._clean(db, uid)
+
+    async def test_debug_diagnostic_absent_when_disabled(self, db):
+        uid = self._uid()
+        try:
+            report = await build_eligible_orders_report(
+                db, user_id=uid, debug=False)
+            assert "_diagnostic" not in report
+        finally:
+            await self._clean(db, uid)
+
+    async def test_arabic_native_status_matches(self, db):
+        """Regression — Arabic status labels (تم التوصيل) should
+        also flow through the classifier."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            oid = await self._seed_order(db, uid, status="تم التوصيل")
+            await self._seed_inbox(db, uid, oid, stage="COMPLETED")
+            report = await build_eligible_orders_report(db, user_id=uid)
+            assert report["total_scanned"] == 1
+            assert report["counts"]["ready_for_preview"] == 1
         finally:
             await self._clean(db, uid)
 

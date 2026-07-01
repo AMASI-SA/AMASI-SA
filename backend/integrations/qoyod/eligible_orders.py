@@ -94,10 +94,26 @@ def _normalise_phone(raw: Any) -> Optional[str]:
 
 
 async def _check_customer(db, user_id: str, order: dict) -> dict:
-    """Look up customer mapping. Returns {resolved, qoyod_id, reason}."""
+    """Look up customer mapping. Returns {resolved, qoyod_id, reason}.
+
+    Iter-001b fix — `unified_orders` doesn't nest customer under a
+    single key; different sources write different top-level fields
+    (`customer_mobile`, `customer.phone`, `customer.mobile`,
+    `customer_email`). We check ALL known shapes.
+    """
     customer = order.get("customer") or {}
-    phone = _normalise_phone(customer.get("phone") or customer.get("mobile"))
-    email = (customer.get("email") or "").strip().lower() or None
+    raw_phone = (
+        customer.get("phone")
+        or customer.get("mobile")
+        or order.get("customer_mobile")
+        or order.get("customer_phone")
+    )
+    raw_email = (
+        customer.get("email")
+        or order.get("customer_email")
+    )
+    phone = _normalise_phone(raw_phone)
+    email = (raw_email or "").strip().lower() or None
     lookup_key = phone or email
     if not lookup_key:
         return {"resolved": False, "qoyod_id": None,
@@ -326,6 +342,7 @@ async def build_eligible_orders_report(
     since_days: int = 90,
     limit: int = 200,
     show_already_sent: bool = False,
+    debug: bool = False,
 ) -> dict:
     """Assemble the full Read-Only report.
 
@@ -337,13 +354,19 @@ async def build_eligible_orders_report(
     limit             : max rows in the `items` list (counts always full).
     show_already_sent : include `already_sent` rows in `items` (they're
                         always counted in `counts`).
+    debug             : Iter-001b — attach a `_diagnostic` block with raw
+                        collection stats and 5-doc samples. Read-only.
 
     Returns a dict conforming to the design's response schema.
     """
     limit = max(1, min(int(limit), 500))
     since_days = max(1, min(int(since_days), 365))
     since_dt = datetime.now(timezone.utc) - timedelta(days=since_days)
-    since_iso = since_dt.isoformat()
+    # `unified_orders.order_date` is a normalised `YYYY-MM-DD` string
+    # (see orders_db.py:25) — NOT an ISO datetime. We compare with the
+    # date component so string ordering works correctly.
+    since_date_str = since_dt.date().isoformat()
+    since_iso_full = since_dt.isoformat()
 
     # 1. Gates
     settings = await db.qoyod_settings.find_one(
@@ -352,18 +375,34 @@ async def build_eligible_orders_report(
     receiving_bank_configured = bool(receiving_bank)
 
     # 2. Fetch candidate orders — cap at 5× limit to survive filtering.
+    # Iter-001b fix — Real `unified_orders` schema (see orders_db.py):
+    #   • order_status / order_status_slug  (not `status`)
+    #   • order_date                        (YYYY-MM-DD string,
+    #                                        not `created_at`)
+    #   • received_at                       (ISO datetime — ingest time)
+    #   • order_id / order_number
     fetch_cap = max(limit * 5, 500)
     orders = await db.unified_orders.find(
         {
             "user_id": user_id,
             "$or": [
-                {"status": {"$in": list(ELIGIBLE_STATUSES)}},
-                {"status_slug": {"$in": list(ELIGIBLE_STATUSES)}},
+                {"order_status":      {"$in": list(ELIGIBLE_STATUSES)}},
+                {"order_status_slug": {"$in": list(ELIGIBLE_STATUSES)}},
             ],
-            "created_at": {"$gte": since_iso},
+            # Accept EITHER `order_date` (business date, YYYY-MM-DD)
+            # OR `received_at` (ingest datetime). Some orders miss
+            # `order_date` on webhook payloads.
+            "$expr": {
+                "$or": [
+                    {"$gte": [{"$ifNull": ["$order_date", ""]},
+                              since_date_str]},
+                    {"$gte": [{"$ifNull": ["$received_at", ""]},
+                              since_iso_full]},
+                ]
+            },
         },
         {"_id": 0},
-    ).sort([("created_at", -1)]).to_list(length=fetch_cap)
+    ).sort([("received_at", -1)]).to_list(length=fetch_cap)
 
     # 3. Classify each order.
     counts: dict[str, int] = {
@@ -420,12 +459,13 @@ async def build_eligible_orders_report(
             "order_number":            order_number,
             "salla_order_id":          order_id or None,
             "latest_trace_id":         (inbox_row or {}).get("trace_id"),
-            "status":                  order.get("status"),
-            "status_slug":             order.get("status_slug"),
+            "status":                  order.get("order_status"),
+            "status_slug":             order.get("order_status_slug"),
             "payment_method":          order.get("payment_method"),
             "total_amount":            round(float(order.get(
                 "total_amount") or 0), 2),
-            "created_at":              order.get("created_at"),
+            "created_at":              order.get("order_date")
+                                        or order.get("received_at"),
             "completed_at":            order.get("completed_at"),
             "delivered_at":            order.get("delivered_at"),
             "existing_qoyod_invoice_id":
@@ -457,10 +497,10 @@ async def build_eligible_orders_report(
             "recommended_next_action": verdict["recommended_next_action"],
         })
 
-    return {
+    result = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "since_days":   since_days,
-        "since_date":   since_iso,
+        "since_date":   since_date_str,
         "total_scanned": len(orders),
         "counts":        counts,
         "gates": {
@@ -481,3 +521,66 @@ async def build_eligible_orders_report(
             "مستبعدة من الاستعلام.",
         ],
     }
+
+    # ── Iter-001b — Read-Only diagnostic block ─────────────────────
+    # Enabled via `debug=true` query param. Emits collection totals +
+    # status breakdowns + 5-doc samples so operators can verify field
+    # names / value shapes without direct DB access. Read-only.
+    if debug:
+        async def _sample(coll_name: str, filt: dict, keys: list[str]):
+            proj = {"_id": 0, **{k: 1 for k in keys}}
+            return await db[coll_name].find(filt, proj).limit(5).to_list(5)
+
+        async def _breakdown(coll_name: str, filt: dict, field: str):
+            cursor = db[coll_name].aggregate([
+                {"$match": filt},
+                {"$group": {"_id": f"${field}", "n": {"$sum": 1}}},
+                {"$sort": {"n": -1}},
+                {"$limit": 40},
+            ])
+            rows = await cursor.to_list(50)
+            return {(r["_id"] or "(null)"): r["n"] for r in rows}
+
+        uo_filt_all = {"user_id": user_id}
+        uo_filt_90d = {"user_id": user_id, "$expr": {"$or": [
+            {"$gte": [{"$ifNull": ["$order_date", ""]}, since_date_str]},
+            {"$gte": [{"$ifNull": ["$received_at", ""]}, since_iso_full]},
+        ]}}
+        ib_filt_all = {"user_id": user_id}
+        ib_filt_90d = {"user_id": user_id,
+                       "received_at": {"$gte": since_iso_full}}
+
+        result["_diagnostic"] = {
+            "user_id_used_in_query": user_id,
+            "since_date_str_used":   since_date_str,
+            "since_iso_full_used":   since_iso_full,
+            "unified_orders_total_all_time":
+                await db.unified_orders.count_documents(uo_filt_all),
+            "unified_orders_total_90d":
+                await db.unified_orders.count_documents(uo_filt_90d),
+            "integration_inbox_total_all_time":
+                await db.integration_inbox.count_documents(ib_filt_all),
+            "integration_inbox_total_90d":
+                await db.integration_inbox.count_documents(ib_filt_90d),
+            "unified_orders_status_breakdown_all_time":
+                await _breakdown("unified_orders", uo_filt_all,
+                                 "order_status"),
+            "unified_orders_status_slug_breakdown_all_time":
+                await _breakdown("unified_orders", uo_filt_all,
+                                 "order_status_slug"),
+            "integration_inbox_stage_breakdown_all_time":
+                await _breakdown("integration_inbox", ib_filt_all,
+                                 "pipeline_stage"),
+            "sample_unified_orders_all_time": await _sample(
+                "unified_orders", uo_filt_all,
+                ["order_id", "order_number", "order_status",
+                 "order_status_slug", "order_date", "received_at",
+                 "payment_method", "total_amount", "user_id"]),
+            "sample_integration_inbox_all_time": await _sample(
+                "integration_inbox", ib_filt_all,
+                ["salla_order_id", "salla_order_number", "trace_id",
+                 "pipeline_stage", "received_at", "user_id"]),
+            "eligible_statuses_configured": sorted(ELIGIBLE_STATUSES),
+        }
+
+    return result
