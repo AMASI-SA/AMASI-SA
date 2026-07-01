@@ -326,3 +326,120 @@ async def resolve_customer(
         created_new=True,
         qoyod_request_payload=payload,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Manual Adoption — Iter-293.5-rev4 (2026-07-01)
+# ─────────────────────────────────────────────────────────────────────
+def _normalize_phone_for_lookup(raw: str) -> str:
+    """E.164 normaliser mirroring `normalizer.normalize_phone` so the
+    lookup key stored via adoption matches the one the pipeline
+    derives from Salla payloads. Accepts `+9665…`, `9665…`, `05…`,
+    `5…`. Removes dashes / spaces. Returns the raw string if it does
+    not match a Saudi pattern (operator gave a non-KSA phone — we
+    still keep the mapping usable but don't hallucinate a country
+    code)."""
+    import re
+    s = re.sub(r"[^\d+]", "", raw)
+    if s.startswith("+"):
+        return s
+    if s.startswith("00966"):
+        return "+" + s[2:]
+    if s.startswith("966"):
+        return "+" + s
+    if s.startswith("0") and len(s) == 10:
+        return "+966" + s[1:]
+    if s.startswith("5") and len(s) == 9:
+        return "+966" + s
+    # Fallback — treat as opaque key; operator knows their data.
+    return s
+
+
+async def adopt_qoyod_customer(
+    db, *, user_id: str, lookup_key: str, lookup_kind: str,
+    qoyod_contact_id: str,
+    qoyod_contact_name: Optional[str] = None,
+    note: Optional[str] = None,
+    actor: str = "operator",
+) -> dict:
+    """Insert / update a row in `qoyod_customers_mapping` flagged
+    `adopted=True`, WITHOUT calling Qoyod. Used when the operator has
+    manually created (or already has) a real Qoyod contact and wants
+    Mezan to bind future orders from this buyer to that contact_id.
+
+    Contract
+    ────────
+    • NO Qoyod API call — Mezan trusts the operator-supplied
+      `qoyod_contact_id` verbatim. This is safe because adoption is
+      an authenticated operator action and the audit trail
+      (`adopted_by`, `adopted_at`, `adoption_note`) is persisted.
+    • Sets `dry_run_only=False` so the customer resolver / preview /
+      sendable gate recognise the mapping as a real binding.
+    • Idempotent — re-adopting the same lookup_key updates the note
+      and actor without inserting a duplicate.
+    • Phone lookups are E.164-normalised before the DB upsert so the
+      key matches what the runtime pipeline derives from Salla.
+
+    Returns
+    ───────
+    Plain dict — `{ok: true, lookup_key, qoyod_contact_id, ...}` on
+    success; `{ok: false, reason: ...}` on validation failure.
+    """
+    if not lookup_key or not qoyod_contact_id:
+        return {
+            "ok":     False,
+            "reason": "lookup_key_and_qoyod_contact_id_required",
+        }
+    if lookup_kind not in ("phone", "email"):
+        return {
+            "ok":     False,
+            "reason": "lookup_kind_must_be_phone_or_email",
+        }
+    lookup_key = lookup_key.strip()
+    if lookup_kind == "phone":
+        lookup_key = _normalize_phone_for_lookup(lookup_key)
+    elif lookup_kind == "email":
+        lookup_key = lookup_key.lower()
+
+    qoyod_contact_id = str(qoyod_contact_id).strip()
+
+    now = _now()
+    await db.qoyod_customers_mapping.update_one(
+        {"user_id": user_id, "lookup_key": lookup_key},
+        {"$set": {
+            "schema_version":     1,
+            "user_id":            user_id,
+            "lookup_key":         lookup_key,
+            "lookup_kind":        lookup_kind,
+            "qoyod_customer_id":  qoyod_contact_id,
+            "customer_name":      qoyod_contact_name,
+            "phone":              lookup_key if lookup_kind == "phone" else None,
+            "email":              lookup_key if lookup_kind == "email" else None,
+            "adopted":            True,
+            "adopted_by":         actor,
+            "adopted_at":         now,
+            "adoption_note":      note,
+            "source":             "operator_adopted",
+            "auto_created":       False,
+            # Iter-293.5-rev4 — Adoption MUST clear the dry_run_only
+            # flag so the preview / sendable gate recognise this
+            # mapping as a real Qoyod binding.
+            "dry_run_only":       False,
+            # Clear any prior quarantine reason from a previous
+            # dry-run detection cycle.
+            "quarantine_reason":  None,
+         },
+         "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+    return {
+        "ok":                 True,
+        "lookup_key":         lookup_key,
+        "lookup_kind":        lookup_kind,
+        "qoyod_contact_id":   qoyod_contact_id,
+        "qoyod_contact_name": qoyod_contact_name,
+        "adopted_by":         actor,
+        "adopted_at":         now.isoformat(),
+        "dry_run_only":       False,
+        "note":               note,
+    }

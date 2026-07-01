@@ -35,6 +35,7 @@ from integrations.qoyod.write_lock import (
     set_write_lock_context, reset_write_lock_context,
 )
 from integrations.qoyod.product_resolver import adopt_qoyod_product
+from integrations.qoyod.customer_resolver import adopt_qoyod_customer
 from integrations.qoyod.credentials import (
     save_api_key, get_api_key, get_fingerprint, delete_api_key, mark_verified,
 )
@@ -248,6 +249,25 @@ class AdoptProductBody(BaseModel):
     sku: str
     qoyod_product_id: str
     qoyod_product_name: Optional[str] = None
+    note: Optional[str] = None
+
+
+class AdoptCustomerBody(BaseModel):
+    """Iter-293.5-rev4 — Local-only customer adoption.
+
+    The operator has manually verified / created the buyer in Qoyod
+    and wants Mezan to bind their `lookup_key` (phone / email) to
+    that Qoyod `contact_id`. This does NOT hit Qoyod's API; it only
+    upserts the local `qoyod_customers_mapping` row.
+
+    `lookup_key` gets E.164-normalised for `lookup_kind='phone'` so
+    it matches the runtime pipeline's derivation from Salla.
+    """
+    model_config = ConfigDict(extra="forbid")
+    lookup_key: str
+    lookup_kind: str = Field(..., pattern="^(phone|email)$")
+    qoyod_contact_id: str
+    qoyod_contact_name: Optional[str] = None
     note: Optional[str] = None
 
 
@@ -965,6 +985,40 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             db, user_id=tenant, sku=body.sku.strip(),
             qoyod_product_id=body.qoyod_product_id.strip(),
             qoyod_product_name=body.qoyod_product_name,
+            note=body.note,
+            actor=f"operator:{getattr(user, 'email', tenant)}",
+        )
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": result.get("reason", "adopt_refused")})
+        return result
+
+    # ── Iter-293.5-rev4 — Manual Customer Adoption (Local-Only) ─────
+    # Operator has already created/verified the buyer in Qoyod and
+    # wants Mezan to bind their phone/email to that contact_id.
+    # DOES NOT call Qoyod's API — only upserts the local mapping.
+    # Sets `dry_run_only=False` so the preview / sendable gate
+    # accepts this binding immediately. Fully audited via
+    # `adopted_by` / `adopted_at` / `adoption_note`.
+    @router.post("/customers/adopt")
+    async def adopt_customer(
+        body: AdoptCustomerBody,
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        if not body.lookup_key.strip() or not body.qoyod_contact_id.strip():
+            raise HTTPException(
+                status_code=400,
+                detail={"code":
+                        "lookup_key_and_qoyod_contact_id_required"})
+        result = await adopt_qoyod_customer(
+            db,
+            user_id=tenant,
+            lookup_key=body.lookup_key.strip(),
+            lookup_kind=body.lookup_kind,
+            qoyod_contact_id=body.qoyod_contact_id.strip(),
+            qoyod_contact_name=body.qoyod_contact_name,
             note=body.note,
             actor=f"operator:{getattr(user, 'email', tenant)}",
         )
