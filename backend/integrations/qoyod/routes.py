@@ -1692,6 +1692,29 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             include_raw_debug=bool(include_raw_debug),
         )
 
+    # ── Iter-001k+ (2026-02-XX) — Mezan-VAT Qoyod Simulation ───
+    # Read-Only diagnostic answering ONE question:
+    #     "If we build Qoyod invoice using Mezan's fixed 15% VAT
+    #      and Salla's gross customer total as the only anchor,
+    #      does the simulated Qoyod gross equal Salla's official
+    #      total within 0.01 SAR?"
+    #
+    # Salla's own tax fields are IGNORED. This endpoint never
+    # sends, never writes, never opens the gate.
+    @router.get("/admin/qoyod-mezan-vat-simulation/{order_number}")
+    async def admin_qoyod_mezan_vat_simulation(
+        order_number: str,
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.qoyod_simulation import (
+            fetch_qoyod_simulation,
+        )
+        return await fetch_qoyod_simulation(
+            db,
+            user_id=_tenant_id(user),
+            order_number=str(order_number),
+        )
+
     @router.get("/admin/qoyod/pending-orders")
     async def admin_qoyod_pending_orders(
         limit: int = 200,
