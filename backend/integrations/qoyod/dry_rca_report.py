@@ -161,6 +161,7 @@ async def _rca_one(db, user_id: str, order_number: str) -> dict:
     dry_product_ids: list[str] = []
     real_product_map_hits: list[dict] = []
     real_product_ext_hits: list[dict] = []
+    per_sku_status: list[dict] = []
     for it in canonical.get("items") or []:
         sku = (it.get("sku") or "").strip()
         if not sku:
@@ -178,10 +179,37 @@ async def _rca_one(db, user_id: str, order_number: str) -> dict:
         e = await _find_real_product_in_external(db, user_id, sku)
         if e:
             real_product_ext_hits.append({"sku": sku, **e})
+        # ── Iter-001k+ fix #2: per-SKU recommendation ─────────
+        if m:
+            sku_rec = "adopt_existing_product"
+            real_target: Any = m.get("qoyod_product_id")
+            real_source = "qoyod_products_mapping"
+        elif e:
+            sku_rec = "adopt_existing_product"
+            real_target = e.get("qoyod_product_id")
+            real_source = "qoyod_external_products"
+        else:
+            sku_rec = "needs_create_product_later"
+            real_target = None
+            real_source = None
+        per_sku_status.append({
+            "sku":                    sku,
+            "name":                   name or None,
+            "current_qoyod_product_id_on_order": pid,
+            "is_dry":                 _is_dry_or_preview(pid),
+            "real_qoyod_product_id":  real_target,
+            "real_source":            real_source,
+            "recommendation":         sku_rec,
+        })
 
     has_real_customer_elsewhere = bool(real_map or real_ext)
-    has_real_product_elsewhere = bool(
-        real_product_map_hits or real_product_ext_hits)
+    # Product-level aggregate: mixed / adopt_all / create_all.
+    any_needs_create = any(
+        s["recommendation"] == "needs_create_product_later"
+        for s in per_sku_status)
+    any_adopt = any(
+        s["recommendation"] == "adopt_existing_product"
+        for s in per_sku_status)
 
     recs: list[str] = []
     if payment_method in _BANK_TRANSFER_METHODS:
@@ -192,10 +220,11 @@ async def _rca_one(db, user_id: str, order_number: str) -> dict:
         recs.append("adopt_existing_customer"
                     if has_real_customer_elsewhere
                     else "needs_create_customer_later")
-    if dry_product_ids:
-        recs.append("adopt_existing_product"
-                    if has_real_product_elsewhere
-                    else "needs_create_product_later")
+    if dry_product_ids or any_needs_create or any_adopt:
+        if any_adopt:
+            recs.append("adopt_existing_product")
+        if any_needs_create:
+            recs.append("needs_create_product_later")
 
     return {
         "order_number":                     order_number,
@@ -217,6 +246,7 @@ async def _rca_one(db, user_id: str, order_number: str) -> dict:
         "real_product_mappings":            real_product_map_hits,
         "has_real_product_in_external_any": bool(real_product_ext_hits),
         "real_product_ext_hits":            real_product_ext_hits,
+        "per_sku_recommendation":           per_sku_status,
         "recommended_action":               recs,
     }
 
@@ -237,8 +267,15 @@ async def build_dry_rca_report(
     execute unless gates are Fail-Closed."""
     settings = await db.qoyod_settings.find_one(
         {"user_id": user_id},
-        {"_id": 0, "selective_live_send_enabled": 1,
-         "production_writes_locked": 1}) or {}
+        {"_id": 0,
+         "selective_live_send_enabled":            1,
+         "production_writes_locked":               1,
+         "qoyod_sync_start_date":                  1,
+         "qoyod_tax_period":                       1,
+         "bank_transfer_routing_enabled":          1,
+         "qoyod_invoice_date_source":              1,
+         "qoyod_enabled_invoice_trigger_statuses": 1,
+         }) or {}
     if settings.get("selective_live_send_enabled") is True or \
             settings.get("production_writes_locked") is False:
         raise GatesNotFailClosedError(

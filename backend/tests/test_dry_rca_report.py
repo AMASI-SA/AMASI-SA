@@ -102,8 +102,14 @@ class _FakeDB:
 
 def _fail_closed_settings():
     return [{"user_id": "main",
-             "selective_live_send_enabled": False,
-             "production_writes_locked":    True}]
+             "selective_live_send_enabled":            False,
+             "production_writes_locked":               True,
+             "qoyod_sync_start_date":                  "2026-07-01",
+             "qoyod_tax_period":                       "Q3-2026",
+             "bank_transfer_routing_enabled":          False,
+             "qoyod_invoice_date_source":              "send_date",
+             "qoyod_enabled_invoice_trigger_statuses":
+                 ["completed", "تم التنفيذ"]}]
 
 
 # ── Gate-guard tests ────────────────────────────────────────────────
@@ -322,3 +328,130 @@ class TestReadOnlyInvariants:
         assert out["read_only"] is True
         assert out["no_qoyod_api_calls"] is True
         assert out["no_db_writes"] is True
+
+
+# ── Iter-001k+ (2026-02-27) — bug-fix regression tests ─────────────
+class TestGatesSnapshotSurfacesAllGates:
+    """Bug #1: gates_snapshot returned {} in Production because the
+    projection dropped fields other than the two booleans."""
+
+    @pytest.mark.asyncio
+    async def test_gates_snapshot_carries_full_settings(self):
+        db = _FakeDB(
+            qoyod_settings=_fail_closed_settings(),
+            integration_inbox=[],
+            qoyod_customers_mapping=[],
+            qoyod_external_customers=[],
+            qoyod_products_mapping=[],
+            qoyod_external_products=[])
+        r = await build_dry_rca_report(
+            db, user_id="main", order_numbers=["nonexistent"])
+        gs = r["gates_snapshot"]
+        assert gs["selective_live_send_enabled"] is False
+        assert gs["production_writes_locked"]    is True
+        assert gs["qoyod_sync_start_date"]       == "2026-07-01"
+        assert gs["bank_transfer_routing_enabled"] is False
+        assert gs["qoyod_invoice_date_source"]   == "send_date"
+
+
+class TestPerSkuRecommendation:
+    """Bug #2: recommendations were aggregated across all SKUs. Now
+    each SKU carries its own recommendation, and top-level rec
+    surfaces BOTH `adopt_existing_product` and
+    `needs_create_product_later` when the order mixes both."""
+
+    @pytest.mark.asyncio
+    async def test_mixed_skus_produce_both_recommendations(self):
+        # Two items: SKU-A has a real mapping, SKU-B is missing
+        # everywhere → order needs BOTH adopt AND create.
+        inbox = [{
+            "user_id":              "main",
+            "salla_order_number":   "MIXED-1",
+            "existing_qoyod_invoice_id": "DRY:invoice:mix1",
+            "qoyod_customer_id":    555001,
+            "canonical_payload": {
+                "order_number": "MIXED-1",
+                "payment_method": "mada",
+                "status": "completed",
+                "customer": {"mobile": "+966555555555",
+                             "name":   "Mixed User"},
+                "items": [
+                    {"sku": "SKU-A", "name": "Product A",
+                     "quantity": 1, "unit_price": 10.0,
+                     "discount_amount": 0.0, "tax_amount": 0.0,
+                     "total": 10.0,
+                     "qoyod_product_id": "DRY:product:aaaa"},
+                    {"sku": "SKU-B", "name": "Product B",
+                     "quantity": 1, "unit_price": 20.0,
+                     "discount_amount": 0.0, "tax_amount": 0.0,
+                     "total": 20.0,
+                     "qoyod_product_id": "DRY:product:bbbb"},
+                ],
+            },
+        }]
+        db = _FakeDB(
+            qoyod_settings=_fail_closed_settings(),
+            integration_inbox=inbox,
+            qoyod_customers_mapping=[],
+            qoyod_external_customers=[
+                {"user_id": "main", "mobile": "+966555555555",
+                 "qoyod_customer_id": 12345, "name": "Ext"}],
+            # SKU-A → real, SKU-B → missing everywhere.
+            qoyod_products_mapping=[
+                {"user_id": "main", "sku": "SKU-A",
+                 "qoyod_product_id": 45,
+                 "dry_run_only": False}],
+            qoyod_external_products=[])
+        r = await build_dry_rca_report(
+            db, user_id="main", order_numbers=["MIXED-1"])
+        rep = r["reports"][0]
+        # Per-SKU list carries both recommendations.
+        assert len(rep["per_sku_recommendation"]) == 2
+        by_sku = {s["sku"]: s for s in rep["per_sku_recommendation"]}
+        assert by_sku["SKU-A"]["recommendation"] == \
+            "adopt_existing_product"
+        assert by_sku["SKU-A"]["real_qoyod_product_id"] == 45
+        assert by_sku["SKU-A"]["real_source"] == \
+            "qoyod_products_mapping"
+        assert by_sku["SKU-B"]["recommendation"] == \
+            "needs_create_product_later"
+        assert by_sku["SKU-B"]["real_qoyod_product_id"] is None
+        # Aggregate includes BOTH markers.
+        assert "adopt_existing_product" in rep["recommended_action"]
+        assert "needs_create_product_later" in rep["recommended_action"]
+
+    @pytest.mark.asyncio
+    async def test_single_sku_adopt_only(self):
+        inbox = [{
+            "user_id":              "main",
+            "salla_order_number":   "ADOPT-1",
+            "existing_qoyod_invoice_id": "DRY:invoice:x",
+            "qoyod_customer_id":    12345,   # real
+            "canonical_payload": {
+                "order_number": "ADOPT-1",
+                "payment_method": "mada",
+                "status": "completed",
+                "customer": {"mobile": "+966510000000"},
+                "items": [{
+                    "sku": "AMS11237", "quantity": 1,
+                    "unit_price": 30.0, "discount_amount": 0.0,
+                    "tax_amount": 0.0, "total": 30.0,
+                    "qoyod_product_id": "DRY:product:tt"}],
+            },
+        }]
+        db = _FakeDB(
+            qoyod_settings=_fail_closed_settings(),
+            integration_inbox=inbox,
+            qoyod_customers_mapping=[],
+            qoyod_external_customers=[],
+            qoyod_products_mapping=[
+                {"user_id": "main", "sku": "AMS11237",
+                 "qoyod_product_id": 45, "dry_run_only": False}],
+            qoyod_external_products=[])
+        r = await build_dry_rca_report(
+            db, user_id="main", order_numbers=["ADOPT-1"])
+        rep = r["reports"][0]
+        assert rep["recommended_action"] == [
+            "ignore_dry_invoice_sentinel",
+            "adopt_existing_product",
+        ]
