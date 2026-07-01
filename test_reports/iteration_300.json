@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only testing of /integrations/qoyod/eligible-orders (Phase B READ-ONLY page). Login as admin@hesab.app succeeded. Page rendered without crash. All 13 required checks PASSED including read-only banner, gates section, 10 classification count cards, 3 filter dropdowns, toggle-show-already-sent (re-fetches), btn-refresh (re-fetches, GET only), invariant row (total_scanned/classified/excluded/invariant=true), sidebar nav link, and CRITICAL read-only invariant — zero forbidden action buttons (Approve/Send/Bypass/One-Shot/إرسال إلى قيود/اعتماد) found on page. All observed API calls to /api/integrations/qoyod/admin/eligible-orders are GET only. Preview env returned 0 orders (empty state rendered correctly).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GATE OBSERVATION (not a UI bug): The backend returned production_writes_locked=false, so the UI truthfully renders '🔓 Production Writes UNLOCKED (خطر)'. The read-only page itself never writes, so no risk here, but the main agent should verify the gate default in the preview environment matches intent. This is a config/backend concern.",
+    "SEMANTIC NOTE: The word 'اعتماد' appears once inside a non-interactive classification card LABEL 'بانتظار اعتماد يدوي' (=Awaiting manual approval). It is not an action button — the card is a filter toggle on classification counts. Read-only invariant preserved.",
+    "Minor: page has no user-visible loading spinner besides the disabled-button text on btn-refresh — acceptable for a diagnostic page.",
+    "File size EligibleOrders.jsx is ~380 lines — within limits."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "admin@hesab.app / admin123 (used successfully)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 13 acceptance criteria for Phase B Eligible Orders read-only page verified in preview env. Page correctly displays empty state when unified_orders has no eligible records. Network capture confirmed only GET requests. If future iterations add data or optional actions, re-verify the forbidden-buttons DOM scan (Approve/Send/Bypass/One-Shot/إرسال إلى قيود) — currently 0 hits and 'اعتماد' appears only in the category label, not a button.",
+  "rca of the issue": "No issue found — feature meets read-only contract."
+}
