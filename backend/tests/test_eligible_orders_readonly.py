@@ -24,11 +24,15 @@ import pytest
 
 from integrations.qoyod.eligible_orders import (
     ELIGIBLE_STATUSES,
+    INELIGIBLE_STATUSES,
     build_eligible_orders_report,
     _classify,
     _check_totals,
     _is_real_invoice_id,
+    _is_eligible_status,
     _normalise_phone,
+    _normalize_status,
+    _expand_status_variants,
 )
 
 
@@ -83,6 +87,59 @@ class TestPureUnits:
         for s in ("cancelled", "refunded", "deleted",
                   "pending", "waiting"):
             assert s not in ELIGIBLE_STATUSES
+
+    # ── Iter-001e: Status normalization ──────────────────────────
+    def test_normalize_status_underscore_to_space(self):
+        assert _normalize_status("جاري_التوصيل") == _normalize_status(
+            "جاري التوصيل")
+        assert _normalize_status("تم_التوصيل") == _normalize_status(
+            "تم التوصيل")
+        assert _normalize_status("تم_التنفيذ") == _normalize_status(
+            "تم التنفيذ")
+
+    def test_normalize_status_trim_and_case(self):
+        assert _normalize_status("  COMPLETED  ") == "completed"
+        assert _normalize_status("Delivered") == "delivered"
+        assert _normalize_status("  جاري   التوصيل  ") == \
+            _normalize_status("جاري التوصيل")
+
+    def test_normalize_status_none_and_empty(self):
+        assert _normalize_status(None) == ""
+        assert _normalize_status("") == ""
+
+    def test_is_eligible_status_underscore_arabic(self):
+        # Underscore Arabic variants MUST match eligible set.
+        assert _is_eligible_status("جاري_التوصيل") is True
+        assert _is_eligible_status("تم_التوصيل") is True
+        assert _is_eligible_status("تم_التنفيذ") is True
+        # Space Arabic still eligible.
+        assert _is_eligible_status("جاري التوصيل") is True
+        assert _is_eligible_status("تم التوصيل") is True
+        # English canonical still eligible.
+        assert _is_eligible_status("completed") is True
+        assert _is_eligible_status("Delivered") is True
+        assert _is_eligible_status("SHIPPING") is True
+
+    def test_is_eligible_status_ineligible_stays_out(self):
+        for s in ("waiting", "pending", "in_review", "in review",
+                  "cancelled", "canceled", "refunded", "deleted",
+                  "محذوف", "بإنتظار_الدفع", "بإنتظار الدفع", "ملغي"):
+            assert _is_eligible_status(s) is False, (
+                f"{s!r} must NOT be eligible")
+
+    def test_ineligible_statuses_defined(self):
+        # Sanity: our documented ineligible set includes common cases.
+        for s in ("waiting", "pending", "cancelled", "refunded",
+                  "deleted", "محذوف"):
+            assert s in INELIGIBLE_STATUSES
+
+    def test_expand_status_variants_includes_both_forms(self):
+        variants = _expand_status_variants(frozenset({"جاري التوصيل"}))
+        assert "جاري التوصيل" in variants
+        assert "جاري_التوصيل" in variants
+        # single word (no change).
+        variants2 = _expand_status_variants(frozenset({"completed"}))
+        assert "completed" in variants2
 
 
 # ── Classifier tests (no DB, direct _classify calls) ───────────────
@@ -410,6 +467,127 @@ class TestEndToEndReport:
             report = await build_eligible_orders_report(db, user_id=uid)
             assert sum(report["counts"].values()) == 0
             assert report["total_scanned"] == 0
+        finally:
+            await self._clean(db, uid)
+
+    # ── Iter-001e: Status normalization end-to-end ─────────────────
+    async def test_underscore_arabic_status_treated_as_eligible(self, db):
+        """Order with `جاري_التوصيل` (underscore) MUST be picked up as
+        eligible — same as `جاري التوصيل` (space)."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            oid = await self._seed_order(db, uid, status="جاري_التوصيل",
+                                         pm="cod")
+            await self._seed_inbox(db, uid, oid, stage="COMPLETED")
+            report = await build_eligible_orders_report(db, user_id=uid)
+            # Must be scanned (query picked it up via _expand_status_variants).
+            assert report["total_scanned"] == 1, (
+                f"underscore Arabic status not picked up: {report}")
+            # Must classify (not excluded).
+            assert report["excluded_status_count"] == 0
+            # Must land in a `counts` bucket (ready_for_preview here).
+            assert report["counts"]["ready_for_preview"] == 1
+            # Breakdown should record the raw form.
+            assert "جاري_التوصيل" in report["total_eligible_by_status"]
+        finally:
+            await self._clean(db, uid)
+
+    async def test_space_arabic_status_still_eligible(self, db):
+        """Regression: `جاري التوصيل` (space) MUST still work."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            oid = await self._seed_order(db, uid, status="جاري التوصيل",
+                                         pm="cod")
+            await self._seed_inbox(db, uid, oid, stage="COMPLETED")
+            report = await build_eligible_orders_report(db, user_id=uid)
+            assert report["total_scanned"] == 1
+            assert report["counts"]["ready_for_preview"] == 1
+            assert "جاري التوصيل" in report["total_eligible_by_status"]
+        finally:
+            await self._clean(db, uid)
+
+    async def test_all_underscore_arabic_variants_eligible(self, db):
+        """جاري_التوصيل, تم_التوصيل, تم_التنفيذ — all eligible."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            for st in ("جاري_التوصيل", "تم_التوصيل", "تم_التنفيذ"):
+                oid = await self._seed_order(db, uid, status=st, pm="cod")
+                await db.integration_inbox.insert_one({
+                    "user_id": uid, "salla_order_id": oid,
+                    "salla_order_number": oid,
+                    "connector_key": f"salla-{oid}",
+                    "idempotency_key": f"idem-{oid}",
+                    "trace_id": f"t-{uuid.uuid4().hex[:8]}",
+                    "pipeline_stage": "COMPLETED",
+                    "received_at": self._now_iso(),
+                })
+            report = await build_eligible_orders_report(db, user_id=uid)
+            assert report["total_scanned"] == 3, (
+                f"expected 3 scanned, got {report['total_scanned']} — "
+                f"one of the underscore variants was dropped: "
+                f"{report['total_eligible_by_status']}")
+            assert report["counts"]["ready_for_preview"] == 3
+        finally:
+            await self._clean(db, uid)
+
+    async def test_invariant_holds_with_normalization(self, db):
+        """Mix eligible + ineligible; invariant must hold."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            # 2 eligible (underscore + space Arabic).
+            o1 = await self._seed_order(db, uid, status="جاري_التوصيل",
+                                        pm="cod")
+            await db.integration_inbox.insert_one({
+                "user_id": uid, "salla_order_id": o1,
+                "salla_order_number": o1,
+                "connector_key": f"salla-{o1}",
+                "idempotency_key": f"idem-{o1}",
+                "trace_id": f"t-{uuid.uuid4().hex[:8]}",
+                "pipeline_stage": "COMPLETED",
+                "received_at": self._now_iso(),
+            })
+            o2 = await self._seed_order(db, uid, status="delivered",
+                                        pm="cod")
+            await db.integration_inbox.insert_one({
+                "user_id": uid, "salla_order_id": o2,
+                "salla_order_number": o2,
+                "connector_key": f"salla-{o2}",
+                "idempotency_key": f"idem-{o2}",
+                "trace_id": f"t-{uuid.uuid4().hex[:8]}",
+                "pipeline_stage": "COMPLETED",
+                "received_at": self._now_iso(),
+            })
+            # 2 ineligible (in the DB but excluded by the query).
+            await self._seed_order(db, uid, status="cancelled")
+            await self._seed_order(db, uid, status="بإنتظار_الدفع")
+            report = await build_eligible_orders_report(db, user_id=uid)
+            # Only the 2 eligible ones enter the classifier.
+            assert report["total_scanned"] == 2
+            assert report["invariant_holds"] is True
+            # Response shape contract.
+            assert "total_eligible_by_status" in report
+            assert "total_ineligible_by_status" in report
+            assert "excluded_reason_counts" in report
+        finally:
+            await self._clean(db, uid)
+
+    async def test_response_has_normalization_note(self, db):
+        """UI depends on the normalization note to explain behavior."""
+        uid = self._uid()
+        try:
+            report = await build_eligible_orders_report(db, user_id=uid)
+            notes = " ".join(report.get("notes") or [])
+            assert "normalization" in notes.lower() or "طبيع" in notes \
+                or "_" in notes, (
+                f"notes must mention normalization: {report.get('notes')}")
         finally:
             await self._clean(db, uid)
 

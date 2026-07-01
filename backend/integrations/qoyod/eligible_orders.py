@@ -42,10 +42,62 @@ from typing import Any, Optional
 # Per Iter-001 request: ONLY completed / delivered / shipping.
 # Explicitly excludes: waiting, pending, cancelled, refunded, deleted,
 # and even shipped/processing/in_progress (kept out of THIS report).
+#
+# Iter-001e (2026-02) — Status normalization: production data mixes
+# space vs underscore separators (`جاري التوصيل` vs `جاري_التوصيل`).
+# We store the canonical space form here, then compare via
+# `_normalize_status()` which strips + casefolds + `_→space`.
 ELIGIBLE_STATUSES: frozenset[str] = frozenset({
     "completed", "delivered", "shipping",
     "تم التنفيذ", "تم التوصيل", "جاري التوصيل",
 })
+
+# Statuses that MUST stay excluded (documented for excluded_reason_counts
+# transparency; production may write either space or underscore form).
+INELIGIBLE_STATUSES: frozenset[str] = frozenset({
+    "waiting", "pending", "in_review", "in review",
+    "cancelled", "canceled", "refunded", "deleted",
+    "بإنتظار الدفع", "بانتظار الدفع",
+    "محذوف", "ملغي", "ملغى", "مسترجع",
+})
+
+
+def _normalize_status(s: Any) -> str:
+    """Iter-001e canonical form: lowercase, `_`→space, collapsed spaces.
+
+    Guarantees that `جاري_التوصيل`, `جاري التوصيل`, `  جاري  التوصيل  `
+    all map to the same key so equality checks work across sources.
+    """
+    if s is None:
+        return ""
+    txt = str(s).replace("_", " ").strip()
+    # collapse multiple whitespace to single
+    txt = " ".join(txt.split())
+    # casefold is Unicode-safe (Arabic is unaffected but English lowered)
+    return txt.casefold()
+
+
+_ELIGIBLE_NORMALIZED: frozenset[str] = frozenset(
+    _normalize_status(s) for s in ELIGIBLE_STATUSES)
+_INELIGIBLE_NORMALIZED: frozenset[str] = frozenset(
+    _normalize_status(s) for s in INELIGIBLE_STATUSES)
+
+
+def _is_eligible_status(s: Any) -> bool:
+    """True iff the (normalized) status is in the eligible set."""
+    return _normalize_status(s) in _ELIGIBLE_NORMALIZED
+
+
+def _expand_status_variants(base: frozenset[str]) -> list[str]:
+    """Expand a status set into every space/underscore variant for
+    MongoDB `$in`. Ensures a doc stored as `جاري_التوصيل` matches even
+    though the canonical form is `جاري التوصيل`."""
+    out: set[str] = set()
+    for s in base:
+        out.add(s)
+        out.add(s.replace(" ", "_"))
+        out.add(s.replace("_", " "))
+    return sorted(out)
 
 # BNPL family — allowed since Iter-293.5-rev3.
 _BNPL = frozenset({
@@ -402,9 +454,9 @@ async def build_eligible_orders_report(
                 "$and": [
                     {"$or": [
                         {"order_status":
-                         {"$in": list(ELIGIBLE_STATUSES)}},
+                         {"$in": _expand_status_variants(ELIGIBLE_STATUSES)}},
                         {"order_status_slug":
-                         {"$in": list(ELIGIBLE_STATUSES)}},
+                         {"$in": _expand_status_variants(ELIGIBLE_STATUSES)}},
                     ]},
                     {"$or": [
                         {"order_date":    {"$gte": since_date_str}},
@@ -492,6 +544,10 @@ async def build_eligible_orders_report(
         "unclassified_needs_review":    0,
     }
     excluded_reason_counts: dict[str, int] = {}
+    # Iter-001e — per-status breakdowns so operators can see EXACTLY
+    # which raw status values are being accepted vs. rejected.
+    total_eligible_by_status: dict[str, int] = {}
+    total_ineligible_by_status: dict[str, int] = {}
     items: list[dict] = []
     total_hidden_already_sent = 0
 
@@ -505,19 +561,36 @@ async def build_eligible_orders_report(
             inbox_row = order.get("_inbox_row")
             # Post-filter: only keep rows whose canonical status is
             # actually eligible (integration_inbox holds ALL states).
-            status = (order.get("order_status") or "").strip()
-            slug   = (order.get("order_status_slug") or "").strip()
-            if (status not in ELIGIBLE_STATUSES
-                    and slug not in ELIGIBLE_STATUSES
-                    and status.lower() not in ELIGIBLE_STATUSES):
+            # Iter-001e — use normalized comparison so `جاري_التوصيل`
+            # matches `جاري التوصيل`.
+            status_raw = order.get("order_status") or ""
+            slug_raw   = order.get("order_status_slug") or ""
+            if (_is_eligible_status(status_raw)
+                    or _is_eligible_status(slug_raw)):
+                # eligible — record the raw form for the breakdown.
+                key_raw = str(status_raw or slug_raw or "(empty)").strip()
+                total_eligible_by_status[key_raw] = \
+                    total_eligible_by_status.get(key_raw, 0) + 1
+            else:
                 # Iter-001d — count instead of silently dropping.
-                key = (f"status_not_eligible:{status or slug or '(empty)'}"
-                       if (status or slug)
-                       else "status_missing_from_canonical")
-                excluded_reason_counts[key] = \
-                    excluded_reason_counts.get(key, 0) + 1
+                key_raw = str(status_raw or slug_raw or "(empty)").strip()
+                reason_key = (
+                    f"status_not_eligible:{key_raw}" if key_raw
+                    else "status_missing_from_canonical")
+                excluded_reason_counts[reason_key] = \
+                    excluded_reason_counts.get(reason_key, 0) + 1
+                total_ineligible_by_status[key_raw or "(empty)"] = \
+                    total_ineligible_by_status.get(
+                        key_raw or "(empty)", 0) + 1
                 continue
         else:
+            # unified_orders path — the primary query already filtered by
+            # eligible status variants, so we can log this as eligible.
+            status_raw = str(order.get("order_status")
+                             or order.get("order_status_slug")
+                             or "(empty)").strip()
+            total_eligible_by_status[status_raw] = \
+                total_eligible_by_status.get(status_raw, 0) + 1
             inbox_row = await db.integration_inbox.find_one(
                 {"user_id": user_id,
                  "$or": [{"salla_order_id": order_id},
@@ -668,6 +741,8 @@ async def build_eligible_orders_report(
                                + excluded_status_count == len(orders)),
         "counts":              counts,
         "excluded_reason_counts": excluded_reason_counts,
+        "total_eligible_by_status":   total_eligible_by_status,
+        "total_ineligible_by_status": total_ineligible_by_status,
         "gates": {
             "production_writes_locked": bool(
                 settings.get("production_writes_locked", True)),
@@ -682,6 +757,8 @@ async def build_eligible_orders_report(
             "READ-ONLY REPORT — لا استدعاء لـ Qoyod، لا كتابة على DB.",
             "Statuses included: completed / delivered / shipping "
             "(Arabic natives accepted).",
+            "Status normalization: `_` treated as space "
+            "(`جاري_التوصيل` = `جاري التوصيل`).",
             "cancelled / refunded / deleted / waiting / pending "
             "مستبعدة من الاستعلام.",
             "Invariant: total_classified + excluded_status_count "

@@ -1,5 +1,62 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-001e — Eligible Orders Status Normalization (2026-02-XX)
+
+### Problem
+Production data mixes space vs. underscore forms of Arabic order statuses
+(`جاري التوصيل` vs. `جاري_التوصيل`, `تم التوصيل` vs. `تم_التوصيل`,
+`تم التنفيذ` vs. `تم_التنفيذ`). The previous `$in` query used only the
+canonical space forms, so underscore-form rows were silently missed from
+the Eligible Orders audit, inflating `excluded_status_count`.
+
+### Fix
+In `backend/integrations/qoyod/eligible_orders.py`:
+- New helper `_normalize_status(s)` — lowercases, strips, replaces `_→space`.
+- New helper `_expand_status_variants(base)` — MongoDB `$in` list now
+  includes BOTH space and underscore variants of every eligible status.
+- Inbox-fallback post-filter uses `_is_eligible_status()` (normalized).
+- Response gains two new fields:
+  - `total_eligible_by_status`  — raw counts per accepted status form.
+  - `total_ineligible_by_status` — raw counts per excluded status form.
+- `INELIGIBLE_STATUSES` constant added for documentation.
+- Notes list mentions the normalization contract.
+
+In `frontend/src/pages/EligibleOrders.jsx`:
+- New collapsible **Excluded Reasons Panel** shows
+  `excluded_reason_counts`, `total_eligible_by_status`, and
+  `total_ineligible_by_status`. Read-only; no send/approve buttons.
+- data-testids: `excluded-reasons-panel`, `excluded-reasons-toggle`,
+  `excluded-reasons-body`, `excluded-reason-*`, `eligible-status-*`,
+  `ineligible-status-*`.
+
+### Tests
+`backend/tests/test_eligible_orders_readonly.py` — 46 tests, all pass.
+New coverage:
+- `test_normalize_status_underscore_to_space`
+- `test_normalize_status_trim_and_case`
+- `test_normalize_status_none_and_empty`
+- `test_is_eligible_status_underscore_arabic`
+- `test_is_eligible_status_ineligible_stays_out`
+- `test_ineligible_statuses_defined`
+- `test_expand_status_variants_includes_both_forms`
+- `test_underscore_arabic_status_treated_as_eligible`
+- `test_space_arabic_status_still_eligible`
+- `test_all_underscore_arabic_variants_eligible`
+- `test_invariant_holds_with_normalization`
+- `test_response_has_normalization_note`
+
+### Verified impact (synthetic 10-order dataset)
+- BEFORE (old query): 3 matched, 5 underscore-form rows missed.
+- AFTER: 8 matched, 0 missed, invariant holds.
+
+### Read-Only guarantee (unchanged)
+- No Qoyod API calls.
+- No DB writes.
+- No approve/send/bypass/one-shot buttons.
+- `production_writes_locked` never touched.
+
+
+
 ## Iter-293.4-rev3-per-order-approval — First live send unlock mechanism (2026-XX)
 
 **Operator mandate** (verbatim phrase used as the unlock key):

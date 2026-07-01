@@ -62,6 +62,7 @@ export default function EligibleOrders() {
   const [filterPayment, setFilterPayment] = useState("all");
   const [filterStatus, setFilterStatus]   = useState("all");
   const [showAlreadySent, setShowAlreadySent] = useState(false);
+  const [showExcludedPanel, setShowExcludedPanel] = useState(false);
   const [sinceDays] = useState(90);
 
   const fetchReport = async () => {
@@ -227,6 +228,121 @@ export default function EligibleOrders() {
             "text-emerald-400" : "text-rose-400"}>
             invariant = {String(report.invariant_holds)}
           </span>
+        </div>
+      )}
+
+      {/* Excluded Reasons Panel (Iter-001e) — collapsible, read-only.
+          Shows exactly why rows were excluded so operators can verify
+          the underscore/space normalization worked. */}
+      {report && (
+        <div className="rounded-lg border border-slate-700 bg-slate-900/40"
+             data-testid="excluded-reasons-panel">
+          <button
+            onClick={() => setShowExcludedPanel(v => !v)}
+            className="w-full flex items-center justify-between p-3
+                       text-right hover:bg-slate-800/50 transition"
+            data-testid="excluded-reasons-toggle"
+          >
+            <span className="text-slate-200 font-medium">
+              🔍 تفاصيل الاستبعاد ({report.excluded_status_count || 0}
+              &nbsp;طلب مستبعد)
+            </span>
+            <span className="text-slate-400 text-xs">
+              {showExcludedPanel ? "▲ إخفاء" : "▼ عرض"}
+            </span>
+          </button>
+          {showExcludedPanel && (
+            <div className="p-4 border-t border-slate-700 space-y-4"
+                 data-testid="excluded-reasons-body">
+              {/* excluded_reason_counts */}
+              <div>
+                <div className="text-slate-300 text-sm font-semibold mb-2">
+                  أسباب الاستبعاد (excluded_reason_counts)
+                </div>
+                {Object.keys(report.excluded_reason_counts || {}).length
+                  === 0 ? (
+                  <div className="text-slate-500 text-xs"
+                       data-testid="excluded-reasons-empty">
+                    لا يوجد أسباب استبعاد — كل الطلبات المقروءة مؤهلة.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(report.excluded_reason_counts)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([key, count]) => (
+                        <span
+                          key={key}
+                          className="px-2 py-1 rounded border
+                                     border-rose-500/30 bg-rose-500/10
+                                     text-rose-200 text-xs font-mono"
+                          data-testid={`excluded-reason-${key}`}
+                        >
+                          {key} <b className="text-rose-100">{count}</b>
+                        </span>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* total_eligible_by_status */}
+              {report.total_eligible_by_status &&
+               Object.keys(report.total_eligible_by_status).length > 0 && (
+                <div>
+                  <div className="text-slate-300 text-sm font-semibold mb-2">
+                    ✅ حالات مقبولة (بعد التطبيع)
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(report.total_eligible_by_status)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([key, count]) => (
+                        <span
+                          key={key}
+                          className="px-2 py-1 rounded border
+                                     border-emerald-500/30
+                                     bg-emerald-500/10 text-emerald-200
+                                     text-xs font-mono"
+                          data-testid={`eligible-status-${key}`}
+                        >
+                          {key} <b className="text-emerald-100">{count}</b>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* total_ineligible_by_status */}
+              {report.total_ineligible_by_status &&
+               Object.keys(report.total_ineligible_by_status).length > 0 && (
+                <div>
+                  <div className="text-slate-300 text-sm font-semibold mb-2">
+                    ⛔ حالات مستبعدة
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(report.total_ineligible_by_status)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([key, count]) => (
+                        <span
+                          key={key}
+                          className="px-2 py-1 rounded border
+                                     border-slate-500/40 bg-slate-500/10
+                                     text-slate-200 text-xs font-mono"
+                          data-testid={`ineligible-status-${key}`}
+                        >
+                          {key} <b className="text-slate-100">{count}</b>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="text-xs text-slate-500 pt-2 border-t
+                              border-slate-800">
+                ملاحظة: التطبيع يعامل الشرطة السفلية والمسافة على أنهما
+                متساويان (مثال: <code>جاري_التوصيل</code> ={" "}
+                <code>جاري التوصيل</code>).
+              </div>
+            </div>
+          )}
         </div>
       )}
 
