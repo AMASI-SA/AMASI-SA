@@ -1733,6 +1733,29 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         except GatesNotFailClosedError as e:
             raise HTTPException(status_code=409, detail=str(e))
 
+    # ── Iter-001k+ (2026-02-27) — Canary Readiness Preview ────
+    # Read-Only preflight for a SINGLE order. Refuses if gates
+    # are not Fail-Closed. Never sends. Never writes.
+    @router.get("/admin/canary-readiness-preview/{order_number}")
+    async def admin_canary_readiness_preview(
+        order_number: str,
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.canary_readiness import (
+            build_canary_readiness_preview,
+        )
+        from integrations.qoyod.dry_rca_report import (
+            GatesNotFailClosedError,
+        )
+        try:
+            return await build_canary_readiness_preview(
+                db,
+                user_id=_tenant_id(user),
+                order_number=str(order_number),
+            )
+        except GatesNotFailClosedError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
     @router.get("/admin/qoyod-mezan-vat-simulation/{order_number}")
     async def admin_qoyod_mezan_vat_simulation(
         order_number: str,
