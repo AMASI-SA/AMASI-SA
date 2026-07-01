@@ -143,6 +143,14 @@ class _DB:
             "dry_run_mode":             False,
             "invoice_trigger_statuses": ["completed"],
             "auto_receipt":             True,
+            # Iter-001k — Selective Send guard now runs first. Master
+            # gate opened + trigger status opted-in for these legacy
+            # per-order-unlock tests. Not production settings.
+            "selective_live_send_enabled": True,
+            "qoyod_enabled_invoice_trigger_statuses":
+                ["completed", "تم التنفيذ",
+                 "delivered", "shipping"],
+            "qoyod_sync_start_date": "2020-01-01",
         })
         self.integration_inbox          = _Coll()
         self.qoyod_invoices             = _Coll()
@@ -176,6 +184,9 @@ def _customer_resolved_row():
         "canonical_payload": {
             "order_id":      "269571122",
             "order_number":  "269571122",
+            # Iter-001k — order_date required for sync-cutoff check.
+            "order_date":    "2026-07-05",
+            "order_status":  "completed",
             "customer": {
                 "name": "Test", "phone": "0500000000",
                 "email": "t@x.com",

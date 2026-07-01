@@ -141,6 +141,15 @@ class _DB:
             "dry_run_mode":             False,
             "invoice_trigger_statuses": ["completed"],
             "auto_receipt":             True,
+            # Iter-001k — Selective Send guard now runs before writes.
+            # These legacy tests exercise the happy path with a mock
+            # client, so open the master gate + enable the trigger
+            # status list. Not production behaviour.
+            "selective_live_send_enabled": True,
+            "qoyod_enabled_invoice_trigger_statuses": [
+                "completed", "تم التنفيذ",
+                "delivered", "shipping"],
+            "qoyod_sync_start_date": "2020-01-01",
         })
         self.integration_inbox          = _Coll()
         self.qoyod_invoices             = _Coll()
@@ -172,6 +181,10 @@ def _cod_row_269571122():
         "canonical_payload": {
             "order_id":      "269571122",
             "order_number":  "269571122",
+            # Iter-001k — canonical must include order_date for the
+            # Selective Send sync-cutoff check. Q3-2026 keeps eligible.
+            "order_date":    "2026-07-05",
+            "order_status":  "completed",
             "customer": {"name": "Test", "phone": "0500000000",
                          "email": "t@x.com"},
             "items": [{

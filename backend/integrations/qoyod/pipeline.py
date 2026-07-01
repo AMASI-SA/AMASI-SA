@@ -48,6 +48,12 @@ from integrations.qoyod.state_machine import transition, InvalidTransition
 from integrations.qoyod.totals_guard import (
     validate_totals, TotalsGuardResult,
 )
+# Iter-001k — Selective Live Send guard (pipeline instrumentation).
+from integrations.qoyod.selective_send_guard import (
+    SelectiveSendPolicyBlocked,
+    apply_send_date_to_qoyod_payload,
+    assert_send_allowed,
+)
 
 
 def _now() -> datetime:
@@ -145,6 +151,94 @@ def _writes_blocked(api_client: Any, settings: dict) -> bool:
         # False so the pre-check never trips in dry-run mode).
         return bool(getattr(api_client, "write_lock_enabled", False))
     return is_locked(settings)
+
+
+
+def _build_policy_order_from_pipeline_scope(
+    *,
+    row: dict,
+    canonical: dict,
+    qoyod_customer_id: Any,
+    products_resolution: Any = None,
+    invoice_diagnostics: Optional[dict] = None,
+    is_dry: bool = False,
+) -> dict:
+    """Iter-001k — Assemble the `order` dict expected by the Selective
+    Send policy from what the pipeline already has in scope.
+
+    Called at the invoice + payment write sites BEFORE any Qoyod API
+    call. Purely-derived (no DB reads), synchronous, safe.
+    """
+    # Salla creation date — prefer canonical.order_date (normalised
+    # YYYY-MM-DD), then raw_payload.data.date.date (Salla webhook).
+    salla_created = canonical.get("order_date")
+    if not salla_created:
+        raw = (row.get("raw_payload") or {}).get("data") or {}
+        dfield = raw.get("date") if isinstance(raw, dict) else None
+        if isinstance(dfield, dict):
+            salla_created = dfield.get("date")
+        elif dfield:
+            salla_created = dfield
+        if not salla_created:
+            salla_created = (raw.get("created_at")
+                             if isinstance(raw, dict) else None)
+
+    # Product status: pipeline reaches invoice site only past
+    # PRODUCT_RESOLVED. Detect DRY-only mappings when in dry_run mode.
+    # Iter-001k policy: TRUST upstream — if the pipeline transitioned
+    # past PRODUCT_RESOLVED with no missing SKUs, treat as resolved
+    # (products may have come from `default_product_id` settings
+    # rather than the resolver's `resolved` list).
+    resolved_count = 0
+    dry_run_only = 0
+    missing_skus: list[str] = []
+    if products_resolution is not None:
+        # `ProductsResolutionResult` shape (defensive access).
+        resolved = getattr(products_resolution, "resolved", None) or []
+        resolved_count = len(resolved)
+        missing_skus = list(
+            getattr(products_resolution, "missing", None) or [])
+        if is_dry:
+            dry_run_only = resolved_count
+
+    totals_diff = float((invoice_diagnostics or {}).get("diff") or 0.0)
+    totals_expected = float(
+        (invoice_diagnostics or {}).get("expected_qoyod_total") or 0.0)
+    totals_actual = float(
+        (invoice_diagnostics or {}).get("salla_total")
+        or canonical.get("total_amount") or 0.0)
+
+    return {
+        "order_number": (row.get("salla_order_number")
+                         or canonical.get("order_number")),
+        "salla_order_id": (row.get("salla_order_id")
+                           or canonical.get("order_id")),
+        "salla_order_created_at": salla_created,
+        "status": canonical.get("order_status"),
+        "payment_method": canonical.get("payment_method"),
+        "existing_qoyod_invoice_id": row.get("qoyod_invoice_id"),
+        "customer_status": {
+            "resolved": qoyod_customer_id is not None,
+            "qoyod_id": qoyod_customer_id,  # policy detects DRY:/PREVIEW:
+            "reason": None,
+        },
+        "products_status": {
+            # Trust upstream: if we reached the invoice site AND
+            # there's no explicit `missing` list AND no DRY-only
+            # flag, mark as resolved.
+            "resolved": (not missing_skus and dry_run_only == 0),
+            "resolved_count": resolved_count,
+            "dry_run_only":   dry_run_only,
+            "missing":        missing_skus,
+        },
+        "totals_status": {
+            "valid":    abs(totals_diff) <= 0.01,
+            "total":    totals_actual,
+            "expected": totals_expected,
+            "diff":     totals_diff,
+        },
+    }
+
 
 
 async def _dead_letter(
@@ -695,6 +789,11 @@ async def process_customer_resolved_row(
     invoice_idem = f"mzn-{trace_id}-invoice"
     inv_resp_raw: Any = None
     inv_started_ms = int(_now().timestamp() * 1000)
+    # Iter-001k — Selective Send decision captured at the invoice site
+    # so the payment site can reuse the SAME frozen send_timestamp.
+    # `None` when we short-circuit via `existing_qid` (invoice was
+    # already created in a prior run) OR when running in dry-run mode.
+    selective_send_decision = None
 
     # Iter-291 — Idempotent invoice short-circuit. When a previous run
     # successfully created the Qoyod invoice but the receipt failed
@@ -716,6 +815,73 @@ async def process_customer_resolved_row(
         # the post-success branch which advances the stage to
         # INVOICE_CREATED (it tolerates re-applying the same stage).
     else:
+        # ── Iter-001k — Selective Live Send guard (STRICTEST layer) ─
+        # Runs BEFORE `_writes_blocked` so a policy block returns a
+        # dedicated `SELECTIVE_SEND_BLOCKED:<code>` stage that names
+        # the exact reason (gate_disabled / q2_cutoff / bank_hold /
+        # trigger_status_not_enabled / etc.).
+        # DRY-run pipelines skip this — they use a DryRunQoyodClient
+        # that never touches api.qoyod.com.
+        #
+        # SKIP when `_writes_blocked` would fire anyway: the existing
+        # LOCKED_AWAITING_APPROVAL path is preserved for the pure
+        # write-lock case (no gate, no Q2, no DRY, etc. — just lock).
+        # That keeps Iter-293.4-rev5 semantics intact.
+        if not is_dry and not _writes_blocked(api_client, settings):
+            policy_order = _build_policy_order_from_pipeline_scope(
+                row=row, canonical=canonical,
+                qoyod_customer_id=qoyod_customer_id,
+                products_resolution=prod_res,
+                invoice_diagnostics=invoice_diagnostics,
+                is_dry=is_dry,
+            )
+            # Iter-001k — Delegate write-lock resolution to
+            # `_writes_blocked` (single source of truth). This honours
+            # the Iter-293.4 per-order unlock: an api_client with
+            # `write_lock_enabled=False` (as produced by
+            # one_shot_reprocess after a valid approval_phrase) is
+            # treated as effectively unlocked for the policy, without
+            # ever mutating the DB `production_writes_locked` flag.
+            _policy_settings = dict(settings)
+            _policy_settings["production_writes_locked"] = \
+                _writes_blocked(api_client, settings)
+            try:
+                selective_send_decision = assert_send_allowed(
+                    order=policy_order, settings=_policy_settings)
+            except SelectiveSendPolicyBlocked as blocked:
+                # Persist blocker + park the row. No Qoyod call.
+                await db.integration_inbox.update_one(
+                    {"id": row["id"]},
+                    {"$set": {
+                        "qoyod_payloads.invoice_selective_blocked_payload":
+                            invoice_payload,
+                        "qoyod_payloads.invoice_selective_blocked_at":
+                            _now(),
+                        "pipeline_stage":
+                            f"SELECTIVE_SEND_BLOCKED:"
+                            f"{blocked.blocker_code}",
+                        "selective_send_blocker_code":
+                            blocked.blocker_code,
+                        "selective_send_blocker_reason":
+                            blocked.blocker_reason,
+                        "selective_send_blocked_step":  "invoice",
+                        "selective_send_blocked_at":    _now(),
+                    }})
+                return {
+                    "row_id":         row["id"],
+                    "outcome":        "SELECTIVE_SEND_BLOCKED",
+                    "reason":         blocked.blocker_code,
+                    "blocker_reason": blocked.blocker_reason,
+                    "step":           "invoice",
+                    "trace_id":       trace_id,
+                    "note": ("Selective Send policy refused this order "
+                             "BEFORE any Qoyod API call. See "
+                             "selective_send_blocker_code."),
+                }
+            # Policy allowed — stamp payload dates with send_date_riyadh.
+            invoice_payload = apply_send_date_to_qoyod_payload(
+                invoice_payload, selective_send_decision)
+
         # ── Iter-293.3 — Production Writes Kill Switch ────────────
         # ZATCA-sensitive guard: AFTER the Mezan↔Qoyod↔ZATCA chain is
         # live, any uncontrolled POST to `api.qoyod.com` could push a
@@ -1229,6 +1395,69 @@ async def process_customer_resolved_row(
                 "qoyod_responses.invoice_payment.qoyod_id": qoyod_invoice_payment_id,
             }})
     else:
+        # ── Iter-001k — Selective Send guard for payment step ──────
+        # Same rules as invoice site: skip when the legacy write-lock
+        # path would fire anyway (keeps LOCKED_AWAITING_APPROVAL for
+        # the pure write-lock case).
+        payment_decision = selective_send_decision
+        if payment_decision is None and not is_dry \
+                and not _writes_blocked(api_client, settings):
+            policy_order_pay = _build_policy_order_from_pipeline_scope(
+                row=row, canonical=canonical,
+                qoyod_customer_id=qoyod_customer_id,
+                products_resolution=prod_res,
+                invoice_diagnostics=None,
+                is_dry=is_dry,
+            )
+            # Iter-001k — At the payment site, the existing invoice id
+            # is EXPECTED (that's what we're paying against). Strip it
+            # from the policy order so the `already_sent` check (which
+            # is intended to prevent DUPLICATE invoice creation) does
+            # not misfire on the payment path.
+            policy_order_pay["existing_qoyod_invoice_id"] = None
+            # Iter-001k — same per-order unlock resolution as the
+            # invoice site (see comment there).
+            _policy_settings_pay = dict(settings)
+            _policy_settings_pay["production_writes_locked"] = \
+                _writes_blocked(api_client, settings)
+            try:
+                payment_decision = assert_send_allowed(
+                    order=policy_order_pay,
+                    settings=_policy_settings_pay)
+            except SelectiveSendPolicyBlocked as blocked:
+                await db.integration_inbox.update_one(
+                    {"id": row["id"]},
+                    {"$set": {
+                        "qoyod_payloads.invoice_payment_selective_blocked_payload":
+                            payment_payload,
+                        "qoyod_payloads.invoice_payment_selective_blocked_at":
+                            _now(),
+                        "pipeline_stage":
+                            f"SELECTIVE_SEND_BLOCKED:"
+                            f"{blocked.blocker_code}",
+                        "selective_send_blocker_code":
+                            blocked.blocker_code,
+                        "selective_send_blocker_reason":
+                            blocked.blocker_reason,
+                        "selective_send_blocked_step":
+                            "invoice_payment",
+                        "selective_send_blocked_at": _now(),
+                    }})
+                return {
+                    "row_id":         row["id"],
+                    "outcome":        "SELECTIVE_SEND_BLOCKED",
+                    "reason":         blocked.blocker_code,
+                    "blocker_reason": blocked.blocker_reason,
+                    "step":           "invoice_payment",
+                    "qoyod_invoice_id": qoyod_invoice_id,
+                    "trace_id":       trace_id,
+                }
+        # Stamp payment payload dates from the (invoice or fresh)
+        # decision so invoice + payment share `send_date_riyadh`.
+        if payment_decision is not None:
+            payment_payload = apply_send_date_to_qoyod_payload(
+                payment_payload, payment_decision)
+
         # ── Iter-293.4 — Global Write Lock pre-check for invoice_payment ─
         # Mirror the pre-check on the create_invoice path (line 652)
         # so the operator sees a clean LOCKED_AWAITING_APPROVAL outcome

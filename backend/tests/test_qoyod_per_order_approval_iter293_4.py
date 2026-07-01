@@ -121,6 +121,12 @@ class _DB:
             "production_writes_locked": locked,
             "dry_run_mode": False,
             "invoice_trigger_statuses": ["completed"],
+            # Iter-001k — open Selective Send gate for legacy tests.
+            "selective_live_send_enabled": True,
+            "qoyod_enabled_invoice_trigger_statuses":
+                ["completed", "تم التنفيذ",
+                 "delivered", "shipping"],
+            "qoyod_sync_start_date": "2020-01-01",
         })
 
     def __getattr__(self, name):

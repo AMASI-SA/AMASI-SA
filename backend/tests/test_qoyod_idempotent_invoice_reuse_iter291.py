@@ -81,6 +81,10 @@ def _make_canonical(order_id: str) -> dict:
         "order_number":   order_id,
         "order_status":   "completed",
         "order_status_native": "completed",
+        # Iter-001k — canonical must include order_date so the
+        # Selective Send policy's sync-cutoff check has data to
+        # evaluate. Q3-2026 or later keeps the row eligible.
+        "order_date":     "2026-07-05",
         "currency":       "SAR",
         "total_amount":   115.0,
         "subtotal":       100.0,
@@ -117,6 +121,13 @@ async def _seed_settings(db, user_id: str) -> None:
             # Iter-293.4 hardening — missing field now defaults to LOCKED.
             # Existing tests exercise the happy path, so explicitly unlock.
             "production_writes_locked": False,
+            # Iter-001k — Selective Send guard now runs first. Open
+            # the master gate + enable the trigger status so this
+            # legacy happy-path test still reaches the mock client.
+            "selective_live_send_enabled": True,
+            "qoyod_enabled_invoice_trigger_statuses":
+                ["completed", "تم التنفيذ", "delivered", "shipping"],
+            "qoyod_sync_start_date": "2020-01-01",
             "invoice_trigger_statuses": ["completed"],
             "default_tax_id": "1",
             "default_branch_id": "1",
@@ -213,8 +224,8 @@ async def test_invoice_create_IS_called_when_no_stored_id(db):
         qoyod_invoice_id=None)
     row = await db.integration_inbox.find_one({"salla_order_id": order_id})
     client = _CountingClient()
-    await process_customer_resolved_row(db, row, api_client=client)
-    assert client.invoice_calls == 1
+    out = await process_customer_resolved_row(db, row, api_client=client)
+    assert client.invoice_calls == 1, f"outcome={out}"
 
 
 @pytest.mark.asyncio

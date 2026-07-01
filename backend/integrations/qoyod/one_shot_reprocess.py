@@ -755,6 +755,89 @@ async def reprocess_one_order(
             actor, order_number, row.get("trace_id"), approval_id)
         use_unlocked_client = True
 
+    # ── 7a. Iter-001k — Selective Live Send guard ─────────────────────
+    # Runs AFTER approval_phrase verification but BEFORE any api_client
+    # construction / write. Even a valid approval_phrase MUST NOT
+    # bypass the Selective Send policy — the policy is strictly a
+    # superset of the write-lock check (it also blocks Q2 orders,
+    # non-enabled trigger statuses, DRY/PREVIEW ids, bank_transfer,
+    # totals mismatch, etc.).
+    # Skipped when dry_run_mode is active (already rejected above).
+    from integrations.qoyod.selective_send_guard import (
+        SelectiveSendPolicyBlocked as _SelectiveSendBlocked,
+        assert_send_allowed as _assert_send_allowed,
+    )
+    canonical_for_policy = fresh.get("canonical_payload") or {}
+    policy_order = {
+        "order_number": (fresh.get("salla_order_number")
+                         or canonical_for_policy.get("order_number")
+                         or order_number),
+        "salla_order_id": (fresh.get("salla_order_id")
+                           or canonical_for_policy.get("order_id")),
+        "salla_order_created_at":
+            canonical_for_policy.get("order_date"),
+        "status": canonical_for_policy.get("order_status"),
+        "payment_method": canonical_for_policy.get("payment_method"),
+        "existing_qoyod_invoice_id": fresh.get("qoyod_invoice_id"),
+        "customer_status": {
+            "resolved": fresh.get("qoyod_customer_id") is not None,
+            "qoyod_id": fresh.get("qoyod_customer_id"),
+            "reason": None,
+        },
+        "products_status": {
+            # We haven't run product_resolver here — leave as
+            # "unknown-but-not-missing". The pipeline layer's guard
+            # (process_customer_resolved_row) re-checks with the true
+            # resolution result. This one_shot layer guard is the
+            # FIRST-line rejection for the fast blockers (gate closed,
+            # Q2 cutoff, bank_transfer, DRY invoice id, etc.).
+            "resolved": True,
+            "resolved_count": 1,
+            "dry_run_only": 0,
+            "missing": [],
+        },
+        "totals_status": {"valid": True, "total": 0.0,
+                          "expected": 0.0, "diff": 0.0},
+    }
+    try:
+        # Per-order unlock — approval_phrase was already verified at
+        # step 7 above. The one_shot flow always builds an UNLOCKED
+        # api_client (step 8). Reflect that here so the policy's
+        # WRITE_LOCK_ACTIVE check doesn't misfire on an approved
+        # per-order retry. The DB settings row is NEVER modified.
+        _policy_settings_oneshot = dict(settings)
+        _policy_settings_oneshot["production_writes_locked"] = False
+        _assert_send_allowed(
+            order=policy_order, settings=_policy_settings_oneshot)
+    except _SelectiveSendBlocked as _blocked:
+        # Persist audit — even approved orders can be refused by policy.
+        try:
+            await db.qoyod_per_order_approvals.update_one(
+                {"row_id": row.get("id"),
+                 "order_number": order_number,
+                 "approved_at": (approval_audit or {}).get(
+                     "approved_at")},
+                {"$set": {
+                    "selective_send_blocked_after_approval": True,
+                    "selective_send_blocker_code":
+                        _blocked.blocker_code,
+                    "selective_send_blocker_reason":
+                        _blocked.blocker_reason,
+                    "selective_send_blocked_at":
+                        datetime.now(timezone.utc),
+                }})
+        except Exception:    # pragma: no cover
+            pass
+        raise OneShotRefused(
+            "selective_send_policy_blocked",
+            "Selective Send policy refused this order EVEN WITH a "
+            "valid approval_phrase. approval_phrase alone cannot "
+            "bypass Selective Send. See selective_send_blocker_code.",
+            order_number=order_number,
+            selective_send_blocker_code=_blocked.blocker_code,
+            selective_send_blocker_reason=_blocked.blocker_reason,
+        )
+
     # ── 7b. Iter-293.4-rev3 — Pre-send sendability check ─────────────
     # Re-run the preview-reprocess to make sure the latest state of
     # mappings + canonical produces a sendable payload. This catches:

@@ -87,6 +87,14 @@ async def _seed_settings(db, user_id="main", *, with_mada=True,
             "qoyod_api_key":                  "test-key",
             "invoice_total_policy":           "match_salla_total",
             "qoyod_tax_percent":              15,
+            # Iter-001k — open Selective Send gate for legacy tests
+            # + trigger status opt-in. Not production defaults.
+            "production_writes_locked":       False,
+            "selective_live_send_enabled":    True,
+            "qoyod_enabled_invoice_trigger_statuses":
+                ["completed", "تم التنفيذ",
+                 "delivered", "shipping"],
+            "qoyod_sync_start_date":          "2020-01-01",
         }}, upsert=True,
     )
 
