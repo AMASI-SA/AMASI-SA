@@ -137,6 +137,43 @@ export default function EligibleOrders() {
         </div>
       </div>
 
+      {/* Iter-001f — Sync-cutoff banner (tax-period Q3-2026 start) */}
+      {report?.sync_start_date && (
+        <div className="rounded-lg border border-indigo-500/40
+                        bg-indigo-500/10 p-4 flex items-center gap-3"
+             data-testid="eligible-orders-sync-cutoff-banner">
+          <span className="text-2xl">📅</span>
+          <div className="flex-1">
+            <div className="text-indigo-200 font-semibold">
+              يعرض فقط الطلبات المنشأة من {report.sync_start_date} وما بعد
+              — بداية الربع الضريبي {report.tax_period || "الثالث"}
+            </div>
+            <div className="text-indigo-100/80 text-xs mt-1">
+              المعيار: <code>salla_order_created_at</code>
+              &nbsp;(ليس <code>received_at</code>). الطلبات السابقة
+              لهذا التاريخ تخص الربع الثاني ولا تدخل ضمن المزامنة الحالية.
+            </div>
+            {(report.excluded_before_sync_start_date_count > 0 ||
+              report.excluded_missing_order_created_at_count > 0) && (
+              <div className="flex flex-wrap gap-3 mt-2 text-xs">
+                <span data-testid="cutoff-count-before-start"
+                      className="px-2 py-0.5 rounded border
+                                 border-indigo-400/30 text-indigo-100">
+                  مستبعد قبل التاريخ:{" "}
+                  <b>{report.excluded_before_sync_start_date_count}</b>
+                </span>
+                <span data-testid="cutoff-count-missing-created-at"
+                      className="px-2 py-0.5 rounded border
+                                 border-indigo-400/30 text-indigo-100">
+                  بدون تاريخ إنشاء:{" "}
+                  <b>{report.excluded_missing_order_created_at_count}</b>
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

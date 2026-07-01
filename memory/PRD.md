@@ -1,5 +1,67 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-001f — Tax-Period Sync Cutoff (Q3-2026 start) (2026-07-01)
+
+### Business Rule
+MEZAN begins pushing to قيود from **2026-07-01** only. Any Salla order
+whose CREATION date is before 2026-07-01 belongs to Q2 (previous tax
+period) and MUST NOT appear in Eligible Orders / Catch-up / any live
+send path. Q2 orders will be handled by a separate reconciliation
+workflow, not covered here.
+
+### Fix
+`backend/integrations/qoyod/eligible_orders.py`:
+- New module constants: `QOYOD_SYNC_START_DATE = "2026-07-01"`,
+  `QOYOD_TAX_PERIOD = "Q3-2026"`, `QOYOD_SYNC_TZ = "Asia/Riyadh"`.
+- New helpers: `_parse_iso_date()`, `_extract_order_created_at()` —
+  extracts Salla creation date from (priority order):
+  1. `order.created_at`
+  2. `order.order_date` (if NOT `order_date_inferred=True`)
+  3. `raw_payload.data.date.date` (Salla webhook shape)
+  4. `raw_payload.data.created_at`
+- Classifier loop applies the cutoff **first**, BEFORE all other
+  checks:
+  - `created_at < 2026-07-01` → `excluded_before_sync_start_date`
+    with reason `before_sync_start_date:2026-07-01 (order_created_at=…)`.
+  - `created_at` unresolvable → `excluded_missing_order_created_at`
+    with reason `missing_order_created_at`.
+- New response fields:
+  - `sync_start_date`, `tax_period`, `sync_timezone`,
+    `date_filter_basis="salla_order_created_at"`,
+    `excluded_before_sync_start_date_count`,
+    `excluded_missing_order_created_at_count`.
+  - Each item now carries `salla_order_created_at` (ISO date).
+- New notes advertise cutoff in Arabic + English.
+
+`frontend/src/pages/EligibleOrders.jsx`:
+- New indigo **Sync-Cutoff Banner** with `data-testid="eligible-orders-sync-cutoff-banner"` explaining the Q3 start date and cutoff counts.
+
+### Tests (55 pass, up from 46)
+- `test_sync_start_date_is_2026_07_01`
+- `test_parse_iso_date_handles_shapes`
+- `test_extract_order_created_at_priority`
+- `test_response_advertises_sync_cutoff_fields`
+- `test_order_before_cutoff_excluded` (2026-06-30 → excluded)
+- `test_order_on_cutoff_included` (2026-07-01 → eligible)
+- `test_late_arrival_of_old_order_still_excluded` (created_at wins over received_at)
+- `test_missing_created_at_excluded_and_counted`
+- `test_invariant_holds_with_cutoff_mix`
+
+### Verified impact (8-order synthetic dataset)
+Seed: 4×Q2 + 3×Q3 + 1×undateable.
+- `total_scanned=8`, `total_classified=3`, `invariant_holds=true`
+- `excluded_before_sync_start_date_count=4` (Q2 orders blocked)
+- `excluded_missing_order_created_at_count=1` (undateable blocked)
+- 5 orders that would previously have been classified are now
+  correctly blocked from any downstream send path.
+
+### Read-only guarantee (unchanged)
+- No Qoyod API calls, no DB writes, no approve/send/bypass buttons.
+- `production_writes_locked` untouched. Q2 orders never enter the
+  send queue.
+
+
+
 ## Iter-001e — Eligible Orders Status Normalization (2026-02-XX)
 
 ### Problem

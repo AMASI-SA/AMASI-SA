@@ -34,8 +34,108 @@ Classifications (9)
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, date, timedelta, timezone
 from typing import Any, Optional
+
+
+# ── Iter-001f (2026-02) — Tax-period sync cutoff ───────────────────
+# Business decision: MEZAN starts pushing to قيود from Q3-2026 only.
+# Any Salla order whose CREATION date is before this cutoff belongs
+# to Q2-2026 and must NOT appear in Eligible Orders (nor be sent by
+# any downstream mechanism).
+#
+# The filter uses the order's CREATION date in Salla, NOT `received_at`
+# on our side — a legacy order that arrived at our pipeline after
+# 2026-07-01 is still Q2 accounting-wise.
+QOYOD_SYNC_START_DATE: str = "2026-07-01"          # ISO YYYY-MM-DD
+QOYOD_TAX_PERIOD: str      = "Q3-2026"
+QOYOD_SYNC_TZ: str         = "Asia/Riyadh"
+
+_SYNC_START_ISO: date = date.fromisoformat(QOYOD_SYNC_START_DATE)
+
+
+def _parse_iso_date(v: Any) -> Optional[date]:
+    """Coerce heterogeneous Salla/Mongo date shapes into a `date`.
+
+    Accepts:
+        - `date` object      → returned as-is
+        - `datetime` object  → `.date()`
+        - `YYYY-MM-DD` str   → `date.fromisoformat`
+        - `YYYY-MM-DD HH:…` str → parsed as ISO then `.date()`
+        - Full ISO w/ tz     → parsed then `.date()`
+        - Anything else / falsy → None
+    """
+    if v is None or v == "":
+        return None
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    s = str(v).strip()
+    if not s:
+        return None
+    # Fast path — plain YYYY-MM-DD
+    try:
+        return date.fromisoformat(s[:10])
+    except ValueError:
+        pass
+    # Fallback — full ISO datetime with 'T' or space separator
+    try:
+        return datetime.fromisoformat(
+            s.replace("Z", "+00:00").replace(" ", "T", 1)).date()
+    except ValueError:
+        return None
+
+
+def _extract_order_created_at(order: dict) -> Optional[date]:
+    """Return the Salla order CREATION date as a `date`, or None.
+
+    Priority (per user directive Iter-001f):
+        1. raw Salla `created_at`               (order['created_at'])
+        2. `order_date`                          — trusted unless
+           `order_date_inferred=True` (would be a guess by Make.com)
+        3. inbox raw_payload → data.date.date  (Salla webhook shape)
+        4. inbox raw_payload → data.created_at
+        5. canonical_payload.order_date / created_at (if surfaced)
+
+    Anything else → None (row will be classified as
+    `excluded_missing_order_created_at`).
+    """
+    # 1. Direct top-level created_at (used by webhook payloads and
+    #    manual Excel imports that preserve the Salla timestamp).
+    d = _parse_iso_date(order.get("created_at"))
+    if d is not None:
+        return d
+    # 2. Normalized `order_date` — trusted only when NOT flagged as
+    #    inferred (Make.com guessed today when Salla omitted the field).
+    if not order.get("order_date_inferred"):
+        d = _parse_iso_date(order.get("order_date"))
+        if d is not None:
+            return d
+    # 3–4. Inbox fallback — dig into raw_payload we stashed on the
+    #    pseudo-order (`_inbox_row.raw_payload`).
+    inbox_row = order.get("_inbox_row") or {}
+    raw = inbox_row.get("raw_payload") or {}
+    if isinstance(raw, dict):
+        data = raw.get("data") or raw
+        if isinstance(data, dict):
+            # Salla webhook shape: {"data": {"date": {"date": "..."}}}
+            date_field = data.get("date")
+            if isinstance(date_field, dict):
+                d = _parse_iso_date(date_field.get("date"))
+                if d is not None:
+                    return d
+            elif date_field is not None:
+                d = _parse_iso_date(date_field)
+                if d is not None:
+                    return d
+            d = _parse_iso_date(data.get("created_at"))
+            if d is not None:
+                return d
+    # 5. Last resort — canonical order_date (may exist on some rows).
+    d = _parse_iso_date(order.get("order_date")) if \
+        order.get("order_date_inferred") is False else None
+    return d
 
 
 # ── Eligible statuses (subset of the unified set per user directive) ─
@@ -548,12 +648,35 @@ async def build_eligible_orders_report(
     # which raw status values are being accepted vs. rejected.
     total_eligible_by_status: dict[str, int] = {}
     total_ineligible_by_status: dict[str, int] = {}
+    # Iter-001f — sync-cutoff counters.
+    excluded_before_sync_start_date_count = 0
+    excluded_missing_order_created_at_count = 0
     items: list[dict] = []
     total_hidden_already_sent = 0
 
     for order in orders:
         order_id = str(order.get("order_id") or order.get("id") or "")
         order_number = str(order.get("order_number") or order_id)
+
+        # ── Iter-001f — Tax-period sync-cutoff filter (FIRST) ─────
+        # Any order whose Salla creation date is BEFORE the sync
+        # cutoff (2026-07-01) belongs to a prior tax period and MUST
+        # NOT enter the classifier under any classification.
+        order_created_at = _extract_order_created_at(order)
+        if order_created_at is None:
+            excluded_missing_order_created_at_count += 1
+            excluded_reason_counts["missing_order_created_at"] = \
+                excluded_reason_counts.get(
+                    "missing_order_created_at", 0) + 1
+            continue
+        if order_created_at < _SYNC_START_ISO:
+            excluded_before_sync_start_date_count += 1
+            reason_key = (
+                f"before_sync_start_date:{QOYOD_SYNC_START_DATE} "
+                f"(order_created_at={order_created_at.isoformat()})")
+            excluded_reason_counts[reason_key] = \
+                excluded_reason_counts.get(reason_key, 0) + 1
+            continue
 
         # Iter-001c — in inbox_fallback mode the inbox_row is already
         # attached to the pseudo-order; skip the extra query and use it.
@@ -669,6 +792,9 @@ async def build_eligible_orders_report(
             "payment_method":          order.get("payment_method"),
             "total_amount":            round(float(order.get(
                 "total_amount") or 0), 2),
+            # Iter-001f — the ACTUAL Salla creation date used for the
+            # cutoff decision (accountant needs to see this).
+            "salla_order_created_at":  order_created_at.isoformat(),
             "created_at":              order.get("order_date")
                                         or order.get("received_at"),
             "completed_at":            order.get("completed_at"),
@@ -715,6 +841,15 @@ async def build_eligible_orders_report(
         "since_date":   since_date_str,
         "source_mode":   source_mode,
         "source_reason": source_reason,
+        # ── Iter-001f — Tax-period sync cutoff ──────────────────
+        "sync_start_date":   QOYOD_SYNC_START_DATE,
+        "tax_period":        QOYOD_TAX_PERIOD,
+        "sync_timezone":     QOYOD_SYNC_TZ,
+        "date_filter_basis": "salla_order_created_at",
+        "excluded_before_sync_start_date_count":
+            excluded_before_sync_start_date_count,
+        "excluded_missing_order_created_at_count":
+            excluded_missing_order_created_at_count,
         # Definitions:
         # - total_source_rows       = rows fetched from source
         #                             (before any post-filter)
@@ -723,6 +858,8 @@ async def build_eligible_orders_report(
         # - total_classified        = rows that landed in one of `counts`
         # - excluded_status_count   = rows skipped because canonical
         #                             status was not in ELIGIBLE_STATUSES
+        #                             OR fell before the sync cutoff
+        #                             OR missed the creation date entirely
         # - unclassified_count      = rows that fell through classifier
         #                             (safety-net bucket)
         # - total_hidden_already_sent = rows counted as already_sent but
@@ -761,6 +898,11 @@ async def build_eligible_orders_report(
             "(`جاري_التوصيل` = `جاري التوصيل`).",
             "cancelled / refunded / deleted / waiting / pending "
             "مستبعدة من الاستعلام.",
+            f"Eligible Orders يعرض فقط الطلبات المنشأة من "
+            f"{QOYOD_SYNC_START_DATE} وما بعد، لأن التشغيل الضريبي "
+            f"يبدأ من الربع الثالث ({QOYOD_TAX_PERIOD}).",
+            "Date filter basis: salla_order_created_at "
+            "(NOT received_at). Missing created_at → excluded.",
             "Invariant: total_classified + excluded_status_count "
             "== total_scanned (see `invariant_holds`).",
         ],

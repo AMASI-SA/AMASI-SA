@@ -18,13 +18,15 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, date, timedelta, timezone
 
 import pytest
 
 from integrations.qoyod.eligible_orders import (
     ELIGIBLE_STATUSES,
     INELIGIBLE_STATUSES,
+    QOYOD_SYNC_START_DATE,
+    QOYOD_TAX_PERIOD,
     build_eligible_orders_report,
     _classify,
     _check_totals,
@@ -33,6 +35,8 @@ from integrations.qoyod.eligible_orders import (
     _normalise_phone,
     _normalize_status,
     _expand_status_variants,
+    _extract_order_created_at,
+    _parse_iso_date,
 )
 
 
@@ -140,6 +144,44 @@ class TestPureUnits:
         # single word (no change).
         variants2 = _expand_status_variants(frozenset({"completed"}))
         assert "completed" in variants2
+
+    # ── Iter-001f: Tax-period sync cutoff (2026-07-01, Q3-2026) ────
+    def test_sync_start_date_is_2026_07_01(self):
+        assert QOYOD_SYNC_START_DATE == "2026-07-01"
+        assert QOYOD_TAX_PERIOD == "Q3-2026"
+
+    def test_parse_iso_date_handles_shapes(self):
+        assert _parse_iso_date("2026-07-01") == date(2026, 7, 1)
+        assert _parse_iso_date("2026-07-01T10:00:00Z") == \
+            date(2026, 7, 1)
+        assert _parse_iso_date("2026-07-01 10:00:00+03:00") == \
+            date(2026, 7, 1)
+        assert _parse_iso_date(datetime(2026, 6, 30, 12, 0)) == \
+            date(2026, 6, 30)
+        assert _parse_iso_date(date(2026, 6, 30)) == date(2026, 6, 30)
+        assert _parse_iso_date(None) is None
+        assert _parse_iso_date("") is None
+        assert _parse_iso_date("not-a-date") is None
+
+    def test_extract_order_created_at_priority(self):
+        # 1. Direct `created_at` wins.
+        assert _extract_order_created_at(
+            {"created_at": "2026-07-15",
+             "order_date": "2026-07-20"}) == date(2026, 7, 15)
+        # 2. `order_date` used when created_at missing.
+        assert _extract_order_created_at(
+            {"order_date": "2026-07-20"}) == date(2026, 7, 20)
+        # 3. `order_date_inferred=True` disqualifies order_date.
+        assert _extract_order_created_at(
+            {"order_date": "2026-07-20",
+             "order_date_inferred": True}) is None
+        # 4. Salla webhook raw shape via inbox row.
+        assert _extract_order_created_at({
+            "_inbox_row": {"raw_payload": {
+                "data": {"date": {"date": "2026-08-01 10:00:00"}}}}
+        }) == date(2026, 8, 1)
+        # 5. Nothing → None.
+        assert _extract_order_created_at({}) is None
 
 
 # ── Classifier tests (no DB, direct _classify calls) ───────────────
@@ -325,12 +367,16 @@ class TestEndToEndReport:
 
     async def _seed_order(self, db, uid, *, status="delivered",
                           pm="tabby_installment", total=100.0,
-                          items=None, phone="+966554681361"):
+                          items=None, phone="+966554681361",
+                          order_date=None, created_at=None):
         oid = f"O-{uuid.uuid4().hex[:8]}"
         # Iter-001b: real `unified_orders` schema uses `order_status`
         # + `order_date` (YYYY-MM-DD), NOT `status` / `created_at`.
-        from datetime import date
-        await db.unified_orders.insert_one({
+        # Iter-001f: default `order_date` is TODAY (>= sync cutoff);
+        # tests that want to check the cutoff pass their own value.
+        from datetime import date as _date
+        od = order_date or _date.today().isoformat()
+        doc = {
             "user_id": uid, "order_id": oid, "order_number": oid,
             "order_status": status, "order_status_slug": status,
             "payment_method": pm,
@@ -340,18 +386,43 @@ class TestEndToEndReport:
                                 "unit_price": total}],
             "customer": {"phone": phone},
             "customer_mobile": phone,
-            "order_date": date.today().isoformat(),
+            "order_date": od,
             "received_at": self._now_iso(),
-        })
+        }
+        if created_at is not None:
+            doc["created_at"] = created_at
+        await db.unified_orders.insert_one(doc)
         return oid
 
-    async def _seed_inbox(self, db, uid, oid, stage="COMPLETED"):
+    async def _seed_inbox(self, db, uid, oid, stage="COMPLETED",
+                          canonical_order_date=None,
+                          canonical_status=None):
+        # Iter-001f — inbox rows now need a discoverable created_at
+        # for the sync cutoff. `raw_payload.data.date.date` mirrors the
+        # real Salla webhook shape; default = today (post-cutoff).
+        from datetime import date as _date
+        od = canonical_order_date or _date.today().isoformat()
         await db.integration_inbox.insert_one({
             "user_id": uid, "salla_order_id": oid,
             "salla_order_number": oid,
+            "connector_key":   f"salla-{oid}",
+            "idempotency_key": f"idem-{oid}",
             "trace_id": f"t-{uuid.uuid4().hex[:8]}",
             "pipeline_stage": stage,
             "received_at": self._now_iso(),
+            "raw_payload": {"data": {"date": {"date": f"{od} 10:00:00"}}},
+            "canonical_payload": {
+                "order_id": oid, "order_number": oid,
+                "order_status": canonical_status or "delivered",
+                "order_status_slug": canonical_status or "delivered",
+                "payment_method": "cod",
+                "total_amount": 100.0,
+                "shipping_amount": 0, "tax_amount": 0,
+                "items": [{"sku": "X", "quantity": 1,
+                           "unit_price": 100.0}],
+                "customer": {"phone": "+966554681361"},
+                "order_date": od,
+            },
         })
 
     async def _seed_invoice(self, db, uid, oid,
@@ -591,6 +662,155 @@ class TestEndToEndReport:
         finally:
             await self._clean(db, uid)
 
+    # ── Iter-001f: Tax-period sync cutoff end-to-end ───────────────
+    async def test_response_advertises_sync_cutoff_fields(self, db):
+        uid = self._uid()
+        try:
+            r = await build_eligible_orders_report(db, user_id=uid)
+            assert r["sync_start_date"] == "2026-07-01"
+            assert r["tax_period"] == "Q3-2026"
+            assert r["date_filter_basis"] == "salla_order_created_at"
+            assert "excluded_before_sync_start_date_count" in r
+            assert "excluded_missing_order_created_at_count" in r
+            notes = " ".join(r.get("notes") or [])
+            assert "2026-07-01" in notes
+        finally:
+            await self._clean(db, uid)
+
+    async def test_order_before_cutoff_excluded(self, db):
+        """Iter-001f: order created 2026-06-30 (Q2) must NOT appear."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            oid = await self._seed_order(
+                db, uid, status="delivered", pm="cod",
+                order_date="2026-06-30",
+                created_at="2026-06-30T14:00:00+03:00")
+            await self._seed_inbox(db, uid, oid, stage="COMPLETED")
+            r = await build_eligible_orders_report(
+                db, user_id=uid, since_days=180)
+            # Row was fetched by the query (order_date in window)
+            # but MUST be excluded by the cutoff, not classified.
+            assert r["total_scanned"] == 1
+            assert r["excluded_before_sync_start_date_count"] == 1
+            assert r["total_classified"] == 0
+            assert r["invariant_holds"] is True
+            assert all(i["order_number"] != oid for i in r["items"])
+        finally:
+            await self._clean(db, uid)
+
+    async def test_order_on_cutoff_included(self, db):
+        """Iter-001f: order created exactly on 2026-07-01 IS eligible."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            oid = await self._seed_order(
+                db, uid, status="delivered", pm="cod",
+                order_date="2026-07-01",
+                created_at="2026-07-01T00:05:00+03:00")
+            await self._seed_inbox(db, uid, oid, stage="COMPLETED")
+            r = await build_eligible_orders_report(db, user_id=uid)
+            assert r["total_scanned"] == 1
+            assert r["excluded_before_sync_start_date_count"] == 0
+            assert r["counts"]["ready_for_preview"] == 1
+            item = next(i for i in r["items"] if i["order_number"] == oid)
+            assert item["salla_order_created_at"] == "2026-07-01"
+        finally:
+            await self._clean(db, uid)
+
+    async def test_late_arrival_of_old_order_still_excluded(self, db):
+        """Legacy Q2 order that arrived at our pipeline AFTER 2026-07-01
+        must STILL be excluded — created_at wins over received_at."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            oid = await self._seed_order(
+                db, uid, status="delivered", pm="cod",
+                order_date="2026-05-15",             # Q2
+                created_at="2026-05-15T10:00:00+03:00")
+            # `received_at` is auto-set to `_now_iso()` (today = Q3).
+            await self._seed_inbox(db, uid, oid, stage="COMPLETED")
+            r = await build_eligible_orders_report(
+                db, user_id=uid, since_days=180)
+            assert r["excluded_before_sync_start_date_count"] == 1
+            assert r["total_classified"] == 0
+            assert r["invariant_holds"] is True
+        finally:
+            await self._clean(db, uid)
+
+    async def test_missing_created_at_excluded_and_counted(self, db):
+        """Iter-001f: no way to date the order → excluded, not classified."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            oid = f"O-{uuid.uuid4().hex[:8]}"
+            # Manually insert an order with NO order_date + inferred flag
+            # to hide the fallback. This is the pathological case.
+            await db.unified_orders.insert_one({
+                "user_id": uid, "order_id": oid, "order_number": oid,
+                "order_status": "delivered",
+                "order_status_slug": "delivered",
+                "payment_method": "cod",
+                "total_amount": 100.0, "shipping_amount": 0,
+                "tax_amount": 0,
+                "items": [{"sku": "X", "quantity": 1, "unit_price": 100.0}],
+                "customer": {"phone": "+966554681361"},
+                "customer_mobile": "+966554681361",
+                # No order_date, no created_at, and order_date_inferred=True
+                # to block the fallback path if something later fills it.
+                "order_date_inferred": True,
+                "received_at": self._now_iso(),
+            })
+            # Since order_date is missing, the query's `$or` will match
+            # via received_at (BSON) OR order_date (>=str), but we've
+            # stored received_at as ISO string — mixed types. To force
+            # the row into the fetch, add order_date matching today.
+            await db.unified_orders.update_one(
+                {"user_id": uid, "order_id": oid},
+                {"$set": {"order_date": datetime.now(timezone.utc)
+                                                .date().isoformat()}})
+            # Now order_date exists but `order_date_inferred=True` will
+            # cause _extract_order_created_at to return None.
+            r = await build_eligible_orders_report(db, user_id=uid)
+            assert r["excluded_missing_order_created_at_count"] == 1
+            assert r["total_classified"] == 0
+            assert r["invariant_holds"] is True
+            assert "missing_order_created_at" in \
+                r["excluded_reason_counts"]
+        finally:
+            await self._clean(db, uid)
+
+    async def test_invariant_holds_with_cutoff_mix(self, db):
+        """Mix Q2 + Q3 + missing-date orders; invariant stays true."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            # 2 eligible (post cutoff).
+            for _ in range(2):
+                oid = await self._seed_order(
+                    db, uid, status="delivered", pm="cod",
+                    order_date="2026-07-05",
+                    created_at="2026-07-05T10:00:00+03:00")
+                await self._seed_inbox(db, uid, oid, stage="COMPLETED")
+            # 1 pre-cutoff.
+            await self._seed_order(
+                db, uid, status="delivered", pm="cod",
+                order_date="2026-06-15",
+                created_at="2026-06-15T10:00:00+03:00")
+            r = await build_eligible_orders_report(
+                db, user_id=uid, since_days=180)
+            assert r["total_scanned"] == 3
+            assert r["excluded_before_sync_start_date_count"] == 1
+            assert r["counts"]["ready_for_preview"] == 2
+            assert r["invariant_holds"] is True
+        finally:
+            await self._clean(db, uid)
+
     async def test_read_only_no_writes(self, db):
         """Sanity check — running the report against seeded data does
         not modify ANY of the six read collections."""
@@ -720,6 +940,8 @@ class TestEndToEndReport:
                     "items": [{"sku": "X", "quantity": 1,
                                "unit_price": 116.85}],
                     "customer": {"phone": "+966554681361"},
+                    "order_date": datetime.now(timezone.utc)
+                                        .date().isoformat(),
                 },
                 "qoyod_payloads": {"invoice": {
                     "contact_id": 223,
@@ -772,6 +994,8 @@ class TestEndToEndReport:
                     "items": [{"sku": "X", "quantity": 1,
                                "unit_price": 100.0}],
                     "customer": {"phone": "+966554681361"},
+                    "order_date": datetime.now(timezone.utc)
+                                        .date().isoformat(),
                 },
             })
             report = await build_eligible_orders_report(
@@ -816,6 +1040,7 @@ class TestEndToEndReport:
                         "items": [{"sku": "X", "quantity": 1,
                                    "unit_price": 100.0}],
                         "customer": {"phone": "+966554681361"},
+                        "order_date": now.date().isoformat(),
                     },
                 })
             report = await build_eligible_orders_report(db, user_id=uid)
@@ -879,6 +1104,7 @@ class TestEndToEndReport:
                         "items": [{"sku": "X", "quantity": 1,
                                    "unit_price": 100.0}],
                         "customer": {"phone": "+966554681361"},
+                        "order_date": now.date().isoformat(),
                     },
                 })
             report = await build_eligible_orders_report(
