@@ -1545,94 +1545,19 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     )
 
     def _stage_to_category(stage: str) -> str:
-        return {
-            "LOCKED_AWAITING_APPROVAL":            "ready_to_send",
-            "UNRESOLVED_QOYOD_DEPENDENCY":         "needs_mapping",
-            "BANK_TRANSFER_PAYMENT_ROUTING_PENDING": "bank_transfer_hold",
-            "HOLD_COD_PENDING_FIX":                "cod",
-            "HOLD_UNSUPPORTED_PAYMENT_METHOD":     "unsupported_method",
-            "INVOICE_CREATED_TOTAL_MISMATCH":      "total_rounding_review",
-            "STALE_TRACE_NOT_CURRENT_ORDER_STATE": "stale_or_cancelled",
-            "FAILED_INVOICE":                      "needs_mapping",
-            "DEAD_LETTER":                         "stale_or_cancelled",
-        }.get(stage, "needs_mapping")
+        from integrations.qoyod.pending_classifier import stage_to_category
+        return stage_to_category(stage)
 
     def _categorise_row(row: dict) -> str:
-        """Iter-293.5 (2026-07-01 update) — Pick a category for a
-        row that was surfaced by the eligibility net. Falls back to
-        stage-based mapping for classic HOLD stages, then reads the
-        canonical payment_method + payload leaks + existing-invoice
-        signal to derive a category for rows that are 'in-flight'
-        (RULES_APPLIED / PRODUCT_RESOLVED / CUSTOMER_RESOLVED etc.)
-        but haven't yet reached قيود."""
-        stage = row.get("pipeline_stage") or ""
-        # Explicit stages win — they carry the most reliable signal.
-        if stage in {
-            "LOCKED_AWAITING_APPROVAL", "UNRESOLVED_QOYOD_DEPENDENCY",
-            "BANK_TRANSFER_PAYMENT_ROUTING_PENDING",
-            "HOLD_COD_PENDING_FIX", "HOLD_UNSUPPORTED_PAYMENT_METHOD",
-            "INVOICE_CREATED_TOTAL_MISMATCH",
-            "STALE_TRACE_NOT_CURRENT_ORDER_STATE", "FAILED_INVOICE",
-            "DEAD_LETTER",
-        }:
-            return _stage_to_category(stage)
-        # Derived — the row is billable-but-not-yet-in-قيود.
-        canonical = row.get("canonical_payload") or {}
-        pm = str(canonical.get("payment_method") or "").strip().lower()
-        payloads = row.get("qoyod_payloads") or {}
-        inv_payload = payloads.get("invoice") or {}
-        # 1. Payment method routing.
-        if pm in {"bank_transfer", "banktransfer"}:
-            return "bank_transfer_hold"
-        if pm in {"cod", "cash_on_delivery", "cashondelivery"}:
-            # If mapping is broken, needs_mapping wins.
-            if _payload_has_leak(inv_payload):
-                return "needs_mapping"
-            return "cod"
-        prepaid = {"mada", "apple_pay", "applepay", "stc_pay", "stcpay",
-                   "credit_card", "creditcard", "cc", "visa",
-                   "mastercard", "master_card", "american_express",
-                   "americanexpress", "amex"}
-        # Iter-293.5-rev3 — BNPL family (Tabby / Tamara / Emkan +
-        # `_installment` variants) is prepaid-equivalent from the
-        # merchant's POV: the provider settles the full amount and we
-        # book invoice + receipt against the BNPL provider's Qoyod
-        # account. Route through the same leak-check path as prepaid
-        # so a mapped BNPL order becomes `ready_to_send`, an unmapped
-        # or broken one becomes `needs_mapping` — NEVER
-        # `unsupported_method`.
-        bnpl = {"tabby", "tabby_installment", "tabby_installments",
-                "tabby_pay", "tabby_payment",
-                "tamara", "tamara_installment", "tamara_installments",
-                "tamara_pay", "tamara_payment",
-                "emkan", "emkan_installment", "emkan_installments"}
-        if pm in bnpl:
-            if _payload_has_leak(inv_payload):
-                return "needs_mapping"
-            return "ready_to_send"
-        if pm not in prepaid and pm not in {"", None}:
-            return "unsupported_method"
-        # 2. Payload readiness.
-        if _payload_has_leak(inv_payload):
-            return "needs_mapping"
-        # 3. Otherwise — the row is billable and clean → ready.
-        return "ready_to_send"
+        """Delegates to `pending_classifier.categorise_row` — pure
+        module-level helper so tests exercise the exact same logic
+        as the endpoint. See `pending_classifier.py`."""
+        from integrations.qoyod.pending_classifier import categorise_row
+        return categorise_row(row)
 
     def _payload_has_leak(payload) -> bool:
-        """Deep scan for DRY: / PREVIEW: / null id leaks."""
-        if isinstance(payload, str):
-            return payload.startswith("DRY:") or payload.startswith(
-                "PREVIEW:")
-        if isinstance(payload, dict):
-            for k, v in payload.items():
-                if k in ("contact_id", "product_id") and v is None:
-                    return True
-                if _payload_has_leak(v):
-                    return True
-            return False
-        if isinstance(payload, list):
-            return any(_payload_has_leak(x) for x in payload)
-        return False
+        from integrations.qoyod.pending_classifier import payload_has_leak
+        return payload_has_leak(payload)
 
     @router.get("/admin/qoyod/pending-orders")
     async def admin_qoyod_pending_orders(

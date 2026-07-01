@@ -240,44 +240,119 @@ class TestLiveSendGateBNPL:
         assert d.outcome.value == "ALLOWED", d.to_json()
 
 
-# ── Pending-orders classifier — BNPL routing ──────────────────────
+# ── Pending-orders classifier — BNPL routing (real classifier) ───
 class TestPendingOrdersBNPLClassification:
-    """Guards `_categorise_row` in routes.py — BNPL rows without a
-    known HOLD stage must NOT land in `unsupported_method`."""
+    """Guards `pending_classifier.categorise_row` — BNPL rows must
+    route to `ready_to_send` when clean, `needs_mapping` when the
+    payload has a leak, and NEVER to `unsupported_method`.
 
-    def _classify(self, pm: str, inv_payload=None):
-        # Import inline — `_categorise_row` is defined inside
-        # `attach_qoyod_routes`; we reconstruct the logic by calling
-        # the underlying helpers exported at module level.
-        from integrations.qoyod import routes  # noqa: F401
-        # `_categorise_row` is a local closure — we call the public
-        # attach_qoyod_routes wrapper via a mini-test-double by
-        # inspecting `_stage_to_category`. Instead, exercise the
-        # behaviour end-to-end through the HTTP layer would be ideal,
-        # but keeping this a pure-unit test we replicate the classifier
-        # here to prevent silent drift.
-        stage = ""
-        canonical = {"payment_method": pm}
-        payloads = {"invoice": inv_payload or {}}
-        # Direct copy of the logic — verify keys match by importing.
-        pm_low = str(canonical.get("payment_method") or "").strip().lower()
-        bnpl = {"tabby", "tabby_installment", "tabby_installments",
-                "tabby_pay", "tabby_payment",
-                "tamara", "tamara_installment", "tamara_installments",
-                "tamara_pay", "tamara_payment",
-                "emkan", "emkan_installment", "emkan_installments"}
-        assert pm_low in bnpl or pm_low not in bnpl  # sanity
-        return pm_low, bnpl
+    Regression for order 268307955 (Tabby / delivered / contact_id=null
+    / AMS11542 dry_run_only=true).
+    """
 
-    def test_bnpl_variants_are_recognised(self):
-        for pm in ("tabby", "tabby_installment", "tamara",
-                   "tamara_installment", "emkan"):
-            low, bnpl = self._classify(pm)
-            assert low in bnpl
+    def _row(self, pm: str, *, stage: str = "RULES_APPLIED",
+             inv_payload=None, status: str = "delivered"):
+        return {
+            "pipeline_stage":  stage,
+            "canonical_payload": {
+                "order_status":        status,
+                "order_status_native": status,
+                "payment_method":      pm,
+            },
+            "qoyod_payloads": {"invoice": inv_payload or {
+                "contact_id":  1,
+                "line_items":  [{"product_id": 2, "quantity": 1}],
+            }},
+        }
 
-    def test_unsupported_wallet_not_in_bnpl(self):
-        low, bnpl = self._classify("some_crypto_wallet")
-        assert low not in bnpl
+    def test_tabby_clean_payload_ready_to_send(self):
+        from integrations.qoyod.pending_classifier import categorise_row
+        assert categorise_row(self._row("tabby_installment")) == \
+            "ready_to_send"
+
+    def test_tamara_clean_payload_ready_to_send(self):
+        from integrations.qoyod.pending_classifier import categorise_row
+        assert categorise_row(self._row("tamara_installment")) == \
+            "ready_to_send"
+
+    def test_emkan_clean_payload_ready_to_send(self):
+        from integrations.qoyod.pending_classifier import categorise_row
+        assert categorise_row(self._row("emkan")) == "ready_to_send"
+
+    def test_bnpl_with_null_contact_id_needs_mapping(self):
+        """Order 268307955 profile — Tabby + contact_id=null."""
+        from integrations.qoyod.pending_classifier import categorise_row
+        row = self._row("tabby_installment", inv_payload={
+            "contact_id":  None,
+            "line_items":  [{"product_id": 2}],
+        })
+        assert categorise_row(row) == "needs_mapping"
+
+    def test_bnpl_with_dry_product_id_needs_mapping(self):
+        """AMS11542 dry_run_only=true → product_id='DRY:AMS11542'."""
+        from integrations.qoyod.pending_classifier import categorise_row
+        row = self._row("tabby_installment", inv_payload={
+            "contact_id":  7,
+            "line_items":  [{"product_id": "DRY:AMS11542"}],
+        })
+        assert categorise_row(row) == "needs_mapping"
+
+    def test_bnpl_with_both_leaks_needs_mapping(self):
+        """Exact profile of order 268307955: contact_id=null AND
+        product_id contains a DRY: prefix."""
+        from integrations.qoyod.pending_classifier import categorise_row
+        row = self._row("tabby_installment", inv_payload={
+            "contact_id":  None,
+            "line_items":  [
+                {"product_id": 5,                   "quantity": 1},
+                {"product_id": 6,                   "quantity": 2},
+                {"product_id": "DRY:AMS11542",      "quantity": 1},
+            ],
+        })
+        assert categorise_row(row) == "needs_mapping", (
+            "Regression for order 268307955 — Tabby row with null "
+            "contact + DRY product MUST land in needs_mapping.")
+
+    def test_explicit_unresolved_stage_beats_bnpl_derivation(self):
+        """When pipeline_stage=UNRESOLVED_QOYOD_DEPENDENCY the
+        explicit stage wins — the row is ALWAYS needs_mapping
+        regardless of BNPL classification."""
+        from integrations.qoyod.pending_classifier import categorise_row
+        row = self._row("tabby_installment",
+                        stage="UNRESOLVED_QOYOD_DEPENDENCY",
+                        inv_payload={"contact_id": 1,
+                                     "line_items": [{"product_id": 2}]})
+        assert categorise_row(row) == "needs_mapping"
+
+    def test_bnpl_never_lands_in_unsupported(self):
+        from integrations.qoyod.pending_classifier import categorise_row
+        for pm in ("tabby", "tabby_installment", "tabby_installments",
+                   "tamara", "tamara_installment",
+                   "emkan", "emkan_installment"):
+            cat = categorise_row(self._row(pm))
+            assert cat != "unsupported_method", (pm, cat)
+
+    def test_unknown_wallet_still_unsupported(self):
+        from integrations.qoyod.pending_classifier import categorise_row
+        assert categorise_row(self._row("crypto_wallet_x")) == \
+            "unsupported_method"
+
+    def test_cod_with_leak_needs_mapping(self):
+        from integrations.qoyod.pending_classifier import categorise_row
+        row = self._row("cod", inv_payload={
+            "contact_id": None,
+            "line_items": [{"product_id": 1}],
+        })
+        assert categorise_row(row) == "needs_mapping"
+
+    def test_cod_clean_stays_cod(self):
+        from integrations.qoyod.pending_classifier import categorise_row
+        assert categorise_row(self._row("cod")) == "cod"
+
+    def test_bank_transfer_always_hold(self):
+        from integrations.qoyod.pending_classifier import categorise_row
+        assert categorise_row(self._row("bank_transfer")) == \
+            "bank_transfer_hold"
 
 
 if __name__ == "__main__":  # pragma: no cover
