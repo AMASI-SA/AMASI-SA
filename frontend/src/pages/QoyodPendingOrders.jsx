@@ -30,13 +30,13 @@ const CATEGORY_META = [
   // a row here is BILLABLE but MUST pass Preview + sendability
   // before it can be sent. True readiness is proven per-row via
   // Preview, not by simple category membership.
-  { key: "ready_to_send",         label: "مرشح للإرسال (Candidate)", color: "emerald" },
-  { key: "needs_mapping",         label: "يحتاج ربط",         color: "amber"   },
+  { key: "ready_to_send",         label: "مرشّح للإرسال",       color: "emerald" },
+  { key: "needs_mapping",         label: "يحتاج ربط",           color: "amber"   },
   { key: "bank_transfer_hold",    label: "تحويل بنكي (سداد لاحق)", color: "sky" },
-  { key: "cod",                   label: "COD",              color: "indigo"  },
-  { key: "unsupported_method",    label: "طريقة دفع غير مدعومة", color: "rose" },
-  { key: "total_rounding_review", label: "مراجعة الإجمالي",    color: "orange"  },
-  { key: "stale_or_cancelled",    label: "ملغي/قديم",         color: "slate"   },
+  { key: "cod",                   label: "الدفع عند الاستلام",  color: "indigo"  },
+  { key: "unsupported_method",    label: "طريقة دفع غير مدعومة", color: "rose"  },
+  { key: "total_rounding_review", label: "مراجعة الإجمالي",     color: "orange"  },
+  { key: "stale_or_cancelled",    label: "ملغي/قديم",           color: "slate"   },
 ];
 
 const STAGE_LABELS = {
@@ -117,7 +117,7 @@ export default function QoyodPendingOrders() {
             🗂️ طلبات قيود المعلقة
           </h1>
           <p className="text-sm text-slate-600 mt-1">
-            Qoyod Manual Processing Queue — عرض قراءة فقط.
+            قائمة المراجعة اليدوية لطلبات قيود — عرض قراءة فقط.
           </p>
         </div>
         <button

@@ -75,6 +75,26 @@ COD_ALLOWED: frozenset[str] = frozenset({
 BANK_TRANSFER_METHODS: frozenset[str] = frozenset({
     "bank_transfer", "banktransfer",
 })
+# Iter-293.5-rev3 — BNPL providers (Buy Now Pay Later) are prepaid
+# from the merchant's perspective: the provider (Tabby / Tamara /
+# Emkan) settles the full amount to the merchant, then collects
+# instalments from the shopper. Accounting-wise the flow is
+# identical to any prepaid gateway: create the invoice + book a
+# receipt against the BNPL provider's Qoyod account (which the
+# operator maps in Settings, one per BNPL variant if desired).
+#
+# Alias variants like `tabby_installment`, `tamara_installments`,
+# `emkan_installment` collapse to their base family via
+# `payment_methods.PAYMENT_METHOD_ALIASES` — we accept both here so
+# a row whose canonical_payload still carries the un-aliased variant
+# is not misrouted to `unsupported_method`.
+BNPL_ALLOWED: frozenset[str] = frozenset({
+    "tabby", "tabby_installment", "tabby_installments",
+    "tabby_pay", "tabby_payment",
+    "tamara", "tamara_installment", "tamara_installments",
+    "tamara_pay", "tamara_payment",
+    "emkan", "emkan_installment", "emkan_installments",
+})
 
 
 def canonicalise_payment_method(raw: Optional[str]) -> str:
@@ -312,7 +332,10 @@ def evaluate(
     # G0 — Feature flag
     flag_enabled = bool(settings.get("selective_live_send_enabled", False))
 
-    # G1 — Order status
+    # G1 — Order status (Iter-293.5-rev3: consult unified set)
+    from integrations.qoyod.eligible_statuses import (
+        ELIGIBLE_ORDER_STATUSES,
+    )
     status = _extract_order_status(row)
     quarantine_code = _is_cancelled_family(status)
     if quarantine_code is not None:
@@ -320,11 +343,14 @@ def evaluate(
             quarantine_code,
             f"order status '{status}' is terminal — never auto-send",
             hold="QUARANTINED", category=None, quarantine=True)
-    if status not in {"completed", "delivered", "تم التنفيذ"}:
+    # Compare against the unified eligible set (both lowered English
+    # canonicals and Arabic natives are members).
+    if status not in ELIGIBLE_ORDER_STATUSES:
         return _fail(
             GuardCode.ORDER_STATUS_NOT_ELIGIBLE,
-            (f"order_status='{status}' is not in the eligible set "
-             "{completed, delivered, تم التنفيذ}"),
+            (f"order_status='{status}' is not in the unified eligible "
+             f"set (completed/delivered/shipped/shipping/processing/"
+             f"in_progress + Arabic natives)"),
             hold="STALE_TRACE_NOT_CURRENT_ORDER_STATE",
             category=PendingCategory.STALE_OR_CANCELLED)
     guards_passed.append("order_status_eligible")
@@ -349,6 +375,12 @@ def evaluate(
     is_bank_transfer = canonical_pm in BANK_TRANSFER_METHODS
     is_cod = canonical_pm in COD_ALLOWED
     is_prepaid = canonical_pm in PREPAID_ALLOWED
+    # Iter-293.5-rev3 — BNPL family behaves like prepaid: provider
+    # settles the full amount, we book invoice + receipt against the
+    # BNPL provider's Qoyod account.
+    is_bnpl = canonical_pm in BNPL_ALLOWED
+    if is_bnpl:
+        is_prepaid = True
     if not (is_cod or is_prepaid or is_bank_transfer):
         return _fail(
             GuardCode.UNSUPPORTED_PAYMENT_METHOD,

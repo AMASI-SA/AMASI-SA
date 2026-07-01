@@ -23,6 +23,7 @@ from typing import Any, Optional
 from integrations.qoyod.payment_methods import (
     resolve_payment_account, provider_family, is_pending_payment_status,
 )
+from integrations.qoyod.eligible_statuses import resolve_trigger_statuses
 
 
 @dataclass
@@ -131,8 +132,11 @@ def run(
                                    "provider_family": family,
                                    "posting_mode": posting_mode}})
 
-    # 5) Status
-    triggers = settings.get("invoice_trigger_statuses") or ["completed"]
+    # 5) Status — Iter-293.5-rev3: consult the unified eligible set
+    # via `resolve_trigger_statuses` so the pending queue, preflight,
+    # business_rules, and live_send_gate agree. Legacy tenants with
+    # `["completed"]` are widened; explicit narrower lists are honoured.
+    triggers = resolve_trigger_statuses(settings)
     canonical = (dto_dict.get("order_status") or "").strip().lower()
     if canonical not in triggers:
         failures.append({"check": "order_status",

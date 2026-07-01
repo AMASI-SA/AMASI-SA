@@ -4857,3 +4857,68 @@ order approval lifted the lock.
   `invoice_payment`, no `receipt`.
 - Per-order approval bypass is scoped to ONE run only; the api_client
   carries the unlock signal, not a global flag.
+
+
+---
+
+## Iter-293.5-rev3 — Unified Eligible Statuses + BNPL Allow-List (2026-07-01)
+
+### Bug (order 268307955 — Tabby / delivered)
+Three inconsistencies surfaced on the Pending Orders page:
+
+1. **BNPL misclassified as Unsupported** — `tabby_installment` (and
+   Tamara / Emkan variants) landed in the "طريقة دفع غير مدعومة" tab
+   even though a Qoyod account mapping existed and the Preview
+   confirmed `resolved_account_id=92`, `posting_mode=paid_receipt`.
+2. **Preflight rejected `delivered`** with
+   `code=status_not_in_triggers` because `invoice_trigger_statuses`
+   defaulted to `["completed"]` while the Pending queue's eligibility
+   set already included `delivered / shipped / shipping / processing`.
+3. **live_send_gate G1** only accepted `{completed, delivered,
+   تم التنفيذ}` — narrower than the queue's surface, so `shipped` /
+   `processing` rows that appeared as Candidates could never be sent.
+
+### Fix
+1. New module `integrations/qoyod/eligible_statuses.py`
+   - `ELIGIBLE_ORDER_STATUSES` — unified frozenset (English canonicals
+     + Arabic natives).
+   - `resolve_trigger_statuses(settings)` — widens missing/empty
+     `invoice_trigger_statuses` to the unified set; honours explicit
+     narrowing (e.g. tenant sets `["completed"]` on purpose).
+   - `is_eligible_status(status, triggers=None)` helper.
+2. `business_rules.evaluate` now consults `resolve_trigger_statuses`.
+3. `preflight.run` — status check consults `resolve_trigger_statuses`.
+4. `live_send_gate.evaluate` — G1 (order status) now checks the
+   unified `ELIGIBLE_ORDER_STATUSES` instead of the narrow triplet.
+5. `live_send_gate` new `BNPL_ALLOWED` frozenset (`tabby /
+   tabby_installment / tamara / tamara_installment / emkan /
+   emkan_installment` + all `_installments`, `_pay`, `_payment`
+   variants). BNPL rows are treated as prepaid: create invoice +
+   receipt against the provider's Qoyod account.
+6. `routes.py` `_categorise_row` — BNPL family routed through the
+   leak-check path: mapped + clean → `ready_to_send`; leak → `needs_mapping`.
+   Never `unsupported_method`.
+7. `routes.py` `_ELIGIBLE_STATUSES_FOR_QUEUE` now aliases
+   `ELIGIBLE_ORDER_STATUSES` — single source of truth.
+
+### Tests
+- `tests/test_qoyod_eligible_and_bnpl_iter293_5_rev3.py` (+27):
+  eligible-status unification, preflight status gate, business_rules
+  status gate, live_send_gate BNPL allow-list, BNPL classification.
+- Updated pre-existing tests
+  (`test_qoyod_live_send_gate_iter293_5.py`) to reflect BNPL moving
+  onto the allow-list and `processing` becoming eligible.
+- Full qoyod suite: **1265 passed, 3 skipped, 0 failed.**
+
+### Contract pinned
+- BNPL rows with a mapped Qoyod account = ALLOWED (invoice + receipt
+  scope). Unmapped or with leak = `needs_mapping`.
+- Pending queue eligible-set = business_rules trigger default =
+  preflight trigger default = live_send_gate G1 accepted set.
+- Explicit tenant narrowing via `invoice_trigger_statuses` still
+  honoured (regression-tested).
+- `production_writes_locked` remains `true`.
+- `selective_live_send_enabled` remains `false`. Approve-and-Send
+  endpoint still NOT built — awaiting user sign-off on the Pending
+  page after this fix.
+

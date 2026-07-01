@@ -1528,14 +1528,12 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         "DEAD_LETTER",
     )
     # Salla statuses that make an order billable (should appear in
-    # the queue when there is no قيود invoice yet).
-    _ELIGIBLE_STATUSES_FOR_QUEUE: frozenset[str] = frozenset({
-        # English canonicals + common Salla slugs
-        "completed", "in_progress", "processing", "shipping",
-        "shipped", "delivered",
-        # Arabic labels — Salla emits these on some tenants
-        "تم التنفيذ", "جاري التوصيل", "تم التوصيل", "تم الشحن",
-    })
+    # the queue when there is no قيود invoice yet). Kept aligned with
+    # `eligible_statuses.ELIGIBLE_ORDER_STATUSES` (Iter-293.5-rev3).
+    from integrations.qoyod.eligible_statuses import (
+        ELIGIBLE_ORDER_STATUSES,
+    )
+    _ELIGIBLE_STATUSES_FOR_QUEUE: frozenset[str] = ELIGIBLE_ORDER_STATUSES
     _CATEGORY_ORDER: tuple[str, ...] = (
         "ready_to_send",
         "needs_mapping",
@@ -1595,6 +1593,23 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                    "credit_card", "creditcard", "cc", "visa",
                    "mastercard", "master_card", "american_express",
                    "americanexpress", "amex"}
+        # Iter-293.5-rev3 — BNPL family (Tabby / Tamara / Emkan +
+        # `_installment` variants) is prepaid-equivalent from the
+        # merchant's POV: the provider settles the full amount and we
+        # book invoice + receipt against the BNPL provider's Qoyod
+        # account. Route through the same leak-check path as prepaid
+        # so a mapped BNPL order becomes `ready_to_send`, an unmapped
+        # or broken one becomes `needs_mapping` — NEVER
+        # `unsupported_method`.
+        bnpl = {"tabby", "tabby_installment", "tabby_installments",
+                "tabby_pay", "tabby_payment",
+                "tamara", "tamara_installment", "tamara_installments",
+                "tamara_pay", "tamara_payment",
+                "emkan", "emkan_installment", "emkan_installments"}
+        if pm in bnpl:
+            if _payload_has_leak(inv_payload):
+                return "needs_mapping"
+            return "ready_to_send"
         if pm not in prepaid and pm not in {"", None}:
             return "unsupported_method"
         # 2. Payload readiness.

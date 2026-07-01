@@ -35,6 +35,7 @@ except Exception:    # pragma: no cover
     ZoneInfo = None    # type: ignore[assignment]
 
 from integrations.qoyod.dto import SalesOrderDTO
+from integrations.qoyod.eligible_statuses import resolve_trigger_statuses
 
 
 # Asia/Riyadh — the SAR-denominated ZATCA jurisdiction. Every
@@ -196,7 +197,11 @@ def evaluate(
     `existing_invoice_row` upstream (one Mongo lookup keyed by
     `salla_order_id`).
     """
-    triggers = settings.get("invoice_trigger_statuses") or ["completed"]
+    # Iter-293.5-rev3 — widen the default trigger list to the unified
+    # ELIGIBLE_ORDER_STATUSES set so preflight, pending queue, and
+    # business_rules never disagree. Tenants can still explicitly
+    # narrow the list via `qoyod_settings.invoice_trigger_statuses`.
+    triggers = resolve_trigger_statuses(settings)
     once = bool(settings.get("trigger_once_only", True))
     # Iter-293.4-rev9 — Default flipped from "trigger_status_date"
     # (which resolved to completed_at for COD orders) to "send_date"

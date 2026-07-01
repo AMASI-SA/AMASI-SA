@@ -114,13 +114,18 @@ class TestAllowlistCanonicalisation:
         assert canonicalise_payment_method("apple-pay") == "apple_pay"
         assert canonicalise_payment_method("STC-Pay") == "stc_pay"
 
-    def test_bnpl_not_on_allowlist(self):
-        """User directive Iter-293.5: tamara/tabby require a separate
-        decision — MUST NOT slip into prepaid or cod."""
-        for pm in ("tamara", "tabby", "bnpl"):
-            assert pm not in PREPAID_ALLOWED
-            assert pm not in COD_ALLOWED
-            assert pm not in BANK_TRANSFER_METHODS
+    def test_bnpl_now_allowed_iter293_5_rev3(self):
+        """Iter-293.5-rev3 update per user directive 2026-07-01:
+        Tabby / Tamara / Emkan (and their `_installment` variants)
+        are now on the allow-list. They behave like prepaid — the
+        BNPL provider settles the full amount to the merchant, so
+        the pipeline creates invoice + receipt against the provider's
+        Qoyod account. Only totally unknown methods (crypto wallets,
+        gift cards, etc.) remain unsupported."""
+        from integrations.qoyod.live_send_gate import BNPL_ALLOWED
+        for pm in ("tamara", "tamara_installment", "tabby",
+                   "tabby_installment", "emkan"):
+            assert pm in BNPL_ALLOWED
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -261,9 +266,12 @@ class TestBankTransferInvoiceCreatedButPaymentDeferred:
 # ═════════════════════════════════════════════════════════════════════
 class TestUnsupportedPaymentMethod:
 
-    @pytest.mark.parametrize("pm", ["tamara", "tabby", "cheque",
+    @pytest.mark.parametrize("pm", ["cheque",
                                      "wallet_gift", "unknown_gateway"])
     def test_unknown_methods_held(self, pm):
+        """Iter-293.5-rev3: BNPL (tabby/tamara/emkan) moved to
+        prepaid-equivalent allow-list. Only genuinely unknown methods
+        (crypto wallets, gift cards, cheques…) still land here."""
         d = evaluate(
             row=_row(payment_method=pm),
             settings=_settings(flag=True),
@@ -316,9 +324,12 @@ class TestOrderStatusFilters:
         assert d.outcome == GateOutcome.QUARANTINED
         assert d.reason_code == GuardCode.ORDER_DELETED.value
 
-    @pytest.mark.parametrize("status", ["pending", "waiting", "processing"])
+    @pytest.mark.parametrize("status", ["pending", "waiting"])
     def test_non_terminal_ineligible_status_blocks_not_quarantines(
             self, status):
+        """Iter-293.5-rev3: `processing` moved to eligible via the
+        unified set. Truly non-billable transitional states
+        (pending / waiting) still block here."""
         d = evaluate(
             row=_row(order_status=status),
             settings=_settings(flag=True),
