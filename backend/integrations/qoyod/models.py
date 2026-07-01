@@ -165,16 +165,20 @@ class QoyodSettings(BaseModel):
     #       "تم التنفيذ"). Multiple statuses allowed (e.g. ["completed",
     #       "delivered"]).
     #   `invoice_date_source`       — picks WHICH timestamp goes on the
-    #       Qoyod invoice. New canonical value: "trigger_status_date"
-    #       = the moment the order entered one of the trigger statuses.
+    #       Qoyod invoice. Iter-293.4-rev9 canonical value: `send_date`
+    #       = current Asia/Riyadh moment when the invoice is being
+    #       created in قيود (ZATCA-correct issue_date). Legacy values
+    #       `completed_at` / `trigger_status_date` (Salla-side event
+    #       timestamps) are auto-migrated to `send_date` on load.
     #   `trigger_once_only`         — if True (default), once a Qoyod
     #       invoice exists for a Salla order we ignore subsequent status
     #       transitions — never auto-re-create or duplicate.
     invoice_trigger_statuses: list[str] = Field(
         default_factory=lambda: ["completed"])
     invoice_date_source: Literal[
-        "trigger_status_date", "completed_at", "paid_at", "created_at"
-    ] = "trigger_status_date"
+        "send_date", "trigger_status_date", "completed_at",
+        "paid_at", "created_at",
+    ] = "send_date"
     trigger_once_only: bool = True
 
     # ─── Legacy single-status field (deprecated — read-only mirror) ──

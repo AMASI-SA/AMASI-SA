@@ -102,10 +102,25 @@ ALL_STAGES: tuple[str, ...] = HAPPY_PATH + (
     SKIPPED, RETRYING, PARTIAL_FAILURE, NEEDS_ENRICHMENT, LEGACY_RECEIPT_CREATED,
     # Iter-293.4-rev3 — Global Write Lock hold stage.
     "LOCKED_AWAITING_APPROVAL",
+    # Iter-293.4-rev7 — Post-create total mismatch hold stage.
+    # The قيود invoice exists but its server-computed total disagrees
+    # with Salla's by more than 0.005 SAR. The row halts here pending
+    # accountant decision — NO auto-receipt, NO auto-completion.
+    "INVOICE_CREATED_TOTAL_MISMATCH",
+    # Iter-293.4-rev8 — Terminal "completed with rounding warning".
+    # 0 < |salla_total - qoyod_actual_total| <= 0.01 SAR.
+    # This is an ACCEPTABLE rounding gap caused by قيود's server-side
+    # 2-decimal discount rounding (RCA Iter-293.4-rev8). Treated as
+    # SUCCESS (no blocker) but the row carries a permanent warning
+    # flag for audit + reporting.
+    "COMPLETED_WITH_ROUNDING_WARNING",
 ) + FAILURE_STAGES
 
 TERMINAL_STAGES: frozenset[str] = frozenset({
     "COMPLETED", "SKIPPED", "DEAD_LETTER", "PARTIAL_FAILURE",
+    # Iter-293.4-rev8 — Terminal success with a known-acceptable
+    # rounding gap (<= 0.01 SAR caused by قيود server-side rounding).
+    "COMPLETED_WITH_ROUNDING_WARNING",
 })
 
 # Map each failure stage back to the happy-path stage we resume from
@@ -259,6 +274,41 @@ def _build_allowed() -> set[tuple[str, str]]:
     # apple_pay, etc.) still flow through the full
     # INVOICE_CREATED → INVOICE_PAYMENT_CREATED → COMPLETED path.
     allowed.add(("INVOICE_CREATED", "COMPLETED"))
+
+    # ─── Iter-293.4-rev7 — INVOICE_CREATED_TOTAL_MISMATCH (post-create) ─
+    # After a successful POST /invoices, the pipeline reads the
+    # قيود-computed total from the response and compares it with
+    # Salla's total_amount. If they differ by more than 0.01 SAR,
+    # the row transitions to INVOICE_CREATED_TOTAL_MISMATCH and STOPS.
+    # NO invoice_payment, NO receipt, NO completion. The invoice
+    # exists in قيود — only the local audit trail reflects the
+    # discrepancy so an accountant can review.
+    #
+    # Edges:
+    #   INVOICE_CREATED → INVOICE_CREATED_TOTAL_MISMATCH  (pipeline writes)
+    #   INVOICE_CREATED_TOTAL_MISMATCH → COMPLETED         (operator: reconciled)
+    #   INVOICE_CREATED_TOTAL_MISMATCH → COMPLETED_WITH_ROUNDING_WARNING
+    #                                                      (operator: small-gap
+    #                                                       accepted)
+    #   INVOICE_CREATED_TOTAL_MISMATCH → DEAD_LETTER       (operator: void in قيود)
+    allowed.add(("INVOICE_CREATED", "INVOICE_CREATED_TOTAL_MISMATCH"))
+    allowed.add(("INVOICE_CREATED_TOTAL_MISMATCH", "COMPLETED"))
+    allowed.add(("INVOICE_CREATED_TOTAL_MISMATCH",
+                 "COMPLETED_WITH_ROUNDING_WARNING"))
+    allowed.add(("INVOICE_CREATED_TOTAL_MISMATCH", "DEAD_LETTER"))
+
+    # ─── Iter-293.4-rev8 — COMPLETED_WITH_ROUNDING_WARNING edges ──────
+    # Reachable from:
+    #   • INVOICE_CREATED — COD/credit_invoice_only flow when diff in
+    #     (0.005, 0.01] (warning-grade).
+    #   • INVOICE_PAYMENT_CREATED — pre-paid flow when diff in the
+    #     warning band after the payment-link step.
+    #   • INVOICE_CREATED_TOTAL_MISMATCH — operator explicitly
+    #     reconciled / accepted the small gap (covered above).
+    # Terminal — no edges out.
+    allowed.add(("INVOICE_CREATED", "COMPLETED_WITH_ROUNDING_WARNING"))
+    allowed.add(("INVOICE_PAYMENT_CREATED",
+                 "COMPLETED_WITH_ROUNDING_WARNING"))
 
     return allowed
 

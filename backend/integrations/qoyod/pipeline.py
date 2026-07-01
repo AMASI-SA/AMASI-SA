@@ -17,6 +17,7 @@ Failure routing (per user directive — same pattern as Day 3):
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -43,7 +44,7 @@ from integrations.qoyod.write_lock import (
 )
 from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.dto import SalesOrderDTO
-from integrations.qoyod.state_machine import transition
+from integrations.qoyod.state_machine import transition, InvalidTransition
 from integrations.qoyod.totals_guard import (
     validate_totals, TotalsGuardResult,
 )
@@ -51,6 +52,9 @@ from integrations.qoyod.totals_guard import (
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -63,7 +67,8 @@ async def _load_settings(db, user_id: str) -> dict:
     if not doc:
         return {
             "invoice_trigger_statuses": ["completed"],
-            "invoice_date_source":      "trigger_status_date",
+            # Iter-293.4-rev9 — Default source is `send_date`.
+            "invoice_date_source":      "send_date",
             "trigger_once_only":        True,
             "dry_run_mode":             False,
         }
@@ -74,8 +79,16 @@ async def _load_settings(db, user_id: str) -> dict:
         doc["trigger_once_only"] = True
     if "dry_run_mode" not in doc:
         doc["dry_run_mode"] = False
-    if doc.get("invoice_date_source") == "completed_at":
-        doc["invoice_date_source"] = "trigger_status_date"
+    # Iter-293.4-rev9 — Auto-migrate legacy tenants whose
+    # invoice_date_source still points at Salla-side timestamps. Both
+    # `completed_at` and the historical `trigger_status_date` default
+    # are silently upgraded to `send_date` so قيود's issue_date always
+    # reflects the current Asia/Riyadh moment. Operators who WANT the
+    # old behaviour can set it explicitly to a non-empty non-send value.
+    if doc.get("invoice_date_source") in ("completed_at",
+                                           "trigger_status_date",
+                                           None, ""):
+        doc["invoice_date_source"] = "send_date"
     return doc
 
 
@@ -861,6 +874,156 @@ async def process_customer_resolved_row(
         upsert=True,
     )
 
+    # ── Iter-293.4-rev7 — Post-create total verification ────────────
+    # Production order 269571122 (2026-XX) revealed that قيود's
+    # server-side total can differ from Salla's by 0.01 SAR when the
+    # line-level discount rounds differently (قيود rounds discount to
+    # 2 decimals BEFORE applying VAT; Mezan's simulator used 4-decimal
+    # discounts). After ZATCA wiring, any mismatch (even one halala)
+    # MUST stop the pipeline pending accountant review — auto-creating
+    # a receipt would lock-in the wrong total in the books.
+    #
+    # Read the قيود-actual total from the response (best-effort across
+    # several shape variants), compare with Salla's, persist the
+    # comparison, and transition the row to INVOICE_CREATED_TOTAL_MISMATCH
+    # if the difference exceeds 0.005 SAR. NO further pipeline work.
+    if not is_dry and qoyod_invoice_id:
+        salla_total_for_verify = canonical.get("total_amount")
+        mezan_expected_for_verify = (invoice_diagnostics or {}).get(
+            "mezan_expected_total")
+        qoyod_actual_total = None
+        for src in (
+            inv_resp_raw,
+            (inv_resp_raw.get("invoice")
+             if isinstance(inv_resp_raw, dict) else None),
+        ):
+            if not isinstance(src, dict):
+                continue
+            for k in ("total", "total_amount", "balance", "grand_total"):
+                if src.get(k) is not None:
+                    try:
+                        qoyod_actual_total = float(src[k])
+                    except (TypeError, ValueError):
+                        qoyod_actual_total = None
+                    if qoyod_actual_total is not None:
+                        break
+            if qoyod_actual_total is not None:
+                break
+
+        try:
+            diff_value = (
+                None if (qoyod_actual_total is None
+                         or salla_total_for_verify is None)
+                else round(float(qoyod_actual_total)
+                           - float(salla_total_for_verify), 4)
+            )
+        except (TypeError, ValueError):
+            diff_value = None
+
+        totals_comparison = {
+            "salla_total":           salla_total_for_verify,
+            "mezan_expected_total":  mezan_expected_for_verify,
+            "qoyod_actual_total":    qoyod_actual_total,
+            "difference":            diff_value,
+            # Iter-293.4-rev8 — Tri-state rounding policy.
+            #
+            #   |diff| <= 0.005       → no warning (essentially zero).
+            #   0.005 < |diff| <= 0.01 → ACCEPTED rounding gap.
+            #                            Pipeline continues; row carries a
+            #                            permanent `rounding_warning=True`
+            #                            flag and lands at
+            #                            COMPLETED_WITH_ROUNDING_WARNING.
+            #   |diff| > 0.01         → BLOCKER. Pipeline halts at
+            #                            INVOICE_CREATED_TOTAL_MISMATCH.
+            #                            Accountant must review.
+            "warning_tolerance_sar": 0.005,    # below = no warning
+            "blocker_tolerance_sar": 0.01,     # above = blocker
+            "rounding_warning":      (
+                diff_value is not None
+                and abs(diff_value) > 0.005
+                and abs(diff_value) <= 0.01),
+            "mismatch":              (diff_value is not None
+                                      and abs(diff_value) > 0.01),
+            "reason":                ("qoyod_server_side_rounding"
+                                      if (diff_value is not None
+                                          and abs(diff_value) > 0.005)
+                                      else None),
+            "checked_at":            _now(),
+        }
+        # Persist the comparison so the diagnostic endpoint surfaces
+        # it even if the row never re-enters the pipeline.
+        await db.integration_inbox.update_one(
+            {"id": row["id"]},
+            {"$set": {"totals_comparison": totals_comparison}})
+        await db.qoyod_invoices.update_one(
+            {"user_id":        user_id,
+             "salla_order_id": canonical.get("order_id")},
+            {"$set": {"totals_comparison": totals_comparison}})
+
+        if totals_comparison["mismatch"]:
+            # Transition the inbox row INVOICE_CREATED →
+            # INVOICE_CREATED_TOTAL_MISMATCH and STOP.
+            mismatch_error = {
+                "code":    "qoyod_actual_total_mismatch",
+                "message": (
+                    "الفاتورة تم إنشاؤها في قيود لكن إجمالي قيود الفعلي "
+                    f"({qoyod_actual_total}) يختلف عن Salla "
+                    f"({salla_total_for_verify}) بمقدار "
+                    f"{diff_value:+.2f} SAR. تم إيقاف السجل عند "
+                    "INVOICE_CREATED_TOTAL_MISMATCH — لا سند قبض، "
+                    "لا إكمال تلقائي. يلزم قرار محاسبي."
+                ),
+                "salla_total":         salla_total_for_verify,
+                "mezan_expected_total": mezan_expected_for_verify,
+                "qoyod_actual_total":   qoyod_actual_total,
+                "difference":           diff_value,
+                "qoyod_invoice_id":     qoyod_invoice_id,
+                "qoyod_invoice_number": qoyod_invoice_number,
+            }
+            try:
+                p_mm = transition(
+                    from_stage="INVOICE_CREATED",
+                    to_stage="INVOICE_CREATED_TOTAL_MISMATCH",
+                    actor="worker",
+                    error=mismatch_error,
+                )
+                p_mm.setdefault("$set", {})["pipeline_error"] = mismatch_error
+                await _apply(db, row["id"], p_mm)
+            except InvalidTransition as _exc:    # pragma: no cover
+                logger.warning(
+                    "INVOICE_CREATED → INVOICE_CREATED_TOTAL_MISMATCH "
+                    "refused by state machine: %s", _exc)
+            # Mirror the mismatch state to the ledger so an external
+            # dashboard / report can filter on it.
+            await db.qoyod_invoices.update_one(
+                {"user_id":        user_id,
+                 "salla_order_id": canonical.get("order_id")},
+                {"$set": {
+                    "pipeline_stage": "INVOICE_CREATED_TOTAL_MISMATCH",
+                    "last_error":     mismatch_error,
+                    "updated_at":     _now(),
+                }})
+            logger.warning(
+                "QOYOD_ACTUAL_TOTAL_MISMATCH order=%s trace=%s "
+                "qoyod_invoice_id=%s diff=%s SAR — pipeline halted.",
+                canonical.get("order_number") or canonical.get("order_id"),
+                trace_id, qoyod_invoice_id, diff_value,
+            )
+            return {
+                "row_id":            row["id"],
+                "outcome":           "INVOICE_CREATED_TOTAL_MISMATCH",
+                "reason":            "qoyod_actual_total_mismatch",
+                "qoyod_invoice_id":  qoyod_invoice_id,
+                "qoyod_invoice_number": qoyod_invoice_number,
+                "totals_comparison": totals_comparison,
+                "trace_id":          trace_id,
+                "note":              ("لا يتم إنشاء سند قبض ولا إكمال "
+                                       "تلقائي للسجل عند فروقات الإجمالي. "
+                                       "يلزم قرار محاسبي يدوي."),
+            }
+        # else: totals match. Fall through to the normal posting-mode
+        # branch below.
+
     # ── 4d INVOICE PAYMENT (Iter-290h — replaces standalone Receipt) ──
     #
     # Why this exists
@@ -881,34 +1044,17 @@ async def process_customer_resolved_row(
     #
     # No fallback to /receipts. Per user spec — "إذا فشل ربط السند
     # بالفاتورة، لا تسجل الطلب كناجح".
-    if not (settings.get("auto_receipt", True)
-            and (settings.get("capabilities") or {}).get("create_receipts", True)):
-        # Invoice-payment step disabled by capability (e.g. tenant
-        # using Qoyod's auto-payment plugin externally). Stop at
-        # INVOICE_CREATED as success.
-        return {"row_id": row["id"], "outcome": "INVOICE_CREATED",
-                "reason": "invoice_payment_disabled_by_capability",
-                "dry_run": is_dry,
-                "qoyod_invoice_id": qoyod_invoice_id}
 
-    # ── Iter-293 — posting_mode branch BEFORE building any payment payload ──
-    # Strict accounting rule per user (2026-06-30):
-    #
-    #   credit_invoice_only  → Invoice ONLY. NO invoice_payment is built,
-    #                          NO Qoyod call is made for /invoice_payments,
-    #                          NO qoyod_account_id is required. The full
-    #                          amount stays as receivable in Qoyod, which
-    #                          is the correct accounting for COD (collected
-    #                          later when courier delivers + remits cash).
-    #
-    #   disabled             → Payment method is configured as not-synced.
-    #                          Order ends at INVOICE_CREATED. We did create
-    #                          the invoice above, but skip everything else.
-    #
-    # Resolved via `resolve_posting_mode` which BAKES IN the rule that
-    # any COD-family method ALWAYS produces credit_invoice_only,
-    # regardless of what the operator saved in settings — defense in
-    # depth against a buggy UI or a malicious API consumer.
+    # ── Iter-293.4-rev6 — posting_mode FIRST (BEFORE auto_receipt) ──
+    # Critical ordering fix: the payment-method posting_mode is an
+    # ACCOUNTING decision baked into the order itself. COD orders
+    # MUST always post as `credit_invoice_only` (invoice only, no
+    # invoice_payment) regardless of whether the operator has
+    # `auto_receipt` enabled. Previously the auto_receipt guard fired
+    # BEFORE posting_mode resolution, so COD orders with
+    # `auto_receipt=False` got stuck at INVOICE_CREATED — invoice
+    # was created in Qoyod but the row never reached COMPLETED.
+    # Production order 269571122 hit this on 2026-XX-XX.
     from .payment_methods import (
         resolve_posting_mode,
         POSTING_MODE_CREDIT_INVOICE_ONLY,
@@ -922,31 +1068,55 @@ async def process_customer_resolved_row(
         # COD path — invoice exists in Qoyod, no receipt. Mark row + invoice
         # as COMPLETED so the monitor doesn't think the payment step
         # failed. qoyod_invoice_payment_id stays NULL by design.
+        #
+        # Iter-293.4-rev8 — Honour the rounding-warning flag from the
+        # post-create verification above. When |diff| in (0.005, 0.01]
+        # the row lands at `COMPLETED_WITH_ROUNDING_WARNING` instead
+        # of plain `COMPLETED`, with the totals_comparison preserved
+        # so a daily report can list orders that carry the warning.
+        _tc = (locals().get("totals_comparison") or {}) if not is_dry else {}
+        _rounding_warning = bool(_tc.get("rounding_warning"))
+        _final_stage = ("COMPLETED_WITH_ROUNDING_WARNING"
+                        if _rounding_warning else "COMPLETED")
+        _ledger_status = ("completed_with_rounding_warning"
+                          if _rounding_warning else "sent")
         await db.qoyod_invoices.update_one(
             {"user_id": user_id, "salla_order_id": canonical.get("order_id")},
             {"$set": {
-                "status":                "sent",
-                "pipeline_stage":        "COMPLETED",
+                "status":                _ledger_status,
+                "pipeline_stage":        _final_stage,
                 "posting_mode":          _posting_mode,
                 "qoyod_invoice_payment_id": None,
                 "qoyod_receipt_id":      None,
                 "paid_amount":           0,
                 "remaining_amount":      canonical.get("total_amount"),
+                "rounding_warning":      _rounding_warning,
                 "updated_at":            _now(),
             }})
         p = transition(from_stage="INVOICE_CREATED",
-                       to_stage="COMPLETED", actor="worker",
-                       note=("credit_invoice_only — COD posted as credit "
-                             "invoice, no receipt (correct accounting)"),
+                       to_stage=_final_stage, actor="worker",
+                       note=(
+                           "credit_invoice_only — COD posted as credit "
+                           "invoice, no receipt "
+                           + (f"(rounding gap {_tc.get('difference'):+.2f} "
+                              "SAR accepted as warning)"
+                              if _rounding_warning else
+                              "(correct accounting)")),
                        existing_started_at=started_at)
         p.setdefault("$set", {})["posting_mode"] = _posting_mode
+        if _rounding_warning:
+            p["$set"]["rounding_warning"] = True
         await _apply(db, row["id"], p)
         return {"row_id":               row["id"],
-                "outcome":              "COMPLETED",
-                "reason":               "credit_invoice_only",
+                "outcome":              _final_stage,
+                "reason":               ("credit_invoice_only_with_rounding_warning"
+                                          if _rounding_warning
+                                          else "credit_invoice_only"),
                 "posting_mode":         _posting_mode,
                 "qoyod_invoice_id":     qoyod_invoice_id,
                 "qoyod_invoice_payment_id": None,
+                "totals_comparison":    _tc or None,
+                "rounding_warning":     _rounding_warning,
                 "dry_run":              is_dry}
 
     if _posting_mode == POSTING_MODE_DISABLED:
@@ -963,6 +1133,20 @@ async def process_customer_resolved_row(
                 "reason": "posting_mode_disabled",
                 "posting_mode": _posting_mode,
                 "qoyod_invoice_id": qoyod_invoice_id, "dry_run": is_dry}
+
+    # auto_receipt / create_receipts capability gate (runs AFTER
+    # posting_mode so it only governs pre-paid methods that would
+    # normally build an invoice_payment).
+    if not (settings.get("auto_receipt", True)
+            and (settings.get("capabilities") or {}).get("create_receipts", True)):
+        # Invoice-payment step disabled by capability (e.g. tenant
+        # using Qoyod's auto-payment plugin externally). Stop at
+        # INVOICE_CREATED as success.
+        return {"row_id": row["id"], "outcome": "INVOICE_CREATED",
+                "reason": "invoice_payment_disabled_by_capability",
+                "posting_mode": _posting_mode,
+                "dry_run": is_dry,
+                "qoyod_invoice_id": qoyod_invoice_id}
 
     payment_payload, idem_fingerprint = build_invoice_payment_payload(
         qoyod_invoice_id=qoyod_invoice_id,

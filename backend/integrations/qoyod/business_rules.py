@@ -10,18 +10,18 @@ The single source of truth for "should this order go to Qoyod?" is the
 **Invoice Trigger Policy** stored on `qoyod_settings`:
 
     invoice_trigger_statuses   list[str]   default ["completed"]
-    invoice_date_source        str         default "trigger_status_date"
+    invoice_date_source        str         default "send_date"  (rev9)
     trigger_once_only          bool        default True
 
-Why this design (per user directive 2026-06-26):
-    1. NEVER hard-code "paid" as the trigger. The merchant is legally
-       responsible (Zakat + VAT) for the invoice date, so the date
-       MUST come from a configurable status transition.
-    2. The trigger is a LIST so a merchant can configure multiple
-       statuses (e.g. both "completed" and "delivered") without code
-       changes.
-    3. Once an order produces a Qoyod invoice, subsequent status
-       changes do NOT regenerate it (idempotency at the business level).
+Iter-293.4-rev9 — Invoice issue-date policy defaults to `send_date`:
+    Historically the default was `trigger_status_date` (which resolves
+    to `completed_at` for COD/completed orders). That meant a manual
+    resend the following day would still stamp the قيود invoice with
+    yesterday's date. Per user directive (2026-07-01), for ZATCA
+    correctness the قيود `issue_date` MUST reflect when the invoice
+    was CREATED in قيود — the actual send date in Asia/Riyadh — not
+    the Salla-side completion timestamp. `completed_at` is preserved
+    as diagnostic metadata but no longer drives `issue_date`.
 """
 from __future__ import annotations
 
@@ -29,7 +29,19 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+try:
+    from zoneinfo import ZoneInfo    # Python ≥ 3.9
+except Exception:    # pragma: no cover
+    ZoneInfo = None    # type: ignore[assignment]
+
 from integrations.qoyod.dto import SalesOrderDTO
+
+
+# Asia/Riyadh — the SAR-denominated ZATCA jurisdiction. Every
+# قيود-facing issue_date computed with `invoice_date_source=send_date`
+# is snapped to LOCAL midnight in this zone so a 23:31 UTC+3 send
+# stamps the correct local date (never a "day-earlier" UTC leak).
+QOYOD_ISSUE_DATE_TIMEZONE = "Asia/Riyadh"
 
 
 # Decision tokens — closed set. The pipeline maps these directly to
@@ -50,6 +62,9 @@ class RulesDecision:
     invoice_date_source: str          # which timestamp produced invoice_date
     triggered_by_status: Optional[str] = None
     notes:       list[str] = field(default_factory=list)
+    # Iter-293.4-rev9 — extra diagnostics for the operator UI.
+    completed_at:                Optional[datetime] = None
+    invoice_issue_date_timezone: Optional[str] = None
 
     def to_log_dict(self) -> dict:
         """Compact form for stage_history / Qoyod invoice metadata."""
@@ -60,6 +75,11 @@ class RulesDecision:
                                     if self.invoice_date else None),
             "invoice_date_source": self.invoice_date_source,
             "triggered_by_status": self.triggered_by_status,
+            # Iter-293.4-rev9 diagnostics.
+            "completed_at":        (self.completed_at.isoformat()
+                                    if self.completed_at else None),
+            "invoice_issue_date_source":   self.invoice_date_source,
+            "invoice_issue_date_timezone": self.invoice_issue_date_timezone,
         }
 
 
@@ -97,6 +117,29 @@ def _resolve_trigger_status_date(
     return None, "none"
 
 
+def _resolve_send_date_riyadh() -> tuple[datetime, str]:
+    """Iter-293.4-rev9 — قيود issue_date = current send-time in
+    Asia/Riyadh. Returns (datetime, source-label).
+
+    We return the LOCAL Riyadh datetime (with `tzinfo=Asia/Riyadh` so
+    downstream `.date()` calls snap to the correct local day). Falls
+    back to fixed UTC+3 offset if `zoneinfo` isn't available (rare —
+    Python ≥ 3.9 ships it by default).
+    """
+    now_utc = datetime.now(timezone.utc)
+    if ZoneInfo is not None:
+        try:
+            return now_utc.astimezone(ZoneInfo(QOYOD_ISSUE_DATE_TIMEZONE)), \
+                   "send_date"
+        except Exception:    # pragma: no cover — bad tzdata
+            pass
+    # Fallback: fixed UTC+3 (no DST in Saudi Arabia — safe constant).
+    from datetime import timedelta
+    return now_utc.astimezone(
+        timezone(timedelta(hours=3), name="Asia/Riyadh-fallback")), \
+        "send_date_utc_offset_fallback"
+
+
 def _resolve_invoice_date(
     dto: SalesOrderDTO, source: str, triggered_by: Optional[str]
 ) -> tuple[Optional[datetime], str]:
@@ -105,8 +148,17 @@ def _resolve_invoice_date(
     Returns (date_or_None, actual_source_used). The "actual source"
     can differ from the requested one when a fallback kicks in — the
     pipeline logs both so the operator can audit the choice.
+
+    Iter-293.4-rev9 — `send_date` is the recommended production
+    default. It stamps قيود's `issue_date` with the current Asia/Riyadh
+    date at the moment the invoice is being sent, matching the ZATCA
+    requirement that issue_date reflects the true creation moment
+    (not the underlying Salla-side event).
     """
     s = (source or "").strip()
+    # Iter-293.4-rev9 — new preferred source.
+    if s == "send_date":
+        return _resolve_send_date_riyadh()
     if s == "trigger_status_date":
         dt, used = _resolve_trigger_status_date(dto, triggered_by)
         return dt, used
@@ -118,8 +170,10 @@ def _resolve_invoice_date(
         return dto.paid_at, "paid_at"
     if s == "created_at":
         return dto.order_date, "order_date"
-    # Unknown setting → defensive fallback.
-    return _resolve_trigger_status_date(dto, triggered_by)
+    # Unknown setting → defensive fallback to the new send_date default
+    # so a mistyped config doesn't accidentally revive the old
+    # completed_at behaviour.
+    return _resolve_send_date_riyadh()
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -144,7 +198,11 @@ def evaluate(
     """
     triggers = settings.get("invoice_trigger_statuses") or ["completed"]
     once = bool(settings.get("trigger_once_only", True))
-    source = settings.get("invoice_date_source") or "trigger_status_date"
+    # Iter-293.4-rev9 — Default flipped from "trigger_status_date"
+    # (which resolved to completed_at for COD orders) to "send_date"
+    # so قيود's issue_date matches the actual send moment in
+    # Asia/Riyadh. Legacy setting is honoured when explicit.
+    source = settings.get("invoice_date_source") or "send_date"
 
     canonical_status = (dto.order_status or "").strip().lower()
     triggered_by = canonical_status if canonical_status in triggers else None
@@ -188,4 +246,15 @@ def evaluate(
         invoice_date=invoice_dt,
         invoice_date_source=used_source,
         triggered_by_status=triggered_by,
+        # Iter-293.4-rev9 — Diagnostics for the UI. `completed_at`
+        # stays visible as a REFERENCE timestamp regardless of which
+        # source drives `invoice_date`. Timezone label only when the
+        # send_date path resolved (Asia/Riyadh) so operators can
+        # distinguish local-day-snapping from a raw DTO timestamp.
+        completed_at=dto.completed_at,
+        invoice_issue_date_timezone=(
+            QOYOD_ISSUE_DATE_TIMEZONE
+            if used_source in ("send_date",
+                               "send_date_utc_offset_fallback")
+            else None),
     )

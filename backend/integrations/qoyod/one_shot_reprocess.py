@@ -450,6 +450,147 @@ async def reprocess_one_order(
         db, user_id=user_id,
         order_number=order_number, trace_id=trace_id)
 
+    # ── 3a. Recovery-detection branch — row stuck at INVOICE_CREATED ──
+    # Iter-293.4-rev6/rev7 (2026-XX) — Production order 269571122 hit
+    # a code-path bug where the pipeline successfully POSTed
+    # `create_invoice` but bailed out BEFORE the COD
+    # `credit_invoice_only` transition because the auto_receipt
+    # capability check fired first (since fixed in pipeline.py).
+    #
+    # IMPORTANT — Iter-293.4-rev7 hardening (after the user observed a
+    # 0.01 SAR mismatch between Salla total and the قيود-computed
+    # invoice total on order 269571122):
+    #
+    #     The recovery path MUST NOT silently mark the row COMPLETED.
+    #     A قيود invoice that was created at a DIFFERENT total than
+    #     Salla's (even by one halala) is an ACCOUNTING ISSUE that
+    #     requires manual accountant review — especially after ZATCA
+    #     wiring goes live. Auto-completion would hide the discrepancy.
+    #
+    # The recovery action is therefore explicitly DEFERRED to a
+    # separate operator-only endpoint (see `/admin/recover-stuck-order`)
+    # so each recovery is an explicit decision with an audit trail —
+    # NOT a side-effect of `one_shot_reprocess`. The branch below ONLY
+    # SURFACES the stuck-state diagnostics for the operator.
+    if row.get("pipeline_stage") == "INVOICE_CREATED":
+        stuck_qid = row.get("qoyod_invoice_id") or ""
+        if stuck_qid and not str(stuck_qid).startswith(("DRY:", "PREVIEW:")):
+            payloads_now = row.get("qoyod_payloads") or {}
+            responses_now = row.get("qoyod_responses") or {}
+            inv_resp_now = (responses_now.get("invoice") or {}).get("body")
+            canonical_now = row.get("canonical_payload") or {}
+            inv_payload_now = payloads_now.get("invoice") or {}
+            # Pull the per-order approval audit (if any) for this trace.
+            approval_audit = None
+            try:
+                approval_audit = await db.qoyod_per_order_approvals.find_one(
+                    {"user_id":    user_id,
+                     "order_number": order_number,
+                     "trace_id":   row.get("trace_id")},
+                    {"_id": 0},
+                )
+                if isinstance(approval_audit, dict):
+                    appat = approval_audit.get("approved_at")
+                    if hasattr(appat, "isoformat"):
+                        approval_audit["approved_at"] = appat.isoformat()
+            except Exception:    # pragma: no cover — defensive
+                approval_audit = None
+            # Pull totals for the mismatch surface — Salla vs قيود.
+            salla_total = canonical_now.get("total_amount")
+            inv_diag = payloads_now.get("invoice_diagnostics") or {}
+            dry_expected = inv_diag.get("mezan_expected_total")
+            # The Qoyod response carries the canonical total قيود
+            # actually computed server-side. We extract it tolerantly
+            # — any of `invoice.total`, `total`, `balance` (when no
+            # payments) is acceptable as the "Qoyod-actual" total.
+            qoyod_actual_total = None
+            inv_resp_obj = (inv_resp_now.get("invoice")
+                            if isinstance(inv_resp_now, dict)
+                            else None)
+            for src in (inv_resp_obj, inv_resp_now
+                        if isinstance(inv_resp_now, dict) else None):
+                if not isinstance(src, dict):
+                    continue
+                for k in ("total", "total_amount", "balance",
+                          "grand_total"):
+                    if src.get(k) is not None:
+                        try:
+                            qoyod_actual_total = float(src[k])
+                        except (TypeError, ValueError):
+                            qoyod_actual_total = None
+                        if qoyod_actual_total is not None:
+                            break
+                if qoyod_actual_total is not None:
+                    break
+            try:
+                difference = (
+                    None if (qoyod_actual_total is None
+                             or salla_total is None)
+                    else round(float(qoyod_actual_total)
+                               - float(salla_total), 4)
+                )
+            except (TypeError, ValueError):
+                difference = None
+            totals_mismatch = (
+                difference is not None and abs(difference) > 0.005)
+            return {
+                "ok":         False,    # NOT a success — needs accountant.
+                "outcome":    ("INVOICE_CREATED_TOTAL_MISMATCH"
+                               if totals_mismatch else "INVOICE_CREATED"),
+                "recoverable": True,
+                "row_id":     row.get("id"),
+                "trace_id":   row.get("trace_id"),
+                "failed_at_stage": (
+                    "INVOICE_CREATED_TOTAL_MISMATCH"
+                    if totals_mismatch else "INVOICE_CREATED"),
+                "qoyod_invoice_id":      stuck_qid,
+                "qoyod_invoice_number":  row.get("qoyod_invoice_number"),
+                "qoyod_customer_id":     row.get("qoyod_customer_id"),
+                "qoyod_invoice_payment_id": None,
+                "qoyod_receipt_id":      None,
+                "qoyod_request_sent":    False,    # nothing new
+                "invoice_request_body":  inv_payload_now,
+                "invoice_response_body": inv_resp_now,
+                "stage_sequence_observed": _extract_observed_sequence(row),
+                "stage_history":         row.get("stage_history") or [],
+                "per_order_approval":    approval_audit,
+                "dry_leaks_in_final_payload": _scan_payload_for_dry(
+                    inv_payload_now),
+                "totals_comparison": {
+                    "salla_total":           salla_total,
+                    "dry_run_expected_total": dry_expected,
+                    "qoyod_actual_total":    qoyod_actual_total,
+                    "difference":            difference,
+                    "mismatch":              totals_mismatch,
+                    "tolerance_sar":         0.005,
+                },
+                "error": (
+                    {"code":    "qoyod_actual_total_mismatch",
+                     "message": (
+                         "الفاتورة موجودة في قيود لكن الإجمالي يختلف عن "
+                         "Salla بمقدار "
+                         f"{difference:+.2f} SAR. لن يتم نقل السجل إلى "
+                         "COMPLETED تلقائياً. يجب على المحاسب مراجعة "
+                         "الفاتورة في قيود واتخاذ القرار يدوياً قبل أي "
+                         "إجراء (ZATCA-sensitive).")}
+                    if totals_mismatch
+                    else
+                    {"code":    "invoice_created_pending_recovery",
+                     "message": (
+                         "الفاتورة موجودة في قيود لكن السجل لم يصل إلى "
+                         "COMPLETED بسبب خلل سابق في الـ pipeline. لا "
+                         "حاجة لإرسال جديد إلى قيود. استخدم endpoint "
+                         "الاسترداد المُخصّص بعد مراجعة المحاسب.")}
+                ),
+                "message": (
+                    "تشخيص فقط — لم يُرسَل أي طلب جديد إلى قيود. "
+                    "هذه الفاتورة منشأة سابقاً والسجل المحلي بانتظار "
+                    "قرار. " +
+                    ("⚠ فرق إجمالي 0.01+ بين Salla و قيود — يلزم "
+                     "مراجعة محاسبية قبل أي خطوة."
+                     if totals_mismatch else "")),
+            }
+
     # ── 3. Bail-out if the row is already COMPLETED ─────────────────
     if row.get("pipeline_stage") == "COMPLETED":
         # Iter-290h.6 — Carry the final-state diagnostics so the UI

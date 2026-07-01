@@ -77,6 +77,7 @@ from integrations.qoyod.one_shot_reprocess import (
 from integrations.qoyod.preview_reprocess import (
     preview_reprocess_one_order,
 )
+from integrations.qoyod.state_machine import transition, InvalidTransition
 from salla_integration.service import call_salla, SallaError
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
@@ -287,6 +288,41 @@ class PreviewReprocessBody(BaseModel):
     trace_id:     Optional[str] = None
 
 
+class FinalizeRoundingWarningBody(BaseModel):
+    """Iter-293.4-rev8 — Explicit operator action to mark an
+    INVOICE_CREATED row as COMPLETED_WITH_ROUNDING_WARNING when the
+    قيود-actual total differs from Salla's by at most 0.01 SAR due
+    to known قيود server-side rounding behaviour.
+
+    Strict invariants:
+      • The row MUST be at pipeline_stage `INVOICE_CREATED` (no other
+        stage is finalisable this way).
+      • The row MUST already have a real (non-DRY) `qoyod_invoice_id`.
+      • The persisted `totals_comparison.difference` MUST be in the
+        (0.005, 0.01] SAR window (or, if missing, the operator must
+        supply an explicit `accept_difference_sar` value within that
+        window — used for retroactive finalisation of rows from before
+        the post-create verification shipped).
+      • Confirm token MUST equal `FINALIZE-ROUNDING-<order_number>`.
+      • NO قيود calls. Local DB writes ONLY (inbox row stage +
+        ledger status + dedicated audit collection).
+    """
+    model_config = ConfigDict(extra="forbid")
+    order_number: str = Field(..., min_length=1, max_length=64)
+    trace_id:     Optional[str] = None
+    confirm:      str = Field(..., min_length=1, max_length=128)
+    # Optional override for rows that pre-date the totals_comparison
+    # persistence (production order 269571122 fell into this gap).
+    accept_difference_sar: Optional[float] = Field(
+        default=None, ge=-0.01, le=0.01,
+        description=("Operator-stated difference in SAR. Required when "
+                     "the row carries no totals_comparison. Must be in "
+                     "[-0.01, 0.01]."))
+    operator_note: Optional[str] = Field(
+        default=None, max_length=512,
+        description="Free-text note appended to the audit row.")
+
+
 class TestConnectionResponse(BaseModel):
     ok:          bool
     fingerprint: Optional[str] = None
@@ -320,10 +356,13 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 [legacy] if legacy else ["completed"])
         if "trigger_once_only" not in doc:
             doc["trigger_once_only"] = True
-        # Legacy default `completed_at` was equivalent to the new
-        # `trigger_status_date` semantics. Migrate on the fly.
-        if doc.get("invoice_date_source") == "completed_at":
-            doc["invoice_date_source"] = "trigger_status_date"
+        # Iter-293.4-rev9 — Auto-migrate legacy tenants whose
+        # invoice_date_source still points at Salla-side timestamps.
+        # See pipeline._load_settings for the rationale.
+        if doc.get("invoice_date_source") in ("completed_at",
+                                               "trigger_status_date",
+                                               None, ""):
+            doc["invoice_date_source"] = "send_date"
         return doc
 
     async def _attach_fingerprint(tenant: str, payload: dict) -> dict:
@@ -1288,6 +1327,407 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 "trace_id":        payload.trace_id,
             }
         return result
+
+    # ── Order Recovery Diagnostics (GET — read-only, no Qoyod calls) ──
+    # Iter-293.4-rev7 (2026-XX) — Surfaces ALL DB-side facts for a
+    # specific order so the operator can diagnose a row stuck at
+    # INVOICE_CREATED (e.g. production order 269571122) WITHOUT
+    # invoking any side-effect path. NO confirm token, NO approval
+    # phrase, NO writes — defensive against accidental re-runs.
+    #
+    # Returns:
+    #   • inbox row snapshot (stage, qoyod ids, payloads, responses,
+    #     stage_history, customer/product resolution).
+    #   • qoyod_invoices ledger row.
+    #   • per_order_approvals audit row (when present).
+    #   • totals_comparison block (Salla vs Mezan-expected vs قيود-actual).
+    #   • posting_mode the order resolves to.
+    @router.get("/admin/order-recovery-diagnostics")
+    async def admin_order_recovery_diagnostics(
+        order_number: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        user=Depends(current_user),
+    ):
+        if not (order_number or trace_id):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "missing_lookup",
+                        "message": "supply order_number or trace_id"})
+        tenant = _tenant_id(user)
+        # Locate the inbox row(s).
+        q: dict = {"user_id": tenant}
+        if trace_id:
+            q["trace_id"] = trace_id
+        else:
+            on = str(order_number)
+            cands: list = [on]
+            try:
+                cands.append(int(on))
+            except (TypeError, ValueError):
+                pass
+            q["$or"] = []
+            for v in cands:
+                q["$or"].extend([
+                    {"salla_order_number": v},
+                    {"salla_order_id":     v},
+                    {"canonical_payload.order_number": v},
+                    {"canonical_payload.order_id":     v},
+                ])
+        rows = await db.integration_inbox.find(
+            q, {"_id": 0}).to_list(length=20)
+        if not rows:
+            return {
+                "ok":           False,
+                "code":         "row_not_found",
+                "order_number": order_number,
+                "trace_id":     trace_id,
+            }
+        if len(rows) > 1 and not trace_id:
+            return {
+                "ok":   False,
+                "code": "multiple_matches_supply_trace_id",
+                "order_number": order_number,
+                "candidates": [{
+                    "trace_id":       r.get("trace_id"),
+                    "received_at":    r.get("received_at"),
+                    "pipeline_stage": r.get("pipeline_stage"),
+                } for r in rows[:10]],
+            }
+        row = rows[0]
+        payloads = row.get("qoyod_payloads") or {}
+        responses = row.get("qoyod_responses") or {}
+        inv_resp_obj = (responses.get("invoice") or {})
+        inv_resp_body = inv_resp_obj.get("body")
+        canonical = row.get("canonical_payload") or {}
+
+        # Pull the qoyod_invoices ledger entry.
+        ledger = await db.qoyod_invoices.find_one(
+            {"user_id":        tenant,
+             "salla_order_id": canonical.get("order_id")
+                               or str(row.get("salla_order_number") or "")},
+            {"_id": 0},
+        )
+
+        # Pull the per-order approval audit (any approvals for this
+        # trace — may be zero or one row).
+        approval = await db.qoyod_per_order_approvals.find_one(
+            {"user_id":     tenant,
+             "trace_id":    row.get("trace_id")},
+            {"_id": 0},
+        )
+        if isinstance(approval, dict):
+            approved_at = approval.get("approved_at")
+            if hasattr(approved_at, "isoformat"):
+                approval["approved_at"] = approved_at.isoformat()
+
+        # Posting-mode resolution (read-only — never modifies state).
+        settings_doc = await db.qoyod_settings.find_one(
+            {"user_id": tenant}, {"_id": 0}) or {}
+        try:
+            from integrations.qoyod.payment_methods import (
+                resolve_posting_mode)
+            posting_mode = resolve_posting_mode(
+                settings_doc,
+                (canonical.get("payment_method")
+                 or canonical.get("payment_method_native")))
+        except Exception:    # pragma: no cover
+            posting_mode = None
+
+        # Totals comparison — Salla vs Mezan-expected vs قيود-actual.
+        inv_diag = payloads.get("invoice_diagnostics") or {}
+        salla_total = canonical.get("total_amount")
+        mezan_expected_total = inv_diag.get("mezan_expected_total")
+        qoyod_actual_total = None
+        for src in (inv_resp_body, inv_resp_body.get("invoice")
+                    if isinstance(inv_resp_body, dict) else None):
+            if not isinstance(src, dict):
+                continue
+            for k in ("total", "total_amount", "balance", "grand_total"):
+                if src.get(k) is not None:
+                    try:
+                        qoyod_actual_total = float(src[k])
+                    except (TypeError, ValueError):
+                        qoyod_actual_total = None
+                    if qoyod_actual_total is not None:
+                        break
+            if qoyod_actual_total is not None:
+                break
+        try:
+            difference = (
+                None if (qoyod_actual_total is None or salla_total is None)
+                else round(float(qoyod_actual_total) - float(salla_total), 4)
+            )
+        except (TypeError, ValueError):
+            difference = None
+
+        return {
+            "ok":               True,
+            "qoyod_request_sent": False,
+            "mode":             "diagnostic_readonly",
+            "row": {
+                "id":                  row.get("id"),
+                "trace_id":            row.get("trace_id"),
+                "salla_order_number":  row.get("salla_order_number"),
+                "salla_order_id":      row.get("salla_order_id"),
+                "pipeline_stage":      row.get("pipeline_stage"),
+                "qoyod_invoice_id":    row.get("qoyod_invoice_id"),
+                "qoyod_invoice_number": row.get("qoyod_invoice_number"),
+                "qoyod_customer_id":   row.get("qoyod_customer_id"),
+                "qoyod_invoice_payment_id":
+                    row.get("qoyod_invoice_payment_id"),
+                "qoyod_receipt_id":    row.get("qoyod_receipt_id"),
+                "received_at":         row.get("received_at"),
+                "last_failed_stage":   row.get("last_failed_stage"),
+                "pipeline_error":      row.get("pipeline_error"),
+                "lock_reason":         row.get("lock_reason"),
+                "lock_step":           row.get("lock_step"),
+                "lock_attempt_id":     row.get("lock_attempt_id"),
+            },
+            "qoyod_invoices_ledger": ledger,
+            "per_order_approval":   approval,
+            "posting_mode":         posting_mode,
+            "invoice_request_body":  payloads.get("invoice"),
+            "invoice_response_body": inv_resp_body,
+            "invoice_diagnostics":   inv_diag,
+            "invoice_payment_payload": payloads.get("invoice_payment"),
+            "stage_history":        row.get("stage_history") or [],
+            "totals_comparison": {
+                "salla_total":              salla_total,
+                "mezan_expected_total":     mezan_expected_total,
+                "qoyod_actual_total":       qoyod_actual_total,
+                "difference":               difference,
+                "mismatch":                 (difference is not None
+                                             and abs(difference) > 0.005),
+                "tolerance_sar":            0.005,
+            },
+        }
+
+    # ── Finalize Rounding Warning (POST — local DB writes ONLY) ─────
+    # Iter-293.4-rev8 (2026-XX) — Explicit operator action to close
+    # an INVOICE_CREATED row whose قيود-actual total differs from
+    # Salla's by at most 0.01 SAR (qoyod_server_side_rounding). NO
+    # قيود calls. NO receipt. NO invoice changes. ONLY:
+    #   1. integration_inbox row stage → COMPLETED_WITH_ROUNDING_WARNING.
+    #   2. qoyod_invoices ledger status → completed_with_rounding_warning.
+    #   3. Append audit row to `qoyod_rounding_warning_audits`.
+    @router.post("/admin/qoyod/finalize-rounding-warning")
+    async def admin_finalize_rounding_warning(
+        payload: FinalizeRoundingWarningBody,
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        actor = getattr(user, "email", None) or tenant
+        expected_token = f"FINALIZE-ROUNDING-{payload.order_number}"
+        if (payload.confirm or "").strip() != expected_token:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code":    "confirm_token_mismatch",
+                    "message": ("confirm must equal "
+                                f"'FINALIZE-ROUNDING-{payload.order_number}'"),
+                    "expected": expected_token,
+                })
+        # Locate the row.
+        q: dict = {"user_id": tenant}
+        if payload.trace_id:
+            q["trace_id"] = payload.trace_id
+        else:
+            on = str(payload.order_number)
+            cands: list = [on]
+            try:
+                cands.append(int(on))
+            except (TypeError, ValueError):
+                pass
+            q["$or"] = []
+            for v in cands:
+                q["$or"].extend([
+                    {"salla_order_number": v},
+                    {"salla_order_id":     v},
+                    {"canonical_payload.order_number": v},
+                    {"canonical_payload.order_id":     v},
+                ])
+        rows = await db.integration_inbox.find(q).to_list(length=20)
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "row_not_found",
+                        "order_number": payload.order_number,
+                        "trace_id":     payload.trace_id})
+        if len(rows) > 1 and not payload.trace_id:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "multiple_matches_supply_trace_id",
+                    "candidates": [{
+                        "trace_id":       r.get("trace_id"),
+                        "pipeline_stage": r.get("pipeline_stage"),
+                    } for r in rows[:10]],
+                })
+        row = rows[0]
+
+        if row.get("pipeline_stage") != "INVOICE_CREATED":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code":    "wrong_stage",
+                    "message": ("finalize-rounding-warning only works on "
+                                "rows at INVOICE_CREATED; this row is at "
+                                f"{row.get('pipeline_stage')!r}"),
+                    "pipeline_stage": row.get("pipeline_stage"),
+                })
+
+        qid = row.get("qoyod_invoice_id") or ""
+        if not qid or str(qid).startswith(("DRY:", "PREVIEW:")):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code":    "qoyod_invoice_id_not_real",
+                    "message": ("the row carries no real Qoyod invoice "
+                                "id — refusing to finalize as warning."),
+                    "qoyod_invoice_id": qid or None,
+                })
+
+        # Determine the difference: prefer the persisted comparison;
+        # otherwise honour the operator-supplied accept_difference_sar.
+        persisted = row.get("totals_comparison") or {}
+        persisted_diff = persisted.get("difference")
+        effective_diff: Optional[float] = None
+        diff_source: str = ""
+        if persisted_diff is not None:
+            try:
+                effective_diff = float(persisted_diff)
+                diff_source = "persisted_totals_comparison"
+            except (TypeError, ValueError):
+                effective_diff = None
+        if effective_diff is None and payload.accept_difference_sar is not None:
+            effective_diff = float(payload.accept_difference_sar)
+            diff_source = "operator_supplied_accept_difference_sar"
+
+        if effective_diff is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code":    "difference_unknown",
+                    "message": ("row has no persisted totals_comparison "
+                                "AND no accept_difference_sar was "
+                                "provided. Cannot finalize blindly."),
+                    "hint": ("call GET /admin/order-recovery-diagnostics "
+                            "first; if it reports difference=null pass "
+                            "accept_difference_sar explicitly."),
+                })
+        if abs(effective_diff) > 0.01:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code":    "difference_exceeds_warning_band",
+                    "message": ("the difference exceeds 0.01 SAR; this "
+                                "endpoint refuses to finalize because the "
+                                "gap is in BLOCKER territory and must be "
+                                "reviewed by an accountant."),
+                    "difference":       effective_diff,
+                    "warning_band_sar": 0.01,
+                })
+
+        # Persist the finalisation idempotently.
+        canonical = row.get("canonical_payload") or {}
+        from datetime import timezone as _tz, datetime as _dt
+        now_utc = _dt.now(_tz.utc)
+        try:
+            p_finalize = transition(
+                from_stage="INVOICE_CREATED",
+                to_stage="COMPLETED_WITH_ROUNDING_WARNING",
+                actor=actor,
+                note=(f"finalize-rounding-warning — diff={effective_diff:+.2f} "
+                      "SAR accepted as قيود server-side rounding"),
+            )
+            p_finalize.setdefault("$set", {}).update({
+                "rounding_warning":               True,
+                "rounding_warning_finalized_at":  now_utc,
+                "rounding_warning_finalized_by":  actor,
+                "rounding_warning_difference":    effective_diff,
+            })
+            await db.integration_inbox.update_one(
+                {"id": row["id"]}, p_finalize)
+        except InvalidTransition as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code":    "invalid_transition",
+                        "message": str(exc),
+                        "from":    row.get("pipeline_stage"),
+                        "to":      "COMPLETED_WITH_ROUNDING_WARNING"})
+
+        # Mirror to qoyod_invoices ledger.
+        await db.qoyod_invoices.update_one(
+            {"user_id":        tenant,
+             "salla_order_id": canonical.get("order_id")
+                               or str(row.get("salla_order_number") or "")},
+            {"$set": {
+                "pipeline_stage":   "COMPLETED_WITH_ROUNDING_WARNING",
+                "status":           "completed_with_rounding_warning",
+                "rounding_warning": True,
+                "rounding_warning_difference": effective_diff,
+                "updated_at":       now_utc,
+            }})
+
+        # ZATCA-ready audit row — survives container restarts, exportable.
+        import uuid as _uuid
+        audit_id = str(_uuid.uuid4())
+        audit_row = {
+            "audit_id":        audit_id,
+            "user_id":         tenant,
+            "order_number":    payload.order_number,
+            "trace_id":        row.get("trace_id"),
+            "row_id":          row.get("id"),
+            "qoyod_invoice_id": qid,
+            "qoyod_invoice_number": row.get("qoyod_invoice_number"),
+            "actor":           actor,
+            "finalized_at":    now_utc,
+            "difference_sar":  effective_diff,
+            "difference_source": diff_source,
+            "totals_comparison_persisted": persisted or None,
+            "reason":          "qoyod_server_side_rounding",
+            "scope":           "single_order",
+            "operator_note":   payload.operator_note,
+        }
+        try:
+            await db.qoyod_rounding_warning_audits.insert_one(audit_row)
+        except Exception as _exc:    # pragma: no cover
+            logger.warning(
+                "qoyod_rounding_warning_audits insert failed: %s", _exc)
+
+        logger.warning(
+            "FINALIZE_ROUNDING_WARNING actor=%s order=%s trace=%s "
+            "qoyod_invoice_id=%s difference_sar=%+.2f audit_id=%s",
+            actor, payload.order_number, row.get("trace_id"),
+            qid, effective_diff, audit_id,
+        )
+
+        refreshed = await db.integration_inbox.find_one({"id": row["id"]})
+        return {
+            "ok":      True,
+            "outcome": "COMPLETED_WITH_ROUNDING_WARNING",
+            "row_id":  row.get("id"),
+            "trace_id": row.get("trace_id"),
+            "order_number": payload.order_number,
+            "qoyod_invoice_id":     qid,
+            "qoyod_invoice_number": row.get("qoyod_invoice_number"),
+            "qoyod_invoice_payment_id": None,
+            "qoyod_receipt_id":     None,
+            "qoyod_request_sent":   False,    # local DB only
+            "difference_sar":       effective_diff,
+            "difference_source":    diff_source,
+            "reason":               "qoyod_server_side_rounding",
+            "audit_id":             audit_id,
+            "finalized_at":         now_utc.isoformat(),
+            "finalized_by":         actor,
+            "pipeline_stage_after": (refreshed or {}).get("pipeline_stage"),
+            "message": (
+                f"تم إغلاق الطلب {payload.order_number} كـ "
+                "COMPLETED_WITH_ROUNDING_WARNING. فرق "
+                f"{effective_diff:+.2f} SAR مقبول كـ قيود server-side "
+                "rounding. لا تعديل في قيود. تم تسجيل audit مع actor "
+                f"= {actor} و audit_id = {audit_id}."),
+        }
     #    Iter-275 (layered `amounts`) + Iter-276 (line discount) +
     #    Iter-278 (legacy adapter nested-amounts fix). Lets the
     #    operator confirm a Production redeploy actually landed

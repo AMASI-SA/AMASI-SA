@@ -56,8 +56,11 @@ def test_all_stages_includes_skipped_and_retrying():
 
 
 def test_terminal_stages_are_completed_skipped_deadletter_partial():
+    # Iter-293.4-rev8 added COMPLETED_WITH_ROUNDING_WARNING as a
+    # success-terminal stage (caps rounding gaps <= 0.01 SAR).
     assert TERMINAL_STAGES == frozenset({
         "COMPLETED", "SKIPPED", "DEAD_LETTER", "PARTIAL_FAILURE",
+        "COMPLETED_WITH_ROUNDING_WARNING",
     })
 
 
