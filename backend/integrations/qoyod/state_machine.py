@@ -114,6 +114,21 @@ ALL_STAGES: tuple[str, ...] = HAPPY_PATH + (
     # SUCCESS (no blocker) but the row carries a permanent warning
     # flag for audit + reporting.
     "COMPLETED_WITH_ROUNDING_WARNING",
+    # Iter-293.5 — Selective Live Send Gate HOLD stages.
+    # Rows land here when the automated gate refuses to grant a
+    # scoped bypass; each stage maps to a category on the
+    # /integrations/qoyod/pending-orders operator UI.
+    "HOLD_UNSUPPORTED_PAYMENT_METHOD",  # payment method not on allowlist
+    "HOLD_COD_PENDING_FIX",             # COD but posting_mode ≠ credit_invoice_only
+    "UNRESOLVED_QOYOD_DEPENDENCY",      # sendable=false or DRY/PREVIEW/null
+    "ORDER_SUPERSEDED_BY_NEWER_EVENT",  # newer Salla event supersedes this trace
+    "STALE_TRACE_NOT_CURRENT_ORDER_STATE",
+    # Iter-293.5-rev2 — POST-invoice hold for bank_transfer.
+    # The invoice IS created in قيود (ZATCA-critical) but the
+    # invoice_payment / receipt is DEFERRED until Iter-294 delivers
+    # the receiving-bank routing so we never book to a legacy
+    # generic-bank account.
+    "BANK_TRANSFER_PAYMENT_ROUTING_PENDING",
 ) + FAILURE_STAGES
 
 TERMINAL_STAGES: frozenset[str] = frozenset({
@@ -309,6 +324,39 @@ def _build_allowed() -> set[tuple[str, str]]:
     allowed.add(("INVOICE_CREATED", "COMPLETED_WITH_ROUNDING_WARNING"))
     allowed.add(("INVOICE_PAYMENT_CREATED",
                  "COMPLETED_WITH_ROUNDING_WARNING"))
+
+    # ─── Iter-293.5 — Selective Live Send Gate HOLD edges ────────────
+    # Rows reach these stages from RULES_APPLIED / PRODUCT_RESOLVED /
+    # CUSTOMER_RESOLVED whenever the gate refuses a bypass. All HOLD
+    # stages can climb back to RETRYING when the operator resolves the
+    # blocker (adopt product / customer, wait for Iter-294, override
+    # payment method), and can escalate to DEAD_LETTER for manual
+    # dismissal. Not terminal — but they carry no outgoing
+    # auto-send edges either.
+    for _from in ("RULES_APPLIED", "PRODUCT_RESOLVED", "CUSTOMER_RESOLVED",
+                  "NORMALIZED"):
+        for _hold in ("HOLD_UNSUPPORTED_PAYMENT_METHOD",
+                      "HOLD_COD_PENDING_FIX",
+                      "UNRESOLVED_QOYOD_DEPENDENCY",
+                      "ORDER_SUPERSEDED_BY_NEWER_EVENT",
+                      "STALE_TRACE_NOT_CURRENT_ORDER_STATE"):
+            allowed.add((_from, _hold))
+    for _hold in ("HOLD_UNSUPPORTED_PAYMENT_METHOD",
+                  "HOLD_COD_PENDING_FIX",
+                  "UNRESOLVED_QOYOD_DEPENDENCY"):
+        allowed.add((_hold, RETRYING))
+        allowed.add((_hold, "DEAD_LETTER"))
+
+    # ─── Iter-293.5-rev2 — bank_transfer POST-invoice hold ───────────
+    # The invoice is created FIRST (ZATCA), then the row parks at
+    # BANK_TRANSFER_PAYMENT_ROUTING_PENDING waiting for Iter-294's
+    # bank-routing to build the invoice_payment against the correct
+    # receiving bank. Two exit edges:
+    #   → COMPLETED    once Iter-294 books the payment successfully.
+    #   → DEAD_LETTER  operator overrides / voids.
+    allowed.add(("INVOICE_CREATED", "BANK_TRANSFER_PAYMENT_ROUTING_PENDING"))
+    allowed.add(("BANK_TRANSFER_PAYMENT_ROUTING_PENDING", "COMPLETED"))
+    allowed.add(("BANK_TRANSFER_PAYMENT_ROUTING_PENDING", "DEAD_LETTER"))
 
     return allowed
 

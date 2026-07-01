@@ -1502,6 +1502,146 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             },
         }
 
+    # ── Pending Orders (GET — read-only, categorised view) ──────────
+    # Iter-293.5 — Read-only surface for the operator UI at
+    # /integrations/qoyod/pending-orders. Groups every row that is
+    # stuck (or "would be sendable if the flag were on") into one of
+    # the seven pending categories. NO Qoyod calls, NO writes, NO
+    # sensitive data leaked — bypass hashes are truncated to 12 chars.
+    _PENDING_STAGES: tuple[str, ...] = (
+        "LOCKED_AWAITING_APPROVAL",
+        "INVOICE_CREATED_TOTAL_MISMATCH",
+        "BANK_TRANSFER_PAYMENT_ROUTING_PENDING",
+        "HOLD_UNSUPPORTED_PAYMENT_METHOD",
+        "HOLD_COD_PENDING_FIX",
+        "UNRESOLVED_QOYOD_DEPENDENCY",
+        "STALE_TRACE_NOT_CURRENT_ORDER_STATE",
+        "FAILED_INVOICE",
+        "DEAD_LETTER",
+    )
+    _CATEGORY_ORDER: tuple[str, ...] = (
+        "ready_to_send",
+        "needs_mapping",
+        "bank_transfer_hold",
+        "cod",
+        "unsupported_method",
+        "total_rounding_review",
+        "stale_or_cancelled",
+    )
+
+    def _stage_to_category(stage: str) -> str:
+        return {
+            "LOCKED_AWAITING_APPROVAL":            "ready_to_send",
+            "UNRESOLVED_QOYOD_DEPENDENCY":         "needs_mapping",
+            "BANK_TRANSFER_PAYMENT_ROUTING_PENDING": "bank_transfer_hold",
+            "HOLD_COD_PENDING_FIX":                "cod",
+            "HOLD_UNSUPPORTED_PAYMENT_METHOD":     "unsupported_method",
+            "INVOICE_CREATED_TOTAL_MISMATCH":      "total_rounding_review",
+            "STALE_TRACE_NOT_CURRENT_ORDER_STATE": "stale_or_cancelled",
+            "FAILED_INVOICE":                      "needs_mapping",
+            "DEAD_LETTER":                         "stale_or_cancelled",
+        }.get(stage, "needs_mapping")
+
+    @router.get("/admin/qoyod/pending-orders")
+    async def admin_qoyod_pending_orders(
+        limit: int = 200,
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        limit = max(1, min(int(limit), 500))
+        q = {"user_id": tenant,
+             "pipeline_stage": {"$in": list(_PENDING_STAGES)}}
+        cursor = db.integration_inbox.find(
+            q, {"_id": 0}
+        ).sort([("received_at", -1)])
+        raw_rows = await cursor.to_list(length=limit)
+        # Load the flag (from the same loader as pipeline uses).
+        settings_doc = await db.qoyod_settings.find_one(
+            {"user_id": tenant}, {"_id": 0}) or {}
+        flag_enabled = bool(
+            settings_doc.get("selective_live_send_enabled", False))
+
+        buckets: dict[str, list[dict]] = {c: [] for c in _CATEGORY_ORDER}
+        for row in raw_rows:
+            stage = row.get("pipeline_stage") or ""
+            category = _stage_to_category(stage)
+            canonical = row.get("canonical_payload") or {}
+            payloads = row.get("qoyod_payloads") or {}
+            totals = row.get("totals_comparison") or {}
+            existing_qid = row.get("qoyod_invoice_id") or ""
+            # Compact projection — one row per pending order.
+            buckets[category].append({
+                "row_id":               row.get("id"),
+                "trace_id":             row.get("trace_id"),
+                "salla_order_number":   row.get("salla_order_number")
+                                        or canonical.get("order_number"),
+                "salla_order_id":       row.get("salla_order_id"),
+                "salla_order_status":   canonical.get("order_status_native"),
+                "received_at":          row.get("received_at"),
+                "pipeline_stage":       stage,
+                "payment_method":       canonical.get("payment_method"),
+                "salla_total":          canonical.get("total_amount"),
+                "qoyod_invoice_id":     existing_qid or None,
+                "qoyod_invoice_number": row.get("qoyod_invoice_number"),
+                "qoyod_invoice_payment_id":
+                    row.get("qoyod_invoice_payment_id"),
+                "qoyod_receipt_id":     row.get("qoyod_receipt_id"),
+                "has_existing_invoice": bool(
+                    existing_qid and not str(existing_qid).startswith(
+                        ("DRY:", "PREVIEW:"))),
+                "dependency_status": (
+                    (payloads.get("invoice_diagnostics") or {})
+                    .get("dependency_status")),
+                "reason":               (row.get("pipeline_error") or {})
+                                        .get("code")
+                                        or (row.get("pipeline_error") or {})
+                                        .get("reason"),
+                "totals_comparison":    totals or None,
+                "actions_available":    _pending_actions_for_stage(
+                                            stage, flag_enabled),
+            })
+
+        # Category counts (empty categories included so the UI can
+        # render zero-badges without extra logic).
+        counts = {c: len(rs) for c, rs in buckets.items()}
+        counts["total"] = sum(counts.values())
+
+        return {
+            "ok":                          True,
+            "mode":                        "read_only",
+            "qoyod_request_sent":          False,
+            "production_writes_locked":    bool(settings_doc.get(
+                                                "production_writes_locked",
+                                                True)),
+            "selective_live_send_enabled": flag_enabled,
+            "counts":                      counts,
+            "categories":                  buckets,
+            "generated_at":                _iso_now(),
+        }
+
+    def _pending_actions_for_stage(stage: str,
+                                   flag_enabled: bool) -> list[str]:
+        """Which action buttons the UI should offer for a row.
+        Preview is always allowed (read-only). Approve-and-Send is
+        gated by both the stage AND the tenant flag."""
+        actions = ["preview"]
+        if stage == "UNRESOLVED_QOYOD_DEPENDENCY":
+            actions.append("resolve_dependency")
+        if stage == "INVOICE_CREATED_TOTAL_MISMATCH":
+            actions.append("finalize_rounding_warning")
+        # Approve-and-send is enabled ONLY when:
+        #   • The row is truly at a ready-to-send hold state, AND
+        #   • The tenant flag is TRUE.
+        # Explicitly refused for bank_transfer and unsupported methods.
+        if (flag_enabled
+                and stage in ("LOCKED_AWAITING_APPROVAL",)):
+            actions.append("approve_and_send")
+        return actions
+
+    def _iso_now() -> str:
+        from datetime import datetime, timezone as _tz
+        return datetime.now(_tz.utc).isoformat()
+
     # ── Finalize Rounding Warning (POST — local DB writes ONLY) ─────
     # Iter-293.4-rev8 (2026-XX) — Explicit operator action to close
     # an INVOICE_CREATED row whose قيود-actual total differs from

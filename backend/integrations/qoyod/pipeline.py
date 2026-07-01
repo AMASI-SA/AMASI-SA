@@ -89,6 +89,12 @@ async def _load_settings(db, user_id: str) -> dict:
                                            "trigger_status_date",
                                            None, ""):
         doc["invoice_date_source"] = "send_date"
+    # Iter-293.5 — Selective Live Send Gate feature flag. False by
+    # default; MUST be explicitly enabled per tenant. When False the
+    # gate stays in defensive read-only mode: `pending-orders`
+    # endpoint surfaces categorised rows but no auto-send fires.
+    if "selective_live_send_enabled" not in doc:
+        doc["selective_live_send_enabled"] = False
     return doc
 
 
