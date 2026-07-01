@@ -1664,6 +1664,34 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             limit=limit,
         )
 
+    # ── Iter-001k+ (2026-02-XX) — Order Totals Breakdown ──────
+    # Read-Only diagnostic: when `_check_totals` reports a totals
+    # mismatch (diff > 0.01), this endpoint returns the FULL numeric
+    # breakdown for one order so the operator can identify which
+    # adjustment (coupon / promotion / wallet / etc.) is missing
+    # from the current reconstruction formula.
+    #
+    # STRICT read-only contract:
+    #   • Zero Qoyod API calls.
+    #   • Zero DB writes.
+    #   • No policy change / gate flip / send attempt.
+    #   • Raw payload debug ONLY when `include_raw_debug=true`.
+    @router.get("/admin/order-totals-breakdown/{order_number}")
+    async def admin_order_totals_breakdown(
+        order_number: str,
+        include_raw_debug: bool = False,
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.order_totals_breakdown import (
+            fetch_order_totals_breakdown,
+        )
+        return await fetch_order_totals_breakdown(
+            db,
+            user_id=_tenant_id(user),
+            order_number=str(order_number),
+            include_raw_debug=bool(include_raw_debug),
+        )
+
     @router.get("/admin/qoyod/pending-orders")
     async def admin_qoyod_pending_orders(
         limit: int = 200,
