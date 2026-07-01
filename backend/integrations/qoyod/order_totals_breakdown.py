@@ -23,7 +23,46 @@ is missing. No premature formula fix.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
+
+
+# ── Tax Source Finder constants ─────────────────────────────────────
+# Keys that STRONGLY indicate a tax-related numeric.
+_TAX_KEY_NEEDLES: tuple[str, ...] = (
+    "tax", "vat", "ضريبة",
+)
+
+# Paths we ALWAYS probe first — even when the walker doesn't reach
+# them (e.g. because a parent node is empty).
+_CANONICAL_TAX_PATHS: tuple[str, ...] = (
+    "canonical_payload.tax_amount",
+    "canonical_payload.order.tax_amount",
+    "raw_payload.data.amounts.tax",
+    "raw_payload.data.amounts.tax.amount",
+    "raw_payload.data.amounts.vat",
+    "raw_payload.data.amounts.vat.amount",
+    "raw_payload.data.tax",
+    "raw_payload.data.vat",
+    "raw_payload.data.order.amounts.tax",
+    "raw_payload.data.order.amounts.vat",
+    "raw_payload.data.total.tax",
+    "raw_payload.data.amounts.total.tax",
+)
+
+# Keys under integration_inbox that are LIKELY to hold a raw/snapshot
+# copy of the Salla payload (varies by pipeline stage).
+_SNAPSHOT_KEYS: tuple[str, ...] = (
+    "raw_payload",
+    "canonical_payload",
+    "trace",
+    "snapshot",
+    "request_body",
+    "webhook_body",
+    "salla_webhook_payload",
+    "normalized_order",
+    "pre_dispatch_snapshot",
+    "eligible_orders_snapshot",
+)
 
 
 # ── Small numeric helpers (local, no I/O) ───────────────────────────
@@ -92,6 +131,195 @@ def _sum_line_totals(items: list) -> float:
             or _to_float(it.get("price")) or 0.0
         total += qty * unit
     return round(total, 2)
+
+
+# ── Tax Source Finder (Read-Only walker) ────────────────────────────
+def _walk_tax_candidates(
+    node: Any,
+    path: str,
+    out: list,
+    *,
+    max_depth: int = 12,
+    max_candidates: int = 60,
+    _depth: int = 0,
+) -> None:
+    """Recursively walk `node` collecting every (path, value) whose
+    KEY name contains one of the tax needles. Emits ONLY numeric
+    values or {amount: numeric} envelopes. Never emits strings,
+    lists of scalars, or nested structures verbatim.
+
+    Depth-limited and count-limited to keep the response small and
+    to guarantee we NEVER surface PII or large payload fragments.
+    """
+    if _depth > max_depth or len(out) >= max_candidates:
+        return
+    if isinstance(node, dict):
+        for k, v in node.items():
+            child_path = f"{path}.{k}" if path else str(k)
+            key_lower = str(k).lower()
+            key_matches_tax = any(
+                needle in key_lower for needle in _TAX_KEY_NEEDLES
+            ) or ("ضريبة" in str(k))
+            if key_matches_tax:
+                # Emit if the value is a scalar OR a {amount:...} envelope.
+                num = _to_float(v)
+                if num is not None:
+                    out.append({
+                        "path":  child_path,
+                        "value": _r2(num),
+                        "key":   str(k)[:64],
+                        "shape": "scalar" if not isinstance(v, dict)
+                                 else "envelope",
+                    })
+                elif isinstance(v, dict):
+                    # Envelope without an `amount` key — record the
+                    # keys present (numeric only) so the auditor can
+                    # decide. NO string values are ever exposed.
+                    numeric_children = {
+                        ck: _r2(_to_float(cv))
+                        for ck, cv in v.items()
+                        if _to_float(cv) is not None
+                    }
+                    if numeric_children:
+                        out.append({
+                            "path": child_path,
+                            "value": None,
+                            "key":  str(k)[:64],
+                            "shape": "nested_numeric",
+                            "numeric_children": numeric_children,
+                        })
+            # Recurse into containers regardless of key match.
+            if isinstance(v, (dict, list)):
+                _walk_tax_candidates(
+                    v, child_path, out,
+                    max_depth=max_depth,
+                    max_candidates=max_candidates,
+                    _depth=_depth + 1)
+    elif isinstance(node, list):
+        # Only descend a shallow amount into lists (items[] etc).
+        for i, item in enumerate(node[:20]):   # cap at 20 elements
+            _walk_tax_candidates(
+                item, f"{path}[{i}]", out,
+                max_depth=max_depth,
+                max_candidates=max_candidates,
+                _depth=_depth + 1)
+
+
+def _rate_confidence(
+    candidate: dict,
+    *,
+    derived_tax: Optional[float],
+) -> tuple[str, str]:
+    """Assign (confidence, reason) for a tax candidate.
+
+        HIGH   — value matches derived_tax (within 0.01) AND key is
+                 an exact tax marker.
+        MEDIUM — key contains tax/vat but value does not match
+                 derived_tax OR shape is envelope with no direct value.
+        LOW    — key contains tax/vat but value is None / nested only.
+    """
+    key_lower = candidate.get("key", "").lower()
+    exact_key = key_lower in {"tax", "vat", "tax_amount", "vat_amount"} \
+        or candidate.get("key") == "ضريبة"
+    val = candidate.get("value")
+    if (derived_tax is not None and val is not None
+            and abs(val - derived_tax) <= 0.01
+            and exact_key):
+        return ("high",
+                "key is a canonical tax marker AND value matches "
+                "derived_tax within 0.01.")
+    if derived_tax is not None and val is not None \
+            and abs(val - derived_tax) <= 0.01:
+        return ("high",
+                "value matches derived_tax within 0.01 "
+                "(non-canonical key name).")
+    if val is None and candidate.get("shape") == "nested_numeric":
+        return ("low",
+                "key mentions tax/vat but the node is a nested "
+                "structure with no direct scalar value.")
+    if val is not None and exact_key:
+        return ("medium",
+                "key is a canonical tax marker but its value does "
+                "not match derived_tax.")
+    return ("low",
+            "key mentions tax/vat but value provenance is unclear.")
+
+
+def _extract_probe_paths(inbox_row: dict) -> list[dict]:
+    """Explicitly probe the well-known paths from `_CANONICAL_TAX_PATHS`
+    even if the walker missed them (e.g. empty parents)."""
+    hits: list[dict] = []
+    for dotted in _CANONICAL_TAX_PATHS:
+        cur: Any = inbox_row
+        parts = dotted.split(".")
+        ok = True
+        for p in parts:
+            if isinstance(cur, dict) and p in cur:
+                cur = cur[p]
+            else:
+                ok = False
+                break
+        if ok:
+            val = _to_float(cur)
+            if val is None and isinstance(cur, dict):
+                val = _to_float(cur.get("amount"))
+            if val is not None:
+                hits.append({
+                    "path":  dotted,
+                    "value": _r2(val),
+                    "key":   parts[-1][:64],
+                    "shape": "probed",
+                })
+    return hits
+
+
+def _find_tax_source_candidates(
+    inbox_row: dict,
+    *,
+    derived_tax: Optional[float],
+) -> list[dict]:
+    """Read-Only tax provenance finder. Walks integration_inbox row
+    plus canonical/raw/snapshot subtrees and returns every candidate
+    numeric field whose key name mentions tax/vat/ضريبة.
+
+    NEVER returns raw payload verbatim. NEVER emits string fields
+    (PII-safe).
+    """
+    collected: list[dict] = []
+    # 1. Probe well-known paths first (deterministic).
+    collected.extend(_extract_probe_paths(inbox_row))
+    # 2. Walk every snapshot-shaped subtree.
+    for key in _SNAPSHOT_KEYS:
+        subtree = inbox_row.get(key)
+        if subtree is None:
+            continue
+        _walk_tax_candidates(
+            subtree, f"{key}", collected,
+            max_depth=12, max_candidates=60)
+    # 3. Also walk the row itself once at shallow depth for tax
+    #    markers that live at the top level.
+    _walk_tax_candidates(
+        {k: v for k, v in inbox_row.items()
+         if k not in _SNAPSHOT_KEYS
+         and not str(k).startswith("_")},
+        "", collected, max_depth=3, max_candidates=20)
+
+    # ── Dedupe by (path, value) ────────────────────────────────
+    seen: set[tuple[str, Optional[float]]] = set()
+    unique: list[dict] = []
+    for c in collected:
+        key = (c["path"], c.get("value"))
+        if key in seen:
+            continue
+        seen.add(key)
+        conf, reason = _rate_confidence(c, derived_tax=derived_tax)
+        c = {**c, "confidence": conf, "reason": reason}
+        unique.append(c)
+    # ── Sort: high → medium → low, then by path length asc.
+    _order = {"high": 0, "medium": 1, "low": 2}
+    unique.sort(key=lambda x: (_order.get(x["confidence"], 3),
+                               len(x["path"])))
+    return unique
 
 
 # ── Field paths (source-of-truth attribution) ───────────────────────
@@ -346,6 +574,47 @@ def build_order_totals_breakdown(
         (salla_official_total or 0.0) - reconstructed_with_adjustments)
     residual_unexplained = diff_after_adjustments
 
+    # ── Derived Tax Reconciliation ──────────────────────────────
+    # Iter-001k+ — Working hypothesis: the residual after subtracting
+    # all detected discounts equals the missing tax that the
+    # normalizer failed to lift into canonical. We compute the tax
+    # value implied by pure arithmetic reconciliation and check
+    # whether it matches the observed residual.
+    #
+    # derived_tax = official_total − (subtotal + shipping + options
+    #                                 − order_level_discount)
+    _subtotal   = subtotal or items_sum_from_canonical or 0.0
+    _shipping   = shipping_amount or 0.0
+    _options    = options_amount or 0.0
+    _order_disc = order_level_discount or 0.0
+    if salla_official_total is not None:
+        derived_tax_from_reconciliation = _r2(
+            salla_official_total
+            - (_subtotal + _shipping + _options - _order_disc))
+    else:
+        derived_tax_from_reconciliation = None
+
+    derived_tax_matches_residual = (
+        derived_tax_from_reconciliation is not None
+        and residual_unexplained is not None
+        and abs(derived_tax_from_reconciliation
+                - residual_unexplained) <= 0.01)
+
+    if derived_tax_from_reconciliation is not None:
+        corrected_expected_using_derived_tax = _r2(
+            _subtotal + _shipping + _options
+            - _order_disc + derived_tax_from_reconciliation)
+        diff_using_derived_tax = _r2(
+            (salla_official_total or 0.0)
+            - corrected_expected_using_derived_tax)
+    else:
+        corrected_expected_using_derived_tax = None
+        diff_using_derived_tax = None
+
+    # ── Tax Source Finder ───────────────────────────────────────
+    tax_source_candidates = _find_tax_source_candidates(
+        inbox_row, derived_tax=derived_tax_from_reconciliation)
+
     # ── Formula notes (operator-facing) ────────────────────────
     formula_notes = [
         "current_expected = Σ(qty×unit_price) + shipping + tax "
@@ -360,6 +629,15 @@ def build_order_totals_breakdown(
         ("If |diff_after_adjustments| > 0.01 the residual is UNKNOWN "
          "and needs raw payload inspection (use "
          "?include_raw_debug=true)."),
+        ("derived_tax_from_reconciliation = official_total − "
+         "(subtotal + shipping + options − order_level_discount). "
+         "This is the arithmetic value the tax MUST have for the "
+         "totals to reconcile — regardless of whether the normalizer "
+         "captured it."),
+        ("tax_source_candidates walks every snapshot in "
+         "integration_inbox looking for keys containing "
+         "tax/vat/ضريبة. Confidence=high when the value matches "
+         "derived_tax within 0.01."),
     ]
     if dedup_note:
         formula_notes.append(dedup_note)
@@ -404,6 +682,25 @@ def build_order_totals_breakdown(
             _r2(reconstructed_with_adjustments),
         "diff_after_adjustments":         diff_after_adjustments,
         "residual_unexplained":           residual_unexplained,
+        # ── Derived tax reconciliation ──────────────────────────
+        "derived_tax_from_reconciliation":
+            derived_tax_from_reconciliation,
+        "derived_tax_matches_residual":   bool(
+            derived_tax_matches_residual),
+        "corrected_expected_using_derived_tax":
+            corrected_expected_using_derived_tax,
+        "diff_using_derived_tax":         diff_using_derived_tax,
+        # ── Tax Source Finder (read-only walker) ────────────────
+        "tax_source_candidates":          tax_source_candidates,
+        "tax_source_summary": {
+            "count":         len(tax_source_candidates),
+            "high_conf_count": sum(
+                1 for c in tax_source_candidates
+                if c.get("confidence") == "high"),
+            "any_high_confidence_match": any(
+                c.get("confidence") == "high"
+                for c in tax_source_candidates),
+        },
         # Diagnostics.
         "would_pass_totals_guard": (
             diff_after_adjustments is not None
