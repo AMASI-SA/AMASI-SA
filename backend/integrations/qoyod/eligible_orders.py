@@ -374,35 +374,107 @@ async def build_eligible_orders_report(
     receiving_bank = settings.get("bank_transfer_receiving_account_id")
     receiving_bank_configured = bool(receiving_bank)
 
-    # 2. Fetch candidate orders — cap at 5× limit to survive filtering.
-    # Iter-001b fix — Real `unified_orders` schema (see orders_db.py):
-    #   • order_status / order_status_slug  (not `status`)
-    #   • order_date                        (YYYY-MM-DD string,
-    #                                        not `created_at`)
-    #   • received_at                       (ISO datetime — ingest time)
-    #   • order_id / order_number
+    # 2. Detect data source (Iter-001c: auto-fallback).
+    # On some tenants (e.g. Production without Salla-to-unified sync),
+    # `unified_orders` is empty and the pipeline data lives ONLY in
+    # `integration_inbox`. Switch data source automatically so the
+    # report stays useful.
+    unified_orders_total = await db.unified_orders.count_documents(
+        {"user_id": user_id})
+
+    source_mode: str
+    source_reason: str
+    orders: list[dict] = []
+    inbox_rows_grouped: dict[str, dict] = {}
+
     fetch_cap = max(limit * 5, 500)
-    orders = await db.unified_orders.find(
-        {
-            "user_id": user_id,
-            "$or": [
-                {"order_status":      {"$in": list(ELIGIBLE_STATUSES)}},
-                {"order_status_slug": {"$in": list(ELIGIBLE_STATUSES)}},
-            ],
-            # Accept EITHER `order_date` (business date, YYYY-MM-DD)
-            # OR `received_at` (ingest datetime). Some orders miss
-            # `order_date` on webhook payloads.
-            "$expr": {
-                "$or": [
-                    {"$gte": [{"$ifNull": ["$order_date", ""]},
-                              since_date_str]},
-                    {"$gte": [{"$ifNull": ["$received_at", ""]},
-                              since_iso_full]},
-                ]
+
+    if unified_orders_total > 0:
+        source_mode = "unified_orders"
+        source_reason = (
+            f"unified_orders has {unified_orders_total} docs for tenant "
+            "— using it as the primary source.")
+        # `order_date` is a YYYY-MM-DD string; `received_at` is a BSON
+        # datetime. Compare each with its own type.
+        orders = await db.unified_orders.find(
+            {
+                "user_id": user_id,
+                "$and": [
+                    {"$or": [
+                        {"order_status":
+                         {"$in": list(ELIGIBLE_STATUSES)}},
+                        {"order_status_slug":
+                         {"$in": list(ELIGIBLE_STATUSES)}},
+                    ]},
+                    {"$or": [
+                        {"order_date":    {"$gte": since_date_str}},
+                        {"received_at":   {"$gte": since_dt}},
+                    ]},
+                ],
             },
-        },
-        {"_id": 0},
-    ).sort([("received_at", -1)]).to_list(length=fetch_cap)
+            {"_id": 0},
+        ).sort([("received_at", -1)]).to_list(length=fetch_cap)
+    else:
+        source_mode = "integration_inbox_fallback"
+        source_reason = (
+            "unified_orders is empty for this tenant — using "
+            "integration_inbox as the fallback source. "
+            "`missing_from_pipeline` is unavailable in this mode.")
+
+        # Group by salla_order_number, keep the LATEST trace per order.
+        # Filter is on `received_at >= since_dt` (BSON datetime — this
+        # is the fix for the Iter-001b bug: was compared with string).
+        inbox_cursor = db.integration_inbox.find(
+            {
+                "user_id": user_id,
+                "received_at": {"$gte": since_dt},
+            },
+            {"_id": 0},
+        ).sort([("received_at", -1)])
+        seen: set[str] = set()
+        async for row in inbox_cursor:
+            key = str(row.get("salla_order_number")
+                      or row.get("salla_order_id") or row.get("trace_id"))
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            inbox_rows_grouped[key] = row
+            if len(inbox_rows_grouped) >= fetch_cap:
+                break
+
+        # Reshape inbox rows into pseudo-order dicts so the same
+        # classifier + item builder works.
+        for key, row in inbox_rows_grouped.items():
+            canonical = row.get("canonical_payload") or {}
+            payloads = row.get("qoyod_payloads") or {}
+            inv_payload = payloads.get("invoice") or {}
+            recv = row.get("received_at")
+            recv_iso = recv.isoformat() if isinstance(recv, datetime) \
+                else str(recv) if recv is not None else None
+            orders.append({
+                # canonical fields the rest of the code expects:
+                "user_id":      user_id,
+                "order_id":     row.get("salla_order_id"),
+                "order_number": row.get("salla_order_number") or key,
+                "order_status": canonical.get("order_status")
+                              or canonical.get("order_status_native"),
+                "order_status_slug": canonical.get("order_status_slug")
+                              or canonical.get("order_status"),
+                "payment_method": canonical.get("payment_method"),
+                "total_amount":   canonical.get("total_amount") or 0,
+                "shipping_amount": canonical.get("shipping_amount") or 0,
+                "tax_amount":     canonical.get("tax_amount") or 0,
+                "items":          canonical.get("items") or [],
+                "customer":       canonical.get("customer") or {},
+                "customer_mobile": (canonical.get("customer") or {}).get(
+                    "phone") or canonical.get("customer_mobile"),
+                "order_date":     canonical.get("order_date"),
+                "received_at":    recv_iso,
+                # inbox-specific pass-throughs for the classifier:
+                "_inbox_row":     row,
+                "_from_inbox":    True,
+                "_invoice_payload": inv_payload,
+            })
 
     # 3. Classify each order.
     counts: dict[str, int] = {
@@ -422,13 +494,28 @@ async def build_eligible_orders_report(
         order_id = str(order.get("order_id") or order.get("id") or "")
         order_number = str(order.get("order_number") or order_id)
 
-        inbox_row = await db.integration_inbox.find_one(
-            {"user_id": user_id,
-             "$or": [{"salla_order_id": order_id},
-                     {"salla_order_number": order_number}]},
-            {"_id": 0, "pipeline_stage": 1, "trace_id": 1,
-             "qoyod_invoice_id": 1},
-            sort=[("received_at", -1)])
+        # Iter-001c — in inbox_fallback mode the inbox_row is already
+        # attached to the pseudo-order; skip the extra query and use it.
+        if order.get("_from_inbox"):
+            inbox_row = order.get("_inbox_row")
+            # Post-filter: only keep rows whose canonical status is
+            # actually eligible (integration_inbox holds ALL states).
+            status = (order.get("order_status") or "").strip()
+            slug   = (order.get("order_status_slug") or "").strip()
+            if (status not in ELIGIBLE_STATUSES
+                    and slug not in ELIGIBLE_STATUSES
+                    and status.lower() not in ELIGIBLE_STATUSES):
+                # Skip — inbox row for a status we don't consider billable.
+                continue
+        else:
+            inbox_row = await db.integration_inbox.find_one(
+                {"user_id": user_id,
+                 "$or": [{"salla_order_id": order_id},
+                         {"salla_order_number": order_number}]},
+                {"_id": 0, "pipeline_stage": 1, "trace_id": 1,
+                 "qoyod_invoice_id": 1},
+                sort=[("received_at", -1)])
+
         invoice = await db.qoyod_invoices.find_one(
             {"user_id": user_id,
              "$or": [{"salla_order_id": order_id},
@@ -436,6 +523,17 @@ async def build_eligible_orders_report(
             {"_id": 0, "qoyod_invoice_id": 1, "posting_mode": 1,
              "status": 1},
             sort=[("created_at", -1)])
+
+        # If inbox row itself already carries a real qoyod_invoice_id
+        # (common in fallback mode), synthesise a lightweight invoice
+        # dict so the classifier catches `already_sent`.
+        if invoice is None and inbox_row and _is_real_invoice_id(
+                inbox_row.get("qoyod_invoice_id")):
+            invoice = {
+                "qoyod_invoice_id": inbox_row.get("qoyod_invoice_id"),
+                "posting_mode":     inbox_row.get("posting_mode"),
+            }
+
         customer_check = await _check_customer(db, user_id, order)
         products_check = await _check_products(db, user_id, order)
         totals_check   = _check_totals(order)
@@ -445,6 +543,18 @@ async def build_eligible_orders_report(
             receiving_bank_configured,
         )
         cls = verdict["classification"]
+
+        # `missing_from_pipeline` cannot arise in inbox_fallback mode
+        # by definition — every row IS from the inbox. Downgrade any
+        # such verdict to `ready_for_manual_approval` for safety.
+        if cls == "missing_from_pipeline" and \
+                source_mode == "integration_inbox_fallback":
+            cls = "ready_for_manual_approval"
+            verdict["classification"] = cls
+            verdict["blocker_reason"] = (
+                "unified_orders empty — inbox row exists but "
+                "pipeline stalled")
+
         counts[cls] = counts.get(cls, 0) + 1
 
         # Hide `already_sent` from `items` unless requested — but ALWAYS
@@ -501,6 +611,8 @@ async def build_eligible_orders_report(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "since_days":   since_days,
         "since_date":   since_date_str,
+        "source_mode":   source_mode,
+        "source_reason": source_reason,
         "total_scanned": len(orders),
         "counts":        counts,
         "gates": {
@@ -521,6 +633,10 @@ async def build_eligible_orders_report(
             "مستبعدة من الاستعلام.",
         ],
     }
+    if source_mode == "integration_inbox_fallback":
+        result["notes"].append(
+            "missing_from_pipeline unavailable because unified_orders "
+            "is empty for this tenant.")
 
     # ── Iter-001b — Read-Only diagnostic block ─────────────────────
     # Enabled via `debug=true` query param. Emits collection totals +
@@ -542,18 +658,38 @@ async def build_eligible_orders_report(
             return {(r["_id"] or "(null)"): r["n"] for r in rows}
 
         uo_filt_all = {"user_id": user_id}
-        uo_filt_90d = {"user_id": user_id, "$expr": {"$or": [
-            {"$gte": [{"$ifNull": ["$order_date", ""]}, since_date_str]},
-            {"$gte": [{"$ifNull": ["$received_at", ""]}, since_iso_full]},
-        ]}}
+        uo_filt_90d = {"user_id": user_id, "$or": [
+            {"order_date": {"$gte": since_date_str}},
+            {"received_at": {"$gte": since_dt}},
+        ]}
         ib_filt_all = {"user_id": user_id}
+        # BSON datetime filter (fixed — Iter-001c: was ISO string before).
         ib_filt_90d = {"user_id": user_id,
-                       "received_at": {"$gte": since_iso_full}}
+                       "received_at": {"$gte": since_dt}}
+
+        # `received_at` type breakdown — helps spot mixed types (str vs
+        # BSON datetime) which explain filter mismatches.
+        type_probe = await db.integration_inbox.aggregate([
+            {"$match": {"user_id": user_id}},
+            {"$project": {"t": {"$type": "$received_at"}}},
+            {"$group": {"_id": "$t", "n": {"$sum": 1}}},
+        ]).to_list(20)
+        received_at_type_breakdown = {r["_id"]: r["n"] for r in type_probe}
+
+        # Parsed sample dates (first 5 rows post-90d filter — proves
+        # the filter matches).
+        parsed_sample = await db.integration_inbox.find(
+            ib_filt_90d, {"_id": 0, "received_at": 1,
+                          "salla_order_number": 1, "pipeline_stage": 1}
+        ).sort([("received_at", -1)]).limit(5).to_list(5)
 
         result["_diagnostic"] = {
             "user_id_used_in_query": user_id,
             "since_date_str_used":   since_date_str,
             "since_iso_full_used":   since_iso_full,
+            "since_dt_used_for_bson_filter": since_dt.isoformat(),
+            "source_mode":           source_mode,
+            "source_reason":         source_reason,
             "unified_orders_total_all_time":
                 await db.unified_orders.count_documents(uo_filt_all),
             "unified_orders_total_90d":
@@ -562,6 +698,9 @@ async def build_eligible_orders_report(
                 await db.integration_inbox.count_documents(ib_filt_all),
             "integration_inbox_total_90d":
                 await db.integration_inbox.count_documents(ib_filt_90d),
+            "integration_inbox_total_90d_no_filter_by_status":
+                await db.integration_inbox.count_documents(ib_filt_90d),
+            "received_at_type_breakdown": received_at_type_breakdown,
             "unified_orders_status_breakdown_all_time":
                 await _breakdown("unified_orders", uo_filt_all,
                                  "order_status"),
@@ -570,6 +709,9 @@ async def build_eligible_orders_report(
                                  "order_status_slug"),
             "integration_inbox_stage_breakdown_all_time":
                 await _breakdown("integration_inbox", ib_filt_all,
+                                 "pipeline_stage"),
+            "integration_inbox_stage_breakdown_90d":
+                await _breakdown("integration_inbox", ib_filt_90d,
                                  "pipeline_stage"),
             "sample_unified_orders_all_time": await _sample(
                 "unified_orders", uo_filt_all,
@@ -580,6 +722,8 @@ async def build_eligible_orders_report(
                 "integration_inbox", ib_filt_all,
                 ["salla_order_id", "salla_order_number", "trace_id",
                  "pipeline_stage", "received_at", "user_id"]),
+            "sample_integration_inbox_last_5_within_90d":
+                parsed_sample,
             "eligible_statuses_configured": sorted(ELIGIBLE_STATUSES),
         }
 

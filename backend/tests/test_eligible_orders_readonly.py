@@ -501,6 +501,109 @@ class TestEndToEndReport:
         finally:
             await self._clean(db, uid)
 
+    async def test_source_mode_is_unified_orders_when_populated(self, db):
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            oid = await self._seed_order(db, uid)
+            await self._seed_inbox(db, uid, oid, stage="COMPLETED")
+            report = await build_eligible_orders_report(db, user_id=uid)
+            assert report["source_mode"] == "unified_orders"
+        finally:
+            await self._clean(db, uid)
+
+    async def test_fallback_to_integration_inbox_when_unified_empty(
+            self, db):
+        """Iter-001c — when `unified_orders` is empty for the tenant,
+        the report reconstructs orders from `integration_inbox`
+        (BSON datetime filter fixed). Production scenario."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            # DO NOT seed unified_orders — this is the fallback case.
+            # Seed an inbox row with a canonical_payload that describes
+            # a Salla order.
+            await db.integration_inbox.insert_one({
+                "user_id": uid,
+                "salla_order_id":     "268307955",
+                "salla_order_number": "268307955",
+                "trace_id":           "t-268307955",
+                "pipeline_stage":     "UNRESOLVED_QOYOD_DEPENDENCY",
+                "received_at":        datetime.now(timezone.utc),
+                "canonical_payload": {
+                    "order_status":      "delivered",
+                    "order_status_slug": "delivered",
+                    "payment_method":    "tabby_installment",
+                    "total_amount":      116.85,
+                    "shipping_amount":   0,
+                    "tax_amount":        0,
+                    "items": [{"sku": "X", "quantity": 1,
+                               "unit_price": 116.85}],
+                    "customer": {"phone": "+966554681361"},
+                },
+                "qoyod_payloads": {"invoice": {
+                    "contact_id": 223,
+                    "line_items": [{"product_id": 42, "quantity": 1}],
+                }},
+            })
+            report = await build_eligible_orders_report(
+                db, user_id=uid, debug=True)
+            assert report["source_mode"] == "integration_inbox_fallback"
+            assert "unified_orders is empty" in report["source_reason"]
+            assert report["total_scanned"] == 1
+            assert any("missing_from_pipeline unavailable"
+                       in n for n in report["notes"])
+            # The row should be classified (not missing_from_pipeline).
+            item = report["items"][0]
+            assert item["order_number"] == "268307955"
+            assert item["classification"] != "missing_from_pipeline"
+            # Diagnostic block reports the source correctly.
+            assert report["_diagnostic"]["source_mode"] == \
+                "integration_inbox_fallback"
+            assert report["_diagnostic"]["integration_inbox_total_90d"] \
+                >= 1
+            assert "date" in report["_diagnostic"][
+                "received_at_type_breakdown"] \
+                or "string" in report["_diagnostic"][
+                    "received_at_type_breakdown"]
+        finally:
+            await db.integration_inbox.delete_many({"user_id": uid})
+            await self._clean(db, uid)
+
+    async def test_fallback_already_sent_detected_from_inbox(self, db):
+        """When inbox row carries a real qoyod_invoice_id we synthesise
+        an invoice dict so classifier catches `already_sent`."""
+        uid = self._uid()
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            await db.integration_inbox.insert_one({
+                "user_id": uid,
+                "salla_order_number": "269571122",
+                "trace_id": "t-269571122",
+                "pipeline_stage": "COMPLETED",
+                "received_at": datetime.now(timezone.utc),
+                "qoyod_invoice_id": "Q-REAL-5555",
+                "canonical_payload": {
+                    "order_status": "completed",
+                    "payment_method": "mada",
+                    "total_amount": 100.0, "shipping_amount": 0,
+                    "tax_amount": 0,
+                    "items": [{"sku": "X", "quantity": 1,
+                               "unit_price": 100.0}],
+                    "customer": {"phone": "+966554681361"},
+                },
+            })
+            report = await build_eligible_orders_report(
+                db, user_id=uid, show_already_sent=True)
+            assert report["source_mode"] == "integration_inbox_fallback"
+            assert report["counts"]["already_sent"] == 1
+        finally:
+            await db.integration_inbox.delete_many({"user_id": uid})
+            await self._clean(db, uid)
+
 
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])
