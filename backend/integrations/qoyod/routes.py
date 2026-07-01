@@ -1701,6 +1701,38 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     #
     # Salla's own tax fields are IGNORED. This endpoint never
     # sends, never writes, never opens the gate.
+    # ── Iter-001k+ (2026-02-XX) — Admin DRY RCA endpoint ──────
+    # Read-Only mirror of `scripts/dry_rca_five_orders.py` for
+    # operators without shell access. Refuses to execute unless
+    # gates are Fail-Closed.
+    @router.get("/admin/dry-rca-report")
+    async def admin_dry_rca_report(
+        orders: str,
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.dry_rca_report import (
+            build_dry_rca_report, GatesNotFailClosedError,
+        )
+        parsed = [o.strip() for o in (orders or "").split(",")
+                  if o.strip()]
+        if not parsed:
+            raise HTTPException(
+                status_code=400,
+                detail=("`orders` query param is required, e.g. "
+                        "?orders=269629400,269632660"))
+        if len(parsed) > 50:
+            raise HTTPException(
+                status_code=400,
+                detail="Max 50 orders per request.")
+        try:
+            return await build_dry_rca_report(
+                db,
+                user_id=_tenant_id(user),
+                order_numbers=parsed,
+            )
+        except GatesNotFailClosedError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
     @router.get("/admin/qoyod-mezan-vat-simulation/{order_number}")
     async def admin_qoyod_mezan_vat_simulation(
         order_number: str,
