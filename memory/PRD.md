@@ -1,5 +1,223 @@
 # PRD — MEZAN E-commerce Accounting App
 
+# ══════════════════════════════════════════════════════════════════
+# 🚧 ITER-001K HANDOFF — Pipeline Instrumentation (P0, NOT STARTED)
+# ══════════════════════════════════════════════════════════════════
+
+**Status**: Handed off to a fresh-context iteration on 2026-07-01
+after user (owner) explicitly approved deferring the actual pipeline
+instrumentation. Iter-001j (Guard Module) was accepted as a
+FOUNDATION ONLY — P0 is NOT complete.
+
+## Immutable constraints (must hold throughout Iter-001k)
+- `selective_live_send_enabled` must remain **false** (Preview + Prod).
+- `production_writes_locked` must remain **true** (Preview + Prod).
+- No deploy from the agent.
+- No real send to قيود.
+- No UI Manual Send button.
+- No CSV / Q2 Report / bank_transfer routing.
+- Do NOT modify `api_client.py` unless the change is a strictly-
+  additive defense-in-depth attribute check.
+
+## Currently safe because
+- `selective_live_send_enabled=false` → pipeline never enters the
+  send branch.
+- `production_writes_locked=true` → `api_client._request()` rejects
+  every POST/PUT/PATCH/DELETE and records to
+  `qoyod_write_lock_attempts`.
+- `qoyod_write_lock_attempts` count = 0 → no attempted writes.
+- The 3 rows in `qoyod_invoices` predate this session.
+
+## Iter-001j surface — ready to be adopted
+Module: `backend/integrations/qoyod/selective_send_guard.py`
+
+```python
+from integrations.qoyod.selective_send_guard import (
+    SelectiveSendPolicyBlocked,     # raised on block
+    assert_send_allowed,             # decision on allow, raises on block
+    apply_send_date_to_qoyod_payload,  # canonical date stamper
+)
+```
+
+### `assert_send_allowed(...)`
+Signature:
+```python
+assert_send_allowed(
+    *,
+    order: dict,                      # rich order (see below)
+    settings: dict,                   # qoyod_settings snapshot
+    manual_send_requested: bool = False,
+    manual_approval_phrase: Optional[str] = None,
+    now_utc: Optional[datetime] = None,   # override for tests
+) -> SelectiveSendDecision            # RETURNS on allow
+                                      # RAISES SelectiveSendPolicyBlocked
+                                      # on block
+```
+
+### Expected `order` dict shape (build from pipeline scope):
+```python
+{
+    "order_number": str,
+    "salla_order_id": str,
+    "salla_order_created_at": str,   # ISO date YYYY-MM-DD (from Salla)
+    "status": str,                   # order_status
+    "payment_method": str,
+    "existing_qoyod_invoice_id": Any,  # None / DRY: / PREVIEW: / real
+    "customer_status": {
+        "resolved": bool,
+        "qoyod_id": Any,             # int / DRY:X / PREVIEW:X / None
+        "reason": Optional[str],
+    },
+    "products_status": {
+        "resolved": bool,
+        "resolved_count": int,
+        "dry_run_only": int,
+        "missing": list[str],        # unmapped SKUs
+    },
+    "totals_status": {
+        "valid": bool,
+        "total": float,
+        "expected": float,
+        "diff": float,               # positive OR negative
+    },
+}
+```
+
+### `apply_send_date_to_qoyod_payload(payload, decision)`
+- Stamps every top-level and nested occurrence of `date`,
+  `issue_date`, `invoice_date`, `due_date`, `payment_date`,
+  `receipt_date` with `decision.send_date_riyadh` (YYYY-MM-DD).
+- Scrubs `completed_at`, `delivered_at`, `paid_at`, `received_at`,
+  `order_created_at`, `created_at` from the payload.
+- Idempotent. Rejects `None` decision.
+
+## Files to instrument (Iter-001k tasks)
+
+### 1. `backend/integrations/qoyod/pipeline.py`
+- **Line ~778** (before `api_client.create_invoice(invoice_payload, idem=invoice_idem)`):
+    ```python
+    try:
+        decision = assert_send_allowed(
+            order=_build_policy_order_from_pipeline_scope(...),
+            settings=settings,
+        )
+    except SelectiveSendPolicyBlocked as blocked:
+        # Park the row with blocker_code (mirror the existing
+        # QoyodWriteLockedError handling pattern at line ~786).
+        await db.integration_inbox.update_one(
+            {"user_id": user_id, "trace_id": trace_id},
+            {"$set": {
+                "pipeline_stage":
+                    f"SELECTIVE_SEND_BLOCKED:{blocked.blocker_code}",
+                "selective_send_blocker_code": blocked.blocker_code,
+                "selective_send_blocker_reason":
+                    blocked.blocker_reason,
+                "updated_at": datetime.now(timezone.utc),
+            }})
+        return {"stage": "blocked",
+                "blocker_code": blocked.blocker_code,
+                "blocker_reason": blocked.blocker_reason,
+                "trace_id": trace_id}
+    invoice_payload = apply_send_date_to_qoyod_payload(
+        invoice_payload, decision)
+    inv_resp = await api_client.create_invoice(invoice_payload,
+                                                idem=invoice_idem)
+    ```
+- **Line ~1276** (before `create_invoice_payment`):
+    - Reuse the SAME `decision` object captured at line 778 above
+      (do NOT re-compute — invoice + payment must share one frozen
+      `send_timestamp_riyadh`).
+    - `payment_payload = apply_send_date_to_qoyod_payload(payment_payload, decision)`.
+
+### 2. `backend/integrations/qoyod/one_shot_reprocess.py`
+- Locate the `approval_phrase` verification (existing).
+- Immediately AFTER that check, BEFORE any `api_client` write:
+    ```python
+    try:
+        decision = assert_send_allowed(
+            order=..., settings=...)
+    except SelectiveSendPolicyBlocked as blocked:
+        return {"stage": "blocked",
+                "blocker_code": blocked.blocker_code, ...}
+    ```
+- **Contract**: approval_phrase alone MUST NOT bypass the policy.
+  Even a correct approval phrase must yield a block when the policy
+  says block (gate disabled, write lock, Q2 cutoff, DRY IDs, etc.).
+
+### 3. Payload builders
+- Every builder that constructs invoice/payment/receipt payloads
+  must call `apply_send_date_to_qoyod_payload(payload, decision)`
+  once, using the ONE decision captured for that send attempt.
+- Rule: **ONE frozen `send_timestamp_riyadh` per send attempt** —
+  invoice + payment + receipt share it. Do NOT call
+  `should_allow_selective_live_send()` twice; capture once, reuse.
+
+## Test matrix (all must pass)
+Use `respx` or a mock httpx client to prove `create_invoice` /
+`create_invoice_payment` / `create_receipt` are NEVER invoked when
+the policy blocks. Cover:
+1. Pipeline blocked on `gate_disabled`.
+2. Pipeline blocked on `write_lock_active`.
+3. Pipeline blocked on `before_sync_start_date` (Q2).
+4. Pipeline blocked on DRY / PREVIEW / null IDs.
+5. Pipeline blocked on `bank_transfer_on_hold_iter_294`.
+6. Pipeline blocked on `totals_mismatch_hard_diff_gt_0.01`.
+7. Pipeline blocked on `invoice_trigger_status_not_enabled`
+   (delivered / shipping default).
+8. one_shot blocked on `manual_approval_phrase_required`.
+9. one_shot blocked by policy EVEN WITH correct approval phrase
+   (feed a `gate_disabled` settings scenario + correct phrase →
+   still blocks).
+10. `create_invoice` is not called before `assert_send_allowed`.
+11. `create_invoice_payment` is not called when invoice stage blocked.
+12. Invoice + payment share the SAME `send_timestamp_riyadh` (freeze
+    via `now_utc` in a test; assert equal in both payloads sent to
+    the mock client).
+13. All payload date fields = `send_date_riyadh`.
+14. `completed_at` / `delivered_at` / `paid_at` are scrubbed from
+    the actual payload sent to httpx.
+15. Master gate `selective_live_send_enabled=false` yields no real
+    send even in tests (verify via `qoyod_write_lock_attempts`
+    remains 0).
+
+## Deliverables at the end of Iter-001k
+- Modified files: `pipeline.py`, `one_shot_reprocess.py`, and any
+  payload builder helpers that carry date fields.
+- New/updated tests: `test_pipeline_selective_send.py` (or extend
+  existing pipeline tests).
+- Grep proof: `grep -n "create_invoice\|create_invoice_payment"
+  pipeline.py one_shot_reprocess.py` — every call site preceded by
+  `assert_send_allowed` in the same function scope.
+- 163+ tests (all existing) + new pipeline integration tests pass.
+- `qoyod_write_lock_attempts` count still 0 after test run.
+- Preview `qoyod_settings.main.selective_live_send_enabled == false`.
+- Preview `qoyod_settings.main.production_writes_locked == true`.
+
+## Do NOT modify in Iter-001k
+- `api_client.py` write-lock guard (existing, working).
+- `selective_send_policy.py` / `selective_send_guard.py` (frozen
+  contract).
+- Any DB config in Production (owner will do this manually).
+- Frontend UI (no Manual Send button in this iteration).
+
+## Reference: existing pipeline write-lock pattern to mirror
+```python
+# From pipeline.py around line 786-810 (existing pattern):
+except QoyodWriteLockedError as exc:
+    await db.integration_inbox.update_one(
+        {...},
+        {"$set": {"pipeline_stage": "WRITE_LOCKED",
+                  "write_lock_reason": str(exc),
+                  ...}})
+    return {"stage": "write_locked", ...}
+```
+Use the SAME shape for `SelectiveSendPolicyBlocked` — it should feel
+like a peer of `QoyodWriteLockedError` to the pipeline reader.
+
+# ══════════════════════════════════════════════════════════════════
+
+
+
 ## Iter-001j — Phase C P0 Wiring: Guard Module + Integration Contract (2026-07-01)
 
 ### Scope decision
