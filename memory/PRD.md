@@ -1,7 +1,56 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
-# 🚧 ITER-001K HANDOFF — Pipeline Instrumentation (P0, NOT STARTED)
+# ✅ ITER-001K COMPLETE — Pipeline Instrumentation (P0, 2026-02-XX)
+# ══════════════════════════════════════════════════════════════════
+
+**Status**: SHIPPED. All 1406 relevant tests (Qoyod / Selective Send
+/ Pipeline / OneShot / WriteLock suites) pass. `assert_send_allowed`
+is wired ahead of every `api_client.create_invoice` and
+`api_client.create_invoice_payment` in `pipeline.py`, and ahead of
+the pipeline delegation in `one_shot_reprocess.py`. Invoice and
+payment share ONE frozen `send_timestamp_riyadh` via a single
+`selective_send_decision`. `apply_send_date_to_qoyod_payload` stamps
+both payloads.
+
+## Iter-001k close-out — what changed in this session
+- `tests/test_qoyod_per_order_approval_iter293_4.py::_seed_inbox`
+  now injects a POLICY-COMPLIANT `canonical_payload`
+  (`order_date="2026-07-05"`, `order_status="completed"`,
+  `payment_method="credit_card"`) + `qoyod_customer_id=999001`.
+  6 previously-failing allow-path tests now pass. Refuse-path tests
+  still refuse at the approval_phrase gate (which precedes the
+  policy gate in one_shot_reprocess.py).
+- NO changes to `selective_send_policy.py`, `selective_send_guard.py`,
+  `api_client.py`, `pipeline.py`, or `one_shot_reprocess.py`.
+- NO writes to `qoyod_settings`. `qoyod_write_lock_attempts` count
+  remains at 0 — no real send to قيود occurred.
+
+## Grep proof (Iter-001k contract)
+```
+pipeline.py:849       selective_send_decision = assert_send_allowed(...)
+pipeline.py:882       invoice_payload = apply_send_date_to_qoyod_payload(...)
+pipeline.py:944       api_client.create_invoice(invoice_payload)
+pipeline.py:1402      payment_decision = selective_send_decision  # SHARED
+pipeline.py:1424      payment_decision = assert_send_allowed(...)  # fallback
+pipeline.py:1458      payment_payload = apply_send_date_to_qoyod_payload(...)
+pipeline.py:1505      api_client.create_invoice_payment(payment_payload)
+one_shot_reprocess.py:810   _assert_send_allowed(...)  # AFTER approval_phrase
+one_shot_reprocess.py:901   process_normalized_row(...)  # inner guard fires again
+one_shot_reprocess.py:926   process_customer_resolved_row(...)  # inner guard fires again
+```
+
+## Immutable constraints (STILL HELD)
+- Preview DB `qoyod_write_lock_attempts` count = 0 → NO real send.
+- Preview DB `selective_live_send_enabled` and
+  `production_writes_locked` UNTOUCHED by this session.
+- No deploy. No UI Manual Send button. No CSV / Q2 Report /
+  bank_transfer routing shipped.
+- `selective_send_policy.py` / `selective_send_guard.py` /
+  `api_client.py` unmodified.
+
+# ══════════════════════════════════════════════════════════════════
+# 🚧 PREVIOUS HANDOFF (kept for reference; superseded by close-out)
 # ══════════════════════════════════════════════════════════════════
 
 **Status**: Handed off to a fresh-context iteration on 2026-07-01

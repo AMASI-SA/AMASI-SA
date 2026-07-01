@@ -137,13 +137,38 @@ class _DB:
 
 def _seed_inbox(db, *, order_number: str, trace_id: str = "t-1",
                 stage: str = "NORMALIZED"):
+    # Iter-001k — Seed the row with a POLICY-COMPLIANT canonical
+    # payload so the Selective Send guard (invoked by
+    # one_shot_reprocess AFTER approval_phrase verification) does
+    # NOT block on missing_order_created_at / status_not_eligible /
+    # payment_method_not_allowed. These tests exercise the approval
+    # gate specifically — the policy allow-path is a prerequisite,
+    # not the subject under test.
+    #
+    # Tests that intentionally trip the approval gate (refuse_*,
+    # phrase mismatch, wrong phrase) fail BEFORE the policy check
+    # in one_shot_reprocess.py, so this compliant seed is safe for
+    # them too.
     row = {
-        "id":                 "row-" + trace_id,
-        "user_id":             "main",
-        "trace_id":            trace_id,
-        "salla_order_number":  order_number,
-        "pipeline_stage":      stage,
-        "raw_payload":         {"order_number": order_number},
+        "id":                    "row-" + trace_id,
+        "user_id":               "main",
+        "trace_id":              trace_id,
+        "salla_order_number":    order_number,
+        "salla_order_id":        order_number,
+        "pipeline_stage":        stage,
+        "raw_payload":           {"order_number": order_number},
+        # Resolved Qoyod customer id so the policy's
+        # `customer_not_resolved` / `customer_dry_or_null` gates pass.
+        "qoyod_customer_id":     999001,
+        # Post-Q3 order (>= 2026-07-01), `completed` status, allowed
+        # payment method → no policy blocker on the allow path.
+        "canonical_payload":     {
+            "order_number":   order_number,
+            "order_id":       order_number,
+            "order_date":     "2026-07-05",
+            "order_status":   "completed",
+            "payment_method": "credit_card",
+        },
     }
     db.integration_inbox.rows.append(row)
     return row
