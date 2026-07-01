@@ -1503,11 +1503,19 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         }
 
     # ── Pending Orders (GET — read-only, categorised view) ──────────
-    # Iter-293.5 — Read-only surface for the operator UI at
-    # /integrations/qoyod/pending-orders. Groups every row that is
-    # stuck (or "would be sendable if the flag were on") into one of
-    # the seven pending categories. NO Qoyod calls, NO writes, NO
-    # sensitive data leaked — bypass hashes are truncated to 12 chars.
+    # Iter-293.5 (updated 2026-07-01 per user directive):
+    #
+    # The page surfaces EVERY inbox row that satisfies EITHER:
+    #   (a) pipeline_stage is one of the well-known HOLD/failure
+    #       stages listed in _PENDING_STAGES; OR
+    #   (b) salla_order_status_native indicates the order SHOULD have
+    #       an invoice (completed / delivered / shipped / in_progress
+    #       / تم التنفيذ / جاري التوصيل / تم التوصيل / تم الشحن) AND
+    #       the row does NOT yet carry a real qoyod_invoice_id.
+    #
+    # For each order (identified by salla_order_id/number) only the
+    # LATEST trace is shown — older traces are discarded so a
+    # canceled-then-completed order surfaces as `completed`, not stale.
     _PENDING_STAGES: tuple[str, ...] = (
         "LOCKED_AWAITING_APPROVAL",
         "INVOICE_CREATED_TOTAL_MISMATCH",
@@ -1519,6 +1527,15 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         "FAILED_INVOICE",
         "DEAD_LETTER",
     )
+    # Salla statuses that make an order billable (should appear in
+    # the queue when there is no قيود invoice yet).
+    _ELIGIBLE_STATUSES_FOR_QUEUE: frozenset[str] = frozenset({
+        # English canonicals + common Salla slugs
+        "completed", "in_progress", "processing", "shipping",
+        "shipped", "delivered",
+        # Arabic labels — Salla emits these on some tenants
+        "تم التنفيذ", "جاري التوصيل", "تم التوصيل", "تم الشحن",
+    })
     _CATEGORY_ORDER: tuple[str, ...] = (
         "ready_to_send",
         "needs_mapping",
@@ -1542,6 +1559,66 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             "DEAD_LETTER":                         "stale_or_cancelled",
         }.get(stage, "needs_mapping")
 
+    def _categorise_row(row: dict) -> str:
+        """Iter-293.5 (2026-07-01 update) — Pick a category for a
+        row that was surfaced by the eligibility net. Falls back to
+        stage-based mapping for classic HOLD stages, then reads the
+        canonical payment_method + payload leaks + existing-invoice
+        signal to derive a category for rows that are 'in-flight'
+        (RULES_APPLIED / PRODUCT_RESOLVED / CUSTOMER_RESOLVED etc.)
+        but haven't yet reached قيود."""
+        stage = row.get("pipeline_stage") or ""
+        # Explicit stages win — they carry the most reliable signal.
+        if stage in {
+            "LOCKED_AWAITING_APPROVAL", "UNRESOLVED_QOYOD_DEPENDENCY",
+            "BANK_TRANSFER_PAYMENT_ROUTING_PENDING",
+            "HOLD_COD_PENDING_FIX", "HOLD_UNSUPPORTED_PAYMENT_METHOD",
+            "INVOICE_CREATED_TOTAL_MISMATCH",
+            "STALE_TRACE_NOT_CURRENT_ORDER_STATE", "FAILED_INVOICE",
+            "DEAD_LETTER",
+        }:
+            return _stage_to_category(stage)
+        # Derived — the row is billable-but-not-yet-in-قيود.
+        canonical = row.get("canonical_payload") or {}
+        pm = str(canonical.get("payment_method") or "").strip().lower()
+        payloads = row.get("qoyod_payloads") or {}
+        inv_payload = payloads.get("invoice") or {}
+        # 1. Payment method routing.
+        if pm in {"bank_transfer", "banktransfer"}:
+            return "bank_transfer_hold"
+        if pm in {"cod", "cash_on_delivery", "cashondelivery"}:
+            # If mapping is broken, needs_mapping wins.
+            if _payload_has_leak(inv_payload):
+                return "needs_mapping"
+            return "cod"
+        prepaid = {"mada", "apple_pay", "applepay", "stc_pay", "stcpay",
+                   "credit_card", "creditcard", "cc", "visa",
+                   "mastercard", "master_card", "american_express",
+                   "americanexpress", "amex"}
+        if pm not in prepaid and pm not in {"", None}:
+            return "unsupported_method"
+        # 2. Payload readiness.
+        if _payload_has_leak(inv_payload):
+            return "needs_mapping"
+        # 3. Otherwise — the row is billable and clean → ready.
+        return "ready_to_send"
+
+    def _payload_has_leak(payload) -> bool:
+        """Deep scan for DRY: / PREVIEW: / null id leaks."""
+        if isinstance(payload, str):
+            return payload.startswith("DRY:") or payload.startswith(
+                "PREVIEW:")
+        if isinstance(payload, dict):
+            for k, v in payload.items():
+                if k in ("contact_id", "product_id") and v is None:
+                    return True
+                if _payload_has_leak(v):
+                    return True
+            return False
+        if isinstance(payload, list):
+            return any(_payload_has_leak(x) for x in payload)
+        return False
+
     @router.get("/admin/qoyod/pending-orders")
     async def admin_qoyod_pending_orders(
         limit: int = 200,
@@ -1549,36 +1626,101 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     ):
         tenant = _tenant_id(user)
         limit = max(1, min(int(limit), 500))
-        q = {"user_id": tenant,
-             "pipeline_stage": {"$in": list(_PENDING_STAGES)}}
-        cursor = db.integration_inbox.find(
-            q, {"_id": 0}
-        ).sort([("received_at", -1)])
-        raw_rows = await cursor.to_list(length=limit)
-        # Load the flag (from the same loader as pipeline uses).
+        # Two overlapping queries — well-known HOLD stages, PLUS any
+        # inbox row whose Salla status is billable and has no real
+        # قيود invoice yet. Overlap is deduplicated below.
+        stage_query = {
+            "user_id": tenant,
+            "pipeline_stage": {"$in": list(_PENDING_STAGES)},
+        }
+        status_query = {
+            "user_id": tenant,
+            "$or": [
+                {"canonical_payload.order_status_native":
+                    {"$in": list(_ELIGIBLE_STATUSES_FOR_QUEUE)}},
+                {"canonical_payload.order_status":
+                    {"$in": list(_ELIGIBLE_STATUSES_FOR_QUEUE)}},
+            ],
+            # No REAL qoyod_invoice_id yet. DRY:/PREVIEW: values are
+            # allowed here (they represent unresolved mappings, not
+            # a shipped invoice).
+            "$and": [{
+                "$or": [
+                    {"qoyod_invoice_id": None},
+                    {"qoyod_invoice_id": ""},
+                    {"qoyod_invoice_id": {"$regex": "^(DRY:|PREVIEW:)"}},
+                ]}],
+            "pipeline_stage": {"$nin": ["COMPLETED",
+                                        "COMPLETED_WITH_ROUNDING_WARNING"]},
+        }
+        # Fetch, cap per-query at limit; union afterwards.
+        rows_a = await db.integration_inbox.find(
+            stage_query, {"_id": 0}).sort(
+            [("received_at", -1)]).to_list(length=limit)
+        rows_b = await db.integration_inbox.find(
+            status_query, {"_id": 0}).sort(
+            [("received_at", -1)]).to_list(length=limit)
+        # Deduplicate: keep only the LATEST trace per
+        # (salla_order_id / salla_order_number) — a canceled event
+        # arriving after a completed one should hide the earlier row.
+        by_order: dict[str, dict] = {}
+        for row in rows_a + rows_b:
+            canonical = row.get("canonical_payload") or {}
+            key = str(
+                canonical.get("order_id")
+                or row.get("salla_order_id")
+                or row.get("salla_order_number")
+                or row.get("id"))
+            existing = by_order.get(key)
+            if existing is None:
+                by_order[key] = row
+                continue
+            # Later received_at wins.
+            a = row.get("received_at") or ""
+            b = existing.get("received_at") or ""
+            if str(a) > str(b):
+                by_order[key] = row
+        raw_rows = sorted(
+            by_order.values(),
+            key=lambda r: str(r.get("received_at") or ""),
+            reverse=True)[:limit]
+
+        # Load settings for flag + lock display.
         settings_doc = await db.qoyod_settings.find_one(
             {"user_id": tenant}, {"_id": 0}) or {}
         flag_enabled = bool(
             settings_doc.get("selective_live_send_enabled", False))
+        lock_on_by_setting = settings_doc.get(
+            "production_writes_locked", None)
+        # Fail-closed default: absence of the flag means locked.
+        lock_effective = (lock_on_by_setting is None
+                          or bool(lock_on_by_setting))
+        lock_source = (
+            "explicit_setting"
+            if lock_on_by_setting is not None
+            else "fail_closed_default")
 
         buckets: dict[str, list[dict]] = {c: [] for c in _CATEGORY_ORDER}
         for row in raw_rows:
-            stage = row.get("pipeline_stage") or ""
-            category = _stage_to_category(stage)
+            category = _categorise_row(row)
             canonical = row.get("canonical_payload") or {}
             payloads = row.get("qoyod_payloads") or {}
             totals = row.get("totals_comparison") or {}
             existing_qid = row.get("qoyod_invoice_id") or ""
+            order_status_native = (
+                canonical.get("order_status_native")
+                or canonical.get("order_status"))
             # Compact projection — one row per pending order.
             buckets[category].append({
                 "row_id":               row.get("id"),
                 "trace_id":             row.get("trace_id"),
                 "salla_order_number":   row.get("salla_order_number")
                                         or canonical.get("order_number"),
-                "salla_order_id":       row.get("salla_order_id"),
-                "salla_order_status":   canonical.get("order_status_native"),
+                "salla_order_id":       row.get("salla_order_id")
+                                        or canonical.get("order_id"),
+                "salla_order_status":   order_status_native,
                 "received_at":          row.get("received_at"),
-                "pipeline_stage":       stage,
+                "pipeline_stage":       row.get("pipeline_stage"),
                 "payment_method":       canonical.get("payment_method"),
                 "salla_total":          canonical.get("total_amount"),
                 "qoyod_invoice_id":     existing_qid or None,
@@ -1598,11 +1740,10 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                                         .get("reason"),
                 "totals_comparison":    totals or None,
                 "actions_available":    _pending_actions_for_stage(
-                                            stage, flag_enabled),
+                                            row.get("pipeline_stage") or "",
+                                            flag_enabled),
             })
 
-        # Category counts (empty categories included so the UI can
-        # render zero-badges without extra logic).
         counts = {c: len(rs) for c, rs in buckets.items()}
         counts["total"] = sum(counts.values())
 
@@ -1610,10 +1751,11 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             "ok":                          True,
             "mode":                        "read_only",
             "qoyod_request_sent":          False,
-            "production_writes_locked":    bool(settings_doc.get(
-                                                "production_writes_locked",
-                                                True)),
+            "production_writes_locked":    lock_effective,
+            "lock_source":                 lock_source,
             "selective_live_send_enabled": flag_enabled,
+            "eligible_statuses_for_pending_queue": sorted(
+                _ELIGIBLE_STATUSES_FOR_QUEUE),
             "counts":                      counts,
             "categories":                  buckets,
             "generated_at":                _iso_now(),

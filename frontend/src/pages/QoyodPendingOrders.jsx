@@ -134,6 +134,11 @@ export default function QoyodPendingOrders() {
             <b className={lockOn ? "text-emerald-700" : "text-rose-700"}>
               {" "}{String(lockOn)}
             </b>
+            {data?.lock_source && (
+              <span className="text-slate-500 mr-1">
+                {" "}<i>({data.lock_source})</i>
+              </span>
+            )}
           </span>
           <span className="font-mono">
             selective_live_send_enabled =
