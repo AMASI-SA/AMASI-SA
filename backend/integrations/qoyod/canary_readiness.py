@@ -35,9 +35,61 @@ from integrations.qoyod.dry_rca_report import (
     _is_dry_or_preview,
     _normalise_phone,
 )
+from integrations.qoyod.eligible_orders import _normalize_status
+from integrations.qoyod.selective_send_policy import (
+    QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT,
+)
 
 
 PAYLOAD_DATE_SOURCE: str = "send_date"
+
+
+_GATE_KEYS = (
+    "selective_live_send_enabled",
+    "production_writes_locked",
+    "qoyod_sync_start_date",
+    "qoyod_tax_period",
+    "bank_transfer_routing_enabled",
+    "qoyod_invoice_date_source",
+    "qoyod_enabled_invoice_trigger_statuses",
+)
+
+
+async def _load_gates_snapshot(db, user_id: str) -> dict:
+    """Robust settings loader. Reads the full doc (minus `_id`) and
+    keeps only the seven gate fields. Guards against the historical
+    projection-drops-fields bug reported on Production."""
+    doc = await db.qoyod_settings.find_one(
+        {"user_id": user_id}, {"_id": 0}) or {}
+    return {k: doc[k] for k in _GATE_KEYS if k in doc}
+
+
+def _canonical_status_diagnostic(
+    canonical: dict, enabled: list[str],
+) -> dict:
+    """Show EXACTLY how the policy will read the status field for
+    this order — including the fallback chain and normalization."""
+    # Same fallback chain as `selective_send_policy._build_policy_order`.
+    raw_status_primary = canonical.get("status")
+    raw_status_secondary = canonical.get("order_status")
+    raw_status = raw_status_primary or raw_status_secondary or ""
+    normalized = _normalize_status(raw_status)
+    enabled_normalized = {_normalize_status(s) for s in enabled if s}
+    is_enabled = normalized in enabled_normalized
+    return {
+        "status_raw":                       raw_status,
+        "status_source":  ("canonical_payload.status"
+                            if raw_status_primary
+                            else ("canonical_payload.order_status"
+                                  if raw_status_secondary else None)),
+        "normalized_status":                normalized,
+        "enabled_trigger_statuses":         enabled,
+        "enabled_trigger_statuses_normalized": sorted(enabled_normalized),
+        "invoice_trigger_status_check_source":
+            "selective_send_policy._normalize_status "
+            "(same code path used by the guard)",
+        "invoice_trigger_status_enabled":   is_enabled,
+    }
 
 
 def _preview_customer_payload(canonical: dict) -> tuple[dict, dict]:
@@ -146,14 +198,13 @@ def _simulate_post_state(
     canonical: dict,
     per_sku: list[dict],
     real_customer_id: Optional[Any],
+    status_diag: dict,
 ) -> dict:
     """Assume customer resolved + all products resolved. Enumerate
     the remaining Selective-Send blockers that would still fire."""
     remaining: list[str] = []
 
     # ── Immutable operator-controlled blockers ──────────────────
-    # These stay listed because they are NOT auto-cleared by the
-    # canary flow — the operator flips them explicitly.
     remaining.append("gate_disabled")
     remaining.append("write_lock_active")
 
@@ -162,9 +213,8 @@ def _simulate_post_state(
     if payment in {"bank_transfer", "bank", "wire_transfer"}:
         remaining.append("bank_transfer_on_hold_iter_294")
 
-    # ── Status ──────────────────────────────────────────────────
-    if str(canonical.get("status") or "").lower() != "completed" \
-            and canonical.get("status") != "تم التنفيذ":
+    # ── Status (uses shared policy normalizer) ─────────────────
+    if not status_diag.get("invoice_trigger_status_enabled"):
         remaining.append("invoice_trigger_status_not_enabled")
 
     # ── Customer post-simulation ───────────────────────────────
@@ -208,17 +258,7 @@ async def build_canary_readiness_preview(
     user_id: str,
     order_number: str,
 ) -> dict:
-    settings = await db.qoyod_settings.find_one(
-        {"user_id": user_id},
-        {"_id": 0,
-         "selective_live_send_enabled":            1,
-         "production_writes_locked":               1,
-         "qoyod_sync_start_date":                  1,
-         "qoyod_tax_period":                       1,
-         "bank_transfer_routing_enabled":          1,
-         "qoyod_invoice_date_source":              1,
-         "qoyod_enabled_invoice_trigger_statuses": 1,
-         }) or {}
+    settings = await _load_gates_snapshot(db, user_id)
     if settings.get("selective_live_send_enabled") is True or \
             settings.get("production_writes_locked") is False:
         raise GatesNotFailClosedError(
@@ -240,6 +280,12 @@ async def build_canary_readiness_preview(
     canonical = row.get("canonical_payload") or {}
     per_sku = await _per_sku_resolution(db, user_id, canonical)
 
+    enabled_statuses = settings.get(
+        "qoyod_enabled_invoice_trigger_statuses") \
+        or list(QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT)
+    status_diag = _canonical_status_diagnostic(
+        canonical, enabled_statuses)
+
     # ── Customer resolution probe (Read-Only) ───────────────────
     cust = canonical.get("customer") or {}
     phone = _normalise_phone(
@@ -258,14 +304,10 @@ async def build_canary_readiness_preview(
         or (real_ext or {}).get("qoyod_customer_id")
         or "<NEW_ID_ASSIGNED_BY_QOYOD_ON_CREATE>")
 
-    # ── Preview the customer payload ────────────────────────────
     payload, field_status = _preview_customer_payload(canonical)
-
-    # ── Simulate post-state ─────────────────────────────────────
     post_state = _simulate_post_state(
-        canonical, per_sku, real_customer_id_after_adopt)
+        canonical, per_sku, real_customer_id_after_adopt, status_diag)
 
-    # ── send-date confirmation ──────────────────────────────────
     send_date_diagnostic = {
         "payload_date_source":      PAYLOAD_DATE_SOURCE,
         "invoice_date_will_use":    "send_date_riyadh",
@@ -281,13 +323,18 @@ async def build_canary_readiness_preview(
     return {
         "order_number":                    order_number,
         "found":                           True,
-        "traces_available":                1,   # limit(3) upstream
+        "traces_available":                1,
         "gates_snapshot":                  settings,
         # ── Canonical baseline ──────────────────────────────────
         "salla_order_id":                  canonical.get("order_id"),
         "salla_official_total":            canonical.get("total_amount"),
         "payment_method":                  canonical.get("payment_method"),
-        "status":                          canonical.get("status"),
+        "status":                          status_diag["status_raw"],
+        "normalized_status":               status_diag[
+                                            "normalized_status"],
+        "enabled_trigger_statuses":        status_diag[
+                                            "enabled_trigger_statuses"],
+        "invoice_trigger_status_check":    status_diag,
         # ── Products (per-SKU resolution) ───────────────────────
         "products_resolution":             per_sku,
         # ── Customer preview ────────────────────────────────────
