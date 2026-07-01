@@ -34,6 +34,7 @@ import logging
 from dataclasses import dataclass, field, asdict
 from datetime import date, datetime, timezone
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 from integrations.qoyod.eligible_orders import (
     QOYOD_SYNC_START_DATE,
@@ -41,12 +42,34 @@ from integrations.qoyod.eligible_orders import (
     ELIGIBLE_STATUSES,
     _is_eligible_status,
     _is_real_invoice_id,
+    _normalize_status,
     _parse_iso_date,
     build_eligible_orders_report,
 )
 
 
 logger = logging.getLogger("selective_send_policy")
+
+
+# ── Iter-001g/h — Invoice date policy ───────────────────────────────
+# Per user directive (2026-07-01): invoice_date / issue_date in the
+# Qoyod payload MUST be the SEND date in Asia/Riyadh — NOT
+# order.created_at, completed_at, delivered_at, paid_at, or webhook
+# received_at.
+QOYOD_INVOICE_DATE_SOURCE_DEFAULT: str = "send_date"
+QOYOD_SEND_TIMEZONE: str = "Asia/Riyadh"
+_RIYADH_TZ = ZoneInfo(QOYOD_SEND_TIMEZONE)
+
+
+# ── Iter-001h — Default enabled trigger statuses (STRICT) ───────────
+# Per user directive (2026-07-01): only `completed` / `تم التنفيذ`
+# trigger send by default. `delivered` / `shipping` / `جاري التوصيل`
+# / `تم التوصيل` remain visible in Eligible Orders for diagnostics
+# but are BLOCKED by the Selective Live Send policy unless the tenant
+# opts them in explicitly via `qoyod_enabled_invoice_trigger_statuses`.
+QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT: tuple[str, ...] = (
+    "completed", "تم التنفيذ",
+)
 
 
 # ── Payment method allow-list (verbatim from user directive) ────────
@@ -83,6 +106,7 @@ class BlockerCode:
     BEFORE_SYNC_START_DATE      = "before_sync_start_date"
     MISSING_ORDER_CREATED_AT    = "missing_order_created_at"
     STATUS_NOT_ELIGIBLE         = "status_not_eligible"
+    INVOICE_TRIGGER_STATUS_NOT_ENABLED = "invoice_trigger_status_not_enabled"
     ALREADY_SENT                = "already_sent"
     BANK_TRANSFER_ON_HOLD       = "bank_transfer_on_hold_iter_294"
     PAYMENT_METHOD_NOT_ALLOWED  = "payment_method_not_allowed"
@@ -103,6 +127,8 @@ class SelectiveSendDecision:
     salla_order_id:             Optional[str]
     salla_order_created_at:     Optional[str]
     status:                     Optional[str]
+    normalized_status:          Optional[str]
+    enabled_trigger_statuses:   list[str]
     payment_method:             Optional[str]
     decision:                   str                 # "allow" | "block"
     blocker_reason:             Optional[str]
@@ -114,6 +140,12 @@ class SelectiveSendDecision:
     dry_ids_detected:           list[str] = field(default_factory=list)
     existing_qoyod_invoice_id:  Optional[Any] = None
     warnings:                   list[str] = field(default_factory=list)
+    # Iter-001h — Invoice date contract (always send_date, Asia/Riyadh)
+    invoice_date_source:        str = QOYOD_INVOICE_DATE_SOURCE_DEFAULT
+    would_use_invoice_date:     Optional[str] = None    # YYYY-MM-DD
+    send_timezone:              str = QOYOD_SEND_TIMEZONE
+    send_timestamp_riyadh:      Optional[str] = None    # full ISO
+    send_date_riyadh:           Optional[str] = None    # YYYY-MM-DD
     # Snapshot of the gate values active at decision time.
     gates_snapshot:             dict = field(default_factory=dict)
 
@@ -148,6 +180,7 @@ def should_allow_selective_live_send(
     order: dict,
     settings: dict,
     sync_start_date: Optional[date] = None,
+    now_utc: Optional[datetime] = None,
 ) -> SelectiveSendDecision:
     """PURE policy — no DB, no I/O, no side-effects.
 
@@ -171,12 +204,20 @@ def should_allow_selective_live_send(
           - selective_live_send_enabled  (default False)
           - production_writes_locked     (default True)
           - qoyod_sync_start_date        (default 2026-07-01)
+          - qoyod_invoice_date_source    (default 'send_date')
+          - qoyod_enabled_invoice_trigger_statuses
+                (default ['completed', 'تم التنفيذ'])
     sync_start_date : date, optional
         Override for tests. Falls back to
         `settings['qoyod_sync_start_date']` and then to
         `QOYOD_SYNC_START_DATE`.
+    now_utc : datetime, optional
+        Override for tests. When omitted, `datetime.now(timezone.utc)`
+        is used.
 
-    Returns a `SelectiveSendDecision`. Every field is populated.
+    Returns a `SelectiveSendDecision`. Every field is populated
+    including the Asia/Riyadh send timestamp that WOULD be used as
+    the قيود invoice_date.
     """
     order_number  = order.get("order_number")
     salla_order_id = order.get("salla_order_id")
@@ -190,6 +231,29 @@ def should_allow_selective_live_send(
     products_status = order.get("products_status") or {}
     totals_status   = order.get("totals_status") or {}
     diff = float(totals_status.get("diff") or 0.0)
+
+    # ── Send date computation (Asia/Riyadh) ────────────────────
+    _now = now_utc or datetime.now(timezone.utc)
+    send_ts_riyadh = _now.astimezone(_RIYADH_TZ)
+    send_ts_iso    = send_ts_riyadh.isoformat()
+    send_date_str  = send_ts_riyadh.date().isoformat()
+    invoice_date_source = settings.get(
+        "qoyod_invoice_date_source",
+        QOYOD_INVOICE_DATE_SOURCE_DEFAULT)
+
+    # ── Enabled trigger statuses (STRICT) ──────────────────────
+    enabled_trigger_statuses_raw = settings.get(
+        "qoyod_enabled_invoice_trigger_statuses")
+    if enabled_trigger_statuses_raw is None:
+        enabled_trigger_statuses = list(
+            QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT)
+    else:
+        # Accept list / tuple / frozenset — always normalise contents.
+        enabled_trigger_statuses = [
+            str(s) for s in enabled_trigger_statuses_raw if s]
+    _enabled_normalized = {
+        _normalize_status(s) for s in enabled_trigger_statuses}
+    normalized_status = _normalize_status(status)
 
     # Gate snapshot (Fail-Closed defaults).
     gate_enabled    = bool(settings.get("selective_live_send_enabled",
@@ -211,6 +275,20 @@ def should_allow_selective_live_send(
     if _looks_like_preview_id(existing_inv):
         dry_ids.append(f"invoice_id={existing_inv}")
 
+    _gates_snap = {
+        "selective_live_send_enabled":   gate_enabled,
+        "production_writes_locked":      write_locked,
+        "qoyod_sync_start_date":         cutoff.isoformat()
+                                          if cutoff else None,
+        "qoyod_tax_period":              settings.get(
+            "qoyod_tax_period", QOYOD_TAX_PERIOD),
+        "bank_transfer_routing_enabled": bool(
+            settings.get("bank_transfer_routing_enabled", False)),
+        "qoyod_invoice_date_source":     invoice_date_source,
+        "qoyod_enabled_invoice_trigger_statuses":
+            list(enabled_trigger_statuses),
+    }
+
     def _block(code: str, reason: str) -> SelectiveSendDecision:
         return SelectiveSendDecision(
             order_number=order_number,
@@ -219,6 +297,8 @@ def should_allow_selective_live_send(
                 created_at_raw.isoformat()
                 if isinstance(created_at_raw, date) else created_at_raw),
             status=status or None,
+            normalized_status=normalized_status or None,
+            enabled_trigger_statuses=list(enabled_trigger_statuses),
             payment_method=payment_method or None,
             decision="block",
             blocker_reason=reason,
@@ -230,17 +310,12 @@ def should_allow_selective_live_send(
             dry_ids_detected=dry_ids,
             existing_qoyod_invoice_id=existing_inv,
             warnings=[],
-            gates_snapshot={
-                "selective_live_send_enabled": gate_enabled,
-                "production_writes_locked":    write_locked,
-                "qoyod_sync_start_date":       cutoff.isoformat()
-                                                if cutoff else None,
-                "qoyod_tax_period":            settings.get(
-                    "qoyod_tax_period", QOYOD_TAX_PERIOD),
-                "bank_transfer_routing_enabled": bool(
-                    settings.get("bank_transfer_routing_enabled",
-                                 False)),
-            },
+            invoice_date_source=invoice_date_source,
+            would_use_invoice_date=send_date_str,
+            send_timezone=QOYOD_SEND_TIMEZONE,
+            send_timestamp_riyadh=send_ts_iso,
+            send_date_riyadh=send_date_str,
+            gates_snapshot=_gates_snap,
         )
 
     # ── Check 1: Master gate (Fail-Closed) ──────────────────────
@@ -259,7 +334,6 @@ def should_allow_selective_live_send(
         )
 
     # ── Check 3: PREVIEW / DRY sentinel invoice IDs ─────────────
-    # Check BEFORE cutoff so we surface both problems in the report.
     if _looks_like_preview_id(existing_inv):
         return _block(
             BlockerCode.PREVIEW_ID_DETECTED,
@@ -288,7 +362,10 @@ def should_allow_selective_live_send(
             f"{cutoff.isoformat()} — الطلب من ربع ضريبي سابق.",
         )
 
-    # ── Check 5: Status normalized eligible ─────────────────────
+    # ── Check 5: Broad status eligibility (defensive) ───────────
+    # Guards against completely unrelated statuses (waiting, pending,
+    # cancelled…). ELIGIBLE_STATUSES = broad "conceptually invoiceable"
+    # superset; the trigger-status check below is stricter.
     if not _is_eligible_status(status):
         return _block(
             BlockerCode.STATUS_NOT_ELIGIBLE,
@@ -296,7 +373,20 @@ def should_allow_selective_live_send(
             f"({sorted(ELIGIBLE_STATUSES)}).",
         )
 
-    # ── Check 6: Already sent (real قيود invoice exists) ────────
+    # ── Check 6: Iter-001h — Enabled trigger status (STRICT) ────
+    # Even if status is broadly eligible (e.g. delivered), the tenant
+    # must have opted it in via `qoyod_enabled_invoice_trigger_statuses`
+    # before Selective Send will allow it. Default enables only
+    # `completed` / `تم التنفيذ` — everything else is blocked.
+    if normalized_status not in _enabled_normalized:
+        return _block(
+            BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED,
+            f"حالة الطلب '{status}' ليست ضمن الحالات المفعّلة "
+            f"للإرسال ({enabled_trigger_statuses}). "
+            "الإرسال الافتراضي مقتصر على completed / تم التنفيذ.",
+        )
+
+    # ── Check 7: Already sent (real قيود invoice exists) ────────
     if _is_real_invoice_id(existing_inv):
         return _block(
             BlockerCode.ALREADY_SENT,
@@ -304,7 +394,7 @@ def should_allow_selective_live_send(
             f"{existing_inv}",
         )
 
-    # ── Check 7: Bank transfer — HOLD until Iter-294 ────────────
+    # ── Check 8: Bank transfer — HOLD until Iter-294 ────────────
     if payment_method in _BANK:
         return _block(
             BlockerCode.BANK_TRANSFER_ON_HOLD,
@@ -312,7 +402,7 @@ def should_allow_selective_live_send(
             "(bank_transfer_routing_enabled=false).",
         )
 
-    # ── Check 8: Payment method allow-list ──────────────────────
+    # ── Check 9: Payment method allow-list ──────────────────────
     if not payment_method:
         return _block(
             BlockerCode.PAYMENT_METHOD_NOT_ALLOWED,
@@ -326,7 +416,7 @@ def should_allow_selective_live_send(
             f"mastercard / stc_pay / tabby / tamara / emkan / cod.",
         )
 
-    # ── Check 9: Customer resolved & non-DRY ────────────────────
+    # ── Check 10: Customer resolved & non-DRY ───────────────────
     if not customer_status.get("resolved"):
         return _block(
             BlockerCode.CUSTOMER_NOT_RESOLVED,
@@ -341,7 +431,7 @@ def should_allow_selective_live_send(
             f"customer.qoyod_id يحمل قيمة DRY/PREVIEW أو null: {qcid}",
         )
 
-    # ── Check 10: Products resolved & non-DRY & no missing ──────
+    # ── Check 11: Products resolved & non-DRY & no missing ──────
     missing_skus = products_status.get("missing") or []
     if missing_skus:
         return _block(
@@ -361,13 +451,10 @@ def should_allow_selective_live_send(
             "المنتجات غير مربوطة بالكامل في قيود.",
         )
 
-    # ── Check 11: Totals — hard block if |diff| > 0.01 ──────────
+    # ── Check 12: Totals — hard block if |diff| > 0.01 ──────────
     abs_diff = abs(diff)
     totals_warning = False
     warnings: list[str] = []
-    if not totals_status.get("valid", True):
-        # Explicit invalid flag from upstream — still consult diff.
-        pass
     if abs_diff > _TOTALS_ALLOW_TOLERANCE:
         return _block(
             BlockerCode.TOTALS_MISMATCH_HARD,
@@ -388,6 +475,8 @@ def should_allow_selective_live_send(
             created_at.isoformat() if isinstance(created_at, date)
             else created_at_raw),
         status=status,
+        normalized_status=normalized_status,
+        enabled_trigger_statuses=list(enabled_trigger_statuses),
         payment_method=payment_method,
         decision="allow",
         blocker_reason=None,
@@ -399,16 +488,12 @@ def should_allow_selective_live_send(
         dry_ids_detected=dry_ids,
         existing_qoyod_invoice_id=existing_inv,
         warnings=warnings,
-        gates_snapshot={
-            "selective_live_send_enabled": gate_enabled,
-            "production_writes_locked":    write_locked,
-            "qoyod_sync_start_date":       cutoff.isoformat()
-                                            if cutoff else None,
-            "qoyod_tax_period":            settings.get(
-                "qoyod_tax_period", QOYOD_TAX_PERIOD),
-            "bank_transfer_routing_enabled": bool(
-                settings.get("bank_transfer_routing_enabled", False)),
-        },
+        invoice_date_source=invoice_date_source,
+        would_use_invoice_date=send_date_str,
+        send_timezone=QOYOD_SEND_TIMEZONE,
+        send_timestamp_riyadh=send_ts_iso,
+        send_date_riyadh=send_date_str,
+        gates_snapshot=_gates_snap,
     )
 
 
@@ -474,6 +559,13 @@ async def build_selective_send_policy_report(
             "qoyod_tax_period", QOYOD_TAX_PERIOD),
         "bank_transfer_routing_enabled": bool(
             raw_settings.get("bank_transfer_routing_enabled", False)),
+        "qoyod_invoice_date_source":   raw_settings.get(
+            "qoyod_invoice_date_source",
+            QOYOD_INVOICE_DATE_SOURCE_DEFAULT),
+        "qoyod_enabled_invoice_trigger_statuses":
+            list(raw_settings.get(
+                "qoyod_enabled_invoice_trigger_statuses",
+                QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT)),
     }
 
     # 3. Apply the policy to every item.
@@ -512,6 +604,10 @@ async def build_selective_send_policy_report(
                 settings["qoyod_tax_period"],
             "bank_transfer_routing_enabled":
                 settings["bank_transfer_routing_enabled"],
+            "qoyod_invoice_date_source":
+                settings["qoyod_invoice_date_source"],
+            "qoyod_enabled_invoice_trigger_statuses":
+                settings["qoyod_enabled_invoice_trigger_statuses"],
         },
         "eligible_orders_snapshot":  {
             "total_scanned":       eo.get("total_scanned"),
@@ -541,6 +637,14 @@ async def build_selective_send_policy_report(
             f"Sync cutoff = {settings['qoyod_sync_start_date']} "
             f"({settings['qoyod_tax_period']}) — أي طلب قبل هذا "
             "التاريخ سيُرفض حتى لو فُتحت البوابة.",
+            f"invoice_date_source = "
+            f"{settings['qoyod_invoice_date_source']} — تاريخ "
+            "الفاتورة في قيود = تاريخ الإرسال الفعلي (Asia/Riyadh)، "
+            "وليس تاريخ إنشاء الطلب أو completed_at أو delivered_at.",
+            f"Enabled trigger statuses (default STRICT) = "
+            f"{settings['qoyod_enabled_invoice_trigger_statuses']}. "
+            "delivered / shipping / تم التوصيل / جاري التوصيل تُحظر "
+            "افتراضياً بـ blocker_code=invoice_trigger_status_not_enabled.",
             "bank_transfer معلَّق حتى Iter-294 "
             "(bank_transfer_routing_enabled=false).",
             "المسموح لاحقاً: mada / apple_pay / credit_card / visa / "

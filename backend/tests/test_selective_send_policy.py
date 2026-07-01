@@ -25,6 +25,9 @@ import pytest
 from integrations.qoyod.selective_send_policy import (
     BlockerCode,
     SelectiveSendDecision,
+    QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT,
+    QOYOD_INVOICE_DATE_SOURCE_DEFAULT,
+    QOYOD_SEND_TIMEZONE,
     build_selective_send_policy_report,
     should_allow_selective_live_send,
     _ALLOWED_PAYMENT_METHODS,
@@ -42,12 +45,18 @@ def db():
 def _base_order(**overrides):
     """A canonical 'green' order that should pass every check when the
     two master gates are open. Tests override the specific field they
-    want to isolate."""
+    want to isolate.
+
+    Iter-001h — status defaults to `completed` because
+    `qoyod_enabled_invoice_trigger_statuses` defaults to
+    `["completed", "تم التنفيذ"]`. `delivered` / `shipping` /
+    Arabic in-transit variants are now blocked by default.
+    """
     o = {
         "order_number": "TEST-001",
         "salla_order_id": "TEST-001",
         "salla_order_created_at": "2026-07-05",  # Q3, post-cutoff
-        "status": "delivered",
+        "status": "completed",
         "payment_method": "mada",
         "existing_qoyod_invoice_id": None,
         "customer_status": {"resolved": True, "qoyod_id": 223,
@@ -70,6 +79,9 @@ def _gates_OPEN():
         "qoyod_sync_start_date":       "2026-07-01",
         "qoyod_tax_period":            "Q3-2026",
         "bank_transfer_routing_enabled": False,
+        "qoyod_invoice_date_source":   "send_date",
+        "qoyod_enabled_invoice_trigger_statuses":
+            ["completed", "تم التنفيذ"],
     }
 
 
@@ -81,6 +93,9 @@ def _gates_CLOSED():
         "qoyod_sync_start_date":       "2026-07-01",
         "qoyod_tax_period":            "Q3-2026",
         "bank_transfer_routing_enabled": False,
+        "qoyod_invoice_date_source":   "send_date",
+        "qoyod_enabled_invoice_trigger_statuses":
+            ["completed", "تم التنفيذ"],
     }
 
 
@@ -151,12 +166,23 @@ class TestStatusAndSent:
         assert d.decision == "block"
         assert d.blocker_code == BlockerCode.STATUS_NOT_ELIGIBLE
 
-    def test_underscore_arabic_status_allowed(self):
-        # Iter-001e — underscore Arabic normalises to space.
+    def test_underscore_arabic_completed_allowed(self):
+        # Iter-001e — `تم_التنفيذ` normalises to `تم التنفيذ` and is
+        # in the default enabled list.
+        d = should_allow_selective_live_send(
+            order=_base_order(status="تم_التنفيذ"),
+            settings=_gates_OPEN())
+        assert d.decision == "allow"
+
+    def test_underscore_arabic_delivering_blocked_by_default(self):
+        # Iter-001h — `جاري_التوصيل` normalises to `جاري التوصيل`
+        # which is broadly eligible BUT NOT in default enabled list.
         d = should_allow_selective_live_send(
             order=_base_order(status="جاري_التوصيل"),
             settings=_gates_OPEN())
-        assert d.decision == "allow"
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED
 
     def test_already_sent_blocked(self):
         d = should_allow_selective_live_send(
@@ -359,7 +385,7 @@ class TestReportBuilder:
             "user_id": uid, "sku": sku,
             "qoyod_product_id": 42, "dry_run_only": False})
 
-    async def _seed_order(self, db, uid, *, status="delivered",
+    async def _seed_order(self, db, uid, *, status="completed",
                           pm="mada", order_date="2026-07-05",
                           total=100.0):
         oid = f"O-{uuid.uuid4().hex[:8]}"
@@ -500,6 +526,199 @@ class TestPaymentAllowListContract:
 
     def test_bank_transfer_NOT_on_allow_list(self):
         assert "bank_transfer" not in _ALLOWED_PAYMENT_METHODS
+
+
+# ── Iter-001h — Enabled trigger status contract ─────────────────────
+class TestEnabledTriggerStatuses:
+    """Default enabled_trigger_statuses = ['completed', 'تم التنفيذ'].
+    delivered / shipping / تم التوصيل / جاري التوصيل are BROADLY
+    eligible (visible in Eligible Orders) but blocked by policy."""
+
+    def test_completed_allowed_by_default(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(status="completed"),
+            settings=_gates_OPEN())
+        assert d.decision == "allow", d.blocker_reason
+        assert d.normalized_status == "completed"
+
+    def test_arabic_completed_allowed_by_default(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(status="تم التنفيذ"),
+            settings=_gates_OPEN())
+        assert d.decision == "allow", d.blocker_reason
+
+    def test_delivered_blocked_by_default(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(status="delivered"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED
+
+    def test_arabic_delivered_blocked_by_default(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(status="تم التوصيل"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED
+
+    def test_shipping_blocked_by_default(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(status="shipping"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED
+
+    def test_arabic_in_transit_blocked_by_default(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(status="جاري التوصيل"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED
+
+    def test_cod_does_not_bypass_trigger_status(self):
+        """Explicit user directive: COD in جاري التوصيل is NOT
+        allowed by default (even though posting_mode is
+        credit_invoice_only)."""
+        d = should_allow_selective_live_send(
+            order=_base_order(status="جاري_التوصيل",
+                              payment_method="cod"),
+            settings=_gates_OPEN())
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED
+
+    def test_delivered_allowed_when_opted_in_explicitly(self):
+        """Tenant can enable delivered by adding it to
+        `qoyod_enabled_invoice_trigger_statuses`."""
+        s = _gates_OPEN()
+        s["qoyod_enabled_invoice_trigger_statuses"] = [
+            "completed", "تم التنفيذ", "delivered", "تم التوصيل"]
+        d = should_allow_selective_live_send(
+            order=_base_order(status="delivered"),
+            settings=s)
+        assert d.decision == "allow", d.blocker_reason
+
+    def test_shipping_allowed_when_opted_in_explicitly(self):
+        s = _gates_OPEN()
+        s["qoyod_enabled_invoice_trigger_statuses"] = [
+            "completed", "shipping", "جاري التوصيل"]
+        d = should_allow_selective_live_send(
+            order=_base_order(status="جاري_التوصيل"),
+            settings=s)
+        assert d.decision == "allow", d.blocker_reason
+
+    def test_enabled_trigger_statuses_reported_in_decision(self):
+        d = should_allow_selective_live_send(
+            order=_base_order(), settings=_gates_OPEN())
+        assert d.enabled_trigger_statuses == [
+            "completed", "تم التنفيذ"]
+
+    def test_default_matches_module_constant(self):
+        # Guard against accidental default drift.
+        assert QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT == \
+            ("completed", "تم التنفيذ")
+
+
+# ── Iter-001h — Invoice date = send_date (Asia/Riyadh) ──────────────
+class TestInvoiceDate:
+    """قيود invoice_date MUST always be the send moment in
+    Asia/Riyadh — NOT order.created_at, completed_at, delivered_at,
+    paid_at, or received_at."""
+
+    def _fixed_now(self, y=2026, m=7, d=4, h=15, mi=30):
+        return datetime(y, m, d, h, mi, 0, tzinfo=timezone.utc)
+
+    def test_invoice_date_source_default_is_send_date(self):
+        assert QOYOD_INVOICE_DATE_SOURCE_DEFAULT == "send_date"
+
+    def test_send_timezone_is_asia_riyadh(self):
+        assert QOYOD_SEND_TIMEZONE == "Asia/Riyadh"
+
+    def test_invoice_date_equals_send_date_riyadh(self):
+        # Order created 2026-07-01, sent (now) 2026-07-04 UTC 15:30
+        # → Asia/Riyadh (+3) = 2026-07-04 18:30 → date = 2026-07-04.
+        now = self._fixed_now(2026, 7, 4, 15, 30)
+        d = should_allow_selective_live_send(
+            order=_base_order(salla_order_created_at="2026-07-01"),
+            settings=_gates_OPEN(), now_utc=now)
+        assert d.decision == "allow", d.blocker_reason
+        assert d.would_use_invoice_date == "2026-07-04"
+        assert d.send_date_riyadh == "2026-07-04"
+        assert d.invoice_date_source == "send_date"
+        assert d.send_timezone == "Asia/Riyadh"
+
+    def test_invoice_date_not_derived_from_order_created_at(self):
+        now = self._fixed_now(2026, 7, 10, 12, 0)
+        d = should_allow_selective_live_send(
+            order=_base_order(salla_order_created_at="2026-07-01"),
+            settings=_gates_OPEN(), now_utc=now)
+        # created_at ≠ invoice_date.
+        assert d.salla_order_created_at == "2026-07-01"
+        assert d.would_use_invoice_date == "2026-07-10"
+
+    def test_invoice_date_ignores_completed_at(self):
+        # Even if the order carries completed_at, we don't consult it.
+        o = _base_order()
+        o["completed_at"] = "2026-07-02T14:00:00+03:00"
+        now = self._fixed_now(2026, 7, 4, 10, 0)
+        d = should_allow_selective_live_send(
+            order=o, settings=_gates_OPEN(), now_utc=now)
+        assert d.would_use_invoice_date == "2026-07-04"
+
+    def test_riyadh_date_boundary_crossed_at_utc_2100(self):
+        """UTC 21:00 = Asia/Riyadh 00:00 next day. Contract: the
+        send_date_riyadh must reflect Asia/Riyadh's calendar day."""
+        now = datetime(2026, 7, 4, 21, 30, 0, tzinfo=timezone.utc)
+        d = should_allow_selective_live_send(
+            order=_base_order(), settings=_gates_OPEN(), now_utc=now)
+        # UTC 2026-07-04 21:30 → Asia/Riyadh 2026-07-05 00:30
+        assert d.send_date_riyadh == "2026-07-05"
+
+    def test_invoice_date_populated_even_on_block(self):
+        # Auditable: `would_use_invoice_date` is set on BLOCK too so
+        # operators see what the send date WOULD have been.
+        now = self._fixed_now(2026, 7, 4, 10, 0)
+        d = should_allow_selective_live_send(
+            order=_base_order(status="waiting"),
+            settings=_gates_OPEN(), now_utc=now)
+        assert d.decision == "block"
+        assert d.would_use_invoice_date == "2026-07-04"
+
+    def test_send_timestamp_has_riyadh_offset(self):
+        now = self._fixed_now(2026, 7, 4, 10, 0)
+        d = should_allow_selective_live_send(
+            order=_base_order(), settings=_gates_OPEN(), now_utc=now)
+        # Riyadh is +03:00 year-round (no DST).
+        assert "+03:00" in (d.send_timestamp_riyadh or "")
+
+    def test_cod_uses_send_date_as_due_date_semantics(self):
+        # Reified as documentation: COD → posting_mode credit_invoice
+        # _only, invoice_date = due_date = send_date. The policy
+        # surfaces invoice_date; the pipeline is responsible for
+        # applying send_date to due_date too. This test just verifies
+        # the policy carries the send_date so the pipeline can wire
+        # it to both fields.
+        now = self._fixed_now(2026, 7, 4, 10, 0)
+        d = should_allow_selective_live_send(
+            order=_base_order(payment_method="cod"),
+            settings=_gates_OPEN(), now_utc=now)
+        assert d.decision == "allow", d.blocker_reason
+        assert d.posting_mode == "credit_invoice_only"
+        assert d.would_use_invoice_date == "2026-07-04"
+
+    def test_prepaid_uses_send_date_for_receipt_and_invoice(self):
+        now = self._fixed_now(2026, 7, 4, 10, 0)
+        d = should_allow_selective_live_send(
+            order=_base_order(payment_method="mada"),
+            settings=_gates_OPEN(), now_utc=now)
+        assert d.decision == "allow", d.blocker_reason
+        assert d.posting_mode == "paid_receipt"
+        # invoice_date AND payment_date both derive from send_date.
+        assert d.would_use_invoice_date == "2026-07-04"
 
 
 if __name__ == "__main__":  # pragma: no cover

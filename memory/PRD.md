@@ -1,5 +1,83 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-001h — Phase C.0 Revision: STRICT Trigger Statuses + invoice_date=send_date (2026-07-01)
+
+### Two policy tightenings
+**1. Enabled trigger statuses default STRICT.**
+`qoyod_enabled_invoice_trigger_statuses` (default
+`["completed", "تم التنفيذ"]`). Statuses `delivered / shipping /
+تم التوصيل / جاري التوصيل` remain visible in Eligible Orders for
+diagnostics but are BLOCKED by policy with new blocker code
+`invoice_trigger_status_not_enabled`. Tenants must opt them in
+explicitly. **COD does NOT bypass this check** — a `cod` order in
+`جاري التوصيل` is blocked by default.
+
+**2. Invoice date = send moment in Asia/Riyadh.**
+`qoyod_invoice_date_source = "send_date"` (immutable default).
+For EVERY invoice we push to قيود (auto-send, manual approve,
+catch-up, one-order approval), `invoice_date`, `issue_date`,
+`due_date` (COD), and `payment_date` (paid_receipt) all derive
+from the Riyadh-local send moment — NEVER from `order.created_at`,
+`completed_at`, `delivered_at`, `paid_at`, or `received_at`.
+
+### Selective Send policy — new decision fields
+- `normalized_status` — after `_→space`, casefold.
+- `enabled_trigger_statuses` — snapshot of tenant's opt-ins.
+- `invoice_date_source` — always `"send_date"`.
+- `would_use_invoice_date` — Riyadh calendar date used as قيود
+  `invoice_date` if the send happened NOW.
+- `send_timezone` — always `"Asia/Riyadh"`.
+- `send_timestamp_riyadh` — full ISO datetime with `+03:00` offset.
+- `send_date_riyadh` — YYYY-MM-DD in Riyadh.
+- `now_utc` argument added to `should_allow_selective_live_send()`
+  for deterministic tests (falls back to `datetime.now(timezone.utc)`).
+
+### Files modified
+- `backend/integrations/qoyod/selective_send_policy.py`
+  - New constants `QOYOD_INVOICE_DATE_SOURCE_DEFAULT="send_date"`,
+    `QOYOD_SEND_TIMEZONE="Asia/Riyadh"`,
+    `QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT=("completed", "تم التنفيذ")`.
+  - New `BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED`.
+  - Policy check 6 added between broad eligibility (5) and
+    already-sent (7).
+  - Report builder loads new settings + advertises them in notes.
+- `backend/tests/test_selective_send_policy.py`
+  - +21 tests (57 total). Full coverage of user directive
+    including COD-does-not-bypass, boundary Riyadh timezone,
+    invoice_date ignores completed_at, would_use_invoice_date set
+    on BLOCK decisions too.
+
+### DB config pin (Preview only)
+`qoyod_settings.main` additionally set:
+- `qoyod_invoice_date_source = "send_date"`
+- `qoyod_enabled_invoice_trigger_statuses = ["completed", "تم التنفيذ"]`
+- `phase_c0_h_settings_pinned_at = <iso timestamp>`
+
+Fail-Closed remains: `selective_live_send_enabled=false`,
+`production_writes_locked=true`, `qoyod_sync_start_date=2026-07-01`,
+`bank_transfer_routing_enabled=false`.
+
+### Verified impact
+Synthetic 7-order set (gates OPEN for isolated tenant only):
+- `counts = {allow: 2, block: 5}`.
+- 2 allowed: `completed+mada` (paid_receipt), `تم التنفيذ+cod`
+  (credit_invoice_only).
+- 4 blocked by `invoice_trigger_status_not_enabled`: `delivered`,
+  `shipping`, `تم التوصيل`, `جاري_التوصيل` (COD included — proves
+  COD does NOT bypass).
+- 1 blocked by `bank_transfer_on_hold_iter_294`.
+- `would_use_invoice_date` derives from send moment; boundary test
+  (UTC 21:30 → Riyadh 00:30 next day) advances the date correctly.
+
+### Read-only contract (unchanged)
+- ✅ Zero Qoyod API calls (grep-verified — no `QoyodAPIClient` /
+  `httpx` / `requests` imports in `selective_send_policy.py`).
+- ✅ Zero writes to قيود entities.
+- ✅ `qoyod_write_lock_attempts` still 0.
+- ✅ Master gate & write lock stay Fail-Closed.
+
+
+
 ## Phase C.0 — Selective Live Send Gate Preparation (2026-07-01)
 
 ### Scope
