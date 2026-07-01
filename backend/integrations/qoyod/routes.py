@@ -1700,6 +1700,111 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             if lock_on_by_setting is not None
             else "fail_closed_default")
 
+        # Iter-293.5 fix — Cross-trace / cross-collection existing
+        # invoice detection.
+        #
+        # A single Salla order_number can produce MULTIPLE inbox
+        # traces (SKIPPED → COMPLETED → SKIPPED — normal flow). If
+        # any trace for the same order has already produced a real
+        # قيود invoice, no OTHER trace of that order may be surfaced
+        # as ready_to_send. Two lookups feed this map:
+        #
+        #   1. integration_inbox rows for the same order carrying a
+        #      real qoyod_invoice_id (any pipeline_stage).
+        #   2. qoyod_invoices ledger rows (canonical source-of-truth
+        #      for what actually exists in قيود).
+        order_keys: set[str] = set()
+        for r in raw_rows:
+            can = r.get("canonical_payload") or {}
+            for v in (
+                r.get("salla_order_number"),
+                r.get("salla_order_id"),
+                can.get("order_number"),
+                can.get("order_id"),
+            ):
+                if v not in (None, ""):
+                    order_keys.add(str(v))
+
+        order_has_invoice: dict[str, dict] = {}
+        if order_keys:
+            or_conditions = []
+            for k in order_keys:
+                or_conditions.extend([
+                    {"salla_order_number": k},
+                    {"salla_order_id":     k},
+                    {"canonical_payload.order_number": k},
+                    {"canonical_payload.order_id":     k},
+                ])
+            # 1. Sibling inbox traces.
+            sibling_cursor = db.integration_inbox.find({
+                "user_id": tenant,
+                "$or": or_conditions,
+                "qoyod_invoice_id": {
+                    "$exists": True,
+                    "$nin": [None, ""],
+                    "$not": {"$regex": "^(DRY:|PREVIEW:)"},
+                },
+            }, {"salla_order_number": 1, "salla_order_id": 1,
+                "canonical_payload.order_number": 1,
+                "canonical_payload.order_id":     1,
+                "qoyod_invoice_id": 1, "qoyod_invoice_number": 1,
+                "trace_id": 1, "pipeline_stage": 1, "_id": 0})
+            async for sibling in sibling_cursor:
+                scan = sibling.get("canonical_payload") or {}
+                for k in (sibling.get("salla_order_number"),
+                          sibling.get("salla_order_id"),
+                          scan.get("order_number"),
+                          scan.get("order_id")):
+                    if k in (None, ""):
+                        continue
+                    order_has_invoice.setdefault(str(k), {
+                        "source":               "inbox_sibling_trace",
+                        "qoyod_invoice_id":     sibling.get(
+                                                    "qoyod_invoice_id"),
+                        "qoyod_invoice_number": sibling.get(
+                                                    "qoyod_invoice_number"),
+                        "trace_id":             sibling.get("trace_id"),
+                        "pipeline_stage":       sibling.get(
+                                                    "pipeline_stage"),
+                    })
+            # 2. qoyod_invoices ledger (source of truth).
+            ledger_cursor = db.qoyod_invoices.find({
+                "user_id": tenant,
+                "$or": [
+                    {"salla_order_id":     {"$in": list(order_keys)}},
+                    {"salla_order_number": {"$in": list(order_keys)}},
+                ],
+                "qoyod_invoice_id": {"$exists": True, "$nin": [None, ""]},
+            }, {"salla_order_id": 1, "salla_order_number": 1,
+                "qoyod_invoice_id": 1, "qoyod_invoice_number": 1,
+                "status": 1, "_id": 0})
+            async for led in ledger_cursor:
+                for k in (led.get("salla_order_id"),
+                          led.get("salla_order_number")):
+                    if k in (None, ""):
+                        continue
+                    # Ledger wins if not already set — but respect
+                    # inbox_sibling_trace when it's already there
+                    # (both are valid signals).
+                    order_has_invoice.setdefault(str(k), {
+                        "source":               "qoyod_invoices_ledger",
+                        "qoyod_invoice_id":     led.get(
+                                                    "qoyod_invoice_id"),
+                        "qoyod_invoice_number": led.get(
+                                                    "qoyod_invoice_number"),
+                        "status":               led.get("status"),
+                    })
+
+        def _order_key_for(row: dict) -> Optional[str]:
+            can = row.get("canonical_payload") or {}
+            for v in (row.get("salla_order_number"),
+                      row.get("salla_order_id"),
+                      can.get("order_number"),
+                      can.get("order_id")):
+                if v not in (None, "") and str(v) in order_has_invoice:
+                    return str(v)
+            return None
+
         buckets: dict[str, list[dict]] = {c: [] for c in _CATEGORY_ORDER}
         for row in raw_rows:
             category = _categorise_row(row)
@@ -1710,7 +1815,24 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             order_status_native = (
                 canonical.get("order_status_native")
                 or canonical.get("order_status"))
-            # Compact projection — one row per pending order.
+            # Iter-293.5 fix — if ANY trace / ledger row shows a real
+            # invoice for this order_number, downgrade the row: it is
+            # NOT a candidate. Push it to total_rounding_review (where
+            # the accountant can decide what to do with the sibling
+            # trace) OR hide it if we already have a fully-completed
+            # sibling. We keep it visible under total_rounding_review
+            # so operators can see the whole family.
+            sibling_key = _order_key_for(row)
+            sibling_invoice = (order_has_invoice.get(sibling_key)
+                               if sibling_key else None)
+            row_has_own_real_invoice = bool(
+                existing_qid and not str(existing_qid).startswith(
+                    ("DRY:", "PREVIEW:")))
+            if sibling_invoice and not row_has_own_real_invoice:
+                # A sibling trace / ledger row already carries the قيود
+                # invoice — this row must NOT sit in "ready_to_send".
+                if category == "ready_to_send":
+                    category = "total_rounding_review"
             buckets[category].append({
                 "row_id":               row.get("id"),
                 "trace_id":             row.get("trace_id"),
@@ -1729,8 +1851,12 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                     row.get("qoyod_invoice_payment_id"),
                 "qoyod_receipt_id":     row.get("qoyod_receipt_id"),
                 "has_existing_invoice": bool(
-                    existing_qid and not str(existing_qid).startswith(
-                        ("DRY:", "PREVIEW:"))),
+                    row_has_own_real_invoice
+                    or (sibling_invoice is not None)),
+                "existing_invoice_source": (
+                    "self" if row_has_own_real_invoice
+                    else (sibling_invoice or {}).get("source")),
+                "existing_invoice_info": sibling_invoice,
                 "dependency_status": (
                     (payloads.get("invoice_diagnostics") or {})
                     .get("dependency_status")),

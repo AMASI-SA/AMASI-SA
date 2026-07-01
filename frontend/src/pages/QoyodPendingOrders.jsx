@@ -26,7 +26,11 @@ import { toast } from "sonner";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const CATEGORY_META = [
-  { key: "ready_to_send",         label: "جاهز للإرسال",       color: "emerald" },
+  // Iter-293.5 — Renamed from "Ready to Send" to "Candidate" —
+  // a row here is BILLABLE but MUST pass Preview + sendability
+  // before it can be sent. True readiness is proven per-row via
+  // Preview, not by simple category membership.
+  { key: "ready_to_send",         label: "مرشح للإرسال (Candidate)", color: "emerald" },
   { key: "needs_mapping",         label: "يحتاج ربط",         color: "amber"   },
   { key: "bank_transfer_hold",    label: "تحويل بنكي (سداد لاحق)", color: "sky" },
   { key: "cod",                   label: "COD",              color: "indigo"  },
@@ -75,13 +79,22 @@ export default function QoyodPendingOrders() {
     setPreviewing(true);
     setPreview(null);
     try {
+      // Iter-293.5 fix — a single order_number may have multiple
+      // inbox traces (SKIPPED → COMPLETED → SKIPPED etc). We MUST
+      // disambiguate by trace_id so preview-reprocess targets THIS
+      // specific row, not "any" match.
       const { data } = await axios.post(
         `${API}/integrations/qoyod/admin/preview-reprocess`,
-        { order_number: row.salla_order_number || row.salla_order_id }
+        {
+          trace_id:     row.trace_id,
+          order_number: row.salla_order_number || row.salla_order_id,
+        }
       );
       setPreview(data);
     } catch (e) {
-      toast.error(e.response?.data?.detail?.message || e.message);
+      toast.error(e.response?.data?.detail?.message
+                  || e.response?.data?.detail?.code
+                  || e.message);
     } finally {
       setPreviewing(false);
     }
@@ -317,6 +330,19 @@ export default function QoyodPendingOrders() {
               </dd>
               <dt className="text-slate-500">qoyod_invoice_id</dt>
               <dd className="font-mono">{selectedRow.qoyod_invoice_id || "—"}</dd>
+              {selectedRow.existing_invoice_source && (
+                <>
+                  <dt className="text-slate-500">existing_invoice_source</dt>
+                  <dd className="font-mono text-amber-800" data-testid="drawer-existing-invoice-source">
+                    {selectedRow.existing_invoice_source}
+                    {selectedRow.existing_invoice_info?.qoyod_invoice_id && (
+                      <span className="ms-1 text-slate-500">
+                        ({selectedRow.existing_invoice_info.qoyod_invoice_id})
+                      </span>
+                    )}
+                  </dd>
+                </>
+              )}
               <dt className="text-slate-500">qoyod_invoice_payment_id</dt>
               <dd className="font-mono">
                 {selectedRow.qoyod_invoice_payment_id || "—"}
