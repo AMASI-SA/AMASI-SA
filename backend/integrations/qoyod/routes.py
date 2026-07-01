@@ -1613,6 +1613,32 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         from integrations.qoyod.pending_classifier import payload_has_leak
         return payload_has_leak(payload)
 
+    # ── Iter-001 (Eligible Orders Read-Only Audit) ──────────────────
+    # Surfaces every Salla order in `unified_orders` whose status is
+    # billable but hasn't reached قيود yet. Complements pending-orders
+    # (which reads only from `integration_inbox`) by ALSO detecting
+    # orders that never entered the pipeline at all
+    # (missing_from_pipeline). See `eligible_orders.py`.
+    #
+    # Read-Only Contract: NO writes, NO Qoyod API calls, NO approve.
+    @router.get("/admin/eligible-orders")
+    async def admin_eligible_orders(
+        since_days: int = 90,
+        limit: int = 200,
+        show_already_sent: bool = False,
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.eligible_orders import (
+            build_eligible_orders_report,
+        )
+        return await build_eligible_orders_report(
+            db,
+            user_id=_tenant_id(user),
+            since_days=since_days,
+            limit=limit,
+            show_already_sent=show_already_sent,
+        )
+
     @router.get("/admin/qoyod/pending-orders")
     async def admin_qoyod_pending_orders(
         limit: int = 200,

@@ -15,6 +15,7 @@
   - **طلبات لم تدخل الـ pipeline إطلاقاً** (مفقودة تماماً — الأخطر).
   - طلبات دخلت وأُرسلت (مغلقة).
 - 🟢 **لا endpoint جديد كتابياً** — Read-only فقط. يُقترح: `GET /api/integrations/qoyod/admin/eligible-orders`.
+- 🟢 **6 collections تُقرأ Read-Only** (تصحيح إحصائي: قائمة §1 فيها 6 عناصر، ليس 5).
 - 🟢 **لا كتابة** على أي collection. لا bypass، لا approve.
 - 🟢 يُحتَرم القفل: `production_writes_locked=true`, `selective_live_send_enabled=false` — العرض يعرض السبب فقط.
 
