@@ -477,6 +477,8 @@ async def build_eligible_orders_report(
             })
 
     # 3. Classify each order.
+    # Iter-001d — accounting invariant: every scanned row lands in
+    # EITHER `counts` OR `excluded_reason_counts`. No silent drops.
     counts: dict[str, int] = {
         "ready_for_preview":            0,
         "ready_for_manual_approval":    0,
@@ -487,8 +489,11 @@ async def build_eligible_orders_report(
         "blocked_status":               0,
         "totals_mismatch":              0,
         "missing_from_pipeline":        0,
+        "unclassified_needs_review":    0,
     }
+    excluded_reason_counts: dict[str, int] = {}
     items: list[dict] = []
+    total_hidden_already_sent = 0
 
     for order in orders:
         order_id = str(order.get("order_id") or order.get("id") or "")
@@ -505,7 +510,12 @@ async def build_eligible_orders_report(
             if (status not in ELIGIBLE_STATUSES
                     and slug not in ELIGIBLE_STATUSES
                     and status.lower() not in ELIGIBLE_STATUSES):
-                # Skip — inbox row for a status we don't consider billable.
+                # Iter-001d — count instead of silently dropping.
+                key = (f"status_not_eligible:{status or slug or '(empty)'}"
+                       if (status or slug)
+                       else "status_missing_from_canonical")
+                excluded_reason_counts[key] = \
+                    excluded_reason_counts.get(key, 0) + 1
                 continue
         else:
             inbox_row = await db.integration_inbox.find_one(
@@ -555,11 +565,23 @@ async def build_eligible_orders_report(
                 "unified_orders empty — inbox row exists but "
                 "pipeline stalled")
 
-        counts[cls] = counts.get(cls, 0) + 1
+        # Iter-001d — Safety net: if verdict returned an unknown
+        # classification, bucket it in `unclassified_needs_review`
+        # so the invariant holds.
+        if cls not in counts:
+            counts["unclassified_needs_review"] = \
+                counts.get("unclassified_needs_review", 0) + 1
+            verdict["classification"] = "unclassified_needs_review"
+            verdict["blocker_reason"] = (
+                f"internal: unknown classification token '{cls}'")
+            cls = "unclassified_needs_review"
+        else:
+            counts[cls] = counts.get(cls, 0) + 1
 
         # Hide `already_sent` from `items` unless requested — but ALWAYS
         # count them in `counts`.
         if cls == "already_sent" and not show_already_sent:
+            total_hidden_already_sent += 1
             continue
 
         if len(items) >= limit:
@@ -607,14 +629,45 @@ async def build_eligible_orders_report(
             "recommended_next_action": verdict["recommended_next_action"],
         })
 
+    # Iter-001d — Explicit bookkeeping counters. Invariant:
+    #    total_classified + excluded_status_count == total_scanned
+    # `total_scanned` = every row that entered the classifier loop
+    # (i.e. rows fetched from the primary source after date filter).
+    total_classified = sum(counts.values())
+    excluded_status_count = sum(excluded_reason_counts.values())
+
     result = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "since_days":   since_days,
         "since_date":   since_date_str,
         "source_mode":   source_mode,
         "source_reason": source_reason,
-        "total_scanned": len(orders),
-        "counts":        counts,
+        # Definitions:
+        # - total_source_rows       = rows fetched from source
+        #                             (before any post-filter)
+        # - total_scanned           = rows entered the classifier
+        #                             (same as total_source_rows for now)
+        # - total_classified        = rows that landed in one of `counts`
+        # - excluded_status_count   = rows skipped because canonical
+        #                             status was not in ELIGIBLE_STATUSES
+        # - unclassified_count      = rows that fell through classifier
+        #                             (safety-net bucket)
+        # - total_hidden_already_sent = rows counted as already_sent but
+        #                               hidden from `items` list
+        # - total_returned_items    = final `len(items)`
+        # INVARIANT:
+        #   total_classified + excluded_status_count == total_scanned
+        "total_source_rows":  len(orders),
+        "total_scanned":      len(orders),
+        "total_classified":   total_classified,
+        "excluded_status_count": excluded_status_count,
+        "unclassified_count": counts.get("unclassified_needs_review", 0),
+        "total_hidden_already_sent": total_hidden_already_sent,
+        "total_returned_items": len(items),
+        "invariant_holds":    (total_classified
+                               + excluded_status_count == len(orders)),
+        "counts":              counts,
+        "excluded_reason_counts": excluded_reason_counts,
         "gates": {
             "production_writes_locked": bool(
                 settings.get("production_writes_locked", True)),
@@ -631,6 +684,8 @@ async def build_eligible_orders_report(
             "(Arabic natives accepted).",
             "cancelled / refunded / deleted / waiting / pending "
             "مستبعدة من الاستعلام.",
+            "Invariant: total_classified + excluded_status_count "
+            "== total_scanned (see `invariant_holds`).",
         ],
     }
     if source_mode == "integration_inbox_fallback":

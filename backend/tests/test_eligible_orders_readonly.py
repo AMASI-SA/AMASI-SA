@@ -604,6 +604,114 @@ class TestEndToEndReport:
             await db.integration_inbox.delete_many({"user_id": uid})
             await self._clean(db, uid)
 
+    async def test_invariant_holds_all_scanned_rows_accounted_for(self, db):
+        """Iter-001d — the invariant
+            total_classified + excluded_status_count == total_scanned
+        must hold in every scenario, including mixed statuses in
+        fallback mode."""
+        uid = self._uid()
+        now = datetime.now(timezone.utc)
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            # 3 rows with billable status + 2 rows with ineligible
+            # status → all must land somewhere.
+            for i, st in enumerate(
+                    ["delivered", "completed", "shipping",
+                     "pending",   "waiting"]):
+                await db.integration_inbox.insert_one({
+                    "user_id": uid,
+                    "connector_key": "salla",
+                    "idempotency_key": f"inv-{i}",
+                    "salla_order_number": f"INV-{i}",
+                    "trace_id": f"t-INV-{i}",
+                    "pipeline_stage": "COMPLETED"
+                                       if st in ("delivered", "completed",
+                                                 "shipping")
+                                       else "WAITING",
+                    "received_at": now,
+                    "canonical_payload": {
+                        "order_status": st,
+                        "payment_method": "mada",
+                        "total_amount": 100.0,
+                        "shipping_amount": 0, "tax_amount": 0,
+                        "items": [{"sku": "X", "quantity": 1,
+                                   "unit_price": 100.0}],
+                        "customer": {"phone": "+966554681361"},
+                    },
+                })
+            report = await build_eligible_orders_report(db, user_id=uid)
+            assert report["source_mode"] == "integration_inbox_fallback"
+            assert report["total_scanned"] == 5
+            # 3 billable statuses land in `counts`.
+            assert report["total_classified"] == 3
+            # 2 ineligible-status rows land in excluded, NOT dropped.
+            assert report["excluded_status_count"] == 2
+            # Invariant holds.
+            assert report["invariant_holds"] is True
+            assert (report["total_classified"]
+                    + report["excluded_status_count"]
+                    == report["total_scanned"])
+            # Reason breakdown present.
+            assert report["excluded_reason_counts"]
+            assert any("pending" in k or "waiting" in k
+                       for k in report["excluded_reason_counts"].keys())
+            # No mystery bucket.
+            assert report["unclassified_count"] == 0
+        finally:
+            await db.integration_inbox.delete_many({"user_id": uid})
+            await self._clean(db, uid)
+
+    async def test_new_bookkeeping_fields_present(self, db):
+        uid = self._uid()
+        try:
+            report = await build_eligible_orders_report(db, user_id=uid)
+            for k in ("total_source_rows", "total_scanned",
+                      "total_classified", "excluded_status_count",
+                      "unclassified_count", "total_hidden_already_sent",
+                      "total_returned_items", "invariant_holds",
+                      "excluded_reason_counts"):
+                assert k in report, f"missing bookkeeping field: {k}"
+        finally:
+            await self._clean(db, uid)
+
+    async def test_hidden_already_sent_counter_matches(self, db):
+        """`total_hidden_already_sent` should equal already_sent count
+        when `show_already_sent=False`."""
+        uid = self._uid()
+        now = datetime.now(timezone.utc)
+        try:
+            await self._seed_customer(db, uid)
+            await self._seed_product(db, uid, "X")
+            for i in range(3):
+                await db.integration_inbox.insert_one({
+                    "user_id": uid,
+                    "connector_key": "salla",
+                    "idempotency_key": f"sent-{i}",
+                    "salla_order_number": f"SENT-{i}",
+                    "trace_id": f"t-{i}",
+                    "pipeline_stage": "COMPLETED",
+                    "received_at": now,
+                    "qoyod_invoice_id": f"Q-REAL-{i}",
+                    "canonical_payload": {
+                        "order_status": "delivered",
+                        "payment_method": "mada",
+                        "total_amount": 100.0,
+                        "shipping_amount": 0, "tax_amount": 0,
+                        "items": [{"sku": "X", "quantity": 1,
+                                   "unit_price": 100.0}],
+                        "customer": {"phone": "+966554681361"},
+                    },
+                })
+            report = await build_eligible_orders_report(
+                db, user_id=uid, show_already_sent=False)
+            assert report["counts"]["already_sent"] == 3
+            assert report["total_hidden_already_sent"] == 3
+            assert report["total_returned_items"] == 0
+        finally:
+            await db.integration_inbox.delete_many({"user_id": uid})
+            await self._clean(db, uid)
+
 
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])
