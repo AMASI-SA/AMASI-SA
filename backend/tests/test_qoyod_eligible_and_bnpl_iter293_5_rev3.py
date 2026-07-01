@@ -31,13 +31,27 @@ class TestEligibleStatusUnification:
         for s in ("cancelled", "canceled", "refunded", "deleted"):
             assert s not in ELIGIBLE_ORDER_STATUSES
 
-    def test_resolve_honours_explicit_completed_only(self):
-        # Explicit narrow list [`completed`] MUST be honoured
-        # verbatim — merchants who want the stricter policy keep it.
-        # Widening only kicks in when the field is missing/empty.
-        narrowed = resolve_trigger_statuses({"invoice_trigger_statuses":
-                                             ["completed"]})
-        assert narrowed == ["completed"]
+    def test_resolve_widens_legacy_completed_only_sentinel(self):
+        # Legacy tenants (production bug 2026-07-01 on order
+        # 268307955) had `['completed']` explicitly stored — that
+        # is now recognised as the legacy sentinel and widened.
+        widened = resolve_trigger_statuses({"invoice_trigger_statuses":
+                                            ["completed"]})
+        assert set(widened) == set(ELIGIBLE_ORDER_STATUSES)
+
+    def test_resolve_honours_explicit_multi_item_narrowing(self):
+        # An explicit narrower list of ≥2 items is a real narrowing
+        # signal — the operator meant to restrict billing.
+        narrowed = resolve_trigger_statuses(
+            {"invoice_trigger_statuses": ["completed", "delivered"]})
+        assert set(narrowed) == {"completed", "delivered"}
+
+    def test_resolve_honours_non_default_single_item_override(self):
+        # An operator who explicitly sets `['delivered']` gets it —
+        # only the specific `['completed']` legacy sentinel widens.
+        narrowed = resolve_trigger_statuses(
+            {"invoice_trigger_statuses": ["delivered"]})
+        assert narrowed == ["delivered"]
 
     def test_resolve_widens_missing_setting(self):
         widened = resolve_trigger_statuses({})
@@ -95,6 +109,24 @@ class TestPreflightStatusGate:
         # No status_not_in_triggers failure.
         codes = {f["code"] for f in result.failures}
         assert "status_not_in_triggers" not in codes, result.failures
+
+    def test_delivered_passes_when_tenant_carries_legacy_completed_only(self):
+        """Prod regression 2026-07-01, order 268307955 — the tenant
+        had `invoice_trigger_statuses=['completed']` stored on their
+        settings doc from the Day-1 default. Preflight rejected
+        `delivered`. rev3-fix widens the legacy sentinel."""
+        result = self._run(
+            "delivered",
+            extra_settings={"invoice_trigger_statuses": ["completed"]})
+        codes = {f["code"] for f in result.failures}
+        assert "status_not_in_triggers" not in codes, result.failures
+
+    def test_shipped_passes_when_tenant_carries_legacy_completed_only(self):
+        result = self._run(
+            "shipped",
+            extra_settings={"invoice_trigger_statuses": ["completed"]})
+        codes = {f["code"] for f in result.failures}
+        assert "status_not_in_triggers" not in codes
 
     def test_shipped_passes_when_no_explicit_triggers(self):
         result = self._run("shipped")

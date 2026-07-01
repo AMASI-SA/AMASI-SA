@@ -58,20 +58,29 @@ def resolve_trigger_statuses(settings: dict) -> list[str]:
     """Return the list of Salla statuses that TRIGGER invoicing for
     this tenant.
 
-    Contract
-    ────────
-    • When `settings["invoice_trigger_statuses"]` is explicitly set
-      (non-empty list of strings), it is honoured verbatim — even if
-      it narrows the set to a single status. Tenants who want a
-      stricter policy keep full control.
+    Contract (Iter-293.5-rev3-fix, 2026-07-01 — user directive)
+    ──────────────────────────────────────────────────────────
+    The Salla × قيود integration treats ALL post-delivery statuses
+    as billable (`completed / delivered / shipped / shipping /
+    processing / in_progress` + Arabic equivalents). Legacy tenants
+    stored `['completed']` on their settings doc back when the
+    pipeline only fired on `completed`. That single-item sentinel
+    is treated as legacy and widened to `ELIGIBLE_ORDER_STATUSES`
+    so preflight, business_rules, pending queue, and live_send_gate
+    all agree — even for tenants who never re-saved their settings
+    after the rev3 rollout.
 
-    • When the field is MISSING / None / empty, we widen to the
-      unified `ELIGIBLE_ORDER_STATUSES` set so preflight,
-      business_rules, pending queue, and live_send_gate agree on
-      which statuses are candidates for invoicing.
-
-    The returned list is lower-cased + trimmed for direct membership
-    tests, and Arabic natives are preserved as-is.
+    Widening rules
+    ──────────────
+      • Field missing / None / empty     → widen to unified set.
+      • Field == `['completed']`         → widen to unified set
+        (legacy sentinel — cannot be distinguished from the old
+        default; explicit narrowing to completed-only is no longer
+        supported per user directive 2026-07-01).
+      • Field is a real narrower list of ≥2 statuses (e.g.
+        `['completed','delivered']`) → honoured verbatim.
+      • Field lists a status NOT in the unified set (e.g. custom
+        Salla slug) → honoured verbatim (operator override).
     """
     raw = settings.get("invoice_trigger_statuses")
     if raw is None:
@@ -83,10 +92,11 @@ def resolve_trigger_statuses(settings: dict) -> list[str]:
         v = s.strip()
         if not v:
             continue
-        # Preserve original casing for Arabic natives; lowercase
-        # English canonicals so downstream .lower() comparisons hit.
         normalised.append(v.lower() if v.isascii() else v)
     if not normalised:
+        return sorted(ELIGIBLE_ORDER_STATUSES)
+    # Legacy sentinel — widen to unified set.
+    if tuple(normalised) == _LEGACY_COMPLETED_ONLY_DEFAULT:
         return sorted(ELIGIBLE_ORDER_STATUSES)
     return normalised
 

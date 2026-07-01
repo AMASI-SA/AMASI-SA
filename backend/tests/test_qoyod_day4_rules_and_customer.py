@@ -89,9 +89,26 @@ def test_rules_eligible_when_status_matches_trigger():
     assert d.invoice_date_source == "completed_at"
 
 
-def test_rules_not_eligible_when_status_outside_triggers():
+def test_rules_completed_only_sentinel_widens_to_unified_set():
+    """Iter-293.5-rev3-fix (2026-07-01 user directive) — Legacy
+    tenants stored `['completed']` on their settings doc. That
+    sentinel is now widened to the unified eligible set so
+    `delivered` / `shipped` no longer land in "status_not_in_triggers".
+    Prod bug regression for order 268307955 (tenant carried the
+    legacy `['completed']` and preflight rejected delivered)."""
     dto = _dto(status="shipped", status_native="تم الشحن")
     settings = {"invoice_trigger_statuses": ["completed"]}
+    d = evaluate_rules(dto, settings)
+    assert d.eligible is True, d.reason
+    assert d.triggered_by_status == "shipped"
+
+
+def test_rules_explicit_narrower_list_still_honoured():
+    """Merchants who genuinely want to narrow (say, completed +
+    delivered ONLY) still get their way — the widening only kicks
+    in for the legacy `['completed']` sentinel."""
+    dto = _dto(status="shipped", status_native="تم الشحن")
+    settings = {"invoice_trigger_statuses": ["completed", "delivered"]}
     d = evaluate_rules(dto, settings)
     assert d.eligible is False
     assert d.reason == SKIP_NOT_IN_TRIGGER
@@ -387,10 +404,13 @@ async def test_pipeline_happy_path_advances_to_customer_resolved(db):
 
 @pytest.mark.asyncio
 async def test_pipeline_skips_when_status_not_in_triggers(db):
+    """Iter-293.5-rev3-fix (2026-07-01) — `shipped` is now on the
+    unified eligible set, so we test the skip path with a truly
+    non-eligible status (`pending`) instead."""
     await ensure_qoyod_indexes(db)
     user_id = "main"
     order_id = f"D4-SKIP-{uuid.uuid4().hex[:8]}"
-    dto = _dto(order_id=order_id, status="shipped", status_native="تم الشحن")
+    dto = _dto(order_id=order_id, status="pending", status_native="بانتظار المراجعة")
     row = await _seed_normalized_row(db, user_id=user_id, order_id=order_id, dto=dto)
     fake = _FakeAPIClient()
     try:
@@ -487,8 +507,8 @@ async def test_batch_processor_counts_outcomes(db):
             dto=_dto(order_id=f"BATCH-{base}-OK", status="completed"))
         skipped  = await _seed_normalized_row(
             db, user_id=user_id, order_id=f"BATCH-{base}-SK",
-            dto=_dto(order_id=f"BATCH-{base}-SK", status="shipped",
-                     status_native="تم الشحن"))
+            dto=_dto(order_id=f"BATCH-{base}-SK", status="pending",
+                     status_native="بانتظار المراجعة"))
         failed   = await _seed_normalized_row(
             db, user_id=user_id, order_id=f"BATCH-{base}-DL",
             dto=_dto(order_id=f"BATCH-{base}-DL", status="completed",
