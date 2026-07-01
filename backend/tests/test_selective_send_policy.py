@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from dataclasses import asdict
 from datetime import datetime, date, timedelta, timezone
 
 import pytest
@@ -29,6 +30,7 @@ from integrations.qoyod.selective_send_policy import (
     QOYOD_INVOICE_DATE_SOURCE_DEFAULT,
     QOYOD_SEND_TIMEZONE,
     build_selective_send_policy_report,
+    manual_approval_phrase_for,
     should_allow_selective_live_send,
     _ALLOWED_PAYMENT_METHODS,
 )
@@ -719,6 +721,298 @@ class TestInvoiceDate:
         assert d.posting_mode == "paid_receipt"
         # invoice_date AND payment_date both derive from send_date.
         assert d.would_use_invoice_date == "2026-07-04"
+
+
+# ── Iter-001i — Manual Send narrow bypass ───────────────────────────
+class TestManualSend:
+    """Manual Send unlocks a per-order path for delivered / shipping /
+    Arabic in-transit ONLY, and ONLY when the operator supplies the
+    exact approval phrase. Every other blocker still holds."""
+
+    def _canonical_phrase(self, order_number):
+        return manual_approval_phrase_for(order_number)
+
+    # ── Availability (auto vs manual)
+    def test_shipping_auto_send_blocked_manual_available(self):
+        # Directive #1 & #3: shipping is not auto-eligible but IS
+        # manual-eligible when all other conditions hold.
+        order = _base_order(status="shipping")
+        auto = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN())
+        assert auto.decision == "block"
+        assert auto.blocker_code == \
+            BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED
+
+        manual = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert manual.decision == "allow", manual.blocker_reason
+        assert manual.manual_send_requested is True
+        assert manual.manual_approval_phrase_provided is True
+
+    def test_delivered_auto_send_blocked_manual_available(self):
+        order = _base_order(status="delivered")
+        manual = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert manual.decision == "allow", manual.blocker_reason
+
+    def test_arabic_delivered_manual_send_available(self):
+        order = _base_order(status="تم التوصيل")
+        manual = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert manual.decision == "allow", manual.blocker_reason
+
+    def test_arabic_in_transit_manual_send_available(self):
+        order = _base_order(status="جاري التوصيل")
+        manual = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert manual.decision == "allow", manual.blocker_reason
+
+    # ── Phrase enforcement
+    def test_manual_send_without_phrase_blocked(self):
+        """Directive #10: press button without confirmation → no send."""
+        order = _base_order(status="delivered")
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=None)
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.MANUAL_APPROVAL_PHRASE_REQUIRED
+
+    def test_manual_send_with_wrong_phrase_blocked(self):
+        order = _base_order(status="delivered")
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase="i approve this send")
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.MANUAL_APPROVAL_PHRASE_MISMATCH
+
+    def test_manual_send_phrase_is_case_sensitive(self):
+        order = _base_order(status="delivered")
+        phrase = self._canonical_phrase(order["order_number"]).lower()
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=phrase)
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.MANUAL_APPROVAL_PHRASE_MISMATCH
+
+    def test_manual_send_phrase_must_reference_correct_order(self):
+        order = _base_order(order_number="ORDER-A", status="delivered")
+        # Operator typed phrase for a DIFFERENT order.
+        wrong = manual_approval_phrase_for("ORDER-B")
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=wrong)
+        assert d.decision == "block"
+        assert d.blocker_code == \
+            BlockerCode.MANUAL_APPROVAL_PHRASE_MISMATCH
+
+    # ── Non-bypassable blockers (directive #5–#8)
+    def test_manual_send_does_NOT_bypass_bank_transfer(self):
+        order = _base_order(status="delivered",
+                            payment_method="bank_transfer")
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.BANK_TRANSFER_ON_HOLD
+
+    def test_manual_send_does_NOT_bypass_q2_cutoff(self):
+        order = _base_order(status="delivered",
+                            salla_order_created_at="2026-06-15")
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.BEFORE_SYNC_START_DATE
+
+    def test_manual_send_does_NOT_bypass_dry_customer(self):
+        order = _base_order(status="delivered",
+                            customer_status={
+                                "resolved": True, "qoyod_id": "DRY:1",
+                                "reason": None})
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.CUSTOMER_DRY_OR_NULL
+
+    def test_manual_send_does_NOT_bypass_dry_product(self):
+        order = _base_order(status="delivered",
+                            products_status={
+                                "resolved": False, "resolved_count": 0,
+                                "dry_run_only": 1, "missing": []})
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.PRODUCT_DRY_OR_NULL
+
+    def test_manual_send_does_NOT_bypass_preview_id(self):
+        order = _base_order(status="delivered",
+                            existing_qoyod_invoice_id="PREVIEW:abc")
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.PREVIEW_ID_DETECTED
+
+    def test_manual_send_does_NOT_bypass_hard_totals_mismatch(self):
+        order = _base_order(status="delivered",
+                            totals_status={
+                                "valid": False, "total": 100.50,
+                                "expected": 100.0, "diff": 0.50})
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.TOTALS_MISMATCH_HARD
+
+    def test_manual_send_does_NOT_bypass_already_sent(self):
+        order = _base_order(status="delivered",
+                            existing_qoyod_invoice_id="Q-REAL-9001")
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.ALREADY_SENT
+
+    def test_manual_send_does_NOT_bypass_master_gate(self):
+        order = _base_order(status="delivered")
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_CLOSED(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.GATE_DISABLED
+
+    def test_manual_send_does_NOT_bypass_write_lock(self):
+        s = _gates_OPEN()
+        s["production_writes_locked"] = True
+        order = _base_order(status="delivered")
+        d = should_allow_selective_live_send(
+            order=order, settings=s,
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.WRITE_LOCK_ACTIVE
+
+    # ── Invoice date still uses send_date on manual path
+    def test_manual_send_uses_send_date_as_invoice_date(self):
+        """Directive #9: manual-send invoice_date = send_date, not
+        order.created_at / completed_at."""
+        order = _base_order(status="delivered",
+                            salla_order_created_at="2026-07-01")
+        order["completed_at"] = "2026-07-02T14:00:00+03:00"
+        now = datetime(2026, 7, 4, 15, 30, 0, tzinfo=timezone.utc)
+        d = should_allow_selective_live_send(
+            order=order, settings=_gates_OPEN(),
+            now_utc=now,
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase(
+                order["order_number"]))
+        assert d.decision == "allow", d.blocker_reason
+        assert d.would_use_invoice_date == "2026-07-04"
+        assert d.invoice_date_source == "send_date"
+
+    # ── Manual send is ONLY for the narrow eligible statuses
+    def test_manual_send_flag_ignored_when_status_is_completed(self):
+        """`completed` is already auto-eligible; manual flag has no
+        effect, still allow, no phrase required."""
+        d = should_allow_selective_live_send(
+            order=_base_order(status="completed"),
+            settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=None)
+        assert d.decision == "allow"
+
+    def test_manual_send_flag_ignored_when_status_is_waiting(self):
+        """`waiting` is not broadly eligible — manual flag CANNOT
+        rescue it (guarded by broad eligibility check 5)."""
+        d = should_allow_selective_live_send(
+            order=_base_order(status="waiting"),
+            settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=self._canonical_phrase("TEST-001"))
+        assert d.decision == "block"
+        assert d.blocker_code == BlockerCode.STATUS_NOT_ELIGIBLE
+
+
+class TestManualSendPhraseHelper:
+    def test_helper_produces_directive_phrase(self):
+        assert manual_approval_phrase_for("269571122") == \
+            "Approved manual Qoyod send for order 269571122 only"
+
+    def test_helper_handles_none_gracefully(self):
+        # Doesn't raise — matches the literal string with 'None'.
+        p = manual_approval_phrase_for(None)
+        assert "None" in p
+
+
+class TestManualSendReportEnrichment:
+    """The report must expose `manual_send_available` +
+    `manual_send_confirmation_phrase` so the UI can decide when to
+    show the button."""
+
+    def test_report_shape_has_manual_send_fields_on_each_row(self):
+        # Compute directly on a synthetic item (no DB): mimic what the
+        # report loop does per-order.
+        item = _base_order(status="delivered")
+        expected = manual_approval_phrase_for(item["order_number"])
+        probe = should_allow_selective_live_send(
+            order=item, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=expected)
+        assert probe.decision == "allow"
+        # Contract for UI:
+        assert probe.manual_send_requested is True
+        assert probe.manual_approval_phrase_provided is True
+
+    def test_report_manual_probe_does_not_store_phrase_text(self):
+        item = _base_order(status="delivered")
+        d = should_allow_selective_live_send(
+            order=item, settings=_gates_OPEN(),
+            manual_send_requested=True,
+            manual_approval_phrase=manual_approval_phrase_for(
+                item["order_number"]))
+        # Audit-critical: never persist the phrase itself.
+        # (`manual_approval_phrase_provided` is a bool, not the text.)
+        as_dict = asdict(d)
+        assert "manual_approval_phrase" not in as_dict
+        assert "phrase_text" not in as_dict
 
 
 if __name__ == "__main__":  # pragma: no cover

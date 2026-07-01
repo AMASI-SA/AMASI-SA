@@ -1,5 +1,85 @@
 # PRD — MEZAN E-commerce Accounting App
 
+## Iter-001i — Phase C Manual Send Path (2026-07-01)
+
+### Rule
+Auto-send default remains STRICT (`completed / تم التنفيذ` only).
+For `delivered / shipping / تم التوصيل / جاري التوصيل` a NARROW
+manual-send path is added — the operator must:
+1. Explicitly opt in per-order (button click, `manual_send_requested=true`).
+2. Type the canonical confirmation phrase:
+   `Approved manual Qoyod send for order <order_number> only`
+   (case-sensitive, order-number-scoped).
+
+Every other blocker still holds. Manual send does NOT bypass:
+Q2 cutoff, bank_transfer, DRY/PREVIEW/null IDs, totals mismatch > 0.01,
+missing customer/product, already-sent, master gate, write lock.
+
+Invoice date on manual path = `send_date` in Asia/Riyadh (same as auto).
+
+### Backend
+`backend/integrations/qoyod/selective_send_policy.py`:
+- New constants: `_MANUAL_SEND_ELIGIBLE_STATUSES`, helper
+  `manual_approval_phrase_for(order_number)`.
+- New BlockerCodes: `MANUAL_APPROVAL_PHRASE_REQUIRED`,
+  `MANUAL_APPROVAL_PHRASE_MISMATCH`.
+- `should_allow_selective_live_send()` now accepts
+  `manual_send_requested: bool = False`,
+  `manual_approval_phrase: Optional[str] = None`. Check 6 becomes
+  branched:
+    - Status in enabled list → allow (auto).
+    - Status in {delivered, shipping, تم التوصيل, جاري التوصيل}
+      AND `manual_send_requested=True` → verify phrase, then continue.
+    - Anything else → `INVOICE_TRIGGER_STATUS_NOT_ENABLED`.
+- Decision now includes `manual_send_requested` and
+  `manual_approval_phrase_provided` (boolean only — phrase text is
+  never persisted to keep audit trail clean).
+- Report per-order enriched with:
+    `auto_send_available` (bool), `manual_send_available` (bool),
+    `manual_send_confirmation_phrase` (canonical text),
+    `manual_send_blocker_code`, `manual_send_blocker_reason`.
+- Report top-level gains `manual_send_available_count`.
+
+### Tests
+`backend/tests/test_selective_send_policy.py` — **+24 tests** (81
+total; 136/136 including eligible_orders regression suite pass).
+Coverage per user directive #1–#10:
+- Auto blocked for shipping/delivered/Arabic in-transit.
+- Manual allowed when phrase supplied AND all other conditions pass.
+- Phrase enforcement: missing / wrong / case-mismatch / wrong-order
+  all blocked.
+- Manual does NOT bypass: bank_transfer, Q2 cutoff, DRY customer,
+  DRY product, PREVIEW IDs, hard totals mismatch, already-sent,
+  master gate, write lock.
+- Manual invoice_date = send_date (still Asia/Riyadh).
+- Manual flag has no effect on auto-eligible `completed`.
+- Manual flag cannot rescue broad-ineligible `waiting`.
+- Phrase text is NOT persisted in decision dict.
+
+### Verified impact
+Synthetic 4-order demo (gates OPEN for isolated tenant only):
+| Order | Status | Payment | auto_send_available | manual_send_available |
+|---|---|---|---|---|
+| A | completed | mada | ✅ | ✅ |
+| B | delivered | mada | ❌ | ✅ (needs phrase) |
+| C | جاري التوصيل | cod | ❌ | ✅ (needs phrase — COD no bypass) |
+| D | delivered | bank_transfer | ❌ | ❌ (bank blocker survives) |
+
+`counts={allow:1, block:3}`, `manual_send_available_count=3`.
+
+### Not delivered in this iteration (per user directive "no new UI")
+- Frontend Manual Send button + confirmation modal — awaits explicit
+  approval. Backend policy is ready to power it whenever UI ships.
+
+### Read-only contract (unchanged)
+- ✅ Zero Qoyod API imports (grep-verified).
+- ✅ Zero writes to قيود entities.
+- ✅ `qoyod_write_lock_attempts = 0`.
+- ✅ `selective_live_send_enabled = false` (Preview pinned).
+- ✅ `production_writes_locked = true` (Preview pinned).
+
+
+
 ## Iter-001h — Phase C.0 Revision: STRICT Trigger Statuses + invoice_date=send_date (2026-07-01)
 
 ### Two policy tightenings

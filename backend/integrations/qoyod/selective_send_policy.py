@@ -72,6 +72,28 @@ QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT: tuple[str, ...] = (
 )
 
 
+# ── Iter-001i — Manual Send path ────────────────────────────────────
+# Per user directive: when the auto trigger-status check would BLOCK
+# a delivered / shipping / Arabic in-transit order, the operator may
+# still choose to send it MANUALLY. This does NOT enable auto-send
+# for those statuses — it only unlocks a per-order manual path that
+# still requires a matching approval phrase.
+#
+# ONLY these statuses are eligible for the manual bypass; every other
+# blocker (Q2 cutoff, DRY IDs, totals mismatch, bank_transfer, etc.)
+# still holds even when `manual_send_requested=True`.
+_MANUAL_SEND_ELIGIBLE_STATUSES: frozenset[str] = frozenset({
+    "delivered", "shipping",
+    "تم التوصيل", "جاري التوصيل",
+})
+
+
+def manual_approval_phrase_for(order_number: Any) -> str:
+    """Canonical phrase the operator must type to authorise ONE
+    manual send. Mirrors Iter-293.4 per-order phrase pattern."""
+    return f"Approved manual Qoyod send for order {order_number} only"
+
+
 # ── Payment method allow-list (verbatim from user directive) ────────
 # NOTE: These are the methods that WILL BE allowed once the gate is
 # flipped. Today (Phase C.0) every decision is still blocked because
@@ -107,6 +129,8 @@ class BlockerCode:
     MISSING_ORDER_CREATED_AT    = "missing_order_created_at"
     STATUS_NOT_ELIGIBLE         = "status_not_eligible"
     INVOICE_TRIGGER_STATUS_NOT_ENABLED = "invoice_trigger_status_not_enabled"
+    MANUAL_APPROVAL_PHRASE_REQUIRED = "manual_approval_phrase_required"
+    MANUAL_APPROVAL_PHRASE_MISMATCH = "manual_approval_phrase_mismatch"
     ALREADY_SENT                = "already_sent"
     BANK_TRANSFER_ON_HOLD       = "bank_transfer_on_hold_iter_294"
     PAYMENT_METHOD_NOT_ALLOWED  = "payment_method_not_allowed"
@@ -146,6 +170,10 @@ class SelectiveSendDecision:
     send_timezone:              str = QOYOD_SEND_TIMEZONE
     send_timestamp_riyadh:      Optional[str] = None    # full ISO
     send_date_riyadh:           Optional[str] = None    # YYYY-MM-DD
+    # Iter-001i — Manual Send audit trail (echoes inputs; phrase text
+    # is deliberately NOT stored — only a boolean).
+    manual_send_requested:      bool = False
+    manual_approval_phrase_provided: bool = False
     # Snapshot of the gate values active at decision time.
     gates_snapshot:             dict = field(default_factory=dict)
 
@@ -181,43 +209,28 @@ def should_allow_selective_live_send(
     settings: dict,
     sync_start_date: Optional[date] = None,
     now_utc: Optional[datetime] = None,
+    manual_send_requested: bool = False,
+    manual_approval_phrase: Optional[str] = None,
 ) -> SelectiveSendDecision:
     """PURE policy — no DB, no I/O, no side-effects.
 
     Args
     ────
-    order : dict
-        A rich order/item dict. Recognised fields (all optional, safe
-        to pass a partial dict — a missing field errs on the BLOCK
-        side):
-          - order_number, salla_order_id
-          - salla_order_created_at (ISO date str)
-          - status | order_status
-          - payment_method
-          - existing_qoyod_invoice_id
-          - customer_status: {resolved, qoyod_id, reason}
-          - products_status: {resolved, missing, dry_run_only,
-                              resolved_count}
-          - totals_status: {valid, total, expected, diff}
-    settings : dict
-        `qoyod_settings` snapshot. Defaults are Fail-Closed:
-          - selective_live_send_enabled  (default False)
-          - production_writes_locked     (default True)
-          - qoyod_sync_start_date        (default 2026-07-01)
-          - qoyod_invoice_date_source    (default 'send_date')
-          - qoyod_enabled_invoice_trigger_statuses
-                (default ['completed', 'تم التنفيذ'])
-    sync_start_date : date, optional
-        Override for tests. Falls back to
-        `settings['qoyod_sync_start_date']` and then to
-        `QOYOD_SYNC_START_DATE`.
-    now_utc : datetime, optional
-        Override for tests. When omitted, `datetime.now(timezone.utc)`
-        is used.
+    order, settings, sync_start_date, now_utc — see Iter-001g/h docs.
+    manual_send_requested : bool
+        When True the operator is invoking the Manual Send path. This
+        unlocks a NARROW bypass of `invoice_trigger_status_not_enabled`
+        ONLY for `delivered / shipping / تم التوصيل / جاري التوصيل`
+        AND ONLY when `manual_approval_phrase` matches the canonical
+        `Approved manual Qoyod send for order <order_number> only`.
+        No other blocker (Q2 cutoff, bank_transfer, DRY/PREVIEW ids,
+        totals mismatch, missing customer/product, already sent,
+        write lock, master gate) may be bypassed by the manual path.
+    manual_approval_phrase : str, optional
+        The verbatim phrase entered by the operator. Compared
+        strictly to `manual_approval_phrase_for(order_number)`.
 
-    Returns a `SelectiveSendDecision`. Every field is populated
-    including the Asia/Riyadh send timestamp that WOULD be used as
-    the قيود invoice_date.
+    Returns a `SelectiveSendDecision`.
     """
     order_number  = order.get("order_number")
     salla_order_id = order.get("salla_order_id")
@@ -231,6 +244,11 @@ def should_allow_selective_live_send(
     products_status = order.get("products_status") or {}
     totals_status   = order.get("totals_status") or {}
     diff = float(totals_status.get("diff") or 0.0)
+
+    # Manual-send audit inputs (never store the phrase itself).
+    manual_send_requested = bool(manual_send_requested)
+    manual_approval_phrase_provided = bool(
+        manual_approval_phrase and manual_approval_phrase.strip())
 
     # ── Send date computation (Asia/Riyadh) ────────────────────
     _now = now_utc or datetime.now(timezone.utc)
@@ -315,6 +333,9 @@ def should_allow_selective_live_send(
             send_timezone=QOYOD_SEND_TIMEZONE,
             send_timestamp_riyadh=send_ts_iso,
             send_date_riyadh=send_date_str,
+            manual_send_requested=manual_send_requested,
+            manual_approval_phrase_provided=
+                manual_approval_phrase_provided,
             gates_snapshot=_gates_snap,
         )
 
@@ -377,14 +398,39 @@ def should_allow_selective_live_send(
     # Even if status is broadly eligible (e.g. delivered), the tenant
     # must have opted it in via `qoyod_enabled_invoice_trigger_statuses`
     # before Selective Send will allow it. Default enables only
-    # `completed` / `تم التنفيذ` — everything else is blocked.
+    # `completed` / `تم التنفيذ` — everything else is blocked UNLESS
+    # the operator triggers the Manual Send path (Iter-001i).
     if normalized_status not in _enabled_normalized:
-        return _block(
-            BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED,
-            f"حالة الطلب '{status}' ليست ضمن الحالات المفعّلة "
-            f"للإرسال ({enabled_trigger_statuses}). "
-            "الإرسال الافتراضي مقتصر على completed / تم التنفيذ.",
+        # Iter-001i — Manual Send narrow bypass.
+        _manual_eligible_normalized = frozenset(
+            _normalize_status(s) for s in _MANUAL_SEND_ELIGIBLE_STATUSES)
+        can_use_manual_path = (
+            manual_send_requested
+            and normalized_status in _manual_eligible_normalized
         )
+        if not can_use_manual_path:
+            return _block(
+                BlockerCode.INVOICE_TRIGGER_STATUS_NOT_ENABLED,
+                f"حالة الطلب '{status}' ليست ضمن الحالات المفعّلة "
+                f"للإرسال ({enabled_trigger_statuses}). "
+                "الإرسال الافتراضي مقتصر على completed / تم التنفيذ.",
+            )
+        # Manual path activated — verify the operator's phrase.
+        expected_phrase = manual_approval_phrase_for(order_number)
+        if not manual_approval_phrase:
+            return _block(
+                BlockerCode.MANUAL_APPROVAL_PHRASE_REQUIRED,
+                "الإرسال اليدوي يتطلب كتابة عبارة التأكيد الصريحة: "
+                f"'{expected_phrase}'.",
+            )
+        if manual_approval_phrase.strip() != expected_phrase:
+            return _block(
+                BlockerCode.MANUAL_APPROVAL_PHRASE_MISMATCH,
+                f"عبارة التأكيد لا تطابق المطلوب. "
+                f"المتوقع بالضبط: '{expected_phrase}'.",
+            )
+        # Phrase matches — proceed to all remaining checks. Manual
+        # send does NOT bypass anything below this point.
 
     # ── Check 7: Already sent (real قيود invoice exists) ────────
     if _is_real_invoice_id(existing_inv):
@@ -493,6 +539,8 @@ def should_allow_selective_live_send(
         send_timezone=QOYOD_SEND_TIMEZONE,
         send_timestamp_riyadh=send_ts_iso,
         send_date_riyadh=send_date_str,
+        manual_send_requested=manual_send_requested,
+        manual_approval_phrase_provided=manual_approval_phrase_provided,
         gates_snapshot=_gates_snap,
     )
 
@@ -568,24 +616,49 @@ async def build_selective_send_policy_report(
                 QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT)),
     }
 
-    # 3. Apply the policy to every item.
+    # 3. Apply the policy to every item — compute BOTH the auto path
+    #    AND the manual-send availability so the UI can decide whether
+    #    to show the "Manual Send" button.
     decisions: list[dict] = []
     counts: dict[str, int] = {"allow": 0, "block": 0}
     blocker_code_counts: dict[str, int] = {}
     payment_method_breakdown: dict[str, int] = {}
+    manual_send_available_count = 0
 
     for item in (eo.get("items") or []):
-        d = should_allow_selective_live_send(
+        # Auto-send decision (no manual bypass).
+        auto = should_allow_selective_live_send(
             order=item, settings=settings)
-        emit_selective_send_decision_log(d)
-        counts[d.decision] = counts.get(d.decision, 0) + 1
-        if d.blocker_code:
-            blocker_code_counts[d.blocker_code] = \
-                blocker_code_counts.get(d.blocker_code, 0) + 1
-        pm = d.payment_method or "(none)"
+        emit_selective_send_decision_log(auto)
+        counts[auto.decision] = counts.get(auto.decision, 0) + 1
+        if auto.blocker_code:
+            blocker_code_counts[auto.blocker_code] = \
+                blocker_code_counts.get(auto.blocker_code, 0) + 1
+        pm = auto.payment_method or "(none)"
         payment_method_breakdown[pm] = \
             payment_method_breakdown.get(pm, 0) + 1
-        decisions.append(asdict(d))
+
+        # Manual-send availability probe — feed the canonical phrase
+        # to see if THE ONLY remaining blocker was the trigger status.
+        # If this returns `allow`, the operator can perform manual
+        # send after typing the phrase.
+        expected_phrase = manual_approval_phrase_for(
+            item.get("order_number"))
+        manual_probe = should_allow_selective_live_send(
+            order=item, settings=settings,
+            manual_send_requested=True,
+            manual_approval_phrase=expected_phrase)
+        manual_send_available = (manual_probe.decision == "allow")
+        if manual_send_available:
+            manual_send_available_count += 1
+
+        row = asdict(auto)
+        row["auto_send_available"] = (auto.decision == "allow")
+        row["manual_send_available"] = manual_send_available
+        row["manual_send_confirmation_phrase"] = expected_phrase
+        row["manual_send_blocker_code"] = manual_probe.blocker_code
+        row["manual_send_blocker_reason"] = manual_probe.blocker_reason
+        decisions.append(row)
 
     # 4. Assemble the report.
     return {
@@ -624,6 +697,7 @@ async def build_selective_send_policy_report(
         "total_decisions":           len(decisions),
         "would_send_to_qoyod_count": sum(1 for d in decisions
                                          if d["would_send_to_qoyod"]),
+        "manual_send_available_count": manual_send_available_count,
         "decisions":                 decisions,
         "notes": [
             "READ-ONLY POLICY REPORT — لا استدعاء لـ Qoyod، "
@@ -645,6 +719,10 @@ async def build_selective_send_policy_report(
             f"{settings['qoyod_enabled_invoice_trigger_statuses']}. "
             "delivered / shipping / تم التوصيل / جاري التوصيل تُحظر "
             "افتراضياً بـ blocker_code=invoice_trigger_status_not_enabled.",
+            "Manual Send (Iter-001i): يمكن إرسال delivered / shipping "
+            "يدوياً فقط بعد كتابة عبارة التأكيد بالضبط: "
+            "'Approved manual Qoyod send for order <N> only'. "
+            "المسار اليدوي لا يتجاوز أي blocker آخر.",
             "bank_transfer معلَّق حتى Iter-294 "
             "(bank_transfer_routing_enabled=false).",
             "المسموح لاحقاً: mada / apple_pay / credit_card / visa / "
