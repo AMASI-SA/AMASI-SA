@@ -112,7 +112,10 @@ def test_settings_defaults_are_safe():
     assert s.auto_receipt is True
     # Day 4 — Invoice Trigger Policy defaults.
     assert s.invoice_trigger_statuses == ["completed"]  # = Salla "تم التنفيذ"
-    assert s.invoice_date_source == "trigger_status_date"
+    # Iter-293.4-rev9 — default flipped to `send_date` so قيود
+    # issue_date reflects the actual send moment in Asia/Riyadh
+    # (ZATCA-correct), not the Salla-side event timestamp.
+    assert s.invoice_date_source == "send_date"
     assert s.trigger_once_only is True
     assert s.default_product_type == "service" # user spec: Amasi default
     assert s.user_id == "main"                 # single-tenant
