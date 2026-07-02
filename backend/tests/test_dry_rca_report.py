@@ -37,6 +37,28 @@ class _FakeColl:
     def find(self, q, projection=None):
         return _Cursor([d for d in self._docs if self._match(d, q)])
 
+    async def update_one(self, filt, patch, **kw):
+        """Minimal in-memory update. Supports only ``$set``.
+
+        Returns a lightweight result object exposing ``matched_count``
+        and ``modified_count`` so callers may branch on them.
+        """
+        class _Res:
+            def __init__(self, matched, modified):
+                self.matched_count = matched
+                self.modified_count = modified
+
+        for d in self._docs:
+            if self._match(d, filt):
+                modified = 0
+                set_patch = (patch or {}).get("$set") or {}
+                for k, v in set_patch.items():
+                    if d.get(k) != v:
+                        d[k] = v
+                        modified = 1
+                return _Res(1, modified)
+        return _Res(0, 0)
+
     @staticmethod
     def _match(doc, q):
         if not isinstance(q, dict):
