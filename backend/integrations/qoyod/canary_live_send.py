@@ -765,6 +765,116 @@ async def execute_canary_live_send(
     # Build the scoped DB proxy: `qoyod_settings.find_one` returns a
     # copy with `dry_run_mode=False`. Everything else forwards.
     canary_db = _CanaryDBProxy(db)
+
+    # ── Iter-2026-02.rev10 — Pre-resolve customer (canary scope) ─
+    # `SelectiveSendPolicy` refuses `customer_not_resolved` when the
+    # row's `qoyod_customer_id` is null or DRY:/PREVIEW:. Under the
+    # canary flow we pre-resolve the customer here (via the existing
+    # `resolve_customer` helper — full Qoyod lookup/create — using
+    # the scoped `canary_db` so `production_writes_locked=False` is
+    # honoured). On success we update BOTH the mapping (already done
+    # by `resolve_customer`) AND the inbox row's `qoyod_customer_id`
+    # for the selected trace only.
+    customer_pre_resolve_debug: dict = {"performed": False}
+    try:
+        from integrations.qoyod.customer_resolver import (
+            resolve_customer as _cr_resolve,
+        )
+        from integrations.qoyod.dto import CustomerDTO
+        _cust = canonical.get("customer") or {}
+        # Compare current row qoyod_customer_id — if already REAL,
+        # skip. Else resolve.
+        _row_qcid = None
+        for _rr in selection_debug.get(
+                "duplicate_rows_summary", []):
+            if _rr.get("trace_id") == selected_trace_id:
+                _row_qcid = _rr.get("existing_qoyod_invoice_id")
+                # existing_qoyod_invoice_id in summary is for invoice,
+                # not customer. Read qoyod_customer_id from the
+                # candidate row instead.
+                break
+        # Fetch selected row again (deterministic) to inspect
+        # its qoyod_customer_id.
+        _sel_row = await db.integration_inbox.find_one(
+            {"user_id": user_id, "trace_id": selected_trace_id},
+            {"_id": 0}) or {}
+        _current_qcid = _sel_row.get("qoyod_customer_id")
+        _needs_resolve = (
+            _current_qcid is None
+            or (isinstance(_current_qcid, str)
+                and _current_qcid.startswith(("DRY:", "PREVIEW:"))))
+        customer_pre_resolve_debug["row_qoyod_customer_id_before"] = \
+            _current_qcid
+        customer_pre_resolve_debug["needs_resolve"] = _needs_resolve
+        if _needs_resolve:
+            cust_dto = CustomerDTO(
+                name=_cust.get("name"),
+                email=_cust.get("email"),
+                phone=(_cust.get("mobile") or _cust.get("phone")),
+                is_guest=False,
+            )
+            _cr_res = await _cr_resolve(
+                canary_db, user_id=user_id,
+                customer=cust_dto,
+                trace_id=selected_trace_id)
+            customer_pre_resolve_debug["performed"] = True
+            customer_pre_resolve_debug["success"] = \
+                _cr_res.success
+            customer_pre_resolve_debug[
+                "resolved_qoyod_customer_id"] = (
+                    _cr_res.qoyod_customer_id)
+            if not _cr_res.success:
+                await _write_audit(
+                    db, attempt_id=attempt_id,
+                    phase="customer_pre_resolve",
+                    status="refused",
+                    code=(_cr_res.error or {}).get(
+                        "code", "customer_resolve_failed"),
+                    detail=str((_cr_res.error or {}).get(
+                        "message", ""))[:400])
+                return {
+                    "attempt_id":  attempt_id,
+                    "outcome":     "REFUSED",
+                    "guard_no":    None,
+                    "code":        "canary_customer_resolution_failed",
+                    "detail":      (
+                        f"canary refused: customer resolution "
+                        f"failed ({(_cr_res.error or {}).get('code')}"
+                        f") — no invoice, no payment"),
+                    "no_qoyod_api_calls": False,
+                    "customer_pre_resolve_debug":
+                        customer_pre_resolve_debug,
+                    "selected_trace_id": selected_trace_id,
+                    "selection_debug":   selection_debug,
+                }
+            # Success — write the real customer_id ONLY on the
+            # selected trace's inbox row. Bounded scope: user_id +
+            # trace_id filter.
+            await db.integration_inbox.update_one(
+                {"user_id": user_id,
+                 "trace_id": selected_trace_id},
+                {"$set": {
+                    "qoyod_customer_id": _cr_res.qoyod_customer_id}})
+            customer_pre_resolve_debug["inbox_updated"] = True
+    except Exception as _cust_exc:
+        # Any unexpected error: refuse. No invoice.
+        await _write_audit(
+            db, attempt_id=attempt_id,
+            phase="customer_pre_resolve", status="error",
+            code=type(_cust_exc).__name__,
+            detail=str(_cust_exc)[:400])
+        return {
+            "attempt_id":  attempt_id,
+            "outcome":     "REFUSED",
+            "code":        "canary_customer_resolution_error",
+            "detail":      str(_cust_exc)[:400],
+            "no_qoyod_api_calls": False,
+            "customer_pre_resolve_debug":
+                customer_pre_resolve_debug,
+            "selected_trace_id": selected_trace_id,
+            "selection_debug":   selection_debug,
+        }
+
     try:
         result = await reprocess_one_order(
             canary_db,

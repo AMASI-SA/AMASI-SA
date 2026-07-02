@@ -36,7 +36,9 @@ def _canary_row(**overrides):
         "trace_id":             "trace-canary-default-abc123",
         "received_at":          "2026-07-05T12:00:00+00:00",
         "existing_qoyod_invoice_id": "DRY:invoice:xxx",
-        "qoyod_customer_id":    "DRY:contact:yyy",
+        "qoyod_customer_id":    "12345",   # pre-resolved (skip
+                                            # canary pre-resolve
+                                            # in tests)
         "salla_order_created_at": "2026-07-05",
         "canonical_payload": {
             "order_number":   CANARY_ORDER_NUMBER,
@@ -620,7 +622,7 @@ class TestGuard5DateExtractionMatchesEligibleOrders:
             "trace_id": "trace-prod-269629400-canonical",
             "received_at": "2026-07-01T09:00:00+00:00",
             "existing_qoyod_invoice_id": "DRY:invoice:xxx",
-            "qoyod_customer_id": "DRY:contact:yyy",
+            "qoyod_customer_id": "12345",
             "canonical_payload": {
                 "order_number": CANARY_ORDER_NUMBER,
                 "order_date": "2026-07-01",
@@ -2601,6 +2603,233 @@ class TestScopedTriggerStatusOverlayRev9:
         assert db.qoyod_settings._docs[0][
             "qoyod_enabled_invoice_trigger_statuses"] == [
                 "completed", "تم التنفيذ"]
+
+
+# ── Canary customer pre-resolve (rev10) ─────────────────────────────
+# Prod bug: SelectiveSendPolicy refused `customer_not_resolved` even
+# after all rev1–rev9 fixes because the row's `qoyod_customer_id`
+# was still null/DRY at the moment the pipeline ran the invoice
+# site's `assert_send_allowed`. rev10 pre-resolves the customer in
+# canary (via the existing `resolve_customer` helper — full lookup
+# or create with idempotency) and updates the selected trace's
+# inbox row BEFORE dispatching to `reprocess_one_order`.
+@pytest.mark.asyncio
+class TestCustomerPreResolveRev10:
+
+    def _make_db_dry_customer(self):
+        row = _canary_row()
+        row["qoyod_customer_id"] = "DRY:contact:yyy"
+        db = _build_db(row=row)
+        return db, row
+
+    async def test_pre_resolve_success_updates_inbox_and_dispatches(
+            self):
+        from integrations.qoyod.customer_resolver import (
+            ResolutionResult,
+        )
+        db, _ = self._make_db_dry_customer()
+        with patch("integrations.qoyod.customer_resolver."
+                   "resolve_customer",
+                   new=AsyncMock(return_value=ResolutionResult(
+                       success=True,
+                       qoyod_customer_id="42",
+                       lookup_key="+966557951913",
+                       lookup_kind="phone",
+                       created_new=True))) as mock_cr, \
+             patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-PR",
+                       "qoyod_customer_id":  "42",
+                       "qoyod_receipt_id":   "RCPT-PR",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        # resolve_customer was invoked once.
+        assert mock_cr.call_count == 1
+        # Inbox row's qoyod_customer_id was updated to the real id.
+        assert db.integration_inbox._docs[0]["qoyod_customer_id"] \
+            == "42"
+        # DB settings still Fail-Closed.
+        s = db.qoyod_settings._docs[0]
+        assert s["selective_live_send_enabled"] is False
+        assert s["production_writes_locked"] is True
+
+    async def test_pre_resolve_failure_refuses_no_invoice(self):
+        from integrations.qoyod.customer_resolver import (
+            ResolutionResult,
+        )
+        db, _ = self._make_db_dry_customer()
+        with patch("integrations.qoyod.customer_resolver."
+                   "resolve_customer",
+                   new=AsyncMock(return_value=ResolutionResult(
+                       success=False,
+                       lookup_key="+966557951913",
+                       lookup_kind="phone",
+                       error={"code": "credentials_missing",
+                              "message": "no key"}))), \
+             patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["code"] == "canary_customer_resolution_failed"
+        # NO pipeline call = no invoice / no payment.
+        assert mock_pipe.call_count == 0
+        assert r["customer_pre_resolve_debug"]["performed"] is True
+        assert r["customer_pre_resolve_debug"]["success"] is False
+
+    async def test_real_customer_id_skips_pre_resolve(self):
+        """When the row already has a REAL qoyod_customer_id, canary
+        MUST NOT invoke resolve_customer again — idempotency."""
+        db = _build_db(row=_canary_row())    # fixture has "12345"
+        with patch("integrations.qoyod.customer_resolver."
+                   "resolve_customer",
+                   new=AsyncMock()) as mock_cr, \
+             patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-SKIP",
+                       "qoyod_customer_id":  "12345",
+                       "qoyod_receipt_id":   "RCPT-SKIP",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        assert mock_cr.call_count == 0    # not invoked.
+
+    async def test_non_canary_order_never_pre_resolves(self):
+        db, _ = self._make_db_dry_customer()
+        with patch("integrations.qoyod.customer_resolver."
+                   "resolve_customer",
+                   new=AsyncMock()) as mock_cr, \
+             patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number="999999999",
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 2
+        assert mock_cr.call_count == 0
+        assert mock_pipe.call_count == 0
+
+    async def test_phone_email_mismatch_refuses_before_pre_resolve(
+            self):
+        db, row = self._make_db_dry_customer()
+        # Bad phone → Guard 8 refuses before any resolver call.
+        row["canonical_payload"]["customer"]["mobile"] = "+966000000000"
+        with patch("integrations.qoyod.customer_resolver."
+                   "resolve_customer",
+                   new=AsyncMock()) as mock_cr:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 8
+        assert mock_cr.call_count == 0
+
+    async def test_invoice_uses_new_customer_id_after_resolve(self):
+        from integrations.qoyod.customer_resolver import (
+            ResolutionResult,
+        )
+        db, _ = self._make_db_dry_customer()
+        captured = {}
+
+        async def _fake_reprocess(db_arg, **kw):
+            # Read the inbox row from the (proxied) DB.
+            r = await db_arg.integration_inbox.find_one(
+                {"user_id": "main",
+                 "trace_id": kw["trace_id"]}, {"_id": 0})
+            captured["qoyod_customer_id"] = r.get(
+                "qoyod_customer_id")
+            return {
+                "outcome":            "SENT",
+                "qoyod_invoice_id":   "INV-NEW",
+                "qoyod_customer_id":  r.get("qoyod_customer_id"),
+                "qoyod_receipt_id":   "RCPT-NEW",
+            }
+
+        with patch("integrations.qoyod.customer_resolver."
+                   "resolve_customer",
+                   new=AsyncMock(return_value=ResolutionResult(
+                       success=True,
+                       qoyod_customer_id="777",
+                       lookup_key="+966557951913",
+                       lookup_kind="phone",
+                       created_new=True))), \
+             patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(side_effect=_fake_reprocess)):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        # The pipeline read the NEW resolved customer_id from the
+        # inbox row (updated by canary pre-resolve).
+        assert captured["qoyod_customer_id"] == "777"
+
+    async def test_db_settings_untouched_after_pre_resolve(self):
+        from integrations.qoyod.customer_resolver import (
+            ResolutionResult,
+        )
+        db, _ = self._make_db_dry_customer()
+        before_settings = list(db.qoyod_settings._docs)
+        with patch("integrations.qoyod.customer_resolver."
+                   "resolve_customer",
+                   new=AsyncMock(return_value=ResolutionResult(
+                       success=True,
+                       qoyod_customer_id="99",
+                       lookup_key="+966557951913",
+                       lookup_kind="phone",
+                       created_new=False))), \
+             patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-A",
+                       "qoyod_customer_id":  "99",
+                       "qoyod_receipt_id":   "RCPT-A",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        after_settings = list(db.qoyod_settings._docs)
+        # DB settings still Fail-Closed on disk.
+        assert after_settings == before_settings
+
+    async def test_no_payment_before_successful_customer_resolve(
+            self):
+        """If customer resolve fails, `reprocess_one_order` (which
+        would drive both invoice AND payment) must never run."""
+        from integrations.qoyod.customer_resolver import (
+            ResolutionResult,
+        )
+        db, _ = self._make_db_dry_customer()
+        with patch("integrations.qoyod.customer_resolver."
+                   "resolve_customer",
+                   new=AsyncMock(return_value=ResolutionResult(
+                       success=False,
+                       lookup_key="+966557951913",
+                       lookup_kind="phone",
+                       error={"code": "qoyod_write_locked",
+                              "message": "locked"}))), \
+             patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert mock_pipe.call_count == 0
 
 
 # ── Static / lint-style invariants ─────────────────────────────────
