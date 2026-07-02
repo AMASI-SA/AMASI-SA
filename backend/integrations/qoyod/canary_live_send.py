@@ -25,6 +25,20 @@ CANARY_APPROVAL_PHRASE:   str = (
     "Approved live Qoyod canary send for order 269629400 only")
 REQUIRED_PAYMENT_METHOD:  str = "tabby_installment"
 REQUIRED_STATUS:          str = "completed"
+# Iter-2026-02.canary-manual — the same canary target order
+# (269629400) may drift to `جاري التوصيل` before the operator can
+# fire the send. That status is business-eligible per
+# `eligible_orders.ELIGIBLE_STATUSES` but does NOT trigger auto-send
+# (invoice_trigger_status_enabled=false in Production for this
+# status). Canary treats it as an explicit MANUAL send — signalled
+# via `manual_send_requested=true` in the response — but ONLY for
+# the canary target order. `_ACCEPTED_CANARY_STATUSES_NORMALIZED` is
+# the exhaustive whitelist; anything else refuses at Guard 4.
+_MANUAL_SEND_STATUSES_NORMALIZED: frozenset[str] = frozenset({
+    "جاري التوصيل",       # normalized form of جاري_التوصيل + جاري التوصيل
+})
+_ACCEPTED_CANARY_STATUSES_NORMALIZED: frozenset[str] = frozenset(
+    {REQUIRED_STATUS} | _MANUAL_SEND_STATUSES_NORMALIZED)
 Q3_CUTOFF_ISO:            str = "2026-07-01"
 REQUIRED_SKU:             str = "AMS11237"
 REQUIRED_QOYOD_PRODUCT_ID: int = 45
@@ -127,7 +141,10 @@ async def _write_audit(
 def _row_summary(row: dict) -> dict:
     """Non-PII summary of a candidate inbox row for debug output.
     Never includes customer name / email / phone / raw_payload."""
+    from integrations.qoyod.eligible_orders import _normalize_status
     can = row.get("canonical_payload") or {}
+    raw_status = can.get("status") or can.get("order_status")
+    norm_status = _normalize_status(raw_status)
     return {
         "trace_id":         row.get("trace_id"),
         "received_at":      (row.get("received_at").isoformat()
@@ -135,8 +152,10 @@ def _row_summary(row: dict) -> dict:
                                         "isoformat")
                              else row.get("received_at")),
         "pipeline_stage":   row.get("pipeline_stage"),
-        "status":           can.get("status")
-                            or can.get("order_status"),
+        "status":           raw_status,
+        "normalized_status": norm_status,
+        "manual_send_requested": (
+            norm_status in _MANUAL_SEND_STATUSES_NORMALIZED),
         "payment_method":   can.get("payment_method"),
         "created_at":       (can.get("salla_order_created_at")
                              or can.get("created_at")
@@ -144,6 +163,7 @@ def _row_summary(row: dict) -> dict:
         "existing_qoyod_invoice_id": (
             can.get("existing_qoyod_invoice_id")
             or row.get("existing_qoyod_invoice_id")),
+        "qoyod_invoice_id": row.get("qoyod_invoice_id"),
         "outcome":          row.get("outcome"),
     }
 
@@ -165,9 +185,11 @@ def _row_matches_canary_criteria(row: dict) -> tuple[bool, Optional[str]]:
     if str(can.get("payment_method") or "").lower() \
             != REQUIRED_PAYMENT_METHOD:
         return (False, "payment_method_mismatch")
-    # Status.
+    # Status: accept 'completed' OR 'جاري التوصيل' (canary-only
+    # extension — the latter triggers manual_send semantics).
     raw_status = can.get("status") or can.get("order_status") or ""
-    if _normalize_status(raw_status) != REQUIRED_STATUS:
+    if _normalize_status(raw_status) \
+            not in _ACCEPTED_CANARY_STATUSES_NORMALIZED:
         return (False, "status_not_completed")
     # Created_at ≥ Q3 cutoff.
     pseudo = {
@@ -375,11 +397,12 @@ async def _run_guards(
         from integrations.qoyod.eligible_orders import _normalize_status
         raw_status = canonical.get("status") \
             or canonical.get("order_status") or ""
-        if _normalize_status(raw_status) != REQUIRED_STATUS:
+        norm = _normalize_status(raw_status)
+        if norm not in _ACCEPTED_CANARY_STATUSES_NORMALIZED:
             raise CanaryGuardFailed(
                 4, "status_not_completed",
-                f"Normalised status '{_normalize_status(raw_status)}' "
-                f"!= '{REQUIRED_STATUS}'.",
+                f"Normalised status {norm!r} not in canary-accepted "
+                f"set {sorted(_ACCEPTED_CANARY_STATUSES_NORMALIZED)}.",
                 extra={"duplicate_debug": duplicate_debug})
 
         # Guard 5 — created_at cutoff (with date_debug).
@@ -684,6 +707,15 @@ async def execute_canary_live_send(
                 "qoyod_product_id": REQUIRED_QOYOD_PRODUCT_ID,
             },
         })
+    # Determine manual_send_requested for the SELECTED row from
+    # selection_debug (populated by _row_summary).
+    _selected_manual = False
+    _selected_normalized_status = None
+    for _r in selection_debug.get("duplicate_rows_summary", []):
+        if _r.get("trace_id") == selected_trace_id:
+            _selected_manual = bool(_r.get("manual_send_requested"))
+            _selected_normalized_status = _r.get("normalized_status")
+            break
     return {
         "attempt_id":         attempt_id,
         "outcome":            result.get("outcome"),
@@ -695,6 +727,8 @@ async def execute_canary_live_send(
                                REQUIRED_QOYOD_PRODUCT_ID},
         "invoice_date_source": "send_date_riyadh",
         "selected_trace_id":   selected_trace_id,
+        "selected_normalized_status": _selected_normalized_status,
+        "manual_send_requested":      _selected_manual,
         "selection_debug":     selection_debug,
         "raw_pipeline_result": result,
     }

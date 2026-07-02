@@ -1681,6 +1681,155 @@ class TestSkippedPartialReset:
         assert after[0].get("dry_run_mode", False) is False
 
 
+# ── Manual-canary status extension (Iter-2026-02.rev5) ─────────────
+# Prod bug: order 269629400 status drifted to `جاري التوصيل` (in
+# transit). Canary must accept this status (business-eligible), but
+# only for the canary target order, and only under the same 14
+# safety guards. When accepted, the response marks
+# `manual_send_requested=true` for auditability.
+@pytest.mark.asyncio
+class TestManualCanaryStatusExtension:
+
+    async def test_delivering_space_form_accepted_as_manual(self):
+        row = _canary_row()
+        row["canonical_payload"]["status"] = "جاري التوصيل"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-MAN-1",
+                       "qoyod_customer_id":  "CUST-MAN-1",
+                       "qoyod_receipt_id":   "RCPT-MAN-1",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert r["manual_send_requested"] is True
+        assert r["selected_normalized_status"] == "جاري التوصيل"
+        # Same trace_id + confirm token as automatic path.
+        kw = mock_pipe.call_args.kwargs
+        assert kw["order_number"] == CANARY_ORDER_NUMBER
+        assert kw["confirm"] == f"REPROCESS-{CANARY_ORDER_NUMBER}"
+
+    async def test_delivering_underscore_form_accepted_as_manual(self):
+        row = _canary_row()
+        row["canonical_payload"]["status"] = "جاري_التوصيل"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-MAN-2",
+                       "qoyod_customer_id":  "CUST-MAN-2",
+                       "qoyod_receipt_id":   "RCPT-MAN-2",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert r["manual_send_requested"] is True
+
+    async def test_completed_still_accepted_and_not_manual(self):
+        row = _canary_row()
+        row["canonical_payload"]["status"] = "completed"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-C",
+                       "qoyod_customer_id":  "CUST-C",
+                       "qoyod_receipt_id":   "RCPT-C",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        assert r["manual_send_requested"] is False
+        assert r["selected_normalized_status"] == "completed"
+
+    async def test_other_statuses_still_refused_at_guard_4(self):
+        """`shipping` / `delivered` / `تم التوصيل` are business-
+        eligible but NOT permitted for canary — canary keeps the
+        two-status whitelist tight."""
+        for bad in ("shipping", "delivered", "تم التوصيل",
+                    "in_review", "pending", "cancelled"):
+            row = _canary_row()
+            row["canonical_payload"]["status"] = bad
+            db = _build_db(row=row)
+            with patch("integrations.qoyod.one_shot_reprocess."
+                       "reprocess_one_order",
+                       new=AsyncMock()) as mock_pipe:
+                r = await execute_canary_live_send(
+                    db, order_number=CANARY_ORDER_NUMBER,
+                    approval_phrase=CANARY_APPROVAL_PHRASE)
+            assert r["outcome"] == "REFUSED", (
+                f"status={bad!r} unexpectedly accepted: {r}")
+            assert r["guard_no"] in {4, 2}
+            assert mock_pipe.call_count == 0
+
+    async def test_manual_status_still_requires_all_other_guards(self):
+        """Delivering status is accepted, but every OTHER canary
+        guard (payment method, customer, totals, product mapping,
+        etc.) must still pass."""
+        # payment_method mismatch under delivering status.
+        row = _canary_row()
+        row["canonical_payload"]["status"] = "جاري التوصيل"
+        row["canonical_payload"]["payment_method"] = "bank_transfer"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] in {3, 2}
+        assert mock_pipe.call_count == 0
+
+    async def test_delivering_only_for_canary_order(self):
+        """A non-canary order in delivering status must STILL be
+        refused at Guard 2 (order_number_not_canary), BEFORE the
+        status check runs."""
+        row = _canary_row()
+        row["salla_order_number"] = "999999999"
+        row["canonical_payload"]["order_number"] = "999999999"
+        row["canonical_payload"]["status"] = "جاري التوصيل"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number="999999999",
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 2   # order_number_not_canary
+        assert mock_pipe.call_count == 0
+
+    async def test_settings_untouched_when_delivering_accepted(self):
+        row = _canary_row()
+        row["canonical_payload"]["status"] = "جاري التوصيل"
+        db = _build_db(row=row)
+        before = list(db.qoyod_settings._docs)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-S",
+                       "qoyod_customer_id":  "CUST-S",
+                       "qoyod_receipt_id":   "RCPT-S",
+                   })):
+            await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        after = list(db.qoyod_settings._docs)
+        assert after == before
+        assert after[0]["selective_live_send_enabled"] is False
+        assert after[0]["production_writes_locked"]    is True
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 
