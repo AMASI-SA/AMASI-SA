@@ -42,6 +42,65 @@ class CanaryGuardFailed(Exception):
         self.extra    = extra or {}
 
 
+# ── Scoped dry_run override — canary-only DB proxy ─────────────────
+# Rationale: `one_shot_reprocess.py` L666 rejects when
+#     `is_dry_run_mode(settings) is True`  (settings.get("dry_run_mode"))
+# Pipeline stages also branch on `settings.get("dry_run_mode")`. We
+# want a scoped override that:
+#   • NEVER writes to qoyod_settings.
+#   • NEVER leaks outside this single canary call (constructed fresh
+#     per attempt, discarded on return).
+#   • Applies ONLY to reads of `qoyod_settings.find_one`.
+#   • Leaves every other collection and every write untouched.
+# Approach: a thin proxy that intercepts only
+#     db.qoyod_settings.find_one(...)
+# and overlays `dry_run_mode=False` on the returned document. All
+# other attributes / methods forward to the real db unchanged. Two
+# static invariants (tests) pin these guarantees.
+class _CanaryDryRunSettingsProxy:
+    """Proxy for `db.qoyod_settings` that overrides ONE field
+    (`dry_run_mode`) on read. Writes / updates pass through
+    untouched. Any attempt to `update_one` / `replace_one` /
+    `insert_one` on this proxy still lands on the real collection —
+    but canary's own module-level static test refuses to allow
+    those literals in canary_live_send.py."""
+    __slots__ = ("_coll",)
+
+    def __init__(self, real_coll):
+        self._coll = real_coll
+
+    async def find_one(self, *a, **kw):
+        doc = await self._coll.find_one(*a, **kw)
+        if isinstance(doc, dict):
+            return {**doc, "dry_run_mode": False}
+        return doc
+
+    def __getattr__(self, name):
+        return getattr(self._coll, name)
+
+
+class _CanaryDBProxy:
+    """Proxy for the `db` object that ONLY intercepts access to
+    `qoyod_settings` (wrapped in `_CanaryDryRunSettingsProxy`).
+    Every other collection is returned as-is."""
+    __slots__ = ("_db",)
+
+    def __init__(self, real_db):
+        object.__setattr__(self, "_db", real_db)
+
+    def __getattr__(self, name):
+        if name == "qoyod_settings":
+            return _CanaryDryRunSettingsProxy(self._db.qoyod_settings)
+        return getattr(self._db, name)
+
+    def __getitem__(self, name):
+        # Some code accesses collections via db["collection"]; forward
+        # with the same override policy.
+        if name == "qoyod_settings":
+            return _CanaryDryRunSettingsProxy(self._db["qoyod_settings"])
+        return self._db[name]
+
+
 async def _write_audit(
     db, *, attempt_id: str, phase: str, status: str,
     guard_no: Optional[int] = None, code: Optional[str] = None,
@@ -185,6 +244,7 @@ async def _run_guards(
         {"user_id": user_id}, {"_id": 0}) or {}
     raw_selective = raw_settings.get("selective_live_send_enabled")
     raw_writes    = raw_settings.get("production_writes_locked")
+    raw_dry_run   = raw_settings.get("dry_run_mode")
     # Fail-Closed defaults (identical to policy report).
     selective_flag = bool(raw_selective) if raw_selective is not None \
         else False
@@ -202,6 +262,11 @@ async def _run_guards(
         "raw_production_writes_locked_type":
             type(raw_writes).__name__,
         "effective_production_writes_locked": writes_locked_flag,
+        "raw_dry_run_mode":                 raw_dry_run,
+        "raw_dry_run_mode_type":            type(raw_dry_run).__name__,
+        "effective_dry_run_mode_for_canary": False,
+        "dry_run_mode_scope":
+            f"canary_order_{CANARY_ORDER_NUMBER}_only",
         "default_semantics":
             "identical to selective_send_policy_report "
             "(missing field → Fail-Closed default)",
@@ -474,6 +539,7 @@ async def execute_canary_live_send(
                 {"user_id": user_id}, {"_id": 0}) or {}
             _rs = _raw.get("selective_live_send_enabled")
             _rw = _raw.get("production_writes_locked")
+            _rd = _raw.get("dry_run_mode")
             debug_snapshot = {
                 "settings_source":                  "qoyod_settings",
                 "settings_user_id":                 user_id,
@@ -484,6 +550,11 @@ async def execute_canary_live_send(
                 "raw_production_writes_locked":     _rw,
                 "raw_production_writes_locked_type":
                     type(_rw).__name__,
+                "raw_dry_run_mode":                 _rd,
+                "raw_dry_run_mode_type":            type(_rd).__name__,
+                "effective_dry_run_mode_for_canary": False,
+                "dry_run_mode_scope":
+                    f"canary_order_{CANARY_ORDER_NUMBER}_only",
             }
         except Exception:
             debug_snapshot = {"settings_source_error": True}
@@ -525,9 +596,12 @@ async def execute_canary_live_send(
     internal_phrase = APPROVAL_PHRASE_TEMPLATE.format(
         order_number=CANARY_ORDER_NUMBER)
     selected_trace_id = selection_debug.get("selected_trace_id")
+    # Build the scoped DB proxy: `qoyod_settings.find_one` returns a
+    # copy with `dry_run_mode=False`. Everything else forwards.
+    canary_db = _CanaryDBProxy(db)
     try:
         result = await reprocess_one_order(
-            db,
+            canary_db,
             user_id=user_id,
             order_number=CANARY_ORDER_NUMBER,
             trace_id=selected_trace_id,

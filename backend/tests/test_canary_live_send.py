@@ -990,6 +990,259 @@ class TestTraceIdSelection:
             f"Approved to send order {CANARY_ORDER_NUMBER} only")
 
 
+# ── Scoped dry_run override (Production-parity) ───────────────────
+# Repro for Production bug 2026-02: canary passed all 14 guards +
+# picked correct trace_id → then reprocess refused with
+# `dry_run_mode_active`. The gate `dry_run_mode` MUST NOT be opened
+# globally in DB. Canary applies a SCOPED override via a DB proxy
+# that intercepts ONLY `qoyod_settings.find_one` for the duration of
+# the reprocess call.
+@pytest.mark.asyncio
+class TestScopedDryRunOverride:
+
+    async def _capture_reprocess_view(self, db, dry_run_val):
+        """Return the settings snapshot that reprocess_one_order would
+        observe when called via the scoped canary path."""
+        # Overwrite the qoyod_settings collection with a value that
+        # includes dry_run_mode.
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                dry_run_val,
+        }])
+        captured = {}
+
+        async def fake_reprocess(db_arg, **kwargs):
+            # Read qoyod_settings via the arg the pipeline uses.
+            doc = await db_arg.qoyod_settings.find_one(
+                {"user_id": "main"}, {"_id": 0})
+            captured["doc"] = doc
+            captured["called_with_db_id"] = id(db_arg)
+            captured["real_db_id"] = id(db)
+            return {
+                "outcome":            "SENT",
+                "qoyod_invoice_id":   "INV-DR",
+                "qoyod_customer_id":  "CUST-DR",
+                "qoyod_receipt_id":   "RCPT-DR",
+            }
+
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(side_effect=fake_reprocess)):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        return r, captured
+
+    async def test_dry_run_true_in_db_bypassed_scoped_for_canary(self):
+        """When DB has `dry_run_mode=true`, canary's DB proxy must
+        overlay `dry_run_mode=false` on the doc that reaches
+        reprocess_one_order. Global DB value is NOT touched."""
+        db = _build_db(row=_canary_row())
+        r, cap = await self._capture_reprocess_view(db, True)
+        assert r["outcome"] == "SENT", r
+        # Reprocess saw dry_run_mode as False (scoped).
+        assert cap["doc"]["dry_run_mode"] is False
+        # But the real DB still has dry_run_mode=True.
+        raw = db.qoyod_settings._docs[0]
+        assert raw["dry_run_mode"] is True
+        assert raw["selective_live_send_enabled"] is False
+        assert raw["production_writes_locked"]    is True
+
+    async def test_dry_run_mode_not_mutated_after_success(self):
+        db = _build_db(row=_canary_row())
+        before = list(db.qoyod_settings._docs)
+        # dry_run_mode starts True.
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                True,
+        }])
+        before = list(db.qoyod_settings._docs)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-A",
+                       "qoyod_customer_id":  "CUST-A",
+                       "qoyod_receipt_id":   "RCPT-A",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        after = list(db.qoyod_settings._docs)
+        assert after == before
+        assert after[0]["dry_run_mode"] is True
+        assert after[0]["selective_live_send_enabled"] is False
+        assert after[0]["production_writes_locked"]    is True
+
+    async def test_dry_run_mode_not_mutated_after_refuse(self):
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                True,
+        }])
+        before = list(db.qoyod_settings._docs)
+        r = await execute_canary_live_send(
+            db, order_number="999999999",     # → guard 2 refuse
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        after = list(db.qoyod_settings._docs)
+        assert after == before
+        assert after[0]["dry_run_mode"] is True
+
+    async def test_proxy_never_applied_to_other_orders(self):
+        """The DB proxy is constructed ONLY inside
+        execute_canary_live_send. Any other caller of
+        reprocess_one_order gets the real DB with real dry_run_mode.
+        Test this by asserting the module-level scope: the proxy
+        classes are referenced ONLY when
+        `order_number == CANARY_ORDER_NUMBER`. Guard 2 refuses
+        earlier for non-canary orders, so proxy path is never
+        constructed."""
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                True,
+        }])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number="269629401",   # off-by-one — refuse.
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 2
+        assert mock_pipe.call_count == 0    # never reached the proxy.
+
+    async def test_selective_and_writes_lock_unchanged_by_override(
+            self):
+        """Scoped dry_run override MUST NOT touch selective /
+        writes_locked in either the DB or the reprocess-visible view."""
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                True,
+        }])
+        r, cap = await self._capture_reprocess_view(db, True)
+        assert r["outcome"] == "SENT"
+        # From reprocess's viewpoint via the proxy:
+        assert cap["doc"]["selective_live_send_enabled"] is False
+        assert cap["doc"]["production_writes_locked"]    is True
+        # And in the real DB:
+        raw = db.qoyod_settings._docs[0]
+        assert raw["selective_live_send_enabled"] is False
+        assert raw["production_writes_locked"]    is True
+
+    async def test_selected_trace_id_flows_through_scoped_proxy(self):
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                True,
+        }])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-TR",
+                       "qoyod_customer_id":  "CUST-TR",
+                       "qoyod_receipt_id":   "RCPT-TR",
+                   })) as mock_pipe:
+            await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert mock_pipe.call_args.kwargs["trace_id"] == \
+            "trace-canary-default-abc123"
+
+    async def test_oneshot_refused_after_proxy_returns_pipeline_error(
+            self):
+        """If reprocess still refuses for a reason unrelated to
+        dry_run (e.g. credentials_missing), canary surfaces
+        PIPELINE_ERROR — never actually contacts Qoyod (mocked)."""
+        from integrations.qoyod.one_shot_reprocess import OneShotRefused
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                True,
+        }])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(side_effect=OneShotRefused(
+                       "credentials_missing",
+                       "no api key configured",
+                       user_id="main"))):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "PIPELINE_ERROR"
+        assert r["code"] == "OneShotRefused"
+        # DB dry_run_mode remains True.
+        assert db.qoyod_settings._docs[0]["dry_run_mode"] is True
+
+    async def test_no_qoyod_call_when_guard_fails_before_proxy(self):
+        """If any pre-pipeline guard refuses, the scoped proxy is
+        never constructed and the DB stays entirely untouched."""
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": True,    # gate flipped
+            "production_writes_locked":    True,
+            "dry_run_mode":                True,
+        }])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 11
+        assert mock_pipe.call_count == 0
+        # DB unchanged.
+        assert db.qoyod_settings._docs[0]["selective_live_send_enabled"] \
+            is True
+        assert db.qoyod_settings._docs[0]["dry_run_mode"] is True
+
+
+# ── settings_debug carries dry_run_mode transparency ───────────────
+@pytest.mark.asyncio
+class TestSettingsDebugCarriesDryRun:
+
+    async def test_refuse_response_includes_raw_dry_run_mode_debug(
+            self):
+        """REFUSED response must surface raw_dry_run_mode +
+        effective_dry_run_mode_for_canary + scope, so the operator
+        can confirm the DB value is untouched."""
+        db = _build_db(row=_canary_row(),
+                       settings=[{"user_id": "main",
+                                  "selective_live_send_enabled": True,
+                                  "production_writes_locked":    True,
+                                  "dry_run_mode":                True}])
+        r = await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        sd = r["settings_debug"]
+        assert sd["raw_dry_run_mode"] is True
+        assert sd["raw_dry_run_mode_type"] == "bool"
+        assert sd["effective_dry_run_mode_for_canary"] is False
+        assert sd["dry_run_mode_scope"] == (
+            f"canary_order_{CANARY_ORDER_NUMBER}_only")
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 
