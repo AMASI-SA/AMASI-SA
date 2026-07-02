@@ -853,76 +853,112 @@ class TestTraceIdSelection:
                 db, order_number=CANARY_ORDER_NUMBER,
                 approval_phrase=CANARY_APPROVAL_PHRASE)
         assert r["outcome"] == "SENT", r
-        # trace_id was passed to reprocess_one_order.
         kwargs = mock_pipe.call_args.kwargs
         assert kwargs["trace_id"] == "trace-canary-default-abc123"
-        # And surfaced in the top-level response.
         assert r["selected_trace_id"] == "trace-canary-default-abc123"
-        assert r["selection_debug"]["passing_rows_count"] == 1
+        # Under latest-only policy: selected IS latest, single-row case.
+        assert r["latest_trace_id"] == "trace-canary-default-abc123"
+        assert r["selected_is_latest"] is True
 
-    async def test_two_rows_one_deterministic_picks_the_valid_one(
+    async def test_latest_row_picked_when_older_row_also_valid(
             self):
-        """Two rows exist. Only ONE satisfies canary criteria — that
-        specific trace_id is passed to reprocess. The other row is
-        summarised (with reject reason) in duplicate_debug."""
-        good = _canary_row()
-        good["trace_id"] = "trace-good-777"
-        bad = _canary_row()
-        bad["trace_id"] = "trace-bad-666"
-        # Break `bad` on ONE criterion only.
-        bad["canonical_payload"]["payment_method"] = "bank_transfer"
-        db = _build_db(row=good)
-        db.integration_inbox = _FakeColl([bad, good])
+        """OLDER row = completed (would pass); LATEST row also
+        completed but different trace. Latest-only policy → pick
+        latest, never fall back to older."""
+        older = _canary_row()
+        older["trace_id"] = "trace-older"
+        older["received_at"] = "2026-07-01T09:00:00+00:00"
+        newer = _canary_row()
+        newer["trace_id"] = "trace-newer"
+        newer["received_at"] = "2026-07-05T15:00:00+00:00"
+        db = _build_db(row=newer)
+        # Insertion order matches sort(received_at DESC): newer first.
+        db.integration_inbox = _FakeColl([newer, older])
         with patch("integrations.qoyod.one_shot_reprocess."
                    "reprocess_one_order",
                    new=AsyncMock(return_value={
                        "outcome":            "SENT",
-                       "qoyod_invoice_id":   "INV-T2",
-                       "qoyod_customer_id":  "CUST-T2",
-                       "qoyod_receipt_id":   "RCPT-T2",
+                       "qoyod_invoice_id":   "INV-L1",
+                       "qoyod_customer_id":  "CUST-L1",
+                       "qoyod_receipt_id":   "RCPT-L1",
                    })) as mock_pipe:
             r = await execute_canary_live_send(
                 db, order_number=CANARY_ORDER_NUMBER,
                 approval_phrase=CANARY_APPROVAL_PHRASE)
         assert r["outcome"] == "SENT", r
-        assert mock_pipe.call_args.kwargs["trace_id"] == \
-            "trace-good-777"
-        assert r["selected_trace_id"] == "trace-good-777"
-        # duplicate_debug enumerates both rows with per-row reason.
-        sd = r["selection_debug"]
-        assert sd["passing_rows_count"] == 1
-        assert sd["duplicate_rows_count"] == 2
-        assert set(sd["duplicate_trace_ids"]) == {
-            "trace-good-777", "trace-bad-666"}
-        # Each summary carries only the safe non-PII fields.
-        for s in sd["duplicate_rows_summary"]:
-            for banned in ("email", "phone", "mobile", "name",
-                           "raw_payload"):
-                assert banned not in s
+        # Selected == LATEST (never falls back).
+        assert r["selected_trace_id"] == "trace-newer"
+        assert r["latest_trace_id"] == "trace-newer"
+        assert r["selected_is_latest"] is True
+        assert mock_pipe.call_args.kwargs["trace_id"] == "trace-newer"
 
-    async def test_two_rows_both_pass_refuses_ambiguous(self):
-        r1 = _canary_row()
-        r1["trace_id"] = "trace-dup-1"
-        r2 = _canary_row()
-        r2["trace_id"] = "trace-dup-2"
-        db = _build_db(row=r1)
-        db.integration_inbox = _FakeColl([r1, r2])
+    async def test_latest_row_fails_criteria_refuses_no_fallback(
+            self):
+        """LATEST row fails criteria (e.g. status=in_review), OLDER
+        row is completed and would pass. Latest-only policy MUST
+        refuse — no fallback to the older completed row."""
+        older = _canary_row()
+        older["trace_id"] = "trace-older-completed"
+        older["received_at"] = "2026-07-01T09:00:00+00:00"
+        # Latest has a status that is NOT in the canary whitelist.
+        newer = _canary_row()
+        newer["trace_id"] = "trace-newer-in-review"
+        newer["received_at"] = "2026-07-05T15:00:00+00:00"
+        newer["canonical_payload"]["status"] = "in_review"
+        db = _build_db(row=newer)
+        db.integration_inbox = _FakeColl([newer, older])
         with patch("integrations.qoyod.one_shot_reprocess."
                    "reprocess_one_order",
                    new=AsyncMock()) as mock_pipe:
             r = await execute_canary_live_send(
                 db, order_number=CANARY_ORDER_NUMBER,
                 approval_phrase=CANARY_APPROVAL_PHRASE)
-        assert r["outcome"] == "REFUSED"
-        assert r["code"] == "ambiguous_order_rows"
-        # NEVER dispatches to Qoyod.
+        # REFUSED, no Qoyod call.
+        assert r["outcome"] == "REFUSED", r
+        assert r["guard_no"] == 4
+        assert r["code"] == "status_not_completed"
         assert mock_pipe.call_count == 0
         assert r["no_qoyod_api_calls"] is True
-        # Ambiguity debug present.
+        # Debug shows both rows and marks that older would have
+        # matched — but selection ignored it (transparency).
         dd = r["duplicate_debug"]
-        assert dd["passing_rows_count"] == 2
-        assert set(dd["duplicate_trace_ids"]) == {
-            "trace-dup-1", "trace-dup-2"}
+        assert dd["duplicate_rows_count"] == 2
+        assert dd["latest_trace_id"] == "trace-newer-in-review"
+        assert dd["latest_matches_canary_criteria"] is False
+        assert dd["latest_reject_reason"] == "status_not_completed"
+
+    async def test_latest_row_delivering_marks_manual_send(self):
+        """Latest row status=جاري_التوصيل is accepted (canary
+        whitelist) and marked `manual_send_requested=true`. No
+        fallback needed."""
+        older = _canary_row()
+        older["trace_id"] = "trace-older-completed"
+        older["received_at"] = "2026-07-01T09:00:00+00:00"
+        newer = _canary_row()
+        newer["trace_id"] = "trace-newer-delivering"
+        newer["received_at"] = "2026-07-05T15:00:00+00:00"
+        newer["canonical_payload"]["status"] = "جاري_التوصيل"
+        db = _build_db(row=newer)
+        db.integration_inbox = _FakeColl([newer, older])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-D",
+                       "qoyod_customer_id":  "CUST-D",
+                       "qoyod_receipt_id":   "RCPT-D",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert r["selected_trace_id"] == "trace-newer-delivering"
+        assert r["selected_is_latest"] is True
+        assert r["manual_send_requested"] is True
+        assert r["selected_normalized_status"] == "جاري التوصيل"
+        assert r["latest_normalized_status"] == "جاري التوصيل"
+        assert mock_pipe.call_args.kwargs["trace_id"] == \
+            "trace-newer-delivering"
 
     async def test_selected_row_without_trace_id_refuses(self):
         row = _canary_row()
@@ -938,13 +974,16 @@ class TestTraceIdSelection:
         assert r["code"] == "selected_row_missing_trace_id"
         assert mock_pipe.call_count == 0
 
-    async def test_no_qoyod_calls_on_ambiguity(self):
-        r1 = _canary_row()
-        r1["trace_id"] = "trace-a"
-        r2 = _canary_row()
-        r2["trace_id"] = "trace-b"
-        db = _build_db(row=r1)
-        db.integration_inbox = _FakeColl([r1, r2])
+    async def test_no_qoyod_calls_when_latest_fails_criteria(self):
+        """Latest fails → NO Qoyod API call, regardless of older
+        rows' state."""
+        older = _canary_row()
+        older["trace_id"] = "trace-older"
+        newer = _canary_row()
+        newer["trace_id"] = "trace-newer-bad"
+        newer["canonical_payload"]["payment_method"] = "bank_transfer"
+        db = _build_db(row=newer)
+        db.integration_inbox = _FakeColl([newer, older])
         with patch("integrations.qoyod.one_shot_reprocess."
                    "reprocess_one_order",
                    new=AsyncMock()) as mock_pipe:
@@ -954,13 +993,15 @@ class TestTraceIdSelection:
         assert r["outcome"] == "REFUSED"
         assert mock_pipe.call_count == 0
 
-    async def test_no_settings_writes_on_ambiguity(self):
-        r1 = _canary_row()
-        r1["trace_id"] = "trace-x"
-        r2 = _canary_row()
-        r2["trace_id"] = "trace-y"
-        db = _build_db(row=r1)
-        db.integration_inbox = _FakeColl([r1, r2])
+    async def test_no_settings_writes_when_latest_fails_criteria(
+            self):
+        older = _canary_row()
+        older["trace_id"] = "trace-x"
+        newer = _canary_row()
+        newer["trace_id"] = "trace-y-bad"
+        newer["canonical_payload"]["payment_method"] = "bank_transfer"
+        db = _build_db(row=newer)
+        db.integration_inbox = _FakeColl([newer, older])
         before = list(db.qoyod_settings._docs)
         await execute_canary_live_send(
             db, order_number=CANARY_ORDER_NUMBER,
@@ -1828,6 +1869,184 @@ class TestManualCanaryStatusExtension:
         assert after == before
         assert after[0]["selective_live_send_enabled"] is False
         assert after[0]["production_writes_locked"]    is True
+
+
+# ── Latest-only source-of-truth policy (Iter-2026-02.rev6) ─────────
+# Prod bug repro: multiple rows exist for the canary order — an
+# older row has status=completed while the newest row shows the
+# current status (e.g. جاري_التوصيل). Canary MUST use the LATEST
+# row only. Falling back to an older row that happens to match
+# criteria would send the invoice against a stale status snapshot.
+@pytest.mark.asyncio
+class TestLatestOnlySelectionPolicy:
+
+    async def test_older_completed_newer_delivering_uses_newer(self):
+        """Repro of production 269629400 shape: OLDER trace is
+        completed (would pass automatic path), NEWER trace is
+        جاري_التوصيل (manual). Canary must select the NEWER and
+        mark manual_send_requested=true."""
+        older = _canary_row()
+        older["trace_id"] = "trace-old-completed"
+        older["received_at"] = "2026-07-01T21:38:27+00:00"
+        older["canonical_payload"]["status"] = "completed"
+        newer = _canary_row()
+        newer["trace_id"] = "trace-new-delivering"
+        newer["received_at"] = "2026-07-02T11:26:03+00:00"
+        newer["canonical_payload"]["status"] = "جاري_التوصيل"
+        db = _build_db(row=newer)
+        # sort(received_at DESC): newer first.
+        db.integration_inbox = _FakeColl([newer, older])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-LATEST",
+                       "qoyod_customer_id":  "CUST-LATEST",
+                       "qoyod_receipt_id":   "RCPT-LATEST",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert r["selected_trace_id"] == "trace-new-delivering"
+        assert r["latest_trace_id"] == "trace-new-delivering"
+        assert r["selected_is_latest"] is True
+        assert r["manual_send_requested"] is True
+        assert r["selected_normalized_status"] == "جاري التوصيل"
+        assert r["latest_normalized_status"] == "جاري التوصيل"
+        assert mock_pipe.call_args.kwargs["trace_id"] == \
+            "trace-new-delivering"
+
+    async def test_never_picks_older_completed_when_newer_exists(
+            self):
+        """Even if the older row is BETTER (completed), the newer
+        row's trace_id is ALWAYS chosen. This is the anti-fallback
+        invariant."""
+        older = _canary_row()
+        older["trace_id"] = "trace-A-completed"
+        older["received_at"] = "2026-07-01T09:00:00+00:00"
+        older["canonical_payload"]["status"] = "completed"
+        newer = _canary_row()
+        newer["trace_id"] = "trace-B-completed"
+        newer["received_at"] = "2026-07-02T09:00:00+00:00"
+        newer["canonical_payload"]["status"] = "completed"
+        db = _build_db(row=newer)
+        db.integration_inbox = _FakeColl([newer, older])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-B",
+                       "qoyod_customer_id":  "CUST-B",
+                       "qoyod_receipt_id":   "RCPT-B",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        # Selected is the NEWER trace (B), NOT the older one (A).
+        assert r["selected_trace_id"] == "trace-B-completed"
+        assert mock_pipe.call_args.kwargs["trace_id"] == \
+            "trace-B-completed"
+
+    async def test_latest_delivering_marks_manual_send_true(self):
+        row = _canary_row()
+        row["canonical_payload"]["status"] = "جاري_التوصيل"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-M",
+                       "qoyod_customer_id":  "CUST-M",
+                       "qoyod_receipt_id":   "RCPT-M",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        assert r["manual_send_requested"] is True
+
+    async def test_latest_fails_criteria_refuses_no_fallback(self):
+        """Latest = in_review (fails). Older = completed (would
+        pass). Canary MUST refuse — no fallback."""
+        older = _canary_row()
+        older["trace_id"] = "trace-old-good"
+        older["received_at"] = "2026-07-01T09:00:00+00:00"
+        older["canonical_payload"]["status"] = "completed"
+        newer = _canary_row()
+        newer["trace_id"] = "trace-new-in-review"
+        newer["received_at"] = "2026-07-05T09:00:00+00:00"
+        newer["canonical_payload"]["status"] = "in_review"
+        db = _build_db(row=newer)
+        db.integration_inbox = _FakeColl([newer, older])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["code"] == "status_not_completed"
+        assert mock_pipe.call_count == 0
+        # Debug MUST show the older row was rejected by policy, NOT
+        # by criteria mismatch.
+        dd = r["duplicate_debug"]
+        assert dd["latest_trace_id"] == "trace-new-in-review"
+        assert dd["latest_matches_canary_criteria"] is False
+        # Verify the older row's own row_matches_canary_criteria is
+        # True (would have passed) — proving canary intentionally
+        # avoided fallback.
+        older_summary = next(s for s in dd["duplicate_rows_summary"]
+                             if s["trace_id"] == "trace-old-good")
+        assert older_summary["row_matches_canary_criteria"] is True
+
+    async def test_no_qoyod_api_call_when_latest_refuses(self):
+        older = _canary_row()
+        older["trace_id"] = "trace-old-good"
+        newer = _canary_row()
+        newer["trace_id"] = "trace-new-bad"
+        newer["canonical_payload"]["payment_method"] = "bank_transfer"
+        db = _build_db(row=newer)
+        db.integration_inbox = _FakeColl([newer, older])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert mock_pipe.call_count == 0
+
+    async def test_response_carries_all_latest_only_diagnostics(self):
+        """Success response must expose: latest_trace_id,
+        selected_trace_id, selected_is_latest, latest_normalized_status,
+        selected_normalized_status, manual_send_requested."""
+        row = _canary_row()
+        row["trace_id"] = "trace-solo"
+        row["canonical_payload"]["status"] = "جاري_التوصيل"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-DIAG",
+                       "qoyod_customer_id":  "CUST-DIAG",
+                       "qoyod_receipt_id":   "RCPT-DIAG",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        for key in ("latest_trace_id", "selected_trace_id",
+                    "selected_is_latest", "latest_normalized_status",
+                    "selected_normalized_status",
+                    "manual_send_requested"):
+            assert key in r, f"missing key: {key}"
+        assert r["latest_trace_id"] == "trace-solo"
+        assert r["selected_trace_id"] == "trace-solo"
+        assert r["selected_is_latest"] is True
+        assert r["manual_send_requested"] is True
 
 
 # ── Static / lint-style invariants ─────────────────────────────────

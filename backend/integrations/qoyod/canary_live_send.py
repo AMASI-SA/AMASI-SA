@@ -353,8 +353,20 @@ async def _run_guards(
             f"Expected {REQUIRED_SKU} → "
             f"{REQUIRED_QOYOD_PRODUCT_ID}, got {m}.")
 
-    # Deterministic row selection: filter by ALL row-level criteria.
-    passing: list[dict] = []
+    # ── Selection policy: LATEST-ONLY, no fallback ──────────────────
+    # `all_rows` is already sorted by received_at DESC. The latest
+    # row is the sole source of truth for the order's current state.
+    # Rationale (Iter-2026-02.rev6): older rows may show status=
+    # completed while the newest reflects the current status (e.g.
+    # جاري_التوصيل). Falling back to an older matching row would
+    # send the invoice against a stale status. Never allowed.
+    latest_row = all_rows[0]
+    latest_trace_id = latest_row.get("trace_id")
+    latest_norm_status = _row_summary(latest_row).get(
+        "normalized_status")
+
+    # Evaluate criteria on ALL rows for debug transparency, but
+    # SELECTION uses only the latest.
     per_row_reasons: list[dict] = []
     for r in all_rows:
         ok, reason = _row_matches_canary_criteria(r)
@@ -363,27 +375,31 @@ async def _run_guards(
             "row_matches_canary_criteria": ok,
             "row_reject_reason":           reason,
         })
-        if ok:
-            passing.append(r)
+
+    latest_ok, latest_reason = _row_matches_canary_criteria(latest_row)
 
     duplicate_debug = {
         "duplicate_rows_count":     len(all_rows),
-        "passing_rows_count":       len(passing),
         "duplicate_trace_ids":      [r.get("trace_id")
                                      for r in all_rows],
         "duplicate_rows_summary":   per_row_reasons,
-        "selection_policy": (
-            "canary picks the UNIQUE row that passes ALL row-level "
-            "criteria (guards 3, 4, 5, 6, 8, 9, 10). Ambiguity or "
-            "zero matches → refuse (never fall back to random)."),
+        "latest_trace_id":          latest_trace_id,
+        "latest_normalized_status": latest_norm_status,
+        "latest_matches_canary_criteria": latest_ok,
+        "latest_reject_reason":     latest_reason,
+        "selection_policy":
+            "canary uses LATEST row only (received_at DESC). No "
+            "fallback to older rows even if they would pass. If the "
+            "latest fails any row-level criterion, refuse.",
     }
 
-    if len(passing) == 0:
-        # No candidate passes the strict canary contract — raise the
-        # FIRST (latest) row's specific rejection reason for a
-        # precise diagnostic, matching the pre-refactor behaviour.
-        row = all_rows[0]
+    if not latest_ok:
+        # Reproduce the SPECIFIC guard on the LATEST row (not any
+        # older row) so the operator sees exactly why the latest
+        # state is not eligible.
+        row = latest_row
         canonical = row.get("canonical_payload") or {}
+
         # Guard 3 — payment method.
         payment = str(canonical.get("payment_method") or "").lower()
         if payment != REQUIRED_PAYMENT_METHOD:
@@ -401,7 +417,7 @@ async def _run_guards(
         if norm not in _ACCEPTED_CANARY_STATUSES_NORMALIZED:
             raise CanaryGuardFailed(
                 4, "status_not_completed",
-                f"Normalised status {norm!r} not in canary-accepted "
+                f"Latest row status {norm!r} not in canary-accepted "
                 f"set {sorted(_ACCEPTED_CANARY_STATUSES_NORMALIZED)}.",
                 extra={"duplicate_debug": duplicate_debug})
 
@@ -523,36 +539,30 @@ async def _run_guards(
                 extra={"duplicate_debug": duplicate_debug})
 
         # If we reach here without a specific guard firing but
-        # `passing` is still empty, something is inconsistent.
+        # `latest_ok` is False, something is inconsistent.
         raise CanaryGuardFailed(
-            2, "row_criteria_inconsistent",
-            "No row satisfies canary criteria and no specific "
-            "guard fired — refusing conservatively.",
+            2, "latest_row_criteria_inconsistent",
+            f"Latest row rejected ({latest_reason!r}) but no "
+            f"specific guard fired — refusing conservatively.",
             extra={"duplicate_debug": duplicate_debug})
 
-    if len(passing) > 1:
-        # Ambiguity — refuse rather than pick arbitrarily.
-        raise CanaryGuardFailed(
-            2, "ambiguous_order_rows",
-            f"order_number={order_number} has {len(passing)} rows "
-            f"that all satisfy canary strict criteria; refusing to "
-            f"choose. Use dedup / stage-based cleanup first.",
-            extra={"duplicate_debug": duplicate_debug})
-
-    # Exactly one row passes — use it. Trace_id must be present.
-    row = passing[0]
+    # Latest row passes. Use it exclusively (no fallback).
+    row = latest_row
     canonical = row.get("canonical_payload") or {}
     selected_trace_id = row.get("trace_id")
     if not selected_trace_id:
         raise CanaryGuardFailed(
             2, "selected_row_missing_trace_id",
-            "The unique canary-eligible row has no trace_id; "
+            "The latest canary-eligible row has no trace_id; "
             "cannot disambiguate against reprocess pipeline.",
             extra={"duplicate_debug": duplicate_debug})
 
-    # Attach selection metadata onto the returned tuple via a dict.
+    # Selection metadata for the response.
     selection_debug = {
-        "selected_trace_id":      selected_trace_id,
+        "selected_trace_id":         selected_trace_id,
+        "latest_trace_id":           latest_trace_id,
+        "selected_is_latest":        True,
+        "latest_normalized_status":  latest_norm_status,
         **duplicate_debug,
     }
     return (raw_settings, canonical, settings_debug, selection_debug)
@@ -727,6 +737,11 @@ async def execute_canary_live_send(
                                REQUIRED_QOYOD_PRODUCT_ID},
         "invoice_date_source": "send_date_riyadh",
         "selected_trace_id":   selected_trace_id,
+        "latest_trace_id":     selection_debug.get("latest_trace_id"),
+        "selected_is_latest":
+            selection_debug.get("selected_is_latest"),
+        "latest_normalized_status":
+            selection_debug.get("latest_normalized_status"),
         "selected_normalized_status": _selected_normalized_status,
         "manual_send_requested":      _selected_manual,
         "selection_debug":     selection_debug,
