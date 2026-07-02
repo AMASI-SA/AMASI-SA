@@ -1166,8 +1166,10 @@ class TestScopedDryRunOverride:
 
     async def test_selective_and_writes_lock_unchanged_by_override(
             self):
-        """Scoped dry_run override MUST NOT touch selective /
-        writes_locked in either the DB or the reprocess-visible view."""
+        """Iter-rev8: scoped policy override applies all THREE
+        fields (dry_run, selective, writes_lock) — but only in the
+        canary-scoped VIEW that reaches the pipeline. The REAL DB
+        rows remain untouched (Fail-Closed on disk)."""
         db = _build_db(row=_canary_row())
         db.qoyod_settings = _FakeColl([{
             "user_id": "main",
@@ -1177,13 +1179,16 @@ class TestScopedDryRunOverride:
         }])
         r, cap = await self._capture_reprocess_view(db, True)
         assert r["outcome"] == "SENT"
-        # From reprocess's viewpoint via the proxy:
-        assert cap["doc"]["selective_live_send_enabled"] is False
-        assert cap["doc"]["production_writes_locked"]    is True
-        # And in the real DB:
+        # From reprocess's viewpoint via the proxy — ALL THREE
+        # fields are overridden for the canary scope.
+        assert cap["doc"]["selective_live_send_enabled"] is True
+        assert cap["doc"]["production_writes_locked"]    is False
+        assert cap["doc"]["dry_run_mode"]                is False
+        # And in the real DB — nothing changed.
         raw = db.qoyod_settings._docs[0]
         assert raw["selective_live_send_enabled"] is False
         assert raw["production_writes_locked"]    is True
+        assert raw["dry_run_mode"]                is True
 
     async def test_selected_trace_id_flows_through_scoped_proxy(self):
         db = _build_db(row=_canary_row())
@@ -2230,6 +2235,168 @@ class TestE2EPartialSkippedResetTwoHopWireLevel:
         assert extra["state_machine_allowed_edges_for_current_stage"] \
             == ["RETRYING"]
         assert r["allow_reset_from_partial_invoice_created"] is True
+
+
+# ── Scoped policy override (rev8) — three-field overlay ────────────
+# The Iter-rev8 extends the DB proxy to also overlay the master gate
+# (`selective_live_send_enabled=true`) and the write-lock
+# (`production_writes_locked=false`) — all scoped to the single
+# canary call. Prod DB values remain unchanged.
+@pytest.mark.asyncio
+class TestScopedPolicyOverrideRev8:
+
+    async def _capture(self, db):
+        captured = {}
+
+        async def fake_reprocess(db_arg, **kwargs):
+            doc = await db_arg.qoyod_settings.find_one(
+                {"user_id": "main"}, {"_id": 0})
+            captured["doc"] = doc
+            return {
+                "outcome":            "SENT",
+                "qoyod_invoice_id":   "INV-OV",
+                "qoyod_customer_id":  "CUST-OV",
+                "qoyod_receipt_id":   "RCPT-OV",
+            }
+
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(side_effect=fake_reprocess)):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        return r, captured
+
+    async def test_pipeline_view_has_selective_true(self):
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                False,
+        }])
+        r, cap = await self._capture(db)
+        assert r["outcome"] == "SENT"
+        assert cap["doc"]["selective_live_send_enabled"] is True
+
+    async def test_pipeline_view_has_writes_locked_false(self):
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                False,
+        }])
+        r, cap = await self._capture(db)
+        assert r["outcome"] == "SENT"
+        assert cap["doc"]["production_writes_locked"] is False
+
+    async def test_pipeline_view_has_dry_run_false(self):
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                True,
+        }])
+        r, cap = await self._capture(db)
+        assert r["outcome"] == "SENT"
+        assert cap["doc"]["dry_run_mode"] is False
+
+    async def test_db_untouched_after_success(self):
+        """After a successful canary send with the three-field
+        overlay, the DB row STILL reads Fail-Closed values."""
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                False,
+        }])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-U",
+                       "qoyod_customer_id":  "CUST-U",
+                       "qoyod_receipt_id":   "RCPT-U",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        # DB reads unchanged.
+        raw = db.qoyod_settings._docs[0]
+        assert raw["selective_live_send_enabled"] is False
+        assert raw["production_writes_locked"]    is True
+        assert raw["dry_run_mode"]                is False
+
+    async def test_guards_still_check_real_db_before_overlay(self):
+        """The pre-pipeline Guards 11/12 must inspect the REAL DB
+        (Fail-Closed values on disk) BEFORE the proxy is built.
+        If DB is not in Fail-Closed base state → refuse."""
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": True,     # violated
+            "production_writes_locked":    True,
+            "dry_run_mode":                False,
+        }])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 11
+        assert mock_pipe.call_count == 0
+
+    async def test_settings_debug_carries_rev8_effective_view(self):
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": True,     # violation
+            "production_writes_locked":    True,
+            "dry_run_mode":                True,
+        }])
+        r = await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        sd = r["settings_debug"]
+        # Effective canary view — three-field overlay.
+        assert sd["effective_dry_run_mode_for_canary"] is False
+        assert sd["effective_selective_live_send_enabled_for_canary"] \
+            is True
+        assert sd["effective_production_writes_locked_for_canary"] \
+            is False
+        assert sd["policy_override_scope"] == (
+            f"canary_order_{CANARY_ORDER_NUMBER}_only")
+
+    async def test_overlay_only_for_canary_order(self):
+        """Non-canary orders never build the proxy — Guard 2
+        refuses before the DB proxy is ever constructed."""
+        db = _build_db(row=_canary_row())
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                False,
+        }])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number="999999999",
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 2
+        assert mock_pipe.call_count == 0
+        # DB row still reflects Fail-Closed base state.
+        raw = db.qoyod_settings._docs[0]
+        assert raw["selective_live_send_enabled"] is False
+        assert raw["production_writes_locked"]    is True
 
 
 # ── Static / lint-style invariants ─────────────────────────────────

@@ -72,12 +72,22 @@ class CanaryGuardFailed(Exception):
 # other attributes / methods forward to the real db unchanged. Two
 # static invariants (tests) pin these guarantees.
 class _CanaryDryRunSettingsProxy:
-    """Proxy for `db.qoyod_settings` that overrides ONE field
-    (`dry_run_mode`) on read. Writes / updates pass through
-    untouched. Any attempt to `update_one` / `replace_one` /
+    """Proxy for `db.qoyod_settings` that overrides THREE fields
+    (`dry_run_mode`, `selective_live_send_enabled`,
+    `production_writes_locked`) on read. Writes / updates pass
+    through untouched. Any attempt to `update_one` / `replace_one` /
     `insert_one` on this proxy still lands on the real collection —
     but canary's own module-level static test refuses to allow
-    those literals in canary_live_send.py."""
+    those literals in canary_live_send.py.
+
+    Iter-2026-02.rev8: extended to overlay the master gate + the
+    write-lock in addition to dry_run_mode. This is the same scoped
+    policy override pattern — the DB values remain untouched; ONLY
+    the view seen by `one_shot_reprocess` + `pipeline` inside this
+    single canary invocation is modified. Guards 11/12 in `_run_guards`
+    still assert against the REAL DB values BEFORE the proxy is
+    constructed (Fail-Closed), so the proxy is only ever built after
+    the operator's DB is proven to be in the safe base state."""
     __slots__ = ("_coll",)
 
     def __init__(self, real_coll):
@@ -86,7 +96,13 @@ class _CanaryDryRunSettingsProxy:
     async def find_one(self, *a, **kw):
         doc = await self._coll.find_one(*a, **kw)
         if isinstance(doc, dict):
-            return {**doc, "dry_run_mode": False}
+            return {
+                **doc,
+                # Canary-scope overlay — three fields only.
+                "dry_run_mode":                False,
+                "selective_live_send_enabled": True,
+                "production_writes_locked":    False,
+            }
         return doc
 
     def __getattr__(self, name):
@@ -298,7 +314,12 @@ async def _run_guards(
         "effective_production_writes_locked": writes_locked_flag,
         "raw_dry_run_mode":                 raw_dry_run,
         "raw_dry_run_mode_type":            type(raw_dry_run).__name__,
-        "effective_dry_run_mode_for_canary": False,
+        # Canary scoped policy overlay (rev8) — DB is untouched.
+        "effective_dry_run_mode_for_canary":                 False,
+        "effective_selective_live_send_enabled_for_canary":  True,
+        "effective_production_writes_locked_for_canary":     False,
+        "policy_override_scope":
+            f"canary_order_{CANARY_ORDER_NUMBER}_only",
         "dry_run_mode_scope":
             f"canary_order_{CANARY_ORDER_NUMBER}_only",
         "default_semantics":
@@ -612,7 +633,12 @@ async def execute_canary_live_send(
                     type(_rw).__name__,
                 "raw_dry_run_mode":                 _rd,
                 "raw_dry_run_mode_type":            type(_rd).__name__,
-                "effective_dry_run_mode_for_canary": False,
+                # Canary scoped policy overlay (rev8) — three fields.
+                "effective_dry_run_mode_for_canary":                 False,
+                "effective_selective_live_send_enabled_for_canary":  True,
+                "effective_production_writes_locked_for_canary":     False,
+                "policy_override_scope":
+                    f"canary_order_{CANARY_ORDER_NUMBER}_only",
                 "dry_run_mode_scope":
                     f"canary_order_{CANARY_ORDER_NUMBER}_only",
             }
