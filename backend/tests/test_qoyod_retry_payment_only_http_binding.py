@@ -242,3 +242,51 @@ async def test_no_invoice_call_ever_from_this_endpoint(
     # Only /invoice_payments touched — the _OK stub would have
     # raised AssertionError from any other endpoint.
     assert all("invoice_payment" in str(c) for c in qoyod.calls)
+
+
+# ─── 5. Adopt-existing-payment — same body-binding guarantee ──────
+@pytest.mark.asyncio
+async def test_adopt_existing_payment_json_body_accepted(
+        monkeypatch, fake_user):
+    """The adopt endpoint MUST also accept its JSON body — same
+    module-scope model pattern applies (`AdoptExistingPaymentBody`).
+    Regression check: `loc` must never be `["query", ...]`."""
+    db = _DB()
+    _seed_269629400_row(db)
+    app = _build_test_app(db, fake_user, monkeypatch)
+
+    async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test") as ac:
+        resp = await ac.post(
+            "/api/integrations/qoyod/admin/adopt-existing-payment",
+            json={
+                "salla_order_number":       "269629400",
+                "qoyod_invoice_payment_id": "PYT2",
+                "qoyod_invoice_id":         "186",
+                "qoyod_customer_id":        "228",
+                "confirm_token": "ADOPT-PAYMENT-269629400",
+            })
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["outcome"] == "ADOPTED"
+    assert body["qoyod_invoice_payment_id"] == "PYT2"
+    assert body["no_qoyod_api_calls"] is True
+
+
+@pytest.mark.asyncio
+async def test_adopt_missing_json_returns_body_scoped_422(
+        monkeypatch, fake_user):
+    db = _DB()
+    app = _build_test_app(db, fake_user, monkeypatch)
+    async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test") as ac:
+        resp = await ac.post(
+            "/api/integrations/qoyod/admin/adopt-existing-payment")
+    assert resp.status_code == 422
+    for err in resp.json()["detail"]:
+        assert "query" not in err.get("loc", ()), (
+            "regression: AdoptExistingPaymentBody bound as query "
+            "parameter — restore module scope + Body(...)")

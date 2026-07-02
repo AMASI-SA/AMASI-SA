@@ -367,6 +367,21 @@ class RetryPaymentOnlyBody(BaseModel):
     confirm_token:      str = Field(..., min_length=1, max_length=128)
 
 
+class AdoptExistingPaymentBody(BaseModel):
+    """Iter-2026-02.rev15 — Body model for
+    `POST /admin/adopt-existing-payment`. Declared at MODULE scope
+    for the same reason as `RetryPaymentOnlyBody` (function-scope
+    Pydantic models trigger FastAPI's `loc: ["query","body"]`
+    misclassification).
+    """
+    model_config = ConfigDict(extra="forbid")
+    salla_order_number:       str = Field(..., min_length=1, max_length=64)
+    qoyod_invoice_payment_id: str = Field(..., min_length=1, max_length=64)
+    confirm_token:            str = Field(..., min_length=1, max_length=128)
+    qoyod_invoice_id:  Optional[str] = Field(None, max_length=64)
+    qoyod_customer_id: Optional[str] = Field(None, max_length=64)
+
+
 # ─────────────────────────────────────────────────────────────────────
 def make_qoyod_router(db, current_user) -> APIRouter:
     router = APIRouter(
@@ -2686,6 +2701,42 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             )
         except RetryPaymentRefused as exc:
             return exc.to_dict()
+
+    # ── Iter-2026-02.rev15 — Adopt an EXISTING قيود receipt ─────────
+    # Operator has already created the receipt manually in قيود
+    # (e.g. PYT2 for order 269629400 / invoice 186). We record it in
+    # Mezan + write an idempotency ledger row so any future automatic
+    # attempt (retry_payment_only, canary, worker) returns
+    # ALREADY_PAID instead of POSTing a duplicate receipt. NO قيود
+    # API calls are performed.
+    @router.post("/admin/adopt-existing-payment")
+    async def admin_adopt_existing_payment(
+        body: AdoptExistingPaymentBody = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.adopt_existing_payment import (
+            adopt_existing_payment, AdoptPaymentRefused,
+        )
+        tenant = _tenant_id(user)
+        actor  = (getattr(user, "email", None) or "operator")
+        try:
+            return await adopt_existing_payment(
+                db, user_id=tenant,
+                salla_order_number=body.salla_order_number,
+                qoyod_invoice_payment_id=body.qoyod_invoice_payment_id,
+                qoyod_invoice_id=body.qoyod_invoice_id,
+                qoyod_customer_id=body.qoyod_customer_id,
+                confirm_token=body.confirm_token,
+                actor=str(actor),
+            )
+        except AdoptPaymentRefused as exc:
+            return {
+                "ok":     False,
+                "outcome": "REFUSED",
+                "code":   exc.code,
+                "detail": str(exc),
+                **exc.extra,
+            }
 
     # ── Iter-290h.7 — Payment-method field probe (read-only) ────────
     class _PaymentMethodProbeBody(BaseModel):
