@@ -342,13 +342,20 @@ async def execute_canary_live_send(
     # ── Dispatch to the existing per-order pipeline ─────────────
     # `reprocess_one_order` handles: scoped write-lock bypass +
     # policy assert + api_client build + full pipeline invocation.
-    # Its own approval_phrase template is "Approved to send order
-    # {n} only". We translate our canary contract phrase → that.
+    # Its contract requires TWO parameters:
+    #   • confirm         = "REPROCESS-<order_number>"
+    #   • approval_phrase = "Approved to send order <n> only"
+    # Both are synthesised INTERNALLY from the canary contract phrase
+    # (which the operator already verified via Guard 1). The
+    # operator NEVER supplies these directly.
     from integrations.qoyod.one_shot_reprocess import (
+        CONFIRM_TOKEN_TEMPLATE, APPROVAL_PHRASE_TEMPLATE,
         reprocess_one_order,
     )
-    internal_phrase = f"Approved to send order {CANARY_ORDER_NUMBER} only"
-    internal_confirm = f"CANARY-{CANARY_ORDER_NUMBER}-CONFIRM"
+    internal_confirm = CONFIRM_TOKEN_TEMPLATE.format(
+        order_number=CANARY_ORDER_NUMBER)
+    internal_phrase = APPROVAL_PHRASE_TEMPLATE.format(
+        order_number=CANARY_ORDER_NUMBER)
     try:
         result = await reprocess_one_order(
             db,
@@ -367,6 +374,11 @@ async def execute_canary_live_send(
             "outcome":    "PIPELINE_ERROR",
             "code":       type(e).__name__,
             "detail":     str(e)[:500],
+            "internal_confirm_used":         internal_confirm,
+            "internal_confirm_template":     CONFIRM_TOKEN_TEMPLATE,
+            "internal_approval_phrase_used": internal_phrase,
+            "internal_approval_phrase_template":
+                APPROVAL_PHRASE_TEMPLATE,
         }
 
     await _write_audit(

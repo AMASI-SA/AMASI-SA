@@ -681,6 +681,147 @@ class TestGuard5DateExtractionMatchesEligibleOrders:
         assert r["no_qoyod_api_calls"] is True
 
 
+# ── Internal confirm-token synthesis (Production-parity) ───────────
+# Repro for Production bug 2026-02: canary reached the pipeline but
+# passed `confirm='CANARY-269629400-CONFIRM'` while
+# `reprocess_one_order` expects `REPROCESS-<order_number>`. The
+# operator must NEVER supply this token — canary must synthesise it
+# internally from `CONFIRM_TOKEN_TEMPLATE`.
+@pytest.mark.asyncio
+class TestInternalConfirmToken:
+
+    async def test_success_passes_reprocess_confirm_token(self):
+        db = _build_db(row=_canary_row())
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-CT",
+                       "qoyod_customer_id":  "CUST-CT",
+                       "qoyod_receipt_id":   "RCPT-CT",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        # confirm token MUST equal 'REPROCESS-<canary_order>' verbatim.
+        kwargs = mock_pipe.call_args.kwargs
+        assert kwargs["confirm"] == f"REPROCESS-{CANARY_ORDER_NUMBER}"
+        # approval_phrase to reprocess MUST match its template.
+        assert kwargs["approval_phrase"] == (
+            f"Approved to send order {CANARY_ORDER_NUMBER} only")
+        # order_number pinned to canary target.
+        assert kwargs["order_number"] == CANARY_ORDER_NUMBER
+
+    async def test_confirm_token_uses_reprocess_template_symbol(self):
+        """Pin the source-of-truth: canary imports
+        CONFIRM_TOKEN_TEMPLATE from one_shot_reprocess (never
+        hard-codes the string). This guards against future drift."""
+        from integrations.qoyod.one_shot_reprocess import (
+            CONFIRM_TOKEN_TEMPLATE, APPROVAL_PHRASE_TEMPLATE,
+        )
+        assert CONFIRM_TOKEN_TEMPLATE == "REPROCESS-{order_number}"
+        assert APPROVAL_PHRASE_TEMPLATE == (
+            "Approved to send order {order_number} only")
+        # Ensure canary source imports these symbols (protects
+        # against someone re-inlining the raw literals).
+        import integrations.qoyod.canary_live_send as mod
+        src = open(mod.__file__, encoding="utf-8").read()
+        assert "CONFIRM_TOKEN_TEMPLATE" in src
+        assert "APPROVAL_PHRASE_TEMPLATE" in src
+        # And that we no longer hard-code the (wrong) old sentinel.
+        assert "CANARY-" + CANARY_ORDER_NUMBER + "-CONFIRM" not in src
+
+    async def test_operator_never_asked_for_second_confirm_string(self):
+        """Endpoint signature: only approval_phrase + order_number
+        are operator inputs. `confirm` MUST not appear anywhere in
+        the route wrapper's expected payload keys."""
+        # Read the route source and confirm it exposes only
+        # `order_number` + `approval_phrase` from the request payload.
+        with open("/app/backend/integrations/qoyod/routes.py",
+                  encoding="utf-8") as f:
+            src = f.read()
+        # Locate the canary route body.
+        i = src.find("/admin/canary-live-send")
+        j = src.find("@router", i + 10)
+        body = src[i:j]
+        # Operator payload keys.
+        assert "payload.get(\"order_number\"" in body
+        assert "payload.get(\"approval_phrase\"" in body
+        # NO extra `confirm` field pulled from payload.
+        assert "payload.get(\"confirm\"" not in body
+        assert "payload.get('confirm'" not in body
+
+    async def test_oneshot_refused_returns_pipeline_error(self):
+        """If reprocess_one_order raises OneShotRefused, canary
+        returns PIPELINE_ERROR (not SENT) without Qoyod calls."""
+        from integrations.qoyod.one_shot_reprocess import OneShotRefused
+        db = _build_db(row=_canary_row())
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(side_effect=OneShotRefused(
+                       "confirm_token_mismatch",
+                       "confirm must equal 'REPROCESS-<order_number>'",
+                       expected="REPROCESS-269629400",
+                       received="X"))):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "PIPELINE_ERROR"
+        assert r["code"] == "OneShotRefused"
+        # Diagnostic must reveal which templates were used, so future
+        # drift is trivially spot-checked.
+        assert r["internal_confirm_used"] == "REPROCESS-269629400"
+        assert (r["internal_approval_phrase_used"]
+                == f"Approved to send order {CANARY_ORDER_NUMBER} only")
+
+    async def test_wrong_phrase_never_reaches_reprocess(self):
+        db = _build_db(row=_canary_row())
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase="WRONG")
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 1
+        assert mock_pipe.call_count == 0
+
+    async def test_wrong_order_never_reaches_reprocess(self):
+        db = _build_db(row=_canary_row())
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number="999999999",
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 2
+        assert mock_pipe.call_count == 0
+
+    async def test_no_qoyod_calls_no_settings_writes_on_any_refuse(
+            self):
+        """Any REFUSED / PIPELINE_ERROR path: audit rows may be
+        appended, but qoyod_settings MUST NOT be mutated and Qoyod
+        API MUST NOT be called."""
+        from integrations.qoyod.one_shot_reprocess import OneShotRefused
+        db = _build_db(row=_canary_row())
+        before = list(db.qoyod_settings._docs)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(side_effect=OneShotRefused(
+                       "some_reason", "boom",
+                       expected="x", received="y"))):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "PIPELINE_ERROR"
+        after = list(db.qoyod_settings._docs)
+        assert after == before
+        assert after[0]["selective_live_send_enabled"] is False
+        assert after[0]["production_writes_locked"]    is True
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 
