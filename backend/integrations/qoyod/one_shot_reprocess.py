@@ -368,9 +368,16 @@ async def _reset_row_to_stage(
     # are not allowed to hop into RETRYING, so we just write the
     # resume_stage directly when applicable (defensive — most live
     # callers will see DEAD_LETTER / FAILED_* and use the two-hop path).
-    needs_retry_hop = (current in FAILURE_TO_RESUME) or \
-                      (current in ("DEAD_LETTER", "PARTIAL_FAILURE",
-                                   "LOCKED_AWAITING_APPROVAL"))
+    # Canary partial-IC exception: INVOICE_CREATED must ALSO go via
+    # RETRYING (state machine forbids INVOICE_CREATED → NORMALIZED
+    # direct; edge INVOICE_CREATED → RETRYING is registered in
+    # state_machine.py, gated business-side by this flag).
+    needs_retry_hop = (
+        (current in FAILURE_TO_RESUME)
+        or (current in ("DEAD_LETTER", "PARTIAL_FAILURE",
+                        "LOCKED_AWAITING_APPROVAL"))
+        or (permit_partial_invoice_created
+            and current == "INVOICE_CREATED"))
     if needs_retry_hop:
         try:
             p1 = transition(

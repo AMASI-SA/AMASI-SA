@@ -273,6 +273,21 @@ def _build_allowed() -> set[tuple[str, str]]:
     allowed.add(("PRODUCT_RESOLVED",        "LOCKED_AWAITING_APPROVAL"))
     allowed.add(("INVOICE_CREATED",         "LOCKED_AWAITING_APPROVAL"))
     allowed.add(("LOCKED_AWAITING_APPROVAL", RETRYING))
+
+    # ─── Iter-2026-02.canary — Partial-invoice-created recovery ─────
+    # The Canary (one-shot per-order live send) may encounter a row
+    # stuck at `INVOICE_CREATED` with NO real Qoyod `invoice_id`
+    # (only DRY:/PREVIEW: sentinels or null). That's a partial
+    # side-effect from an earlier abandoned attempt and safe to
+    # rewind. The state-machine edge is defined here, but access is
+    # gated business-side by
+    # `one_shot_reprocess._reset_row_to_stage(..., permit_partial_invoice_created=True)`
+    # which itself is only set by `canary_live_send.execute_canary_live_send`
+    # after all 14 canary guards pass AND the selected row is proven
+    # to carry no real Qoyod invoice_id (`partial_real_invoice_state`
+    # refuses otherwise). Therefore this edge is unreachable outside
+    # the canary code path.
+    allowed.add(("INVOICE_CREATED", RETRYING))
     allowed.add(("LOCKED_AWAITING_APPROVAL", "DEAD_LETTER"))
 
     # ─── Iter-293.4-rev5 — COD credit_invoice_only direct completion ──

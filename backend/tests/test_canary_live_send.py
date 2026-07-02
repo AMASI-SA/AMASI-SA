@@ -6,6 +6,7 @@ delegate `reprocess_one_order` is fully patched so no HTTP happens.
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -1414,6 +1415,101 @@ class TestPartialInvoiceCreatedHandling:
         assert after == before
         assert after[0]["selective_live_send_enabled"] is False
         assert after[0]["production_writes_locked"]    is True
+
+
+# ── State-machine two-hop for partial-IC reset ─────────────────────
+# Repro for Production bug 2026-02: canary reached the partial-reset
+# path but `_reset_row_to_stage` refused with
+# `state-machine refused INVOICE_CREATED → NORMALIZED`.
+# The direct transition is illegal by the state-machine contract.
+# The canary path must go via RETRYING (INVOICE_CREATED → RETRYING
+# → NORMALIZED) — mirroring how DEAD_LETTER / PARTIAL_FAILURE
+# recover.
+@pytest.mark.asyncio
+class TestPartialICStateMachineTwoHop:
+
+    async def test_state_machine_edge_invoice_created_to_retrying(
+            self):
+        """The state machine must expose an
+        `INVOICE_CREATED → RETRYING` edge — the pre-requisite for
+        canary's two-hop partial-reset. Direct
+        `INVOICE_CREATED → NORMALIZED` must still be REFUSED
+        (defence-in-depth)."""
+        from integrations.qoyod.state_machine import (
+            can_transition, InvalidTransition, transition,
+        )
+        assert can_transition("INVOICE_CREATED", "RETRYING") is True
+        # Direct hop still forbidden — critical safety property.
+        assert can_transition("INVOICE_CREATED", "NORMALIZED") is False
+        # The state-machine must still allow RETRYING → NORMALIZED.
+        assert can_transition("RETRYING", "NORMALIZED") is True
+        # Test raising path.
+        with pytest.raises(InvalidTransition):
+            transition(from_stage="INVOICE_CREATED",
+                       to_stage="NORMALIZED",
+                       actor="test")
+
+    async def test_reset_uses_two_hop_when_permit_partial_true(self):
+        """When `permit_partial_invoice_created=True` and current is
+        INVOICE_CREATED, `_reset_row_to_stage` writes TWO updates:
+        Hop 1 = INVOICE_CREATED → RETRYING, Hop 2 = RETRYING →
+        NORMALIZED. Neither writes to qoyod_settings."""
+        from integrations.qoyod.one_shot_reprocess import (
+            _reset_row_to_stage,
+        )
+
+        writes: list[dict] = []
+
+        class _Coll:
+            async def update_one(self, filt, patch, **kw):
+                writes.append({"filter": filt, "patch": patch})
+                # simulate applying the $set to preserve realistic
+                # `pipeline_stage` progression for subsequent reads.
+                return SimpleNamespace(modified_count=1)
+
+        class _DB:
+            integration_inbox = _Coll()
+
+        row = {
+            "id": "row-1",
+            "pipeline_stage": "INVOICE_CREATED",
+            "qoyod_invoice_id": None,
+        }
+        await _reset_row_to_stage(
+            _DB(), row, resume_stage="NORMALIZED",
+            actor="canary:test",
+            permit_partial_invoice_created=True)
+        # Two writes, both to integration_inbox.
+        assert len(writes) == 2
+        # Hop 1: → RETRYING
+        h1 = writes[0]["patch"]["$set"]
+        assert h1["pipeline_stage"] == "RETRYING"
+        # Hop 2: → NORMALIZED
+        h2 = writes[1]["patch"]["$set"]
+        assert h2["pipeline_stage"] == "NORMALIZED"
+
+    async def test_reset_refuses_without_flag_for_invoice_created(
+            self):
+        """Without the canary flag, INVOICE_CREATED still refuses
+        (unsupported_current_stage) — pre-existing safety."""
+        from integrations.qoyod.one_shot_reprocess import (
+            _reset_row_to_stage, OneShotRefused,
+        )
+
+        class _NullDB:
+            class integration_inbox:
+                async def update_one(self, *a, **kw):
+                    raise AssertionError("no writes expected")
+            integration_inbox = integration_inbox()
+
+        row = {"id": "row-2", "pipeline_stage": "INVOICE_CREATED",
+               "qoyod_invoice_id": None}
+        with pytest.raises(OneShotRefused) as exc:
+            await _reset_row_to_stage(
+                _NullDB(), row, resume_stage="NORMALIZED",
+                actor="operator",
+                permit_partial_invoice_created=False)
+        assert exc.value.code == "unsupported_current_stage"
 
 
 # ── Static / lint-style invariants ─────────────────────────────────
