@@ -33,11 +33,13 @@ REQUIRED_EMAIL:           str = "suziyousif9@gmail.com"
 
 
 class CanaryGuardFailed(Exception):
-    def __init__(self, guard_no: int, code: str, detail: str):
+    def __init__(self, guard_no: int, code: str, detail: str,
+                 extra: Optional[dict] = None):
         super().__init__(f"guard#{guard_no} {code}: {detail}")
         self.guard_no = guard_no
         self.code     = code
         self.detail   = detail
+        self.extra    = extra or {}
 
 
 async def _write_audit(
@@ -154,25 +156,74 @@ async def _run_guards(
             f"!= '{REQUIRED_STATUS}'.")
 
     # Guard 5 — created_at cutoff.
-    created_raw = canonical.get("salla_order_created_at") \
-        or row.get("salla_order_created_at")
-    if isinstance(created_raw, str):
-        created = datetime.fromisoformat(
-            created_raw.replace("Z", "+00:00")).date() \
-            if "T" in created_raw \
-            else date.fromisoformat(created_raw)
-    elif isinstance(created_raw, datetime):
-        created = created_raw.date()
-    elif isinstance(created_raw, date):
-        created = created_raw
-    else:
+    # Uses the same extraction chain as
+    # `eligible_orders._extract_order_created_at` so canary agrees
+    # with policy-report / eligible-orders on the exact date field.
+    # Priority (matches `_extract_order_created_at`):
+    #   1. canonical_payload.salla_order_created_at (explicit)
+    #   2. canonical_payload.created_at             (raw Salla)
+    #   3. canonical_payload.order_date             (normalised)
+    #   4. row.raw_payload.data.date.date           (Salla webhook)
+    #   5. row.raw_payload.data.created_at
+    #   6. row.raw_payload.created_at
+    # `completed_at`, `delivered_at`, `received_at` are NEVER used.
+    from integrations.qoyod.eligible_orders import (
+        _extract_order_created_at,
+    )
+    pseudo_order = {
+        "created_at": (canonical.get("salla_order_created_at")
+                       or canonical.get("created_at")),
+        "order_date": canonical.get("order_date"),
+        "order_date_inferred": (canonical.get("order_date_inferred")
+                                or row.get("order_date_inferred")
+                                or False),
+        "_inbox_row": {"raw_payload": row.get("raw_payload")},
+    }
+    created = _extract_order_created_at(pseudo_order)
+    raw_pl = row.get("raw_payload") or {}
+    raw_data = (raw_pl.get("data") if isinstance(raw_pl, dict)
+                else {}) or {}
+    raw_data_date = raw_data.get("date") if isinstance(raw_data, dict) \
+        else None
+    date_debug = {
+        "available_date_fields": {
+            "canonical_payload.salla_order_created_at":
+                canonical.get("salla_order_created_at"),
+            "canonical_payload.order_date":
+                canonical.get("order_date"),
+            "canonical_payload.created_at":
+                canonical.get("created_at"),
+            "row.salla_order_created_at":
+                row.get("salla_order_created_at"),
+            "raw_payload.created_at": (
+                raw_pl.get("created_at")
+                if isinstance(raw_pl, dict) else None),
+            "raw_payload.data.date.date": (
+                raw_data_date.get("date")
+                if isinstance(raw_data_date, dict) else raw_data_date),
+            "raw_payload.data.created_at":
+                raw_data.get("created_at"),
+        },
+        "extracted_salla_order_created_at":
+            created.isoformat() if created else None,
+        "extraction_source": (
+            "eligible_orders._extract_order_created_at "
+            "(priority: canonical.created_at → order_date "
+            "(unless inferred) → raw_payload.data.date.date → "
+            "raw_payload.data.created_at → order_date fallback)"),
+        "q3_cutoff_iso": Q3_CUTOFF_ISO,
+    }
+    if created is None:
         raise CanaryGuardFailed(
             5, "created_at_missing",
-            "salla_order_created_at not present.")
+            "No usable salla order created_at across all supported "
+            "fields (see extra.date_debug).",
+            extra={"date_debug": date_debug})
     if created < date.fromisoformat(Q3_CUTOFF_ISO):
         raise CanaryGuardFailed(
             5, "created_before_q3_cutoff",
-            f"{created} < {Q3_CUTOFF_ISO}.")
+            f"{created} < {Q3_CUTOFF_ISO}.",
+            extra={"date_debug": date_debug})
 
     # Guard 6 — no real existing Qoyod invoice.
     existing = canonical.get("existing_qoyod_invoice_id") \
@@ -281,6 +332,7 @@ async def execute_canary_live_send(
             "no_qoyod_api_calls": True,
             "no_db_writes_to_qoyod_settings": True,
             "settings_debug": debug_snapshot,
+            **(g.extra or {}),
         }
 
     await _write_audit(db, attempt_id=attempt_id,

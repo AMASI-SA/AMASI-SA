@@ -480,6 +480,207 @@ class TestUserIdParameterisation:
                 == "custom_tenant_xyz")
 
 
+# ── Guard #5 date extraction (Production parity) ───────────────────
+# Repro for the Production bug reported 2026-02: canary refused with
+# `created_at_missing` because the row surfaced the date under
+# `canonical_payload.order_date` (or raw_payload.data.date.date) and
+# NOT under `salla_order_created_at`. Canary must accept any of the
+# supported source fields — identical to eligible_orders / policy
+# report — and MUST NOT fall back to completed_at / delivered_at /
+# received_at.
+@pytest.mark.asyncio
+class TestGuard5DateExtractionMatchesEligibleOrders:
+
+    async def _run(self, row):
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-DT",
+                       "qoyod_customer_id":  "CUST-DT",
+                       "qoyod_receipt_id":   "RCPT-DT",
+                   })):
+            return await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+
+    async def test_accepts_created_at_from_canonical_order_date(self):
+        row = _canary_row()
+        # Strip primary field, surface only `order_date`.
+        row["canonical_payload"].pop("salla_order_created_at", None)
+        row.pop("salla_order_created_at", None)
+        row["canonical_payload"]["order_date"] = "2026-07-05"
+        row["canonical_payload"]["order_date_inferred"] = False
+        r = await self._run(row)
+        assert r["outcome"] == "SENT", (
+            f"Guard 5 refused unexpectedly: {r}")
+
+    async def test_accepts_created_at_from_raw_payload_data_date_date(
+            self):
+        row = _canary_row()
+        row["canonical_payload"].pop("salla_order_created_at", None)
+        row.pop("salla_order_created_at", None)
+        row["canonical_payload"].pop("order_date", None)
+        row["raw_payload"] = {
+            "data": {
+                "date": {"date": "2026-07-05 10:30:00"},
+            }
+        }
+        r = await self._run(row)
+        assert r["outcome"] == "SENT", (
+            f"Guard 5 refused unexpectedly: {r}")
+
+    async def test_accepts_created_at_from_raw_payload_data_created_at(
+            self):
+        row = _canary_row()
+        row["canonical_payload"].pop("salla_order_created_at", None)
+        row.pop("salla_order_created_at", None)
+        row["canonical_payload"].pop("order_date", None)
+        row["raw_payload"] = {
+            "data": {
+                "created_at": "2026-07-05T10:30:00+03:00",
+            }
+        }
+        r = await self._run(row)
+        assert r["outcome"] == "SENT", (
+            f"Guard 5 refused unexpectedly: {r}")
+
+    async def test_refuses_when_all_date_sources_missing_with_debug(
+            self):
+        row = _canary_row()
+        # Wipe EVERY known date source.
+        row["canonical_payload"].pop("salla_order_created_at", None)
+        row["canonical_payload"].pop("order_date", None)
+        row["canonical_payload"].pop("created_at", None)
+        row.pop("salla_order_created_at", None)
+        row["raw_payload"] = {}  # no data
+        db = _build_db(row=row)
+        r = await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 5
+        assert r["code"] == "created_at_missing"
+        # Debug block MUST be present and complete.
+        d = r["date_debug"]
+        af = d["available_date_fields"]
+        for k in ("canonical_payload.salla_order_created_at",
+                  "canonical_payload.order_date",
+                  "canonical_payload.created_at",
+                  "raw_payload.created_at",
+                  "raw_payload.data.date.date",
+                  "raw_payload.data.created_at"):
+            assert k in af, f"missing key in debug: {k}"
+        assert d["extracted_salla_order_created_at"] is None
+        assert d["q3_cutoff_iso"] == "2026-07-01"
+
+    async def test_completed_at_is_never_used_as_fallback(self):
+        row = _canary_row()
+        # Wipe every legitimate source AND set completed_at only.
+        row["canonical_payload"].pop("salla_order_created_at", None)
+        row["canonical_payload"].pop("order_date", None)
+        row["canonical_payload"].pop("created_at", None)
+        row.pop("salla_order_created_at", None)
+        row["canonical_payload"]["completed_at"] = "2026-07-05"
+        row["raw_payload"] = {}
+        db = _build_db(row=row)
+        r = await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 5
+        assert r["code"] == "created_at_missing"
+
+    async def test_delivered_at_is_never_used_as_fallback(self):
+        row = _canary_row()
+        row["canonical_payload"].pop("salla_order_created_at", None)
+        row["canonical_payload"].pop("order_date", None)
+        row["canonical_payload"].pop("created_at", None)
+        row.pop("salla_order_created_at", None)
+        row["canonical_payload"]["delivered_at"] = "2026-07-05"
+        row["raw_payload"] = {}
+        db = _build_db(row=row)
+        r = await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 5
+
+    async def test_269629400_fixture_passes_guard5_via_order_date(self):
+        # Exact Production fixture shape: date lives only in
+        # canonical_payload.order_date (no salla_order_created_at,
+        # no raw_payload data.date.date).
+        row = {
+            "user_id": "main",
+            "salla_order_number": CANARY_ORDER_NUMBER,
+            "existing_qoyod_invoice_id": "DRY:invoice:xxx",
+            "qoyod_customer_id": "DRY:contact:yyy",
+            "canonical_payload": {
+                "order_number": CANARY_ORDER_NUMBER,
+                "order_date": "2026-07-01",
+                "order_date_inferred": False,
+                "payment_method": "tabby_installment",
+                "status": "completed",
+                "subtotal": 80.00,
+                "shipping_amount": 13.05,
+                "tax_amount": 0.00,
+                "discount_amount": 0.00,
+                "total_amount": 100.00,
+                "customer": {
+                    "mobile": "+966557951913",
+                    "email": "suziyousif9@gmail.com",
+                    "name": "سوزان عوض الله",
+                },
+                "items": [{
+                    "sku": REQUIRED_SKU,
+                    "quantity": 1,
+                    "unit_price": 80.00,
+                    "discount_amount": 0.0,
+                    "tax_amount": 6.95,
+                    "total": 86.95,
+                    "qoyod_product_id": "DRY:product:cc",
+                }],
+            },
+        }
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-269",
+                       "qoyod_customer_id":  "CUST-269",
+                       "qoyod_receipt_id":   "RCPT-269",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", (
+            f"269629400 fixture failed guard 5: {r}")
+
+    async def test_no_qoyod_api_call_when_guard5_refuses(self):
+        """When Guard 5 refuses, the delegate pipeline (which owns
+        the actual Qoyod HTTP calls) must NEVER be invoked."""
+        row = _canary_row()
+        row["canonical_payload"].pop("salla_order_created_at", None)
+        row["canonical_payload"].pop("order_date", None)
+        row["canonical_payload"].pop("created_at", None)
+        row.pop("salla_order_created_at", None)
+        row["raw_payload"] = {}
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 5
+        assert mock_pipe.call_count == 0, (
+            "reprocess_one_order was called despite guard 5 refuse")
+        assert r["no_qoyod_api_calls"] is True
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 
