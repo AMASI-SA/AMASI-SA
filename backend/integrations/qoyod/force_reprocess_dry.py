@@ -295,17 +295,34 @@ async def force_reprocess_dry_row(
         li.get("product_id") for li in
         ((payloads.get("invoice") or {}).get("line_items") or [])
         if isinstance(li, dict)]
-    # Iter-rev19 — invoice_post_attempted is TRUE only when قيود
-    # actually saw the request (response body present, id extracted,
-    # or a real qoyod_invoice_id landed on the row).
+    # Iter-rev19 → rev20 — invoice_post_attempted is TRUE only when
+    # قيود actually saw the request. `SELECTIVE_SEND_BLOCKED:*`
+    # stages mean the OLD policy refused BEFORE any Qoyod POST, so
+    # attempted MUST report False. Response body presence OR a real
+    # qoyod_invoice_id on the row are the honest signals.
+    _final_stage = (final_row or {}).get("pipeline_stage") or ""
+    _selective_send_blocked_state = _final_stage.startswith(
+        "SELECTIVE_SEND_BLOCKED")
     _real_invoice_id_now = _is_real_qid(
         (final_row or {}).get("qoyod_invoice_id"))
     debug["invoice_post_attempted"] = bool(
-        responses.get("invoice")
-        or _real_invoice_id_now)
+        (responses.get("invoice") or _real_invoice_id_now)
+        and not _selective_send_blocked_state)
     debug["payment_post_attempted"] = bool(
-        responses.get("invoice_payment")
-        or (final_row or {}).get("qoyod_invoice_payment_id"))
+        (responses.get("invoice_payment")
+         or (final_row or {}).get("qoyod_invoice_payment_id"))
+        and not _selective_send_blocked_state)
+    debug["request_sent_to_qoyod"] = (
+        debug["invoice_post_attempted"]
+        or debug["payment_post_attempted"])
+    debug["old_selective_send_bypassed_by_auto_gate"] = (
+        (settings.get("selective_live_send_enabled", False) is False)
+        and bool(debug.get("scoped_write_allowance")))
+    debug["effective_selective_live_send_enabled_for_row"] = (
+        True if debug.get("scoped_write_allowance") else False)
+    debug["effective_production_writes_locked_for_row"] = (
+        False if debug.get("scoped_write_allowance") else True)
+    debug["effective_dry_run_for_row"] = False
     debug["product_resolve_attempted"] = (
         (final_row or {}).get("pipeline_stage") in
         ("PRODUCT_RESOLVED", "PREFLIGHTED", "INVOICE_CREATED",
@@ -313,8 +330,10 @@ async def force_reprocess_dry_row(
     # Explain when invoice was NOT sent.
     if not debug["invoice_post_attempted"]:
         _blocked = None
-        _final_stage = debug["final_stage"]
-        if _final_stage == "CUSTOMER_RESOLVED":
+        if _selective_send_blocked_state:
+            _blocked = (f"old_selective_send_policy_refused:"
+                        f"{_final_stage[len('SELECTIVE_SEND_BLOCKED:'):]}")
+        elif _final_stage == "CUSTOMER_RESOLVED":
             _blocked = ("stopped_before_product_resolve — call "
                         "resume-selective-auto-send")
         elif _final_stage == "PRODUCT_RESOLVED":

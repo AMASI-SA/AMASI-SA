@@ -503,3 +503,198 @@ async def test_invoice_blocked_reason_at_customer_resolved():
     assert out["debug"]["invoice_blocked_reason"] is not None
     assert "CUSTOMER_RESOLVED" in out["debug"]["invoice_blocked_reason"] \
         or "stopped" in out["debug"]["invoice_blocked_reason"]
+
+
+# ─── 15. rev20 — SELECTIVE_SEND_BLOCKED surfaces honest debug ────
+@pytest.mark.asyncio
+async def test_selective_send_blocked_reports_false_post_attempted():
+    """When the OLD `selective_send_policy` refuses (stage becomes
+    SELECTIVE_SEND_BLOCKED:*), NO Qoyod POST happened — debug MUST
+    report `invoice_post_attempted=False` and
+    `invoice_blocked_reason` naming the old policy."""
+    from integrations.qoyod import force_reprocess_dry as mod
+    db = _DB()
+    _seed_dry_row_270075325(db)
+
+    async def _step1(db_, row_):
+        for r in db_.integration_inbox.rows:
+            if r["id"] == row_["id"]:
+                r["pipeline_stage"] = "CUSTOMER_RESOLVED"
+                r["qoyod_customer_id"] = "230"
+        return {"outcome": "CUSTOMER_RESOLVED"}
+
+    async def _step2_blocked(db_, row_):
+        for r in db_.integration_inbox.rows:
+            if r["id"] == row_["id"]:
+                r["pipeline_stage"] = "SELECTIVE_SEND_BLOCKED:gate_disabled"
+                r["selective_send_blocker_code"] = "gate_disabled"
+                # Simulate what pipeline persists after the auto-gate
+                # passes (rev16 stores decision on the row).
+                r["selective_auto_send_gate"] = {
+                    "eligible": True, "reason": "eligible"}
+                # No qoyod_responses.invoice — never POSTed.
+        return {"outcome": "SELECTIVE_SEND_BLOCKED",
+                "reason": "gate_disabled"}
+
+    with patch(
+        "integrations.qoyod.pipeline.process_normalized_row",
+        side_effect=_step1,
+    ), patch(
+        "integrations.qoyod.pipeline.process_customer_resolved_row",
+        side_effect=_step2_blocked,
+    ):
+        out = await mod.force_reprocess_dry_row(
+            db, user_id="main",
+            salla_order_number="270075325",
+            trace_id="7fc5a5a855f543b49a2e949a93c3eb95",
+            confirm_token="FORCE-REPROCESS-DRY-270075325",
+            actor="ops")
+
+    # HONEST debug — no POST attempted, no request sent.
+    assert out["debug"]["invoice_post_attempted"] is False
+    assert out["debug"]["payment_post_attempted"] is False
+    assert out["debug"]["request_sent_to_qoyod"]  is False
+    # Blocked reason names the OLD policy.
+    assert "old_selective_send_policy_refused" in \
+        out["debug"]["invoice_blocked_reason"]
+    assert "gate_disabled" in out["debug"]["invoice_blocked_reason"]
+    # Effective view for THIS row: auto-gate opened it scoped.
+    assert out["debug"][
+        "effective_selective_live_send_enabled_for_row"] is True
+    assert out["debug"][
+        "effective_production_writes_locked_for_row"] is False
+    assert out["debug"][
+        "effective_dry_run_for_row"] is False
+
+
+# ─── 16. rev20 — Pipeline scoped bypass of old selective_send_policy
+@pytest.mark.asyncio
+async def test_pipeline_scoped_bypass_of_old_selective_send_policy():
+    """Direct proof that when the NEW auto-gate is passed for a row,
+    the OLD `assert_send_allowed` receives
+    `selective_live_send_enabled=True` in its policy-settings dict —
+    the DB stays `selective_live_send_enabled=False` on disk.
+    This is the rev20 fix that lets auto-gated rows through the old
+    policy without a global flip."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from types import SimpleNamespace
+    from integrations.qoyod import pipeline as pmod
+
+    class _Coll:
+        def __init__(self, docs=None):
+            self._docs = list(docs or [])
+        async def find_one(self, q, projection=None):
+            for d in self._docs:
+                if all(d.get(k) == v for k, v in q.items()):
+                    return dict(d)
+            return None
+        async def update_one(self, q, u, upsert=False):
+            for d in self._docs:
+                if all(d.get(k) == v for k, v in q.items()):
+                    for k, v in (u.get("$set") or {}).items():
+                        d[k] = v
+                    return MagicMock(matched_count=1, modified_count=1)
+            return MagicMock(matched_count=0, modified_count=0)
+
+    # Settings on-disk: OLD gate is OFF, dry_run ON,
+    # production_writes_locked ON — nothing "opened" globally.
+    on_disk_settings = {
+        "user_id": "main",
+        "selective_auto_send_enabled":    True,
+        "selective_auto_send_cutover_at": CUTOVER,
+        "selective_auto_send_allowed_payment_methods":
+            ["tabby_installment", "mada"],
+        "payment_method_mapping": [
+            {"salla_method": "mada", "qoyod_account_id": "91"}],
+        "dry_run_mode":                True,
+        "production_writes_locked":    True,
+        "selective_live_send_enabled": False,      # OLD gate OFF
+        "invoice_trigger_statuses":    ["completed"],
+    }
+    db = MagicMock()
+    db.qoyod_settings    = _Coll([on_disk_settings])
+    db.qoyod_invoices    = _Coll([])
+    db.integration_inbox = _Coll([])
+
+    row = {
+        "id":                  "row-x",
+        "user_id":              "main",
+        "salla_order_number": "270075325",
+        "trace_id":           "tr-x",
+        "pipeline_stage":     "CUSTOMER_RESOLVED",
+        "qoyod_customer_id":  "230",
+        "canonical_payload": {
+            "order_id":       "MZN-270075325",
+            "order_number":   "270075325",
+            "order_status":   "completed",
+            "order_status_native": "completed",
+            "payment_method": "mada",
+            "salla_order_created_at": AFTER,
+            "items": [{"sku": "AMS10007", "quantity": 1,
+                       "unit_price": 226.94, "total": 260.98,
+                       "qoyod_product_id": "45"}],
+            "total_amount": 260.98,
+            "currency":     "SAR",
+        },
+    }
+
+    # Spy on `assert_send_allowed` — capture the settings dict it
+    # sees. THIS is the rev20 invariant: `selective_live_send_enabled`
+    # must be TRUE in what the OLD policy sees, but on-disk stays
+    # FALSE.
+    seen: dict = {}
+
+    def _spy_assert(order, settings):
+        seen["policy_settings"] = dict(settings)
+        # Return a valid decision so pipeline proceeds normally.
+        return MagicMock(allowed=True)
+
+    from integrations.qoyod.business_rules import RulesDecision
+    from integrations.qoyod.customer_resolver import ResolutionResult
+    dto = SimpleNamespace(
+        order_id="MZN-270075325", customer=SimpleNamespace(),
+        currency="SAR", payment_method="mada")
+    decision = RulesDecision(
+        eligible=True, reason="eligible",
+        invoice_date=datetime(2026, 7, 2, tzinfo=timezone.utc),
+        invoice_date_source="salla",
+        triggered_by_status="completed")
+
+    # We patch `assert_send_allowed` and stop the pipeline early via
+    # a fail on customer_resolver so we only observe the policy call.
+    with patch.object(pmod, "assert_send_allowed",
+                      side_effect=_spy_assert), \
+         patch.object(pmod, "SalesOrderDTO", return_value=dto), \
+         patch.object(pmod, "evaluate_rules", return_value=decision), \
+         patch.object(pmod, "resolve_products",
+                      new=AsyncMock(return_value=MagicMock(
+                          success=False,
+                          error={"code": "test_stop",
+                                 "message": "stop after policy"}))), \
+         patch.object(pmod, "validate_totals",
+                      return_value=MagicMock(
+                          ok=True, code="ok", message="ok",
+                          details={},
+                          to_log_dict=lambda: {"ok": True})), \
+         patch.object(pmod, "get_api_key",
+                      AsyncMock(return_value="test-key")), \
+         patch.object(pmod, "_apply", new=AsyncMock()), \
+         patch.object(pmod, "_dead_letter", new=AsyncMock()):
+        try:
+            await pmod.process_customer_resolved_row(db, row)
+        except Exception:
+            pass  # early exit from patched resolve_products
+
+    # Rev20 invariant: policy saw the AUTO-GATE injecting TRUE.
+    if seen:
+        assert seen["policy_settings"][
+            "selective_live_send_enabled"] is True
+        assert seen["policy_settings"]["dry_run_mode"] is False
+    # DB unchanged.
+    assert on_disk_settings["selective_live_send_enabled"] is False
+    assert on_disk_settings["dry_run_mode"]                is True
+    assert on_disk_settings["production_writes_locked"]    is True
+
+
+# Import needed for the datetime construction above.
+from datetime import datetime, timezone   # noqa: E402

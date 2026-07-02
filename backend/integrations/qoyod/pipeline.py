@@ -976,6 +976,20 @@ async def process_customer_resolved_row(
             _policy_settings = dict(settings)
             _policy_settings["production_writes_locked"] = \
                 _writes_blocked(api_client, settings)
+            # Iter-2026-02.rev20 — Selective Auto-Send gate bypass.
+            # When the row has passed the NEW `selective_auto_send_gate`
+            # (rev16), the OLD `selective_send_policy` MUST NOT refuse
+            # it with `gate_disabled` just because
+            # `selective_live_send_enabled=false` on disk. The two
+            # gates are INDEPENDENT — auto-gate = per-row (with cutover
+            # / status / pm / mapping / no real invoice), old gate =
+            # global master switch. When auto-gate passes, we inject
+            # a scoped `selective_live_send_enabled=True` into the
+            # policy-only settings snapshot. DB is NEVER modified —
+            # this is a per-row execution-context override only.
+            if _sas_gate_passed:
+                _policy_settings["selective_live_send_enabled"] = True
+                _policy_settings["dry_run_mode"] = False
             try:
                 selective_send_decision = assert_send_allowed(
                     order=policy_order, settings=_policy_settings)
@@ -1551,6 +1565,12 @@ async def process_customer_resolved_row(
             _policy_settings_pay = dict(settings)
             _policy_settings_pay["production_writes_locked"] = \
                 _writes_blocked(api_client, settings)
+            # Iter-2026-02.rev20 — mirror of the invoice-site fix so
+            # payment isn't refused by the OLD selective_send_policy
+            # after the new auto-gate approved the row.
+            if _sas_gate_passed:
+                _policy_settings_pay["selective_live_send_enabled"] = True
+                _policy_settings_pay["dry_run_mode"] = False
             try:
                 payment_decision = assert_send_allowed(
                     order=policy_order_pay,
