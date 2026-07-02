@@ -892,6 +892,276 @@ async def execute_canary_live_send(
             "selection_debug":   selection_debug,
         }
 
+    # ── Iter-2026-02.rev13 — Reconcile / Adopt existing invoice ────
+    # If قيود already carries an invoice with `reference==order_number`
+    # (created in a previous run whose response never landed in
+    # `integration_inbox`), adopt it instead of creating a duplicate.
+    # This runs BEFORE `reprocess_one_order` so the pipeline sees a
+    # real qoyod_invoice_id on the row and skips its own /invoices
+    # POST via the built-in existing-invoice reuse short-circuit
+    # (pipeline.py L803). Only GET calls are performed here; writes
+    # happen exclusively via `db.integration_inbox.update_one`
+    # (bounded to the selected trace) and a single
+    # `db.qoyod_invoices.update_one(..., upsert=True)`.
+    reconcile_debug: dict[str, Any] = {
+        "attempted":            False,
+        "adopted":              False,
+        "code":                 None,
+        "adopted_invoice_id":   None,
+        "mismatch_reasons":     None,
+        "matches_found":        0,
+        "pages_scanned":        0,
+        "api_error":            None,
+        "db_invoice_update_result": None,
+    }
+    adopted_invoice_id: Optional[str] = None
+    try:
+        from integrations.qoyod.canary_reconcile import (
+            find_and_adopt_existing_invoice,
+        )
+        from integrations.qoyod.pipeline import _get_api_client
+
+        # Load REAL on-disk settings for the API-client construction
+        # (writes-lock context, credentials). The dry-run overlay
+        # inside `canary_db` only widens the scoped read; api-client
+        # construction MUST reflect real disk state.
+        _real_settings = await db.qoyod_settings.find_one(
+            {"user_id": user_id}, {"_id": 0}) or {}
+        reconcile_api_client, _is_dry_client = await _get_api_client(
+            canary_db, user_id, _real_settings)
+        if reconcile_api_client is not None and not _is_dry_client:
+            reconcile_debug["attempted"] = True
+            # Read the row AFTER pre-resolve so we adopt against the
+            # up-to-date customer id.
+            _sel_row = await db.integration_inbox.find_one(
+                {"user_id": user_id,
+                 "trace_id": selected_trace_id}, {"_id": 0}) or {}
+            _sel_can = _sel_row.get("canonical_payload") or {}
+            _expected_customer_id = str(
+                _sel_row.get("qoyod_customer_id") or "")
+
+            # Expected values — canary constants + row-derived
+            # customer id. Money values come from the row's
+            # canonical_payload (already validated by Guard 9 to
+            # match Mezan-VAT-15% within ±0.01).
+            _expected_total = float(
+                _sel_can.get("total_amount") or 0.0)
+            # قيود stores VAT as 15% of (subtotal+shipping) —
+            # canonical_payload.tax_amount usually 0 for Salla, so
+            # derive from Mezan expectation.
+            _subtotal_plus_shipping = (
+                float(_sel_can.get("subtotal") or 0.0)
+                + float(_sel_can.get("shipping_amount") or 0.0))
+            _expected_total_before_tax = round(
+                _subtotal_plus_shipping / 1.15, 2)
+            _expected_vat = round(
+                _subtotal_plus_shipping - _expected_total_before_tax,
+                2)
+            _expected_issue_date = None
+            _sd = _sel_can.get("salla_order_created_at") \
+                or _sel_can.get("order_date") \
+                or _sel_can.get("created_at")
+            if _sd:
+                _expected_issue_date = str(_sd)[:10]
+
+            adopt_res = await find_and_adopt_existing_invoice(
+                reconcile_api_client,
+                order_number=CANARY_ORDER_NUMBER,
+                expected_total=_expected_total,
+                expected_vat=_expected_vat,
+                expected_total_before_tax=_expected_total_before_tax,
+                expected_customer_id=(_expected_customer_id
+                                      or None),
+                expected_product_id=str(REQUIRED_QOYOD_PRODUCT_ID),
+                expected_issue_date=_expected_issue_date,
+            )
+            reconcile_debug.update({
+                "code":                adopt_res.code,
+                "adopted_invoice_id":  adopt_res.adopted_invoice_id,
+                "mismatch_reasons":    (adopt_res.mismatch_reasons
+                                        or None),
+                "matches_found":       adopt_res.matches_found,
+                "pages_scanned":       adopt_res.pages_scanned,
+                "api_error":           adopt_res.api_error,
+            })
+
+            if adopt_res.code in ("mismatch", "multiple_matches"):
+                # Refuse; no writes. Operator must investigate قيود
+                # before any further canary attempt.
+                await _write_audit(
+                    db, attempt_id=attempt_id,
+                    phase="reconcile", status="refused",
+                    code=f"canary_reconcile_{adopt_res.code}",
+                    detail=str(adopt_res.mismatch_reasons)[:400])
+                return {
+                    "attempt_id":       attempt_id,
+                    "outcome":          "REFUSED",
+                    "code":             (f"canary_reconcile_"
+                                         f"{adopt_res.code}"),
+                    "detail":           ("reconcile refused; "
+                                         "no writes were made"),
+                    "no_qoyod_api_calls": False,
+                    "reconcile_attempted":         True,
+                    "reconciled_existing_invoice_id": None,
+                    "reconcile_debug":  reconcile_debug,
+                    "selected_trace_id": selected_trace_id,
+                    "selection_debug":   selection_debug,
+                }
+            if adopt_res.code == "adopted" \
+                    and adopt_res.adopted_invoice_id:
+                adopted_invoice_id = adopt_res.adopted_invoice_id
+                reconcile_debug["adopted"] = True
+                # Bounded DB writes — selected trace only.
+                _upd = await db.integration_inbox.update_one(
+                    {"user_id":  user_id,
+                     "trace_id": selected_trace_id},
+                    {"$set": {
+                        "qoyod_invoice_id":     adopted_invoice_id,
+                        "qoyod_customer_id":    (_expected_customer_id
+                                                 or None),
+                        "adopted_from_qoyod":   True,
+                        "adopted_at":           datetime.now(
+                            timezone.utc).isoformat(),
+                        "adopt_source": (
+                            "canary_reconciled_existing_qoyod_invoice"),
+                        "outcome": "invoice_created_reconciled",
+                    }})
+                reconcile_debug["db_invoice_update_result"] = {
+                    "matched":  getattr(_upd, "matched_count", None),
+                    "modified": getattr(_upd, "modified_count", None),
+                }
+                # Upsert canonical qoyod_invoices row so future
+                # already_sent guard (rev12) blocks any duplicate
+                # creation attempt for this order.
+                await db.qoyod_invoices.update_one(
+                    {"user_id":            user_id,
+                     "salla_order_number": CANARY_ORDER_NUMBER},
+                    {"$set": {
+                        "user_id":            user_id,
+                        "salla_order_number": CANARY_ORDER_NUMBER,
+                        "reference":          CANARY_ORDER_NUMBER,
+                        "salla_order_id":     _sel_can.get("order_id"),
+                        "qoyod_invoice_id":   adopted_invoice_id,
+                        "qoyod_customer_id":  (_expected_customer_id
+                                               or None),
+                        "status":             "sent",
+                        "source": (
+                            "canary_reconciled_existing_qoyod_invoice"),
+                        "total":              _expected_total,
+                        "vat":                _expected_vat,
+                        "total_before_tax":
+                            _expected_total_before_tax,
+                        "issue_date":         _expected_issue_date,
+                        "reconciled_at":      datetime.now(
+                            timezone.utc).isoformat(),
+                    }},
+                    upsert=True,
+                )
+                await _write_audit(
+                    db, attempt_id=attempt_id,
+                    phase="reconcile", status="adopted",
+                    code="canary_reconcile_adopted",
+                    detail=(f"adopted_invoice_id="
+                            f"{adopted_invoice_id}"))
+    except Exception as _rec_exc:
+        reconcile_debug["api_error"] = (
+            f"{type(_rec_exc).__name__}: {_rec_exc}")[:400]
+        await _write_audit(
+            db, attempt_id=attempt_id,
+            phase="reconcile", status="error",
+            code=type(_rec_exc).__name__,
+            detail=str(_rec_exc)[:400])
+
+    # ── Iter-2026-02.rev13 — POST-adopt routing ────────────────────
+    # If reconcile adopted an existing قيود invoice, HARD-SKIP the
+    # invoice-creating pipeline (`reprocess_one_order`) and take the
+    # payment-only path via `retry_payment_only`. This guarantees:
+    #   • No second /invoices POST — the قيود invoice is REAL and
+    #     already reached ZATCA; a duplicate would be a compliance
+    #     incident.
+    #   • Payment is attempted ONLY if no successful record exists
+    #     for this fingerprint (retry_payment_only enforces its own
+    #     idempotency check on `qoyod_invoice_payments`).
+    payment_only_result: Optional[dict] = None
+    payment_attempted_flag: bool = False
+    payment_skipped_reason: Optional[str] = None
+    if adopted_invoice_id:
+        payment_attempted_flag = True
+        try:
+            from integrations.qoyod.retry_payment_only import (
+                retry_payment_only,
+            )
+            _payment_confirm = (
+                f"RETRY-PAYMENT-{CANARY_ORDER_NUMBER}")
+            payment_only_result = await retry_payment_only(
+                canary_db,
+                user_id=user_id,
+                salla_order_number=CANARY_ORDER_NUMBER,
+                confirm_token=_payment_confirm,
+                actor=f"canary_adopt:{actor}",
+            )
+            await _write_audit(
+                db, attempt_id=attempt_id,
+                phase="payment_after_adopt",
+                status=str((payment_only_result or {})
+                           .get("outcome")
+                           or ("ok" if (payment_only_result or {})
+                               .get("ok") else "err")),
+                code=(payment_only_result or {}).get("skip_reason"),
+                result_payload={
+                    "adopted_invoice_id": adopted_invoice_id,
+                    "outcome": (payment_only_result or {}).get(
+                        "outcome"),
+                    "qoyod_invoice_payment_id":
+                        (payment_only_result or {}).get(
+                            "qoyod_invoice_payment_id"),
+                })
+        except Exception as _pay_exc:
+            payment_only_result = {
+                "ok": False,
+                "outcome": "PAYMENT_EXCEPTION",
+                "code": type(_pay_exc).__name__,
+                "detail": str(_pay_exc)[:500],
+            }
+            await _write_audit(
+                db, attempt_id=attempt_id,
+                phase="payment_after_adopt", status="error",
+                code=type(_pay_exc).__name__,
+                detail=str(_pay_exc)[:400])
+        # Payment attempt done — return early with rich diagnostics.
+        _po = payment_only_result or {}
+        _outcome = _po.get("outcome") or (
+            "PAYMENT_OK" if _po.get("ok") else "PAYMENT_FAILED")
+        return {
+            "attempt_id":              attempt_id,
+            "outcome":                 _outcome,
+            "adopted":                 True,
+            "reconcile_attempted":     True,
+            "reconciled_existing_invoice_id":
+                adopted_invoice_id,
+            "reconcile_debug":         reconcile_debug,
+            "extracted_qoyod_invoice_id":
+                adopted_invoice_id,
+            "db_invoice_update_result":
+                reconcile_debug.get("db_invoice_update_result"),
+            "payment_attempted":       payment_attempted_flag,
+            "payment_result":          payment_only_result,
+            "payment_skipped_reason":  _po.get("skip_reason"),
+            "qoyod_invoice_id":        adopted_invoice_id,
+            "qoyod_customer_id":       _po.get(
+                "qoyod_customer_id") or None,
+            "qoyod_invoice_payment_id": _po.get(
+                "qoyod_invoice_payment_id"),
+            "invoice_post_request_body":  None,
+            "invoice_post_response_body": None,
+            "selected_trace_id":       selected_trace_id,
+            "selection_debug":         selection_debug,
+            "no_qoyod_api_calls":      False,
+            "note": ("adopted existing قيود invoice; NO /invoices "
+                     "POST was attempted"),
+        }
+
+    payment_skipped_reason = "no_adopted_invoice"
     try:
         result = await reprocess_one_order(
             canary_db,

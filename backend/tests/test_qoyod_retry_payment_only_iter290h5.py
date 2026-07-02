@@ -279,3 +279,147 @@ async def test_success_transitions_row_to_completed_and_writes_ledger(patch_deps
         {"salla_order_id": "MZN-269048975"})
     assert led["qoyod_invoice_payment_id"] == "PMT-OK-1"
     assert led["source"] == "retry_payment_only"
+
+
+# ─── 7. PRODUCTION CASE — order 269629400 / invoice 186 / Tabby ─────
+# Iter-2026-02.rev14 — Locks in the specific production case:
+#   • invoice_id     = 186   (already bound in Mezan + قيود + ZATCA)
+#   • customer_id    = 228
+#   • total          = 178.87
+#   • date           = 2026-07-02
+#   • payment method = tabby_installment → canonical "tabby"
+#   • account        = Tabby clearing account (mapped by operator)
+#
+# The endpoint MUST:
+#   • POST /invoice_payments ONLY (no /invoices, /customers, etc.)
+#   • Use the operator-mapped Tabby clearing account_id
+#   • Persist the qoyod_invoice_payment_id to the row + ledger
+#   • Refuse to run if Tabby mapping is missing (structured reason)
+# so operators get a clean guardrail without a duplicate POST attempt.
+@pytest.mark.asyncio
+async def test_production_269629400_invoice_186_tabby_payment_only(
+        patch_deps):
+    db = _DB()
+    # Simulate the PRODUCTION state: invoice 186 already bound
+    # (canary previously created it in قيود; operator manually
+    # updated the row with the real id).
+    db.qoyod_settings.rows.append({
+        "user_id": "main",
+        "payment_method_mapping": [
+            {"salla_method": "tabby", "qoyod_account_id": "77"},
+        ],
+        "credentials": {"api_key_encrypted": "test-key"},
+    })
+    db.integration_inbox.rows.append({
+        "id":                 "row-269629400",
+        "user_id":            "main",
+        "salla_order_number": "269629400",
+        "trace_id":           "162b59c818114b259850f2e2d35449f7",
+        "qoyod_invoice_id":   "186",         # REAL bound id
+        "qoyod_customer_id":  "228",
+        "pipeline_stage":     "INVOICE_CREATED",
+        "stage_history":      [],
+        "canonical_payload": {
+            "order_id":       "MZN-269629400",
+            "order_number":   "269629400",
+            "total_amount":   178.87,
+            "currency":       "SAR",
+            "payment_method": "tabby_installment",
+        },
+        "business_rules_decision": {
+            "invoice_date": "2026-07-02T00:00:00+00:00",
+        },
+    })
+
+    qoyod = _OK()
+    from integrations.qoyod import retry_payment_only as mod
+    patch_deps.setattr(
+        mod, "QoyodAPIClient", lambda key, **kw: qoyod)
+
+    out = await retry_payment_only(
+        db, user_id="main",
+        salla_order_number="269629400",
+        confirm_token="RETRY-PAYMENT-269629400",
+        actor="ops")
+
+    # Result — success + payment id persisted.
+    assert out["ok"] is True
+    assert out["outcome"] == "COMPLETED"
+    assert out["payment_post_attempted"] is True
+    assert out["qoyod_invoice_payment_id"] == "PMT-OK-1"
+
+    # Exactly ONE قيود call — POST /invoice_payments.
+    assert len(qoyod.calls) == 1
+    payload = qoyod.calls[0]["payload"]["invoice_payment"]
+    assert payload["invoice_id"] == 186        # coerced to int
+    assert payload["amount"]     == 178.87
+    assert payload["date"]       == "2026-07-02"
+    assert payload["account_id"] == 77          # Tabby clearing
+    assert payload["reference"]  == "269629400"
+    # Wire field must be `account_id` — never `account`
+    # (Iter-290h.6 correction — assertion Qoyod docs).
+    assert "account" not in payload
+
+    # Row transitioned + payment id saved (رقم سداد الفاتورة).
+    r = await db.integration_inbox.find_one({"id": "row-269629400"})
+    assert r["pipeline_stage"] == "COMPLETED"
+    assert r["qoyod_invoice_payment_id"] == "PMT-OK-1"
+
+    # Ledger row — enables future idempotency guard so any repeat
+    # POST for this fingerprint returns ALREADY_PAID (no duplicate).
+    led = await db.qoyod_invoice_payments.find_one(
+        {"salla_order_id": "MZN-269629400"})
+    assert led is not None
+    assert led["qoyod_invoice_payment_id"] == "PMT-OK-1"
+    assert led["qoyod_invoice_id"] == 186
+
+
+@pytest.mark.asyncio
+async def test_production_269629400_refuses_without_tabby_mapping(
+        patch_deps):
+    """If the operator hasn't mapped Tabby → قيود clearing account,
+    the endpoint MUST refuse with a structured reason BEFORE any
+    POST — never a blind retry."""
+    db = _DB()
+    db.qoyod_settings.rows.append({
+        "user_id": "main",
+        "payment_method_mapping": [],    # nothing mapped
+        "credentials": {"api_key_encrypted": "test-key"},
+    })
+    db.integration_inbox.rows.append({
+        "id":                 "row-269629400",
+        "user_id":            "main",
+        "salla_order_number": "269629400",
+        "trace_id":           "162b59c818114b259850f2e2d35449f7",
+        "qoyod_invoice_id":   "186",
+        "qoyod_customer_id":  "228",
+        "pipeline_stage":     "INVOICE_CREATED",
+        "stage_history":      [],
+        "canonical_payload": {
+            "order_id":       "MZN-269629400",
+            "order_number":   "269629400",
+            "total_amount":   178.87,
+            "payment_method": "tabby_installment",
+        },
+        "business_rules_decision": {
+            "invoice_date": "2026-07-02T00:00:00+00:00",
+        },
+    })
+    qoyod = _OK()
+    from integrations.qoyod import retry_payment_only as mod
+    patch_deps.setattr(
+        mod, "QoyodAPIClient", lambda key, **kw: qoyod)
+
+    out = await retry_payment_only(
+        db, user_id="main",
+        salla_order_number="269629400",
+        confirm_token="RETRY-PAYMENT-269629400",
+        actor="ops")
+
+    assert out["ok"] is False
+    assert out["outcome"] == "REFUSED"
+    assert out["skip_reason"] == "payment_method_mapping_missing"
+    assert out["payment_post_attempted"] is False
+    assert out["request_sent_to_qoyod"] is False
+    # No قيود calls whatsoever.
+    assert qoyod.calls == []
