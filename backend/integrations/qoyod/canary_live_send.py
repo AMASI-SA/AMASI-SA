@@ -186,11 +186,22 @@ def _row_matches_canary_criteria(row: dict) -> tuple[bool, Optional[str]]:
         return (False, "created_before_q3_cutoff")
     # No real existing invoice.
     existing = can.get("existing_qoyod_invoice_id") \
-        or row.get("existing_qoyod_invoice_id")
+        or row.get("existing_qoyod_invoice_id") \
+        or row.get("qoyod_invoice_id")
     if existing is not None:
         s = str(existing)
         if not (s.startswith("DRY:") or s.startswith("PREVIEW:")):
             return (False, "real_existing_invoice_id_present")
+    # Partial-invoice-created safety: if pipeline_stage indicates an
+    # invoice was already created but the invoice_id itself is real,
+    # refuse — even without an `existing_qoyod_invoice_id` field.
+    if row.get("pipeline_stage") == "INVOICE_CREATED":
+        qid_direct = row.get("qoyod_invoice_id")
+        if qid_direct is not None:
+            qs = str(qid_direct)
+            if qs and not (qs.startswith("DRY:")
+                           or qs.startswith("PREVIEW:")):
+                return (False, "partial_real_invoice_state")
     # Customer phone.
     import re as _re
     cust = can.get("customer") or {}
@@ -432,7 +443,8 @@ async def _run_guards(
 
         # Guard 6 — no real existing Qoyod invoice.
         existing = canonical.get("existing_qoyod_invoice_id") \
-            or row.get("existing_qoyod_invoice_id")
+            or row.get("existing_qoyod_invoice_id") \
+            or row.get("qoyod_invoice_id")
         if existing is not None:
             s = str(existing)
             if not (s.startswith("DRY:")
@@ -442,6 +454,19 @@ async def _run_guards(
                     f"existing_qoyod_invoice_id = {existing!r} "
                     f"looks real. Refusing.",
                     extra={"duplicate_debug": duplicate_debug})
+        # Guard 6b — partial invoice-created with real id.
+        if row.get("pipeline_stage") == "INVOICE_CREATED":
+            qid_direct = row.get("qoyod_invoice_id")
+            if qid_direct is not None:
+                qs = str(qid_direct)
+                if qs and not (qs.startswith("DRY:")
+                               or qs.startswith("PREVIEW:")):
+                    raise CanaryGuardFailed(
+                        6, "partial_real_invoice_state",
+                        "pipeline_stage=INVOICE_CREATED with a real "
+                        "qoyod_invoice_id — refusing to re-create.",
+                        extra={"duplicate_debug": duplicate_debug,
+                               "qoyod_invoice_id": qid_direct})
 
         # Guard 8 — customer phone match.
         cust = canonical.get("customer") or {}
@@ -596,6 +621,22 @@ async def execute_canary_live_send(
     internal_phrase = APPROVAL_PHRASE_TEMPLATE.format(
         order_number=CANARY_ORDER_NUMBER)
     selected_trace_id = selection_debug.get("selected_trace_id")
+    # If the selected row is stuck at INVOICE_CREATED without a real
+    # Qoyod invoice_id, ask reprocess_one_order to reset the partial
+    # state and rebuild the invoice from scratch. Guarded above:
+    # `_row_matches_canary_criteria` already refused rows with a
+    # REAL qoyod_invoice_id at this stage.
+    _stage = None
+    _qid   = None
+    for _r in selection_debug.get("duplicate_rows_summary", []):
+        if _r.get("trace_id") == selected_trace_id:
+            _stage = _r.get("pipeline_stage")
+            _qid   = _r.get("existing_qoyod_invoice_id")
+            break
+    _allow_partial_reset = (
+        _stage == "INVOICE_CREATED"
+        and (_qid is None
+             or str(_qid).startswith(("DRY:", "PREVIEW:"))))
     # Build the scoped DB proxy: `qoyod_settings.find_one` returns a
     # copy with `dry_run_mode=False`. Everything else forwards.
     canary_db = _CanaryDBProxy(db)
@@ -607,7 +648,9 @@ async def execute_canary_live_send(
             trace_id=selected_trace_id,
             confirm=internal_confirm,
             approval_phrase=internal_phrase,
-            actor=f"canary:{actor}")
+            actor=f"canary:{actor}",
+            allow_reset_from_partial_invoice_created=(
+                _allow_partial_reset))
     except Exception as e:
         await _write_audit(
             db, attempt_id=attempt_id,

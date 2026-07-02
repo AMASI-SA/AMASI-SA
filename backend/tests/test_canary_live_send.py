@@ -1243,6 +1243,179 @@ class TestSettingsDebugCarriesDryRun:
             f"canary_order_{CANARY_ORDER_NUMBER}_only")
 
 
+# ── Partial-invoice-created (INVOICE_CREATED without real id) ──────
+# Repro for Production bug 2026-02: canary passed all guards + dry_run
+# scoped bypass, but reprocess refused because the selected row was
+# in `INVOICE_CREATED` stage with `qoyod_invoice_id=null`. That's a
+# stuck partial state — safe to reset and reprocess. Meanwhile a
+# real invoice at INVOICE_CREATED MUST NEVER be re-created (idempotency).
+@pytest.mark.asyncio
+class TestPartialInvoiceCreatedHandling:
+
+    async def test_invoice_created_null_invoice_id_allows_reset(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "INVOICE_CREATED"
+        row["qoyod_invoice_id"] = None
+        row["existing_qoyod_invoice_id"] = None
+        row["canonical_payload"].pop(
+            "existing_qoyod_invoice_id", None)
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-PIC-1",
+                       "qoyod_customer_id":  "CUST-PIC-1",
+                       "qoyod_receipt_id":   "RCPT-PIC-1",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        # Reprocess was told the reset is permitted.
+        assert (mock_pipe.call_args.kwargs
+                ["allow_reset_from_partial_invoice_created"]
+                is True)
+
+    async def test_invoice_created_dry_invoice_id_allows_reset(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "INVOICE_CREATED"
+        row["qoyod_invoice_id"] = "DRY:invoice:zzz"
+        row["existing_qoyod_invoice_id"] = "DRY:invoice:zzz"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-PIC-2",
+                       "qoyod_customer_id":  "CUST-PIC-2",
+                       "qoyod_receipt_id":   "RCPT-PIC-2",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert (mock_pipe.call_args.kwargs
+                ["allow_reset_from_partial_invoice_created"]
+                is True)
+
+    async def test_invoice_created_preview_invoice_id_allows_reset(
+            self):
+        row = _canary_row()
+        row["pipeline_stage"] = "INVOICE_CREATED"
+        row["qoyod_invoice_id"] = "PREVIEW:invoice:aaa"
+        row["existing_qoyod_invoice_id"] = "PREVIEW:invoice:aaa"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-PIC-3",
+                       "qoyod_customer_id":  "CUST-PIC-3",
+                       "qoyod_receipt_id":   "RCPT-PIC-3",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert (mock_pipe.call_args.kwargs
+                ["allow_reset_from_partial_invoice_created"]
+                is True)
+
+    async def test_invoice_created_real_invoice_id_refuses(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "INVOICE_CREATED"
+        row["qoyod_invoice_id"] = "12345"    # real (non-DRY/PREVIEW).
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["code"] in {"partial_real_invoice_state",
+                             "real_existing_invoice_id_present"}
+        assert mock_pipe.call_count == 0
+
+    async def test_flag_false_for_non_invoice_created_stages(self):
+        """When the row is at NORMALIZED (or any non-IC stage), the
+        canary MUST NOT ask for the partial-reset escape hatch."""
+        row = _canary_row()
+        row["pipeline_stage"] = "NORMALIZED"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-F",
+                       "qoyod_customer_id":  "CUST-F",
+                       "qoyod_receipt_id":   "RCPT-F",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        assert (mock_pipe.call_args.kwargs
+                ["allow_reset_from_partial_invoice_created"]
+                is False)
+
+    async def test_trace_id_still_flows_through_partial_reset(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "INVOICE_CREATED"
+        row["qoyod_invoice_id"] = None
+        row["existing_qoyod_invoice_id"] = None
+        row["canonical_payload"].pop(
+            "existing_qoyod_invoice_id", None)
+        row["trace_id"] = "trace-partial-icc-123"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-T",
+                       "qoyod_customer_id":  "CUST-T",
+                       "qoyod_receipt_id":   "RCPT-T",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        assert (mock_pipe.call_args.kwargs["trace_id"]
+                == "trace-partial-icc-123")
+        assert (mock_pipe.call_args.kwargs["confirm"]
+                == f"REPROCESS-{CANARY_ORDER_NUMBER}")
+
+    async def test_no_qoyod_call_on_partial_real_invoice_refuse(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "INVOICE_CREATED"
+        row["qoyod_invoice_id"] = "REAL-9999"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert mock_pipe.call_count == 0
+        assert r["no_qoyod_api_calls"] is True
+
+    async def test_settings_untouched_on_partial_real_refuse(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "INVOICE_CREATED"
+        row["qoyod_invoice_id"] = "REAL-1234"
+        db = _build_db(row=row)
+        before = list(db.qoyod_settings._docs)
+        await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        after = list(db.qoyod_settings._docs)
+        assert after == before
+        assert after[0]["selective_live_send_enabled"] is False
+        assert after[0]["production_writes_locked"]    is True
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 

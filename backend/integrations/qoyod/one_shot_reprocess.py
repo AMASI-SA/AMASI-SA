@@ -332,6 +332,7 @@ _REPROCESSABLE_STAGES: frozenset[str] = frozenset(
 
 async def _reset_row_to_stage(
     db, row: dict, *, resume_stage: str, actor: str,
+    permit_partial_invoice_created: bool = False,
 ) -> None:
     """Two-hop terminal/failed → RETRYING → resume_stage transition.
     Mirrors the dead_letter_requeue mechanic so stage_history stays
@@ -349,11 +350,18 @@ async def _reset_row_to_stage(
         return
 
     if current not in _REPROCESSABLE_STAGES:
-        raise OneShotRefused(
-            "unsupported_current_stage",
-            f"row is in stage {current!r}; one-shot reprocess only "
-            f"supports terminal / failed / pre-customer stages",
-            current_stage=current)
+        # Canary partial-invoice-created escape hatch: allow reset
+        # from INVOICE_CREATED IFF the row has no real Qoyod invoice
+        # (checked upstream by the caller via
+        # `allow_reset_from_partial_invoice_created`).
+        if not (permit_partial_invoice_created
+                and current == "INVOICE_CREATED"):
+            raise OneShotRefused(
+                "unsupported_current_stage",
+                f"row is in stage {current!r}; one-shot reprocess "
+                f"only supports terminal / failed / pre-customer "
+                f"stages",
+                current_stage=current)
 
     # Hop 1: current → RETRYING (only if current is failure/terminal).
     # NORMALIZED / NEW / RECEIVED / VALIDATED / ELIGIBLE / SKIPPED
@@ -409,6 +417,7 @@ async def reprocess_one_order(
     confirm: str,
     approval_phrase: Optional[str] = None,
     actor: str = "operator",
+    allow_reset_from_partial_invoice_created: bool = False,
 ) -> dict:
     """Reprocess exactly one Salla order against real Qoyod.
 
@@ -474,7 +483,24 @@ async def reprocess_one_order(
     # SURFACES the stuck-state diagnostics for the operator.
     if row.get("pipeline_stage") == "INVOICE_CREATED":
         stuck_qid = row.get("qoyod_invoice_id") or ""
-        if stuck_qid and not str(stuck_qid).startswith(("DRY:", "PREVIEW:")):
+        _is_real_invoice = (
+            bool(stuck_qid)
+            and not str(stuck_qid).startswith(("DRY:", "PREVIEW:"))
+        )
+        # Canary partial-state escape hatch (Iter-2026-02):
+        # When the caller (canary) explicitly opts in via
+        # `allow_reset_from_partial_invoice_created=True`, and there
+        # is NO real Qoyod invoice_id yet (stuck_qid is empty or
+        # DRY:/PREVIEW: sentinel), we DO NOT surface the recovery
+        # diagnostics — instead we fall through and allow the row
+        # to be reset back to NORMALIZED so the pipeline can create
+        # a REAL invoice from scratch. Guardrail: if a real invoice
+        # DOES exist, we refuse regardless of the caller flag.
+        if allow_reset_from_partial_invoice_created and \
+                not _is_real_invoice:
+            # Fall through — the row will be reset just below.
+            pass
+        elif stuck_qid and _is_real_invoice:
             payloads_now = row.get("qoyod_payloads") or {}
             responses_now = row.get("qoyod_responses") or {}
             inv_resp_now = (responses_now.get("invoice") or {}).get("body")
@@ -680,8 +706,15 @@ async def reprocess_one_order(
 
     # ── 6. Reset row to a worker-drainable stage ────────────────────
     resume_stage = _resume_target_for(row, force_full=True)
+    _permit_partial_ic = (
+        allow_reset_from_partial_invoice_created
+        and row.get("pipeline_stage") == "INVOICE_CREATED"
+        and not (row.get("qoyod_invoice_id")
+                 and not str(row.get("qoyod_invoice_id")).startswith(
+                     ("DRY:", "PREVIEW:"))))
     await _reset_row_to_stage(
-        db, row, resume_stage=resume_stage, actor=actor)
+        db, row, resume_stage=resume_stage, actor=actor,
+        permit_partial_invoice_created=_permit_partial_ic)
     # Re-fetch fresh state for the pipeline calls.
     fresh = await db.integration_inbox.find_one({"id": row["id"]})
     if not fresh:    # defensive — should never happen
