@@ -193,9 +193,10 @@ def _row_matches_canary_criteria(row: dict) -> tuple[bool, Optional[str]]:
         if not (s.startswith("DRY:") or s.startswith("PREVIEW:")):
             return (False, "real_existing_invoice_id_present")
     # Partial-invoice-created safety: if pipeline_stage indicates an
-    # invoice was already created but the invoice_id itself is real,
-    # refuse — even without an `existing_qoyod_invoice_id` field.
-    if row.get("pipeline_stage") == "INVOICE_CREATED":
+    # invoice was already created (INVOICE_CREATED) or the row was
+    # skipped (SKIPPED) but the invoice_id itself is real, refuse —
+    # even without an `existing_qoyod_invoice_id` field.
+    if row.get("pipeline_stage") in ("INVOICE_CREATED", "SKIPPED"):
         qid_direct = row.get("qoyod_invoice_id")
         if qid_direct is not None:
             qs = str(qid_direct)
@@ -454,8 +455,8 @@ async def _run_guards(
                     f"existing_qoyod_invoice_id = {existing!r} "
                     f"looks real. Refusing.",
                     extra={"duplicate_debug": duplicate_debug})
-        # Guard 6b — partial invoice-created with real id.
-        if row.get("pipeline_stage") == "INVOICE_CREATED":
+        # Guard 6b — partial invoice-created / skipped with real id.
+        if row.get("pipeline_stage") in ("INVOICE_CREATED", "SKIPPED"):
             qid_direct = row.get("qoyod_invoice_id")
             if qid_direct is not None:
                 qs = str(qid_direct)
@@ -463,8 +464,9 @@ async def _run_guards(
                                or qs.startswith("PREVIEW:")):
                     raise CanaryGuardFailed(
                         6, "partial_real_invoice_state",
-                        "pipeline_stage=INVOICE_CREATED with a real "
-                        "qoyod_invoice_id — refusing to re-create.",
+                        f"pipeline_stage={row.get('pipeline_stage')!r} "
+                        f"with a real qoyod_invoice_id — refusing to "
+                        f"re-create.",
                         extra={"duplicate_debug": duplicate_debug,
                                "qoyod_invoice_id": qid_direct})
 
@@ -634,7 +636,7 @@ async def execute_canary_live_send(
             _qid   = _r.get("existing_qoyod_invoice_id")
             break
     _allow_partial_reset = (
-        _stage == "INVOICE_CREATED"
+        _stage in ("INVOICE_CREATED", "SKIPPED")
         and (_qid is None
              or str(_qid).startswith(("DRY:", "PREVIEW:"))))
     # Build the scoped DB proxy: `qoyod_settings.find_one` returns a

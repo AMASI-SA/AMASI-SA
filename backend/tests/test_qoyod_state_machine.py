@@ -104,16 +104,18 @@ def test_failure_can_be_killed_to_deadletter():
 
 
 def test_terminal_stages_have_only_auto_requeue_outbound():
-    """Terminal stages are immutable EXCEPT for the bounded auto-requeue
-    edge added 2026-02-27: DEAD_LETTER / PARTIAL_FAILURE → RETRYING.
-    SKIPPED and COMPLETED remain absolutely terminal.
+    """Terminal stages are immutable EXCEPT for the bounded canary
+    recovery edges: DEAD_LETTER / PARTIAL_FAILURE / SKIPPED →
+    RETRYING (safe rewind, gated by
+    `_reset_row_to_stage(..., permit_partial_invoice_created=True)`).
+    COMPLETED remains absolutely terminal.
     """
     for terminal in TERMINAL_STAGES:
         outbound = sorted(t for (f, t) in ALLOWED_TRANSITIONS if f == terminal)
-        if terminal in ("DEAD_LETTER", "PARTIAL_FAILURE"):
+        if terminal in ("DEAD_LETTER", "PARTIAL_FAILURE", "SKIPPED"):
             assert outbound == ["RETRYING"], (
-                f"{terminal} should only allow RETRYING (auto-requeue), "
-                f"got {outbound}")
+                f"{terminal} should only allow RETRYING (canary/auto-"
+                f"requeue), got {outbound}")
         else:
             assert outbound == [], (
                 f"terminal {terminal} has outbound edges: {outbound}")

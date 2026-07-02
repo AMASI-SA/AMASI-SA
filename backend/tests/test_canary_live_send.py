@@ -1512,6 +1512,175 @@ class TestPartialICStateMachineTwoHop:
         assert exc.value.code == "unsupported_current_stage"
 
 
+# ── SKIPPED partial-reset (Production-parity, 2026-02.rev4) ────────
+# Repro: canary passed all guards + trace_id selection + INVOICE_CREATED
+# two-hop, then encountered another row whose current stage is
+# `SKIPPED` with no real invoice. Same safe rewind pattern applies:
+# SKIPPED → RETRYING → NORMALIZED. Guarded by the same
+# `partial_real_invoice_state` refusal when a real invoice exists.
+@pytest.mark.asyncio
+class TestSkippedPartialReset:
+
+    async def test_state_machine_edge_skipped_to_retrying(self):
+        """State-machine must allow `SKIPPED → RETRYING`, and STILL
+        refuse `SKIPPED → NORMALIZED` direct (safety property)."""
+        from integrations.qoyod.state_machine import (
+            can_transition, InvalidTransition, transition,
+        )
+        assert can_transition("SKIPPED", "RETRYING") is True
+        assert can_transition("SKIPPED", "NORMALIZED") is False
+        assert can_transition("RETRYING", "NORMALIZED") is True
+        with pytest.raises(InvalidTransition):
+            transition(from_stage="SKIPPED", to_stage="NORMALIZED",
+                       actor="test")
+
+    async def test_skipped_no_real_invoice_allows_reset(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "SKIPPED"
+        row["qoyod_invoice_id"] = None
+        row["existing_qoyod_invoice_id"] = None
+        row["canonical_payload"].pop(
+            "existing_qoyod_invoice_id", None)
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-SKP-1",
+                       "qoyod_customer_id":  "CUST-SKP-1",
+                       "qoyod_receipt_id":   "RCPT-SKP-1",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert (mock_pipe.call_args.kwargs
+                ["allow_reset_from_partial_invoice_created"] is True)
+
+    async def test_skipped_dry_invoice_allows_reset(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "SKIPPED"
+        row["qoyod_invoice_id"] = "DRY:invoice:sk1"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-SKP-2",
+                       "qoyod_customer_id":  "CUST-SKP-2",
+                       "qoyod_receipt_id":   "RCPT-SKP-2",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert (mock_pipe.call_args.kwargs
+                ["allow_reset_from_partial_invoice_created"] is True)
+
+    async def test_skipped_real_invoice_refuses(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "SKIPPED"
+        row["qoyod_invoice_id"] = "QID-77777"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["code"] in {"partial_real_invoice_state",
+                             "real_existing_invoice_id_present"}
+        assert mock_pipe.call_count == 0
+        assert r["no_qoyod_api_calls"] is True
+
+    async def test_skipped_row_failing_criteria_refuses(self):
+        """Row is at SKIPPED but its canonical fails another canary
+        criterion (e.g. wrong payment_method). Canary must refuse —
+        NOT reset a row that fails criteria."""
+        row = _canary_row()
+        row["pipeline_stage"] = "SKIPPED"
+        row["qoyod_invoice_id"] = None
+        row["canonical_payload"]["payment_method"] = "bank_transfer"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] in {3, 2}   # payment_method_mismatch
+        assert mock_pipe.call_count == 0
+
+    async def test_skipped_reset_uses_two_hop_state_machine(self):
+        """When `permit_partial_invoice_created=True` and current=
+        SKIPPED, `_reset_row_to_stage` must write TWO transitions:
+        SKIPPED → RETRYING, then RETRYING → NORMALIZED."""
+        from integrations.qoyod.one_shot_reprocess import (
+            _reset_row_to_stage,
+        )
+        writes: list[dict] = []
+
+        class _Coll:
+            async def update_one(self, filt, patch, **kw):
+                writes.append({"filter": filt, "patch": patch})
+                return SimpleNamespace(modified_count=1)
+
+        class _DB:
+            integration_inbox = _Coll()
+
+        row = {"id": "row-skp", "pipeline_stage": "SKIPPED",
+               "qoyod_invoice_id": None}
+        await _reset_row_to_stage(
+            _DB(), row, resume_stage="NORMALIZED",
+            actor="canary:test",
+            permit_partial_invoice_created=True)
+        assert len(writes) == 2
+        assert writes[0]["patch"]["$set"]["pipeline_stage"] == \
+            "RETRYING"
+        assert writes[1]["patch"]["$set"]["pipeline_stage"] == \
+            "NORMALIZED"
+
+    async def test_skipped_reset_refuses_without_flag(self):
+        """Without the canary flag, SKIPPED still refuses — the
+        edge is unreachable outside canary."""
+        from integrations.qoyod.one_shot_reprocess import (
+            _reset_row_to_stage, OneShotRefused,
+        )
+
+        class _NullDB:
+            class integration_inbox:
+                async def update_one(self, *a, **kw):
+                    raise AssertionError("no writes expected")
+            integration_inbox = integration_inbox()
+
+        row = {"id": "row-skp2", "pipeline_stage": "SKIPPED",
+               "qoyod_invoice_id": None}
+        with pytest.raises(OneShotRefused) as exc:
+            await _reset_row_to_stage(
+                _NullDB(), row, resume_stage="NORMALIZED",
+                actor="operator",
+                permit_partial_invoice_created=False)
+        assert exc.value.code in {"unsupported_current_stage",
+                                  "invalid_transition_to_resume"}
+
+    async def test_skipped_settings_untouched_on_refuse(self):
+        row = _canary_row()
+        row["pipeline_stage"] = "SKIPPED"
+        row["qoyod_invoice_id"] = "REAL-1234"    # real → refuse
+        db = _build_db(row=row)
+        before = list(db.qoyod_settings._docs)
+        await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        after = list(db.qoyod_settings._docs)
+        assert after == before
+        assert after[0]["selective_live_send_enabled"] is False
+        assert after[0]["production_writes_locked"]    is True
+        assert after[0].get("dry_run_mode", False) is False
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 

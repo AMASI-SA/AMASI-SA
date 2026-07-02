@@ -288,6 +288,11 @@ def _build_allowed() -> set[tuple[str, str]]:
     # refuses otherwise). Therefore this edge is unreachable outside
     # the canary code path.
     allowed.add(("INVOICE_CREATED", RETRYING))
+    # Same rationale: SKIPPED rows whose canonical now matches canary
+    # criteria (e.g. skipped historically due to an upstream fix
+    # since applied) and carry no real Qoyod invoice_id can also be
+    # safely rewound. Same business gate applies.
+    allowed.add(("SKIPPED", RETRYING))
     allowed.add(("LOCKED_AWAITING_APPROVAL", "DEAD_LETTER"))
 
     # ─── Iter-293.4-rev5 — COD credit_invoice_only direct completion ──

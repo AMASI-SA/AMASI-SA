@@ -351,11 +351,11 @@ async def _reset_row_to_stage(
 
     if current not in _REPROCESSABLE_STAGES:
         # Canary partial-invoice-created escape hatch: allow reset
-        # from INVOICE_CREATED IFF the row has no real Qoyod invoice
-        # (checked upstream by the caller via
+        # from INVOICE_CREATED or SKIPPED IFF the row has no real
+        # Qoyod invoice (checked upstream by the caller via
         # `allow_reset_from_partial_invoice_created`).
         if not (permit_partial_invoice_created
-                and current == "INVOICE_CREATED"):
+                and current in ("INVOICE_CREATED", "SKIPPED")):
             raise OneShotRefused(
                 "unsupported_current_stage",
                 f"row is in stage {current!r}; one-shot reprocess "
@@ -368,16 +368,17 @@ async def _reset_row_to_stage(
     # are not allowed to hop into RETRYING, so we just write the
     # resume_stage directly when applicable (defensive — most live
     # callers will see DEAD_LETTER / FAILED_* and use the two-hop path).
-    # Canary partial-IC exception: INVOICE_CREATED must ALSO go via
+    # Canary partial-IC / SKIPPED exception: these must ALSO go via
     # RETRYING (state machine forbids INVOICE_CREATED → NORMALIZED
-    # direct; edge INVOICE_CREATED → RETRYING is registered in
-    # state_machine.py, gated business-side by this flag).
+    # and SKIPPED → NORMALIZED direct; edges to RETRYING are
+    # registered in state_machine.py, gated business-side by this
+    # flag).
     needs_retry_hop = (
         (current in FAILURE_TO_RESUME)
         or (current in ("DEAD_LETTER", "PARTIAL_FAILURE",
                         "LOCKED_AWAITING_APPROVAL"))
         or (permit_partial_invoice_created
-            and current == "INVOICE_CREATED"))
+            and current in ("INVOICE_CREATED", "SKIPPED")))
     if needs_retry_hop:
         try:
             p1 = transition(
