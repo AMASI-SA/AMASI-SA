@@ -382,6 +382,24 @@ class AdoptExistingPaymentBody(BaseModel):
     qoyod_customer_id: Optional[str] = Field(None, max_length=64)
 
 
+class EnableSelectiveAutoSendBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm_token: str = Field(..., min_length=1, max_length=128)
+    allowed_payment_methods: Optional[list[str]] = Field(
+        None, max_length=32)
+
+
+class DisableSelectiveAutoSendBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm_token: str = Field(..., min_length=1, max_length=128)
+
+
+class ExpandSelectiveAutoSendBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm_token: str      = Field(..., min_length=1, max_length=128)
+    add_methods:   list[str] = Field(..., min_length=1, max_length=16)
+
+
 # ─────────────────────────────────────────────────────────────────────
 def make_qoyod_router(db, current_user) -> APIRouter:
     router = APIRouter(
@@ -2737,6 +2755,70 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 "detail": str(exc),
                 **exc.extra,
             }
+
+    # ── Iter-2026-02.rev16 — Selective Auto-Send admin endpoints ────
+    # Enable/Disable/Expand the tenant's Selective Auto-Send policy.
+    # Enable stamps `cutover_at=NOW` automatically — orders created
+    # BEFORE this timestamp are NEVER auto-sent (no backlog).
+    # `production_writes_locked` is NEVER modified by these endpoints.
+    @router.post("/admin/enable-selective-auto-send")
+    async def admin_enable_selective_auto_send(
+        body: EnableSelectiveAutoSendBody = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.enable_selective_auto_send import (
+            enable_selective_auto_send, SelectiveAutoSendRefused,
+        )
+        tenant = _tenant_id(user)
+        actor  = (getattr(user, "email", None) or "operator")
+        try:
+            return await enable_selective_auto_send(
+                db, user_id=tenant,
+                confirm_token=body.confirm_token,
+                allowed_payment_methods=body.allowed_payment_methods,
+                actor=str(actor))
+        except SelectiveAutoSendRefused as exc:
+            return {"ok": False, "outcome": "REFUSED",
+                    "code": exc.code, "detail": exc.human}
+
+    @router.post("/admin/disable-selective-auto-send")
+    async def admin_disable_selective_auto_send(
+        body: DisableSelectiveAutoSendBody = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.enable_selective_auto_send import (
+            disable_selective_auto_send, SelectiveAutoSendRefused,
+        )
+        tenant = _tenant_id(user)
+        actor  = (getattr(user, "email", None) or "operator")
+        try:
+            return await disable_selective_auto_send(
+                db, user_id=tenant,
+                confirm_token=body.confirm_token,
+                actor=str(actor))
+        except SelectiveAutoSendRefused as exc:
+            return {"ok": False, "outcome": "REFUSED",
+                    "code": exc.code, "detail": exc.human}
+
+    @router.post("/admin/expand-selective-auto-send")
+    async def admin_expand_selective_auto_send(
+        body: ExpandSelectiveAutoSendBody = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.enable_selective_auto_send import (
+            expand_allowed_payment_methods, SelectiveAutoSendRefused,
+        )
+        tenant = _tenant_id(user)
+        actor  = (getattr(user, "email", None) or "operator")
+        try:
+            return await expand_allowed_payment_methods(
+                db, user_id=tenant,
+                add_methods=body.add_methods,
+                confirm_token=body.confirm_token,
+                actor=str(actor))
+        except SelectiveAutoSendRefused as exc:
+            return {"ok": False, "outcome": "REFUSED",
+                    "code": exc.code, "detail": exc.human}
 
     # ── Iter-290h.7 — Payment-method field probe (read-only) ────────
     class _PaymentMethodProbeBody(BaseModel):

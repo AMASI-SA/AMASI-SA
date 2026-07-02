@@ -315,6 +315,51 @@ async def process_normalized_row(
 
     settings = await _load_settings(db, user_id)
 
+    # ── Iter-2026-02.rev16 — Selective Auto-Send Gate ──────────────
+    # When `selective_auto_send_enabled=true`, this gate is the ONE
+    # control that opens automatic Qoyod writes. Enforces 9 hard
+    # invariants (cutover, status allow-list, hard blocks, payment
+    # method allow-list, mapping resolves, no real invoice yet).
+    # A gate PASS is persisted on the row so subsequent stages
+    # (CUSTOMER_RESOLVED → INVOICE_CREATED) reuse the decision
+    # without re-computing. The gate PASS ALSO grants a SCOPED
+    # write allowance for THIS ROW only — the DB
+    # `production_writes_locked` flag is NEVER mutated.
+    _sas_gate_passed = False
+    if bool(settings.get("selective_auto_send_enabled", False)):
+        from integrations.qoyod.selective_auto_send_gate import (
+            evaluate_selective_auto_send_gate,
+        )
+        _sas = evaluate_selective_auto_send_gate(
+            canonical=canonical, row=row, settings=settings)
+        # Persist decision for audit / UI.
+        await db.integration_inbox.update_one(
+            {"id": row["id"]},
+            {"$set": {
+                "selective_auto_send_gate": _sas.to_log_dict(),
+                "selective_auto_send_gate_at":
+                    datetime.now(timezone.utc).isoformat(),
+            }})
+        if not _sas.eligible:
+            patch = transition(
+                from_stage="NORMALIZED", to_stage="SKIPPED",
+                actor="worker",
+                note=f"selective_auto_send_gate: {_sas.reason}",
+                existing_started_at=row.get("pipeline_started_at"),
+            )
+            patch.setdefault("$set", {})["selective_auto_send_gate"] = \
+                _sas.to_log_dict()
+            await _apply(db, row["id"], patch)
+            return {
+                "row_id":   row["id"],
+                "outcome":  "SKIPPED",
+                "reason":   _sas.reason,
+                "detail":   _sas.detail,
+                "trace_id": trace_id,
+                "selective_auto_send_gate": _sas.to_log_dict(),
+            }
+        _sas_gate_passed = True
+
     # ── Status Eligibility Gate (Iter-282) ─────────────────────────
     # Status gate MUST run BEFORE totals_guard. Orders that are not
     # in an invoice-eligible status (e.g. `under_review`) must NEVER
@@ -410,7 +455,9 @@ async def process_normalized_row(
     # honouring dry_run_mode so the customer resolver doesn't reach
     # Qoyod when the operator is testing.
     if api_client is None:
-        api_client, _is_dry = await _get_api_client(db, user_id, settings)
+        api_client, _is_dry = await _get_api_client(
+            db, user_id, settings,
+            scoped_write_allowance=_sas_gate_passed)
         if api_client is None:
             await _dead_letter(
                 db, row_id=row["id"], from_stage="NORMALIZED",
@@ -505,8 +552,19 @@ async def process_normalized_row(
 # Batch entry point — what the `/pipeline/process-normalized` endpoint
 # calls. Strict Day-4 ceiling: stops at CUSTOMER_RESOLVED.
 # ─────────────────────────────────────────────────────────────────────
-async def _get_api_client(db, user_id: str, settings: dict):
-    """Return a Qoyod client (real or DryRun) based on settings.
+async def _get_api_client(
+    db, user_id: str, settings: dict,
+    *,
+    scoped_write_allowance: bool = False,
+):
+    """Return `(client, is_dry)`.
+
+    Iter-2026-02.rev16 — When `scoped_write_allowance=True` the
+    real client is constructed with `write_lock_enabled=False` so
+    Selective Auto-Send (row-eligible after the gate) can POST
+    despite `production_writes_locked=true` on disk. The DB flag is
+    NEVER modified — this is a per-call bypass keyed on the gate's
+    approval of THIS SPECIFIC ROW.
 
     Iter-294 — Real clients always carry the Global Write Lock snapshot
     so writes are refused at the api_client layer when
@@ -520,7 +578,9 @@ async def _get_api_client(db, user_id: str, settings: dict):
     return QoyodAPIClient(
         key,
         db=db, user_id=user_id,
-        write_lock_enabled=is_locked(settings),
+        write_lock_enabled=(
+            False if scoped_write_allowance
+            else is_locked(settings)),
     ), False
 
 
@@ -556,11 +616,45 @@ async def process_customer_resolved_row(
         callsite="pipeline.process_customer_resolved_row",
     )
 
+    # Iter-2026-02.rev16 — Re-evaluate Selective Auto-Send gate at
+    # this stage too. The gate PASS on entry to NORMALIZED does NOT
+    # imply the row is still eligible now — the operator may have
+    # disabled the switch mid-flight, or the payment_method mapping
+    # may have been unmapped. Idempotent: safe to re-run.
+    _sas_gate_passed = False
+    if bool(settings.get("selective_auto_send_enabled", False)):
+        from integrations.qoyod.selective_auto_send_gate import (
+            evaluate_selective_auto_send_gate,
+        )
+        _sas = evaluate_selective_auto_send_gate(
+            canonical=canonical, row=row, settings=settings)
+        if not _sas.eligible:
+            patch = transition(
+                from_stage="CUSTOMER_RESOLVED", to_stage="SKIPPED",
+                actor="worker",
+                note=("selective_auto_send_gate re-eval failed: "
+                      f"{_sas.reason}"),
+            )
+            patch.setdefault("$set", {})[
+                "selective_auto_send_gate"] = _sas.to_log_dict()
+            await _apply(db, row["id"], patch)
+            return {
+                "row_id":  row["id"],
+                "outcome": "SKIPPED",
+                "reason":  _sas.reason,
+                "detail":  _sas.detail,
+                "trace_id": trace_id,
+                "selective_auto_send_gate": _sas.to_log_dict(),
+            }
+        _sas_gate_passed = True
+
     # Resolve client (real or dry-run).
     client_provided = api_client is not None
     is_dry = is_dry_run_mode(settings)
     if not client_provided:
-        api_client, is_dry = await _get_api_client(db, user_id, settings)
+        api_client, is_dry = await _get_api_client(
+            db, user_id, settings,
+            scoped_write_allowance=_sas_gate_passed)
         if api_client is None:
             await _dead_letter(
                 db, row_id=row["id"], from_stage="CUSTOMER_RESOLVED",
