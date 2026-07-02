@@ -65,9 +65,11 @@ async def _write_audit(
 
 async def _run_guards(
     db, *, order_number: str, approval_phrase: str,
-) -> tuple[dict, dict]:
-    """Runs all 14 guards. Returns (settings_snapshot, canonical)
-    when every guard passes; raises `CanaryGuardFailed` otherwise."""
+    user_id: str = "main",
+) -> tuple[dict, dict, dict]:
+    """Runs all 14 guards. Returns (settings_snapshot, canonical,
+    settings_debug) when every guard passes; raises
+    `CanaryGuardFailed` (carrying settings_debug) otherwise."""
     # Guard 1 — approval_phrase must match EXACTLY.
     if approval_phrase != CANARY_APPROVAL_PHRASE:
         raise CanaryGuardFailed(1, "approval_phrase_mismatch",
@@ -82,20 +84,47 @@ async def _run_guards(
             f"{CANARY_ORDER_NUMBER}.")
 
     # Guard 11+12 — gates must remain Fail-Closed in DB.
-    settings = await db.qoyod_settings.find_one(
-        {"user_id": "main"}, {"_id": 0}) or {}
-    if settings.get("selective_live_send_enabled") is not False:
+    # NOTE: use identical read + default semantics as
+    # `build_selective_send_policy_report` so both endpoints agree on
+    # what "Fail-Closed" means. Missing field → Fail-Closed default
+    # (selective=False, writes_locked=True).
+    raw_settings = await db.qoyod_settings.find_one(
+        {"user_id": user_id}, {"_id": 0}) or {}
+    raw_selective = raw_settings.get("selective_live_send_enabled")
+    raw_writes    = raw_settings.get("production_writes_locked")
+    # Fail-Closed defaults (identical to policy report).
+    selective_flag = bool(raw_selective) if raw_selective is not None \
+        else False
+    writes_locked_flag = bool(raw_writes) if raw_writes is not None \
+        else True
+    settings_debug = {
+        "settings_source":                  "qoyod_settings",
+        "settings_user_id":                 user_id,
+        "settings_doc_present":             bool(raw_settings),
+        "raw_selective_live_send_enabled":  raw_selective,
+        "raw_selective_live_send_enabled_type":
+            type(raw_selective).__name__,
+        "effective_selective_live_send_enabled": selective_flag,
+        "raw_production_writes_locked":     raw_writes,
+        "raw_production_writes_locked_type":
+            type(raw_writes).__name__,
+        "effective_production_writes_locked": writes_locked_flag,
+        "default_semantics":
+            "identical to selective_send_policy_report "
+            "(missing field → Fail-Closed default)",
+    }
+    if selective_flag is not False:
         raise CanaryGuardFailed(
             11, "selective_live_send_enabled_not_false",
             "Master gate must remain FALSE. Refusing to run.")
-    if settings.get("production_writes_locked") is not True:
+    if writes_locked_flag is not True:
         raise CanaryGuardFailed(
             12, "production_writes_locked_not_true",
             "Write lock must remain TRUE (scoped bypass only).")
 
     # Fetch canonical.
     row = await db.integration_inbox.find_one(
-        {"user_id": "main",
+        {"user_id": user_id,
          "$or": [
              {"salla_order_number": order_number},
              {"canonical_payload.order_number": order_number},
@@ -158,7 +187,7 @@ async def _run_guards(
 
     # Guard 7 — AMS11237 must resolve to qoyod_product_id=45.
     m = await db.qoyod_products_mapping.find_one(
-        {"user_id": "main", "sku": REQUIRED_SKU,
+        {"user_id": user_id, "sku": REQUIRED_SKU,
          "dry_run_only": {"$ne": True}},
         {"_id": 0, "qoyod_product_id": 1})
     if not m or int(m.get("qoyod_product_id") or 0) != \
@@ -193,7 +222,7 @@ async def _run_guards(
             10, "totals_mismatch_gt_0_01",
             f"Mezan-VAT-15% diff={totals['diff']} > 0.01.")
 
-    return (settings, canonical)
+    return (raw_settings, canonical, settings_debug)
 
 
 async def execute_canary_live_send(
@@ -202,6 +231,7 @@ async def execute_canary_live_send(
     order_number: str,
     approval_phrase: str,
     actor: str = "operator",
+    user_id: str = "main",
 ) -> dict:
     """Executes the one-shot canary. Read-heavy; writes only into
     `canary_send_audit_log` (audit) and delegates the actual Qoyod
@@ -210,12 +240,34 @@ async def execute_canary_live_send(
     attempt_id = str(uuid.uuid4())
     await _write_audit(db, attempt_id=attempt_id,
                        phase="attempt_received", status="pending",
-                       detail=f"actor={actor}")
+                       detail=f"actor={actor} user_id={user_id}")
     try:
-        settings, canonical = await _run_guards(
+        settings, canonical, settings_debug = await _run_guards(
             db, order_number=order_number,
-            approval_phrase=approval_phrase)
+            approval_phrase=approval_phrase,
+            user_id=user_id)
     except CanaryGuardFailed as g:
+        # Best-effort re-read of settings debug for refusal response
+        # even when guards 1/2 short-circuit before settings load.
+        debug_snapshot: dict = {}
+        try:
+            _raw = await db.qoyod_settings.find_one(
+                {"user_id": user_id}, {"_id": 0}) or {}
+            _rs = _raw.get("selective_live_send_enabled")
+            _rw = _raw.get("production_writes_locked")
+            debug_snapshot = {
+                "settings_source":                  "qoyod_settings",
+                "settings_user_id":                 user_id,
+                "settings_doc_present":             bool(_raw),
+                "raw_selective_live_send_enabled":  _rs,
+                "raw_selective_live_send_enabled_type":
+                    type(_rs).__name__,
+                "raw_production_writes_locked":     _rw,
+                "raw_production_writes_locked_type":
+                    type(_rw).__name__,
+            }
+        except Exception:
+            debug_snapshot = {"settings_source_error": True}
         await _write_audit(db, attempt_id=attempt_id,
                            phase="guard_check", status="refused",
                            guard_no=g.guard_no, code=g.code,
@@ -228,6 +280,7 @@ async def execute_canary_live_send(
             "detail":      g.detail,
             "no_qoyod_api_calls": True,
             "no_db_writes_to_qoyod_settings": True,
+            "settings_debug": debug_snapshot,
         }
 
     await _write_audit(db, attempt_id=attempt_id,
@@ -247,7 +300,7 @@ async def execute_canary_live_send(
     try:
         result = await reprocess_one_order(
             db,
-            user_id="main",
+            user_id=user_id,
             order_number=CANARY_ORDER_NUMBER,
             confirm=internal_confirm,
             approval_phrase=internal_phrase,

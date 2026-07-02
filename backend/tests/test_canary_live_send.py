@@ -324,6 +324,162 @@ class TestSuccessPath:
         assert refused[0]["guard_no"] == 1
 
 
+# ── Production-parity: Fail-Closed default semantics ────────────────
+# These tests pin the exact bug reported on Production 2026-02:
+# Canary refused with Guard 11 because the settings doc existed but
+# was MISSING the `selective_live_send_enabled` field entirely.
+# The policy-report endpoint tolerated this (defaulted to False), so
+# operators saw a false mismatch. Canary must apply the SAME defaults.
+@pytest.mark.asyncio
+class TestFailClosedDefaultSemantics:
+
+    async def test_missing_selective_field_treated_as_false(self):
+        """Settings doc exists but `selective_live_send_enabled` key
+        is absent → must be treated as False (Fail-Closed), so guard
+        11 PASSES and canary proceeds to later guards."""
+        db = _build_db(row=_canary_row(),
+                       settings=[{"user_id": "main",
+                                  # selective_live_send_enabled key
+                                  # DELIBERATELY OMITTED — same as
+                                  # the Production bug repro.
+                                  "production_writes_locked": True}])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-1",
+                       "qoyod_customer_id":  "CUST-1",
+                       "qoyod_receipt_id":   "RCPT-1",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        # Guards 11 & 12 must pass under Fail-Closed defaults.
+        assert r["outcome"] == "SENT", (
+            f"Canary refused unexpectedly: {r}")
+
+    async def test_missing_writes_locked_field_treated_as_true(self):
+        """Settings doc exists but `production_writes_locked` key
+        is absent → must be treated as True (Fail-Closed default)."""
+        db = _build_db(row=_canary_row(),
+                       settings=[{"user_id": "main",
+                                  "selective_live_send_enabled": False,
+                                  # production_writes_locked OMITTED.
+                                  }])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-2",
+                       "qoyod_customer_id":  "CUST-2",
+                       "qoyod_receipt_id":   "RCPT-2",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", (
+            f"Canary refused unexpectedly: {r}")
+
+    async def test_settings_doc_completely_missing_uses_defaults(self):
+        """No settings doc at all under this user_id → both fields
+        default to Fail-Closed values, guards 11/12 pass."""
+        db = _build_db(row=_canary_row(), settings=[])  # empty
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-3",
+                       "qoyod_customer_id":  "CUST-3",
+                       "qoyod_receipt_id":   "RCPT-3",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", (
+            f"Canary refused unexpectedly: {r}")
+
+
+# ── Debug info on REFUSED responses ─────────────────────────────────
+@pytest.mark.asyncio
+class TestRefuseCarriesSettingsDebug:
+
+    async def test_refuse_carries_settings_debug_block(self):
+        db = _build_db(row=_canary_row(),
+                       settings=[{"user_id": "main",
+                                  "selective_live_send_enabled": True,
+                                  "production_writes_locked":    True}])
+        r = await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 11
+        d = r["settings_debug"]
+        assert d["settings_source"] == "qoyod_settings"
+        assert d["settings_user_id"] == "main"
+        assert d["settings_doc_present"] is True
+        assert d["raw_selective_live_send_enabled"] is True
+        assert d["raw_selective_live_send_enabled_type"] == "bool"
+        assert d["raw_production_writes_locked"] is True
+        assert d["raw_production_writes_locked_type"] == "bool"
+        # Debug must NEVER leak API keys / secrets.
+        blob = str(d).lower()
+        for banned in ("api_key", "credentials", "token",
+                       "password", "secret"):
+            assert banned not in blob
+
+    async def test_refuse_debug_present_even_when_guard1_fires(self):
+        """Even when guards 1 or 2 short-circuit before settings
+        are loaded, the response must still carry a best-effort
+        settings_debug snapshot."""
+        db = _build_db(row=_canary_row())
+        r = await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase="wrong")
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 1
+        assert "settings_debug" in r
+        assert r["settings_debug"]["settings_user_id"] == "main"
+
+
+# ── user_id parameterisation (Production parity) ───────────────────
+@pytest.mark.asyncio
+class TestUserIdParameterisation:
+
+    async def test_settings_query_uses_provided_user_id(self):
+        """When caller passes a custom user_id, canary must query
+        qoyod_settings under THAT id (not a hardcoded 'main')."""
+        db = _build_db(
+            row=_canary_row(),
+            settings=[{"user_id": "custom_tenant_xyz",
+                       "selective_live_send_enabled": False,
+                       "production_writes_locked":    True}])
+        # Replicate the row + mapping under the custom tenant.
+        row = _canary_row()
+        row["user_id"] = "custom_tenant_xyz"
+        db.integration_inbox = _FakeColl([row])
+        db.qoyod_products_mapping = _FakeColl(
+            [{"user_id": "custom_tenant_xyz",
+              "sku": REQUIRED_SKU,
+              "qoyod_product_id": 45,
+              "dry_run_only": False}])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-U",
+                       "qoyod_customer_id":  "CUST-U",
+                       "qoyod_receipt_id":   "RCPT-U",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE,
+                user_id="custom_tenant_xyz")
+        assert r["outcome"] == "SENT", r
+        # Pipeline was called with the same user_id.
+        assert (mock_pipe.call_args.kwargs["user_id"]
+                == "custom_tenant_xyz")
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 

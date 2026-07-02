@@ -57,11 +57,21 @@ _GATE_KEYS = (
 
 async def _load_gates_snapshot(db, user_id: str) -> dict:
     """Robust settings loader. Reads the full doc (minus `_id`) and
-    keeps only the seven gate fields. Guards against the historical
-    projection-drops-fields bug reported on Production."""
+    keeps only the seven gate fields. Applies Fail-Closed defaults
+    for the two operator-controlled booleans so the snapshot is
+    ALWAYS non-empty and its semantics match
+    `build_selective_send_policy_report` byte-for-byte.
+    Guards against the historical projection-drops-fields bug
+    reported on Production."""
     doc = await db.qoyod_settings.find_one(
         {"user_id": user_id}, {"_id": 0}) or {}
-    return {k: doc[k] for k in _GATE_KEYS if k in doc}
+    snap: dict = {k: doc[k] for k in _GATE_KEYS if k in doc}
+    # Fail-Closed defaults — identical to policy-report semantics.
+    if "selective_live_send_enabled" not in snap:
+        snap["selective_live_send_enabled"] = False
+    if "production_writes_locked" not in snap:
+        snap["production_writes_locked"] = True
+    return snap
 
 
 def _canonical_status_diagnostic(

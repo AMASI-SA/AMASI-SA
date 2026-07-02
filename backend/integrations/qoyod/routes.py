@@ -1755,6 +1755,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             approval_phrase=approval_phrase,
             actor=str(getattr(user, "email",
                               getattr(user, "id", "operator"))),
+            user_id=_tenant_id(user),
         )
 
     @router.get("/admin/canary-readiness-preview/{order_number}")
