@@ -2399,6 +2399,210 @@ class TestScopedPolicyOverrideRev8:
         assert raw["production_writes_locked"]    is True
 
 
+# ── Scoped trigger-status overlay (rev9) ───────────────────────────
+# Prod bug: canary passed all rev8 guards but selective_send_policy
+# still refused `invoice_trigger_status_not_enabled` because the
+# tenant's `qoyod_enabled_invoice_trigger_statuses` on disk is
+# `["completed", "تم التنفيذ"]`. Canary must widen this list to
+# include `"جاري التوصيل"` scoped to its single invocation — DB row
+# must remain unchanged.
+@pytest.mark.asyncio
+class TestScopedTriggerStatusOverlayRev9:
+
+    def _make_db(self, enabled_triggers, row_status="جاري_التوصيل",
+                 order_number=None):
+        row = _canary_row()
+        row["canonical_payload"]["status"] = row_status
+        db = _build_db(row=row)
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                False,
+            "qoyod_enabled_invoice_trigger_statuses":
+                list(enabled_triggers),
+        }])
+        return db
+
+    async def _capture(self, db, order_number=None,
+                       approval_phrase=None):
+        captured = {}
+
+        async def fake_reprocess(db_arg, **kwargs):
+            doc = await db_arg.qoyod_settings.find_one(
+                {"user_id": "main"}, {"_id": 0})
+            captured["doc"] = doc
+            return {
+                "outcome":            "SENT",
+                "qoyod_invoice_id":   "INV-OV9",
+                "qoyod_customer_id":  "CUST-OV9",
+                "qoyod_receipt_id":   "RCPT-OV9",
+            }
+
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(side_effect=fake_reprocess)):
+            r = await execute_canary_live_send(
+                db,
+                order_number=order_number or CANARY_ORDER_NUMBER,
+                approval_phrase=(
+                    approval_phrase or CANARY_APPROVAL_PHRASE))
+        return r, captured
+
+    async def test_delivering_widens_enabled_triggers(self):
+        """Latest status = جاري التوصيل. DB has
+        ["completed", "تم التنفيذ"]. Canary view must include
+        جاري التوصيل additionally."""
+        db = self._make_db(["completed", "تم التنفيذ"])
+        r, cap = await self._capture(db)
+        assert r["outcome"] == "SENT", r
+        enabled = cap["doc"][
+            "qoyod_enabled_invoice_trigger_statuses"]
+        assert "جاري التوصيل" in enabled
+        # Tenant's original values preserved (never shrinks).
+        assert "completed" in enabled
+        assert "تم التنفيذ" in enabled
+
+    async def test_db_row_unchanged_after_overlay(self):
+        db = self._make_db(["completed", "تم التنفيذ"])
+        r, _ = await self._capture(db)
+        assert r["outcome"] == "SENT"
+        raw = db.qoyod_settings._docs[0]
+        # DB list unchanged.
+        assert raw["qoyod_enabled_invoice_trigger_statuses"] == [
+            "completed", "تم التنفيذ"]
+        # Other three fields also unchanged.
+        assert raw["selective_live_send_enabled"] is False
+        assert raw["production_writes_locked"]    is True
+        assert raw["dry_run_mode"]                is False
+
+    async def test_non_canary_order_never_gets_overlay(self):
+        db = self._make_db(["completed", "تم التنفيذ"])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number="999999999",
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 2
+        assert mock_pipe.call_count == 0
+
+    async def test_wrong_phrase_never_gets_overlay(self):
+        db = self._make_db(["completed", "تم التنفيذ"])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase="WRONG")
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 1
+        assert mock_pipe.call_count == 0
+
+    async def test_status_delivered_never_gets_overlay(self):
+        """`delivered` / `تم التوصيل` are NOT in the canary
+        whitelist — Guard 4 refuses before the overlay path."""
+        db = self._make_db(["completed", "تم التنفيذ"],
+                           row_status="delivered")
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 4
+        assert mock_pipe.call_count == 0
+        # Also assert arabic form.
+        db2 = self._make_db(["completed", "تم التنفيذ"],
+                            row_status="تم التوصيل")
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe2:
+            r2 = await execute_canary_live_send(
+                db2, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r2["outcome"] == "REFUSED"
+        assert r2["guard_no"] == 4
+        assert mock_pipe2.call_count == 0
+
+    async def test_status_in_review_never_gets_overlay(self):
+        db = self._make_db(["completed", "تم التنفيذ"],
+                           row_status="in_review")
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["guard_no"] == 4
+        assert mock_pipe.call_count == 0
+
+    async def test_settings_debug_carries_rev9_trigger_overlay(self):
+        db = self._make_db(["completed", "تم التنفيذ"],
+                           row_status="in_review")
+        r = await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        sd = r["settings_debug"]
+        assert sd["raw_qoyod_enabled_invoice_trigger_statuses"] \
+            == ["completed", "تم التنفيذ"]
+        assert "جاري التوصيل" in sd[
+            "effective_qoyod_enabled_invoice_trigger_statuses_for_canary"]
+        # Tenant values preserved in the effective view.
+        assert "completed" in sd[
+            "effective_qoyod_enabled_invoice_trigger_statuses_for_canary"]
+        assert sd["policy_override_scope"] == (
+            f"canary_order_{CANARY_ORDER_NUMBER}_only")
+
+    async def test_no_qoyod_call_when_status_rejected_early(self):
+        db = self._make_db(["completed"], row_status="pending")
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert mock_pipe.call_count == 0
+
+    async def test_completed_status_still_widens_defensively(self):
+        """Even when the latest row is `completed` (already in the
+        tenant's list), the overlay still adds `جاري التوصيل` for
+        symmetry — but this doesn't cause any observable change."""
+        row = _canary_row()
+        row["canonical_payload"]["status"] = "completed"
+        db = _build_db(row=row)
+        db.qoyod_settings = _FakeColl([{
+            "user_id": "main",
+            "selective_live_send_enabled": False,
+            "production_writes_locked":    True,
+            "dry_run_mode":                False,
+            "qoyod_enabled_invoice_trigger_statuses":
+                ["completed", "تم التنفيذ"],
+        }])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-Z",
+                       "qoyod_customer_id":  "CUST-Z",
+                       "qoyod_receipt_id":   "RCPT-Z",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        assert r["manual_send_requested"] is False
+        # DB unchanged.
+        assert db.qoyod_settings._docs[0][
+            "qoyod_enabled_invoice_trigger_statuses"] == [
+                "completed", "تم التنفيذ"]
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 

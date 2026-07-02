@@ -72,23 +72,25 @@ class CanaryGuardFailed(Exception):
 # other attributes / methods forward to the real db unchanged. Two
 # static invariants (tests) pin these guarantees.
 class _CanaryDryRunSettingsProxy:
-    """Proxy for `db.qoyod_settings` that overrides THREE fields
+    """Proxy for `db.qoyod_settings` that overrides FOUR fields
     (`dry_run_mode`, `selective_live_send_enabled`,
-    `production_writes_locked`) on read. Writes / updates pass
-    through untouched. Any attempt to `update_one` / `replace_one` /
-    `insert_one` on this proxy still lands on the real collection —
-    but canary's own module-level static test refuses to allow
-    those literals in canary_live_send.py.
+    `production_writes_locked`, `qoyod_enabled_invoice_trigger_statuses`)
+    on read. Writes / updates pass through untouched.
 
-    Iter-2026-02.rev8: extended to overlay the master gate + the
-    write-lock in addition to dry_run_mode. This is the same scoped
-    policy override pattern — the DB values remain untouched; ONLY
-    the view seen by `one_shot_reprocess` + `pipeline` inside this
-    single canary invocation is modified. Guards 11/12 in `_run_guards`
-    still assert against the REAL DB values BEFORE the proxy is
-    constructed (Fail-Closed), so the proxy is only ever built after
-    the operator's DB is proven to be in the safe base state."""
+    Iter-2026-02.rev9: extends the overlay to include the enabled
+    trigger-status whitelist so `selective_send_policy` accepts the
+    manual-canary status `جاري التوصيل` in addition to the
+    tenant's on-disk list (typically `["completed", "تم التنفيذ"]`).
+    The DB row is NEVER mutated. Guards 11/12 in `_run_guards`
+    already assert against the REAL DB values BEFORE the proxy is
+    built (Fail-Closed on disk), and Guard 4 in `_row_matches_canary_criteria`
+    only lets the LATEST row's status pass if it is in the tight
+    canary whitelist `{"completed", "جاري التوصيل"}`. So the enabled-
+    triggers overlay only widens the set to precisely match the
+    LATEST canary-eligible status — no broader impact."""
     __slots__ = ("_coll",)
+
+    _CANARY_TRIGGER_STATUS_OVERLAY = ("جاري التوصيل",)
 
     def __init__(self, real_coll):
         self._coll = real_coll
@@ -96,12 +98,42 @@ class _CanaryDryRunSettingsProxy:
     async def find_one(self, *a, **kw):
         doc = await self._coll.find_one(*a, **kw)
         if isinstance(doc, dict):
+            # Widen the enabled trigger-status list to include the
+            # canary manual-send status, PRESERVING every value the
+            # tenant already has (defence-in-depth — never shrinks).
+            raw_enabled = doc.get(
+                "qoyod_enabled_invoice_trigger_statuses")
+            if isinstance(raw_enabled, (list, tuple, set,
+                                        frozenset)):
+                base = list(raw_enabled)
+            elif raw_enabled is None:
+                base = []
+            else:
+                base = [str(raw_enabled)]
+            # Preserve order + dedupe.
+            widened_enabled = list(dict.fromkeys(
+                base + list(self._CANARY_TRIGGER_STATUS_OVERLAY)))
+            # Also widen `invoice_trigger_statuses` (business-rules
+            # eligibility field) with the same guard.
+            raw_trigger = doc.get("invoice_trigger_statuses")
+            if isinstance(raw_trigger, (list, tuple, set,
+                                        frozenset)):
+                base_t = list(raw_trigger)
+            elif raw_trigger is None:
+                base_t = []
+            else:
+                base_t = [str(raw_trigger)]
+            widened_trigger = list(dict.fromkeys(
+                base_t + list(self._CANARY_TRIGGER_STATUS_OVERLAY)))
             return {
                 **doc,
-                # Canary-scope overlay — three fields only.
+                # Canary-scope overlay — four fields.
                 "dry_run_mode":                False,
                 "selective_live_send_enabled": True,
                 "production_writes_locked":    False,
+                "qoyod_enabled_invoice_trigger_statuses":
+                    widened_enabled,
+                "invoice_trigger_statuses":    widened_trigger,
             }
         return doc
 
@@ -295,6 +327,10 @@ async def _run_guards(
     raw_selective = raw_settings.get("selective_live_send_enabled")
     raw_writes    = raw_settings.get("production_writes_locked")
     raw_dry_run   = raw_settings.get("dry_run_mode")
+    raw_enabled_triggers = raw_settings.get(
+        "qoyod_enabled_invoice_trigger_statuses")
+    raw_invoice_triggers = raw_settings.get(
+        "invoice_trigger_statuses")
     # Fail-Closed defaults (identical to policy report).
     selective_flag = bool(raw_selective) if raw_selective is not None \
         else False
@@ -314,6 +350,18 @@ async def _run_guards(
         "effective_production_writes_locked": writes_locked_flag,
         "raw_dry_run_mode":                 raw_dry_run,
         "raw_dry_run_mode_type":            type(raw_dry_run).__name__,
+        # Trigger-status whitelist snapshot + overlay (rev9).
+        "raw_qoyod_enabled_invoice_trigger_statuses":
+            raw_enabled_triggers,
+        "raw_invoice_trigger_statuses":     raw_invoice_triggers,
+        "effective_qoyod_enabled_invoice_trigger_statuses_for_canary":
+            list(dict.fromkeys(
+                (list(raw_enabled_triggers)
+                 if isinstance(raw_enabled_triggers,
+                               (list, tuple, set, frozenset))
+                 else [])
+                + ["جاري التوصيل"])),
+        "canary_status_overlay":            ["جاري التوصيل"],
         # Canary scoped policy overlay (rev8) — DB is untouched.
         "effective_dry_run_mode_for_canary":                 False,
         "effective_selective_live_send_enabled_for_canary":  True,
@@ -621,6 +669,14 @@ async def execute_canary_live_send(
             _rs = _raw.get("selective_live_send_enabled")
             _rw = _raw.get("production_writes_locked")
             _rd = _raw.get("dry_run_mode")
+            _renabled = _raw.get(
+                "qoyod_enabled_invoice_trigger_statuses")
+            _rinv_trig = _raw.get("invoice_trigger_statuses")
+            _base_enabled = (list(_renabled)
+                             if isinstance(_renabled,
+                                           (list, tuple, set,
+                                            frozenset))
+                             else [])
             debug_snapshot = {
                 "settings_source":                  "qoyod_settings",
                 "settings_user_id":                 user_id,
@@ -633,6 +689,14 @@ async def execute_canary_live_send(
                     type(_rw).__name__,
                 "raw_dry_run_mode":                 _rd,
                 "raw_dry_run_mode_type":            type(_rd).__name__,
+                # Trigger-status whitelist (rev9).
+                "raw_qoyod_enabled_invoice_trigger_statuses":
+                    _renabled,
+                "raw_invoice_trigger_statuses":     _rinv_trig,
+                "effective_qoyod_enabled_invoice_trigger_statuses_for_canary":
+                    list(dict.fromkeys(
+                        _base_enabled + ["جاري التوصيل"])),
+                "canary_status_overlay":            ["جاري التوصيل"],
                 # Canary scoped policy overlay (rev8) — three fields.
                 "effective_dry_run_mode_for_canary":                 False,
                 "effective_selective_live_send_enabled_for_canary":  True,
