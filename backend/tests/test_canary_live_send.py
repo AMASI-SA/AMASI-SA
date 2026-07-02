@@ -32,6 +32,8 @@ def _canary_row(**overrides):
     row = {
         "user_id":              "main",
         "salla_order_number":   CANARY_ORDER_NUMBER,
+        "trace_id":             "trace-canary-default-abc123",
+        "received_at":          "2026-07-05T12:00:00+00:00",
         "existing_qoyod_invoice_id": "DRY:invoice:xxx",
         "qoyod_customer_id":    "DRY:contact:yyy",
         "salla_order_created_at": "2026-07-05",
@@ -614,6 +616,8 @@ class TestGuard5DateExtractionMatchesEligibleOrders:
         row = {
             "user_id": "main",
             "salla_order_number": CANARY_ORDER_NUMBER,
+            "trace_id": "trace-prod-269629400-canonical",
+            "received_at": "2026-07-01T09:00:00+00:00",
             "existing_qoyod_invoice_id": "DRY:invoice:xxx",
             "qoyod_customer_id": "DRY:contact:yyy",
             "canonical_payload": {
@@ -820,6 +824,170 @@ class TestInternalConfirmToken:
         assert after == before
         assert after[0]["selective_live_send_enabled"] is False
         assert after[0]["production_writes_locked"]    is True
+
+
+# ── trace_id selection & ambiguity (Production-parity) ────────────
+# Repro for Production bug 2026-02: canary passed all 14 guards then
+# reprocess refused because integration_inbox had ≥2 rows for
+# order_number=269629400. Canary now:
+#   • Fetches ALL rows.
+#   • Applies row-level canary criteria to each (deterministic).
+#   • If exactly one row passes → uses its trace_id.
+#   • If none pass → normal guard diagnostic (with duplicate_debug).
+#   • If more than one passes → refuses `ambiguous_order_rows`.
+@pytest.mark.asyncio
+class TestTraceIdSelection:
+
+    async def test_single_row_passes_trace_id_to_reprocess(self):
+        db = _build_db(row=_canary_row())
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-T1",
+                       "qoyod_customer_id":  "CUST-T1",
+                       "qoyod_receipt_id":   "RCPT-T1",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        # trace_id was passed to reprocess_one_order.
+        kwargs = mock_pipe.call_args.kwargs
+        assert kwargs["trace_id"] == "trace-canary-default-abc123"
+        # And surfaced in the top-level response.
+        assert r["selected_trace_id"] == "trace-canary-default-abc123"
+        assert r["selection_debug"]["passing_rows_count"] == 1
+
+    async def test_two_rows_one_deterministic_picks_the_valid_one(
+            self):
+        """Two rows exist. Only ONE satisfies canary criteria — that
+        specific trace_id is passed to reprocess. The other row is
+        summarised (with reject reason) in duplicate_debug."""
+        good = _canary_row()
+        good["trace_id"] = "trace-good-777"
+        bad = _canary_row()
+        bad["trace_id"] = "trace-bad-666"
+        # Break `bad` on ONE criterion only.
+        bad["canonical_payload"]["payment_method"] = "bank_transfer"
+        db = _build_db(row=good)
+        db.integration_inbox = _FakeColl([bad, good])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-T2",
+                       "qoyod_customer_id":  "CUST-T2",
+                       "qoyod_receipt_id":   "RCPT-T2",
+                   })) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert mock_pipe.call_args.kwargs["trace_id"] == \
+            "trace-good-777"
+        assert r["selected_trace_id"] == "trace-good-777"
+        # duplicate_debug enumerates both rows with per-row reason.
+        sd = r["selection_debug"]
+        assert sd["passing_rows_count"] == 1
+        assert sd["duplicate_rows_count"] == 2
+        assert set(sd["duplicate_trace_ids"]) == {
+            "trace-good-777", "trace-bad-666"}
+        # Each summary carries only the safe non-PII fields.
+        for s in sd["duplicate_rows_summary"]:
+            for banned in ("email", "phone", "mobile", "name",
+                           "raw_payload"):
+                assert banned not in s
+
+    async def test_two_rows_both_pass_refuses_ambiguous(self):
+        r1 = _canary_row()
+        r1["trace_id"] = "trace-dup-1"
+        r2 = _canary_row()
+        r2["trace_id"] = "trace-dup-2"
+        db = _build_db(row=r1)
+        db.integration_inbox = _FakeColl([r1, r2])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["code"] == "ambiguous_order_rows"
+        # NEVER dispatches to Qoyod.
+        assert mock_pipe.call_count == 0
+        assert r["no_qoyod_api_calls"] is True
+        # Ambiguity debug present.
+        dd = r["duplicate_debug"]
+        assert dd["passing_rows_count"] == 2
+        assert set(dd["duplicate_trace_ids"]) == {
+            "trace-dup-1", "trace-dup-2"}
+
+    async def test_selected_row_without_trace_id_refuses(self):
+        row = _canary_row()
+        row["trace_id"] = None      # simulate legacy row w/o trace_id
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert r["code"] == "selected_row_missing_trace_id"
+        assert mock_pipe.call_count == 0
+
+    async def test_no_qoyod_calls_on_ambiguity(self):
+        r1 = _canary_row()
+        r1["trace_id"] = "trace-a"
+        r2 = _canary_row()
+        r2["trace_id"] = "trace-b"
+        db = _build_db(row=r1)
+        db.integration_inbox = _FakeColl([r1, r2])
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert mock_pipe.call_count == 0
+
+    async def test_no_settings_writes_on_ambiguity(self):
+        r1 = _canary_row()
+        r1["trace_id"] = "trace-x"
+        r2 = _canary_row()
+        r2["trace_id"] = "trace-y"
+        db = _build_db(row=r1)
+        db.integration_inbox = _FakeColl([r1, r2])
+        before = list(db.qoyod_settings._docs)
+        await execute_canary_live_send(
+            db, order_number=CANARY_ORDER_NUMBER,
+            approval_phrase=CANARY_APPROVAL_PHRASE)
+        after = list(db.qoyod_settings._docs)
+        assert after == before
+        assert after[0]["selective_live_send_enabled"] is False
+        assert after[0]["production_writes_locked"]    is True
+
+    async def test_internal_confirm_remains_reprocess_template(self):
+        """Even under trace_id path, the internal confirm token
+        must still be 'REPROCESS-<order_number>'."""
+        db = _build_db(row=_canary_row())
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-C",
+                       "qoyod_customer_id":  "CUST-C",
+                       "qoyod_receipt_id":   "RCPT-C",
+                   })) as mock_pipe:
+            await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        kwargs = mock_pipe.call_args.kwargs
+        assert kwargs["confirm"] == f"REPROCESS-{CANARY_ORDER_NUMBER}"
+        assert kwargs["approval_phrase"] == (
+            f"Approved to send order {CANARY_ORDER_NUMBER} only")
 
 
 # ── Static / lint-style invariants ─────────────────────────────────

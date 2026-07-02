@@ -65,13 +65,104 @@ async def _write_audit(
     })
 
 
+def _row_summary(row: dict) -> dict:
+    """Non-PII summary of a candidate inbox row for debug output.
+    Never includes customer name / email / phone / raw_payload."""
+    can = row.get("canonical_payload") or {}
+    return {
+        "trace_id":         row.get("trace_id"),
+        "received_at":      (row.get("received_at").isoformat()
+                             if hasattr(row.get("received_at"),
+                                        "isoformat")
+                             else row.get("received_at")),
+        "pipeline_stage":   row.get("pipeline_stage"),
+        "status":           can.get("status")
+                            or can.get("order_status"),
+        "payment_method":   can.get("payment_method"),
+        "created_at":       (can.get("salla_order_created_at")
+                             or can.get("created_at")
+                             or can.get("order_date")),
+        "existing_qoyod_invoice_id": (
+            can.get("existing_qoyod_invoice_id")
+            or row.get("existing_qoyod_invoice_id")),
+        "outcome":          row.get("outcome"),
+    }
+
+
+def _row_matches_canary_criteria(row: dict) -> tuple[bool, Optional[str]]:
+    """Deterministic per-row check for the strict canary contract.
+    Returns (True, None) iff the row satisfies ALL row-level criteria
+    (payment method, status, created_at ≥ Q3 cutoff, no real existing
+    invoice, customer phone, customer email, Mezan-VAT totals).
+    Returns (False, reason_code) otherwise. This mirrors Guards
+    3, 4, 5, 6, 8, 9, 10 but does NOT raise — so it can be used to
+    filter multiple candidate rows before choosing which one to send.
+    """
+    from integrations.qoyod.eligible_orders import (
+        _check_totals, _extract_order_created_at, _normalize_status,
+    )
+    can = row.get("canonical_payload") or {}
+    # Payment method.
+    if str(can.get("payment_method") or "").lower() \
+            != REQUIRED_PAYMENT_METHOD:
+        return (False, "payment_method_mismatch")
+    # Status.
+    raw_status = can.get("status") or can.get("order_status") or ""
+    if _normalize_status(raw_status) != REQUIRED_STATUS:
+        return (False, "status_not_completed")
+    # Created_at ≥ Q3 cutoff.
+    pseudo = {
+        "created_at": (can.get("salla_order_created_at")
+                       or can.get("created_at")),
+        "order_date": can.get("order_date"),
+        "order_date_inferred": (can.get("order_date_inferred")
+                                or row.get("order_date_inferred")
+                                or False),
+        "_inbox_row": {"raw_payload": row.get("raw_payload")},
+    }
+    d = _extract_order_created_at(pseudo)
+    if d is None:
+        return (False, "created_at_missing")
+    if d < date.fromisoformat(Q3_CUTOFF_ISO):
+        return (False, "created_before_q3_cutoff")
+    # No real existing invoice.
+    existing = can.get("existing_qoyod_invoice_id") \
+        or row.get("existing_qoyod_invoice_id")
+    if existing is not None:
+        s = str(existing)
+        if not (s.startswith("DRY:") or s.startswith("PREVIEW:")):
+            return (False, "real_existing_invoice_id_present")
+    # Customer phone.
+    import re as _re
+    cust = can.get("customer") or {}
+    phone = _re.sub(r"[^\d+]", "",
+                    str(cust.get("mobile") or cust.get("phone")
+                        or ""))
+    if phone != REQUIRED_MOBILE:
+        return (False, "customer_mobile_mismatch")
+    # Customer email.
+    email = (cust.get("email") or "").strip().lower()
+    if email != REQUIRED_EMAIL:
+        return (False, "customer_email_mismatch")
+    # Mezan-VAT totals.
+    t = _check_totals(can)
+    if not t["valid"]:
+        return (False, "totals_mismatch_gt_0_01")
+    return (True, None)
+
+
 async def _run_guards(
     db, *, order_number: str, approval_phrase: str,
     user_id: str = "main",
-) -> tuple[dict, dict, dict]:
+) -> tuple[dict, dict, dict, dict]:
     """Runs all 14 guards. Returns (settings_snapshot, canonical,
-    settings_debug) when every guard passes; raises
-    `CanaryGuardFailed` (carrying settings_debug) otherwise."""
+    settings_debug, chosen_row) when every guard passes; raises
+    `CanaryGuardFailed` (carrying settings_debug) otherwise.
+
+    When multiple inbox rows exist for the same order_number,
+    canary applies its strict row-level criteria to EVERY row and
+    picks the unique passing row (deterministic). Ambiguity or
+    zero matches → refuse."""
     # Guard 1 — approval_phrase must match EXACTLY.
     if approval_phrase != CANARY_APPROVAL_PHRASE:
         raise CanaryGuardFailed(1, "approval_phrase_mismatch",
@@ -124,119 +215,34 @@ async def _run_guards(
             12, "production_writes_locked_not_true",
             "Write lock must remain TRUE (scoped bypass only).")
 
-    # Fetch canonical.
-    row = await db.integration_inbox.find_one(
-        {"user_id": user_id,
-         "$or": [
-             {"salla_order_number": order_number},
-             {"canonical_payload.order_number": order_number},
-         ]},
-        {"_id": 0})
-    if not row:
+    # Fetch ALL candidate rows for this order.
+    # Salla persists order ids as int or str; match both.
+    on_str = str(order_number)
+    candidates_val: list[Any] = [on_str]
+    try:
+        candidates_val.append(int(on_str))
+    except (TypeError, ValueError):
+        pass
+    inbox_or: list[dict] = []
+    for v in candidates_val:
+        inbox_or.extend([
+            {"salla_order_number":            v},
+            {"salla_order_id":                v},
+            {"canonical_payload.order_number": v},
+            {"canonical_payload.order_id":     v},
+        ])
+    all_rows: list[dict] = await db.integration_inbox.find(
+        {"user_id": user_id, "$or": inbox_or},
+        {"_id": 0}
+    ).sort([("received_at", -1)]).to_list(length=20)
+    if not all_rows:
         raise CanaryGuardFailed(
             2, "order_not_found",
             f"No inbox row for order {order_number}.")
-    canonical = row.get("canonical_payload") or {}
-
-    # Guard 3 — payment method.
-    payment = str(canonical.get("payment_method") or "").lower()
-    if payment != REQUIRED_PAYMENT_METHOD:
-        raise CanaryGuardFailed(
-            3, "payment_method_mismatch",
-            f"Expected '{REQUIRED_PAYMENT_METHOD}', got '{payment}'.")
-
-    # Guard 4 — normalised status.
-    from integrations.qoyod.eligible_orders import _normalize_status
-    raw_status = canonical.get("status") \
-        or canonical.get("order_status") or ""
-    if _normalize_status(raw_status) != REQUIRED_STATUS:
-        raise CanaryGuardFailed(
-            4, "status_not_completed",
-            f"Normalised status '{_normalize_status(raw_status)}' "
-            f"!= '{REQUIRED_STATUS}'.")
-
-    # Guard 5 — created_at cutoff.
-    # Uses the same extraction chain as
-    # `eligible_orders._extract_order_created_at` so canary agrees
-    # with policy-report / eligible-orders on the exact date field.
-    # Priority (matches `_extract_order_created_at`):
-    #   1. canonical_payload.salla_order_created_at (explicit)
-    #   2. canonical_payload.created_at             (raw Salla)
-    #   3. canonical_payload.order_date             (normalised)
-    #   4. row.raw_payload.data.date.date           (Salla webhook)
-    #   5. row.raw_payload.data.created_at
-    #   6. row.raw_payload.created_at
-    # `completed_at`, `delivered_at`, `received_at` are NEVER used.
-    from integrations.qoyod.eligible_orders import (
-        _extract_order_created_at,
-    )
-    pseudo_order = {
-        "created_at": (canonical.get("salla_order_created_at")
-                       or canonical.get("created_at")),
-        "order_date": canonical.get("order_date"),
-        "order_date_inferred": (canonical.get("order_date_inferred")
-                                or row.get("order_date_inferred")
-                                or False),
-        "_inbox_row": {"raw_payload": row.get("raw_payload")},
-    }
-    created = _extract_order_created_at(pseudo_order)
-    raw_pl = row.get("raw_payload") or {}
-    raw_data = (raw_pl.get("data") if isinstance(raw_pl, dict)
-                else {}) or {}
-    raw_data_date = raw_data.get("date") if isinstance(raw_data, dict) \
-        else None
-    date_debug = {
-        "available_date_fields": {
-            "canonical_payload.salla_order_created_at":
-                canonical.get("salla_order_created_at"),
-            "canonical_payload.order_date":
-                canonical.get("order_date"),
-            "canonical_payload.created_at":
-                canonical.get("created_at"),
-            "row.salla_order_created_at":
-                row.get("salla_order_created_at"),
-            "raw_payload.created_at": (
-                raw_pl.get("created_at")
-                if isinstance(raw_pl, dict) else None),
-            "raw_payload.data.date.date": (
-                raw_data_date.get("date")
-                if isinstance(raw_data_date, dict) else raw_data_date),
-            "raw_payload.data.created_at":
-                raw_data.get("created_at"),
-        },
-        "extracted_salla_order_created_at":
-            created.isoformat() if created else None,
-        "extraction_source": (
-            "eligible_orders._extract_order_created_at "
-            "(priority: canonical.created_at → order_date "
-            "(unless inferred) → raw_payload.data.date.date → "
-            "raw_payload.data.created_at → order_date fallback)"),
-        "q3_cutoff_iso": Q3_CUTOFF_ISO,
-    }
-    if created is None:
-        raise CanaryGuardFailed(
-            5, "created_at_missing",
-            "No usable salla order created_at across all supported "
-            "fields (see extra.date_debug).",
-            extra={"date_debug": date_debug})
-    if created < date.fromisoformat(Q3_CUTOFF_ISO):
-        raise CanaryGuardFailed(
-            5, "created_before_q3_cutoff",
-            f"{created} < {Q3_CUTOFF_ISO}.",
-            extra={"date_debug": date_debug})
-
-    # Guard 6 — no real existing Qoyod invoice.
-    existing = canonical.get("existing_qoyod_invoice_id") \
-        or row.get("existing_qoyod_invoice_id")
-    if existing is not None:
-        s = str(existing)
-        if not (s.startswith("DRY:") or s.startswith("PREVIEW:")):
-            raise CanaryGuardFailed(
-                6, "real_existing_invoice_id_present",
-                f"existing_qoyod_invoice_id = {existing!r} looks "
-                f"real. Refusing.")
 
     # Guard 7 — AMS11237 must resolve to qoyod_product_id=45.
+    # (Order-independent; run before per-row selection so its diagnostic
+    # is not shadowed by ambiguity.)
     m = await db.qoyod_products_mapping.find_one(
         {"user_id": user_id, "sku": REQUIRED_SKU,
          "dry_run_only": {"$ne": True}},
@@ -248,32 +254,193 @@ async def _run_guards(
             f"Expected {REQUIRED_SKU} → "
             f"{REQUIRED_QOYOD_PRODUCT_ID}, got {m}.")
 
-    # Guard 8 — customer phone match.
-    cust = canonical.get("customer") or {}
-    import re
-    phone = re.sub(r"[^\d+]", "",
-                   str(cust.get("mobile") or cust.get("phone") or ""))
-    if phone != REQUIRED_MOBILE:
-        raise CanaryGuardFailed(
-            8, "customer_mobile_mismatch",
-            f"Expected {REQUIRED_MOBILE}, got {phone!r}.")
+    # Deterministic row selection: filter by ALL row-level criteria.
+    passing: list[dict] = []
+    per_row_reasons: list[dict] = []
+    for r in all_rows:
+        ok, reason = _row_matches_canary_criteria(r)
+        per_row_reasons.append({
+            **_row_summary(r),
+            "row_matches_canary_criteria": ok,
+            "row_reject_reason":           reason,
+        })
+        if ok:
+            passing.append(r)
 
-    # Guard 9 — customer email match.
-    email = (cust.get("email") or "").strip().lower()
-    if email != REQUIRED_EMAIL:
-        raise CanaryGuardFailed(
-            9, "customer_email_mismatch",
-            f"Expected {REQUIRED_EMAIL}, got {email!r}.")
+    duplicate_debug = {
+        "duplicate_rows_count":     len(all_rows),
+        "passing_rows_count":       len(passing),
+        "duplicate_trace_ids":      [r.get("trace_id")
+                                     for r in all_rows],
+        "duplicate_rows_summary":   per_row_reasons,
+        "selection_policy": (
+            "canary picks the UNIQUE row that passes ALL row-level "
+            "criteria (guards 3, 4, 5, 6, 8, 9, 10). Ambiguity or "
+            "zero matches → refuse (never fall back to random)."),
+    }
 
-    # Guard 10 — Mezan-VAT totals guard.
-    from integrations.qoyod.eligible_orders import _check_totals
-    totals = _check_totals(canonical)
-    if not totals["valid"]:
-        raise CanaryGuardFailed(
-            10, "totals_mismatch_gt_0_01",
-            f"Mezan-VAT-15% diff={totals['diff']} > 0.01.")
+    if len(passing) == 0:
+        # No candidate passes the strict canary contract — raise the
+        # FIRST (latest) row's specific rejection reason for a
+        # precise diagnostic, matching the pre-refactor behaviour.
+        row = all_rows[0]
+        canonical = row.get("canonical_payload") or {}
+        # Guard 3 — payment method.
+        payment = str(canonical.get("payment_method") or "").lower()
+        if payment != REQUIRED_PAYMENT_METHOD:
+            raise CanaryGuardFailed(
+                3, "payment_method_mismatch",
+                f"Expected '{REQUIRED_PAYMENT_METHOD}', "
+                f"got '{payment}'.",
+                extra={"duplicate_debug": duplicate_debug})
 
-    return (raw_settings, canonical, settings_debug)
+        # Guard 4 — normalised status.
+        from integrations.qoyod.eligible_orders import _normalize_status
+        raw_status = canonical.get("status") \
+            or canonical.get("order_status") or ""
+        if _normalize_status(raw_status) != REQUIRED_STATUS:
+            raise CanaryGuardFailed(
+                4, "status_not_completed",
+                f"Normalised status '{_normalize_status(raw_status)}' "
+                f"!= '{REQUIRED_STATUS}'.",
+                extra={"duplicate_debug": duplicate_debug})
+
+        # Guard 5 — created_at cutoff (with date_debug).
+        from integrations.qoyod.eligible_orders import (
+            _extract_order_created_at,
+        )
+        pseudo_order = {
+            "created_at": (canonical.get("salla_order_created_at")
+                           or canonical.get("created_at")),
+            "order_date": canonical.get("order_date"),
+            "order_date_inferred": (
+                canonical.get("order_date_inferred")
+                or row.get("order_date_inferred")
+                or False),
+            "_inbox_row": {"raw_payload": row.get("raw_payload")},
+        }
+        created = _extract_order_created_at(pseudo_order)
+        raw_pl = row.get("raw_payload") or {}
+        raw_data = (raw_pl.get("data") if isinstance(raw_pl, dict)
+                    else {}) or {}
+        raw_data_date = raw_data.get("date") \
+            if isinstance(raw_data, dict) else None
+        date_debug = {
+            "available_date_fields": {
+                "canonical_payload.salla_order_created_at":
+                    canonical.get("salla_order_created_at"),
+                "canonical_payload.order_date":
+                    canonical.get("order_date"),
+                "canonical_payload.created_at":
+                    canonical.get("created_at"),
+                "row.salla_order_created_at":
+                    row.get("salla_order_created_at"),
+                "raw_payload.created_at": (
+                    raw_pl.get("created_at")
+                    if isinstance(raw_pl, dict) else None),
+                "raw_payload.data.date.date": (
+                    raw_data_date.get("date")
+                    if isinstance(raw_data_date, dict)
+                    else raw_data_date),
+                "raw_payload.data.created_at":
+                    raw_data.get("created_at"),
+            },
+            "extracted_salla_order_created_at":
+                created.isoformat() if created else None,
+            "extraction_source": (
+                "eligible_orders._extract_order_created_at"),
+            "q3_cutoff_iso": Q3_CUTOFF_ISO,
+        }
+        if created is None:
+            raise CanaryGuardFailed(
+                5, "created_at_missing",
+                "No usable salla order created_at across all "
+                "supported fields (see extra.date_debug).",
+                extra={"date_debug": date_debug,
+                       "duplicate_debug": duplicate_debug})
+        if created < date.fromisoformat(Q3_CUTOFF_ISO):
+            raise CanaryGuardFailed(
+                5, "created_before_q3_cutoff",
+                f"{created} < {Q3_CUTOFF_ISO}.",
+                extra={"date_debug": date_debug,
+                       "duplicate_debug": duplicate_debug})
+
+        # Guard 6 — no real existing Qoyod invoice.
+        existing = canonical.get("existing_qoyod_invoice_id") \
+            or row.get("existing_qoyod_invoice_id")
+        if existing is not None:
+            s = str(existing)
+            if not (s.startswith("DRY:")
+                    or s.startswith("PREVIEW:")):
+                raise CanaryGuardFailed(
+                    6, "real_existing_invoice_id_present",
+                    f"existing_qoyod_invoice_id = {existing!r} "
+                    f"looks real. Refusing.",
+                    extra={"duplicate_debug": duplicate_debug})
+
+        # Guard 8 — customer phone match.
+        cust = canonical.get("customer") or {}
+        import re
+        phone = re.sub(r"[^\d+]", "",
+                       str(cust.get("mobile")
+                           or cust.get("phone") or ""))
+        if phone != REQUIRED_MOBILE:
+            raise CanaryGuardFailed(
+                8, "customer_mobile_mismatch",
+                f"Expected {REQUIRED_MOBILE}, got {phone!r}.",
+                extra={"duplicate_debug": duplicate_debug})
+
+        # Guard 9 — customer email match.
+        email = (cust.get("email") or "").strip().lower()
+        if email != REQUIRED_EMAIL:
+            raise CanaryGuardFailed(
+                9, "customer_email_mismatch",
+                f"Expected {REQUIRED_EMAIL}, got {email!r}.",
+                extra={"duplicate_debug": duplicate_debug})
+
+        # Guard 10 — Mezan-VAT totals guard.
+        from integrations.qoyod.eligible_orders import _check_totals
+        totals = _check_totals(canonical)
+        if not totals["valid"]:
+            raise CanaryGuardFailed(
+                10, "totals_mismatch_gt_0_01",
+                f"Mezan-VAT-15% diff={totals['diff']} > 0.01.",
+                extra={"duplicate_debug": duplicate_debug})
+
+        # If we reach here without a specific guard firing but
+        # `passing` is still empty, something is inconsistent.
+        raise CanaryGuardFailed(
+            2, "row_criteria_inconsistent",
+            "No row satisfies canary criteria and no specific "
+            "guard fired — refusing conservatively.",
+            extra={"duplicate_debug": duplicate_debug})
+
+    if len(passing) > 1:
+        # Ambiguity — refuse rather than pick arbitrarily.
+        raise CanaryGuardFailed(
+            2, "ambiguous_order_rows",
+            f"order_number={order_number} has {len(passing)} rows "
+            f"that all satisfy canary strict criteria; refusing to "
+            f"choose. Use dedup / stage-based cleanup first.",
+            extra={"duplicate_debug": duplicate_debug})
+
+    # Exactly one row passes — use it. Trace_id must be present.
+    row = passing[0]
+    canonical = row.get("canonical_payload") or {}
+    selected_trace_id = row.get("trace_id")
+    if not selected_trace_id:
+        raise CanaryGuardFailed(
+            2, "selected_row_missing_trace_id",
+            "The unique canary-eligible row has no trace_id; "
+            "cannot disambiguate against reprocess pipeline.",
+            extra={"duplicate_debug": duplicate_debug})
+
+    # Attach selection metadata onto the returned tuple via a dict.
+    selection_debug = {
+        "selected_trace_id":      selected_trace_id,
+        **duplicate_debug,
+    }
+    return (raw_settings, canonical, settings_debug, selection_debug)
 
 
 async def execute_canary_live_send(
@@ -293,10 +460,11 @@ async def execute_canary_live_send(
                        phase="attempt_received", status="pending",
                        detail=f"actor={actor} user_id={user_id}")
     try:
-        settings, canonical, settings_debug = await _run_guards(
-            db, order_number=order_number,
-            approval_phrase=approval_phrase,
-            user_id=user_id)
+        settings, canonical, settings_debug, selection_debug = \
+            await _run_guards(
+                db, order_number=order_number,
+                approval_phrase=approval_phrase,
+                user_id=user_id)
     except CanaryGuardFailed as g:
         # Best-effort re-read of settings debug for refusal response
         # even when guards 1/2 short-circuit before settings load.
@@ -356,11 +524,13 @@ async def execute_canary_live_send(
         order_number=CANARY_ORDER_NUMBER)
     internal_phrase = APPROVAL_PHRASE_TEMPLATE.format(
         order_number=CANARY_ORDER_NUMBER)
+    selected_trace_id = selection_debug.get("selected_trace_id")
     try:
         result = await reprocess_one_order(
             db,
             user_id=user_id,
             order_number=CANARY_ORDER_NUMBER,
+            trace_id=selected_trace_id,
             confirm=internal_confirm,
             approval_phrase=internal_phrase,
             actor=f"canary:{actor}")
@@ -379,6 +549,8 @@ async def execute_canary_live_send(
             "internal_approval_phrase_used": internal_phrase,
             "internal_approval_phrase_template":
                 APPROVAL_PHRASE_TEMPLATE,
+            "selected_trace_id":             selected_trace_id,
+            "selection_debug":               selection_debug,
         }
 
     await _write_audit(
@@ -403,5 +575,7 @@ async def execute_canary_live_send(
                                "qoyod_product_id":
                                REQUIRED_QOYOD_PRODUCT_ID},
         "invoice_date_source": "send_date_riyadh",
+        "selected_trace_id":   selected_trace_id,
+        "selection_debug":     selection_debug,
         "raw_pipeline_result": result,
     }
