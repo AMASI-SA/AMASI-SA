@@ -358,3 +358,148 @@ async def test_ineligible_before_cutover_refused():
     assert out["outcome"] == "REFUSED"
     assert "order_created_before_cutover" in out["code"]
     p.assert_not_called()
+
+
+# ─── 12. rev19 — Multi-stage drain: CUSTOMER_RESOLVED → COMPLETED ─
+@pytest.mark.asyncio
+async def test_multi_stage_drain_to_completed():
+    """rev19 regression (order 270075325): the endpoint MUST drain
+    all pipeline stages (NORMALIZED → CUSTOMER_RESOLVED → INVOICE_
+    CREATED → COMPLETED) in a single call, not stop at
+    CUSTOMER_RESOLVED after `process_normalized_row`."""
+    from integrations.qoyod import force_reprocess_dry as mod
+    db = _DB()
+    _seed_dry_row_270075325(db)
+
+    async def _step1(db_, row_):
+        # process_normalized_row: advance to CUSTOMER_RESOLVED.
+        for r in db_.integration_inbox.rows:
+            if r["id"] == row_["id"]:
+                r["pipeline_stage"] = "CUSTOMER_RESOLVED"
+                r["qoyod_customer_id"] = "229"
+        return {"outcome": "CUSTOMER_RESOLVED"}
+
+    async def _step2(db_, row_):
+        # process_customer_resolved_row: resolve products + invoice
+        # + payment → COMPLETED.
+        for r in db_.integration_inbox.rows:
+            if r["id"] == row_["id"]:
+                r["pipeline_stage"]           = "COMPLETED"
+                r["qoyod_invoice_id"]         = "187"
+                r["qoyod_invoice_payment_id"] = "PMT-XYZ"
+        return {"outcome": "COMPLETED"}
+
+    with patch(
+        "integrations.qoyod.pipeline.process_normalized_row",
+        side_effect=_step1,
+    ), patch(
+        "integrations.qoyod.pipeline.process_customer_resolved_row",
+        side_effect=_step2,
+    ):
+        out = await mod.force_reprocess_dry_row(
+            db, user_id="main",
+            salla_order_number="270075325",
+            trace_id="7fc5a5a855f543b49a2e949a93c3eb95",
+            confirm_token="FORCE-REPROCESS-DRY-270075325",
+            actor="ops")
+
+    assert out["ok"] is True
+    assert out["outcome"] == "COMPLETED"
+    assert out["qoyod_invoice_id"] == "187"
+    assert out["qoyod_invoice_payment_id"] == "PMT-XYZ"
+    # Steps trace shows both hops.
+    steps = out["debug"]["pipeline_steps_run"]
+    stages_after = [s.get("stage_after") for s in steps]
+    assert "CUSTOMER_RESOLVED" in stages_after
+    assert "COMPLETED"         in stages_after
+
+
+# ─── 13. rev19 — Multi-stage drain stops at PAYMENT_PENDING ────
+@pytest.mark.asyncio
+async def test_multi_stage_drain_stops_at_payment_pending():
+    """When invoice succeeds but payment fails, the loop MUST stop
+    at INVOICE_CREATED with real id — never re-invoke pipeline that
+    could re-attempt invoice creation."""
+    from integrations.qoyod import force_reprocess_dry as mod
+    db = _DB()
+    _seed_dry_row_270075325(db)
+
+    async def _step1(db_, row_):
+        for r in db_.integration_inbox.rows:
+            if r["id"] == row_["id"]:
+                r["pipeline_stage"] = "CUSTOMER_RESOLVED"
+                r["qoyod_customer_id"] = "229"
+        return {"outcome": "CUSTOMER_RESOLVED"}
+
+    async def _step2(db_, row_):
+        for r in db_.integration_inbox.rows:
+            if r["id"] == row_["id"]:
+                r["pipeline_stage"]     = "INVOICE_CREATED"
+                r["qoyod_invoice_id"]   = "187"    # real
+                # payment_id ABSENT — payment failed.
+        return {"outcome": "INVOICE_CREATED"}
+
+    with patch(
+        "integrations.qoyod.pipeline.process_normalized_row",
+        side_effect=_step1,
+    ), patch(
+        "integrations.qoyod.pipeline.process_customer_resolved_row",
+        side_effect=_step2,
+    ) as step2_mock:
+        out = await mod.force_reprocess_dry_row(
+            db, user_id="main",
+            salla_order_number="270075325",
+            trace_id="7fc5a5a855f543b49a2e949a93c3eb95",
+            confirm_token="FORCE-REPROCESS-DRY-270075325",
+            actor="ops")
+
+    assert out["outcome"] == "PAYMENT_PENDING"
+    assert out["qoyod_invoice_id"]         == "187"
+    assert out["qoyod_invoice_payment_id"] is None
+    assert out["next_retry_hint"] == \
+        "call POST /admin/retry-payment-only"
+    # Sanity: process_customer_resolved_row called ONCE — no re-attempt.
+    assert step2_mock.call_count == 1
+
+
+# ─── 14. rev19 — invoice_blocked_reason surfaces when stuck ──────
+@pytest.mark.asyncio
+async def test_invoice_blocked_reason_at_customer_resolved():
+    """If the pipeline stops at CUSTOMER_RESOLVED (e.g. product
+    resolver hasn't advanced yet), debug MUST show
+    `invoice_blocked_reason` and `invoice_post_attempted=False`."""
+    from integrations.qoyod import force_reprocess_dry as mod
+    db = _DB()
+    _seed_dry_row_270075325(db)
+
+    async def _step1(db_, row_):
+        for r in db_.integration_inbox.rows:
+            if r["id"] == row_["id"]:
+                r["pipeline_stage"] = "CUSTOMER_RESOLVED"
+                r["qoyod_customer_id"] = "229"
+        return {"outcome": "CUSTOMER_RESOLVED"}
+
+    # Second step: doesn't advance (returns without changes) —
+    # simulate a product-resolve failure or stuck state.
+    async def _step2_stuck(db_, row_):
+        # Do NOT mutate the row — loop must halt.
+        return {"outcome": "PRODUCT_RESOLVE_FAILED"}
+
+    with patch(
+        "integrations.qoyod.pipeline.process_normalized_row",
+        side_effect=_step1,
+    ), patch(
+        "integrations.qoyod.pipeline.process_customer_resolved_row",
+        side_effect=_step2_stuck,
+    ):
+        out = await mod.force_reprocess_dry_row(
+            db, user_id="main",
+            salla_order_number="270075325",
+            trace_id="7fc5a5a855f543b49a2e949a93c3eb95",
+            confirm_token="FORCE-REPROCESS-DRY-270075325",
+            actor="ops")
+
+    assert out["debug"]["invoice_post_attempted"] is False
+    assert out["debug"]["invoice_blocked_reason"] is not None
+    assert "CUSTOMER_RESOLVED" in out["debug"]["invoice_blocked_reason"] \
+        or "stopped" in out["debug"]["invoice_blocked_reason"]

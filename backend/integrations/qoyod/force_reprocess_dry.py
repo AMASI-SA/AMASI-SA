@@ -219,11 +219,65 @@ async def force_reprocess_dry_row(
     debug["cleared_dry_invoice_id"]  = dry_invoice_cleared
     debug["cleared_dry_products"]    = dry_products_cleared
 
-    # ── Re-run pipeline inline — Gate re-fires → scoped live client
+    # ── Re-run pipeline inline — loop across stages ────────────────
+    # Iter-2026-02.rev19 — Full pipeline drain. `process_normalized_row`
+    # only advances ONE stage (→ CUSTOMER_RESOLVED); the terminal
+    # stage COMPLETED / PAYMENT_PENDING is produced by
+    # `process_customer_resolved_row`. Loop across stages until a
+    # terminal / stuck state, so the operator gets end-to-end
+    # completion from a single call.
     from integrations.qoyod import pipeline as pmod
-    refreshed = await db.integration_inbox.find_one(
-        {"id": row["id"]})
-    result = await pmod.process_normalized_row(db, refreshed)
+    TERMINAL = {"COMPLETED", "DEAD_LETTER", "SKIPPED",
+                "PARTIAL_FAILURE"}
+    STEP_MAP = {
+        "NORMALIZED":         pmod.process_normalized_row,
+        "RULES_APPLIED":      pmod.process_normalized_row,
+        "CUSTOMER_RESOLVED":  pmod.process_customer_resolved_row,
+        "PRODUCT_RESOLVED":   pmod.process_customer_resolved_row,
+        # PREFLIGHTED / INVOICE_CREATED are internally sequential
+        # within process_customer_resolved_row so they're re-entrant.
+        "PREFLIGHTED":        pmod.process_customer_resolved_row,
+        "INVOICE_CREATED":    pmod.process_customer_resolved_row,
+    }
+    result = None
+    steps_run: list[dict] = []
+    for _hop in range(6):
+        refreshed = await db.integration_inbox.find_one(
+            {"id": row["id"]})
+        _stage = (refreshed or {}).get("pipeline_stage")
+        if _stage in TERMINAL:
+            break
+        # If invoice was already created (real id) and payment id is
+        # still absent → stop here so caller can route to
+        # retry_payment_only. Do NOT keep hopping.
+        if _stage == "INVOICE_CREATED" \
+                and _is_real_qid(
+                    (refreshed or {}).get("qoyod_invoice_id")) \
+                and not (refreshed or {}).get(
+                    "qoyod_invoice_payment_id"):
+            steps_run.append(
+                {"hop": _hop, "stage_before": _stage,
+                 "action": "stop_payment_pending"})
+            break
+        step_fn = STEP_MAP.get(_stage)
+        if step_fn is None:
+            steps_run.append(
+                {"hop": _hop, "stage_before": _stage,
+                 "action": "unknown_stage_stop"})
+            break
+        result = await step_fn(db, refreshed)
+        _after = await db.integration_inbox.find_one(
+            {"id": row["id"]})
+        _stage_after = (_after or {}).get("pipeline_stage")
+        steps_run.append({
+            "hop":           _hop,
+            "stage_before":  _stage,
+            "stage_after":   _stage_after,
+            "step_result":   (result or {}).get("outcome"),
+        })
+        # Idempotent halt — no advancement means we're stuck.
+        if _stage_after == _stage:
+            break
 
     # Post-run introspection.
     final_row = await db.integration_inbox.find_one(
@@ -232,6 +286,7 @@ async def force_reprocess_dry_row(
     debug["scoped_write_allowance"] = (
         (final_row or {}).get("selective_auto_send_gate") or {}
     ).get("eligible")
+    debug["pipeline_steps_run"] = steps_run
     payloads = (final_row or {}).get("qoyod_payloads") or {}
     responses = (final_row or {}).get("qoyod_responses") or {}
     debug["contact_id_before_invoice"] = (
@@ -240,11 +295,39 @@ async def force_reprocess_dry_row(
         li.get("product_id") for li in
         ((payloads.get("invoice") or {}).get("line_items") or [])
         if isinstance(li, dict)]
+    # Iter-rev19 — invoice_post_attempted is TRUE only when قيود
+    # actually saw the request (response body present, id extracted,
+    # or a real qoyod_invoice_id landed on the row).
+    _real_invoice_id_now = _is_real_qid(
+        (final_row or {}).get("qoyod_invoice_id"))
     debug["invoice_post_attempted"] = bool(
-        responses.get("invoice") is not None)
+        responses.get("invoice")
+        or _real_invoice_id_now)
     debug["payment_post_attempted"] = bool(
-        responses.get("invoice_payment") is not None)
-    debug["dry_run_seen_by_client"] = False  # scoped path: never dry
+        responses.get("invoice_payment")
+        or (final_row or {}).get("qoyod_invoice_payment_id"))
+    debug["product_resolve_attempted"] = (
+        (final_row or {}).get("pipeline_stage") in
+        ("PRODUCT_RESOLVED", "PREFLIGHTED", "INVOICE_CREATED",
+         "COMPLETED", "PARTIAL_FAILURE"))
+    # Explain when invoice was NOT sent.
+    if not debug["invoice_post_attempted"]:
+        _blocked = None
+        _final_stage = debug["final_stage"]
+        if _final_stage == "CUSTOMER_RESOLVED":
+            _blocked = ("stopped_before_product_resolve — call "
+                        "resume-selective-auto-send")
+        elif _final_stage == "PRODUCT_RESOLVED":
+            _blocked = ("stopped_after_product_resolve — check "
+                        "preflight / mapping / totals")
+        elif _final_stage == "SKIPPED":
+            _blocked = "pipeline_skipped_by_business_rules"
+        else:
+            _blocked = f"stuck_at_{_final_stage}"
+        debug["invoice_blocked_reason"] = _blocked
+    else:
+        debug["invoice_blocked_reason"] = None
+    debug["dry_run_seen_by_client"] = False  # scoped path never dry
 
     # Final assembly. Iter-2026-02.rev18 — When invoice succeeded
     # but payment did NOT, surface `PAYMENT_PENDING` explicitly so
