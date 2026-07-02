@@ -140,9 +140,8 @@ async def approve_locked_payment(
     # ── 3. Build a SCOPED live api client ─────────────────────────
     settings = await db.qoyod_settings.find_one(
         {"user_id": user_id}, {"_id": 0}) or {}
-    from integrations.qoyod.api_client import (
-        QoyodAPIClient, get_api_key,
-    )
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.credentials import get_api_key
     api_key = await get_api_key(db, user_id)
     if not api_key:
         raise ApproveLockedPaymentRefused(
