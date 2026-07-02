@@ -408,6 +408,13 @@ class ForceReprocessDryBody(BaseModel):
     trace_id:  Optional[str] = Field(None, max_length=64)
 
 
+class ApproveLockedPaymentBody(BaseModel):
+    """Iter-2026-02.rev21 — Approve a parked invoice_payment."""
+    model_config = ConfigDict(extra="forbid")
+    lock_attempt_id: str = Field(..., min_length=1, max_length=64)
+    confirm_token:   str = Field(..., min_length=1, max_length=128)
+
+
 # ─────────────────────────────────────────────────────────────────────
 def make_qoyod_router(db, current_user) -> APIRouter:
     router = APIRouter(
@@ -2852,6 +2859,32 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 confirm_token=body.confirm_token,
                 actor=str(actor))
         except ForceReprocessRefused as exc:
+            return {"ok": False, "outcome": "REFUSED",
+                    "code": exc.code, "detail": str(exc),
+                    **exc.extra}
+
+    # ── Iter-2026-02.rev21 — Approve LOCKED_AWAITING_APPROVAL ──────
+    # Replay the saved `/invoice_payments` payload from
+    # `qoyod_write_lock_attempts`. NEVER creates an invoice, NEVER
+    # a customer/product. Scoped bypass of the write lock — DB
+    # `production_writes_locked` stays TRUE on disk.
+    @router.post("/admin/approve-locked-payment")
+    async def admin_approve_locked_payment(
+        body: ApproveLockedPaymentBody = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.approve_locked_payment import (
+            approve_locked_payment, ApproveLockedPaymentRefused,
+        )
+        tenant = _tenant_id(user)
+        actor  = (getattr(user, "email", None) or "operator")
+        try:
+            return await approve_locked_payment(
+                db, user_id=tenant,
+                lock_attempt_id=body.lock_attempt_id,
+                confirm_token=body.confirm_token,
+                actor=str(actor))
+        except ApproveLockedPaymentRefused as exc:
             return {"ok": False, "outcome": "REFUSED",
                     "code": exc.code, "detail": str(exc),
                     **exc.extra}
