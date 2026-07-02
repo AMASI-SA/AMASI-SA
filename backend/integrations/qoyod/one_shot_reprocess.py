@@ -408,10 +408,25 @@ async def _reset_row_to_stage(
             note=f"one-shot reprocess resume at {resume_stage}",
         )
     except InvalidTransition as exc:
+        from integrations.qoyod.state_machine import (
+            ALLOWED_TRANSITIONS,
+        )
+        allowed_from_current = sorted(
+            t for (f, t) in ALLOWED_TRANSITIONS if f == current)
         raise OneShotRefused(
             "invalid_transition_to_resume",
-            f"state-machine refused {from_stage} → {resume_stage}: {exc}",
-            current_stage=current, resume_stage=resume_stage)
+            f"state-machine refused {from_stage} → {resume_stage}: "
+            f"{exc}",
+            current_stage=current, resume_stage=resume_stage,
+            reset_path_attempted=(
+                f"{current} → RETRYING → {resume_stage}"
+                if needs_retry_hop
+                else f"{from_stage} → {resume_stage}"),
+            permit_partial_invoice_created=(
+                permit_partial_invoice_created),
+            needs_retry_hop=needs_retry_hop,
+            state_machine_allowed_edges_for_current_stage=(
+                allowed_from_current))
     await db.integration_inbox.update_one({"id": row["id"]}, p2)
 
 
@@ -714,12 +729,17 @@ async def reprocess_one_order(
 
     # ── 6. Reset row to a worker-drainable stage ────────────────────
     resume_stage = _resume_target_for(row, force_full=True)
+    _current_stage = row.get("pipeline_stage")
+    _qid_current = row.get("qoyod_invoice_id")
+    _has_real_invoice = bool(_qid_current) and not str(
+        _qid_current).startswith(("DRY:", "PREVIEW:"))
+    # Iter-2026-02.rev4/rev5: allow safe-rewind two-hop from either
+    # `INVOICE_CREATED` OR `SKIPPED` when the caller (canary)
+    # explicitly opts in AND there is no real Qoyod invoice_id yet.
     _permit_partial_ic = (
         allow_reset_from_partial_invoice_created
-        and row.get("pipeline_stage") == "INVOICE_CREATED"
-        and not (row.get("qoyod_invoice_id")
-                 and not str(row.get("qoyod_invoice_id")).startswith(
-                     ("DRY:", "PREVIEW:"))))
+        and _current_stage in ("INVOICE_CREATED", "SKIPPED")
+        and not _has_real_invoice)
     await _reset_row_to_stage(
         db, row, resume_stage=resume_stage, actor=actor,
         permit_partial_invoice_created=_permit_partial_ic)

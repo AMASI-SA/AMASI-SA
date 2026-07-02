@@ -687,6 +687,15 @@ async def execute_canary_live_send(
             allow_reset_from_partial_invoice_created=(
                 _allow_partial_reset))
     except Exception as e:
+        # Extract structured OneShotRefused.extra for diagnostics
+        # (attributes may include: current_stage, resume_stage,
+        # reset_path_attempted, permit_partial_invoice_created,
+        # needs_retry_hop, state_machine_allowed_edges_for_current_stage).
+        _extra = {}
+        try:
+            _extra = getattr(e, "extra", None) or {}
+        except Exception:
+            _extra = {}
         await _write_audit(
             db, attempt_id=attempt_id,
             phase="pipeline_exception", status="error",
@@ -703,6 +712,13 @@ async def execute_canary_live_send(
                 APPROVAL_PHRASE_TEMPLATE,
             "selected_trace_id":             selected_trace_id,
             "selection_debug":               selection_debug,
+            "allow_reset_from_partial_invoice_created":
+                _allow_partial_reset,
+            "one_shot_refused_extra":        _extra,
+            # Convenience alias for the ONE field the operator asked
+            # for most: what path did the reset attempt?
+            "reset_path_attempted":
+                _extra.get("reset_path_attempted"),
         }
 
     await _write_audit(
