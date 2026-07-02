@@ -3085,6 +3085,140 @@ class TestUnderDeliveryManualCanary:
         assert mock_pipe.call_count == 0
 
 
+# ── Iter-2026-02.rev12 — already_sent counts REAL Qoyod ids only ──
+# Production regression: canary reached pipeline but `business_rules`
+# returned SKIP_ALREADY_SENT because a stale `qoyod_invoices` row
+# carried status="sent" alongside a DRY:invoice:* sentinel id. Fix:
+# both already_sent gates (business_rules pre-check + preflight
+# idempotency) now IGNORE non-real ids (None / DRY: / PREVIEW:).
+@pytest.mark.asyncio
+class TestAlreadySentIgnoresNonRealIds:
+
+    async def test_pipeline_already_sent_ignores_dry_id(self):
+        """The pipeline layer MUST filter out DRY:/PREVIEW: invoice
+        ids BEFORE passing `existing_invoice_row` to
+        `business_rules.evaluate`. Proof: stub the evaluator and
+        assert it receives `existing_invoice_row=None` even when
+        `qoyod_invoices` has a stale DRY row."""
+        from unittest.mock import MagicMock
+        from integrations.qoyod import pipeline as pmod
+        from integrations.qoyod.business_rules import RulesDecision
+
+        captured: dict = {}
+
+        def _spy_evaluate(dto, settings, *, existing_invoice_row=None):
+            captured["existing_invoice_row"] = existing_invoice_row
+            # Return "not eligible" so pipeline exits early after
+            # we've captured what business_rules saw.
+            return RulesDecision(
+                eligible=False, reason="not_in_trigger_statuses",
+                invoice_date=None, invoice_date_source="none")
+
+        # Stub DTO — dodge Pydantic construction; the pipeline only
+        # reads `.order_id` before calling evaluate_rules.
+        dto_stub = SimpleNamespace(order_id="OID-269629400")
+
+        row = {"id": "row-1", "user_id": "main",
+               "pipeline_stage": "NORMALIZED",
+               "trace_id": "trace-x",
+               "canonical_payload": {"order_id": "OID-269629400"}}
+
+        class _Coll:
+            def __init__(self, docs):
+                self._docs = docs
+            async def find_one(self, q, projection=None):
+                for d in self._docs:
+                    if all(d.get(k) == v for k, v in q.items()):
+                        return {k: v for k, v in d.items()}
+                return None
+
+        # STALE dry-run invoice: status="sent" BUT DRY invoice_id.
+        db = MagicMock()
+        db.qoyod_invoices = _Coll([{
+            "user_id": "main",
+            "salla_order_id": "OID-269629400",
+            "status": "sent",
+            "qoyod_invoice_id": "DRY:invoice:stale-xxx",
+        }])
+        db.qoyod_settings = _Coll([{"user_id": "main"}])
+
+        with patch.object(pmod, "SalesOrderDTO",
+                          return_value=dto_stub), \
+             patch.object(pmod, "evaluate_rules",
+                          side_effect=_spy_evaluate), \
+             patch.object(pmod, "_apply", new=AsyncMock()):
+            await pmod.process_normalized_row(db, row)
+        # The stale DRY-id row was FILTERED OUT before business_rules
+        # even ran — the guard correctly ignored it.
+        assert captured["existing_invoice_row"] is None
+
+    async def test_pipeline_already_sent_ignores_preview_id(self):
+        """Direct proof of the helper contract used by the fix
+        (`_is_real_invoice_id`) — None / DRY: / PREVIEW: are all
+        classified as NOT-real, so already_sent will not fire."""
+        from integrations.qoyod.eligible_orders import (
+            _is_real_invoice_id,
+        )
+        assert _is_real_invoice_id(None) is False
+        assert _is_real_invoice_id("") is False
+        assert _is_real_invoice_id("DRY:invoice:abc") is False
+        assert _is_real_invoice_id("PREVIEW:invoice:xyz") is False
+        assert _is_real_invoice_id("999123") is True
+        assert _is_real_invoice_id("inv_abcdef") is True
+
+    async def test_pipeline_already_sent_still_fires_for_real_id(
+            self):
+        """Sanity: a REAL قيود invoice id with status='sent' MUST
+        still pass through to business_rules — the fix must not
+        weaken idempotency for legitimate prior sends."""
+        from unittest.mock import MagicMock
+        from integrations.qoyod import pipeline as pmod
+        from integrations.qoyod.business_rules import RulesDecision
+
+        captured: dict = {}
+
+        def _spy_evaluate(dto, settings, *, existing_invoice_row=None):
+            captured["existing_invoice_row"] = existing_invoice_row
+            return RulesDecision(
+                eligible=False, reason="already_sent",
+                invoice_date=None, invoice_date_source="none")
+
+        dto_stub = SimpleNamespace(order_id="OID-269629400")
+        row = {"id": "row-1", "user_id": "main",
+               "pipeline_stage": "NORMALIZED",
+               "trace_id": "trace-x",
+               "canonical_payload": {"order_id": "OID-269629400"}}
+
+        class _Coll:
+            def __init__(self, docs):
+                self._docs = docs
+            async def find_one(self, q, projection=None):
+                for d in self._docs:
+                    if all(d.get(k) == v for k, v in q.items()):
+                        return {k: v for k, v in d.items()}
+                return None
+
+        db = MagicMock()
+        db.qoyod_invoices = _Coll([{
+            "user_id": "main",
+            "salla_order_id": "OID-269629400",
+            "status": "sent",
+            "qoyod_invoice_id": "999123",   # REAL قيود id
+        }])
+        db.qoyod_settings = _Coll([{"user_id": "main"}])
+
+        with patch.object(pmod, "SalesOrderDTO",
+                          return_value=dto_stub), \
+             patch.object(pmod, "evaluate_rules",
+                          side_effect=_spy_evaluate), \
+             patch.object(pmod, "_apply", new=AsyncMock()):
+            await pmod.process_normalized_row(db, row)
+        # REAL id → passed through to business_rules.
+        assert captured["existing_invoice_row"] is not None
+        assert captured["existing_invoice_row"].get(
+            "qoyod_invoice_id") == "999123"
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 

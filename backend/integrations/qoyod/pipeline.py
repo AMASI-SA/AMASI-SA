@@ -326,8 +326,19 @@ async def process_normalized_row(
     # decision against `settings.invoice_trigger_statuses`.
     existing = await db.qoyod_invoices.find_one(
         {"user_id": user_id, "salla_order_id": dto.order_id},
-        {"_id": 0, "status": 1},
+        {"_id": 0, "status": 1, "qoyod_invoice_id": 1},
     )
+    # Iter-2026-02.rev12 — already_sent guard applies ONLY when a
+    # REAL قيود invoice id is present. `None`, `DRY:invoice:*`, and
+    # `PREVIEW:invoice:*` sentinels are NOT real sends and MUST NOT
+    # block a first live send. Mirrors `_is_real_invoice_id` used
+    # elsewhere in the codebase (eligible_orders classifier).
+    if existing is not None:
+        from integrations.qoyod.eligible_orders import (
+            _is_real_invoice_id,
+        )
+        if not _is_real_invoice_id(existing.get("qoyod_invoice_id")):
+            existing = None
     decision: RulesDecision = evaluate_rules(
         dto, settings, existing_invoice_row=existing)
     if not decision.eligible:
@@ -591,6 +602,16 @@ async def process_customer_resolved_row(
     existing_invoice = await db.qoyod_invoices.find_one(
         {"user_id": user_id, "salla_order_id": canonical.get("order_id")},
         {"_id": 0, "status": 1, "qoyod_invoice_id": 1})
+    # Iter-2026-02.rev12 — treat DRY:/PREVIEW:/null invoice ids as
+    # "no prior send" for preflight idempotency (`already_sent`
+    # check). Only real قيود ids count.
+    if existing_invoice is not None:
+        from integrations.qoyod.eligible_orders import (
+            _is_real_invoice_id,
+        )
+        if not _is_real_invoice_id(
+                existing_invoice.get("qoyod_invoice_id")):
+            existing_invoice = None
     pf: PreflightResult = preflight_run(
         dto_dict=canonical, settings=settings,
         qoyod_customer_id=qoyod_customer_id,
