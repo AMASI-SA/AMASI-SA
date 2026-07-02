@@ -90,7 +90,24 @@ class _CanaryDryRunSettingsProxy:
     LATEST canary-eligible status — no broader impact."""
     __slots__ = ("_coll",)
 
-    _CANARY_TRIGGER_STATUS_OVERLAY = ("جاري التوصيل",)
+    # Iter-2026-02.rev11 — include BOTH the SPACE form (as Salla /
+    # some tenants store it in `qoyod_settings.invoice_trigger_statuses`)
+    # AND the UNDERSCORE form (which `normalizer._canonical_status`
+    # emits for statuses it doesn't map — see mapping table: `جاري
+    # التوصيل` is NOT mapped, so canonicalization returns
+    # `.replace(" ", "_")` → `"جاري_التوصيل"`, and that is what the
+    # persisted `canonical_payload.order_status` — and therefore
+    # `dto.order_status` — carries into `business_rules.evaluate()`).
+    # Without BOTH forms the overlay widens the trigger list but the
+    # DTO status (underscored) still misses it → business_rules
+    # returns not_in_trigger_statuses → pipeline SKIPPED. Both forms
+    # keep the widening tight (canary status only) while making the
+    # membership check match the DTO's canonical form. The DB row is
+    # NEVER mutated by this overlay.
+    _CANARY_TRIGGER_STATUS_OVERLAY = (
+        "جاري التوصيل",   # space form — matches tenant on-disk lists
+        "جاري_التوصيل",   # underscore form — matches canonicalized DTO
+    )
 
     def __init__(self, real_coll):
         self._coll = real_coll
@@ -942,6 +959,60 @@ async def execute_canary_live_send(
             _selected_manual = bool(_r.get("manual_send_requested"))
             _selected_normalized_status = _r.get("normalized_status")
             break
+
+    # Iter-2026-02.rev11 — SKIPPED diagnostics. When the pipeline
+    # returns SKIPPED (or the raw result signals `ok=false`), read
+    # back the selected inbox row so we can surface the exact
+    # business-rules decision the pipeline persisted. This lets the
+    # operator see WHY the row was skipped and WHICH trigger list
+    # `business_rules.evaluate` compared the DTO status against — the
+    # single most-asked diagnostic when a canary attempt ends at
+    # SKIPPED. Read-only: no writes are performed here.
+    _skipped_diag: dict[str, Any] = {
+        "skip_reason":                            None,
+        "business_rules_eligible":                None,
+        "business_rules_reason":                  None,
+        "manual_send_requested_seen_by_pipeline": _selected_manual,
+        "triggered_by_status":                    None,
+        "invoice_trigger_statuses_seen_by_business_rules":
+            None,
+    }
+    _pipeline_outcome = result.get("outcome") if isinstance(
+        result, dict) else None
+    if _pipeline_outcome == "SKIPPED" or (
+            isinstance(result, dict) and result.get("ok") is False):
+        try:
+            _row_after = await db.integration_inbox.find_one(
+                {"user_id": user_id, "trace_id": selected_trace_id},
+                {"_id": 0})
+            _brd = (_row_after or {}).get(
+                "business_rules_decision") or {}
+            _skipped_diag["business_rules_eligible"] = _brd.get(
+                "eligible")
+            _skipped_diag["business_rules_reason"] = _brd.get(
+                "reason")
+            _skipped_diag["triggered_by_status"] = _brd.get(
+                "triggered_by_status")
+            _skipped_diag["skip_reason"] = (
+                result.get("reason") if isinstance(result, dict)
+                else None) or _brd.get("reason")
+            # The trigger list is not persisted per-row — reconstruct
+            # what business_rules would have seen by reading the
+            # (proxied) settings the pipeline consulted.
+            try:
+                _settings_seen = await canary_db.qoyod_settings.find_one(
+                    {"user_id": user_id}, {"_id": 0}) or {}
+                from integrations.qoyod.eligible_statuses import (
+                    resolve_trigger_statuses,
+                )
+                _skipped_diag[
+                    "invoice_trigger_statuses_seen_by_business_rules"
+                ] = resolve_trigger_statuses(_settings_seen)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
     return {
         "attempt_id":         attempt_id,
         "outcome":            result.get("outcome"),
@@ -960,6 +1031,19 @@ async def execute_canary_live_send(
             selection_debug.get("latest_normalized_status"),
         "selected_normalized_status": _selected_normalized_status,
         "manual_send_requested":      _selected_manual,
+        "skip_reason":
+            _skipped_diag["skip_reason"],
+        "business_rules_eligible":
+            _skipped_diag["business_rules_eligible"],
+        "business_rules_reason":
+            _skipped_diag["business_rules_reason"],
+        "manual_send_requested_seen_by_pipeline":
+            _skipped_diag["manual_send_requested_seen_by_pipeline"],
+        "triggered_by_status":
+            _skipped_diag["triggered_by_status"],
+        "invoice_trigger_statuses_seen_by_business_rules":
+            _skipped_diag[
+                "invoice_trigger_statuses_seen_by_business_rules"],
         "selection_debug":     selection_debug,
         "raw_pipeline_result": result,
     }

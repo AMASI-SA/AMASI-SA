@@ -2832,6 +2832,259 @@ class TestCustomerPreResolveRev10:
         assert mock_pipe.call_count == 0
 
 
+# ── Iter-2026-02.rev11 — SKIPPED diagnostics + under_delivery gate ─
+# Production bug 2026-02.rev11: canary passed all 14 guards, delegated
+# to the pipeline, but the pipeline returned SKIPPED because
+# `business_rules.evaluate` compared `dto.order_status = "جاري_التوصيل"`
+# (underscore — emitted by `_canonical_status` for unmapped statuses)
+# against `qoyod_settings.invoice_trigger_statuses` widened by the
+# canary overlay to include only `"جاري التوصيل"` (space). The two
+# forms didn't match → SKIP_NOT_IN_TRIGGER → SKIPPED. Fix: the
+# overlay now widens with BOTH the space AND underscore forms.
+@pytest.mark.asyncio
+class TestUnderDeliveryManualCanary:
+
+    def _under_delivery_row(self):
+        row = _canary_row()
+        # Salla tenants store statuses in either form; the normalizer
+        # converts unmapped statuses via `.replace(" ", "_")`. So the
+        # canonical_payload post-normalization carries the UNDERSCORE
+        # form. Use that here — this is what the DTO / business_rules
+        # will see in Production.
+        row["canonical_payload"]["status"] = "جاري_التوصيل"
+        row["canonical_payload"]["order_status"] = "جاري_التوصيل"
+        row["received_at"] = "2026-07-06T12:00:00+00:00"
+        row["trace_id"] = "trace-under-delivery-abc"
+        return row
+
+    async def test_overlay_widens_both_space_and_underscore_forms(
+            self):
+        """The scoped settings proxy MUST widen the trigger list with
+        BOTH forms of `جاري التوصيل` — the tenant's on-disk form
+        (space) is preserved and the DTO's canonical form
+        (underscore) is added — so `business_rules.evaluate` matches
+        either representation."""
+        from integrations.qoyod.canary_live_send import (
+            _CanaryDryRunSettingsProxy,
+        )
+        base_settings = [{"user_id": "main",
+                          "selective_live_send_enabled": False,
+                          "production_writes_locked":    True,
+                          "invoice_trigger_statuses":
+                              ["completed", "تم التنفيذ"]}]
+        real_coll = _FakeColl(base_settings)
+        proxy = _CanaryDryRunSettingsProxy(real_coll)
+        overlaid = await proxy.find_one({"user_id": "main"})
+        assert "جاري التوصيل" in overlaid["invoice_trigger_statuses"]
+        assert "جاري_التوصيل" in overlaid["invoice_trigger_statuses"]
+        # Tenant's original entries preserved (defence in depth).
+        assert "completed" in overlaid["invoice_trigger_statuses"]
+        assert "تم التنفيذ" in overlaid["invoice_trigger_statuses"]
+        # DB settings unchanged on disk.
+        assert real_coll._docs[0]["invoice_trigger_statuses"] \
+            == ["completed", "تم التنفيذ"]
+
+    async def test_business_rules_eligible_via_overlay_for_under_delivery(
+            self):
+        """END-TO-END: build a real DTO with canonical status
+        `جاري_التوصيل` (underscore — the DTO's canonical form), run
+        `business_rules.evaluate` against the OVERLAID settings. It
+        MUST return eligible=True — otherwise the pipeline would
+        SKIPPED. This is the exact production regression."""
+        from integrations.qoyod.canary_live_send import (
+            _CanaryDryRunSettingsProxy,
+        )
+        from integrations.qoyod.business_rules import evaluate
+
+        # Real overlaid settings.
+        base_settings = [{"user_id": "main",
+                          "selective_live_send_enabled": False,
+                          "production_writes_locked":    True,
+                          "invoice_trigger_statuses":
+                              ["completed", "تم التنفيذ"]}]
+        proxy = _CanaryDryRunSettingsProxy(_FakeColl(base_settings))
+        overlaid = await proxy.find_one({"user_id": "main"})
+
+        # Minimal DTO shape for evaluate() — attribute access on
+        # order_status / order_status_native / completed_at /
+        # order_date / paid_at.
+        dto = SimpleNamespace(
+            order_status="جاري_التوصيل",
+            order_status_native="جاري التوصيل",
+            completed_at=None,
+            order_date=None,
+            paid_at=None,
+        )
+        decision = evaluate(dto, overlaid, existing_invoice_row=None)
+        assert decision.eligible is True, decision.to_log_dict()
+        assert decision.reason == "eligible"
+        assert decision.triggered_by_status == "جاري_التوصيل"
+
+    async def test_delivered_status_still_refused_by_canary(self):
+        """`تم التوصيل` / `delivered` MUST NOT get the manual-canary
+        override. Only `جاري التوصيل` (in either form) is allowed at
+        Guard 4 for this canary."""
+        row = _canary_row()
+        row["canonical_payload"]["status"] = "تم التوصيل"
+        row["received_at"] = "2026-07-07T12:00:00+00:00"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED", r
+        # No Qoyod-touching call attempted.
+        assert mock_pipe.call_count == 0
+
+    async def test_non_canary_order_never_gets_overlay(self):
+        """A different order number (even with `جاري_التوصيل`) must
+        refuse at Guard 2 — the manual override is 269629400 only."""
+        row = self._under_delivery_row()
+        row["salla_order_number"] = "999999999"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number="999999999",
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED", r
+        assert r["guard_no"] == 2
+        assert mock_pipe.call_count == 0
+
+    async def test_pipeline_receives_widened_trigger_list_for_under_delivery(
+            self):
+        """The pipeline delegate is called with a `db` proxy whose
+        `qoyod_settings.find_one()` yields the widened list. Simulate
+        the pipeline reading settings and check the widening carried
+        through end-to-end."""
+        db = _build_db(row=self._under_delivery_row())
+        seen: dict = {}
+
+        async def _fake_reprocess(db_arg, **kw):
+            s = await db_arg.qoyod_settings.find_one(
+                {"user_id": "main"})
+            seen["invoice_trigger_statuses"] = s.get(
+                "invoice_trigger_statuses")
+            seen["selective_live_send_enabled"] = s.get(
+                "selective_live_send_enabled")
+            seen["production_writes_locked"] = s.get(
+                "production_writes_locked")
+            return {
+                "outcome":            "SENT",
+                "qoyod_invoice_id":   "INV-UD",
+                "qoyod_customer_id":  "12345",
+                "qoyod_receipt_id":   "RCPT-UD",
+            }
+
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(side_effect=_fake_reprocess)):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT", r
+        assert "جاري التوصيل" in seen["invoice_trigger_statuses"]
+        assert "جاري_التوصيل" in seen["invoice_trigger_statuses"]
+        # Scoped open-gate applied via overlay (never on-disk).
+        assert seen["selective_live_send_enabled"] is True
+        assert seen["production_writes_locked"]    is False
+
+    async def test_db_settings_untouched_after_under_delivery_canary(
+            self):
+        db = _build_db(row=self._under_delivery_row())
+        before = [dict(d) for d in db.qoyod_settings._docs]
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(return_value={
+                       "outcome":            "SENT",
+                       "qoyod_invoice_id":   "INV-DBX",
+                       "qoyod_customer_id":  "12345",
+                       "qoyod_receipt_id":   "RCPT-DBX",
+                   })):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SENT"
+        after = list(db.qoyod_settings._docs)
+        assert after == before
+        # Explicit: on-disk fail-closed values untouched.
+        assert after[0]["selective_live_send_enabled"] is False
+        assert after[0]["production_writes_locked"]    is True
+
+    async def test_skipped_response_carries_business_rules_diagnostics(
+            self):
+        """When the pipeline returns SKIPPED, the canary response
+        MUST surface the exact diagnostic keys the operator asked
+        for: skip_reason, business_rules_eligible,
+        business_rules_reason, manual_send_requested_seen_by_pipeline,
+        triggered_by_status,
+        invoice_trigger_statuses_seen_by_business_rules."""
+        row = self._under_delivery_row()
+        db = _build_db(row=row)
+
+        async def _fake_reprocess(db_arg, **kw):
+            # Simulate pipeline persisting a business_rules_decision
+            # on the inbox row before returning SKIPPED.
+            await db_arg.integration_inbox.update_one(
+                {"user_id": "main", "trace_id": kw["trace_id"]},
+                {"$set": {
+                    "business_rules_decision": {
+                        "eligible": False,
+                        "reason":   "not_in_trigger_statuses",
+                        "triggered_by_status": None,
+                        "invoice_date": None,
+                    },
+                    "pipeline_stage": "SKIPPED",
+                }})
+            return {
+                "ok":              False,
+                "outcome":         "SKIPPED",
+                "reason":          "not_in_trigger_statuses",
+                "failed_at_stage": "SKIPPED",
+                "trace_id":        kw["trace_id"],
+            }
+
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock(side_effect=_fake_reprocess)):
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "SKIPPED", r
+        assert r["skip_reason"] == "not_in_trigger_statuses"
+        assert r["business_rules_eligible"] is False
+        assert r["business_rules_reason"] == "not_in_trigger_statuses"
+        # Manual-send flag surfaced through to the response — the
+        # pipeline "saw" the manual intent from the canary layer.
+        assert r["manual_send_requested_seen_by_pipeline"] is True
+        # Overlay carried the widened list even for the SKIPPED path
+        # (so the operator can debug WHY it still skipped).
+        _seen = r["invoice_trigger_statuses_seen_by_business_rules"]
+        assert _seen is not None
+        assert "جاري_التوصيل" in _seen
+        assert "جاري التوصيل" in _seen
+
+    async def test_no_qoyod_call_when_guard_fails_for_under_delivery(
+            self):
+        """If any pre-pipeline guard refuses the row (e.g. bad
+        phone), `reprocess_one_order` MUST NOT be invoked."""
+        row = self._under_delivery_row()
+        # Break phone → Guard 8 refuses BEFORE any pipeline call.
+        row["canonical_payload"]["customer"]["mobile"] = "+966000000000"
+        db = _build_db(row=row)
+        with patch("integrations.qoyod.one_shot_reprocess."
+                   "reprocess_one_order",
+                   new=AsyncMock()) as mock_pipe:
+            r = await execute_canary_live_send(
+                db, order_number=CANARY_ORDER_NUMBER,
+                approval_phrase=CANARY_APPROVAL_PHRASE)
+        assert r["outcome"] == "REFUSED"
+        assert mock_pipe.call_count == 0
+
+
 # ── Static / lint-style invariants ─────────────────────────────────
 class TestStaticInvariants:
 
