@@ -25,7 +25,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
@@ -352,6 +352,21 @@ class TestConnectionResponse(BaseModel):
 
 # ─────────────────────────────────────────────────────────────────────
 # Router factory
+# ─────────────────────────────────────────────────────────────────────
+# Iter-2026-02.rev14 — Module-scope Pydantic body models.
+# FastAPI's type introspection mis-classifies models defined INSIDE
+# `make_qoyod_router()` (function scope) as query parameters — the
+# resulting 422 reports `{"loc": ["query", "body"]}` even when the
+# caller sent a valid JSON body. Declaring them at module scope
+# (with an explicit `Body(...)` binding on the handler) resolves
+# the ForwardRef cleanly and makes the endpoints usable.
+# ─────────────────────────────────────────────────────────────────────
+class RetryPaymentOnlyBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    salla_order_number: str = Field(..., min_length=1, max_length=64)
+    confirm_token:      str = Field(..., min_length=1, max_length=128)
+
+
 # ─────────────────────────────────────────────────────────────────────
 def make_qoyod_router(db, current_user) -> APIRouter:
     router = APIRouter(
@@ -2636,13 +2651,22 @@ def make_qoyod_router(db, current_user) -> APIRouter:
 
     @router.post("/admin/retry-payment-only")
     async def admin_retry_payment_only(
-        body: _RetryPaymentBody, user=Depends(current_user),
+        body: RetryPaymentOnlyBody = Body(...),
+        user=Depends(current_user),
     ):
         """Iter-290h.5 — Surgical retry of `POST /invoice_payments`
         for an existing قيود invoice. Touches NOTHING else (no
         customer/products/invoice/receipt creation, no full pipeline
         re-run). Carries a structured diagnostic block — including
         the LIVE قيود verdict, not a stale one from a previous run.
+
+        Iter-2026-02.rev14 — `RetryPaymentOnlyBody` is defined at
+        MODULE scope (not inside this factory) so FastAPI resolves
+        the ForwardRef and binds it as a JSON body. Declaring the
+        model inside the factory made FastAPI mis-classify it as a
+        query parameter and return 422 `{"loc": ["query", "body"]}`.
+        The `= Body(...)` marker is defensive; the module-scope
+        model is the primary fix.
 
         Confirmation token: `RETRY-PAYMENT-<salla_order_number>`.
         """
