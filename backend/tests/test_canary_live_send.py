@@ -196,12 +196,6 @@ class TestGuardsRefuseCorrectly:
         assert r["outcome"] == "REFUSED"
         assert r["guard_no"] == 9
 
-    async def test_guard10_totals_invalid(self):
-        # Break the totals so Mezan-VAT-guard rejects.
-        with patch("integrations.qoyod.canary_live_send"
-                   "._run_guards.__globals__") as _:
-            pass   # sentinel — real patch below via monkeypatch fn.
-
     async def test_guard10_totals_invalid_via_monkeypatch(
             self, monkeypatch):
         from integrations.qoyod import canary_live_send as clv
