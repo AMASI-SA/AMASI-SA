@@ -400,6 +400,14 @@ class ExpandSelectiveAutoSendBody(BaseModel):
     add_methods:   list[str] = Field(..., min_length=1, max_length=16)
 
 
+class ForceReprocessDryBody(BaseModel):
+    """Iter-2026-02.rev18 — Force-reprocess a row stuck at DRY."""
+    model_config = ConfigDict(extra="forbid")
+    salla_order_number: str = Field(..., min_length=1, max_length=64)
+    confirm_token:      str = Field(..., min_length=1, max_length=128)
+    trace_id:  Optional[str] = Field(None, max_length=64)
+
+
 # ─────────────────────────────────────────────────────────────────────
 def make_qoyod_router(db, current_user) -> APIRouter:
     router = APIRouter(
@@ -2819,6 +2827,34 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         except SelectiveAutoSendRefused as exc:
             return {"ok": False, "outcome": "REFUSED",
                     "code": exc.code, "detail": exc.human}
+
+    # ── Iter-2026-02.rev18 — Force-reprocess a DRY-run row ──────────
+    # Dedicated recovery endpoint for rows stuck at INVOICE_CREATED
+    # with DRY:invoice:* sentinels. Refuses when a REAL قيود
+    # invoice_id exists anywhere for the order. Clears DRY IDs,
+    # rewinds stage NORMALIZED, and re-runs the pipeline inline so
+    # the Selective Auto-Send Gate + scoped live client (rev17) fire.
+    @router.post("/admin/force-reprocess-dry")
+    async def admin_force_reprocess_dry(
+        body: ForceReprocessDryBody = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.force_reprocess_dry import (
+            force_reprocess_dry_row, ForceReprocessRefused,
+        )
+        tenant = _tenant_id(user)
+        actor  = (getattr(user, "email", None) or "operator")
+        try:
+            return await force_reprocess_dry_row(
+                db, user_id=tenant,
+                salla_order_number=body.salla_order_number,
+                trace_id=body.trace_id,
+                confirm_token=body.confirm_token,
+                actor=str(actor))
+        except ForceReprocessRefused as exc:
+            return {"ok": False, "outcome": "REFUSED",
+                    "code": exc.code, "detail": str(exc),
+                    **exc.extra}
 
     # ── Iter-290h.7 — Payment-method field probe (read-only) ────────
     class _PaymentMethodProbeBody(BaseModel):
