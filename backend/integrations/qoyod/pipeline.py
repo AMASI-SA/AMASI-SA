@@ -559,17 +559,35 @@ async def _get_api_client(
 ):
     """Return `(client, is_dry)`.
 
-    Iter-2026-02.rev16 — When `scoped_write_allowance=True` the
-    real client is constructed with `write_lock_enabled=False` so
-    Selective Auto-Send (row-eligible after the gate) can POST
-    despite `production_writes_locked=true` on disk. The DB flag is
-    NEVER modified — this is a per-call bypass keyed on the gate's
-    approval of THIS SPECIFIC ROW.
+    Iter-2026-02.rev16 → rev17 — When `scoped_write_allowance=True`:
+      • BOTH `write_lock_enabled` AND `dry_run_mode` are bypassed
+        for THIS single call. The pipeline gets a REAL live client
+        that WILL POST to قيود.
+      • The DB `production_writes_locked` and `dry_run_mode` flags
+        remain UNCHANGED on disk. This is a per-row bypass ONLY,
+        keyed on the Selective Auto-Send gate's PASS decision.
+
+    Without scoped_write_allowance: legacy semantics preserved —
+    a DryRunQoyodClient is returned when the tenant has
+    `dry_run_mode=True` on their settings.
 
     Iter-294 — Real clients always carry the Global Write Lock snapshot
     so writes are refused at the api_client layer when
     `production_writes_locked=True`.
     """
+    # rev17 — scoped allowance short-circuits BOTH dry_run and
+    # write_lock. Without this the gate could pass but the pipeline
+    # would still resolve to DryRunQoyodClient → no real POST.
+    if scoped_write_allowance:
+        key = await get_api_key(db, user_id)
+        if not key:
+            return None, False
+        return QoyodAPIClient(
+            key,
+            db=db, user_id=user_id,
+            write_lock_enabled=False,
+        ), False
+
     if is_dry_run_mode(settings):
         return DryRunQoyodClient(), True
     key = await get_api_key(db, user_id)
@@ -578,9 +596,7 @@ async def _get_api_client(
     return QoyodAPIClient(
         key,
         db=db, user_id=user_id,
-        write_lock_enabled=(
-            False if scoped_write_allowance
-            else is_locked(settings)),
+        write_lock_enabled=is_locked(settings),
     ), False
 
 
