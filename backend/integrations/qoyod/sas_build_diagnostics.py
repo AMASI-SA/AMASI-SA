@@ -267,6 +267,22 @@ async def row_diagnostics(db, trace_id: str) -> dict:
     qid      = row.get("qoyod_invoice_id")
     is_dry   = isinstance(qid, str) and qid.startswith("DRY:")
 
+    # rev26 — Control-flow invariant checker.
+    # If SAS gate rejected the row (`eligible=false`) yet the row
+    # advanced past SKIPPED into any pipeline stage that touches
+    # customers / products / invoices / payments → hard violation.
+    ADVANCED_STAGES = {
+        "RULES_APPLIED", "CUSTOMER_RESOLVED", "PRODUCT_RESOLVED",
+        "INVOICE_CREATED", "INVOICE_PAYMENT_CREATED",
+        "PAYMENT_LINK_FAILED", "COMPLETED",
+        "LOCKED_AWAITING_APPROVAL", "PARTIAL_FAILURE",
+    }
+    cur_stage = row.get("pipeline_stage")
+    sas_rejected = (
+        isinstance(sas_gate, dict) and sas_gate.get("eligible") is False)
+    control_flow_violation = bool(
+        sas_rejected and cur_stage in ADVANCED_STAGES)
+
     return {
         "ok":                            True,
         "found":                         True,
@@ -285,5 +301,10 @@ async def row_diagnostics(db, trace_id: str) -> dict:
             "qoyod_invoice_id_is_real":  bool(
                 qid and isinstance(qid, str)
                 and not qid.startswith(("DRY:", "PREVIEW:"))),
+            # rev26 — control-flow invariant.
+            "control_flow_violation":    control_flow_violation,
+            "violation_reason":          (
+                "SAS rejected but row advanced past SKIPPED"
+                if control_flow_violation else None),
         },
     }

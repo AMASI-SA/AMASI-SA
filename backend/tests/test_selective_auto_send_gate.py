@@ -566,7 +566,8 @@ async def test_pipeline_skips_at_normalized_when_gate_fails():
                       side_effect=business_rules_called), \
          patch.object(pmod, "_get_api_client",
                       new=AsyncMock()) as get_client, \
-         patch.object(pmod, "_apply", new=AsyncMock()):
+         patch.object(pmod, "_apply", new=AsyncMock()), \
+         patch.object(pmod, "_apply_atomic", new=AsyncMock()):
         out = await pmod.process_normalized_row(db, row)
 
     assert out["outcome"] == "SKIPPED"

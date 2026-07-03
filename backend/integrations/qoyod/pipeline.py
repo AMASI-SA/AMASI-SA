@@ -108,6 +108,81 @@ async def _apply(db, row_id: str, patch: dict) -> None:
     await db.integration_inbox.update_one({"id": row_id}, patch)
 
 
+class _StaleStageError(Exception):
+    """Iter-2026-02.rev26 — Raised (internally) when an atomic
+    compare-and-set on `pipeline_stage` finds the row is NO LONGER
+    at the stage the pipeline expects. This is how we prevent a
+    stale in-memory row snapshot from advancing past SKIPPED /
+    LOCKED_AWAITING_APPROVAL / any terminal.
+    """
+    def __init__(self, row_id: str, expected_from: str, actual: Optional[str]):
+        self.row_id        = row_id
+        self.expected_from = expected_from
+        self.actual        = actual
+        super().__init__(
+            f"stale stage: row {row_id!r} expected={expected_from!r} "
+            f"actual_in_db={actual!r}")
+
+
+async def _apply_atomic(
+    db, row_id: str, patch: dict,
+    *,
+    expected_from_stage: str,
+) -> None:
+    """Iter-2026-02.rev26 — Compare-And-Set on `pipeline_stage`.
+
+    ONLY updates the row if `pipeline_stage == expected_from_stage`
+    in the DB **at the moment of write**. If another handler already
+    transitioned the row (e.g. SAS gate wrote SKIPPED, or a concurrent
+    worker moved it), matched_count is 0 → we raise `_StaleStageError`
+    so the pipeline aborts LOUDLY without any further side-effect.
+
+    This is the atomic guarantee the user demanded after order
+    270212453 advanced past SAS-rejected SKIPPED into INVOICE_CREATED.
+    """
+    res = await db.integration_inbox.update_one(
+        {"id": row_id, "pipeline_stage": expected_from_stage},
+        patch,
+    )
+    matched = getattr(res, "matched_count", None)
+    if matched is None:
+        matched = 1  # fake db in tests may not expose matched_count
+    if matched == 0:
+        # Re-read the actual stage for diagnostics.
+        cur = await db.integration_inbox.find_one(
+            {"id": row_id}, {"pipeline_stage": 1, "_id": 0})
+        actual = (cur or {}).get("pipeline_stage")
+        raise _StaleStageError(row_id, expected_from_stage, actual)
+
+
+async def _assert_sas_not_rejected(db, row_id: str) -> None:
+    """Iter-2026-02.rev26 — Hard guard called BEFORE every Qoyod
+    side-effect (customer create, product create, invoice build,
+    payment build). Reads the row's persisted
+    `selective_auto_send_gate` field. If `eligible=false`, raises
+    `_StaleStageError` so we never emit a Qoyod POST (real or dry)
+    for a row the SAS gate already rejected.
+
+    Defense-in-depth: even if the compare-and-set on pipeline_stage
+    misses a corner-case, this guard prevents any Qoyod-side effect
+    on rejected rows.
+    """
+    doc = await db.integration_inbox.find_one(
+        {"id": row_id},
+        {"selective_auto_send_gate": 1, "pipeline_stage": 1, "_id": 0},
+    )
+    if not doc:
+        return  # nothing to guard against
+    sas = doc.get("selective_auto_send_gate") or {}
+    if isinstance(sas, dict) and sas.get("eligible") is False:
+        raise _StaleStageError(
+            row_id,
+            expected_from="sas_gate_eligible=true",
+            actual=(f"sas_gate_eligible=false "
+                    f"(reason={sas.get('reason')!r}, "
+                    f"current_stage={doc.get('pipeline_stage')!r})"))
+
+
 def _writes_blocked(api_client: Any, settings: dict) -> bool:
     """Iter-293.4-rev5 — Single source of truth for the pipeline's
     PRE-flight lock check.
@@ -371,7 +446,25 @@ async def process_normalized_row(
             )
             patch.setdefault("$set", {})["selective_auto_send_gate"] = \
                 _sas.to_log_dict()
-            await _apply(db, row["id"], patch)
+            # rev26 — atomic CAS: only writes SKIPPED if row is still
+            # at NORMALIZED. If another handler already moved it,
+            # the pipeline aborts loudly (no further side-effect).
+            try:
+                await _apply_atomic(
+                    db, row["id"], patch,
+                    expected_from_stage="NORMALIZED")
+            except _StaleStageError as e:
+                logger.warning(
+                    "sas_reject_stale_stage row_id=%s trace_id=%s %s",
+                    row.get("id"), trace_id, e)
+                return {
+                    "row_id":   row["id"],
+                    "outcome":  "STALE_STAGE_ABORT",
+                    "reason":   "row_stage_changed_before_sas_reject_write",
+                    "expected": "NORMALIZED",
+                    "actual":   e.actual,
+                    "trace_id": trace_id,
+                }
             return {
                 "row_id":   row["id"],
                 "outcome":  "SKIPPED",
@@ -512,6 +605,23 @@ async def process_normalized_row(
     # ordering). We now know the order is ELIGIBLE — proceed with
     # RULES_APPLIED transition and the rest of the pipeline.
 
+    # rev26 — Hard guard: refuse to advance past NORMALIZED if the
+    # SAS gate already rejected this row (defense-in-depth against
+    # any code path that might have bypassed the earlier check).
+    try:
+        await _assert_sas_not_rejected(db, row["id"])
+    except _StaleStageError as e:
+        logger.warning(
+            "sas_reject_guard_at_rules_applied row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "STALE_STAGE_ABORT",
+            "reason":   "sas_gate_rejected_row_no_further_side_effects",
+            "detail":   str(e),
+            "trace_id": trace_id,
+        }
+
     # ── NORMALIZED → RULES_APPLIED ──────────────────────────────────
     patch = transition(
         from_stage="NORMALIZED", to_stage="RULES_APPLIED",
@@ -521,9 +631,42 @@ async def process_normalized_row(
     )
     patch.setdefault("$set", {})["business_rules_decision"] = \
         decision.to_log_dict()
-    await _apply(db, row["id"], patch)
+    # rev26 — atomic CAS on pipeline_stage=NORMALIZED. If the row
+    # was already moved to SKIPPED / LOCKED_* by another handler,
+    # this raises and the pipeline aborts without touching Qoyod.
+    try:
+        await _apply_atomic(
+            db, row["id"], patch,
+            expected_from_stage="NORMALIZED")
+    except _StaleStageError as e:
+        logger.warning(
+            "rules_applied_stale_stage row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "STALE_STAGE_ABORT",
+            "reason":   "row_stage_changed_before_rules_applied_write",
+            "expected": "NORMALIZED",
+            "actual":   e.actual,
+            "trace_id": trace_id,
+        }
 
     # ── RULES_APPLIED → CUSTOMER_RESOLVED ───────────────────────────
+    # rev26 — Second SAS guard just before the FIRST Qoyod side-effect
+    # (customer create). Defense-in-depth against any bypass path.
+    try:
+        await _assert_sas_not_rejected(db, row["id"])
+    except _StaleStageError as e:
+        logger.warning(
+            "sas_reject_guard_at_customer_resolver row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "STALE_STAGE_ABORT",
+            "reason":   "sas_gate_rejected_row_before_customer_resolver",
+            "detail":   str(e),
+            "trace_id": trace_id,
+        }
     res: ResolutionResult = await resolve_customer(
         db, user_id, dto.customer,
         trace_id=trace_id,
@@ -748,6 +891,22 @@ async def process_customer_resolved_row(
                     "reason": "credentials_missing"}
 
     # ── 4b PRODUCTS ─────────────────────────────────────────────────
+    # rev26 — SAS guard before ANY Qoyod side-effect at this stage
+    # (product create/lookup). Refuses to touch Qoyod for a row whose
+    # SAS gate decision is `eligible=false`.
+    try:
+        await _assert_sas_not_rejected(db, row["id"])
+    except _StaleStageError as e:
+        logger.warning(
+            "sas_reject_guard_at_products row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "STALE_STAGE_ABORT",
+            "reason":   "sas_gate_rejected_row_before_product_resolver",
+            "detail":   str(e),
+            "trace_id": trace_id,
+        }
     prod_res: ProductsResolutionResult = await resolve_products(
         db, user_id, canonical.get("items") or [], settings,
         trace_id=trace_id, api_client=api_client)
@@ -809,6 +968,22 @@ async def process_customer_resolved_row(
                 "preflight": pf.to_log_dict()}
 
     # ── 4c INVOICE — build payload, snapshot, POST ──────────────────
+    # rev26 — SAS guard before invoice payload build. This is critical
+    # even for DRY-RUN because dry-run still generates DRY:invoice:*
+    # ids that clutter the audit trail on rejected rows.
+    try:
+        await _assert_sas_not_rejected(db, row["id"])
+    except _StaleStageError as e:
+        logger.warning(
+            "sas_reject_guard_at_invoice_build row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "STALE_STAGE_ABORT",
+            "reason":   "sas_gate_rejected_row_before_invoice_build",
+            "detail":   str(e),
+            "trace_id": trace_id,
+        }
     # Reconstruct datetime from ISO so the payload builder gets a real obj.
     from datetime import datetime
     inv_date_iso = (decision or {}).get("invoice_date")
@@ -1531,6 +1706,20 @@ async def process_customer_resolved_row(
                 "dry_run": is_dry,
                 "qoyod_invoice_id": qoyod_invoice_id}
 
+    # rev26 — SAS guard before payment payload build (final defense).
+    try:
+        await _assert_sas_not_rejected(db, row["id"])
+    except _StaleStageError as e:
+        logger.warning(
+            "sas_reject_guard_at_payment_build row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "STALE_STAGE_ABORT",
+            "reason":   "sas_gate_rejected_row_before_payment_build",
+            "detail":   str(e),
+            "trace_id": trace_id,
+        }
     payment_payload, idem_fingerprint = build_invoice_payment_payload(
         qoyod_invoice_id=qoyod_invoice_id,
         dto_dict=canonical, invoice_date=inv_date, settings=settings)
