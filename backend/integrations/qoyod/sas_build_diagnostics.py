@@ -84,6 +84,12 @@ REQUIRED_MARKERS: dict[str, str] = {
         "rev29 — Atomic CAS INVOICE_CREATED → INVOICE_PAYMENT_CREATED",
     "rev29_atomic_completed":
         "rev29 — Atomic CAS on final COMPLETED transition",
+    # rev29b — Dry-run wording enforcement. If absent, stage_history
+    # may still contain "customer created in Qoyod" / "product(s)
+    # created" / "invoice created" for dry-run rows — misleading
+    # audit signal.
+    "rev29b_dry_run_wording":
+        "rev29b — Dry-run wording enforcement",
 }
 
 
@@ -402,6 +408,96 @@ async def row_diagnostics(db, trace_id: str) -> dict:
                 f"({dup_key[0]}→{dup_key[1]} occurred "
                 f"{seen[dup_key]}× in stage_history)")
 
+    # ── rev29b — Dry-run wording violation invariant ────────────────
+    # An audit trail with `DRY:` ids MUST NEVER carry the strings
+    # "customer created in Qoyod", "product(s) created", or
+    # "invoice ... created" in its stage_history — those wordings
+    # imply a real Qoyod POST happened. Detects rows written under
+    # the pre-rev28/rev29b wording so the operator can filter them
+    # in the historical review.
+    dry_run_wording_violation = False
+    dry_run_wording_reason = None
+    dry_run_wording_offending: list[dict] = []
+    # Row-side evidence that this row was in dry-run at processing.
+    _cust_dry = (isinstance(row.get("qoyod_customer_id"), str)
+                 and str(row.get("qoyod_customer_id"))
+                     .startswith(("DRY:", "PREVIEW:")))
+    _inv_dry = (isinstance(qid, str)
+                and qid.startswith(("DRY:", "PREVIEW:")))
+    _pay_dry = (isinstance(row.get("qoyod_invoice_payment_id"), str)
+                and str(row.get("qoyod_invoice_payment_id"))
+                    .startswith(("DRY:", "PREVIEW:")))
+    _hist_entries = row.get("stage_history") or []
+    _hist_dry = False
+    if isinstance(_hist_entries, list):
+        for _e in _hist_entries:
+            if isinstance(_e, dict) and isinstance(_e.get("note"), str) \
+                    and "DRY-RUN" in _e["note"]:
+                _hist_dry = True
+                break
+    # sas_worker_trace evidence — what the worker actually saw.
+    _swt = row.get("sas_worker_trace") or {}
+    _swt_settings = (_swt.get("settings_seen") or {}) \
+        if isinstance(_swt, dict) else {}
+    _swt_dry = bool(_swt_settings.get("dry_run_mode", False))
+    # Current settings evidence (fallback only — user directive says
+    # do NOT trust current settings blindly; row evidence wins).
+    _settings_dry_now = bool(settings_doc.get("dry_run_mode", False))
+    dry_evidence = (_cust_dry or _inv_dry or _pay_dry
+                    or _hist_dry or _swt_dry or _settings_dry_now)
+
+    if dry_evidence and isinstance(_hist_entries, list):
+        # Forbidden phrases as (label, regex) pairs so `invoice N created`
+        # (with any invoice number) also matches. A note is only
+        # offending when it does NOT itself contain the explicit
+        # "DRY-RUN" marker.
+        _FORBIDDEN = (
+            ("customer created in Qoyod",
+             re.compile(r"customer created in Qoyod")),
+            ("product(s) created",
+             re.compile(r"product\(s\) created")),
+            ("invoice created",
+             re.compile(r"\binvoice(?:\s+\S+)?\s+created\b")),
+        )
+        for _e in _hist_entries:
+            if not isinstance(_e, dict):
+                continue
+            _note = _e.get("note")
+            if not isinstance(_note, str):
+                continue
+            if "DRY-RUN" in _note:
+                continue  # explicitly marked → safe (new wording)
+            for _label, _rx in _FORBIDDEN:
+                if _rx.search(_note):
+                    dry_run_wording_offending.append({
+                        "from_stage": _e.get("from_stage"),
+                        "to_stage":   _e.get("to_stage"),
+                        "note":       _note,
+                        "phrase":     _label,
+                    })
+                    break
+        if dry_run_wording_offending:
+            dry_run_wording_violation = True
+            _bits = []
+            if _cust_dry:
+                _bits.append("qoyod_customer_id=DRY:*")
+            if _inv_dry:
+                _bits.append("qoyod_invoice_id=DRY:*")
+            if _pay_dry:
+                _bits.append("qoyod_invoice_payment_id=DRY:*")
+            if _hist_dry:
+                _bits.append("stage_history contains DRY-RUN note")
+            if _swt_dry:
+                _bits.append(
+                    "sas_worker_trace.settings_seen.dry_run_mode=true")
+            if _settings_dry_now:
+                _bits.append("current settings.dry_run_mode=true")
+            dry_run_wording_reason = (
+                f"Row evidence indicates DRY-RUN ({', '.join(_bits)}) but "
+                f"stage_history contains {len(dry_run_wording_offending)} "
+                f"note(s) with pre-rev29b wording implying real Qoyod POST(s)"
+            )
+
     return {
         "ok":                            True,
         "found":                         True,
@@ -434,5 +530,9 @@ async def row_diagnostics(db, trace_id: str) -> dict:
                 duplicate_stage_transition_violation,
             "duplicate_stage_transition_reason":
                 duplicate_stage_transition_reason,
+            # rev29b — Dry-run wording invariant.
+            "dry_run_wording_violation":  dry_run_wording_violation,
+            "dry_run_wording_reason":     dry_run_wording_reason,
+            "dry_run_wording_offending":  dry_run_wording_offending,
         },
     }

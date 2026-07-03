@@ -722,15 +722,18 @@ async def process_normalized_row(
             "customer": res.to_log_dict(),
         }
 
-    # rev28 — Wording must reflect DRY-RUN state so audit log
-    # never claims a real POST happened when it did not.
+    # rev28 + rev29b — Dry-run wording enforcement.
+    # When the resolved id carries a DRY:/PREVIEW: sentinel, the note
+    # MUST explicitly say "DRY-RUN: ... no POST" so the audit log can
+    # never be misread as evidence of a real Qoyod POST.
     _is_dry_customer = (
         isinstance(res.qoyod_customer_id, str)
         and res.qoyod_customer_id.startswith(("DRY:", "PREVIEW:")))
     if _is_dry_customer:
         _customer_note = ("DRY-RUN: customer payload built, no POST"
                           if res.created_new
-                          else "DRY-RUN: customer mapped from local store")
+                          else "DRY-RUN: customer mapped from local store, "
+                               "no POST")
     else:
         _customer_note = ("customer mapped from local store"
                           if not res.created_new
@@ -995,8 +998,10 @@ async def process_customer_resolved_row(
          "created_new": i.created_new}
         for i in prod_res.items
     ]
-    # rev28 — Reflect DRY-RUN state in product-stage note so the
-    # audit log never claims real POSTs on dry ids.
+    # rev28 + rev29b — Dry-run wording enforcement for the product
+    # stage. If ANY resolved product carries a DRY:/PREVIEW: id, the
+    # whole note must be flagged as DRY-RUN so no reader assumes a
+    # real Qoyod product POST happened.
     _any_dry_product = any(
         (isinstance(i.qoyod_product_id, str)
          and i.qoyod_product_id.startswith(("DRY:", "PREVIEW:")))
@@ -1494,10 +1499,19 @@ async def process_customer_resolved_row(
         return {"row_id": row["id"], "outcome": "DEAD_LETTER",
                 "reason": "FAILED_INVOICE"}
 
+    # rev29b — Dry-run wording enforcement for the invoice stage.
+    # Use the ACTUAL qoyod_invoice_id sentinel (not just `is_dry`) so
+    # the note reflects the true state even if `is_dry` were to drift
+    # from the resolved id (defense-in-depth).
+    _is_dry_invoice = (
+        is_dry
+        or (isinstance(qoyod_invoice_id, str)
+            and qoyod_invoice_id.startswith(("DRY:", "PREVIEW:"))))
     p = transition(from_stage="PRODUCT_RESOLVED",
                    to_stage="INVOICE_CREATED", actor="worker",
                    note=("DRY-RUN: invoice payload built, no POST"
-                         if is_dry else f"invoice {qoyod_invoice_number} created"))
+                         if _is_dry_invoice
+                         else f"invoice {qoyod_invoice_number} created"))
     p.setdefault("$set", {}).update({
         "qoyod_invoice_id":     qoyod_invoice_id,
         "qoyod_invoice_number": qoyod_invoice_number,

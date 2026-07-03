@@ -5643,3 +5643,88 @@ Three inconsistencies surfaced on the Pending Orders page:
   endpoint still NOT built — awaiting user sign-off on the Pending
   page after this fix.
 
+
+---
+
+## 2026-Feb-03 — Rev 29b: Dry-run wording enforcement + diagnostics invariant
+
+### Context
+Rev 29 (idempotent CAS transitions) passed on Production for order
+270196668 (trace `baa0383c...`). All rev27/rev28/rev29 invariants
+came back clean, BUT `stage_history` still carried the misleading
+notes `"customer created in Qoyod"` and `"0 product(s) created ·
+1 mapped"` even though the resolved ids were `DRY:*`. Old order
+270219411 exhibited the same signal.
+
+### Rev 29b fix (surgical — wording + diagnostics only)
+1. `integrations/qoyod/pipeline.py` — Three DRY-RUN wording sites:
+   - **Customer stage**: dry-mapping note now ends with `", no POST"`.
+     Note reads `"DRY-RUN: customer mapped from local store, no POST"`.
+   - **Product stage**: unchanged wording (already rev28-compliant)
+     but re-anchored with `rev29b — Dry-run wording enforcement`
+     marker comment.
+   - **Invoice stage**: dry detection now uses BOTH `is_dry` and
+     `qoyod_invoice_id.startswith("DRY:")` (defense-in-depth). Note
+     stays `"DRY-RUN: invoice payload built, no POST"`.
+2. `integrations/qoyod/sas_build_diagnostics.py`:
+   - New marker `rev29b_dry_run_wording` (needle:
+     `rev29b — Dry-run wording enforcement`). Deploy verified by
+     `markers.rev29b_dry_run_wording.count >= 1`.
+   - New invariant `dry_run_wording_violation` on `row_diagnostics`.
+     Fires when the row has ANY dry evidence AND `stage_history`
+     contains legacy wording (`customer created in Qoyod`,
+     `product(s) created`, `invoice \S* created`). Dry evidence is
+     any of: `qoyod_customer_id/qoyod_invoice_id/
+     qoyod_invoice_payment_id` starting with `DRY:`, any
+     `stage_history.note` containing `DRY-RUN`,
+     `sas_worker_trace.settings_seen.dry_run_mode=true`, or
+     current settings `dry_run_mode=true`. Row evidence WINS over
+     current settings.
+   - Response adds three fields on `diagnosis`:
+     `dry_run_wording_violation`, `dry_run_wording_reason`,
+     `dry_run_wording_offending` (list of offending stage_history
+     entries with `from_stage/to_stage/note/phrase`).
+
+### Tests (`tests/test_rev29b_dry_run_wording.py`)
+- 8 tests covering: source-side wordings present, marker registered
+  and detected, order 270219411 replay flags violation, fresh
+  rev29b row shows no violation, live row with live wording does
+  NOT false-flag, sas_worker_trace-only dry evidence triggers,
+  rev27 live-write gate intact, rev29 CAS intact.
+- Regression: full Qoyod/SAS/Canary/Salla suite **259 passed**
+  (`test_qoyod_dry_run_leak_protection`, `test_sas_*`,
+  `test_rev29_idempotent_transitions`, `test_live_write_gate`,
+  `test_salla_token_strategy`, `test_canary_*`,
+  `test_auto_send_e2e_completes_row`).
+
+### Guarantees
+- No change to `_live_write_permitted` (rev27).
+- No change to `_apply_atomic` CAS semantics (rev29).
+- No change to SAS gate persistence (rev28).
+- Read-only invariant — `row_diagnostics` never mutates DB.
+- Old rows with pre-rev29b wording remain frozen (RCA evidence);
+  the invariant now surfaces them explicitly.
+
+### Deploy verification (Production, after deploy)
+1. `GET /api/integrations/qoyod/admin/diagnostics/build` →
+   `marker_check.markers.rev29b_dry_run_wording.count >= 1` AND
+   `acceptance.code_matches_expected == true`.
+2. `GET /api/integrations/qoyod/admin/diagnostics/row?trace_id=<270219411>` →
+   `diagnosis.dry_run_wording_violation == true`
+   (old evidence, correctly flagged).
+3. Trigger a NEW dry Tabby order → `diagnosis.dry_run_wording_violation == false`
+   AND `stage_history` notes ALL start with `"DRY-RUN: ..."`.
+4. `live_write_gate_violation`, `sas_gate_missing_violation`,
+   `duplicate_stage_transition_violation` remain `false`.
+
+### Constraints honoured
+- No positive live tests.
+- No reprocess / retry-payment / resolve invoice #188.
+- Invoice #188 remains frozen as historical evidence.
+- No production DB access from agent side; user drives Prod checks.
+
+### Next up (blocked on user)
+- Salla Easy Mode Prod webhook verification (waiting on user Env vars).
+- Phase 2 Auto-Send expansion (mada/apple_pay/credit_card/stc_pay/tamara)
+  gated on a flawless Tabby dry + live cycle.
+- manual_send_audit_log + UI Manual Send Button.
