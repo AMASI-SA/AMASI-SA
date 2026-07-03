@@ -315,6 +315,16 @@ async def process_normalized_row(
 
     settings = await _load_settings(db, user_id)
 
+    # ── Iter-2026-02.rev25 — Worker-context observability trace ────
+    # Write ONE compact document showing what THIS worker (this pid,
+    # this pipeline.py sha) actually saw in `settings` at the moment
+    # of processing THIS row. Non-mutating: never touches
+    # pipeline_stage, qoyod_* ids, or settings. Fault-tolerant: any
+    # write failure is swallowed so a trace bug can never abort a
+    # live run. Read at:
+    #   db.integration_inbox.findOne({trace_id: <t>}, {sas_worker_trace: 1})
+    from integrations.qoyod.sas_worker_trace import write_worker_trace
+
     # ── Iter-2026-02.rev16 — Selective Auto-Send Gate ──────────────
     # When `selective_auto_send_enabled=true`, this gate is the ONE
     # control that opens automatic Qoyod writes. Enforces 9 hard
@@ -326,7 +336,9 @@ async def process_normalized_row(
     # write allowance for THIS ROW only — the DB
     # `production_writes_locked` flag is NEVER mutated.
     _sas_gate_passed = False
-    if bool(settings.get("selective_auto_send_enabled", False)):
+    _sas_enabled_setting = bool(
+        settings.get("selective_auto_send_enabled", False))
+    if _sas_enabled_setting:
         from integrations.qoyod.selective_auto_send_gate import (
             evaluate_selective_auto_send_gate,
         )
@@ -340,6 +352,16 @@ async def process_normalized_row(
                 "selective_auto_send_gate_at":
                     datetime.now(timezone.utc).isoformat(),
             }})
+        # rev25 — worker trace AFTER gate evaluated (so we see decision).
+        await write_worker_trace(
+            db, row,
+            stage="NORMALIZED",
+            settings=settings, user_id_used=user_id,
+            gate_ran=True,
+            gate_eligible=bool(_sas.eligible),
+            gate_reason=_sas.reason,
+            gate_detail=_sas.detail,
+        )
         if not _sas.eligible:
             patch = transition(
                 from_stage="NORMALIZED", to_stage="SKIPPED",
@@ -359,6 +381,22 @@ async def process_normalized_row(
                 "selective_auto_send_gate": _sas.to_log_dict(),
             }
         _sas_gate_passed = True
+    else:
+        # rev25 — worker trace when SAS is OFF at the settings layer.
+        # This is the exact diagnostic that surfaces "gate never ran"
+        # while operator believes SAS is enabled — usually a user_id
+        # mismatch between UI writes and worker reads.
+        await write_worker_trace(
+            db, row,
+            stage="NORMALIZED",
+            settings=settings, user_id_used=user_id,
+            gate_ran=False,
+            gate_reason="sas_enabled_setting_is_false",
+            gate_detail=(
+                "selective_auto_send_enabled read as False from "
+                f"qoyod_settings for user_id={user_id!r}; gate "
+                "function not called."),
+        )
 
     # ── Status Eligibility Gate (Iter-282) ─────────────────────────
     # Status gate MUST run BEFORE totals_guard. Orders that are not
@@ -637,13 +675,26 @@ async def process_customer_resolved_row(
     # imply the row is still eligible now — the operator may have
     # disabled the switch mid-flight, or the payment_method mapping
     # may have been unmapped. Idempotent: safe to re-run.
+    from integrations.qoyod.sas_worker_trace import write_worker_trace
     _sas_gate_passed = False
-    if bool(settings.get("selective_auto_send_enabled", False)):
+    _sas_enabled_setting = bool(
+        settings.get("selective_auto_send_enabled", False))
+    if _sas_enabled_setting:
         from integrations.qoyod.selective_auto_send_gate import (
             evaluate_selective_auto_send_gate,
         )
         _sas = evaluate_selective_auto_send_gate(
             canonical=canonical, row=row, settings=settings)
+        # rev25 — trace AFTER gate evaluated.
+        await write_worker_trace(
+            db, row,
+            stage="CUSTOMER_RESOLVED",
+            settings=settings, user_id_used=user_id,
+            gate_ran=True,
+            gate_eligible=bool(_sas.eligible),
+            gate_reason=_sas.reason,
+            gate_detail=_sas.detail,
+        )
         if not _sas.eligible:
             patch = transition(
                 from_stage="CUSTOMER_RESOLVED", to_stage="SKIPPED",
@@ -663,6 +714,21 @@ async def process_customer_resolved_row(
                 "selective_auto_send_gate": _sas.to_log_dict(),
             }
         _sas_gate_passed = True
+    else:
+        # rev25 — SAS is OFF at CUSTOMER_RESOLVED stage. This trace
+        # + the NORMALIZED trace together tell us whether the switch
+        # is genuinely off in the tenant settings, or whether the
+        # worker is reading a different settings doc than the UI wrote.
+        await write_worker_trace(
+            db, row,
+            stage="CUSTOMER_RESOLVED",
+            settings=settings, user_id_used=user_id,
+            gate_ran=False,
+            gate_reason="sas_enabled_setting_is_false",
+            gate_detail=(
+                "selective_auto_send_enabled read as False for "
+                f"user_id={user_id!r} at CUSTOMER_RESOLVED stage."),
+        )
 
     # Resolve client (real or dry-run).
     client_provided = api_client is not None

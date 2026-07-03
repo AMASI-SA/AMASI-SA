@@ -54,6 +54,13 @@ REQUIRED_MARKERS: dict[str, str] = {
         "Iter-2026-02.rev20 — Selective Auto-Send gate bypass",
     "rev20_payment_site":
         "Iter-2026-02.rev20 — mirror of the invoice-site fix",
+    # rev25 — worker-context trace hooks. If these markers are absent
+    # in the running module, the deployed pipeline.py has no
+    # `sas_worker_trace` field on rows → the worker/deploy is stale.
+    "rev25_worker_trace_normalized":
+        "rev25 — worker trace AFTER gate evaluated",
+    "rev25_worker_trace_customer_resolved":
+        "rev25 — trace AFTER gate evaluated.",
 }
 
 
@@ -202,6 +209,9 @@ async def row_diagnostics(db, trace_id: str) -> dict:
         "pipeline_started_at": 1,
         "selective_auto_send_gate": 1,
         "selective_auto_send_gate_at": 1,
+        # rev25 — worker-context observability trace.
+        "sas_worker_trace": 1,
+        "sas_worker_trace_history": 1,
         "business_rules_decision": 1,
         "preflight_result": 1,
         "qoyod_customer_id": 1,
