@@ -744,10 +744,26 @@ async def process_normalized_row(
         "customer_resolution": res.to_log_dict(),
         "qoyod_customer_id":   res.qoyod_customer_id,
     })
-    await _apply(db, row["id"], patch)
+    # rev29 — Atomic CAS on RULES_APPLIED → CUSTOMER_RESOLVED. If the
+    # row was already advanced by a concurrent worker or requeue, this
+    # returns STALE_STAGE_ABORT with no side-effect.
+    try:
+        await _apply_atomic(
+            db, row["id"], patch,
+            expected_from_stage="RULES_APPLIED")
+    except _StaleStageError as e:
+        logger.warning(
+            "rev29 customer_resolved_stale row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "STALE_STAGE_ABORT",
+            "reason":   "row_stage_changed_before_customer_resolved_write",
+            "expected": "RULES_APPLIED",
+            "actual":   e.actual,
+            "trace_id": trace_id,
+        }
     return {
-        "row_id":   row["id"],
-        "outcome":  "CUSTOMER_RESOLVED",
         "reason":   None,
         "trace_id": trace_id,
         "decision": decision.to_log_dict(),
@@ -998,7 +1014,23 @@ async def process_customer_resolved_row(
                    to_stage="PRODUCT_RESOLVED", actor="worker",
                    note=_product_note)
     p.setdefault("$set", {})["product_resolution"] = prod_res.to_log_dict()
-    await _apply(db, row["id"], p)
+    # rev29 — Atomic CAS on CUSTOMER_RESOLVED → PRODUCT_RESOLVED.
+    try:
+        await _apply_atomic(
+            db, row["id"], p,
+            expected_from_stage="CUSTOMER_RESOLVED")
+    except _StaleStageError as e:
+        logger.warning(
+            "rev29 product_resolved_stale row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "STALE_STAGE_ABORT",
+            "reason":   "row_stage_changed_before_product_resolved_write",
+            "expected": "CUSTOMER_RESOLVED",
+            "actual":   e.actual,
+            "trace_id": trace_id,
+        }
 
     # ── PREFLIGHT CHECKLIST ─────────────────────────────────────────
     decision = row.get("business_rules_decision") or {}
@@ -1471,7 +1503,25 @@ async def process_customer_resolved_row(
         "qoyod_invoice_number": qoyod_invoice_number,
         "dry_run":              is_dry,
     })
-    await _apply(db, row["id"], p)
+    # rev29 — Atomic CAS on PRODUCT_RESOLVED → INVOICE_CREATED. This
+    # is the most critical CAS in the pipeline because a duplicate
+    # transition here in a LIVE tenant would produce TWO Qoyod invoices.
+    try:
+        await _apply_atomic(
+            db, row["id"], p,
+            expected_from_stage="PRODUCT_RESOLVED")
+    except _StaleStageError as e:
+        logger.warning(
+            "rev29 invoice_created_stale row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {
+            "row_id":   row["id"],
+            "outcome":  "STALE_STAGE_ABORT",
+            "reason":   "row_stage_changed_before_invoice_created_write",
+            "expected": "PRODUCT_RESOLVED",
+            "actual":   e.actual,
+            "trace_id": trace_id,
+        }
 
     # Mirror to qoyod_invoices ledger (idempotent upsert).
     await db.qoyod_invoices.update_one(
@@ -1732,7 +1782,23 @@ async def process_customer_resolved_row(
         p.setdefault("$set", {})["posting_mode"] = _posting_mode
         if _rounding_warning:
             p["$set"]["rounding_warning"] = True
-        await _apply(db, row["id"], p)
+        # rev29 — Atomic CAS INVOICE_CREATED → _final_stage (COMPLETED
+        # or COMPLETED_WITH_ROUNDING_WARNING). Prevents duplicate
+        # COMPLETED transitions for the same row.
+        try:
+            await _apply_atomic(
+                db, row["id"], p,
+                expected_from_stage="INVOICE_CREATED")
+        except _StaleStageError as e:
+            logger.warning(
+                "rev29 completed_cod_stale row_id=%s trace_id=%s %s",
+                row.get("id"), trace_id, e)
+            return {"row_id":  row["id"],
+                    "outcome": "STALE_STAGE_ABORT",
+                    "reason":  "row_stage_changed_before_completed_write",
+                    "expected": "INVOICE_CREATED",
+                    "actual":  e.actual,
+                    "trace_id": trace_id}
         return {"row_id":               row["id"],
                 "outcome":              _final_stage,
                 "reason":               ("credit_invoice_only_with_rounding_warning"
@@ -2081,7 +2147,24 @@ async def process_customer_resolved_row(
     # longer the source of truth.
     p["$set"]["last_failed_stage"] = None
     p["$set"]["pipeline_error"]    = None
-    await _apply(db, row["id"], p)
+    # rev29 — Atomic CAS INVOICE_CREATED → INVOICE_PAYMENT_CREATED.
+    # In LIVE mode this transition marks the row as having received
+    # a successful Qoyod invoice_payment POST — duplicating it would
+    # be catastrophic.
+    try:
+        await _apply_atomic(
+            db, row["id"], p,
+            expected_from_stage="INVOICE_CREATED")
+    except _StaleStageError as e:
+        logger.warning(
+            "rev29 invoice_payment_created_stale row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {"row_id":  row["id"],
+                "outcome": "STALE_STAGE_ABORT",
+                "reason":  "row_stage_changed_before_invoice_payment_write",
+                "expected": "INVOICE_CREATED",
+                "actual":  e.actual,
+                "trace_id": trace_id}
     # Persist raw response — First-Sync-Monitor.
     await db.integration_inbox.update_one(
         {"id": row["id"]},
@@ -2102,7 +2185,21 @@ async def process_customer_resolved_row(
                    note=("DRY-RUN COMPLETED — no Qoyod POSTs were made"
                          if is_dry else "invoice + invoice_payment pushed to Qoyod"),
                    existing_started_at=started_at)
-    await _apply(db, row["id"], p)
+    # rev29 — Atomic CAS on final COMPLETED transition.
+    try:
+        await _apply_atomic(
+            db, row["id"], p,
+            expected_from_stage="INVOICE_PAYMENT_CREATED")
+    except _StaleStageError as e:
+        logger.warning(
+            "rev29 completed_final_stale row_id=%s trace_id=%s %s",
+            row.get("id"), trace_id, e)
+        return {"row_id":  row["id"],
+                "outcome": "STALE_STAGE_ABORT",
+                "reason":  "row_stage_changed_before_completed_write",
+                "expected": "INVOICE_PAYMENT_CREATED",
+                "actual":  e.actual,
+                "trace_id": trace_id}
     await db.qoyod_invoices.update_one(
         {"user_id": user_id, "salla_order_id": canonical.get("order_id")},
         {"$set": {"qoyod_invoice_payment_id": qoyod_invoice_payment_id,

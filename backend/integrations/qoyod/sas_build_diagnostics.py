@@ -73,6 +73,17 @@ REQUIRED_MARKERS: dict[str, str] = {
     # that caused order 270281278 observability gap).
     "rev28_atomic_gate_in_rules_applied":
         "rev28 — Include the SAS gate in the RULES_APPLIED write",
+    # rev29 — Atomic CAS on ALL post-NORMALIZED transitions.
+    "rev29_atomic_customer_resolved":
+        "rev29 — Atomic CAS on RULES_APPLIED → CUSTOMER_RESOLVED",
+    "rev29_atomic_product_resolved":
+        "rev29 — Atomic CAS on CUSTOMER_RESOLVED → PRODUCT_RESOLVED",
+    "rev29_atomic_invoice_created":
+        "rev29 — Atomic CAS on PRODUCT_RESOLVED → INVOICE_CREATED",
+    "rev29_atomic_invoice_payment":
+        "rev29 — Atomic CAS INVOICE_CREATED → INVOICE_PAYMENT_CREATED",
+    "rev29_atomic_completed":
+        "rev29 — Atomic CAS on final COMPLETED transition",
 }
 
 
@@ -364,6 +375,33 @@ async def row_diagnostics(db, trace_id: str) -> dict:
         except Exception as e:  # noqa: BLE001
             live_write_violation_reason = f"invariant_check_failed: {e!r}"
 
+    # ── rev29 — Duplicate stage transition invariant ────────────────
+    # For a single row, no (from_stage, to_stage) pair MUST repeat.
+    # If it does, a stale worker / requeue advanced the row past a
+    # stage it had already left. Detected here purely by inspecting
+    # `stage_history`.
+    duplicate_stage_transition_violation = False
+    duplicate_stage_transition_reason = None
+    hist = row.get("stage_history") or []
+    if isinstance(hist, list):
+        seen: dict = {}
+        dup_key = None
+        for entry in hist:
+            if not isinstance(entry, dict):
+                continue
+            key = (entry.get("from_stage"), entry.get("to_stage"))
+            if key[0] is None and key[1] is None:
+                continue
+            seen[key] = seen.get(key, 0) + 1
+            if seen[key] > 1 and dup_key is None:
+                dup_key = key
+        if dup_key is not None:
+            duplicate_stage_transition_violation = True
+            duplicate_stage_transition_reason = (
+                "Pipeline stage transition repeated for same trace_id "
+                f"({dup_key[0]}→{dup_key[1]} occurred "
+                f"{seen[dup_key]}× in stage_history)")
+
     return {
         "ok":                            True,
         "found":                         True,
@@ -391,5 +429,10 @@ async def row_diagnostics(db, trace_id: str) -> dict:
             # rev28 — SAS gate missing invariant.
             "sas_gate_missing_violation": sas_gate_missing_violation,
             "sas_gate_missing_reason":    sas_gate_missing_reason,
+            # rev29 — Duplicate stage transition invariant.
+            "duplicate_stage_transition_violation":
+                duplicate_stage_transition_violation,
+            "duplicate_stage_transition_reason":
+                duplicate_stage_transition_reason,
         },
     }
