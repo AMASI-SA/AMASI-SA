@@ -5933,3 +5933,121 @@ augmented with `selective_auto_send_gate` + `_at` + `_source`:
 - If violations persist after worker restart → the row is likely still being
   processed by a truly stale worker. Look at `worker_code_mismatch` in the
   diagnostics: `row_worker_pipeline_sha != current_pipeline_sha` proves it.
+
+---
+
+## 2026-Feb-03 — Rev 30: Payment continuation + diagnostic surfacing
+
+### Context (Production trace `4dc65ba6eb5646e5afbf915268c70fcc`, order 270166208)
+Rev29d passed successfully:
+  - `live_write_gate_violation=false`
+  - `sas_gate_missing_violation=false`
+  - `duplicate_stage_transition_violation=false`
+  - `dry_run_wording_violation=false`
+  - `worker_code_mismatch=false`
+BUT a Tabby dry-run order landed at `pipeline_stage=INVOICE_CREATED` with
+`qoyod_invoice_payment_id=null` — the row sat silently, no downstream
+transition, no clear reason. Tabby needs BOTH invoice + payment; stopping
+at invoice-only is a Blocker before any positive live cycle.
+
+### Root cause
+Two short-circuit branches in `process_customer_resolved_row`:
+  1. `if _posting_mode == POSTING_MODE_DISABLED` — returns
+     `outcome="INVOICE_CREATED"` WITHOUT any inbox pipeline_stage transition.
+  2. `if not (auto_receipt AND capabilities.create_receipts)` — same behaviour.
+The row stays at INVOICE_CREATED forever because
+`process_pending_customer_resolved` only picks up `CUSTOMER_RESOLVED` rows.
+No worker will ever complete this row — silent stuck.
+
+### Rev 30 fixes (surgical only)
+1. **New terminal stage `COMPLETED_INVOICE_ONLY`** (`state_machine.py`):
+   - Added to `ALL_STAGES` and `TERMINAL_STAGES`.
+   - New allowed edge `INVOICE_CREATED → COMPLETED_INVOICE_ONLY`.
+2. **`pipeline.py` — both short-circuit sites** now:
+   - Build a proper `transition(from_stage="INVOICE_CREATED",
+     to_stage="COMPLETED_INVOICE_ONLY", ...)` with a DRY-RUN-aware note.
+   - Persist blocker fields on the row: `payment_stage_blocker_code`,
+     `payment_stage_blocker_reason`, `payment_stage_expected`,
+     `invoice_payment_required_for_method`.
+   - Use `_apply_atomic(..., expected_from_stage="INVOICE_CREATED")` so
+     no stale worker can transition twice (rev29-consistent CAS).
+   - Return `outcome=COMPLETED_INVOICE_ONLY` instead of `INVOICE_CREATED`.
+3. **`sas_build_diagnostics.py` — `row_diagnostics` surfaces**:
+   - `invoice_payment_required_for_method` (from canonical.payment_method
+     via `is_cod_family`).
+   - `payment_stage_expected` (True at COMPLETED/INVOICE_PAYMENT_CREATED,
+     False at COMPLETED_INVOICE_ONLY, derived-from-method at
+     silent-stuck INVOICE_CREATED).
+   - `payment_stage_blocker_code` / `_reason` (persisted or synthesised
+     as `silent_stuck_at_invoice_created` when a row is at INVOICE_CREATED
+     with no persisted blocker).
+   - `payment_payload_preview_exists` (whether
+     `qoyod_payloads.invoice_payment` is on the row for the UI drawer).
+4. **`_is_pm_expecting_payment(payment_method)`** helper added.
+5. **New required marker `rev30_payment_continuation`** (count=1).
+
+### Guarantees
+- No change to `_live_write_permitted` (rev27).
+- No change to `_apply_atomic` CAS semantics (rev29).
+- No change to SAS gate persistence / preflight (rev29c/rev29d).
+- `posting_mode=paid_receipt` happy path (Tabby / mada) is UNCHANGED —
+  it flows through invoice → invoice_payment → COMPLETED in the same tick.
+- COD-family (`credit_invoice_only`) still transitions
+  INVOICE_CREATED → COMPLETED (unchanged).
+
+### Tests (`tests/test_rev30_payment_continuation.py`) — 10 new
+- rev30 marker registered + present in build (`code_matches_expected=true`).
+- `_is_pm_expecting_payment` helper covers prepaid (True) and COD (False).
+- **Prod trace `4dc65ba6...` replay**: silent-stuck row surfaces
+  `payment_stage_blocker_code=silent_stuck_at_invoice_created` and
+  `invoice_payment_required_for_method=true`.
+- COD-family row at COMPLETED_INVOICE_ONLY exposes blocker fields verbatim.
+- Happy-path COMPLETED row has no blocker.
+- `payment_payload_preview_exists` reflects the preview correctly.
+- **E2E**: posting_mode=disabled → row transitions to COMPLETED_INVOICE_ONLY
+  with persisted blocker fields; no misleading
+  "invoice_payment recorded ON invoice in Qoyod" wording.
+- rev27 live-write gate intact.
+- rev30 uses CAS transitions (source-side proof, ≥3 sites now).
+- dry-run wording safe in disabled branch.
+
+### Regression
+- **1672 passed** in the qoyod / sas / canary / auto-send / salla /
+  preflight / business_rules / normalizer / trust_gate / requeue / day4 /
+  state_machine / payment / completed test suite.
+- 18 pre-existing failures verified UNRELATED to rev30 (identical
+  pass/fail before and after — all in salary/shipping/settlements/
+  day4-rules/totals-guard test modules).
+- Fixed `test_qoyod_state_machine.py::test_terminal_stages_...` to
+  include the new `COMPLETED_INVOICE_ONLY` terminal.
+
+### Deploy verification (Production, after deploy)
+1. Deploy rev30 + **restart the worker process** (see rev29d note).
+2. `GET /admin/diagnostics/build`:
+   - `markers.rev30_payment_continuation.count >= 1`.
+   - `acceptance.code_matches_expected == true`.
+3. `GET /admin/diagnostics/row?trace_id=4dc65ba6eb5646e5afbf915268c70fcc`:
+   - `invoice_payment_required_for_method == true` (Tabby is prepaid).
+   - `payment_stage_blocker_code == "silent_stuck_at_invoice_created"`
+     (historical row — persisted blocker was never written).
+4. Fresh dry Tabby order (posting_mode=paid_receipt):
+   - `pipeline_stage == COMPLETED`.
+   - `qoyod_invoice_payment_id` starts with `DRY:invoice_payment:` OR
+     `DRY:payment:`.
+   - All rev29d invariants remain `false`.
+   - `payment_stage_expected == true`, `payment_stage_blocker_code == null`.
+5. Fresh dry Tabby order with `posting_mode=disabled` for the method:
+   - `pipeline_stage == COMPLETED_INVOICE_ONLY` (NOT INVOICE_CREATED).
+   - `payment_stage_blocker_code == "posting_mode_disabled"`.
+
+### Constraints honoured
+- No positive live tests. No reprocess. No retry-payment. Invoice #188 frozen.
+  rev27/rev29/rev29c/rev29d guarantees untouched.
+
+### Next up (blocked on user)
+- Deploy rev30 + restart worker → verify Tabby dry cycle completes to
+  INVOICE_PAYMENT_CREATED → COMPLETED with DRY: payment id.
+- Salla Easy Mode Prod webhook verification.
+- Phase 2 Auto-Send expansion (mada / apple_pay / credit_card / stc_pay /
+  tamara) after flawless Tabby dry + live cycle.
+- manual_send_audit_log + UI Manual Send Button.
