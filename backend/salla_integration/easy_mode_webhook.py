@@ -71,7 +71,15 @@ log = logging.getLogger("salla.easy_mode")
 
 # ── Constants ─────────────────────────────────────────────────────────
 SIGNATURE_HEADER = "x-salla-signature"
+STRATEGY_HEADER  = "x-salla-security-strategy"
+TOKEN_HEADER     = "authorization"          # Salla sends: Authorization: Bearer <token>
+TOKEN_HEADER_ALT = "x-salla-token"          # Documented fallback header name
 ENV_WEBHOOK_SECRET = "SALLA_WEBHOOK_SECRET"
+
+# rev30 — Supported strategies. Values are case-insensitive; Salla
+# sends "Signature" or "Token" as the header value.
+STRATEGY_SIGNATURE = "signature"
+STRATEGY_TOKEN     = "token"
 
 # Map event names to handler functions (registered below).
 # Anything not in this map is ack'd with 200 + a no-op log line.
@@ -111,6 +119,56 @@ def verify_signature(raw_body: bytes, provided_signature: str, secret: str) -> b
     ).hexdigest()
     # Normalize: some clients send the signature uppercased.
     return hmac.compare_digest(expected, (provided_signature or "").strip().lower())
+
+
+def _extract_provided_token(headers) -> Optional[str]:
+    """Iter-2026-02.rev30 — Extract the raw token sent by Salla when
+    the Partners Portal has `Webhook Security Strategy = Token`.
+
+    Salla sends the token in one of two documented header shapes:
+      • `Authorization: Bearer <token>`
+      • `X-Salla-Token: <token>`
+
+    Returns `None` if neither is present or the value is empty.
+    """
+    auth = (headers.get("authorization") or "").strip()
+    if auth:
+        # Accept "Bearer <token>" (case-insensitive) or the raw token.
+        parts = auth.split(None, 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            return parts[1].strip() or None
+        # Some clients omit "Bearer" — treat the whole value as token.
+        return auth
+    alt = (headers.get(TOKEN_HEADER_ALT) or "").strip()
+    return alt or None
+
+
+def verify_token(provided_token: Optional[str], secret: str) -> bool:
+    """Constant-time token comparison.
+
+    In Salla's Token strategy the "Webhook Secret Key" configured in
+    the Partners Portal is the exact value Salla will send on every
+    webhook request. Compare in constant time to prevent timing
+    side-channels.
+    """
+    if not provided_token or not secret:
+        return False
+    return hmac.compare_digest(
+        provided_token.strip().encode("utf-8"),
+        secret.strip().encode("utf-8"),
+    )
+
+
+def resolve_strategy(headers) -> str:
+    """Iter-2026-02.rev30 — Which strategy did Salla advertise on this
+    request? Returns lowercase `"signature"` or `"token"`. Defaults
+    to Signature when the header is missing so pre-rev30 behaviour
+    is preserved for stores still on the legacy strategy.
+    """
+    raw = (headers.get(STRATEGY_HEADER) or "").strip().lower()
+    if raw in (STRATEGY_TOKEN, STRATEGY_SIGNATURE):
+        return raw
+    return STRATEGY_SIGNATURE   # safe default: fallback to HMAC path
 
 
 # ── Owner resolution ──────────────────────────────────────────────────

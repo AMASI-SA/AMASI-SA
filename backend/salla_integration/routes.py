@@ -118,9 +118,15 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
     #   • NO token is persisted if verification fails.
     from .easy_mode_webhook import (  # noqa: E402 — local import keeps module load order safe
         SIGNATURE_HEADER,
+        STRATEGY_HEADER,
+        STRATEGY_SIGNATURE,
+        STRATEGY_TOKEN,
+        _extract_provided_token,
         dispatch_event,
         get_webhook_secret,
+        resolve_strategy,
         verify_signature,
+        verify_token,
     )
 
     @router.post("/webhooks/app")
@@ -145,20 +151,53 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         #    JSON parsing is critical — once parsed, key-order /
         #    whitespace differences would change the hash.
         raw_body = await request.body()
-        provided_sig = request.headers.get(SIGNATURE_HEADER) or ""
-        if not verify_signature(raw_body, provided_sig, secret):
-            import logging
-            logging.getLogger("salla.easy_mode").warning(
-                "easy_mode.invalid_signature ip=%s sig_present=%s body_len=%d",
-                getattr(request.client, "host", None),
-                bool(provided_sig),
-                len(raw_body),
+
+        # rev30 — Detect Salla's Webhook Security Strategy header. The
+        # Partners Portal setting decides which credential Salla will
+        # send on every request: HMAC-SHA256 in Signature mode, OR the
+        # exact webhook secret value in Token mode. We honour whichever
+        # the header advertises; defaults to Signature.
+        strategy = resolve_strategy(request.headers)
+        import logging as _logging
+        _log = _logging.getLogger("salla.easy_mode")
+        if strategy == STRATEGY_TOKEN:
+            provided_token = _extract_provided_token(request.headers)
+            verified = verify_token(provided_token, secret)
+            # Safe log — presence flag only, NEVER the token value.
+            _log.info(
+                "easy_mode.webhook_received strategy=%s token_present=%s "
+                "verified=%s ip=%s body_len=%d",
+                strategy, bool(provided_token), verified,
+                getattr(request.client, "host", None), len(raw_body),
             )
-            raise HTTPException(
-                status_code=401,
-                detail={"code": "INVALID_SIGNATURE",
-                        "message": "x-salla-signature missing or does not match."},
+            if not verified:
+                raise HTTPException(
+                    status_code=401,
+                    detail={"code": "INVALID_TOKEN",
+                            "message": "Salla Token strategy verification failed."},
+                )
+        else:
+            # Signature strategy — HMAC-SHA256 over the raw body.
+            provided_sig = request.headers.get(SIGNATURE_HEADER) or ""
+            verified = verify_signature(raw_body, provided_sig, secret)
+            _log.info(
+                "easy_mode.webhook_received strategy=%s sig_present=%s "
+                "verified=%s ip=%s body_len=%d",
+                strategy, bool(provided_sig), verified,
+                getattr(request.client, "host", None), len(raw_body),
             )
+            if not verified:
+                _log.warning(
+                    "easy_mode.invalid_signature ip=%s sig_present=%s body_len=%d",
+                    getattr(request.client, "host", None),
+                    bool(provided_sig),
+                    len(raw_body),
+                )
+                raise HTTPException(
+                    status_code=401,
+                    detail={"code": "INVALID_SIGNATURE",
+                            "message": "x-salla-signature missing or does not match."},
+                )
 
         # 3. Now safe to parse JSON. A malformed body after a valid HMAC
         #    is essentially impossible (signature would be wrong) — but
@@ -176,6 +215,12 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         #    retrying on non-2xx — so we MUST 200 anything we don't
         #    care about to avoid retry storms).
         result = await dispatch_event(db, body)
+        _log.info(
+            "easy_mode.dispatched strategy=%s event=%s stored=%s http_status=200",
+            strategy,
+            (body or {}).get("event") or "<none>",
+            (result or {}).get("stored"),
+        )
         return result
 
     # ── 1. Status (always safe — never returns tokens) ────────────────
