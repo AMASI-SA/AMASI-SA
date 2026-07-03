@@ -257,6 +257,24 @@ async def _require_sas_gate_persisted(
             row_id=row_id, stage=stage, worker_sha=row_worker_sha)
 
 
+# ─── rev30 — Payment stage expectation helper ────────────────────────
+def _is_pm_expecting_payment(payment_method: Optional[str]) -> bool:
+    """rev30 — Payment continuation. Return True if this payment
+    method is one that should normally produce a Qoyod
+    invoice_payment step (pre-paid at the store front). Used for
+    diagnostic surfacing only; the actual control flow still goes
+    through `resolve_posting_mode`. COD-family methods
+    (cash_on_delivery, cod, bank_transfer) are intentionally
+    EXCLUDED — they book as credit_invoice_only and never carry an
+    invoice_payment.
+    """
+    if not payment_method:
+        return False
+    from integrations.qoyod.payment_methods import is_cod_family
+    return not is_cod_family(payment_method)
+
+
+
 def _writes_blocked(api_client: Any, settings: dict) -> bool:
     """Iter-293.4-rev5 — Single source of truth for the pipeline's
     PRE-flight lock check.
@@ -2075,16 +2093,48 @@ async def process_customer_resolved_row(
                 "dry_run":              is_dry}
 
     if _posting_mode == POSTING_MODE_DISABLED:
-        # Payment method is intentionally not synced. We've already
-        # created the invoice (4c) — that may not be ideal, but it's
-        # the conservative default until the operator removes the
-        # invoice_trigger_status for these methods. Mark as INVOICE_CREATED.
+        # rev30 — Payment method is intentionally not synced. Persist
+        # a definitive `COMPLETED_INVOICE_ONLY` terminal stage on the
+        # inbox row so the row isn't silently stuck at INVOICE_CREATED
+        # (the exact silence the user reported on prod trace
+        # `4dc65ba6...`). Also stamp payment-stage blocker fields the
+        # diagnostics surfaces below.
         await db.qoyod_invoices.update_one(
             {"user_id": user_id, "salla_order_id": canonical.get("order_id")},
             {"$set": {"posting_mode": _posting_mode,
-                      "pipeline_stage": "INVOICE_CREATED",
+                      "pipeline_stage": "COMPLETED_INVOICE_ONLY",
                       "updated_at": _now()}})
-        return {"row_id": row["id"], "outcome": "INVOICE_CREATED",
+        p_dis = transition(
+            from_stage="INVOICE_CREATED",
+            to_stage="COMPLETED_INVOICE_ONLY", actor="worker",
+            note=(
+                "posting_mode=disabled — invoice created, no "
+                "invoice_payment by design"
+                if not is_dry else
+                "DRY-RUN: posting_mode=disabled — invoice payload built, "
+                "no invoice_payment payload"),
+            existing_started_at=started_at,
+        )
+        p_dis.setdefault("$set", {}).update({
+            "posting_mode":                     _posting_mode,
+            "payment_stage_blocker_code":       "posting_mode_disabled",
+            "payment_stage_blocker_reason":     (
+                f"payment_method_mapping.posting_mode is 'disabled' for "
+                f"{pm_for_mode!r}; invoice was created but no "
+                f"invoice_payment step will run."),
+            "payment_stage_expected":           False,
+            "invoice_payment_required_for_method":
+                _is_pm_expecting_payment(pm_for_mode),
+        })
+        try:
+            await _apply_atomic(
+                db, row["id"], p_dis,
+                expected_from_stage="INVOICE_CREATED")
+        except _StaleStageError as e:
+            logger.warning(
+                "rev30 completed_invoice_only_stale row_id=%s trace_id=%s %s",
+                row.get("id"), trace_id, e)
+        return {"row_id": row["id"], "outcome": "COMPLETED_INVOICE_ONLY",
                 "reason": "posting_mode_disabled",
                 "posting_mode": _posting_mode,
                 "qoyod_invoice_id": qoyod_invoice_id, "dry_run": is_dry}
@@ -2094,10 +2144,44 @@ async def process_customer_resolved_row(
     # normally build an invoice_payment).
     if not (settings.get("auto_receipt", True)
             and (settings.get("capabilities") or {}).get("create_receipts", True)):
-        # Invoice-payment step disabled by capability (e.g. tenant
-        # using Qoyod's auto-payment plugin externally). Stop at
-        # INVOICE_CREATED as success.
-        return {"row_id": row["id"], "outcome": "INVOICE_CREATED",
+        # rev30 — Invoice-payment step disabled by tenant capability.
+        # Same reasoning as posting_mode=disabled: land the row at a
+        # definitive terminal stage so it doesn't sit silently at
+        # INVOICE_CREATED.
+        p_cap = transition(
+            from_stage="INVOICE_CREATED",
+            to_stage="COMPLETED_INVOICE_ONLY", actor="worker",
+            note=(
+                "auto_receipt=false / create_receipts=false — "
+                "invoice created, no invoice_payment by capability"
+                if not is_dry else
+                "DRY-RUN: auto_receipt=false / create_receipts=false — "
+                "invoice payload built, no invoice_payment payload"),
+            existing_started_at=started_at,
+        )
+        p_cap.setdefault("$set", {}).update({
+            "posting_mode":                     _posting_mode,
+            "payment_stage_blocker_code":       (
+                "invoice_payment_disabled_by_capability"),
+            "payment_stage_blocker_reason":     (
+                "settings.auto_receipt=false OR "
+                "settings.capabilities.create_receipts=false; the "
+                "operator disabled the invoice_payment step. Invoice "
+                "was created; no payment payload was built."),
+            "payment_stage_expected":           False,
+            "invoice_payment_required_for_method":
+                _is_pm_expecting_payment(pm_for_mode),
+        })
+        try:
+            await _apply_atomic(
+                db, row["id"], p_cap,
+                expected_from_stage="INVOICE_CREATED")
+        except _StaleStageError as e:
+            logger.warning(
+                "rev30 completed_invoice_only_cap_stale row_id=%s trace_id=%s %s",
+                row.get("id"), trace_id, e)
+        return {"row_id": row["id"],
+                "outcome": "COMPLETED_INVOICE_ONLY",
                 "reason": "invoice_payment_disabled_by_capability",
                 "posting_mode": _posting_mode,
                 "dry_run": is_dry,

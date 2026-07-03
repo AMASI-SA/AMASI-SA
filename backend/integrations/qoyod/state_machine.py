@@ -129,6 +129,12 @@ ALL_STAGES: tuple[str, ...] = HAPPY_PATH + (
     # the receiving-bank routing so we never book to a legacy
     # generic-bank account.
     "BANK_TRANSFER_PAYMENT_ROUTING_PENDING",
+    # Iter-2026-02.rev30 — Terminal "invoice created, no invoice_payment".
+    # Reached when posting_mode=disabled OR (auto_receipt=false /
+    # capabilities.create_receipts=false). Signals: invoice exists in
+    # قيود, no receipt/payment step will run for this row. Explicit
+    # terminal so the row is never "silently stuck" at INVOICE_CREATED.
+    "COMPLETED_INVOICE_ONLY",
 ) + FAILURE_STAGES
 
 TERMINAL_STAGES: frozenset[str] = frozenset({
@@ -136,6 +142,8 @@ TERMINAL_STAGES: frozenset[str] = frozenset({
     # Iter-293.4-rev8 — Terminal success with a known-acceptable
     # rounding gap (<= 0.01 SAR caused by قيود server-side rounding).
     "COMPLETED_WITH_ROUNDING_WARNING",
+    # rev30 — Terminal success without an invoice_payment step.
+    "COMPLETED_INVOICE_ONLY",
 })
 
 # Map each failure stage back to the happy-path stage we resume from
@@ -309,6 +317,14 @@ def _build_allowed() -> set[tuple[str, str]]:
     # apple_pay, etc.) still flow through the full
     # INVOICE_CREATED → INVOICE_PAYMENT_CREATED → COMPLETED path.
     allowed.add(("INVOICE_CREATED", "COMPLETED"))
+
+    # ─── Iter-2026-02.rev30 — INVOICE_CREATED → COMPLETED_INVOICE_ONLY ─
+    # When posting_mode=disabled OR auto_receipt=false, the pipeline
+    # SHORT-CIRCUITS after invoice creation. Pre-rev30 the inbox row
+    # was left silently at INVOICE_CREATED. rev30 transitions the row
+    # to a definitive terminal `COMPLETED_INVOICE_ONLY`. Both dry-run
+    # and live paths use this edge — the state machine allows it once.
+    allowed.add(("INVOICE_CREATED", "COMPLETED_INVOICE_ONLY"))
 
     # ─── Iter-293.4-rev7 — INVOICE_CREATED_TOTAL_MISMATCH (post-create) ─
     # After a successful POST /invoices, the pipeline reads the

@@ -103,6 +103,13 @@ REQUIRED_MARKERS: dict[str, str] = {
     # DEAD_LETTERs before emitting any stage_history note.
     "rev29d_hard_gate_preflight":
         "rev29d — Hard preflight",
+    # rev30 — Payment continuation. Ensures rows with
+    # posting_mode=disabled or auto_receipt=off land at a definitive
+    # `COMPLETED_INVOICE_ONLY` terminal stage (instead of silently
+    # sitting at INVOICE_CREATED) and expose payment-stage blocker
+    # fields for diagnostics.
+    "rev30_payment_continuation":
+        "rev30 — Payment continuation",
 }
 
 
@@ -270,6 +277,16 @@ async def row_diagnostics(db, trace_id: str) -> dict:
         "lock_reason": 1,
         "totals_comparison": 1,
         "product_resolution": 1,
+        # rev30 — Payment-stage blocker fields persisted by the
+        # pipeline on the INVOICE_CREATED short-circuit sites.
+        "payment_stage_blocker_code": 1,
+        "payment_stage_blocker_reason": 1,
+        "payment_stage_expected": 1,
+        "invoice_payment_required_for_method": 1,
+        "posting_mode": 1,
+        # Only the invoice_payment sub-key is needed for the preview
+        # existence check; keep the projection tight.
+        "qoyod_payloads.invoice_payment": 1,
     }
 
     row = await db.integration_inbox.find_one(
@@ -527,6 +544,64 @@ async def row_diagnostics(db, trace_id: str) -> dict:
         and current_pipeline_sha
         and row_worker_pipeline_sha != current_pipeline_sha)
 
+    # ── rev30 — Payment stage diagnostic surfacing ───────────────────
+    # Explicitly answers "WHY did this row stop at INVOICE_CREATED?"
+    # by surfacing:
+    #   - invoice_payment_required_for_method (canonical.payment_method
+    #     is pre-paid vs COD)
+    #   - payment_stage_expected (True at COMPLETED / payment-created,
+    #     False at COMPLETED_INVOICE_ONLY, None otherwise unless
+    #     silent-stuck at INVOICE_CREATED)
+    #   - payment_stage_blocker_code / _reason (persisted by the
+    #     pipeline on short-circuit sites, or synthesised here for
+    #     silent-stuck rows)
+    #   - payment_payload_preview_exists (whether the invoice_payment
+    #     preview is present on the row)
+    _canonical = row.get("canonical_payload") or {}
+    _pm_for_diag = (
+        _canonical.get("payment_method")
+        or _canonical.get("payment_method_native")
+        if isinstance(_canonical, dict) else None)
+    invoice_payment_required_for_method: Optional[bool] = None
+    if _pm_for_diag:
+        try:
+            from integrations.qoyod.payment_methods import is_cod_family
+            invoice_payment_required_for_method = (
+                not is_cod_family(_pm_for_diag))
+        except Exception:
+            invoice_payment_required_for_method = None
+    _stage = row.get("pipeline_stage")
+    payment_stage_blocker_code = row.get("payment_stage_blocker_code")
+    payment_stage_blocker_reason = row.get("payment_stage_blocker_reason")
+    if _stage in ("INVOICE_PAYMENT_CREATED", "COMPLETED",
+                  "COMPLETED_WITH_ROUNDING_WARNING"):
+        payment_stage_expected = True
+    elif _stage == "COMPLETED_INVOICE_ONLY":
+        payment_stage_expected = False
+    elif _stage == "INVOICE_CREATED":
+        # Silent-stuck detection — rev30 short-circuits normally set
+        # the terminal stage. If we see INVOICE_CREATED here, either
+        # the worker was interrupted OR a stale worker built the row.
+        payment_stage_expected = (
+            bool(invoice_payment_required_for_method)
+            if invoice_payment_required_for_method is not None
+            else None)
+        if payment_stage_blocker_code is None:
+            payment_stage_blocker_code = "silent_stuck_at_invoice_created"
+            payment_stage_blocker_reason = (
+                "Row sits at INVOICE_CREATED with no downstream "
+                "transition. Under rev30 this state SHOULD be "
+                "unreachable — either the worker was interrupted "
+                "mid-tick, a stale worker built the row, OR the "
+                "pipeline was re-processed without completing the "
+                "payment step.")
+    else:
+        payment_stage_expected = None
+    _payloads = row.get("qoyod_payloads") or {}
+    payment_payload_preview_exists = bool(
+        isinstance(_payloads, dict)
+        and _payloads.get("invoice_payment") is not None)
+
     return {
         "ok":                            True,
         "found":                         True,
@@ -567,5 +642,14 @@ async def row_diagnostics(db, trace_id: str) -> dict:
             "row_worker_pipeline_sha":    row_worker_pipeline_sha,
             "current_pipeline_sha":       current_pipeline_sha,
             "worker_code_mismatch":       worker_code_mismatch,
+            # rev30 — Payment stage diagnostic surfacing.
+            "invoice_payment_required_for_method":
+                invoice_payment_required_for_method,
+            "payment_stage_expected":     payment_stage_expected,
+            "payment_stage_blocker_code": payment_stage_blocker_code,
+            "payment_stage_blocker_reason":
+                payment_stage_blocker_reason,
+            "payment_payload_preview_exists":
+                payment_payload_preview_exists,
         },
     }
