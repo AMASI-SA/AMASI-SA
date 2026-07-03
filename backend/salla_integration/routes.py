@@ -409,6 +409,22 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
     @router.get("/config")
     async def get_config(user: dict = Depends(current_user)):
         cfg = await get_oauth_config(db) or {}
+        # Iter-2026-02.rev23 — Easy Mode install URL.
+        # SALLA_APP_ID is read from env ONLY (never from UI). If present,
+        # we expose the exact Salla App Store install URL — the frontend
+        # opens it directly, no OAuth redirect involved.
+        # If unset, install_url=None + install_url_error tells the UI to
+        # show `SALLA_APP_ID_NOT_CONFIGURED` — no partial URL is ever
+        # returned.
+        salla_app_id = (os.environ.get("SALLA_APP_ID") or "").strip()
+        install_url = (
+            f"https://s.salla.sa/apps/install/{salla_app_id}"
+            if salla_app_id else None
+        )
+        # webhook secret presence (boolean only — never expose the value).
+        from .easy_mode_webhook import get_webhook_secret
+        webhook_secret_configured = bool(get_webhook_secret())
+
         # Never echo the raw secret back. We just say whether it exists.
         return {
             "client_id": cfg.get("client_id") or "",
@@ -419,6 +435,14 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             "configured": is_configured(),
             "env_client_id_present": bool(os.environ.get("SALLA_CLIENT_ID")),
             "env_client_secret_present": bool(os.environ.get("SALLA_CLIENT_SECRET")),
+            # Easy Mode surface (rev23):
+            "install_mode": "easy_mode",
+            "install_url": install_url,
+            "install_url_error": (
+                None if install_url else "SALLA_APP_ID_NOT_CONFIGURED"),
+            "salla_app_id_present": bool(salla_app_id),
+            "webhook_secret_configured": webhook_secret_configured,
+            "webhook_path": "/api/salla/webhooks/app",
         }
 
     @router.put("/config")

@@ -155,15 +155,28 @@ export default function SallaIntegration() {
     const handleConnect = async () => {
         setBusy(b => ({ ...b, connect: true }));
         try {
-            const { data } = await api.get("/salla/oauth/login");
-            if (!data?.authorize_url) {
-                throw new Error("No authorize_url returned");
+            // Iter-2026-02.rev23 — Easy Mode ONLY. No /oauth/login,
+            // no accounts.salla.sa/oauth2/auth, no redirect_uri.
+            // Backend reads SALLA_APP_ID from env and returns the exact
+            // install URL. We open it in a new tab so the merchant's
+            // Mezan session is preserved.
+            const { data } = await api.get("/salla/config");
+            if (data?.install_url_error === "SALLA_APP_ID_NOT_CONFIGURED"
+                || !data?.install_url) {
+                toast.error(
+                    "SALLA_APP_ID_NOT_CONFIGURED — أضف SALLA_APP_ID في backend/.env على Production ثم أعد المحاولة.");
+                return;
             }
-            // Full-page navigation — OAuth dance requires real browser redirect
-            window.location.href = data.authorize_url;
+            // Open Salla install page in a new tab. Salla will POST the
+            // authorize event to our webhook after the merchant clicks
+            // "Install" — no callback URL involved.
+            window.open(data.install_url, "_blank", "noopener,noreferrer");
+            toast.info(
+                "افتُحت صفحة تثبيت التطبيق في سلة. بعد الضغط على «تثبيت» ستصلنا بيانات الربط تلقائياً.");
         } catch (e) {
             const detail = e?.response?.data?.detail || e.message || "فشل بدء الربط";
             toast.error(typeof detail === "string" ? detail : detail.message || "فشل بدء الربط");
+        } finally {
             setBusy(b => ({ ...b, connect: false }));
         }
     };
@@ -341,9 +354,9 @@ export default function SallaIntegration() {
                                 </a>{" "}
                                 ثم انسخ القيم التالية في تطبيقك:
                             </p>
-                            <p className="text-[11px] text-amber-800 mt-2 mb-1">Redirect URI (انسخه إلى صفحة "Configurations" في Partners):</p>
-                            <pre className="text-[11px] bg-slate-900 text-cyan-300 rounded-lg p-3 font-mono overflow-x-auto" data-testid="salla-redirect-uri-snippet">
-{`${window.location.origin}/api/salla/oauth/callback`}
+                            <p className="text-[11px] text-amber-800 mt-2 mb-1">Webhook URL (سجّله في Salla Partners Portal → Webhooks / App Events):</p>
+                            <pre className="text-[11px] bg-slate-900 text-cyan-300 rounded-lg p-3 font-mono overflow-x-auto" data-testid="salla-webhook-url-snippet">
+{`${window.location.origin}/api/salla/webhooks/app`}
                             </pre>
                         </div>
                     </div>
@@ -376,14 +389,14 @@ export default function SallaIntegration() {
                                 autoComplete="off"
                             />
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">Redirect URI (اختياري — يُحسب تلقائياً)</label>
+                        <div style={{ display: "none" }} aria-hidden="true">
+                            {/* rev23 — Redirect URI hidden in Easy Mode. Kept in DOM tree
+                                only to preserve DB/migration compatibility. Value is
+                                neither used at connect time nor visible to the operator. */}
                             <input
-                                type="text"
+                                type="hidden"
                                 value={cfgInputs.redirect_uri}
                                 onChange={(e) => setCfgInputs({ ...cfgInputs, redirect_uri: e.target.value })}
-                                placeholder={`${window.location.origin}/api/salla/oauth/callback`}
-                                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 font-mono"
                                 data-testid="salla-input-redirect-uri"
                             />
                         </div>
@@ -453,7 +466,7 @@ export default function SallaIntegration() {
                         {status?.status === "needs_reauth" ? "انتهت صلاحية الربط" : "اربط متجر سلة الآن"}
                     </h3>
                     <p className="text-sm text-slate-500 mb-4 max-w-md mx-auto leading-relaxed">
-                        سيتم تحويلك إلى صفحة موافقة سلة الرسمية. بعد الموافقة، سنحصل تلقائياً على <span className="font-bold">Access Token</span> و <span className="font-bold">Refresh Token</span> و <span className="font-bold">Store ID</span>، وسنحفظها مشفّرة في قاعدة البيانات.
+                        سيتم فتح صفحة تثبيت التطبيق في سلة (Easy Mode). بعد الضغط على «تثبيت» ستُرسل سلة بيانات الربط تلقائياً إلى ميزان — دون الحاجة إلى صفحة موافقة إضافية.
                     </p>
                     <button
                         type="button"
