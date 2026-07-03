@@ -68,6 +68,11 @@ REQUIRED_MARKERS: dict[str, str] = {
         "Iter-2026-02.rev27 — SINGLE source of truth for whether the",
     "rev27_get_api_client_strict":
         "Iter-2026-02.rev27 — STRICT Live-Write Gate (REPLACES rev17).",
+    # rev28 — Atomic SAS gate persist + wording fix. If absent,
+    # RULES_APPLIED could land without the gate persisted (regression
+    # that caused order 270281278 observability gap).
+    "rev28_atomic_gate_in_rules_applied":
+        "rev28 — Include the SAS gate in the RULES_APPLIED write",
 }
 
 
@@ -296,6 +301,17 @@ async def row_diagnostics(db, trace_id: str) -> dict:
     # compare against the row's ids.
     live_write_gate_violation = False
     live_write_violation_reason = None
+    # rev28 — SAS Gate Missing invariant: if SAS is enabled AND the
+    # row advanced past NORMALIZED yet `selective_auto_send_gate`
+    # is missing on disk, that's a critical observability violation.
+    sas_gate_missing_violation = False
+    sas_gate_missing_reason = None
+    ADVANCED_AFTER_NORMALIZED = {
+        "RULES_APPLIED", "CUSTOMER_RESOLVED", "PRODUCT_RESOLVED",
+        "INVOICE_CREATED", "INVOICE_PAYMENT_CREATED",
+        "PAYMENT_LINK_FAILED", "COMPLETED",
+        "LOCKED_AWAITING_APPROVAL", "PARTIAL_FAILURE",
+    }
     real_customer = bool(row.get("qoyod_customer_id") and
                          isinstance(row.get("qoyod_customer_id"), (str, int))
                          and not str(row.get("qoyod_customer_id"))
@@ -307,11 +323,27 @@ async def row_diagnostics(db, trace_id: str) -> dict:
                                    (str, int))
                         and not str(row.get("qoyod_invoice_payment_id"))
                             .startswith(("DRY:", "PREVIEW:")))
+
+    # Settings fetch for BOTH invariants (single round-trip).
+    try:
+        user_id = row.get("user_id", "main")
+        settings_doc = await db.qoyod_settings.find_one(
+            {"user_id": user_id}, {"_id": 0}) or {}
+    except Exception:  # noqa: BLE001
+        settings_doc = {}
+
+    # ── rev28 — SAS Gate Missing check ──────────────────────────────
+    if bool(settings_doc.get("selective_auto_send_enabled", False)) \
+            and cur_stage in ADVANCED_AFTER_NORMALIZED \
+            and sas_gate is None:
+        sas_gate_missing_violation = True
+        sas_gate_missing_reason = (
+            "Auto-send row advanced past NORMALIZED without "
+            "persisted SAS gate")
+
+    # ── rev27 — Live-Write leak check ───────────────────────────────
     if real_customer or real_invoice or real_payment:
         try:
-            user_id = row.get("user_id", "main")
-            settings_doc = await db.qoyod_settings.find_one(
-                {"user_id": user_id}, {"_id": 0}) or {}
             violations = []
             if bool(settings_doc.get("dry_run_mode", False)):
                 violations.append("dry_run_mode=true")
@@ -356,5 +388,8 @@ async def row_diagnostics(db, trace_id: str) -> dict:
             # rev27 — live-write gate violation.
             "live_write_gate_violation": live_write_gate_violation,
             "live_write_violation_reason": live_write_violation_reason,
+            # rev28 — SAS gate missing invariant.
+            "sas_gate_missing_violation": sas_gate_missing_violation,
+            "sas_gate_missing_reason":    sas_gate_missing_reason,
         },
     }

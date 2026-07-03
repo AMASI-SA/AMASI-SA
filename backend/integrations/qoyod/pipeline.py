@@ -413,20 +413,30 @@ async def process_normalized_row(
     _sas_gate_passed = False
     _sas_enabled_setting = bool(
         settings.get("selective_auto_send_enabled", False))
+    # rev28 — Gate persist buffer. When SAS is enabled, the gate
+    # decision (eligible OR rejected) is included in EVERY exit-patch
+    # ($set of the transition to SKIPPED / RULES_APPLIED / DEAD_LETTER)
+    # so persist and stage-transition are ONE atomic DB write. No
+    # possibility of RULES_APPLIED landing on the row without a
+    # matching `selective_auto_send_gate` field.
+    _sas_gate_persist_set: dict = {}
     if _sas_enabled_setting:
         from integrations.qoyod.selective_auto_send_gate import (
             evaluate_selective_auto_send_gate,
         )
         _sas = evaluate_selective_auto_send_gate(
             canonical=canonical, row=row, settings=settings)
-        # Persist decision for audit / UI.
+        _sas_gate_persist_set = {
+            "selective_auto_send_gate":    _sas.to_log_dict(),
+            "selective_auto_send_gate_at":
+                datetime.now(timezone.utc).isoformat(),
+        }
+        # Persist decision immediately (audit / UI). Same fields will
+        # also be included in the next atomic transition (rev28
+        # belt-and-suspenders).
         await db.integration_inbox.update_one(
             {"id": row["id"]},
-            {"$set": {
-                "selective_auto_send_gate": _sas.to_log_dict(),
-                "selective_auto_send_gate_at":
-                    datetime.now(timezone.utc).isoformat(),
-            }})
+            {"$set": _sas_gate_persist_set})
         # rev25 — worker trace AFTER gate evaluated (so we see decision).
         await write_worker_trace(
             db, row,
@@ -631,6 +641,11 @@ async def process_normalized_row(
     )
     patch.setdefault("$set", {})["business_rules_decision"] = \
         decision.to_log_dict()
+    # rev28 — Include the SAS gate in the RULES_APPLIED write so
+    # persist + stage-transition are ONE atomic op. Any row landing
+    # at RULES_APPLIED is GUARANTEED to carry `selective_auto_send_gate`.
+    if _sas_gate_persist_set:
+        patch["$set"].update(_sas_gate_persist_set)
     # rev26 — atomic CAS on pipeline_stage=NORMALIZED. If the row
     # was already moved to SKIPPED / LOCKED_* by another handler,
     # this raises and the pipeline aborts without touching Qoyod.
@@ -707,12 +722,23 @@ async def process_normalized_row(
             "customer": res.to_log_dict(),
         }
 
+    # rev28 — Wording must reflect DRY-RUN state so audit log
+    # never claims a real POST happened when it did not.
+    _is_dry_customer = (
+        isinstance(res.qoyod_customer_id, str)
+        and res.qoyod_customer_id.startswith(("DRY:", "PREVIEW:")))
+    if _is_dry_customer:
+        _customer_note = ("DRY-RUN: customer payload built, no POST"
+                          if res.created_new
+                          else "DRY-RUN: customer mapped from local store")
+    else:
+        _customer_note = ("customer mapped from local store"
+                          if not res.created_new
+                          else "customer created in Qoyod")
     patch = transition(
         from_stage="RULES_APPLIED", to_stage="CUSTOMER_RESOLVED",
         actor="worker",
-        note=("customer mapped from local store"
-              if not res.created_new
-              else "customer created in Qoyod"),
+        note=_customer_note,
     )
     patch.setdefault("$set", {}).update({
         "customer_resolution": res.to_log_dict(),
@@ -953,11 +979,24 @@ async def process_customer_resolved_row(
          "created_new": i.created_new}
         for i in prod_res.items
     ]
+    # rev28 — Reflect DRY-RUN state in product-stage note so the
+    # audit log never claims real POSTs on dry ids.
+    _any_dry_product = any(
+        (isinstance(i.qoyod_product_id, str)
+         and i.qoyod_product_id.startswith(("DRY:", "PREVIEW:")))
+        for i in prod_res.items)
+    _n_created = sum(1 for i in prod_res.items if i.created_new)
+    _n_mapped  = sum(1 for i in prod_res.items if not i.created_new)
+    if _any_dry_product:
+        _product_note = (
+            f"DRY-RUN: {_n_created} product payload(s) built · "
+            f"{_n_mapped} mapped · no POST")
+    else:
+        _product_note = (
+            f"{_n_created} product(s) created · {_n_mapped} mapped")
     p = transition(from_stage="CUSTOMER_RESOLVED",
                    to_stage="PRODUCT_RESOLVED", actor="worker",
-                   note=(f"{sum(1 for i in prod_res.items if i.created_new)} "
-                         f"product(s) created · "
-                         f"{sum(1 for i in prod_res.items if not i.created_new)} mapped"))
+                   note=_product_note)
     p.setdefault("$set", {})["product_resolution"] = prod_res.to_log_dict()
     await _apply(db, row["id"], p)
 
