@@ -164,6 +164,14 @@ async def _seed_customer_resolved_row(
             "should_create_invoice": True,
             "invoice_date": datetime.now(timezone.utc).isoformat(),
         },
+        # rev29c/rev29d — preflight requires the gate.
+        "selective_auto_send_gate": {
+            "eligible": True, "reason": "eligible",
+            "resolved_payment_key": "mada",
+        },
+        "selective_auto_send_gate_at":
+            datetime.now(timezone.utc).isoformat(),
+        "selective_auto_send_gate_source": "sas_enabled_at_worker",
     }
     if qoyod_invoice_id is not None:
         row["qoyod_invoice_id"] = qoyod_invoice_id

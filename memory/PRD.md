@@ -5833,3 +5833,103 @@ Qoyod ids from a prior live sync, the check fell through to the
 - Salla Easy Mode Prod webhook verification.
 - Phase 2 Auto-Send expansion after flawless Tabby dry + live cycle.
 - manual_send_audit_log + UI Manual Send Button.
+
+---
+
+## 2026-Feb-03 — Rev 29d: Hard gate-persistence preflight + worker-code identity mismatch invariant
+
+### Context (Production trace `8cfeba3cf139456198eef63cf97065cf`, order 270182554)
+Even AFTER rev29c was deployed (build marker present, `code_matches_expected=true`),
+a FRESH dry Tabby order still landed at INVOICE_CREATED with:
+  - `selective_auto_send_gate` MISSING (rev29c should have persisted it).
+  - Legacy wording "customer created in Qoyod" and "1 product(s) created · 2 mapped"
+    (rev29c strengthening should have caught it).
+
+### Root cause (diagnosis)
+Rev29c code was loaded by the API process but the worker asyncio.create_task
+from the previous bootstrap kept processing rows with the CACHED pre-rev29c
+`pipeline` module. The build marker reports what the API process sees, NOT
+what the worker task actually executes.
+
+### Rev 29d fixes (defense-in-depth, no revert of prior fixes)
+1. **`pipeline.py` — Hard preflight `_require_sas_gate_persisted`**:
+   - New coroutine + custom exception `_SasGateMissingError`.
+   - Called at the ENTRY of every downstream stage:
+     - `process_normalized_row` → BEFORE the `RULES_APPLIED → CUSTOMER_RESOLVED` transition.
+     - `process_customer_resolved_row` → BEFORE the product / invoice / receipt stages.
+   - Reads the DB row and refuses to advance if `selective_auto_send_gate`
+     OR `selective_auto_send_gate_at` is missing. The row is DEAD_LETTERed
+     with `code=sas_gate_missing_before_downstream` BEFORE any stage_history
+     wording is emitted. Captures the row's stored `worker_pipeline_sha`
+     in the error so operators can see WHICH worker version built the row.
+
+2. **`sas_build_diagnostics.py` — Worker code identity**:
+   - `row_diagnostics` now surfaces three new fields:
+     `row_worker_pipeline_sha`, `current_pipeline_sha`, `worker_code_mismatch`.
+   - `worker_code_mismatch=true` when the row's stored sha differs from the
+     current process's sha — proves a stale worker built the row.
+   - New required marker `rev29d_hard_gate_preflight` (needle `rev29d — Hard preflight`),
+     count=3.
+
+### Tests (`tests/test_rev29d_hard_gate_preflight.py`) — 10 new tests
+- Marker registered + present in build.
+- `_require_sas_gate_persisted` raises `_SasGateMissingError` when gate missing.
+- Raises when gate present but `selective_auto_send_gate_at` missing (partial write).
+- Passes when both fields present.
+- Preflight wired at BOTH pipeline entry functions.
+- **Prod trace `8cfeba3cf...` replay** flags `sas_gate_missing_violation=true`,
+  `dry_run_wording_violation=true`, AND `worker_code_mismatch=true`.
+- Fresh rev29d-built row (current sha) — everything clean.
+- E2E test: gateless row at CUSTOMER_RESOLVED DEAD_LETTERs BEFORE any downstream
+  wording is emitted (`no "customer created" in stage_history`).
+- rev27 live-write gate + rev29 CAS intact.
+
+### Test-side adjustments (5 pre-existing test files)
+The following tests seeded `CUSTOMER_RESOLVED` rows without the gate;
+augmented with `selective_auto_send_gate` + `_at` + `_source`:
+- `tests/test_qoyod_invoice_payments_iter290h.py`
+- `tests/test_qoyod_pipeline_per_order_unlock_iter293_4_rev5.py`
+- `tests/test_qoyod_rounding_warning_iter293_4_rev8.py`
+- `tests/test_qoyod_day5_invoice_receipt.py`
+- `tests/test_qoyod_idempotent_invoice_reuse_iter291.py`
+
+### Regression
+- **1561 passed** in the qoyod / sas / canary / auto-send / salla / preflight /
+  business_rules / normalizer / trust_gate / requeue / day4 / first_sync suite.
+- 6 pre-existing failures (`test_qoyod_day4_rules_and_customer.py`,
+  `test_qoyod_pipeline_totals_guard_e2e_iter273.py`,
+  `test_eligible_orders_readonly.py`) verified UNRELATED to rev29d
+  (identical pass/fail before and after).
+
+### Deploy verification (Production, after deploy)
+1. `GET /admin/diagnostics/build`:
+   - `markers.rev29d_hard_gate_preflight.count >= 1`.
+   - `acceptance.code_matches_expected == true`.
+2. **CRITICAL**: After deploying, RESTART the worker process explicitly
+   (not just the API). The user asyncio.create_task from the previous
+   bootstrap holds a cached pre-rev29d `pipeline` module. A restart
+   forces the worker to re-import.
+3. `GET /admin/diagnostics/row?trace_id=8cfeba3cf139456198eef63cf97065cf`:
+   - `sas_gate_missing_violation == true` (historical).
+   - `dry_run_wording_violation == true` (historical).
+   - `worker_code_mismatch` — true or false depending on whether the row's
+     stored sha differs from the redeployed process. Either way, it's now
+     visible.
+4. Fresh dry Tabby order:
+   - `selective_auto_send_gate` present with `_at` and `_source`.
+   - `sas_gate_missing_violation == false`.
+   - `dry_run_wording_violation == false`.
+   - `live_write_gate_violation == false`.
+   - `duplicate_stage_transition_violation == false`.
+   - `worker_code_mismatch == false` (the row was built by the current process).
+   - All stage_history notes prefixed `"DRY-RUN: ..."`.
+
+### Constraints honoured
+- No positive live tests. No reprocess. No retry-payment. Invoice #188 frozen.
+  rev27 live-write gate + rev29 CAS transitions untouched.
+
+### Next up (blocked on user)
+- Deploy rev29d and RESTART the worker.
+- If violations persist after worker restart → the row is likely still being
+  processed by a truly stale worker. Look at `worker_code_mismatch` in the
+  diagnostics: `row_worker_pipeline_sha != current_pipeline_sha` proves it.

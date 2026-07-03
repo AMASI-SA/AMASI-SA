@@ -226,6 +226,15 @@ async def _seed_customer_resolved(db, *, user_id, order_id, dto,
             "invoice_date_source": "completed_at",
             "triggered_by_status": "completed",
         },
+        # rev29c/rev29d — Every CUSTOMER_RESOLVED row must carry a
+        # persisted SAS gate; the preflight rejects any that don't.
+        "selective_auto_send_gate": {
+            "eligible": True, "reason": "eligible",
+            "resolved_payment_key": "mada",
+        },
+        "selective_auto_send_gate_at":
+            datetime.now(timezone.utc).isoformat(),
+        "selective_auto_send_gate_source": "sas_enabled_at_worker",
     }
     await db.integration_inbox.insert_one(row)
     return row
@@ -334,6 +343,14 @@ async def test_pipeline_preflight_blocks_when_tax_missing(db):
             "invoice_date_source": "completed_at",
             "triggered_by_status": "completed",
         },
+        # rev29c/rev29d — preflight requires the gate.
+        "selective_auto_send_gate": {
+            "eligible": True, "reason": "eligible",
+            "resolved_payment_key": "mada",
+        },
+        "selective_auto_send_gate_at":
+            datetime.now(timezone.utc).isoformat(),
+        "selective_auto_send_gate_source": "sas_enabled_at_worker",
     }
     await db.integration_inbox.insert_one(row)
     try:

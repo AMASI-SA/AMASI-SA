@@ -122,6 +122,15 @@ async def _seed_row(db, *, user_id, order_id, dto=None):
             "invoice_date_source": "completed_at",
             "triggered_by_status": "completed",
         },
+        # rev29c/rev29d — Every CUSTOMER_RESOLVED row must carry a
+        # persisted SAS gate; the preflight rejects any that don't.
+        "selective_auto_send_gate": {
+            "eligible": True, "reason": "eligible",
+            "resolved_payment_key": "mada",
+        },
+        "selective_auto_send_gate_at":
+            datetime.now(timezone.utc).isoformat(),
+        "selective_auto_send_gate_source": "sas_enabled_at_worker",
     }
     await db.integration_inbox.insert_one(row)
     return row

@@ -181,6 +181,14 @@ def _customer_resolved_row():
             "invoice_date_source":  "trigger_status_date",
             "invoice_date":         "2026-02-27T10:00:00+00:00",
         },
+        # rev29c/rev29d — Every CUSTOMER_RESOLVED row must carry a
+        # persisted SAS gate; the preflight rejects any that don't.
+        "selective_auto_send_gate": {
+            "eligible": True, "reason": "eligible",
+            "resolved_payment_key": "cash_on_delivery",
+        },
+        "selective_auto_send_gate_at":     "2026-02-27T10:00:01+00:00",
+        "selective_auto_send_gate_source": "sas_enabled_at_worker",
         "canonical_payload": {
             "order_id":      "269571122",
             "order_number":  "269571122",

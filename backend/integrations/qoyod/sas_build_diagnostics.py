@@ -96,6 +96,13 @@ REQUIRED_MARKERS: dict[str, str] = {
     # without persisting the SAS gate.
     "rev29c_fail_closed_gate":
         "rev29c — Fail-closed gate persistence",
+    # rev29d — Hard preflight guard at every downstream stage entry.
+    # If a row lands at CUSTOMER_RESOLVED / PRODUCT_RESOLVED /
+    # INVOICE_CREATED without `selective_auto_send_gate` persisted
+    # (typically because a stale worker built it), the pipeline
+    # DEAD_LETTERs before emitting any stage_history note.
+    "rev29d_hard_gate_preflight":
+        "rev29d — Hard preflight",
 }
 
 
@@ -504,6 +511,22 @@ async def row_diagnostics(db, trace_id: str) -> dict:
                 f"note(s) with pre-rev29b wording implying real Qoyod POST(s)"
             )
 
+    # ── rev29d — Worker code identity mismatch ───────────────────────
+    # If the row's stored `sas_worker_trace.worker_pipeline_sha` does
+    # not match the CURRENT process's pipeline sha, this is evidence
+    # that the row was built by a stale worker. Surface both shas so
+    # the operator can decide whether to restart / redeploy.
+    from integrations.qoyod.sas_worker_trace import _compute_pipeline_sha
+    _swt = row.get("sas_worker_trace") or {}
+    row_worker_pipeline_sha = (
+        _swt.get("worker_pipeline_sha")
+        if isinstance(_swt, dict) else None)
+    current_pipeline_sha = _compute_pipeline_sha()
+    worker_code_mismatch = bool(
+        row_worker_pipeline_sha
+        and current_pipeline_sha
+        and row_worker_pipeline_sha != current_pipeline_sha)
+
     return {
         "ok":                            True,
         "found":                         True,
@@ -540,5 +563,9 @@ async def row_diagnostics(db, trace_id: str) -> dict:
             "dry_run_wording_violation":  dry_run_wording_violation,
             "dry_run_wording_reason":     dry_run_wording_reason,
             "dry_run_wording_offending":  dry_run_wording_offending,
+            # rev29d — Worker code identity check.
+            "row_worker_pipeline_sha":    row_worker_pipeline_sha,
+            "current_pipeline_sha":       current_pipeline_sha,
+            "worker_code_mismatch":       worker_code_mismatch,
         },
     }

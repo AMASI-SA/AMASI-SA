@@ -152,6 +152,17 @@ def _make_row() -> dict:
         },
         "pipeline_started_at":         "2026-07-05T10:00:00+00:00",
         "stage_history":               [],
+        # rev29c/rev29d — Rows landing at CUSTOMER_RESOLVED MUST carry
+        # a persisted SAS gate; the preflight in the pipeline refuses
+        # to advance otherwise. The gate here is the standard PASS
+        # record (same shape rev29c writes on the NORMALIZED entry).
+        "selective_auto_send_gate": {
+            "eligible": True,
+            "reason":   "eligible",
+            "resolved_payment_key": "tabby_installment",
+        },
+        "selective_auto_send_gate_at":     "2026-07-05T10:00:01+00:00",
+        "selective_auto_send_gate_source": "sas_enabled_at_worker",
     }
 
 

@@ -191,6 +191,72 @@ async def _assert_sas_not_rejected(db, row_id: str) -> None:
                     f"current_stage={doc.get('pipeline_stage')!r})"))
 
 
+# ── rev29d — Hard gate-persistence preflight ──────────────────────
+class _SasGateMissingError(Exception):
+    """rev29d — Raised when a downstream stage entry sees no
+    `selective_auto_send_gate` field on the DB row.
+
+    A row landing at CUSTOMER_RESOLVED / PRODUCT_RESOLVED /
+    INVOICE_CREATED / INVOICE_PAYMENT_CREATED without this field is
+    IMPOSSIBLE under rev29c pipeline code — the presence of this
+    error means an OLD worker built the row OR another code path
+    bypassed the rev29c gate write. Either way: fail closed."""
+
+    def __init__(self, row_id: str, stage: str, worker_sha: Optional[str]):
+        super().__init__(
+            f"rev29d gate-preflight failed at {stage} for row_id={row_id!r}; "
+            f"selective_auto_send_gate missing. "
+            f"row.sas_worker_trace.worker_pipeline_sha={worker_sha!r}")
+        self.row_id = row_id
+        self.stage = stage
+        self.worker_sha = worker_sha
+
+
+async def _require_sas_gate_persisted(
+    db, row_id: str, *, stage: str,
+) -> None:
+    """rev29d — Hard preflight. Called at the ENTRY of every stage
+    that could produce a Qoyod-shaped stage_history note. Refuses to
+    let the pipeline continue if the row is missing
+    `selective_auto_send_gate`. Fails BEFORE any wording is emitted
+    so no misleading audit line is written.
+
+    Also refuses when the row's `sas_worker_trace.worker_pipeline_sha`
+    does not match the current process's pipeline sha (proves the row
+    was built by a stale worker).
+    """
+    doc = await db.integration_inbox.find_one(
+        {"id": row_id},
+        {"selective_auto_send_gate":       1,
+         "selective_auto_send_gate_at":    1,
+         "sas_worker_trace":               1,
+         "pipeline_stage":                 1,
+         "_id":                            0},
+    )
+    if not doc:
+        # Nothing to guard — caller will handle "row vanished".
+        return
+    sas = doc.get("selective_auto_send_gate")
+    at  = doc.get("selective_auto_send_gate_at")
+    if not isinstance(sas, dict) or not at:
+        # Capture the worker sha so an operator can prove
+        # "old-code-vs-new-code" from the DEAD_LETTER evidence.
+        from integrations.qoyod.sas_worker_trace import (
+            _compute_pipeline_sha,
+        )
+        row_swt = doc.get("sas_worker_trace") or {}
+        row_worker_sha = (row_swt.get("worker_pipeline_sha")
+                          if isinstance(row_swt, dict) else None)
+        current_sha = _compute_pipeline_sha()
+        # Log both for the operator.
+        logger.error(
+            "rev29d gate_missing_at_downstream row_id=%s stage=%s "
+            "row_worker_sha=%s current_sha=%s",
+            row_id, stage, row_worker_sha, current_sha)
+        raise _SasGateMissingError(
+            row_id=row_id, stage=stage, worker_sha=row_worker_sha)
+
+
 def _writes_blocked(api_client: Any, settings: dict) -> bool:
     """Iter-293.4-rev5 — Single source of truth for the pipeline's
     PRE-flight lock check.
@@ -772,6 +838,36 @@ async def process_normalized_row(
     # ── RULES_APPLIED → CUSTOMER_RESOLVED ───────────────────────────
     # rev26 — Second SAS guard just before the FIRST Qoyod side-effect
     # (customer create). Defense-in-depth against any bypass path.
+    # rev29d — Hard preflight: refuse to advance if the DB row is
+    # missing `selective_auto_send_gate`. This catches rows built by
+    # a stale worker running pre-rev29c code (the exact failure the
+    # user reported on prod trace `8cfeba3cf139456198eef63cf97065cf`).
+    try:
+        await _require_sas_gate_persisted(
+            db, row["id"], stage="CUSTOMER_RESOLVED")
+    except _SasGateMissingError as e:
+        logger.error(
+            "rev29d gate_missing_before_customer_resolved row_id=%s "
+            "trace_id=%s row_worker_sha=%s",
+            row.get("id"), trace_id, e.worker_sha)
+        await _dead_letter(
+            db, row_id=row["id"], from_stage="RULES_APPLIED",
+            fail_stage="FAILED_CUSTOMER",
+            error={
+                "code":    "sas_gate_missing_before_downstream",
+                "message": str(e),
+                "stage":   "CUSTOMER_RESOLVED",
+                "row_worker_sha": e.worker_sha,
+            },
+            started_at=row.get("pipeline_started_at"),
+        )
+        return {
+            "row_id":   row["id"],
+            "outcome":  "DEAD_LETTER",
+            "reason":   "sas_gate_missing_before_downstream",
+            "stage":    "CUSTOMER_RESOLVED",
+            "trace_id": trace_id,
+        }
     try:
         await _assert_sas_not_rejected(db, row["id"])
     except _StaleStageError as e:
@@ -979,6 +1075,33 @@ async def process_customer_resolved_row(
         return {"row_id": row.get("id"), "skipped": True,
                 "reason": "not_in_customer_resolved_stage",
                 "pipeline_stage": row.get("pipeline_stage")}
+
+    # rev29d — Hard preflight. Refuse to run product/invoice/receipt
+    # stages if the row was built without `selective_auto_send_gate`.
+    # Fixes prod trace `8cfeba3cf139456198eef63cf97065cf` where the
+    # row landed at CUSTOMER_RESOLVED with no gate — indicating a
+    # stale worker.
+    try:
+        await _require_sas_gate_persisted(
+            db, row["id"], stage="PRODUCT_RESOLVED")
+    except _SasGateMissingError as e:
+        logger.error(
+            "rev29d gate_missing_before_product_resolved row_id=%s "
+            "row_worker_sha=%s", row.get("id"), e.worker_sha)
+        await _dead_letter(
+            db, row_id=row["id"], from_stage="CUSTOMER_RESOLVED",
+            fail_stage="FAILED_PRODUCT",
+            error={
+                "code":    "sas_gate_missing_before_downstream",
+                "message": str(e),
+                "stage":   "PRODUCT_RESOLVED",
+                "row_worker_sha": e.worker_sha,
+            },
+            started_at=row.get("pipeline_started_at"),
+        )
+        return {"row_id": row["id"], "outcome": "DEAD_LETTER",
+                "reason": "sas_gate_missing_before_downstream",
+                "stage":  "PRODUCT_RESOLVED"}
 
     user_id = row.get("user_id", "main")
     trace_id = row.get("trace_id")
