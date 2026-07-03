@@ -5728,3 +5728,108 @@ notes `"customer created in Qoyod"` and `"0 product(s) created ·
 - Phase 2 Auto-Send expansion (mada/apple_pay/credit_card/stc_pay/tamara)
   gated on a flawless Tabby dry + live cycle.
 - manual_send_audit_log + UI Manual Send Button.
+
+---
+
+## 2026-Feb-03 — Rev 29c: Fail-closed gate persistence + strengthened dry-run wording
+
+### Context (Production trace `b09392fb2a1047fa89ca52b39cbcfe65`, order 270227236)
+After rev29b was deployed, a Tabby dry-run row lit BOTH diagnostic
+invariants:
+  - `sas_gate_missing_violation=true` — row advanced past NORMALIZED
+    without `selective_auto_send_gate` persisted.
+  - `dry_run_wording_violation=true` — stage_history contained
+    "customer created in Qoyod" and "1 product(s) created · 0 mapped"
+    while ids were `DRY:*`.
+This showed rev29b *detected* the bugs but the pipeline still
+*allowed* them to happen.
+
+### Root causes
+**RC-1 (Gate)**: `selective_auto_send_gate` was persisted ONLY when
+`selective_auto_send_enabled=true` at worker time. If the operator
+later flipped SAS on, historical rows lit up the invariant.
+
+**RC-2 (Wording)**: `_is_dry_customer` / `_any_dry_product` keyed on
+resolved-id prefix ONLY. When products were mapped locally to REAL
+Qoyod ids from a prior live sync, the check fell through to the
+"N product(s) created" branch — even though the CURRENT run used
+`DryRunQoyodClient`.
+
+### Rev 29c fixes (surgical only)
+1. **`pipeline.py` — Fail-closed gate persistence**:
+   - `selective_auto_send_gate` now persisted on **every** row, even
+     when SAS is disabled at settings. SAS-disabled branch writes a
+     synthetic record `{eligible: false, reason: "sas_disabled_by_settings"}`
+     with `selective_auto_send_gate_source: "sas_disabled_at_worker"`.
+   - The SAS-enabled branch stamps
+     `selective_auto_send_gate_source: "sas_enabled_at_worker"`.
+   - The gate is written IMMEDIATELY AND included in the
+     `NORMALIZED → RULES_APPLIED` atomic CAS.
+   - **Fail-closed guard**: if `_sas_gate_persist_set` is empty at
+     the RULES_APPLIED transition, the row DEAD_LETTERs with code
+     `sas_gate_persist_buffer_empty` (unreachable in normal flow but
+     mathematically impossible to bypass).
+   - `_assert_sas_not_rejected` updated to skip the synthetic
+     `sas_disabled_by_settings` record — that's not a real SAS
+     rejection.
+
+2. **`pipeline.py` — Canonical `_pipeline_is_dry_mode` signal**:
+   - Computed in BOTH `process_normalized_row` AND
+     `process_customer_resolved_row` as:
+       `isinstance(api_client, DryRunQoyodClient) OR settings.dry_run_mode`
+   - PRIMARY signal for customer/product/invoice wording. Id-prefix
+     check is the FALLBACK.
+   - Result: even when a product is locally mapped to a real id but
+     the client is `DryRunQoyodClient`, the note reads
+     `"DRY-RUN: N product payload(s) built · M mapped · no POST"`.
+
+3. **`sas_build_diagnostics.py`** — New marker `rev29c_fail_closed_gate`
+   (needle `rev29c — Fail-closed gate persistence`), count=2.
+   Full `code_matches_expected=true` verified.
+
+### Tests (`tests/test_rev29c_fail_closed_gate.py`)
+10 tests covering:
+- rev29c marker registered + present in build.
+- `_pipeline_is_dry_mode` computed in both entry points.
+- Fail-closed abort present (`sas_gate_persist_buffer_empty`).
+- **Prod trace `b09392fb...` replay flags BOTH invariants**.
+- Fresh rev29c dry path clears all four invariants.
+- Dry-run wording covers customer + product with strengthened check.
+- SAS-disabled branch persists synthetic gate + source marker.
+- Fail-closed check present in source.
+- rev27 live-write gate intact.
+- rev29 atomic CAS semantics intact.
+
+### Regression
+- 237 passed in the qoyod / sas / canary / auto-send / salla suite.
+- 6 pre-existing failures in `test_qoyod_day4_rules_and_customer.py`,
+  `test_qoyod_pipeline_totals_guard_e2e_iter273.py`,
+  `test_eligible_orders_readonly.py` — verified unrelated to rev29c
+  (they fail identically before and after this change).
+
+### Deploy verification (Production, after deploy)
+1. `GET /admin/diagnostics/build`:
+   - `markers.rev29c_fail_closed_gate.count >= 1`.
+   - `acceptance.code_matches_expected == true`.
+2. `GET /admin/diagnostics/row?trace_id=b09392fb2a1047fa89ca52b39cbcfe65`:
+   - `sas_gate_missing_violation == true` (historical).
+   - `dry_run_wording_violation == true` (historical).
+3. Fresh dry Tabby order:
+   - `selective_auto_send_gate.eligible == true` (or synthetic
+     `reason=sas_disabled_by_settings` if SAS is off).
+   - `selective_auto_send_gate_source ∈ {sas_enabled_at_worker,
+     sas_disabled_at_worker}`.
+   - `stage_history` notes ALL start with `"DRY-RUN: ..."`.
+   - `sas_gate_missing_violation == false`.
+   - `dry_run_wording_violation == false`.
+   - `live_write_gate_violation == false`.
+   - `duplicate_stage_transition_violation == false`.
+
+### Constraints honoured
+- No positive live tests. No reprocess. No retry-payment. Invoice #188
+  remains frozen. No live-write gate change. No CAS transition change.
+
+### Next up (blocked on user)
+- Salla Easy Mode Prod webhook verification.
+- Phase 2 Auto-Send expansion after flawless Tabby dry + live cycle.
+- manual_send_audit_log + UI Manual Send Button.

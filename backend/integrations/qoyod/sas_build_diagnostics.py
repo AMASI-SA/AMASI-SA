@@ -90,6 +90,12 @@ REQUIRED_MARKERS: dict[str, str] = {
     # audit signal.
     "rev29b_dry_run_wording":
         "rev29b — Dry-run wording enforcement",
+    # rev29c — Fail-closed SAS gate persistence + dry-run wording
+    # strengthened via `_pipeline_is_dry_mode`. If absent, the
+    # NORMALIZED → RULES_APPLIED transition may still advance
+    # without persisting the SAS gate.
+    "rev29c_fail_closed_gate":
+        "rev29c — Fail-closed gate persistence",
 }
 
 

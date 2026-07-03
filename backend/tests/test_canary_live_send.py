@@ -3141,6 +3141,9 @@ class TestAlreadySentIgnoresNonRealIds:
             "qoyod_invoice_id": "DRY:invoice:stale-xxx",
         }])
         db.qoyod_settings = _Coll([{"user_id": "main"}])
+        # rev29c — SAS-disabled branch now persists a synthetic gate
+        # (fail-closed). Stub update_one so this async call succeeds.
+        db.integration_inbox.update_one = AsyncMock()
 
         with patch.object(pmod, "SalesOrderDTO",
                           return_value=dto_stub), \
@@ -3206,6 +3209,8 @@ class TestAlreadySentIgnoresNonRealIds:
             "qoyod_invoice_id": "999123",   # REAL قيود id
         }])
         db.qoyod_settings = _Coll([{"user_id": "main"}])
+        # rev29c — SAS-disabled branch now persists a synthetic gate.
+        db.integration_inbox.update_one = AsyncMock()
 
         with patch.object(pmod, "SalesOrderDTO",
                           return_value=dto_stub), \

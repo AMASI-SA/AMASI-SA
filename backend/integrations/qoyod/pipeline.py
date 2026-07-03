@@ -174,7 +174,15 @@ async def _assert_sas_not_rejected(db, row_id: str) -> None:
     if not doc:
         return  # nothing to guard against
     sas = doc.get("selective_auto_send_gate") or {}
-    if isinstance(sas, dict) and sas.get("eligible") is False:
+    # rev29c — Skip the synthetic `sas_disabled_by_settings` record.
+    # That gate was written by the pipeline itself as a placeholder
+    # when SAS was OFF at worker time (fail-closed observability),
+    # NOT because the SAS gate rejected the row. Treating it as a
+    # rejection would break every non-auto-send path (manual send,
+    # legacy Day-4 flow, etc.).
+    if (isinstance(sas, dict)
+            and sas.get("eligible") is False
+            and sas.get("reason") != "sas_disabled_by_settings"):
         raise _StaleStageError(
             row_id,
             expected_from="sas_gate_eligible=true",
@@ -413,23 +421,31 @@ async def process_normalized_row(
     _sas_gate_passed = False
     _sas_enabled_setting = bool(
         settings.get("selective_auto_send_enabled", False))
-    # rev28 — Gate persist buffer. When SAS is enabled, the gate
-    # decision (eligible OR rejected) is included in EVERY exit-patch
-    # ($set of the transition to SKIPPED / RULES_APPLIED / DEAD_LETTER)
-    # so persist and stage-transition are ONE atomic DB write. No
-    # possibility of RULES_APPLIED landing on the row without a
-    # matching `selective_auto_send_gate` field.
+    # rev28 + rev29c — Gate persist buffer. The gate decision is
+    # persisted on EVERY row — even when SAS is disabled at settings.
+    # rev29c: `rev29c — Fail-closed gate persistence`. Rationale:
+    # `selective_auto_send_enabled` is toggleable at runtime. If a
+    # row is processed while SAS is OFF and then the operator later
+    # flips it ON, the diagnostic invariant would false-flag the
+    # historical row as `sas_gate_missing_violation`. By ALWAYS
+    # writing a synthetic `sas_disabled_by_settings` gate record,
+    # we make the invariant deterministic: every row past
+    # NORMALIZED carries an explicit gate decision.
+    # rev29c fail-closed: if the gate write cannot be included in
+    # the RULES_APPLIED atomic CAS, the pipeline aborts BEFORE any
+    # customer/product/invoice stage runs.
+    from integrations.qoyod.selective_auto_send_gate import (
+        evaluate_selective_auto_send_gate,
+    )
     _sas_gate_persist_set: dict = {}
     if _sas_enabled_setting:
-        from integrations.qoyod.selective_auto_send_gate import (
-            evaluate_selective_auto_send_gate,
-        )
         _sas = evaluate_selective_auto_send_gate(
             canonical=canonical, row=row, settings=settings)
         _sas_gate_persist_set = {
             "selective_auto_send_gate":    _sas.to_log_dict(),
             "selective_auto_send_gate_at":
                 datetime.now(timezone.utc).isoformat(),
+            "selective_auto_send_gate_source": "sas_enabled_at_worker",
         }
         # Persist decision immediately (audit / UI). Same fields will
         # also be included in the next atomic transition (rev28
@@ -485,6 +501,37 @@ async def process_normalized_row(
             }
         _sas_gate_passed = True
     else:
+        # rev29c — Persist a SYNTHETIC gate record even when SAS is
+        # disabled. Rationale: `selective_auto_send_enabled` is a
+        # runtime toggle. If a row is processed while SAS is OFF and
+        # the operator later flips it ON, the historical row would
+        # false-flag `sas_gate_missing_violation`. A synthetic record
+        # with `reason=sas_disabled_by_settings` makes the invariant
+        # deterministic: every row past NORMALIZED carries an explicit
+        # gate decision that reflects what the worker actually saw at
+        # processing time.
+        _sas_gate_persist_set = {
+            "selective_auto_send_gate": {
+                "eligible": False,
+                "reason":   "sas_disabled_by_settings",
+                "detail":   (
+                    "selective_auto_send_enabled=False when the worker "
+                    f"processed this row (user_id={user_id!r}). The gate "
+                    "function was not called; this synthetic record is "
+                    "persisted so the diagnostic invariant "
+                    "`sas_gate_missing_violation` stays deterministic "
+                    "across settings toggles."),
+                "resolved_payment_key": None,
+            },
+            "selective_auto_send_gate_at":
+                datetime.now(timezone.utc).isoformat(),
+            "selective_auto_send_gate_source": "sas_disabled_at_worker",
+        }
+        # Immediate write — belt-and-suspenders. Also included in the
+        # RULES_APPLIED CAS below.
+        await db.integration_inbox.update_one(
+            {"id": row["id"]},
+            {"$set": _sas_gate_persist_set})
         # rev25 — worker trace when SAS is OFF at the settings layer.
         # This is the exact diagnostic that surfaces "gate never ran"
         # while operator believes SAS is enabled — usually a user_id
@@ -610,6 +657,22 @@ async def process_normalized_row(
             return {"row_id": row["id"], "outcome": "DEAD_LETTER",
                     "reason": "no_credentials"}
 
+    # rev29c — Canonical dry-run mode signal used for wording. Truthy
+    # if ANY of:
+    #   • api_client is DryRunQoyodClient (hard signal — no HTTP)
+    #   • settings.dry_run_mode is True (operator toggle)
+    # This is the PRIMARY dry signal for stage-note wording. Even if
+    # a customer or product was mapped locally to a real Qoyod id
+    # (prior live sync), a dry-run POST still MUST NOT be described
+    # as "created in Qoyod". Belt-and-suspenders below combines this
+    # with the resolved-id prefix check.
+    from integrations.qoyod.invoice_builder import (
+        DryRunQoyodClient as _DryRunQoyodClient_check,
+    )
+    _pipeline_is_dry_mode = bool(
+        isinstance(api_client, _DryRunQoyodClient_check)
+        or settings.get("dry_run_mode", False))
+
     # Existing invoice row — used by `trigger_once_only`.
     # Note: decision was already evaluated above (Iter-282 status gate
     # ordering). We now know the order is ELIGIBLE — proceed with
@@ -633,6 +696,42 @@ async def process_normalized_row(
         }
 
     # ── NORMALIZED → RULES_APPLIED ──────────────────────────────────
+    # rev29c — Fail-closed gate persistence: `_sas_gate_persist_set`
+    # MUST be non-empty by this point. Both the SAS-enabled and
+    # SAS-disabled branches above populate it. If it's empty here,
+    # the pipeline aborts before advancing so no row ever advances
+    # past NORMALIZED without an explicit gate record.
+    if not _sas_gate_persist_set:
+        logger.error(
+            "rev29c fail-closed: gate persist buffer empty "
+            "row_id=%s trace_id=%s", row.get("id"), trace_id)
+        # Move to DEAD_LETTER via atomic CAS so no side-effects
+        # downstream can occur. The row stays visible with a clear
+        # diagnostic pointing at the missing gate.
+        dl_patch = transition(
+            from_stage="NORMALIZED", to_stage="DEAD_LETTER",
+            actor="worker",
+            note="rev29c: gate persist buffer empty at RULES_APPLIED",
+            existing_started_at=row.get("pipeline_started_at"),
+        )
+        dl_patch.setdefault("$set", {})["pipeline_error"] = {
+            "code":    "sas_gate_persist_buffer_empty",
+            "message": (
+                "rev29c fail-closed: no gate decision to persist; "
+                "refusing to advance past NORMALIZED."),
+        }
+        try:
+            await _apply_atomic(
+                db, row["id"], dl_patch,
+                expected_from_stage="NORMALIZED")
+        except _StaleStageError:
+            pass
+        return {
+            "row_id":   row["id"],
+            "outcome":  "DEAD_LETTER",
+            "reason":   "sas_gate_persist_buffer_empty",
+            "trace_id": trace_id,
+        }
     patch = transition(
         from_stage="NORMALIZED", to_stage="RULES_APPLIED",
         actor="worker",
@@ -642,10 +741,14 @@ async def process_normalized_row(
     patch.setdefault("$set", {})["business_rules_decision"] = \
         decision.to_log_dict()
     # rev28 — Include the SAS gate in the RULES_APPLIED write so
-    # persist + stage-transition are ONE atomic op. Any row landing
-    # at RULES_APPLIED is GUARANTEED to carry `selective_auto_send_gate`.
-    if _sas_gate_persist_set:
-        patch["$set"].update(_sas_gate_persist_set)
+    # persist + stage-transition are ONE atomic op (rev29c: this
+    # write ALSO carries `selective_auto_send_gate_source` so
+    # historical rows can be distinguished by whether SAS was on
+    # at processing time). Any row landing at RULES_APPLIED is
+    # GUARANTEED to carry `selective_auto_send_gate`,
+    # `selective_auto_send_gate_at`, and
+    # `selective_auto_send_gate_source`.
+    patch["$set"].update(_sas_gate_persist_set)
     # rev26 — atomic CAS on pipeline_stage=NORMALIZED. If the row
     # was already moved to SKIPPED / LOCKED_* by another handler,
     # this raises and the pipeline aborts without touching Qoyod.
@@ -722,13 +825,21 @@ async def process_normalized_row(
             "customer": res.to_log_dict(),
         }
 
-    # rev28 + rev29b — Dry-run wording enforcement.
-    # When the resolved id carries a DRY:/PREVIEW: sentinel, the note
-    # MUST explicitly say "DRY-RUN: ... no POST" so the audit log can
-    # never be misread as evidence of a real Qoyod POST.
+    # rev28 + rev29b — Dry-run wording enforcement (rev29c: strengthened
+    # to use `_pipeline_is_dry_mode` as primary signal, not just id
+    # prefix).
+    # Primary signal is `_pipeline_is_dry_mode` (client type +
+    # settings.dry_run_mode). Fallback signal is the resolved id
+    # prefix. Either signal means the note MUST say "DRY-RUN".
+    # rev29c fix for prod trace `b09392fb...`: a customer created
+    # via DryRunQoyodClient in dry-run mode used to fall through to
+    # the "customer created in Qoyod" branch when the local mapping
+    # briefly returned a real id (racy sync) OR when the operator
+    # inspected the row after re-processing.
     _is_dry_customer = (
-        isinstance(res.qoyod_customer_id, str)
-        and res.qoyod_customer_id.startswith(("DRY:", "PREVIEW:")))
+        _pipeline_is_dry_mode
+        or (isinstance(res.qoyod_customer_id, str)
+            and res.qoyod_customer_id.startswith(("DRY:", "PREVIEW:"))))
     if _is_dry_customer:
         _customer_note = ("DRY-RUN: customer payload built, no POST"
                           if res.created_new
@@ -964,6 +1075,16 @@ async def process_customer_resolved_row(
             return {"row_id": row["id"], "outcome": "DEAD_LETTER",
                     "reason": "credentials_missing"}
 
+    # rev29c — Canonical dry-run mode signal for wording at this
+    # stage. Same shape as the NORMALIZED-stage signal. Truthy if
+    # api_client is DryRunQoyodClient OR settings.dry_run_mode=True.
+    from integrations.qoyod.invoice_builder import (
+        DryRunQoyodClient as _DryRunQoyodClient_check,
+    )
+    _pipeline_is_dry_mode = bool(
+        isinstance(api_client, _DryRunQoyodClient_check)
+        or settings.get("dry_run_mode", False))
+
     # ── 4b PRODUCTS ─────────────────────────────────────────────────
     # rev26 — SAS guard before ANY Qoyod side-effect at this stage
     # (product create/lookup). Refuses to touch Qoyod for a row whose
@@ -999,16 +1120,20 @@ async def process_customer_resolved_row(
         for i in prod_res.items
     ]
     # rev28 + rev29b — Dry-run wording enforcement for the product
-    # stage. If ANY resolved product carries a DRY:/PREVIEW: id, the
-    # whole note must be flagged as DRY-RUN so no reader assumes a
-    # real Qoyod product POST happened.
+    # stage (rev29c: strengthened via `_pipeline_is_dry_mode`).
+    # Primary signal: `_pipeline_is_dry_mode`. Fallback: ANY product
+    # id with DRY:/PREVIEW: prefix. rev29c fix for prod trace
+    # `b09392fb...` where products were mapped locally to real ids
+    # (prior live sync) — the note used to fall through to
+    # "N product(s) created · M mapped" even under DryRunQoyodClient.
     _any_dry_product = any(
         (isinstance(i.qoyod_product_id, str)
          and i.qoyod_product_id.startswith(("DRY:", "PREVIEW:")))
         for i in prod_res.items)
+    _is_dry_product_stage = _pipeline_is_dry_mode or _any_dry_product
     _n_created = sum(1 for i in prod_res.items if i.created_new)
     _n_mapped  = sum(1 for i in prod_res.items if not i.created_new)
-    if _any_dry_product:
+    if _is_dry_product_stage:
         _product_note = (
             f"DRY-RUN: {_n_created} product payload(s) built · "
             f"{_n_mapped} mapped · no POST")
@@ -1499,12 +1624,13 @@ async def process_customer_resolved_row(
         return {"row_id": row["id"], "outcome": "DEAD_LETTER",
                 "reason": "FAILED_INVOICE"}
 
-    # rev29b — Dry-run wording enforcement for the invoice stage.
-    # Use the ACTUAL qoyod_invoice_id sentinel (not just `is_dry`) so
-    # the note reflects the true state even if `is_dry` were to drift
-    # from the resolved id (defense-in-depth).
+    # rev29b — Dry-run wording enforcement for the invoice stage
+    # (rev29c: strengthened via `_pipeline_is_dry_mode`).
+    # Primary signal: `_pipeline_is_dry_mode`. Fallback: the actual
+    # `qoyod_invoice_id` sentinel or the local `is_dry` flag.
     _is_dry_invoice = (
-        is_dry
+        _pipeline_is_dry_mode
+        or is_dry
         or (isinstance(qoyod_invoice_id, str)
             and qoyod_invoice_id.startswith(("DRY:", "PREVIEW:"))))
     p = transition(from_stage="PRODUCT_RESOLVED",
