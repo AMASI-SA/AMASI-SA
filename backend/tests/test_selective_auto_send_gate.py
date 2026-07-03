@@ -395,110 +395,111 @@ async def test_expand_rejects_hard_blocked_methods():
     assert "cod"           not in out["allowed_payment_methods"]
 
 
-# ─── Pipeline integration — scoped write allowance grant path ─────
+# ─── Pipeline integration — scoped write allowance semantics ─────
+# rev27 (2026-02-28) — After order 270253311 leaked a real invoice
+# while dry_run_mode=true, the scoped-bypass semantics were TIGHTENED:
+#
+#   `scoped_write_allowance=True` is now a NECESSARY-BUT-NOT-SUFFICIENT
+#   condition for a live client. Live writes require ALL global gates
+#   to be permissive (dry_run_mode=false AND selective_live_send=true
+#   AND production_writes_locked=false AND selective_auto_send=true).
+#
+#   The three tests below were rewritten to assert the CORRECT
+#   (rev27) behaviour, not the removed (rev17) leak-prone behaviour.
 @pytest.mark.asyncio
-async def test_get_api_client_scoped_write_allowance_grants_write():
-    """When `scoped_write_allowance=True` is passed AND the DB says
-    `production_writes_locked=True`, the returned client MUST have
-    `write_lock_enabled=False`. This is the SOLE per-row bypass
-    the gate uses — DB flag stays LOCKED on disk."""
-    from unittest.mock import AsyncMock, patch
-    from integrations.qoyod import pipeline as pmod
-
-    class _DB: pass
-    db = _DB()
-    settings = {
-        "user_id": "main",
-        "production_writes_locked": True,       # LOCKED on disk
-        "dry_run_mode": False,
-    }
-    with patch.object(pmod, "get_api_key",
-                      AsyncMock(return_value="test-key")):
-        # Without scoped allowance → locked.
-        client_locked, _ = await pmod._get_api_client(
-            db, "main", settings)
-        assert client_locked is not None
-        assert client_locked.write_lock_enabled is True
-
-        # With scoped allowance → UNLOCKED for this call only.
-        client_scoped, _ = await pmod._get_api_client(
-            db, "main", settings, scoped_write_allowance=True)
-        assert client_scoped is not None
-        assert client_scoped.write_lock_enabled is False
-
-    # Settings dict UNCHANGED — no in-place mutation.
-    assert settings["production_writes_locked"] is True
-
-
-# ─── rev17 — scoped allowance ALSO bypasses dry_run_mode ─────────
-@pytest.mark.asyncio
-async def test_scoped_allowance_bypasses_dry_run_mode():
-    """Regression 2026-02-27: order 270075325 passed the Gate but
-    the pipeline still built a DRY-RUN payload (no POST to قيود)
-    because `_get_api_client` returned `DryRunQoyodClient` when the
-    tenant's on-disk `dry_run_mode=True`. Fix: scoped_write_allowance
-    MUST bypass BOTH the write lock AND dry_run_mode so the eligible
-    row uses a REAL live client. DB settings stay unchanged."""
+async def test_get_api_client_scoped_write_allowance_when_gates_permit():
+    """When all live-write gates are permissive AND
+    `scoped_write_allowance=True`, the returned client is a REAL
+    live client with write_lock_enabled=False. DB stays untouched."""
     from unittest.mock import AsyncMock, patch
     from integrations.qoyod import pipeline as pmod
     from integrations.qoyod.api_client import QoyodAPIClient
+
+    class _DB: pass
+    db = _DB()
+    # ALL gates permissive — the ONLY state that allows live writes.
+    settings = {
+        "user_id":                       "main",
+        "dry_run_mode":                  False,
+        "production_writes_locked":      False,
+        "selective_live_send_enabled":   True,
+        "selective_auto_send_enabled":   True,
+    }
+    with patch.object(pmod, "get_api_key",
+                      AsyncMock(return_value="test-key")):
+        client_scoped, is_dry = await pmod._get_api_client(
+            db, "main", settings, scoped_write_allowance=True)
+        assert isinstance(client_scoped, QoyodAPIClient)
+        assert client_scoped.write_lock_enabled is False
+        assert is_dry is False
+
+    # Settings dict UNCHANGED — no in-place mutation.
+    assert settings["dry_run_mode"] is False
+
+
+# ─── rev27 — scoped allowance DOES NOT bypass dry_run_mode anymore ─
+@pytest.mark.asyncio
+async def test_scoped_allowance_does_NOT_bypass_dry_run_mode():
+    """Regression fix 2026-02-28: order 270253311 leaked a real Qoyod
+    invoice while operator settings said dry_run_mode=true. The scoped
+    bypass now respects dry_run_mode — a DryRunQoyodClient is always
+    returned when dry_run_mode=true, regardless of scoped flag."""
+    from unittest.mock import AsyncMock, patch
+    from integrations.qoyod import pipeline as pmod
     from integrations.qoyod.invoice_builder import DryRunQoyodClient
 
     class _DB: pass
     db = _DB()
     settings = {
-        "user_id":                  "main",
-        "dry_run_mode":             True,      # ON on disk
-        "production_writes_locked": True,      # LOCKED on disk
+        "user_id":                       "main",
+        "dry_run_mode":                  True,      # ← operator's dry
+        "production_writes_locked":      False,
+        "selective_live_send_enabled":   True,
+        "selective_auto_send_enabled":   True,
     }
     with patch.object(pmod, "get_api_key",
                       AsyncMock(return_value="test-key")):
-        # Without scoped → DryRun (legacy behavior).
+        # Without scoped → DryRun (unchanged legacy behaviour).
         legacy_client, legacy_is_dry = await pmod._get_api_client(
             db, "main", settings)
         assert isinstance(legacy_client, DryRunQoyodClient)
         assert legacy_is_dry is True
 
-        # With scoped → REAL live client despite dry_run_mode=True.
+        # WITH scoped → STILL DryRun (rev27 strict fix).
         scoped_client, scoped_is_dry = await pmod._get_api_client(
             db, "main", settings, scoped_write_allowance=True)
-        assert isinstance(scoped_client, QoyodAPIClient)
-        assert not isinstance(scoped_client, DryRunQoyodClient)
-        assert scoped_is_dry is False
-        assert scoped_client.write_lock_enabled is False
+        assert isinstance(scoped_client, DryRunQoyodClient), (
+            "rev27 regression: scoped bypass leaked a real client "
+            "while dry_run_mode=true")
+        assert scoped_is_dry is True
 
-    # DB values STILL untouched — no in-place mutation.
-    assert settings["dry_run_mode"]             is True
-    assert settings["production_writes_locked"] is True
+    # DB values STILL untouched.
+    assert settings["dry_run_mode"] is True
 
 
 @pytest.mark.asyncio
-async def test_scoped_client_actually_sends_post_when_gate_passes():
-    """End-to-end proof: an eligible row with tenant dry_run_mode=True
-    produces a REAL POST /invoices call (not a DryRun stub)."""
+async def test_scoped_client_dry_when_selective_live_send_disabled():
+    """Even with dry_run_mode=false, if selective_live_send_enabled=false
+    then the scoped bypass MUST still return DryRunQoyodClient."""
     from unittest.mock import AsyncMock, patch
     from integrations.qoyod import pipeline as pmod
-    from integrations.qoyod.api_client import QoyodAPIClient
     from integrations.qoyod.invoice_builder import DryRunQoyodClient
 
     class _DB: pass
     db = _DB()
     settings = {
-        "user_id":                  "main",
-        "dry_run_mode":             True,
-        "production_writes_locked": True,
+        "user_id":                       "main",
+        "dry_run_mode":                  False,
+        "production_writes_locked":      False,
+        "selective_live_send_enabled":   False,     # ← disabled
+        "selective_auto_send_enabled":   True,
     }
     with patch.object(pmod, "get_api_key",
                       AsyncMock(return_value="live-key")):
         client, is_dry = await pmod._get_api_client(
             db, "main", settings, scoped_write_allowance=True)
-    # The client MUST be able to POST — assert it's a live client
-    # with the correct auth key and write-lock OFF.
-    assert isinstance(client, QoyodAPIClient)
-    assert client.write_lock_enabled is False
-    # DryRun client would have short-circuited creates; live client
-    # will actually hit قيود (mocked at network layer in real tests).
-    assert not isinstance(client, DryRunQoyodClient)
+    assert isinstance(client, DryRunQoyodClient)
+    assert is_dry is True
 
 
 @pytest.mark.asyncio

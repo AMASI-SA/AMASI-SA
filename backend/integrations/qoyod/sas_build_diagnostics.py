@@ -48,8 +48,8 @@ REQUIRED_MARKERS: dict[str, str] = {
         "Iter-2026-02.rev16 — Selective Auto-Send Gate",
     "rev16_gate_at_customer_resolved":
         "Iter-2026-02.rev16 — Re-evaluate Selective Auto-Send gate",
-    "rev17_scoped_bypass":
-        "Iter-2026-02.rev16 → rev17 — When `scoped_write_allowance=True`",
+    # rev17 was superseded by rev27 (strict live-write gate). No
+    # marker required for rev17 anymore.
     "rev20_invoice_site":
         "Iter-2026-02.rev20 — Selective Auto-Send gate bypass",
     "rev20_payment_site":
@@ -61,6 +61,13 @@ REQUIRED_MARKERS: dict[str, str] = {
         "rev25 — worker trace AFTER gate evaluated",
     "rev25_worker_trace_customer_resolved":
         "rev25 — trace AFTER gate evaluated.",
+    # rev27 — Strict Live-Write Gate. If this marker is absent, the
+    # deployed pipeline.py still has the old scoped-bypass logic that
+    # can leak real Qoyod writes while `dry_run_mode=true`.
+    "rev27_live_write_gate":
+        "Iter-2026-02.rev27 — SINGLE source of truth for whether the",
+    "rev27_get_api_client_strict":
+        "Iter-2026-02.rev27 — STRICT Live-Write Gate (REPLACES rev17).",
 }
 
 
@@ -283,6 +290,48 @@ async def row_diagnostics(db, trace_id: str) -> dict:
     control_flow_violation = bool(
         sas_rejected and cur_stage in ADVANCED_STAGES)
 
+    # rev27 — Live-Write Gate Violation invariant.
+    # A REAL Qoyod id must NEVER appear on a row whose live-write
+    # gates say "no writes". We fetch the current settings and
+    # compare against the row's ids.
+    live_write_gate_violation = False
+    live_write_violation_reason = None
+    real_customer = bool(row.get("qoyod_customer_id") and
+                         isinstance(row.get("qoyod_customer_id"), (str, int))
+                         and not str(row.get("qoyod_customer_id"))
+                             .startswith(("DRY:", "PREVIEW:")))
+    real_invoice = bool(qid and isinstance(qid, str)
+                        and not qid.startswith(("DRY:", "PREVIEW:")))
+    real_payment = bool(row.get("qoyod_invoice_payment_id") and
+                        isinstance(row.get("qoyod_invoice_payment_id"),
+                                   (str, int))
+                        and not str(row.get("qoyod_invoice_payment_id"))
+                            .startswith(("DRY:", "PREVIEW:")))
+    if real_customer or real_invoice or real_payment:
+        try:
+            user_id = row.get("user_id", "main")
+            settings_doc = await db.qoyod_settings.find_one(
+                {"user_id": user_id}, {"_id": 0}) or {}
+            violations = []
+            if bool(settings_doc.get("dry_run_mode", False)):
+                violations.append("dry_run_mode=true")
+            if not bool(settings_doc.get(
+                    "selective_live_send_enabled", False)):
+                violations.append("selective_live_send_enabled=false")
+            if bool(settings_doc.get("production_writes_locked", False)):
+                violations.append("production_writes_locked=true")
+            if violations:
+                live_write_gate_violation = True
+                real_kinds = []
+                if real_customer: real_kinds.append("customer")
+                if real_invoice:  real_kinds.append("invoice")
+                if real_payment:  real_kinds.append("invoice_payment")
+                live_write_violation_reason = (
+                    f"Real Qoyod {'+'.join(real_kinds)} write occurred "
+                    f"while: {', '.join(violations)}")
+        except Exception as e:  # noqa: BLE001
+            live_write_violation_reason = f"invariant_check_failed: {e!r}"
+
     return {
         "ok":                            True,
         "found":                         True,
@@ -298,13 +347,14 @@ async def row_diagnostics(db, trace_id: str) -> dict:
                 None if sas_gate is None
                 else sas_gate.get("reason")),
             "qoyod_invoice_id_is_dry":   is_dry,
-            "qoyod_invoice_id_is_real":  bool(
-                qid and isinstance(qid, str)
-                and not qid.startswith(("DRY:", "PREVIEW:"))),
+            "qoyod_invoice_id_is_real":  real_invoice,
             # rev26 — control-flow invariant.
             "control_flow_violation":    control_flow_violation,
             "violation_reason":          (
                 "SAS rejected but row advanced past SKIPPED"
                 if control_flow_violation else None),
+            # rev27 — live-write gate violation.
+            "live_write_gate_violation": live_write_gate_violation,
+            "live_write_violation_reason": live_write_violation_reason,
         },
     }

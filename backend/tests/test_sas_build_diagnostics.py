@@ -14,8 +14,9 @@ sys.path.insert(0, "/app/backend")
 
 
 def test_all_five_markers_present_in_running_pipeline():
-    """The loaded pipeline.py module MUST carry all Rev16/17/20/21
-    markers. If any is missing, the SAS gate cannot bypass dry-run."""
+    """The loaded pipeline.py module MUST carry all Rev16/17/20/21/25/27
+    markers. If any is missing, the SAS gate or live-write gate is
+    not properly enforced in the deployed build."""
     from integrations.qoyod.sas_build_diagnostics import (
         REQUIRED_MARKERS, build_diagnostics_report,
     )

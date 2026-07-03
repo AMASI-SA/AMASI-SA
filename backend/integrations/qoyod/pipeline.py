@@ -733,33 +733,71 @@ async def process_normalized_row(
 # Batch entry point — what the `/pipeline/process-normalized` endpoint
 # calls. Strict Day-4 ceiling: stops at CUSTOMER_RESOLVED.
 # ─────────────────────────────────────────────────────────────────────
+def _live_write_permitted(settings: dict) -> tuple[bool, str]:
+    """Iter-2026-02.rev27 — SINGLE source of truth for whether the
+    pipeline may perform any REAL Qoyod POST.
+
+    Returns `(permitted, reason)`. If `permitted=False`, EVERY
+    downstream call MUST use DryRunQoyodClient — no exceptions,
+    no scoped bypass, no per-row override.
+
+    Live writes require ALL of these to be true (verbatim from user
+    directive after order 270253311 leaked invoice 188):
+
+      • dry_run_mode                  = False
+      • selective_live_send_enabled   = True
+      • production_writes_locked      = False
+      • selective_auto_send_enabled   = True    (SAS is the ONLY
+                                                 automatic writer)
+
+    NOTE: The row-level SAS-gate `eligible=True` is a NECESSARY
+    (already enforced upstream) but NOT SUFFICIENT condition. This
+    function is the LAST line of defense before a real POST.
+    """
+    if bool(settings.get("dry_run_mode", False)):
+        return False, "dry_run_mode_is_true"
+    if not bool(settings.get("selective_live_send_enabled", False)):
+        return False, "selective_live_send_enabled_is_false"
+    if bool(settings.get("production_writes_locked", False)):
+        return False, "production_writes_locked_is_true"
+    if not bool(settings.get("selective_auto_send_enabled", False)):
+        return False, "selective_auto_send_enabled_is_false"
+    return True, "all_gates_permit_live_write"
+
+
 async def _get_api_client(
     db, user_id: str, settings: dict,
     *,
-    scoped_write_allowance: bool = False,
+    scoped_write_allowance: bool = False,  # kept for signature compat
 ):
     """Return `(client, is_dry)`.
 
-    Iter-2026-02.rev16 → rev17 — When `scoped_write_allowance=True`:
-      • BOTH `write_lock_enabled` AND `dry_run_mode` are bypassed
-        for THIS single call. The pipeline gets a REAL live client
-        that WILL POST to قيود.
-      • The DB `production_writes_locked` and `dry_run_mode` flags
-        remain UNCHANGED on disk. This is a per-row bypass ONLY,
-        keyed on the Selective Auto-Send gate's PASS decision.
+    Iter-2026-02.rev27 — STRICT Live-Write Gate (REPLACES rev17).
+    The prior scoped-bypass semantics (SAS gate PASS → real live
+    client regardless of `dry_run_mode` / `selective_live_send_enabled`)
+    is REVOKED. It caused order 270253311 to leak a real Qoyod
+    invoice #188 while the operator's settings said dry-run.
 
-    Without scoped_write_allowance: legacy semantics preserved —
-    a DryRunQoyodClient is returned when the tenant has
-    `dry_run_mode=True` on their settings.
+    New semantics:
+      • Live client is returned ONLY if `_live_write_permitted(settings)`
+        AND the pipeline explicitly requested it via
+        `scoped_write_allowance=True` (i.e. SAS gate passed for this row).
+      • ANY OTHER STATE → DryRunQoyodClient. The DB flags remain
+        unchanged; the operator is in full control by toggling any
+        one of the four global switches.
+
+    The `scoped_write_allowance` flag is now a NECESSARY-BUT-NOT-
+    SUFFICIENT condition — it can no longer bypass the global gates.
 
     Iter-294 — Real clients always carry the Global Write Lock snapshot
     so writes are refused at the api_client layer when
-    `production_writes_locked=True`.
+    `production_writes_locked=True` (defensive redundancy; the gate
+    above already rejects this state).
     """
-    # rev17 — scoped allowance short-circuits BOTH dry_run and
-    # write_lock. Without this the gate could pass but the pipeline
-    # would still resolve to DryRunQoyodClient → no real POST.
-    if scoped_write_allowance:
+    permitted, _reason = _live_write_permitted(settings)
+    # Live-write requires BOTH permission AND an explicit scoped ask.
+    # Falling into dry-run for either omission is the safe default.
+    if permitted and scoped_write_allowance:
         key = await get_api_key(db, user_id)
         if not key:
             return None, False
@@ -768,17 +806,8 @@ async def _get_api_client(
             db=db, user_id=user_id,
             write_lock_enabled=False,
         ), False
-
-    if is_dry_run_mode(settings):
-        return DryRunQoyodClient(), True
-    key = await get_api_key(db, user_id)
-    if not key:
-        return None, False
-    return QoyodAPIClient(
-        key,
-        db=db, user_id=user_id,
-        write_lock_enabled=is_locked(settings),
-    ), False
+    # All other paths → dry-run client. No real POST possible.
+    return DryRunQoyodClient(), True
 
 
 async def process_customer_resolved_row(
