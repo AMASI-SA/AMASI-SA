@@ -828,6 +828,39 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         return {"ok": True, "reconciliation": await reconciliation_check(db, tenant)}
 
     # ── Iter-293 — Admin diagnostics (READ-ONLY, no Qoyod mutations) ──
+    @router.get("/admin/diagnostics/build")
+    async def admin_diagnostics_build(user=Depends(current_user)):  # noqa: ARG001
+        """Iter-2026-02.rev24 — Prove which build the RUNNING worker
+        process actually uses. Read-only. No DB write. No Qoyod POST.
+
+        Returns marker presence (Rev16/17/20/21), module __file__ + sha,
+        git sha (best-effort), worker task presence, env presence flags
+        (booleans only — never leaks secret values).
+
+        If `code_matches_expected == false` on production, the deployed
+        build is stale: redeploy backend AND ensure the worker process
+        restarts. Re-hit until true.
+        """
+        from integrations.qoyod.sas_build_diagnostics import (
+            build_diagnostics_report,
+        )
+        return build_diagnostics_report()
+
+    @router.get("/admin/diagnostics/row")
+    async def admin_diagnostics_row(
+        user=Depends(current_user),  # noqa: ARG001
+        trace_id: str = Query(..., min_length=8, max_length=64),
+    ):
+        """Iter-2026-02.rev24 — Full read-only dump of a single
+        integration_inbox row by trace_id. Includes
+        `selective_auto_send_gate` persisted decision + derived
+        diagnosis booleans.
+
+        Read-only. Does NOT reprocess, retry, approve, or POST.
+        """
+        from integrations.qoyod.sas_build_diagnostics import row_diagnostics
+        return await row_diagnostics(db, trace_id)
+
     @router.get("/admin/cod-receipts-report")
     async def admin_cod_receipts_report(
         user=Depends(current_user),
