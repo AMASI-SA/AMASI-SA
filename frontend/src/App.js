@@ -111,6 +111,7 @@ import OperationAccountBindings from "./pages/OperationAccountBindings";
 import ShippingLedger from "./pages/ShippingLedger";
 import AdAccountForensic from "./pages/AdAccountForensic";
 import BalanceDriftDiagnostic from "./pages/BalanceDriftDiagnostic";
+import AIControlCenter from "./pages/AIControlCenter";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -199,6 +200,7 @@ function AppRoutes() {
             <Route path="/audit/ad-account-forensic" element={<ProtectedRoute><Layout><AdAccountForensic /></Layout></ProtectedRoute>} />
             <Route path="/audit/balance-drift" element={<ProtectedRoute><Layout><BalanceDriftDiagnostic /></Layout></ProtectedRoute>} />
             <Route path="/audit/ledger-health" element={<ProtectedRoute><Layout><LedgerHealthDiagnostic /></Layout></ProtectedRoute>} />
+            <Route path="/ai/control-center" element={<ProtectedRoute><Layout><AIControlCenter /></Layout></ProtectedRoute>} />
             <Route path="/expense-categories-tree" element={<ProtectedRoute><Layout><ExpenseCategoryTreePage /></Layout></ProtectedRoute>} />
             <Route path="/suppliers-new" element={<ProtectedRoute><Layout><SuppliersPage /></Layout></ProtectedRoute>} />
             <Route path="/financial-movement/new" element={<ProtectedRoute><Layout><FinancialMovementNewPage /></Layout></ProtectedRoute>} />
