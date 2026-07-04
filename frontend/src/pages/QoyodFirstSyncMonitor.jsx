@@ -232,6 +232,19 @@ function RowCard({ row, expanded, onToggle, onAdvanceNow, advancing }) {
                        testid={`canonical-${row.trace_id}`}
                        label="🔄 Canonical DTO (After Normalization)" />
           </div>
+          <div className="grid md:grid-cols-1 gap-3">
+  <JSONBlock
+    data={{
+      product_catalog_seed: row.product_catalog_seed,
+      product_catalog_user_id: row.product_catalog_user_id,
+      product_catalog_seed_at: row.product_catalog_seed_at,
+      product_catalog_seed_source: row.product_catalog_seed_source,
+      product_catalog_seed_error: row.product_catalog_seed_error,
+    }}
+    testid={`product-catalog-seed-${row.trace_id}`}
+    label="📦 Product Catalog Seed"
+  />
+</div>
 
           {/* Business rules + preflight */}
           {(row.business_rules_decision || row.preflight) && (

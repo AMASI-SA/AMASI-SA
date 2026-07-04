@@ -657,6 +657,11 @@ def make_products_router_phase2(db, current_user):
                 if c in cat_paths:
                     paths.append(cat_paths[c])
             it["category_paths"] = paths
+        for it in items:
+            pid = str(it.get("product_id") or "").strip()
+            if pid.upper().startswith("AUTO-"):
+                it["auto_catalog_key"] = it.get("auto_catalog_key") or pid
+                it["product_id"] = None
         return {"items": items, "total": total,
                 "skip": skip, "limit": limit}
 
