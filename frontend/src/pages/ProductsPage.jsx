@@ -20,6 +20,14 @@ const fmtDate = (v) => {
     return new Date(v).toLocaleDateString("en-CA");
   } catch (_e) { return v; }
 };
+const isAutoProductId = (v) =>
+  String(v || "").trim().toUpperCase().startsWith("AUTO-");
+
+const productNumberLabel = (p) => {
+  const pid = String(p?.product_id || "").trim();
+  if (!pid || isAutoProductId(pid)) return "—";
+  return `#${pid}`;
+};
 
 function CostHistoryPanel({ productId }) {
   const [data, setData] = useState(null);
@@ -259,7 +267,7 @@ export default function ProductsPage() {
                     </div>
                   </td>
                   <td className="p-3 font-mono text-xs text-slate-500">
-                    #{p.product_id}
+                      {productNumberLabel(p)}
                   </td>
                   <td className="p-3 text-xs">
                     {(p.category_paths?.[0] || []).join(" › ") || (

@@ -163,7 +163,7 @@ def _extract_variant_info(line: dict) -> tuple[str | None, str | None, dict]:
 
     return variant_key, label, {"raw": raw_parts}
 
-
+    
 def _line_product_identity(line: dict) -> Optional[dict]:
     if not isinstance(line, dict):
         return None
@@ -243,6 +243,124 @@ def _line_product_identity(line: dict) -> Optional[dict]:
     }
 
 
+def _is_auto_product_id(value: Any) -> bool:
+    return str(value or "").strip().upper().startswith("AUTO-")
+async def _find_existing_catalog_product(db, user_id: str, ident: dict) -> Optional[dict]:
+    """Find an existing /products row before creating AUTO-*.
+
+    Handles old Excel-imported products where:
+    - SKU may be missing,
+    - product_id may not equal Salla SKU,
+    - name_lower was generated with older Arabic normalization.
+    """
+    product_id = str(ident.get("product_id") or "").strip()
+    parent_product_id = str(ident.get("parent_product_id") or "").strip()
+    sku = str(ident.get("sku") or "").strip().upper()
+    variant_key = ident.get("variant_key")
+    name_lower = ident.get("name_lower") or _norm_product_key(ident.get("name"))
+    auto_catalog_key = product_id if _is_auto_product_id(product_id) else ""
+
+    or_terms = []
+
+    # Use real product_id only. Do NOT match by generated AUTO-* as identity.
+    if product_id and not _is_auto_product_id(product_id):
+        or_terms.append({"product_id": product_id})
+     
+    if auto_catalog_key:
+      if variant_key:
+        or_terms.append({
+            "auto_catalog_key": auto_catalog_key,
+            "variant_key": variant_key,
+        })
+    else:
+        or_terms.append({"auto_catalog_key": auto_catalog_key})
+
+    if parent_product_id and variant_key:
+        or_terms.append({
+            "parent_product_id": parent_product_id,
+            "variant_key": variant_key,
+        })
+
+    if sku:
+        if variant_key:
+            or_terms.extend([
+                {"sku": sku, "variant_key": variant_key},
+                {"sku_normalized": sku, "variant_key": variant_key},
+                {"product_id": sku, "variant_key": variant_key},
+                {"barcode": sku, "variant_key": variant_key},
+            ])
+        else:
+            or_terms.extend([
+                {"sku": sku},
+                {"sku_normalized": sku},
+                {"product_id": sku},
+                {"barcode": sku},
+            ])
+
+    if name_lower:
+        if variant_key:
+            or_terms.append({"name_lower": name_lower, "variant_key": variant_key})
+        else:
+            or_terms.append({"name_lower": name_lower})
+
+    if or_terms:
+        existing = await db.products.find_one(
+            {
+                "user_id": user_id,
+                "is_active": {"$ne": False},
+                "$or": or_terms,
+            },
+            sort=[("updated_at", -1)],
+        )
+        if existing:
+            return existing
+
+    # Runtime Arabic-normalized name fallback for legacy Excel products.
+    # This catches: الأنيق vs الانيق, أماسي vs اماسي, etc.
+    raw_name = ident.get("base_name") or ident.get("name") or ""
+    norm_target = _norm_product_key(raw_name)
+
+    if not norm_target:
+        return None
+
+    tokens = [
+        t for t in _norm_product_text(raw_name).split()
+        if len(t) >= 3
+    ][:4]
+
+    q = {
+        "user_id": user_id,
+        "is_active": {"$ne": False},
+    }
+
+    if tokens:
+        q["$or"] = [
+            {"name": {"$regex": re.escape(t), "$options": "i"}}
+            for t in tokens
+        ]
+
+    candidates = await db.products.find(q).limit(100).to_list(100)
+
+    for c in candidates:
+        # Do not merge different explicit variants.
+        if variant_key and c.get("variant_key") and c.get("variant_key") != variant_key:
+            continue
+
+        candidate_names = [
+            c.get("name"),
+            c.get("base_name"),
+            c.get("product_name"),
+        ]
+
+        for cand_name in candidate_names:
+            if cand_name and _norm_product_key(cand_name) == norm_target:
+                return c
+
+    return None
+    
+   
+
+
 async def _ensure_order_products_catalogued(
     db,
     user_id: str,
@@ -250,11 +368,11 @@ async def _ensure_order_products_catalogued(
     order_doc: dict,
     source: str,
 ) -> dict:
-    """Create missing db.products rows from order products[].
+    """Create/update db.products rows from order products[].
 
-    Important:
-    - No profit calculation here.
-    - No inventory movement here.
+    Safe scope:
+    - No profit calculation.
+    - No inventory movement.
     - No cost is assumed.
     """
     products = order_doc.get("products") or []
@@ -272,47 +390,7 @@ async def _ensure_order_products_catalogued(
             skipped += 1
             continue
 
-        # Matching priority:
-        # 1. internal product_id
-        # 2. parent_product_id + variant_key
-        # 3. sku (+ variant_key when present)
-        # 4. name_lower (+ variant_key when present)
-        or_terms = [{"product_id": ident["product_id"]}]
-
-        if ident.get("parent_product_id") and ident.get("variant_key"):
-            or_terms.append({
-                "parent_product_id": ident["parent_product_id"],
-                "variant_key": ident["variant_key"],
-            })
-
-        if ident.get("sku"):
-            if ident.get("variant_key"):
-                or_terms.append({
-                    "sku": ident["sku"],
-                    "variant_key": ident["variant_key"],
-                })
-                or_terms.append({
-                    "sku_normalized": ident["sku"],
-                    "variant_key": ident["variant_key"],
-                })
-            else:
-                or_terms.append({"sku": ident["sku"]})
-                or_terms.append({"sku_normalized": ident["sku"]})
-
-        if ident.get("name_lower"):
-            if ident.get("variant_key"):
-                or_terms.append({
-                    "name_lower": ident["name_lower"],
-                    "variant_key": ident["variant_key"],
-                })
-            else:
-                or_terms.append({"name_lower": ident["name_lower"]})
-
-        existing = await db.products.find_one({
-            "user_id": user_id,
-            "is_active": {"$ne": False},
-            "$or": or_terms,
-        })
+        existing = await _find_existing_catalog_product(db, user_id, ident)
 
         if existing:
             set_doc = {
@@ -321,10 +399,10 @@ async def _ensure_order_products_catalogued(
                 "last_seen_at": now,
                 "updated_at": now,
             }
+            
 
-            # Fill missing descriptive fields only. Never overwrite costs.
             for key in (
-                "product_id",
+                "product_id",  # موجود فقط لتفادي مشاكل المحرر — يتم تخطيه تحت
                 "parent_product_id",
                 "sku",
                 "sku_normalized",
@@ -337,13 +415,39 @@ async def _ensure_order_products_catalogued(
                 "variant_attributes",
                 "image_url",
             ):
+                if key == "product_id":
+                    continue
+
                 if ident.get(key) and not existing.get(key):
                     set_doc[key] = ident[key]
+
 
             if ident.get("image_urls") and not existing.get("image_urls"):
                 set_doc["image_urls"] = ident["image_urls"]
 
-            # Make legacy no-cost products visible in needs-cost flow.
+            # Only fill product_id if it is a real source id.
+            # Never fill product_id with generated AUTO-*.
+            if (
+                ident.get("product_id")
+                and not _is_auto_product_id(ident.get("product_id"))
+                and not existing.get("product_id")
+            ):
+                set_doc["product_id"] = ident["product_id"]
+
+            # Keep generated AUTO-* as internal key only.
+            # It must not remain in the user-facing product_id field.
+            generated_key = ident.get("product_id")
+
+            if (
+                _is_auto_product_id(generated_key)
+                and not existing.get("auto_catalog_key")
+            ):
+                set_doc["auto_catalog_key"] = generated_key
+
+            if _is_auto_product_id(existing.get("product_id")):
+                set_doc["auto_catalog_key"] = existing.get("product_id")
+                set_doc["product_id"] = None
+
             if (
                 existing.get("needs_cost") is None
                 and existing.get("cost_current") in (None, "")
@@ -360,11 +464,14 @@ async def _ensure_order_products_catalogued(
             )
             updated += 1
             continue
+        generated_key = ident["product_id"]
+        is_auto = _is_auto_product_id(generated_key)
 
         doc = {
             "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "product_id": ident["product_id"],
+            "user_id": user_id,           
+            "product_id": None if is_auto else generated_key,
+            "auto_catalog_key": generated_key if is_auto else None,
             "parent_product_id": ident.get("parent_product_id"),
             "sku": ident.get("sku"),
             "sku_normalized": ident.get("sku_normalized"),
@@ -375,7 +482,7 @@ async def _ensure_order_products_catalogued(
             "variant_key": ident.get("variant_key"),
             "variant_label": ident.get("variant_label"),
             "variant_attributes": ident.get("variant_attributes") or {},
-            "product_type": "service",  # internal default; inventory comes later
+            "product_type": "service",
             "category_ids": [],
             "category_paths": [],
             "image_url": ident.get("image_url"),
@@ -403,7 +510,7 @@ async def _ensure_order_products_catalogued(
         created += 1
 
     return {"created": created, "updated": updated, "skipped": skipped}
-
+    
 def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
     """Return merged document. `existing` is the prior MongoDB doc (or empty dict).
 

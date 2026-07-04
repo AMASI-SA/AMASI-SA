@@ -260,6 +260,96 @@ async def _resolve_product_catalog_user_id(db, tenant_user_id: str | None) -> st
 
     return tenant_user_id or "main"
 
+def _img_key(value) -> str:
+    return str(value or "").strip().upper()
+
+
+def _image_from_line(line: dict) -> str | None:
+    if not isinstance(line, dict):
+        return None
+
+    for key in ("image_url", "imageUrl", "thumbnail", "main_image"):
+        val = line.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+
+    image = line.get("image")
+    if isinstance(image, str) and image.strip():
+        return image.strip()
+    if isinstance(image, dict):
+        for key in ("url", "src", "original", "small", "medium"):
+            val = image.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+    product = line.get("product")
+    if isinstance(product, dict):
+        for key in ("main_image", "image_url", "thumbnail"):
+            val = product.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+        pimg = product.get("image")
+        if isinstance(pimg, str) and pimg.strip():
+            return pimg.strip()
+        if isinstance(pimg, dict):
+            for key in ("url", "src", "original", "small", "medium"):
+                val = pimg.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+
+    images = line.get("images")
+    if isinstance(images, list) and images:
+        first = images[0]
+        if isinstance(first, str) and first.strip():
+            return first.strip()
+        if isinstance(first, dict):
+            for key in ("url", "src", "original", "small", "medium"):
+                val = first.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+
+    return None
+
+
+def _collect_product_images(payload: dict) -> dict:
+    """Build image lookup from raw/adapted webhook payload."""
+    out = {}
+    if not isinstance(payload, dict):
+        return out
+
+    containers = [payload]
+    data = payload.get("data")
+    if isinstance(data, dict):
+        containers.append(data)
+
+    for container in containers:
+        for list_key in ("items", "products"):
+            rows = container.get(list_key)
+            if not isinstance(rows, list):
+                continue
+
+            for line in rows:
+                if not isinstance(line, dict):
+                    continue
+
+                image_url = _image_from_line(line)
+                if not image_url:
+                    continue
+
+                product = line.get("product") if isinstance(line.get("product"), dict) else {}
+
+                sku = line.get("sku") or product.get("sku") or line.get("barcode")
+                product_id = line.get("product_id") or line.get("id") or product.get("id")
+                name = line.get("name") or line.get("product_name") or product.get("name")
+
+                for key in (_img_key(sku), _img_key(product_id), _img_key(name)):
+                    if key:
+                        out.setdefault(key, image_url)
+
+    return out
+
+
 async def _auto_seed_products_from_canonical(
     db,
     *,
@@ -267,31 +357,32 @@ async def _auto_seed_products_from_canonical(
     canonical: dict,
     doc_filter: dict,
 ) -> None:
-    """Phase 1 bridge: Qoyod webhook canonical items → /products catalogue.
-
-    Qoyod webhook rows live in integration_inbox, not unified_orders.
-    Therefore orders_db.upsert_order() is not called for this path.
-    This bridge creates missing db.products rows from canonical_payload.items.
-
-    Safe scope:
-    - no COGS calculation
-    - no inventory movement
-    - no Qoyod API call
-    - new products become needs_cost=true
-    """
+    """Phase 1 bridge: Qoyod webhook canonical items → /products catalogue."""
     items = canonical.get("items") if isinstance(canonical, dict) else None
     if not isinstance(items, list) or not items:
         return
 
     products = []
+    image_lookup = {}
+    image_lookup.update(_collect_product_images(row.get("raw_payload") or {}))
+    image_lookup.update(_collect_product_images(row.get("adapted_payload") or {}))
+
     for item in items:
         if not isinstance(item, dict):
             continue
+
         name = str(item.get("name") or "").strip()
         sku = str(item.get("sku") or "").strip()
         product_id = str(item.get("product_id") or "").strip()
+
         if not name and not sku and not product_id:
             continue
+
+        image_url = (
+            image_lookup.get(_img_key(sku))
+            or image_lookup.get(_img_key(product_id))
+            or image_lookup.get(_img_key(name))
+        )
 
         products.append({
             "name": name,
@@ -300,10 +391,20 @@ async def _auto_seed_products_from_canonical(
             "quantity": item.get("quantity") or 1,
             "price": item.get("unit_price") or 0,
             "total": item.get("total") or 0,
+            "image_url": image_url,
         })
 
     if not products:
         return
+
+    order_number = str(
+        canonical.get("order_number")
+        or canonical.get("order_id")
+        or row.get("salla_order_number")
+        or row.get("salla_order_id")
+        or row.get("id")
+        or ""
+    ).strip()
 
     from orders_db import _ensure_order_products_catalogued
 
