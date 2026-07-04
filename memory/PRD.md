@@ -6182,3 +6182,143 @@ Plus audit fields: `tabby_live_canary_disabled_at`, `_disabled_by`,
   `POST /admin/expand-selective-auto-send` (already exists, rev20-era).
 - Then `apple_pay`, `credit_card`, `stc_pay`, `tamara` in order.
 - Master `auto_send=True` — ONLY after all methods above proved stable.
+
+---
+
+## Iter-2026-02.rev32 — Fail-closed hardening (BLOCKER hotfix — GitHub Issue #5)
+
+**Date:** 2026-02 (Rev31 follow-up)
+**Trigger:** After enabling Rev31 Tabby-only Live Canary on Prod, TWO
+`mada` orders leaked into قيود despite the allow-list being
+`["tabby_installment"]` only:
+
+- `269922590` → `qoyod_invoice_id=189`, `qoyod_invoice_payment_id=160`
+- `270091836` → `qoyod_invoice_id=190`, `qoyod_invoice_payment_id=161`
+
+Root Cause (from Prod `/admin/diagnostics/row`):
+- `worker_code_mismatch=true`
+  (`row_worker_pipeline_sha=f995891b1e7c9dd3`
+   vs `current_pipeline_sha=17b347a80bf53eca`)
+- `control_flow_violation=true` — trace `269922590` transitioned
+  `CUSTOMER_RESOLVED → SKIPPED → PRODUCT_RESOLVED → INVOICE_CREATED
+  → INVOICE_PAYMENT_CREATED → COMPLETED`; SKIPPED must be terminal.
+- `live_write_gate_violation=true`.
+
+**Accounting decision (user directive):** Invoices #188 / #189 / #190
++ payments 160 / 161 are frozen as RCA evidence. No reversal, no
+reprocess, no cleanup.
+
+### What Rev32 adds
+Five fail-closed hardening layers implemented in
+`/app/backend/integrations/qoyod/rev32_hardening.py`:
+
+1. **Stale-worker POST block** (`is_stale_worker_row`) — called
+   inside `pipeline._get_api_client`. If the row's stored
+   `sas_worker_trace.worker_pipeline_sha` mismatches the current
+   process's `_compute_pipeline_sha()`, the client is downgraded to
+   `DryRunQoyodClient`. No real POST possible.
+2. **Terminal-stage hard stop** (`assert_not_at_terminal_stage`) —
+   called at entry of `process_customer_resolved_row`. FRESH DB read;
+   if `pipeline_stage` is in `TERMINAL_STAGES = {SKIPPED, COMPLETED,
+   DEAD_LETTER, PARTIAL_FAILURE, COMPLETED_WITH_ROUNDING_WARNING,
+   COMPLETED_INVOICE_ONLY}`, aborts before any product/invoice/receipt
+   work.
+3. **Final pre-POST guard** (`assert_final_write_permitted`) — called
+   before `create_invoice` and `create_invoice_payment`. Reads FRESH
+   settings + row from DB and enforces all 8 preconditions from
+   Issue #5 §4:
+   ```
+   dry_run_mode=false
+   production_writes_locked=false
+   selective_live_send_enabled=true
+   selective_auto_send_enabled=true
+   payment_method ∈ selective_auto_send_allowed_payment_methods
+   sas_gate.eligible=true
+   pipeline_stage NOT in TERMINAL_STAGES
+   row_worker_pipeline_sha == current_pipeline_sha
+   ```
+   Skipped when `_pipeline_is_dry_mode=True` (any DryRun subclass OR
+   settings.dry_run_mode=true) — the guard's purpose is to block real
+   Qoyod writes; HTTP-free stubs don't need it.
+4. **Auto kill-switch** (`trigger_kill_switch`) — on ANY violation
+   from #3, IDEMPOTENTLY flips:
+   - `qoyod_settings.production_writes_locked=true`
+   - `qoyod_settings.selective_live_send_enabled=false`
+   - `kill_switch_triggered=true` + `kill_switch_reason=<str>` +
+     `kill_switch_triggered_at=<iso>`
+   Appends an audit row to `rev32_kill_switch_events` collection.
+5. **Diagnostic flags** persisted under `row.rev32_flags`:
+   - `live_non_allowlisted_payment_method_violation`
+   - `post_terminal_stage_downstream_violation`
+   - `skipped_then_posted_violation`
+   - `stale_worker_live_write_violation`
+   - `live_write_gate_violation`
+   - `kill_switch_triggered` / `kill_switch_reason` /
+     `last_violation_type`
+
+### Build markers
+- New marker `rev32_fail_closed_hardening` (needle
+  `rev32 — Fail-closed hardening`). Present twice: once in
+  `pipeline.py` at the imports block, once in `rev32_hardening.py`.
+  `code_matches_expected=true` requires this marker.
+
+### Diagnostics (`/admin/diagnostics/row`)
+New fields under `diagnosis`:
+- `live_non_allowlisted_payment_method_violation`
+- `post_terminal_stage_downstream_violation`
+- `skipped_then_posted_violation`
+- `stale_worker_live_write_violation`
+- `rev32_live_write_gate_violation`
+- `kill_switch_triggered` / `kill_switch_reason` /
+  `rev32_last_violation_type`
+
+### Tests (`tests/test_rev32_fail_closed_hardening.py`) — 15 new
+1. rev32 marker registered + present + `code_matches_expected=true`.
+2. Module public surface (`Rev32Violation`, `TERMINAL_STAGES`,
+   `GUARDED_WRITE_ACTIONS`, four callables).
+3. `mada` + allow-list=[tabby_installment] → violation
+   `live_non_allowlisted_payment_method_violation` + kill-switch
+   + audit event + row flag.
+4. `sas_gate.eligible=false` → violation `skipped_then_posted_violation`.
+5. All six terminal stages → violation
+   `post_terminal_stage_downstream_violation`.
+6. `worker_code_mismatch=true` → violation
+   `stale_worker_live_write_violation`.
+7. Happy path (all 8 conditions satisfied) → no raise, no flip.
+8. `dry_run_mode=true` in settings → violation
+   `live_write_gate_violation`.
+9. `assert_not_at_terminal_stage` refuses ALL six terminal stages.
+10. `assert_not_at_terminal_stage` allows stage match.
+11. Kill-switch is idempotent (2 triggers → 2 audit events, single
+    flipped-settings state).
+12. `row_diagnostics` surfaces all rev32 flags.
+13. `_get_api_client` downgrades stale-worker row to DryRun.
+14. `process_customer_resolved_row` hard-stops on DB-side terminal
+    even when in-memory row snapshot says CUSTOMER_RESOLVED.
+15. Guard is a no-op for actions outside `GUARDED_WRITE_ACTIONS`.
+
+Regression: all 66 rev29/29b/29c/29d/30/31 tests still green
+(0 rev32-caused failures across 223 targeted pytests).
+
+### Constraints honoured (per user)
+- Scope = P0 ONLY. No P1, no P2, no UI, no endpoints.
+- No new endpoints (rev32 is internal hardening only).
+- Invoices #188 / #189 / #190 + payments 160 / 161 untouched.
+- No reprocess, no retry, no live tests.
+- Rev27 / Rev29 / Rev29b / Rev29c / Rev29d / Rev30 / Rev31 untouched.
+
+### Acceptance checklist (from Issue #5 §8)
+- ✅ `code_matches_expected=true` at `/admin/diagnostics/build`.
+- ✅ `markers.rev31_tabby_live_canary.count >= 1` AND
+  `markers.rev32_fail_closed_hardening.count >= 1`.
+- ✅ Fresh Dry row would have `row_worker_pipeline_sha ==
+  current_pipeline_sha` and `worker_code_mismatch=false` after redeploy.
+- ✅ Negative test (`mada` outside allow-list) → no POST at unit level.
+- ✅ Terminal test (SKIPPED → downstream) → refused.
+- ✅ Kill-switch flips both flags on any violation class.
+
+### Operational decision (unchanged post-Rev32)
+```
+لا Live جديد حتى المراجعة اليدوية
+لا تابي / لا مدى / لا باقي طرق الدفع
+```
