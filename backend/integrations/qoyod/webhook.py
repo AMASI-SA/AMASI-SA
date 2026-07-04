@@ -18,6 +18,7 @@ manual review (Day 4-5 will wire the retry button).
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -44,7 +45,7 @@ from integrations.qoyod.webhook_activity import record_webhook_event
 # index. Lets future direct integrations (e.g. Salla webhook directly)
 # coexist with the same `idempotency_key` namespace.
 CONNECTOR_KEY = "make_com_qoyod"
-
+logger = logging.getLogger(__name__)
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -220,6 +221,216 @@ async def _apply(db, *, doc_filter: dict, patch: dict) -> None:
     """One-shot helper so each transition is a single line at the call site."""
     await db.integration_inbox.update_one(doc_filter, patch)
 
+     
+async def _resolve_product_catalog_user_id(db, tenant_user_id: str | None) -> str:
+    """Resolve the real app user_id that owns /products.
+
+    Qoyod integration rows currently use tenant='main', while /products
+    is filtered by the authenticated user's real id. If we seed products
+    under 'main', they will not appear in /products or supplier invoices.
+    """
+    if tenant_user_id and tenant_user_id != "main":
+        return tenant_user_id
+
+    # Prefer an existing products owner if any products were imported before.
+    existing_product = await db.products.find_one(
+        {"user_id": {"$ne": "main"}},
+        {"_id": 0, "user_id": 1},
+        sort=[("updated_at", -1)],
+    )
+    if existing_product and existing_product.get("user_id"):
+        return existing_product["user_id"]
+
+    # Then use app settings owner.
+    existing_settings = await db.settings.find_one(
+        {"user_id": {"$ne": "main"}},
+        {"_id": 0, "user_id": 1},
+    )
+    if existing_settings and existing_settings.get("user_id"):
+        return existing_settings["user_id"]
+
+    # Fallback to the first real user.
+    first_user = await db.users.find_one(
+        {},
+        {"_id": 0, "id": 1},
+        sort=[("created_at", 1)],
+    )
+    if first_user and first_user.get("id"):
+        return first_user["id"]
+
+    return tenant_user_id or "main"
+
+def _img_key(value) -> str:
+    return str(value or "").strip().upper()
+
+
+def _image_from_line(line: dict) -> str | None:
+    if not isinstance(line, dict):
+        return None
+
+    for key in ("image_url", "imageUrl", "thumbnail", "main_image"):
+        val = line.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+
+    image = line.get("image")
+    if isinstance(image, str) and image.strip():
+        return image.strip()
+    if isinstance(image, dict):
+        for key in ("url", "src", "original", "small", "medium"):
+            val = image.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+    product = line.get("product")
+    if isinstance(product, dict):
+        for key in ("main_image", "image_url", "thumbnail"):
+            val = product.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+        pimg = product.get("image")
+        if isinstance(pimg, str) and pimg.strip():
+            return pimg.strip()
+        if isinstance(pimg, dict):
+            for key in ("url", "src", "original", "small", "medium"):
+                val = pimg.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+
+    images = line.get("images")
+    if isinstance(images, list) and images:
+        first = images[0]
+        if isinstance(first, str) and first.strip():
+            return first.strip()
+        if isinstance(first, dict):
+            for key in ("url", "src", "original", "small", "medium"):
+                val = first.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+
+    return None
+
+
+def _collect_product_images(payload: dict) -> dict:
+    """Build image lookup from raw/adapted webhook payload."""
+    out = {}
+    if not isinstance(payload, dict):
+        return out
+
+    containers = [payload]
+    data = payload.get("data")
+    if isinstance(data, dict):
+        containers.append(data)
+
+    for container in containers:
+        for list_key in ("items", "products"):
+            rows = container.get(list_key)
+            if not isinstance(rows, list):
+                continue
+
+            for line in rows:
+                if not isinstance(line, dict):
+                    continue
+
+                image_url = _image_from_line(line)
+                if not image_url:
+                    continue
+
+                product = line.get("product") if isinstance(line.get("product"), dict) else {}
+
+                sku = line.get("sku") or product.get("sku") or line.get("barcode")
+                product_id = line.get("product_id") or line.get("id") or product.get("id")
+                name = line.get("name") or line.get("product_name") or product.get("name")
+
+                for key in (_img_key(sku), _img_key(product_id), _img_key(name)):
+                    if key:
+                        out.setdefault(key, image_url)
+
+    return out
+
+
+async def _auto_seed_products_from_canonical(
+    db,
+    *,
+    row: dict,
+    canonical: dict,
+    doc_filter: dict,
+) -> None:
+    """Phase 1 bridge: Qoyod webhook canonical items → /products catalogue."""
+    items = canonical.get("items") if isinstance(canonical, dict) else None
+    if not isinstance(items, list) or not items:
+        return
+
+    products = []
+    image_lookup = {}
+    image_lookup.update(_collect_product_images(row.get("raw_payload") or {}))
+    image_lookup.update(_collect_product_images(row.get("adapted_payload") or {}))
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        name = str(item.get("name") or "").strip()
+        sku = str(item.get("sku") or "").strip()
+        product_id = str(item.get("product_id") or "").strip()
+
+        if not name and not sku and not product_id:
+            continue
+
+        image_url = (
+            image_lookup.get(_img_key(sku))
+            or image_lookup.get(_img_key(product_id))
+            or image_lookup.get(_img_key(name))
+        )
+
+        products.append({
+            "name": name,
+            "sku": sku,
+            "product_id": product_id,
+            "quantity": item.get("quantity") or 1,
+            "price": item.get("unit_price") or 0,
+            "total": item.get("total") or 0,
+            "image_url": image_url,
+        })
+
+    if not products:
+        return
+
+    order_number = str(
+        canonical.get("order_number")
+        or canonical.get("order_id")
+        or row.get("salla_order_number")
+        or row.get("salla_order_id")
+        or row.get("id")
+        or ""
+    ).strip()
+
+    from orders_db import _ensure_order_products_catalogued
+
+    catalog_user_id = await _resolve_product_catalog_user_id(
+        db,
+        row.get("user_id") or "main",
+    )
+
+    result = await _ensure_order_products_catalogued(
+        db=db,
+        user_id=catalog_user_id,
+        order_number=order_number,
+        order_doc={"products": products},
+        source="qoyod_webhook",
+    )
+
+    await _apply(
+        db,
+        doc_filter=doc_filter,
+        patch={"$set": {
+            "product_catalog_seed": result,
+            "product_catalog_user_id": catalog_user_id,
+            "product_catalog_seed_at": _now(),
+            "product_catalog_seed_source": "qoyod_webhook",
+        }},
+    )
 
 async def _process_inbox_row(
     db, *, row: dict, raw_payload: dict,
@@ -314,20 +525,48 @@ async def _process_inbox_row(
             started_at=row.get("pipeline_started_at"),
         )
 
-    # Persist the canonical DTO + advance the stage.
+     # Persist the canonical DTO + advance the stage.
     canonical = dto.model_dump(mode="json")
-    patch = transition(from_stage="VALIDATED", to_stage="NORMALIZED",
-                       actor="webhook",
-                       note=f"DTO built · {len(canonical['items'])} items")
+    patch = transition(
+        from_stage="VALIDATED",
+        to_stage="NORMALIZED",
+        actor="webhook",
+        note=f"DTO built · {len(canonical['items'])} items",
+    )
     patch.setdefault("$set", {}).update({
-        "canonical_payload":  canonical,
-        "salla_order_id":     canonical["order_id"],
+        "canonical_payload": canonical,
+        "salla_order_id": canonical["order_id"],
         "salla_order_number": canonical.get("order_number"),
     })
     await _apply(db, doc_filter=doc_filter, patch=patch)
 
-    return ("NORMALIZED", None)
+    # Phase 1: make Qoyod/Salla webhook items visible in /products.
+    # This is intentionally non-accounting: no profit, no inventory.
+    try:
+        await _auto_seed_products_from_canonical(
+            db,
+            row=row,
+            canonical=canonical,
+            doc_filter=doc_filter,
+        )
+    except Exception as exc:
+        logger.warning(
+            "qoyod webhook product auto-seed skipped row_id=%s order=%s: %s",
+            row.get("id"),
+            canonical.get("order_id"),
+            exc,
+        )
+        await _apply(
+            db,
+            doc_filter=doc_filter,
+            patch={"$set": {
+                "product_catalog_seed_error": f"{exc.__class__.__name__}: {exc}",
+                "product_catalog_seed_at": _now(),
+                "product_catalog_seed_source": "qoyod_webhook",
+            }},
+        )
 
+    return ("NORMALIZED", None)
 
 async def _dead_letter(
     db, *, doc_filter: dict, from_stage: str, fail_stage: str,
@@ -356,6 +595,7 @@ async def _dead_letter(
 async def _handle_missing_items(
     db, *, row: dict, doc_filter: dict, adapter_meta: dict,
 ) -> tuple[str, Optional[dict]]:
+
     """Branch entered when the Legacy Adapter could not find any line
     items in the incoming payload.
 
