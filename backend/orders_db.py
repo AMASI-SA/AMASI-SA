@@ -13,8 +13,16 @@ Merge rules (when the same order_number arrives twice from different sources):
 - `field_sources` dict tracks which source last wrote each scalar field.
 """
 from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import re
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 CRITICAL_FIELDS = {"total_amount", "order_status", "payment_status"}
@@ -60,7 +68,341 @@ def _is_empty(v: Any) -> bool:
     if isinstance(v, (list, dict)):
         return len(v) == 0
     return False
+    
+    # ── Phase 1: Auto-seed /products from order line-items ──────────────
+# Safe scope:
+# - Creates missing products from order products[].
+# - Does NOT change profit.
+# - Does NOT change inventory.
+# - New products start with needs_cost=True.
+# - Variant/options are preserved so later phases can assign different costs.
 
+_AR_DIACRITICS_RE = re.compile(r"[\u064B-\u0652\u0670\u0640]")
+
+
+def _norm_product_text(value: Any) -> str:
+    s = "" if value is None else str(value)
+    s = s.strip()
+    s = _AR_DIACRITICS_RE.sub("", s)
+    s = s.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+    s = s.replace("ى", "ي").replace("ة", "ه")
+    s = s.replace("ؤ", "و").replace("ئ", "ي")
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
+def _norm_product_key(value: Any) -> str:
+    return _norm_product_text(value).casefold()
+
+
+def _stable_json(value: Any) -> str:
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    except Exception:
+        return str(value)
+
+
+def _extract_variant_info(line: dict) -> tuple[str | None, str | None, dict]:
+    """Return (variant_key, variant_label, variant_attributes).
+
+    This protects products like:
+    - لوحة فنية 100×70
+    - لوحة فنية 200×100
+
+    from being merged into one cost row later.
+    """
+    if not isinstance(line, dict):
+        return None, None, {}
+
+    raw_parts = []
+    label_parts = []
+
+    for key in (
+        "variant_id",
+        "variant_name",
+        "variant",
+        "options",
+        "option",
+        "product_options",
+        "attributes",
+        "attribute",
+        "variant_options",
+        "option_values",
+    ):
+        val = line.get(key)
+        if val in (None, "", [], {}):
+            continue
+        raw_parts.append({key: val})
+
+        if isinstance(val, str):
+            label_parts.append(val.strip())
+        elif isinstance(val, dict):
+            for k, v in val.items():
+                if v not in (None, "", [], {}):
+                    label_parts.append(f"{k}: {v}")
+        elif isinstance(val, list):
+            for item in val:
+                if isinstance(item, dict):
+                    name = item.get("name") or item.get("label") or item.get("key") or ""
+                    value = item.get("value") or item.get("option") or item.get("text") or ""
+                    txt = " ".join(str(x).strip() for x in (name, value) if str(x).strip())
+                    if txt:
+                        label_parts.append(txt)
+                elif item not in (None, ""):
+                    label_parts.append(str(item).strip())
+
+    if not raw_parts:
+        return None, None, {}
+
+    raw = _stable_json(raw_parts)
+    digest = hashlib.sha1(_norm_product_key(raw).encode("utf-8")).hexdigest()[:12]
+    variant_key = f"VAR-{digest}"
+
+    # Short readable label for UI.
+    label = " / ".join([p for p in label_parts if p])[:160] or variant_key
+
+    return variant_key, label, {"raw": raw_parts}
+
+
+def _line_product_identity(line: dict) -> Optional[dict]:
+    if not isinstance(line, dict):
+        return None
+
+    raw_product_id = str(
+        line.get("product_id")
+        or line.get("id")
+        or line.get("salla_product_id")
+        or ""
+    ).strip()
+
+    sku = str(
+        line.get("sku")
+        or line.get("SKU")
+        or line.get("barcode")
+        or ""
+    ).strip().upper()
+
+    barcode = str(line.get("barcode") or "").strip()
+
+    base_name = _norm_product_text(
+        line.get("name")
+        or line.get("product_name")
+        or line.get("title")
+        or ""
+    )
+
+    image_url = str(
+        line.get("image_url")
+        or line.get("image")
+        or line.get("imageUrl")
+        or ""
+    ).strip() or None
+
+    variant_key, variant_label, variant_attributes = _extract_variant_info(line)
+
+    if not raw_product_id and not sku and not base_name:
+        return None
+
+    # Internal catalogue product_id.
+    # If this line has variant/options, make the catalogue row variant-specific.
+    if raw_product_id:
+        catalog_product_id = (
+            f"{raw_product_id}::{variant_key}"
+            if variant_key else raw_product_id
+        )
+    else:
+        seed = "|".join([
+            sku or "",
+            _norm_product_key(base_name),
+            variant_key or "",
+        ])
+        digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:12]
+        catalog_product_id = f"AUTO-{digest}"
+
+    if not base_name:
+        base_name = sku or catalog_product_id
+
+    display_name = base_name
+    if variant_label and variant_label not in display_name:
+        display_name = f"{base_name} — {variant_label}"
+
+    return {
+        "product_id": catalog_product_id,
+        "parent_product_id": raw_product_id or None,
+        "sku": sku or None,
+        "sku_normalized": sku or None,
+        "barcode": barcode or None,
+        "name": display_name,
+        "base_name": base_name,
+        "name_lower": _norm_product_key(display_name),
+        "variant_key": variant_key,
+        "variant_label": variant_label,
+        "variant_attributes": variant_attributes,
+        "image_url": image_url,
+        "image_urls": [image_url] if image_url else [],
+    }
+
+
+async def _ensure_order_products_catalogued(
+    db,
+    user_id: str,
+    order_number: str,
+    order_doc: dict,
+    source: str,
+) -> dict:
+    """Create missing db.products rows from order products[].
+
+    Important:
+    - No profit calculation here.
+    - No inventory movement here.
+    - No cost is assumed.
+    """
+    products = order_doc.get("products") or []
+    if not products:
+        return {"created": 0, "updated": 0, "skipped": 0}
+
+    now = _now()
+    created = 0
+    updated = 0
+    skipped = 0
+
+    for line in products:
+        ident = _line_product_identity(line)
+        if not ident:
+            skipped += 1
+            continue
+
+        # Matching priority:
+        # 1. internal product_id
+        # 2. parent_product_id + variant_key
+        # 3. sku (+ variant_key when present)
+        # 4. name_lower (+ variant_key when present)
+        or_terms = [{"product_id": ident["product_id"]}]
+
+        if ident.get("parent_product_id") and ident.get("variant_key"):
+            or_terms.append({
+                "parent_product_id": ident["parent_product_id"],
+                "variant_key": ident["variant_key"],
+            })
+
+        if ident.get("sku"):
+            if ident.get("variant_key"):
+                or_terms.append({
+                    "sku": ident["sku"],
+                    "variant_key": ident["variant_key"],
+                })
+                or_terms.append({
+                    "sku_normalized": ident["sku"],
+                    "variant_key": ident["variant_key"],
+                })
+            else:
+                or_terms.append({"sku": ident["sku"]})
+                or_terms.append({"sku_normalized": ident["sku"]})
+
+        if ident.get("name_lower"):
+            if ident.get("variant_key"):
+                or_terms.append({
+                    "name_lower": ident["name_lower"],
+                    "variant_key": ident["variant_key"],
+                })
+            else:
+                or_terms.append({"name_lower": ident["name_lower"]})
+
+        existing = await db.products.find_one({
+            "user_id": user_id,
+            "is_active": {"$ne": False},
+            "$or": or_terms,
+        })
+
+        if existing:
+            set_doc = {
+                "last_seen_order_number": str(order_number),
+                "last_seen_source": source,
+                "last_seen_at": now,
+                "updated_at": now,
+            }
+
+            # Fill missing descriptive fields only. Never overwrite costs.
+            for key in (
+                "product_id",
+                "parent_product_id",
+                "sku",
+                "sku_normalized",
+                "barcode",
+                "name",
+                "base_name",
+                "name_lower",
+                "variant_key",
+                "variant_label",
+                "variant_attributes",
+                "image_url",
+            ):
+                if ident.get(key) and not existing.get(key):
+                    set_doc[key] = ident[key]
+
+            if ident.get("image_urls") and not existing.get("image_urls"):
+                set_doc["image_urls"] = ident["image_urls"]
+
+            # Make legacy no-cost products visible in needs-cost flow.
+            if (
+                existing.get("needs_cost") is None
+                and existing.get("cost_current") in (None, "")
+                and existing.get("cost_avg") in (None, "")
+            ):
+                set_doc["needs_cost"] = True
+
+            await db.products.update_one(
+                {"_id": existing["_id"]},
+                {
+                    "$set": set_doc,
+                    "$addToSet": {"seen_order_numbers": str(order_number)},
+                },
+            )
+            updated += 1
+            continue
+
+        doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "product_id": ident["product_id"],
+            "parent_product_id": ident.get("parent_product_id"),
+            "sku": ident.get("sku"),
+            "sku_normalized": ident.get("sku_normalized"),
+            "barcode": ident.get("barcode"),
+            "name": ident["name"],
+            "base_name": ident.get("base_name"),
+            "name_lower": ident["name_lower"],
+            "variant_key": ident.get("variant_key"),
+            "variant_label": ident.get("variant_label"),
+            "variant_attributes": ident.get("variant_attributes") or {},
+            "product_type": "service",  # internal default; inventory comes later
+            "category_ids": [],
+            "category_paths": [],
+            "image_url": ident.get("image_url"),
+            "image_urls": ident.get("image_urls") or [],
+            "cost_current": None,
+            "cost_avg": None,
+            "cost_history": [],
+            "needs_cost": True,
+            "is_active": True,
+            "imported": {
+                "source": "order-auto-created",
+                "at": now,
+            },
+            "first_seen_order_number": str(order_number),
+            "last_seen_order_number": str(order_number),
+            "last_seen_source": source,
+            "first_seen_at": now,
+            "last_seen_at": now,
+            "seen_order_numbers": [str(order_number)],
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        await db.products.insert_one(doc)
+        created += 1
+
+    return {"created": created, "updated": updated, "skipped": skipped}
 
 def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
     """Return merged document. `existing` is the prior MongoDB doc (or empty dict).
@@ -245,7 +587,23 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
         {"$set": merged},
         upsert=True,
     )
-
+          # Phase 1: auto-create missing product catalogue rows from order lines.
+    # This is intentionally non-accounting: no COGS, no inventory movement.
+    try:
+        await _ensure_order_products_catalogued(
+            db=db,
+            user_id=user_id,
+            order_number=order_number,
+            order_doc=merged,
+            source=source,
+        )
+    except Exception as exc:
+        logger.warning(
+            "product catalogue auto-seed skipped for order=%s source=%s: %s",
+            order_number,
+            source,
+            exc,
+        )
     # Iter-146 — Tamara billing-eligible propagation.
     # When the merged order's status is one of the "billable" statuses
     # (shipped / prepared / out-for-delivery / delivered / executed), we

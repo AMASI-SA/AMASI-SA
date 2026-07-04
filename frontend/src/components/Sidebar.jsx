@@ -75,6 +75,7 @@ const SECTIONS = [
             { to: "/diagnostics", label: "تشخيص فروقات الطلبات", icon: MagnifyingGlass, testid: "nav-diagnostics" },
             { to: "/refund-audit", label: "تدقيق المسترجعات (BNPL)", icon: MagnifyingGlass, testid: "nav-refund-audit" },
             { to: "/alerts", label: "🔔 التنبيهات الذكية", icon: Lightning, testid: "nav-alerts" },
+            { to: "/ai/control-center", label: "🧠 مركز الذكاء والتحقق", icon: Lightning, testid: "nav-ai-control-center" },
             { to: "/accounting/migration", label: "🚀 ترحيل الأرصدة (Phase 2)", icon: ArrowsLeftRight, testid: "nav-migration" },
             { to: "/diagnostics/api-permissions", label: "🩺 فحص صلاحيات API", icon: Plug, testid: "nav-api-diagnostics" },
         ],

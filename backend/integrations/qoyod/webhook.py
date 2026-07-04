@@ -18,6 +18,7 @@ manual review (Day 4-5 will wire the retry button).
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -44,7 +45,7 @@ from integrations.qoyod.webhook_activity import record_webhook_event
 # index. Lets future direct integrations (e.g. Salla webhook directly)
 # coexist with the same `idempotency_key` namespace.
 CONNECTOR_KEY = "make_com_qoyod"
-
+logger = logging.getLogger(__name__)
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -219,7 +220,79 @@ def _capture_headers(req: Request) -> dict[str, str]:
 async def _apply(db, *, doc_filter: dict, patch: dict) -> None:
     """One-shot helper so each transition is a single line at the call site."""
     await db.integration_inbox.update_one(doc_filter, patch)
+async def _auto_seed_products_from_canonical(
+    db,
+    *,
+    row: dict,
+    canonical: dict,
+    doc_filter: dict,
+) -> None:
+    """Phase 1 bridge: Qoyod webhook canonical items → /products catalogue.
 
+    Qoyod webhook rows live in integration_inbox, not unified_orders.
+    Therefore orders_db.upsert_order() is not called for this path.
+    This bridge creates missing db.products rows from canonical_payload.items.
+
+    Safe scope:
+    - no COGS calculation
+    - no inventory movement
+    - no Qoyod API call
+    - new products become needs_cost=true
+    """
+    items = canonical.get("items") if isinstance(canonical, dict) else None
+    if not isinstance(items, list) or not items:
+        return
+
+    products = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        sku = str(item.get("sku") or "").strip()
+        product_id = str(item.get("product_id") or "").strip()
+        if not name and not sku and not product_id:
+            continue
+
+        products.append({
+            "name": name,
+            "sku": sku,
+            "product_id": product_id,
+            "quantity": item.get("quantity") or 1,
+            "price": item.get("unit_price") or 0,
+            "total": item.get("total") or 0,
+        })
+
+    if not products:
+        return
+
+    from orders_db import _ensure_order_products_catalogued
+
+    order_number = str(
+        canonical.get("order_number")
+        or canonical.get("order_id")
+        or row.get("salla_order_number")
+        or row.get("salla_order_id")
+        or row.get("id")
+        or ""
+    ).strip()
+
+    result = await _ensure_order_products_catalogued(
+        db=db,
+        user_id=row.get("user_id") or "main",
+        order_number=order_number,
+        order_doc={"products": products},
+        source="qoyod_webhook",
+    )
+
+    await _apply(
+        db,
+        doc_filter=doc_filter,
+        patch={"$set": {
+            "product_catalog_seed": result,
+            "product_catalog_seed_at": _now(),
+            "product_catalog_seed_source": "qoyod_webhook",
+        }},
+    )
 
 async def _process_inbox_row(
     db, *, row: dict, raw_payload: dict,
@@ -314,21 +387,49 @@ async def _process_inbox_row(
             started_at=row.get("pipeline_started_at"),
         )
 
-    # Persist the canonical DTO + advance the stage.
+     # Persist the canonical DTO + advance the stage.
     canonical = dto.model_dump(mode="json")
-    patch = transition(from_stage="VALIDATED", to_stage="NORMALIZED",
-                       actor="webhook",
-                       note=f"DTO built · {len(canonical['items'])} items")
+    patch = transition(
+        from_stage="VALIDATED",
+        to_stage="NORMALIZED",
+        actor="webhook",
+        note=f"DTO built · {len(canonical['items'])} items",
+    )
     patch.setdefault("$set", {}).update({
-        "canonical_payload":  canonical,
-        "salla_order_id":     canonical["order_id"],
+        "canonical_payload": canonical,
+        "salla_order_id": canonical["order_id"],
         "salla_order_number": canonical.get("order_number"),
     })
     await _apply(db, doc_filter=doc_filter, patch=patch)
 
+    # Phase 1: make Qoyod/Salla webhook items visible in /products.
+    # This is intentionally non-accounting: no profit, no inventory.
+    try:
+        await _auto_seed_products_from_canonical(
+            db,
+            row=row,
+            canonical=canonical,
+            doc_filter=doc_filter,
+        )
+    except Exception as exc:
+        logger.warning(
+            "qoyod webhook product auto-seed skipped row_id=%s order=%s: %s",
+            row.get("id"),
+            canonical.get("order_id"),
+            exc,
+        )
+        await _apply(
+            db,
+            doc_filter=doc_filter,
+            patch={"$set": {
+                "product_catalog_seed_error": f"{exc.__class__.__name__}: {exc}",
+                "product_catalog_seed_at": _now(),
+                "product_catalog_seed_source": "qoyod_webhook",
+            }},
+        )
+
     return ("NORMALIZED", None)
-
-
+    
 async def _dead_letter(
     db, *, doc_filter: dict, from_stage: str, fail_stage: str,
     error: dict, started_at: Optional[datetime] = None,
@@ -356,6 +457,7 @@ async def _dead_letter(
 async def _handle_missing_items(
     db, *, row: dict, doc_filter: dict, adapter_meta: dict,
 ) -> tuple[str, Optional[dict]]:
+
     """Branch entered when the Legacy Adapter could not find any line
     items in the incoming payload.
 
