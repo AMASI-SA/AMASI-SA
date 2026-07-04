@@ -267,13 +267,13 @@ async def _find_existing_catalog_product(db, user_id: str, ident: dict) -> Optio
         or_terms.append({"product_id": product_id})
      
     if auto_catalog_key:
-      if variant_key:
-        or_terms.append({
-            "auto_catalog_key": auto_catalog_key,
-            "variant_key": variant_key,
-        })
-    else:
-        or_terms.append({"auto_catalog_key": auto_catalog_key})
+        if variant_key:
+            or_terms.append({
+                "auto_catalog_key": auto_catalog_key,
+                "variant_key": variant_key,
+            })
+        else:
+            or_terms.append({"auto_catalog_key": auto_catalog_key})
 
     if parent_product_id and variant_key:
         or_terms.append({
