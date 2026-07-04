@@ -110,6 +110,19 @@ REQUIRED_MARKERS: dict[str, str] = {
     # fields for diagnostics.
     "rev30_payment_continuation":
         "rev30 — Payment continuation",
+    # rev31 — Tabby-only Live Canary. If absent, the deploy is
+    # missing the dedicated live-canary endpoint that flips
+    # dry_run_mode/production_writes_locked/selective_live_send_enabled
+    # under a strict precondition check.
+    "rev31_tabby_live_canary":
+        "rev31 — Live Canary for Tabby",
+    # rev32 — Fail-closed hardening (BLOCKER hotfix for GitHub #5).
+    # If absent, the deploy is missing (a) the stale-worker POST
+    # block, (b) terminal-stage hard stop, (c) unified pre-POST
+    # guard, (d) auto kill-switch, (e) diagnostic flags. Live Canary
+    # MUST NOT be re-enabled while this marker is absent.
+    "rev32_fail_closed_hardening":
+        "rev32 — Fail-closed hardening",
 }
 
 
@@ -157,6 +170,19 @@ def _pipeline_source_snapshot() -> dict:
         snapshot["sha256_first16"] = (
             hashlib.sha256(data).hexdigest()[:16])
         snapshot["line_count"]     = data.count(b"\n") + 1
+        # rev31 — Also fold in the source of `live_canary.py` (adjacent
+        # module) so the marker check can prove the live-canary
+        # endpoint code was deployed alongside the pipeline. The
+        # marker check uses substring lookup, so concatenation is
+        # sufficient and it never mutates `pipeline.py`.
+        try:
+            src_dir = src_path.rsplit("/", 1)[0]
+            lc_path = f"{src_dir}/live_canary.py"
+            with open(lc_path, "rb") as fh2:
+                lc_data = fh2.read()
+            data = data + b"\n\n# ---- live_canary.py ----\n\n" + lc_data
+        except OSError:
+            pass  # live_canary.py optional for backwards-compat
         snapshot["_raw_source"]    = data.decode("utf-8", "replace")
     except OSError as e:
         snapshot["read_error"] = str(e)
@@ -284,6 +310,10 @@ async def row_diagnostics(db, trace_id: str) -> dict:
         "payment_stage_expected": 1,
         "invoice_payment_required_for_method": 1,
         "posting_mode": 1,
+        # rev32 — Fail-closed hardening flags persisted on the row
+        # when a guard blocked a write. Surface all violation classes
+        # so `/admin/diagnostics/row` shows a definitive audit trail.
+        "rev32_flags": 1,
         # Only the invoice_payment sub-key is needed for the preview
         # existence check; keep the projection tight.
         "qoyod_payloads.invoice_payment": 1,
@@ -602,6 +632,30 @@ async def row_diagnostics(db, trace_id: str) -> dict:
         isinstance(_payloads, dict)
         and _payloads.get("invoice_payment") is not None)
 
+    # ── rev32 — Fail-closed hardening diagnostic flags ───────────────
+    # These flags are persisted by rev32 guards
+    # (`rev32_hardening.assert_final_write_permitted`) when a write
+    # attempt is blocked. Surfaced here so `/admin/diagnostics/row`
+    # gives one-shot visibility of any violation class + whether the
+    # kill-switch has been triggered by rev32.
+    _rev32 = row.get("rev32_flags") or {}
+    if not isinstance(_rev32, dict):
+        _rev32 = {}
+    rev32_live_non_allowlisted_pm_violation = bool(
+        _rev32.get("live_non_allowlisted_payment_method_violation"))
+    rev32_post_terminal_stage_downstream_violation = bool(
+        _rev32.get("post_terminal_stage_downstream_violation"))
+    rev32_skipped_then_posted_violation = bool(
+        _rev32.get("skipped_then_posted_violation"))
+    rev32_stale_worker_live_write_violation = bool(
+        _rev32.get("stale_worker_live_write_violation"))
+    rev32_live_write_gate_violation = bool(
+        _rev32.get("live_write_gate_violation"))
+    rev32_kill_switch_triggered = bool(
+        _rev32.get("kill_switch_triggered"))
+    rev32_kill_switch_reason = _rev32.get("kill_switch_reason")
+    rev32_last_violation_type = _rev32.get("last_violation_type")
+
     return {
         "ok":                            True,
         "found":                         True,
@@ -651,5 +705,19 @@ async def row_diagnostics(db, trace_id: str) -> dict:
                 payment_stage_blocker_reason,
             "payment_payload_preview_exists":
                 payment_payload_preview_exists,
+            # rev32 — Fail-closed hardening diagnostic surfacing.
+            "live_non_allowlisted_payment_method_violation":
+                rev32_live_non_allowlisted_pm_violation,
+            "post_terminal_stage_downstream_violation":
+                rev32_post_terminal_stage_downstream_violation,
+            "skipped_then_posted_violation":
+                rev32_skipped_then_posted_violation,
+            "stale_worker_live_write_violation":
+                rev32_stale_worker_live_write_violation,
+            "rev32_live_write_gate_violation":
+                rev32_live_write_gate_violation,
+            "kill_switch_triggered":  rev32_kill_switch_triggered,
+            "kill_switch_reason":     rev32_kill_switch_reason,
+            "rev32_last_violation_type": rev32_last_violation_type,
         },
     }

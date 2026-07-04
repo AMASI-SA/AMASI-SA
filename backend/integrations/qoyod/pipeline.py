@@ -54,6 +54,24 @@ from integrations.qoyod.selective_send_guard import (
     apply_send_date_to_qoyod_payload,
     assert_send_allowed,
 )
+# ── Iter-2026-02.rev32 — Fail-closed hardening (BLOCKER hotfix) ──
+# GitHub Issue #5: stale worker leaked `mada` orders past a
+# Tabby-only allow-list on Live Canary. rev32 enforces:
+#   (1) stale-worker POST block
+#   (2) terminal-stage hard stop
+#   (3) unified pre-POST guard for the four write actions
+#   (4) auto kill-switch on any violation
+#   (5) row-level diagnostic flags
+# Marker (scanned by sas_build_diagnostics.REQUIRED_MARKERS):
+# "rev32 — Fail-closed hardening"
+from integrations.qoyod.rev32_hardening import (
+    Rev32Violation,
+    TERMINAL_STAGES as _REV32_TERMINAL_STAGES,
+    assert_final_write_permitted as _rev32_assert_final_write_permitted,
+    assert_not_at_terminal_stage as _rev32_assert_not_at_terminal_stage,
+    is_stale_worker_row as _rev32_is_stale_worker_row,
+    trigger_kill_switch as _rev32_trigger_kill_switch,
+)
 
 
 def _now() -> datetime:
@@ -729,7 +747,8 @@ async def process_normalized_row(
     if api_client is None:
         api_client, _is_dry = await _get_api_client(
             db, user_id, settings,
-            scoped_write_allowance=_sas_gate_passed)
+            scoped_write_allowance=_sas_gate_passed,
+            row_id=row.get("id"))
         if api_client is None:
             await _dead_letter(
                 db, row_id=row["id"], from_stage="NORMALIZED",
@@ -1039,6 +1058,7 @@ async def _get_api_client(
     db, user_id: str, settings: dict,
     *,
     scoped_write_allowance: bool = False,  # kept for signature compat
+    row_id: Optional[str] = None,
 ):
     """Return `(client, is_dry)`.
 
@@ -1063,8 +1083,28 @@ async def _get_api_client(
     so writes are refused at the api_client layer when
     `production_writes_locked=True` (defensive redundancy; the gate
     above already rejects this state).
+
+    rev32 — When `row_id` is supplied, we ALSO refuse to build a live
+    client if the row was built by a stale worker (worker_code_mismatch).
+    This is the FIRST layer of Issue #5 Rev32 hardening: even if all
+    settings permit a live POST, a stale-worker row is downgraded to
+    DryRun so no leaked write can happen. The final pre-POST guard
+    (`_rev32_assert_final_write_permitted`) is the second layer.
     """
     permitted, _reason = _live_write_permitted(settings)
+    # rev32 — Stale worker POST block.
+    if permitted and scoped_write_allowance and row_id:
+        try:
+            if await _rev32_is_stale_worker_row(db, row_id):
+                logger.error(
+                    "rev32 stale_worker_downgrade_to_dry row_id=%s",
+                    row_id)
+                return DryRunQoyodClient(), True
+        except Exception as _e:  # noqa: BLE001
+            # Never break the pipeline for a diagnostic read.
+            logger.warning(
+                "rev32 stale_worker_check_failed row_id=%s err=%s",
+                row_id, _e)
     # Live-write requires BOTH permission AND an explicit scoped ask.
     # Falling into dry-run for either omission is the safe default.
     if permitted and scoped_write_allowance:
@@ -1093,6 +1133,29 @@ async def process_customer_resolved_row(
         return {"row_id": row.get("id"), "skipped": True,
                 "reason": "not_in_customer_resolved_stage",
                 "pipeline_stage": row.get("pipeline_stage")}
+
+    # rev32 — Terminal-stage hard stop. FRESH DB read: even if the
+    # in-memory `row` snapshot says CUSTOMER_RESOLVED, a concurrent
+    # worker or requeue may have moved the DB row to SKIPPED /
+    # DEAD_LETTER / etc. Refuse to continue in that case — this is
+    # the primary fix for GitHub Issue #5 control_flow_violation
+    # (SKIPPED → PRODUCT_RESOLVED → INVOICE_CREATED → COMPLETED).
+    try:
+        await _rev32_assert_not_at_terminal_stage(
+            db, row["id"], expected_stage="CUSTOMER_RESOLVED")
+    except Rev32Violation as _v:
+        logger.error(
+            "rev32 terminal_stage_hard_stop_at_customer_resolved "
+            "row_id=%s trace_id=%s evidence=%s",
+            row.get("id"), row.get("trace_id"), _v.evidence)
+        return {
+            "row_id":         row.get("id"),
+            "outcome":        "REV32_TERMINAL_STAGE_ABORT",
+            "reason":         _v.reason,
+            "violation_type": _v.violation_type,
+            "trace_id":       row.get("trace_id"),
+            "evidence":       _v.evidence,
+        }
 
     # rev29d — Hard preflight. Refuse to run product/invoice/receipt
     # stages if the row was built without `selective_auto_send_gate`.
@@ -1698,6 +1761,62 @@ async def process_customer_resolved_row(
             }
 
         try:
+            # rev32 — Final pre-POST guard #3: before create_invoice.
+            # Reads FRESH settings + row from DB and enforces all 8
+            # conditions from Issue #5 §4. On violation, triggers auto
+            # kill-switch (flips production_writes_locked=true +
+            # selective_live_send_enabled=false), persists diagnostic
+            # flags on the row, and raises Rev32Violation.
+            #
+            # Skipped when `_pipeline_is_dry_mode` is True (any
+            # DryRunQoyodClient subclass OR settings.dry_run_mode=True)
+            # because those paths cannot make real Qoyod POSTs. The
+            # guard's purpose is to protect against LIVE leaks —
+            # matching the same `_pipeline_is_dry_mode` signal used
+            # elsewhere in the pipeline for dry-vs-live wording.
+            if not is_dry and not _pipeline_is_dry_mode:
+                pm_for_guard = (canonical.get("payment_method")
+                                or canonical.get("payment_method_native"))
+                try:
+                    await _rev32_assert_final_write_permitted(
+                        db, row["id"],
+                        action="create_invoice",
+                        payment_method=pm_for_guard,
+                        user_id=user_id,
+                    )
+                except Rev32Violation as _v:
+                    logger.error(
+                        "rev32 create_invoice_blocked row_id=%s "
+                        "trace_id=%s violation_type=%s reason=%s",
+                        row.get("id"), trace_id, _v.violation_type,
+                        _v.reason)
+                    await db.integration_inbox.update_one(
+                        {"id": row["id"]},
+                        {"$set": {
+                            "qoyod_payloads.invoice_rev32_blocked_payload":
+                                invoice_payload,
+                            "qoyod_payloads.invoice_rev32_blocked_at":
+                                _now(),
+                        }})
+                    await _dead_letter(
+                        db, row_id=row["id"],
+                        from_stage="PRODUCT_RESOLVED",
+                        fail_stage="FAILED_INVOICE",
+                        error={
+                            "code":           "rev32_guard_blocked",
+                            "violation_type": _v.violation_type,
+                            "message":        _v.reason,
+                            "evidence":       _v.evidence,
+                        },
+                        started_at=started_at)
+                    return {
+                        "row_id":         row["id"],
+                        "outcome":        "REV32_BLOCKED",
+                        "reason":         _v.violation_type,
+                        "violation_type": _v.violation_type,
+                        "step":           "create_invoice",
+                        "trace_id":       trace_id,
+                    }
             inv_resp = await api_client.create_invoice(invoice_payload,
                                                        idem=invoice_idem)
             inv_resp_raw = inv_resp
@@ -2388,6 +2507,70 @@ async def process_customer_resolved_row(
 
         payment_idem = (
             f"mzn-{trace_id}-invoice-payment-{idem_fingerprint['qoyod_invoice_id']}")
+        # rev32 — Final pre-POST guard #4: before create_invoice_payment.
+        # Same 8-condition check as create_invoice. Failing here after
+        # an invoice was already created means the invoice remains in
+        # قيود but the payment link is refused — the row is dead-
+        # lettered so the operator sees the divergence in one place.
+        # Skipped when `_pipeline_is_dry_mode` is True (fake HTTP-free
+        # client OR settings.dry_run_mode=True) — see create_invoice
+        # comment for rationale.
+        if not is_dry and not _pipeline_is_dry_mode:
+            pm_for_guard = (canonical.get("payment_method")
+                            or canonical.get("payment_method_native"))
+            try:
+                await _rev32_assert_final_write_permitted(
+                    db, row["id"],
+                    action="create_invoice_payment",
+                    payment_method=pm_for_guard,
+                    user_id=user_id,
+                )
+            except Rev32Violation as _v:
+                logger.error(
+                    "rev32 create_invoice_payment_blocked row_id=%s "
+                    "trace_id=%s violation_type=%s reason=%s",
+                    row.get("id"), trace_id, _v.violation_type,
+                    _v.reason)
+                await db.integration_inbox.update_one(
+                    {"id": row["id"]},
+                    {"$set": {
+                        "qoyod_payloads.invoice_payment_rev32_blocked_payload":
+                            payment_payload,
+                        "qoyod_payloads.invoice_payment_rev32_blocked_at":
+                            _now(),
+                    }})
+                p_rv = transition(
+                    from_stage="INVOICE_CREATED",
+                    to_stage="PAYMENT_LINK_FAILED",
+                    actor="worker",
+                    error={
+                        "code":           "rev32_guard_blocked",
+                        "violation_type": _v.violation_type,
+                        "message":        _v.reason,
+                        "evidence":       _v.evidence,
+                    })
+                p_rv.setdefault("$set", {})["pipeline_error"] = {
+                    "code":           "rev32_guard_blocked",
+                    "violation_type": _v.violation_type,
+                    "message":        _v.reason,
+                }
+                await _apply(db, row["id"], p_rv)
+                p_rv2 = transition(
+                    from_stage="PAYMENT_LINK_FAILED",
+                    to_stage="PARTIAL_FAILURE", actor="worker",
+                    note=(f"rev32 guard blocked invoice_payment: "
+                          f"{_v.violation_type}"),
+                    existing_started_at=started_at)
+                await _apply(db, row["id"], p_rv2)
+                return {
+                    "row_id":         row["id"],
+                    "outcome":        "REV32_BLOCKED",
+                    "reason":         _v.violation_type,
+                    "violation_type": _v.violation_type,
+                    "step":           "create_invoice_payment",
+                    "qoyod_invoice_id": qoyod_invoice_id,
+                    "trace_id":       trace_id,
+                }
         try:
             payment_resp = await api_client.create_invoice_payment(
                 payment_payload, idem=payment_idem)
