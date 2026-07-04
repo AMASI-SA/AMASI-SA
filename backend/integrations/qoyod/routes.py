@@ -415,6 +415,26 @@ class ApproveLockedPaymentBody(BaseModel):
     confirm_token:   str = Field(..., min_length=1, max_length=128)
 
 
+class EnableTabbyLiveCanaryBody(BaseModel):
+    """Iter-2026-02.rev31 — Open Tabby-only Live Canary. Flips
+    dry_run_mode=False, production_writes_locked=False,
+    selective_live_send_enabled=True. Refuses if preconditions fail
+    (auto_send must be OFF, allow-list must be exactly
+    ['tabby_installment'], auto_receipt + create_receipts must be
+    True)."""
+    model_config = ConfigDict(extra="forbid")
+    confirm_token: str = Field(..., min_length=1, max_length=128)
+
+
+class DisableTabbyLiveCanaryBody(BaseModel):
+    """Iter-2026-02.rev31 — Rollback to fail-closed posture. Flips
+    dry_run_mode=True, production_writes_locked=True,
+    selective_live_send_enabled=False. Always succeeds."""
+    model_config = ConfigDict(extra="forbid")
+    confirm_token: str          = Field(..., min_length=1, max_length=128)
+    reason:        Optional[str] = Field(None, max_length=256)
+
+
 # ─────────────────────────────────────────────────────────────────────
 def make_qoyod_router(db, current_user) -> APIRouter:
     router = APIRouter(
@@ -2867,6 +2887,57 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         except SelectiveAutoSendRefused as exc:
             return {"ok": False, "outcome": "REFUSED",
                     "code": exc.code, "detail": exc.human}
+
+    # ── Iter-2026-02.rev31 — Live Canary for Tabby (Option A) ────────
+    # Purpose-built endpoint that flips EXACTLY three flags and
+    # nothing else:
+    #     dry_run_mode                = False
+    #     production_writes_locked    = False
+    #     selective_live_send_enabled = True
+    # Refuses if ANY precondition fails (auto_send must be OFF,
+    # SAS must be ENABLED, allow-list must be exactly
+    # ["tabby_installment"], auto_receipt=True, capabilities.
+    # create_receipts=True). NEVER touches payment_method_mapping.
+    # Rollback via /admin/live-canary/disable-tabby is always
+    # available and restores the fail-closed posture.
+    @router.post("/admin/live-canary/enable-tabby")
+    async def admin_enable_tabby_live_canary(
+        body: EnableTabbyLiveCanaryBody = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.live_canary import (
+            enable_tabby_live_canary, LiveCanaryRefused,
+        )
+        tenant = _tenant_id(user)
+        actor  = (getattr(user, "email", None) or "operator")
+        try:
+            return await enable_tabby_live_canary(
+                db, user_id=tenant,
+                confirm_token=body.confirm_token,
+                actor=str(actor))
+        except LiveCanaryRefused as exc:
+            return {"ok": False, "outcome": "REFUSED",
+                    "code": exc.code, "detail": exc.message}
+
+    @router.post("/admin/live-canary/disable-tabby")
+    async def admin_disable_tabby_live_canary(
+        body: DisableTabbyLiveCanaryBody = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.live_canary import (
+            disable_tabby_live_canary, LiveCanaryRefused,
+        )
+        tenant = _tenant_id(user)
+        actor  = (getattr(user, "email", None) or "operator")
+        try:
+            return await disable_tabby_live_canary(
+                db, user_id=tenant,
+                confirm_token=body.confirm_token,
+                actor=str(actor),
+                reason=body.reason)
+        except LiveCanaryRefused as exc:
+            return {"ok": False, "outcome": "REFUSED",
+                    "code": exc.code, "detail": exc.message}
 
     # ── Iter-2026-02.rev18 — Force-reprocess a DRY-run row ──────────
     # Dedicated recovery endpoint for rows stuck at INVOICE_CREATED

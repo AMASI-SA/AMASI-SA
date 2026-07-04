@@ -220,6 +220,46 @@ def _capture_headers(req: Request) -> dict[str, str]:
 async def _apply(db, *, doc_filter: dict, patch: dict) -> None:
     """One-shot helper so each transition is a single line at the call site."""
     await db.integration_inbox.update_one(doc_filter, patch)
+
+     
+async def _resolve_product_catalog_user_id(db, tenant_user_id: str | None) -> str:
+    """Resolve the real app user_id that owns /products.
+
+    Qoyod integration rows currently use tenant='main', while /products
+    is filtered by the authenticated user's real id. If we seed products
+    under 'main', they will not appear in /products or supplier invoices.
+    """
+    if tenant_user_id and tenant_user_id != "main":
+        return tenant_user_id
+
+    # Prefer an existing products owner if any products were imported before.
+    existing_product = await db.products.find_one(
+        {"user_id": {"$ne": "main"}},
+        {"_id": 0, "user_id": 1},
+        sort=[("updated_at", -1)],
+    )
+    if existing_product and existing_product.get("user_id"):
+        return existing_product["user_id"]
+
+    # Then use app settings owner.
+    existing_settings = await db.settings.find_one(
+        {"user_id": {"$ne": "main"}},
+        {"_id": 0, "user_id": 1},
+    )
+    if existing_settings and existing_settings.get("user_id"):
+        return existing_settings["user_id"]
+
+    # Fallback to the first real user.
+    first_user = await db.users.find_one(
+        {},
+        {"_id": 0, "id": 1},
+        sort=[("created_at", 1)],
+    )
+    if first_user and first_user.get("id"):
+        return first_user["id"]
+
+    return tenant_user_id or "main"
+
 async def _auto_seed_products_from_canonical(
     db,
     *,
@@ -267,18 +307,14 @@ async def _auto_seed_products_from_canonical(
 
     from orders_db import _ensure_order_products_catalogued
 
-    order_number = str(
-        canonical.get("order_number")
-        or canonical.get("order_id")
-        or row.get("salla_order_number")
-        or row.get("salla_order_id")
-        or row.get("id")
-        or ""
-    ).strip()
+    catalog_user_id = await _resolve_product_catalog_user_id(
+        db,
+        row.get("user_id") or "main",
+    )
 
     result = await _ensure_order_products_catalogued(
         db=db,
-        user_id=row.get("user_id") or "main",
+        user_id=catalog_user_id,
         order_number=order_number,
         order_doc={"products": products},
         source="qoyod_webhook",
@@ -289,6 +325,7 @@ async def _auto_seed_products_from_canonical(
         doc_filter=doc_filter,
         patch={"$set": {
             "product_catalog_seed": result,
+            "product_catalog_user_id": catalog_user_id,
             "product_catalog_seed_at": _now(),
             "product_catalog_seed_source": "qoyod_webhook",
         }},
@@ -429,7 +466,7 @@ async def _process_inbox_row(
         )
 
     return ("NORMALIZED", None)
-    
+
 async def _dead_letter(
     db, *, doc_filter: dict, from_stage: str, fail_stage: str,
     error: dict, started_at: Optional[datetime] = None,

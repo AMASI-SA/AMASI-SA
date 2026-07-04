@@ -253,6 +253,13 @@ def shape_inbox_row_for_monitor(row: dict) -> dict:
         "stage_history":      history,
         "business_rules_decision": row.get("business_rules_decision"),
         "preflight":          row.get("preflight"),
+
+        # Phase 1 product-catalog auto-seed diagnostics.
+        "product_catalog_seed": row.get("product_catalog_seed"),
+        "product_catalog_user_id": row.get("product_catalog_user_id"),
+        "product_catalog_seed_at": row.get("product_catalog_seed_at"),
+        "product_catalog_seed_source": row.get("product_catalog_seed_source"),
+        "product_catalog_seed_error": row.get("product_catalog_seed_error"),
     })
 
 

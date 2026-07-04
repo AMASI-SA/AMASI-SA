@@ -110,6 +110,12 @@ REQUIRED_MARKERS: dict[str, str] = {
     # fields for diagnostics.
     "rev30_payment_continuation":
         "rev30 — Payment continuation",
+    # rev31 — Tabby-only Live Canary. If absent, the deploy is
+    # missing the dedicated live-canary endpoint that flips
+    # dry_run_mode/production_writes_locked/selective_live_send_enabled
+    # under a strict precondition check.
+    "rev31_tabby_live_canary":
+        "rev31 — Live Canary for Tabby",
 }
 
 
@@ -157,6 +163,19 @@ def _pipeline_source_snapshot() -> dict:
         snapshot["sha256_first16"] = (
             hashlib.sha256(data).hexdigest()[:16])
         snapshot["line_count"]     = data.count(b"\n") + 1
+        # rev31 — Also fold in the source of `live_canary.py` (adjacent
+        # module) so the marker check can prove the live-canary
+        # endpoint code was deployed alongside the pipeline. The
+        # marker check uses substring lookup, so concatenation is
+        # sufficient and it never mutates `pipeline.py`.
+        try:
+            src_dir = src_path.rsplit("/", 1)[0]
+            lc_path = f"{src_dir}/live_canary.py"
+            with open(lc_path, "rb") as fh2:
+                lc_data = fh2.read()
+            data = data + b"\n\n# ---- live_canary.py ----\n\n" + lc_data
+        except OSError:
+            pass  # live_canary.py optional for backwards-compat
         snapshot["_raw_source"]    = data.decode("utf-8", "replace")
     except OSError as e:
         snapshot["read_error"] = str(e)

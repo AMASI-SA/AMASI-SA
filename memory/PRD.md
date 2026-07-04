@@ -6051,3 +6051,134 @@ No worker will ever complete this row — silent stuck.
 - Phase 2 Auto-Send expansion (mada / apple_pay / credit_card / stc_pay /
   tamara) after flawless Tabby dry + live cycle.
 - manual_send_audit_log + UI Manual Send Button.
+
+---
+
+## 2026-Feb-03 — Rev 31: Tabby-only Live Canary (Option A)
+
+### Context
+Tabby dry full cycle passed twice under rev30 (last: trace
+`9720653f301e4732816549355e7b3154`, order 270459427, reached COMPLETED
+with `DRY:invoice_payment:854545c0`). Time to open a Live Canary
+scoped exclusively to Tabby WITHOUT touching the master `auto_send`
+flag or the payment_method_mapping.
+
+Blocker: the generic `PUT /api/integrations/qoyod/settings` endpoint
+did not accept `selective_live_send_enabled` (not on `SettingsPatch`)
+— which is the correct posture, since a generic PATCH would let ANY
+caller flip live-send with no guardrails.
+
+### Solution (Option A — dedicated admin endpoint)
+New module `integrations/qoyod/live_canary.py` + two admin routes:
+
+- `POST /api/integrations/qoyod/admin/live-canary/enable-tabby`
+- `POST /api/integrations/qoyod/admin/live-canary/disable-tabby`
+
+Both take a `confirm_token` (case-sensitive, exact match):
+- Enable: `ENABLE_TABBY_LIVE_CANARY`
+- Disable: `DISABLE_TABBY_LIVE_CANARY`
+
+### Enable flow — flips EXACTLY three flags (nothing else)
+```
+dry_run_mode                = False
+production_writes_locked    = False
+selective_live_send_enabled = True
+```
+Plus audit fields: `tabby_live_canary_enabled_at`, `_enabled_by`.
+
+### Strict preconditions (any failure → refused BEFORE any write)
+| # | Field | Required value | Refusal code |
+|---|-------|---------------|--------------|
+| 1 | `auto_send` | `False` | `auto_send_is_on` |
+| 2 | `selective_auto_send_enabled` | `True` | `selective_auto_send_disabled` |
+| 3 | `selective_auto_send_allowed_payment_methods` | exactly `["tabby_installment"]` | `allowlist_not_exactly_tabby` |
+| 4 | `auto_receipt` | `True` | `auto_receipt_disabled` |
+| 5 | `capabilities.create_receipts` | `True` | `capability_create_receipts_disabled` |
+| 6 | `confirm_token` | `ENABLE_TABBY_LIVE_CANARY` | `confirm_token_mismatch` |
+
+### Disable flow — always succeeds, restores fail-closed
+```
+dry_run_mode                = True
+production_writes_locked    = True
+selective_live_send_enabled = False
+```
+Plus audit fields: `tabby_live_canary_disabled_at`, `_disabled_by`,
+`_disabled_reason`. `confirm_token=DISABLE_TABBY_LIVE_CANARY`.
+
+### Guarantees
+- Endpoint NEVER touches `payment_method_mapping`.
+- Endpoint NEVER touches `auto_send` (must ALREADY be False; refused otherwise).
+- Endpoint NEVER touches `selective_auto_send_enabled` or its allow-list
+  (must ALREADY match the required posture; refused otherwise).
+- Idempotent: enable-on-enabled returns `outcome=ALREADY_ENABLED` with
+  no DB write.
+- Single-atomic `update_one` — no partial-write window.
+- Every call (success + refusal) logged with actor + timestamp.
+- New required marker `rev31_tabby_live_canary` (needle
+  `rev31 — Live Canary for Tabby`, folded via `live_canary.py` into
+  the build-diagnostics source snapshot). All 19 markers green.
+- `sas_build_diagnostics._pipeline_source_snapshot` now also loads
+  `live_canary.py` source so the marker check proves BOTH modules
+  are deployed.
+
+### Tests (`tests/test_rev31_tabby_live_canary.py`) — 13 new
+1. rev31 marker registered + present + `code_matches_expected=true`.
+2. Happy path flips exactly three flags; DB write excludes
+   `payment_method_mapping`, `auto_send`,
+   `selective_auto_send_enabled`, `_allowed_payment_methods`,
+   `auto_receipt`.
+3. Wrong confirm_token → refused, no DB write.
+4. `auto_send=True` → refused with code `auto_send_is_on`.
+5. SAS disabled → refused with code `selective_auto_send_disabled`.
+6. Allow-list has extras (mada) → refused with code
+   `allowlist_not_exactly_tabby`.
+6b. Empty allow-list → refused.
+7. `auto_receipt=False` → refused.
+8. `capabilities.create_receipts=False` → refused.
+9. Idempotent: already-enabled → `ALREADY_ENABLED` outcome, no DB write.
+10. Disable flips all three back to fail-closed with audit fields.
+11. Disable with wrong confirm_token → refused.
+12. Source-side proof: endpoints wired in `routes.py`, body models
+    declared with `extra="forbid"`.
+
+### Regression
+- 290 passed in the qoyod/sas/canary/auto-send/salla/state-machine/
+  live-canary suite (zero rev31-caused regressions).
+- Live smoke: `POST /api/integrations/qoyod/admin/live-canary/enable-tabby`
+  responds with `401 Unauthorized` when unauthenticated → endpoint is
+  correctly registered and requires auth.
+
+### Deploy verification (Production, after deploy + worker restart)
+1. `GET /admin/diagnostics/build` →
+   `markers.rev31_tabby_live_canary.count >= 1` AND
+   `acceptance.code_matches_expected == true`.
+2. `POST /admin/live-canary/enable-tabby` with wrong confirm →
+   `{"ok": false, "code": "confirm_token_mismatch"}`.
+3. `POST /admin/live-canary/enable-tabby` with correct confirm →
+   `{"ok": true, "outcome": "ENABLED",
+    "dry_run_mode": false,
+    "production_writes_locked": false,
+    "selective_live_send_enabled": true,
+    "auto_send_still_off": true,
+    "allowed_payment_methods": ["tabby_installment"]}`.
+4. `GET /settings` → verify three flags flipped, no other settings changed.
+5. Send ONE new positive live Tabby order → verify:
+   - `pipeline_stage == COMPLETED` (or COMPLETED_WITH_ROUNDING_WARNING).
+   - `qoyod_invoice_id` is a REAL Qoyod id (NOT `DRY:*`).
+   - `qoyod_invoice_payment_id` is a REAL id.
+   - All rev27/rev29/rev29c/rev29d/rev30 invariants remain false/expected.
+6. Rollback drill: `POST /admin/live-canary/disable-tabby` restores
+   fail-closed posture in one call.
+
+### Constraints honoured
+- `auto_send` global untouched (endpoint refuses if it's ON).
+- No mada/apple_pay/credit_card/stc_pay/tamara/cod/bank_transfer
+  added to the allow-list.
+- Invoice #188 frozen.
+- rev27/rev29/rev29c/rev29d/rev30 all untouched.
+
+### Next up (Phase 2 — after successful live canary)
+- Widen allow-list to `mada` (separate decision + endpoint reuse):
+  `POST /admin/expand-selective-auto-send` (already exists, rev20-era).
+- Then `apple_pay`, `credit_card`, `stc_pay`, `tamara` in order.
+- Master `auto_send=True` — ONLY after all methods above proved stable.
