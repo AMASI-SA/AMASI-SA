@@ -111,6 +111,7 @@ import OperationAccountBindings from "./pages/OperationAccountBindings";
 import ShippingLedger from "./pages/ShippingLedger";
 import AdAccountForensic from "./pages/AdAccountForensic";
 import BalanceDriftDiagnostic from "./pages/BalanceDriftDiagnostic";
+import AIControlCenter from "./pages/AIControlCenter";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
@@ -241,7 +242,7 @@ function AppRoutes() {
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />
             <Route path="/import-jobs" element={<ProtectedRoute><Layout><ImportJobs /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
-
+<Route path="/ai/control-center" element={<ProtectedRoute><Layout><AIControlCenter /></Layout></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
     );
