@@ -706,3 +706,220 @@ def test_26_missing_row_context_is_rev32_violation():
     )
     assert issubclass(Rev32MissingRowContextError, Rev32Violation)
     # So a caller catching Rev32Violation also catches the new error.
+
+
+# ═════════════════════════════════════════════════════════════════
+# 12. PR #10 Blocker fix — _dead_letter() persists dead_lettered_at
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_27_dead_letter_helper_persists_dead_lettered_at_trio():
+    """PR #10 blocker: `pipeline._dead_letter()` MUST stamp the three
+    dead-letter evidence fields on the row via `_stamp_dead_letter_
+    evidence`. Without them, rev32.1 (A) guard has nothing to key on.
+    """
+    from integrations.qoyod.pipeline import _dead_letter
+
+    captured = []
+    async def _upd(f, u):
+        captured.append({"filter": f, "set": (u or {}).get("$set") or {}})
+        return MagicMock(matched_count=1)
+
+    db = MagicMock()
+    db.integration_inbox = MagicMock()
+    db.integration_inbox.update_one = _upd
+
+    await _dead_letter(
+        db,
+        row_id="row-x",
+        from_stage="CUSTOMER_RESOLVED",
+        fail_stage="FAILED_PRODUCT",
+        error={"code": "product_resolve_failed",
+               "message": "Qoyod returned 422"},
+    )
+
+    # Two hops were applied.
+    assert len(captured) == 2, captured
+    # The DEAD_LETTER hop (second) MUST carry the trio.
+    dead_set = captured[1]["set"]
+    assert "dead_lettered_at" in dead_set
+    # `_now()` returns a datetime; the value is either a str (ISO) or
+    # a datetime — accept both since the DB layer converts. The
+    # important invariant is that it is truthy and present.
+    from datetime import datetime as _dt
+    assert isinstance(dead_set["dead_lettered_at"], (str, _dt))
+    assert dead_set["dead_letter_from_stage"] == "FAILED_PRODUCT"
+    assert dead_set["dead_letter_reason"] == "product_resolve_failed"
+    # If it happens to be a string, verify ISO-ness.
+    if isinstance(dead_set["dead_lettered_at"], str):
+        assert "T" in dead_set["dead_lettered_at"]
+
+
+@pytest.mark.asyncio
+async def test_28_dead_letter_helper_reason_falls_back_to_message_or_unspecified():
+    """`dead_letter_reason` prefers error.code, then error.message,
+    then the literal 'unspecified'."""
+    from integrations.qoyod.pipeline import _dead_letter
+
+    async def _mk_captor():
+        captured = []
+        async def _upd(f, u):
+            captured.append((u or {}).get("$set") or {})
+            return MagicMock(matched_count=1)
+        return captured, _upd
+
+    # Case A: only message present.
+    cap_a, upd_a = await _mk_captor()
+    db_a = MagicMock()
+    db_a.integration_inbox = MagicMock()
+    db_a.integration_inbox.update_one = upd_a
+    await _dead_letter(
+        db_a, row_id="a",
+        from_stage="RULES_APPLIED",
+        fail_stage="FAILED_CUSTOMER",
+        error={"message": "customer resolver 5xx"},
+    )
+    assert cap_a[1]["dead_letter_reason"] == "customer resolver 5xx"
+
+    # Case B: empty error → unspecified.
+    cap_b, upd_b = await _mk_captor()
+    db_b = MagicMock()
+    db_b.integration_inbox = MagicMock()
+    db_b.integration_inbox.update_one = upd_b
+    await _dead_letter(
+        db_b, row_id="b",
+        from_stage="NORMALIZED",
+        fail_stage="FAILED_VALIDATION",
+        error={},
+    )
+    assert cap_b[1]["dead_letter_reason"] == "unspecified"
+
+
+@pytest.mark.asyncio
+async def test_29_rollback_from_dead_letter_still_blocked_by_dead_lettered_at():
+    """End-to-end acceptance: pipeline._dead_letter() sets
+    dead_lettered_at, THEN some path rolls stage back to
+    CUSTOMER_RESOLVED / PRODUCT_RESOLVED — assert_final_write_permitted
+    MUST still refuse create_invoice because `dead_lettered_at IS NOT
+    NULL`."""
+    from integrations.qoyod.pipeline import _dead_letter
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+
+    # Row in flight — start at CUSTOMER_RESOLVED, valid sha, live settings.
+    row = _happy_row(pipeline_stage="CUSTOMER_RESOLVED")
+    row["id"] = "row-rollback-scenario"
+    db = _mk_db(settings=_live_settings(), row=row)
+
+    # Step 1: _dead_letter() writes FAILED_PRODUCT then DEAD_LETTER +
+    # stamps dead_lettered_at on the row.
+    await _dead_letter(
+        db,
+        row_id="row-rollback-scenario",
+        from_stage="CUSTOMER_RESOLVED",
+        fail_stage="FAILED_PRODUCT",
+        error={"code": "test_failure", "message": "simulated"},
+    )
+    # The row's dead_lettered_at is now populated.
+    assert "dead_lettered_at" in db._row and db._row["dead_lettered_at"]
+
+    # Step 2: some legacy retry path rolls pipeline_stage back
+    # (this is the exact 270589798 scenario). dead_lettered_at
+    # remains set (that's the invariant).
+    db._row["pipeline_stage"] = "PRODUCT_RESOLVED"
+
+    # Step 3: any code path attempts create_invoice → MUST be refused.
+    with pytest.raises(Rev32Violation) as exc_info:
+        await assert_final_write_permitted(
+            db, "row-rollback-scenario",
+            action="create_invoice",
+            payment_method="tabby_installment",
+            user_id="main")
+    assert exc_info.value.violation_type == \
+        "post_dead_letter_write_violation"
+    # Auto kill-switch fired even though pipeline_stage looks "safe".
+    assert db._settings["production_writes_locked"] is True
+    assert db._settings["selective_live_send_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_30_rollback_from_dead_letter_blocks_direct_api_client_too():
+    """Same rollback scenario, but via direct QoyodAPIClient call
+    (the exact incident code path — retry_payment_only /
+    one_shot_reprocess / manual send). The api_client-level
+    rev32.1 pre-flight MUST refuse."""
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.pipeline import _dead_letter
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.rev32_hardening import Rev32Violation
+
+    row = _happy_row(pipeline_stage="PRODUCT_RESOLVED")
+    row["id"] = "row-rollback-client"
+    db = _mk_db(settings=_live_settings(), row=row)
+
+    await _dead_letter(
+        db,
+        row_id="row-rollback-client",
+        from_stage="PRODUCT_RESOLVED",
+        fail_stage="FAILED_INVOICE",
+        error={"code": "invoice_422"},
+    )
+    # Rollback stage.
+    db._row["pipeline_stage"] = "PRODUCT_RESOLVED"
+
+    client = QoyodAPIClient(
+        "fake-key",
+        db=db, user_id="main",
+        row_id="row-rollback-client",
+        trace_id="trace-happy",
+    )
+    with pytest.raises(Rev32Violation) as exc_info:
+        await client.create_invoice(
+            {"invoice": {"payment_method": "tabby_installment"}},
+            idem="fake")
+    assert exc_info.value.violation_type == \
+        "post_dead_letter_write_violation"
+
+
+def test_31_stamp_dead_letter_evidence_helper_is_pure():
+    """The helper adds the trio to any patch without stomping other
+    $set keys — safe to use on inline transitions elsewhere."""
+    from integrations.qoyod.pipeline import _stamp_dead_letter_evidence
+    patch = {"$set": {"other_field": 42},
+             "$push": {"stage_history": {"foo": 1}}}
+    out = _stamp_dead_letter_evidence(
+        patch, fail_stage="FAILED_VALIDATION",
+        error={"code": "totals_mismatch"})
+    # Preserved fields.
+    assert out["$set"]["other_field"] == 42
+    assert out["$push"]["stage_history"] == {"foo": 1}
+    # New fields.
+    assert "dead_lettered_at" in out["$set"]
+    assert out["$set"]["dead_letter_from_stage"] == "FAILED_VALIDATION"
+    assert out["$set"]["dead_letter_reason"] == "totals_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_32_inline_dead_letter_transitions_also_stamped():
+    """Regression: the two inline DEAD_LETTER transitions in
+    pipeline.py (totals-mismatch, rev29c gate-buffer) both use
+    `_stamp_dead_letter_evidence`. Verify via source inspection
+    that no direct `to_stage="DEAD_LETTER"` transition remains
+    unstamped."""
+    import inspect
+    from integrations.qoyod import pipeline as _pipe
+    src = inspect.getsource(_pipe)
+    # Count DEAD_LETTER transitions.
+    dl_count = src.count('to_stage="DEAD_LETTER"')
+    stamp_count = src.count('_stamp_dead_letter_evidence(')
+    # Every DEAD_LETTER transition must be accompanied by a stamp call
+    # (or be inside `_dead_letter()` which calls stamp once). Since
+    # _dead_letter() has one transition + one stamp call, and each
+    # inline site has one transition + one stamp call, the counts
+    # should be balanced.
+    assert stamp_count >= dl_count, (
+        f"DEAD_LETTER transitions ({dl_count}) exceed stamp calls "
+        f"({stamp_count}) — an inline transition may be missing "
+        "dead_letter evidence stamping")

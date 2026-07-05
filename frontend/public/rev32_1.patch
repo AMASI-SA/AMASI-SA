@@ -1,560 +1,90 @@
-diff --git a/backend/integrations/qoyod/api_client.py b/backend/integrations/qoyod/api_client.py
-index 1e7cc20..7e936c6 100644
---- a/backend/integrations/qoyod/api_client.py
-+++ b/backend/integrations/qoyod/api_client.py
-@@ -130,6 +130,18 @@ class QoyodAPIClient:
-         db: Any = None,
-         user_id: Optional[str] = None,
-         write_lock_enabled: bool = False,
-+        # ── Iter-2026-02.rev32.1 — Dead-letter hardening ───────────────
-+        # `row_id` + `trace_id` let the write methods invoke the
-+        # rev32.1 pre-flight guard against a FRESH read of the
-+        # integration_inbox row. Every caller that legitimately writes
-+        # (pipeline, retry, reprocess, manual send, approve_locked_
-+        # payment, go_live, …) MUST pass these. Legacy admin probes
-+        # that write without a row context must set
-+        # `allow_writes_without_row=True` (audited via kill_switch
-+        # collection). Everything else is fail-CLOSED.
-+        row_id: Optional[str] = None,
-+        trace_id: Optional[str] = None,
-+        allow_writes_without_row: bool = False,
-     ):
-         if not api_key:
-             raise ValueError("Qoyod API key is required")
-@@ -146,6 +158,10 @@ class QoyodAPIClient:
-         self._db = db
-         self._user_id = user_id
-         self._write_lock_enabled = bool(write_lock_enabled)
-+        # rev32.1 — Row-scoped fencing context.
-+        self._row_id = row_id
-+        self._trace_id = trace_id
-+        self._allow_writes_without_row = bool(allow_writes_without_row)
- 
-     # Iter-293.4-rev5 — Public read-only view of the lock state so the
-     # pipeline can honour the per-order approval bypass. Callers MUST
-@@ -392,6 +408,38 @@ class QoyodAPIClient:
-         return await self._request(
-             "GET", "/customers", params={"page": page, "limit": limit})
- 
-+    async def _rev32_1_preflight(
-+        self, *, action: str, payload: Any,
-+    ) -> None:
-+        """rev32.1 — Called at the top of every write method.
-+        Delegates to `assert_client_write_permitted` which reads
-+        FRESH settings + row from DB and enforces all rev32/32.1
-+        conditions (BLOCKED_FOR_WRITE_STAGES, dead_lettered_at,
-+        worker_pipeline_sha match, sas_gate eligible, allow-list,
-+        live-write settings). ANY violation raises Rev32Violation
-+        BEFORE the HTTP call is made.
-+
-+        Backward-compat: probes/admin paths that construct the
-+        client without db/row_id but need to write MUST set
-+        `allow_writes_without_row=True` at construction — otherwise
-+        the write is refused.
-+        """
-+        # Local import to avoid a circular dependency at module load.
-+        from integrations.qoyod.rev32_hardening import (
-+            assert_client_write_permitted, payment_method_from_payload,
-+        )
-+        pm = payment_method_from_payload(action, payload)
-+        await assert_client_write_permitted(
-+            db=self._db,
-+            row_id=self._row_id,
-+            trace_id=self._trace_id,
-+            user_id=self._user_id or "main",
-+            action=action,
-+            payment_method=pm,
-+            allow_writes_without_row=self._allow_writes_without_row,
-+            client_repr=repr(self),
-+        )
-+
-     async def create_contact(self, payload: dict, *, idem: str) -> Any:
-         """POST /customers — creates a customer record in Qoyod.
- 
-@@ -402,18 +450,26 @@ class QoyodAPIClient:
-         We standardise on `/customers` for safety + consistency with
-         `list_contacts`. The Python method name is kept to preserve
-         call sites — the resource is logically the same entity."""
-+        await self._rev32_1_preflight(action="create_customer", payload=payload)
-         return await self._request(
-             "POST", "/customers", json_body=payload, idempotency_key=idem)
- 
-     async def create_product(self, payload: dict, *, idem: str) -> Any:
-+        await self._rev32_1_preflight(action="create_product", payload=payload)
-         return await self._request(
-             "POST", "/products", json_body=payload, idempotency_key=idem)
- 
-     async def create_invoice(self, payload: dict, *, idem: str) -> Any:
-+        await self._rev32_1_preflight(action="create_invoice", payload=payload)
-         return await self._request(
-             "POST", "/invoices", json_body=payload, idempotency_key=idem)
- 
-     async def create_receipt(self, payload: dict, *, idem: str) -> Any:
-+        # /receipts is legacy — not part of rev32/32.1 guarded actions
-+        # (create_invoice_payment supersedes it). Left unguarded because
-+        # GUARDED_WRITE_ACTIONS does not include it; if a future rev
-+        # decides to fence receipts too, add it to
-+        # rev32_hardening.GUARDED_WRITE_ACTIONS and here.
-         return await self._request(
-             "POST", "/receipts", json_body=payload, idempotency_key=idem)
- 
-@@ -435,6 +491,8 @@ class QoyodAPIClient:
-                 "description":  "<optional>"
-             }}
-         """
-+        await self._rev32_1_preflight(
-+            action="create_invoice_payment", payload=payload)
-         return await self._request(
-             "POST", "/invoice_payments",
-             json_body=payload, idempotency_key=idem)
 diff --git a/backend/integrations/qoyod/pipeline.py b/backend/integrations/qoyod/pipeline.py
-index 669f7e3..bbc8c51 100644
+index bbc8c51..af26491 100644
 --- a/backend/integrations/qoyod/pipeline.py
 +++ b/backend/integrations/qoyod/pipeline.py
-@@ -73,6 +73,20 @@ from integrations.qoyod.rev32_hardening import (
-     is_stale_worker_row as _rev32_is_stale_worker_row,
-     trigger_kill_switch as _rev32_trigger_kill_switch,
- )
-+# ── Iter-2026-02.rev32.1 — Dead-letter hardening ─────────────────
-+# RCA of order 270589798 / invoice #192 / payment #163 showed that
-+# Rev32 v2 protected only the pipeline `_get_api_client` entry, but
-+# other code paths (retry_payment_only, one_shot_reprocess, manual
-+# send, approve_locked_payment, go_live) instantiate QoyodAPIClient
-+# directly and were still able to POST to قيود after the row hit
-+# FAILED_PRODUCT → DEAD_LETTER.  rev32.1 pushes the guard down to
-+# `QoyodAPIClient.create_{customer,product,invoice,invoice_payment}`
-+# and expands the blocked-stage set (see BLOCKED_FOR_WRITE_STAGES).
-+# Marker text scanned by sas_build_diagnostics.REQUIRED_MARKERS:
-+# "rev32.1 — Dead-letter hardening"
-+from integrations.qoyod.rev32_hardening import (
-+    BLOCKED_FOR_WRITE_STAGES as _REV32_1_BLOCKED_FOR_WRITE_STAGES,  # noqa: F401
-+)
+@@ -449,6 +449,14 @@ async def _dead_letter(
+ 
+     Matches `webhook._dead_letter` so the operator sees identical
+     semantics whether the failure happened in Day 3 or Day 4.
++
++    Iter-2026-02.rev32.1 — MUST persist `dead_lettered_at` on the row
++    at the DEAD_LETTER transition (via `_stamp_dead_letter_evidence`).
++    This timestamp is the independent signal rev32.1 uses to refuse
++    writes even if state_machine later rolls the stage back (e.g. a
++    retry path resumes at CUSTOMER_RESOLVED but leaves
++    `dead_lettered_at` set). Without this write, the whole rev32.1
++    (A) dead_letter guard is inert.
+     """
+     p1 = transition(from_stage=from_stage, to_stage=fail_stage,
+                     actor="worker", error=error)
+@@ -458,10 +466,39 @@ async def _dead_letter(
+                     actor="worker",
+                     note="auto-routed: no retry — manual review required",
+                     existing_started_at=started_at)
++    _stamp_dead_letter_evidence(p2, fail_stage=fail_stage, error=error)
+     await _apply(db, row_id, p2)
+     return "DEAD_LETTER"
  
  
- def _now() -> datetime:
-@@ -1174,10 +1188,24 @@ async def _get_api_client(
-         key = await get_api_key(db, user_id)
-         if not key:
-             return None, False
-+        # rev32.1 — Pass row_id/trace_id + user_id so the api_client
-+        # write methods can invoke the rev32.1 pre-flight against a
-+        # FRESH DB read. Without this, direct api_client callers
-+        # bypass the guard.
-+        trace_id_for_client = None
-+        if row_id:
-+            try:
-+                _r = await db.integration_inbox.find_one(
-+                    {"id": row_id}, {"trace_id": 1, "_id": 0})
-+                trace_id_for_client = (_r or {}).get("trace_id")
-+            except Exception:  # noqa: BLE001
-+                trace_id_for_client = None
-         return QoyodAPIClient(
-             key,
-             db=db, user_id=user_id,
-             write_lock_enabled=False,
-+            row_id=row_id,
-+            trace_id=trace_id_for_client,
-         ), False
-     # All other paths → dry-run client. No real POST possible.
-     return DryRunQoyodClient(), True
-diff --git a/backend/integrations/qoyod/rev32_hardening.py b/backend/integrations/qoyod/rev32_hardening.py
-index a0b6a43..3947166 100644
---- a/backend/integrations/qoyod/rev32_hardening.py
-+++ b/backend/integrations/qoyod/rev32_hardening.py
-@@ -81,6 +81,48 @@ TERMINAL_STAGES: frozenset[str] = frozenset({
- })
- 
- 
-+# ── Iter-2026-02.rev32.1 — Dead-letter hardening ─────────────────
-+# BLOCKED_FOR_WRITE_STAGES = TERMINAL_STAGES ∪ FAILED_* stages.
-+# A row at any of these stages MUST NOT accept a new Qoyod write
-+# (create_customer / create_product / create_invoice /
-+# create_invoice_payment) — even from a legitimate retry path.
-+#
-+# Rationale (RCA of order 270589798, invoice #192, payment #163):
-+# The row transitioned CUSTOMER_RESOLVED → FAILED_PRODUCT →
-+# DEAD_LETTER; then a SEPARATE code path (retry/reprocess/manual
-+# send) instantiated `QoyodAPIClient` directly and ran
-+# PRODUCT_RESOLVED → INVOICE_CREATED → INVOICE_PAYMENT_CREATED →
-+# COMPLETED, bypassing Rev32 v2 which only guarded the pipeline
-+# `_get_api_client` entry point. rev32.1 pushes the guard down to
-+# the api_client write methods so ANY code path is fenced.
-+#
-+# Note: FAILED_* stages are NOT truly terminal in state_machine.py
-+# (they can resume via FAILURE_TO_RESUME). But for WRITE purposes,
-+# they are hard-blocked — the state_machine's RETRY path re-enters
-+# the pipeline which builds a fresh row-context. Any code that
-+# tries to POST while the current stage is FAILED_* is either a
-+# stale worker or a legacy path that must be revoked.
-+BLOCKED_FOR_WRITE_STAGES: frozenset[str] = frozenset({
-+    # Original terminal set.
-+    "SKIPPED",
-+    "COMPLETED",
-+    "DEAD_LETTER",
-+    "PARTIAL_FAILURE",
-+    "COMPLETED_WITH_ROUNDING_WARNING",
-+    "COMPLETED_INVOICE_ONLY",
-+    # FAILED_* stages — no downstream write until state_machine
-+    # resumes them explicitly.
-+    "FAILED_VALIDATION",
-+    "FAILED_NORMALIZATION",
-+    "FAILED_ENRICHMENT",
-+    "FAILED_CUSTOMER",
-+    "FAILED_PRODUCT",
-+    "FAILED_INVOICE",
-+    "FAILED_RECEIPT",
-+    "PAYMENT_LINK_FAILED",   # canonical name in state_machine.py
-+})
++def _stamp_dead_letter_evidence(
++    patch: dict, *, fail_stage: str, error: Optional[dict] = None,
++) -> dict:
++    """Iter-2026-02.rev32.1 — Attach the dead-letter evidence trio
++    onto a DEAD_LETTER transition patch:
 +
++      • `dead_lettered_at`     — ISO timestamp (independent of the
++        pipeline_stage field; survives state_machine rollback).
++      • `dead_letter_from_stage` — which FAILED_* / precursor stage
++        the row was in when it was routed to DEAD_LETTER.
++      • `dead_letter_reason`   — error.code or error.message so the
++        operator has a one-shot signal without opening pipeline_error.
 +
- # ── Write actions guarded by `assert_final_write_permitted` ──────
- GUARDED_WRITE_ACTIONS: frozenset[str] = frozenset({
-     "create_customer",
-@@ -309,6 +351,13 @@ async def assert_final_write_permitted(
-          "trace_id":                  1,
-          "selective_auto_send_gate":  1,
-          "sas_worker_trace":          1,
-+         # rev32.1 — dead_lettered_at is a separate signal from
-+         # pipeline_stage. Even if state_machine rolls stage back
-+         # (e.g., FAILED_PRODUCT → CUSTOMER_RESOLVED via retry), the
-+         # `dead_lettered_at` timestamp is only set when the row was
-+         # DEAD_LETTERed; once set, it MUST NOT be cleared. Any
-+         # subsequent write attempt is a rev32.1 violation.
-+         "dead_lettered_at":          1,
-          "canonical_payload.payment_method":        1,
-          "canonical_payload.payment_method_native": 1,
-          "_id":                       0},
-@@ -319,6 +368,7 @@ async def assert_final_write_permitted(
-         or (row.get("canonical_payload") or {}).get("payment_method_native"))
-     trace_id = row.get("trace_id")
-     stage = row.get("pipeline_stage")
-+    dead_lettered_at = row.get("dead_lettered_at")
-     swt = row.get("sas_worker_trace") or {}
-     row_worker_sha = (
-         swt.get("worker_pipeline_sha") if isinstance(swt, dict) else None)
-@@ -338,6 +388,7 @@ async def assert_final_write_permitted(
-         "trace_id":                    trace_id,
-         "action":                      action,
-         "pipeline_stage":              stage,
-+        "dead_lettered_at":            dead_lettered_at,
-         "payment_method":              row_pm,
-         "allow_list":                  allow_list,
-         "settings_snapshot": {
-@@ -355,29 +406,105 @@ async def assert_final_write_permitted(
-         "checked_at":              _now_iso(),
-     }
- 
--    # (7) terminal-stage check first — cheap, no downstream flag flip.
--    if stage in TERMINAL_STAGES:
-+    # ── rev32.1 (A): dead_lettered_at signal ─────────────────────
-+    # Independent of pipeline_stage. Once a row was DEAD_LETTERed,
-+    # any subsequent write is forbidden — even if state_machine
-+    # rolled the stage back via a retry path.
-+    if dead_lettered_at:
-         await _persist_violation_flag(
-             db, row_id,
--            flag_key="post_terminal_stage_downstream_violation",
-+            flag_key="post_dead_letter_write_violation",
-             evidence=evidence_common,
-         )
-         await trigger_kill_switch(
-             db, user_id=user_id,
--            reason=(f"Row {row_id!r} at terminal {stage!r} attempted "
--                    f"{action!r} — post_terminal_stage_downstream_violation"),
--            violation_type="post_terminal_stage_downstream_violation",
-+            reason=(f"Row {row_id!r} was DEAD_LETTERed at "
-+                    f"{dead_lettered_at!r}; attempted {action!r} — "
-+                    "post_dead_letter_write_violation"),
-+            violation_type="post_dead_letter_write_violation",
-             evidence=evidence_common,
-         )
-         raise Rev32Violation(
-             row_id=row_id, action=action,
--            violation_type="post_terminal_stage_downstream_violation",
--            reason=(f"row at terminal stage {stage!r} — write forbidden"),
-+            violation_type="post_dead_letter_write_violation",
-+            reason=(f"row was DEAD_LETTERed at {dead_lettered_at!r} — "
-+                    "no further writes permitted (rev32.1)"),
-+            evidence=evidence_common)
-+
-+    # ── rev32.1 (B): blocked-for-write stage set ─────────────────
-+    # Wider than TERMINAL_STAGES — includes all FAILED_* stages so
-+    # a row currently at FAILED_PRODUCT cannot be re-driven to
-+    # create_invoice by a stale/legacy worker.
-+    if stage in BLOCKED_FOR_WRITE_STAGES:
-+        # Classify: terminal → post_terminal; failed → post_failed.
-+        vio = ("post_terminal_stage_downstream_violation"
-+               if stage in TERMINAL_STAGES
-+               else "post_failed_stage_downstream_violation")
-+        await _persist_violation_flag(
-+            db, row_id,
-+            flag_key=vio,
-+            evidence=evidence_common,
-+        )
-+        await trigger_kill_switch(
-+            db, user_id=user_id,
-+            reason=(f"Row {row_id!r} at blocked-for-write stage "
-+                    f"{stage!r} attempted {action!r} — {vio}"),
-+            violation_type=vio,
-+            evidence=evidence_common,
-+        )
-+        raise Rev32Violation(
-+            row_id=row_id, action=action,
-+            violation_type=vio,
-+            reason=(f"row at blocked-for-write stage {stage!r} — "
-+                    "write forbidden (rev32.1)"),
-             evidence=evidence_common)
- 
--    # (8) Stale worker check — critical: any mismatch means the row
--    # was built by pre-rev32 code and MUST NOT trigger a live POST.
--    if row_worker_sha and current_sha and row_worker_sha != current_sha:
-+    # ── rev32.1 (C): worker sha checks — fail-CLOSED ─────────────
-+    # v1 permitted missing sha (fail-open). v2 fixed
-+    # `is_stale_worker_row` but forgot to fix the inline check here.
-+    # rev32.1 unifies: missing OR mismatched OR missing current →
-+    # blocker.
-+    if not current_sha:
-+        await _persist_violation_flag(
-+            db, row_id,
-+            flag_key="missing_current_pipeline_sha_violation",
-+            evidence=evidence_common,
-+        )
-+        await trigger_kill_switch(
-+            db, user_id=user_id,
-+            reason=(f"current_pipeline_sha unavailable during {action!r} "
-+                    f"— missing_current_pipeline_sha_violation"),
-+            violation_type="missing_current_pipeline_sha_violation",
-+            evidence=evidence_common,
-+        )
-+        raise Rev32Violation(
-+            row_id=row_id, action=action,
-+            violation_type="missing_current_pipeline_sha_violation",
-+            reason=("cannot compute current_pipeline_sha — infra bug; "
-+                    "fail-closed to prevent unverified writes"),
-+            evidence=evidence_common)
-+    if not row_worker_sha:
-+        await _persist_violation_flag(
-+            db, row_id,
-+            flag_key="stale_worker_live_write_violation",
-+            evidence=evidence_common,
-+        )
-+        await trigger_kill_switch(
-+            db, user_id=user_id,
-+            reason=(f"row_worker_pipeline_sha missing during {action!r} "
-+                    "— stale_worker_live_write_violation (rev32.1 "
-+                    "fail-closed on missing sha)"),
-+            violation_type="stale_worker_live_write_violation",
-+            evidence=evidence_common,
-+        )
-+        raise Rev32Violation(
-+            row_id=row_id, action=action,
-+            violation_type="stale_worker_live_write_violation",
-+            reason=("row_worker_pipeline_sha missing — row was built "
-+                    "by a stale/legacy code path with no sas_worker_"
-+                    "trace; live write forbidden (rev32.1)"),
-+            evidence=evidence_common)
-+    if row_worker_sha != current_sha:
-         await _persist_violation_flag(
-             db, row_id,
-             flag_key="stale_worker_live_write_violation",
-@@ -600,3 +727,121 @@ async def flag_stale_worker_downgrade(
-         violation_type="stale_worker_live_write_violation",
-         evidence=evidence,
-     )
-+
-+
-+# ─────────────────────────────────────────────────────────────────
-+# rev32.1 — api_client-layer write guard
-+# ─────────────────────────────────────────────────────────────────
-+# Called from inside `QoyodAPIClient.create_customer/product/invoice/
-+# invoice_payment`. Ensures that ANY code path — pipeline, retry,
-+# one_shot_reprocess, manual send, approve_locked_payment, go_live,
-+# etc. — is fenced by rev32.1 before hitting Qoyod HTTP.
-+#
-+# Two contract shapes:
-+#   • With full row context (db + row_id): delegate to
-+#     `assert_final_write_permitted` (single source of truth).
-+#   • Without row context AND `allow_writes_without_row=True`
-+#     (probes / migration / cleanup): permit but LOG loudly for
-+#     later audit.
-+#   • Without row context AND allow flag False: FAIL-CLOSED with a
-+#     dedicated `rev32_1_missing_row_context_on_write` violation.
-+class Rev32MissingRowContextError(Rev32Violation):
-+    """Raised by `assert_client_write_permitted` when a QoyodAPIClient
-+    write method is called with neither row context nor an explicit
-+    escape hatch. Prevents legacy paths from silently POSTing."""
-+
-+
-+async def assert_client_write_permitted(
-+    *,
-+    db=None,
-+    row_id: Optional[str] = None,
-+    trace_id: Optional[str] = None,
-+    user_id: str = "main",
-+    action: str,
-+    payment_method: Optional[str] = None,
-+    allow_writes_without_row: bool = False,
-+    client_repr: Optional[str] = None,
-+) -> None:
-+    """rev32.1 unified pre-flight for `QoyodAPIClient` write methods.
-+
-+    Fail-CLOSED semantics: any missing context (db, row_id) raises
-+    unless `allow_writes_without_row=True` — that flag is a
-+    deliberate escape hatch for admin probes (Fresh-Start Cleanup,
-+    integration diagnostics) that don't have a row.
++    Every direct DEAD_LETTER transition (whether via `_dead_letter()`
++    or via inline `transition(...to_stage="DEAD_LETTER"...)` calls)
++    MUST route through this helper. `assert_final_write_permitted`
++    reads `dead_lettered_at` and refuses ANY subsequent write —
++    that's the whole point of rev32.1 defense-in-depth.
 +    """
-+    if action not in GUARDED_WRITE_ACTIONS:
-+        return  # only guard the four write actions listed
-+    if not db or not row_id:
-+        if allow_writes_without_row:
-+            logger.warning(
-+                "rev32.1 api_client_write_without_row_context "
-+                "action=%s client=%s user_id=%s — permitted by "
-+                "explicit escape hatch. AUDIT trail recommended.",
-+                action, client_repr, user_id)
-+            return
-+        # Fail-closed: no db or no row_id AND no escape hatch → refuse.
-+        evidence = {
-+            "action":          action,
-+            "payment_method":  payment_method,
-+            "client_repr":     client_repr,
-+            "user_id":         user_id,
-+            "db_present":      bool(db),
-+            "row_id_present":  bool(row_id),
-+            "trace_id":        trace_id,
-+            "checked_at":      _now_iso(),
-+        }
-+        # Best-effort audit even without db (may fail silently).
-+        if db is not None:
-+            try:
-+                await trigger_kill_switch(
-+                    db, user_id=user_id,
-+                    reason=(f"rev32.1 api_client write attempted without "
-+                            f"row_id for action={action!r} client={client_repr!r}"),
-+                    violation_type="rev32_1_missing_row_context_on_write",
-+                    evidence=evidence,
-+                )
-+            except Exception as _e:  # noqa: BLE001
-+                logger.error(
-+                    "rev32.1 missing_row_context_kill_switch_failed "
-+                    "err=%s", _e)
-+        logger.error(
-+            "rev32.1 REV32_MISSING_ROW_CONTEXT action=%s client=%s "
-+            "user_id=%s — refusing write",
-+            action, client_repr, user_id)
-+        raise Rev32MissingRowContextError(
-+            row_id=row_id, action=action,
-+            violation_type="rev32_1_missing_row_context_on_write",
-+            reason=(f"QoyodAPIClient.{action}() called without row "
-+                    f"context (db+row_id) and without "
-+                    "allow_writes_without_row=True — rev32.1 fail-closed"),
-+            evidence=evidence)
-+    # Delegate to the full 8-condition guard (rev32.1-hardened).
-+    await assert_final_write_permitted(
-+        db, row_id,
-+        action=action, payment_method=payment_method, user_id=user_id)
++    patch.setdefault("$set", {})["dead_lettered_at"] = _now()
++    patch["$set"]["dead_letter_from_stage"] = fail_stage
++    patch["$set"]["dead_letter_reason"] = (
++        (error or {}).get("code")
++        or (error or {}).get("message")
++        or "unspecified")
++    return patch
 +
 +
-+def payment_method_from_payload(action: str, payload: Any) -> Optional[str]:
-+    """Best-effort extraction of payment method from a Qoyod payload.
-+    Used by `QoyodAPIClient` when the caller didn't pre-compute it.
-+    Only meaningful for invoice payloads; contact/product payloads
-+    don't carry a payment method — return None."""
-+    try:
-+        if not isinstance(payload, dict):
-+            return None
-+        # invoice: {"invoice": {..., "payment_method": "..."}}
-+        inv = payload.get("invoice")
-+        if isinstance(inv, dict):
-+            pm = inv.get("payment_method") or inv.get("payment_method_native")
-+            if pm:
-+                return pm
-+        # invoice_payment: nested under {"invoice_payment": {...}}
-+        inv_pay = payload.get("invoice_payment")
-+        if isinstance(inv_pay, dict):
-+            # Payment method is not typically on the payment payload;
-+            # the caller should pre-compute from the row. Return None
-+            # here so the guard uses the row-side canonical_payload.
-+            return None
-+    except Exception:  # noqa: BLE001
-+        return None
-+    return None
-diff --git a/backend/integrations/qoyod/sas_build_diagnostics.py b/backend/integrations/qoyod/sas_build_diagnostics.py
-index 7161f2b..3b052e1 100644
---- a/backend/integrations/qoyod/sas_build_diagnostics.py
-+++ b/backend/integrations/qoyod/sas_build_diagnostics.py
-@@ -123,6 +123,16 @@ REQUIRED_MARKERS: dict[str, str] = {
-     # MUST NOT be re-enabled while this marker is absent.
-     "rev32_fail_closed_hardening":
-         "rev32 — Fail-closed hardening",
-+    # rev32.1 — Dead-letter hardening (order 270589798 RCA).
-+    # If absent, the deploy is missing (a) BLOCKED_FOR_WRITE_STAGES
-+    # (FAILED_* stages now block downstream writes), (b) fail-closed
-+    # missing-sha check in assert_final_write_permitted, (c)
-+    # dead_lettered_at signal (independent of pipeline_stage), (d)
-+    # api_client-level write guard so direct QoyodAPIClient callers
-+    # (retry/reprocess/manual/go_live/…) are fenced too. Live Canary
-+    # MUST NOT be re-enabled while this marker is absent.
-+    "rev32_1_dead_letter_hardening":
-+        "rev32.1 — Dead-letter hardening",
- }
- 
- 
-@@ -310,10 +320,11 @@ async def row_diagnostics(db, trace_id: str) -> dict:
-         "payment_stage_expected": 1,
-         "invoice_payment_required_for_method": 1,
-         "posting_mode": 1,
--        # rev32 — Fail-closed hardening flags persisted on the row
--        # when a guard blocked a write. Surface all violation classes
--        # so `/admin/diagnostics/row` shows a definitive audit trail.
-+        # rev32.1 — Dead-letter hardening flags.
-         "rev32_flags": 1,
-+        # rev32.1 — dead_lettered_at is checked independently of
-+        # pipeline_stage by the api_client + assert_final_write_permitted.
-+        "dead_lettered_at": 1,
-         # Only the invoice_payment sub-key is needed for the preview
-         # existence check; keep the projection tight.
-         "qoyod_payloads.invoice_payment": 1,
-@@ -656,6 +667,17 @@ async def row_diagnostics(db, trace_id: str) -> dict:
-     rev32_kill_switch_reason = _rev32.get("kill_switch_reason")
-     rev32_last_violation_type = _rev32.get("last_violation_type")
- 
-+    # ── rev32.1 — Dead-letter hardening diagnostic flags ─────────────
-+    rev32_1_post_dead_letter_write_violation = bool(
-+        _rev32.get("post_dead_letter_write_violation"))
-+    rev32_1_post_failed_stage_downstream_violation = bool(
-+        _rev32.get("post_failed_stage_downstream_violation"))
-+    rev32_1_missing_current_pipeline_sha_violation = bool(
-+        _rev32.get("missing_current_pipeline_sha_violation"))
-+    rev32_1_missing_row_context_on_write_violation = bool(
-+        _rev32.get("rev32_1_missing_row_context_on_write"))
-+    row_dead_lettered_at = row.get("dead_lettered_at")
-+
-     return {
-         "ok":                            True,
-         "found":                         True,
-@@ -719,5 +741,15 @@ async def row_diagnostics(db, trace_id: str) -> dict:
-             "kill_switch_triggered":  rev32_kill_switch_triggered,
-             "kill_switch_reason":     rev32_kill_switch_reason,
-             "rev32_last_violation_type": rev32_last_violation_type,
-+            # rev32.1 diagnostics.
-+            "post_dead_letter_write_violation":
-+                rev32_1_post_dead_letter_write_violation,
-+            "post_failed_stage_downstream_violation":
-+                rev32_1_post_failed_stage_downstream_violation,
-+            "missing_current_pipeline_sha_violation":
-+                rev32_1_missing_current_pipeline_sha_violation,
-+            "rev32_1_missing_row_context_on_write_violation":
-+                rev32_1_missing_row_context_on_write_violation,
-+            "dead_lettered_at":       row_dead_lettered_at,
-         },
-     }
+ # ─────────────────────────────────────────────────────────────────────
+ # Per-row processor
+ # ─────────────────────────────────────────────────────────────────────
+@@ -738,6 +775,10 @@ async def process_normalized_row(
+             actor="worker",
+             note="totals mismatch is upstream — no auto-retry",
+         )
++        # rev32.1 — stamp dead-letter evidence trio.
++        _stamp_dead_letter_evidence(
++            dead_patch, fail_stage="FAILED_VALIDATION",
++            error={"code": totals.code, "message": totals.message})
+         await _apply(db, row["id"], dead_patch)
+         return {
+             "row_id":   row["id"],
+@@ -838,6 +879,10 @@ async def process_normalized_row(
+                 "rev29c fail-closed: no gate decision to persist; "
+                 "refusing to advance past NORMALIZED."),
+         }
++        # rev32.1 — stamp dead-letter evidence trio.
++        _stamp_dead_letter_evidence(
++            dl_patch, fail_stage="NORMALIZED",
++            error=dl_patch["$set"]["pipeline_error"])
+         try:
+             await _apply_atomic(
+                 db, row["id"], dl_patch,
 diff --git a/backend/tests/test_rev32_1_dead_letter_hardening.py b/backend/tests/test_rev32_1_dead_letter_hardening.py
 new file mode 100644
 index 0000000..0000001
 --- /dev/null
 +++ b/backend/tests/test_rev32_1_dead_letter_hardening.py
-@@ -0,0 +1,1 @@
+@@ -0,0 +1,925 @@
 +"""Iter-2026-02.rev32.1 — Dead-letter hardening tests.
 +
 +RCA fixture: order 270589798 / trace_id=9d9414fc29344076896beadb70cafc0b
@@ -1263,3 +793,220 @@ index 0000000..0000001
 +    )
 +    assert issubclass(Rev32MissingRowContextError, Rev32Violation)
 +    # So a caller catching Rev32Violation also catches the new error.
++
++
++# ═════════════════════════════════════════════════════════════════
++# 12. PR #10 Blocker fix — _dead_letter() persists dead_lettered_at
++# ═════════════════════════════════════════════════════════════════
++
++@pytest.mark.asyncio
++async def test_27_dead_letter_helper_persists_dead_lettered_at_trio():
++    """PR #10 blocker: `pipeline._dead_letter()` MUST stamp the three
++    dead-letter evidence fields on the row via `_stamp_dead_letter_
++    evidence`. Without them, rev32.1 (A) guard has nothing to key on.
++    """
++    from integrations.qoyod.pipeline import _dead_letter
++
++    captured = []
++    async def _upd(f, u):
++        captured.append({"filter": f, "set": (u or {}).get("$set") or {}})
++        return MagicMock(matched_count=1)
++
++    db = MagicMock()
++    db.integration_inbox = MagicMock()
++    db.integration_inbox.update_one = _upd
++
++    await _dead_letter(
++        db,
++        row_id="row-x",
++        from_stage="CUSTOMER_RESOLVED",
++        fail_stage="FAILED_PRODUCT",
++        error={"code": "product_resolve_failed",
++               "message": "Qoyod returned 422"},
++    )
++
++    # Two hops were applied.
++    assert len(captured) == 2, captured
++    # The DEAD_LETTER hop (second) MUST carry the trio.
++    dead_set = captured[1]["set"]
++    assert "dead_lettered_at" in dead_set
++    # `_now()` returns a datetime; the value is either a str (ISO) or
++    # a datetime — accept both since the DB layer converts. The
++    # important invariant is that it is truthy and present.
++    from datetime import datetime as _dt
++    assert isinstance(dead_set["dead_lettered_at"], (str, _dt))
++    assert dead_set["dead_letter_from_stage"] == "FAILED_PRODUCT"
++    assert dead_set["dead_letter_reason"] == "product_resolve_failed"
++    # If it happens to be a string, verify ISO-ness.
++    if isinstance(dead_set["dead_lettered_at"], str):
++        assert "T" in dead_set["dead_lettered_at"]
++
++
++@pytest.mark.asyncio
++async def test_28_dead_letter_helper_reason_falls_back_to_message_or_unspecified():
++    """`dead_letter_reason` prefers error.code, then error.message,
++    then the literal 'unspecified'."""
++    from integrations.qoyod.pipeline import _dead_letter
++
++    async def _mk_captor():
++        captured = []
++        async def _upd(f, u):
++            captured.append((u or {}).get("$set") or {})
++            return MagicMock(matched_count=1)
++        return captured, _upd
++
++    # Case A: only message present.
++    cap_a, upd_a = await _mk_captor()
++    db_a = MagicMock()
++    db_a.integration_inbox = MagicMock()
++    db_a.integration_inbox.update_one = upd_a
++    await _dead_letter(
++        db_a, row_id="a",
++        from_stage="RULES_APPLIED",
++        fail_stage="FAILED_CUSTOMER",
++        error={"message": "customer resolver 5xx"},
++    )
++    assert cap_a[1]["dead_letter_reason"] == "customer resolver 5xx"
++
++    # Case B: empty error → unspecified.
++    cap_b, upd_b = await _mk_captor()
++    db_b = MagicMock()
++    db_b.integration_inbox = MagicMock()
++    db_b.integration_inbox.update_one = upd_b
++    await _dead_letter(
++        db_b, row_id="b",
++        from_stage="NORMALIZED",
++        fail_stage="FAILED_VALIDATION",
++        error={},
++    )
++    assert cap_b[1]["dead_letter_reason"] == "unspecified"
++
++
++@pytest.mark.asyncio
++async def test_29_rollback_from_dead_letter_still_blocked_by_dead_lettered_at():
++    """End-to-end acceptance: pipeline._dead_letter() sets
++    dead_lettered_at, THEN some path rolls stage back to
++    CUSTOMER_RESOLVED / PRODUCT_RESOLVED — assert_final_write_permitted
++    MUST still refuse create_invoice because `dead_lettered_at IS NOT
++    NULL`."""
++    from integrations.qoyod.pipeline import _dead_letter
++    from integrations.qoyod.rev32_hardening import (
++        Rev32Violation, assert_final_write_permitted,
++    )
++
++    # Row in flight — start at CUSTOMER_RESOLVED, valid sha, live settings.
++    row = _happy_row(pipeline_stage="CUSTOMER_RESOLVED")
++    row["id"] = "row-rollback-scenario"
++    db = _mk_db(settings=_live_settings(), row=row)
++
++    # Step 1: _dead_letter() writes FAILED_PRODUCT then DEAD_LETTER +
++    # stamps dead_lettered_at on the row.
++    await _dead_letter(
++        db,
++        row_id="row-rollback-scenario",
++        from_stage="CUSTOMER_RESOLVED",
++        fail_stage="FAILED_PRODUCT",
++        error={"code": "test_failure", "message": "simulated"},
++    )
++    # The row's dead_lettered_at is now populated.
++    assert "dead_lettered_at" in db._row and db._row["dead_lettered_at"]
++
++    # Step 2: some legacy retry path rolls pipeline_stage back
++    # (this is the exact 270589798 scenario). dead_lettered_at
++    # remains set (that's the invariant).
++    db._row["pipeline_stage"] = "PRODUCT_RESOLVED"
++
++    # Step 3: any code path attempts create_invoice → MUST be refused.
++    with pytest.raises(Rev32Violation) as exc_info:
++        await assert_final_write_permitted(
++            db, "row-rollback-scenario",
++            action="create_invoice",
++            payment_method="tabby_installment",
++            user_id="main")
++    assert exc_info.value.violation_type == \
++        "post_dead_letter_write_violation"
++    # Auto kill-switch fired even though pipeline_stage looks "safe".
++    assert db._settings["production_writes_locked"] is True
++    assert db._settings["selective_live_send_enabled"] is False
++
++
++@pytest.mark.asyncio
++async def test_30_rollback_from_dead_letter_blocks_direct_api_client_too():
++    """Same rollback scenario, but via direct QoyodAPIClient call
++    (the exact incident code path — retry_payment_only /
++    one_shot_reprocess / manual send). The api_client-level
++    rev32.1 pre-flight MUST refuse."""
++    import os
++    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
++    from integrations.qoyod.pipeline import _dead_letter
++    from integrations.qoyod.api_client import QoyodAPIClient
++    from integrations.qoyod.rev32_hardening import Rev32Violation
++
++    row = _happy_row(pipeline_stage="PRODUCT_RESOLVED")
++    row["id"] = "row-rollback-client"
++    db = _mk_db(settings=_live_settings(), row=row)
++
++    await _dead_letter(
++        db,
++        row_id="row-rollback-client",
++        from_stage="PRODUCT_RESOLVED",
++        fail_stage="FAILED_INVOICE",
++        error={"code": "invoice_422"},
++    )
++    # Rollback stage.
++    db._row["pipeline_stage"] = "PRODUCT_RESOLVED"
++
++    client = QoyodAPIClient(
++        "fake-key",
++        db=db, user_id="main",
++        row_id="row-rollback-client",
++        trace_id="trace-happy",
++    )
++    with pytest.raises(Rev32Violation) as exc_info:
++        await client.create_invoice(
++            {"invoice": {"payment_method": "tabby_installment"}},
++            idem="fake")
++    assert exc_info.value.violation_type == \
++        "post_dead_letter_write_violation"
++
++
++def test_31_stamp_dead_letter_evidence_helper_is_pure():
++    """The helper adds the trio to any patch without stomping other
++    $set keys — safe to use on inline transitions elsewhere."""
++    from integrations.qoyod.pipeline import _stamp_dead_letter_evidence
++    patch = {"$set": {"other_field": 42},
++             "$push": {"stage_history": {"foo": 1}}}
++    out = _stamp_dead_letter_evidence(
++        patch, fail_stage="FAILED_VALIDATION",
++        error={"code": "totals_mismatch"})
++    # Preserved fields.
++    assert out["$set"]["other_field"] == 42
++    assert out["$push"]["stage_history"] == {"foo": 1}
++    # New fields.
++    assert "dead_lettered_at" in out["$set"]
++    assert out["$set"]["dead_letter_from_stage"] == "FAILED_VALIDATION"
++    assert out["$set"]["dead_letter_reason"] == "totals_mismatch"
++
++
++@pytest.mark.asyncio
++async def test_32_inline_dead_letter_transitions_also_stamped():
++    """Regression: the two inline DEAD_LETTER transitions in
++    pipeline.py (totals-mismatch, rev29c gate-buffer) both use
++    `_stamp_dead_letter_evidence`. Verify via source inspection
++    that no direct `to_stage="DEAD_LETTER"` transition remains
++    unstamped."""
++    import inspect
++    from integrations.qoyod import pipeline as _pipe
++    src = inspect.getsource(_pipe)
++    # Count DEAD_LETTER transitions.
++    dl_count = src.count('to_stage="DEAD_LETTER"')
++    stamp_count = src.count('_stamp_dead_letter_evidence(')
++    # Every DEAD_LETTER transition must be accompanied by a stamp call
++    # (or be inside `_dead_letter()` which calls stamp once). Since
++    # _dead_letter() has one transition + one stamp call, and each
++    # inline site has one transition + one stamp call, the counts
++    # should be balanced.
++    assert stamp_count >= dl_count, (
++        f"DEAD_LETTER transitions ({dl_count}) exceed stamp calls "
++        f"({stamp_count}) — an inline transition may be missing "
++        "dead_letter evidence stamping")

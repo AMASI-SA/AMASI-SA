@@ -449,6 +449,14 @@ async def _dead_letter(
 
     Matches `webhook._dead_letter` so the operator sees identical
     semantics whether the failure happened in Day 3 or Day 4.
+
+    Iter-2026-02.rev32.1 — MUST persist `dead_lettered_at` on the row
+    at the DEAD_LETTER transition (via `_stamp_dead_letter_evidence`).
+    This timestamp is the independent signal rev32.1 uses to refuse
+    writes even if state_machine later rolls the stage back (e.g. a
+    retry path resumes at CUSTOMER_RESOLVED but leaves
+    `dead_lettered_at` set). Without this write, the whole rev32.1
+    (A) dead_letter guard is inert.
     """
     p1 = transition(from_stage=from_stage, to_stage=fail_stage,
                     actor="worker", error=error)
@@ -458,8 +466,37 @@ async def _dead_letter(
                     actor="worker",
                     note="auto-routed: no retry — manual review required",
                     existing_started_at=started_at)
+    _stamp_dead_letter_evidence(p2, fail_stage=fail_stage, error=error)
     await _apply(db, row_id, p2)
     return "DEAD_LETTER"
+
+
+def _stamp_dead_letter_evidence(
+    patch: dict, *, fail_stage: str, error: Optional[dict] = None,
+) -> dict:
+    """Iter-2026-02.rev32.1 — Attach the dead-letter evidence trio
+    onto a DEAD_LETTER transition patch:
+
+      • `dead_lettered_at`     — ISO timestamp (independent of the
+        pipeline_stage field; survives state_machine rollback).
+      • `dead_letter_from_stage` — which FAILED_* / precursor stage
+        the row was in when it was routed to DEAD_LETTER.
+      • `dead_letter_reason`   — error.code or error.message so the
+        operator has a one-shot signal without opening pipeline_error.
+
+    Every direct DEAD_LETTER transition (whether via `_dead_letter()`
+    or via inline `transition(...to_stage="DEAD_LETTER"...)` calls)
+    MUST route through this helper. `assert_final_write_permitted`
+    reads `dead_lettered_at` and refuses ANY subsequent write —
+    that's the whole point of rev32.1 defense-in-depth.
+    """
+    patch.setdefault("$set", {})["dead_lettered_at"] = _now()
+    patch["$set"]["dead_letter_from_stage"] = fail_stage
+    patch["$set"]["dead_letter_reason"] = (
+        (error or {}).get("code")
+        or (error or {}).get("message")
+        or "unspecified")
+    return patch
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -738,6 +775,10 @@ async def process_normalized_row(
             actor="worker",
             note="totals mismatch is upstream — no auto-retry",
         )
+        # rev32.1 — stamp dead-letter evidence trio.
+        _stamp_dead_letter_evidence(
+            dead_patch, fail_stage="FAILED_VALIDATION",
+            error={"code": totals.code, "message": totals.message})
         await _apply(db, row["id"], dead_patch)
         return {
             "row_id":   row["id"],
@@ -838,6 +879,10 @@ async def process_normalized_row(
                 "rev29c fail-closed: no gate decision to persist; "
                 "refusing to advance past NORMALIZED."),
         }
+        # rev32.1 — stamp dead-letter evidence trio.
+        _stamp_dead_letter_evidence(
+            dl_patch, fail_stage="NORMALIZED",
+            error=dl_patch["$set"]["pipeline_error"])
         try:
             await _apply_atomic(
                 db, row["id"], dl_patch,
