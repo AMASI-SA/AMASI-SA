@@ -1,0 +1,416 @@
+diff --git a/backend/integrations/qoyod/one_shot_reprocess.py b/backend/integrations/qoyod/one_shot_reprocess.py
+index b1bc71b..d904ed1 100644
+--- a/backend/integrations/qoyod/one_shot_reprocess.py
++++ b/backend/integrations/qoyod/one_shot_reprocess.py
+@@ -349,13 +349,32 @@ async def _reset_row_to_stage(
+         # NORMALIZED but the worker hasn't picked it up yet).
+         return
+ 
++    # rev33 — SKIPPED is ABSOLUTELY TERMINAL.
++    #
++    # RCA of leaks 269747616 (credit_card → invoice #193) and
++    # 270054904 (tamara_installment → invoice #194): SKIPPED rows
++    # were resurrected via `permit_partial_invoice_created=True`
++    # and driven through PRODUCT_RESOLVED → INVOICE_CREATED live
++    # during the 2026-07-05 Tabby-only canary window. The
++    # partial-IC escape hatch is now scoped to INVOICE_CREATED
++    # ONLY. A row that a worker (or the SAS gate) marked SKIPPED
++    # CANNOT be reset back to any earlier stage — full stop.
++    if current == "SKIPPED":
++        raise OneShotRefused(
++            "skipped_is_terminal_rev33",
++            "row is in stage 'SKIPPED'; rev33 makes SKIPPED "
++            "absolutely terminal — no reprocess/reset permitted. "
++            "If a SKIPPED row legitimately needs to be re-sent, "
++            "create a new inbox row from the source webhook payload.",
++            current_stage=current)
+     if current not in _REPROCESSABLE_STAGES:
+         # Canary partial-invoice-created escape hatch: allow reset
+-        # from INVOICE_CREATED or SKIPPED IFF the row has no real
+-        # Qoyod invoice (checked upstream by the caller via
+-        # `allow_reset_from_partial_invoice_created`).
++        # from INVOICE_CREATED IFF the row has no real Qoyod
++        # invoice (checked upstream by the caller via
++        # `allow_reset_from_partial_invoice_created`). SKIPPED is
++        # NO LONGER in this escape hatch — see rev33 block above.
+         if not (permit_partial_invoice_created
+-                and current in ("INVOICE_CREATED", "SKIPPED")):
++                and current == "INVOICE_CREATED"):
+             raise OneShotRefused(
+                 "unsupported_current_stage",
+                 f"row is in stage {current!r}; one-shot reprocess "
+@@ -368,17 +387,18 @@ async def _reset_row_to_stage(
+     # are not allowed to hop into RETRYING, so we just write the
+     # resume_stage directly when applicable (defensive — most live
+     # callers will see DEAD_LETTER / FAILED_* and use the two-hop path).
+-    # Canary partial-IC / SKIPPED exception: these must ALSO go via
++    # Canary partial-IC exception: MUST ALSO go via
+     # RETRYING (state machine forbids INVOICE_CREATED → NORMALIZED
+-    # and SKIPPED → NORMALIZED direct; edges to RETRYING are
+-    # registered in state_machine.py, gated business-side by this
+-    # flag).
++    # direct; edges to RETRYING are registered in state_machine.py,
++    # gated business-side by this flag). rev33: SKIPPED is no
++    # longer part of this escape hatch — it is absolute-terminal
++    # and rejected before this point.
+     needs_retry_hop = (
+         (current in FAILURE_TO_RESUME)
+         or (current in ("DEAD_LETTER", "PARTIAL_FAILURE",
+                         "LOCKED_AWAITING_APPROVAL"))
+         or (permit_partial_invoice_created
+-            and current in ("INVOICE_CREATED", "SKIPPED")))
++            and current == "INVOICE_CREATED"))
+     if needs_retry_hop:
+         try:
+             p1 = transition(
+diff --git a/backend/integrations/qoyod/pipeline.py b/backend/integrations/qoyod/pipeline.py
+index c7d84bf..6930c57 100644
+--- a/backend/integrations/qoyod/pipeline.py
++++ b/backend/integrations/qoyod/pipeline.py
+@@ -88,6 +88,15 @@ from integrations.qoyod.rev32_hardening import (
+     BLOCKED_FOR_WRITE_STAGES as _REV32_1_BLOCKED_FOR_WRITE_STAGES,  # noqa: F401
+     stamp_dead_letter_evidence as _stamp_dead_letter_evidence,
+ )
++# ── Iter-2026-07.rev33 — Canary Scope Lock + SKIPPED Terminality ─
++# P0 hotfix for the 2026-07-05 Tabby-only canary scope leak (orders
++# 269747616 → invoice #193 credit_card, 270054904 → invoice #194
++# tamara_installment). Live writes MUST require BOTH global gates
++# permit AND payment_method ∈ allowlist AND (when canary window is
++# active) allowlist == ["tabby_installment"] AND no historical
++# SKIPPED transition on the row. Marker text scanned by
++# sas_build_diagnostics.REQUIRED_MARKERS:
++# "rev33 — Canary Scope Lock + SKIPPED Terminality"
+ 
+ 
+ def _now() -> datetime:
+@@ -1107,7 +1116,11 @@ async def process_normalized_row(
+ # Batch entry point — what the `/pipeline/process-normalized` endpoint
+ # calls. Strict Day-4 ceiling: stops at CUSTOMER_RESOLVED.
+ # ─────────────────────────────────────────────────────────────────────
+-def _live_write_permitted(settings: dict) -> tuple[bool, str]:
++def _live_write_permitted(
++    settings: dict,
++    *,
++    payment_method: Optional[str] = None,
++) -> tuple[bool, str]:
+     """Iter-2026-02.rev27 — SINGLE source of truth for whether the
+     pipeline may perform any REAL Qoyod POST.
+ 
+@@ -1124,6 +1137,16 @@ def _live_write_permitted(settings: dict) -> tuple[bool, str]:
+       • selective_auto_send_enabled   = True    (SAS is the ONLY
+                                                  automatic writer)
+ 
++    rev33 — When `payment_method` is supplied (recommended), the
++    caller's payment_method MUST be present in
++    `selective_auto_send_allowed_payment_methods`. AND when
++    `selective_live_send_enabled=True` (Live Canary window), the
++    allowlist MUST equal exactly `["tabby_installment"]`. This is
++    the pipeline-level mirror of the rev33 checks in
++    `rev32_hardening.assert_final_write_permitted` — belt-and-
++    suspenders so a caller cannot bypass by providing a live
++    `api_client` argument that skips `_get_api_client`.
++
+     NOTE: The row-level SAS-gate `eligible=True` is a NECESSARY
+     (already enforced upstream) but NOT SUFFICIENT condition. This
+     function is the LAST line of defense before a real POST.
+@@ -1136,6 +1159,19 @@ def _live_write_permitted(settings: dict) -> tuple[bool, str]:
+         return False, "production_writes_locked_is_true"
+     if not bool(settings.get("selective_auto_send_enabled", False)):
+         return False, "selective_auto_send_enabled_is_false"
++    # rev33 — payment_method allowlist check (when caller supplies pm).
++    allow_list = list(
++        settings.get("selective_auto_send_allowed_payment_methods") or [])
++    # rev33 — Canary scope invariant: allowlist must be exactly Tabby.
++    if list(allow_list) != ["tabby_installment"]:
++        return False, ("canary_scope_drift_allowlist_not_exactly_"
++                       f"tabby (got {allow_list!r})")
++    if payment_method is not None:
++        if not payment_method:
++            return False, "payment_method_unresolvable"
++        if payment_method not in allow_list:
++            return (False,
++                    f"payment_method_{payment_method!r}_not_in_allowlist")
+     return True, "all_gates_permit_live_write"
+ 
+ 
+@@ -1427,6 +1463,36 @@ async def process_customer_resolved_row(
+                 started_at=started_at)
+             return {"row_id": row["id"], "outcome": "DEAD_LETTER",
+                     "reason": "credentials_missing"}
++    else:
++        # rev33 — Force re-check when the caller passes an api_client.
++        # RCA of leaks 269747616 / 270054904: callers such as
++        # `one_shot_reprocess.reprocess_one_order` construct a LIVE
++        # QoyodAPIClient and pass it in via `api_client=…`, thereby
++        # skipping the `_get_api_client()` live-write gate entirely.
++        # Even though `_rev32_1_preflight` at the api_client layer
++        # still fires, the SAS gate re-eval above may have flipped
++        # `_sas_gate_passed=True` — but the pipeline should NEVER
++        # allow a live client here unless BOTH gates permit AND the
++        # row's payment_method is on the allowlist. Any mismatch →
++        # replace the caller's client with a DryRunQoyodClient.
++        from integrations.qoyod.invoice_builder import (
++            DryRunQoyodClient as _DryRunQoyodClient_pipeline,
++        )
++        if not isinstance(api_client, _DryRunQoyodClient_pipeline):
++            _pm_for_gate = (
++                canonical.get("payment_method")
++                or canonical.get("payment_method_native"))
++            _permit_live, _permit_reason = _live_write_permitted(
++                settings, payment_method=_pm_for_gate)
++            if (not _permit_live) or (not _sas_gate_passed):
++                logger.error(
++                    "rev33 api_client_argument_bypass_denied row_id=%s "
++                    "trace_id=%s permit_live=%s sas_gate_passed=%s "
++                    "reason=%s — forcing DryRunQoyodClient",
++                    row.get("id"), trace_id, _permit_live,
++                    _sas_gate_passed, _permit_reason)
++                api_client = _DryRunQoyodClient_pipeline()
++                is_dry = True
+ 
+     # rev29c — Canonical dry-run mode signal for wording at this
+     # stage. Same shape as the NORMALIZED-stage signal. Truthy if
+diff --git a/backend/integrations/qoyod/rev32_hardening.py b/backend/integrations/qoyod/rev32_hardening.py
+index e842c97..1f080e2 100644
+--- a/backend/integrations/qoyod/rev32_hardening.py
++++ b/backend/integrations/qoyod/rev32_hardening.py
+@@ -351,6 +351,14 @@ async def assert_final_write_permitted(
+          "trace_id":                  1,
+          "selective_auto_send_gate":  1,
+          "sas_worker_trace":          1,
++         # rev33 — full stage_history so we can veto any row that
++         # was EVER marked SKIPPED. SKIPPED is absolute-terminal;
++         # even if a caller successfully reset the row to another
++         # stage (which rev33 also blocks upstream in
++         # one_shot_reprocess), the historical SKIPPED transition
++         # is proof that the SAS gate rejected the row and MUST
++         # forever prevent live writes.
++         "stage_history":             1,
+          # rev32.1 — dead_lettered_at is a separate signal from
+          # pipeline_stage. Even if state_machine rolls stage back
+          # (e.g., FAILED_PRODUCT → CUSTOMER_RESOLVED via retry), the
+@@ -406,6 +414,78 @@ async def assert_final_write_permitted(
+         "checked_at":              _now_iso(),
+     }
+ 
++    # ── rev33 (X): SKIPPED in stage_history is a hard veto ──────
++    # RCA of leaks 269747616 (credit_card → invoice #193) and
++    # 270054904 (tamara_installment → invoice #194): a row that
++    # was marked SKIPPED by the SAS gate was later resurrected and
++    # driven through to a live write. rev33 makes SKIPPED absolute-
++    # terminal: even if the row's current pipeline_stage was reset
++    # to something else, the historical SKIPPED transition proves
++    # the SAS gate rejected the row and MUST forever prevent any
++    # Qoyod write. This is defense-in-depth on top of the
++    # `pipeline_stage in BLOCKED_FOR_WRITE_STAGES` check (which
++    # only looks at the CURRENT stage).
++    stage_history = row.get("stage_history") or []
++    if isinstance(stage_history, list):
++        for _entry in stage_history:
++            _to = None
++            if isinstance(_entry, dict):
++                _to = _entry.get("to_stage") or _entry.get("to")
++            if _to == "SKIPPED":
++                await _persist_violation_flag(
++                    db, row_id,
++                    flag_key="post_skipped_history_write_violation",
++                    evidence=evidence_common,
++                )
++                await trigger_kill_switch(
++                    db, user_id=user_id,
++                    reason=(f"Row {row_id!r} has SKIPPED in stage_history; "
++                            f"attempted {action!r} — "
++                            "post_skipped_history_write_violation (rev33)"),
++                    violation_type="post_skipped_history_write_violation",
++                    evidence=evidence_common,
++                )
++                raise Rev32Violation(
++                    row_id=row_id, action=action,
++                    violation_type="post_skipped_history_write_violation",
++                    reason=("row was marked SKIPPED at least once in "
++                            "stage_history — rev33 makes SKIPPED "
++                            "absolute-terminal; no writes permitted"),
++                    evidence=evidence_common)
++
++    # ── rev33 (Y): Canary scope invariant ───────────────────────
++    # When `selective_live_send_enabled=True`, the operator is in
++    # a Live-Canary window. rev33 requires the allowlist to be
++    # EXACTLY ["tabby_installment"] at write-time — not just at
++    # enable-time. This closes the drift window where a caller
++    # could widen the allowlist AFTER canary enable (via
++    # POST /admin/expand-selective-auto-send or direct MongoDB
++    # update) and slip a non-Tabby write through.
++    if bool(settings.get("selective_live_send_enabled", False)):
++        if list(allow_list) != ["tabby_installment"]:
++            await _persist_violation_flag(
++                db, row_id,
++                flag_key="canary_scope_drift_violation",
++                evidence=evidence_common,
++            )
++            await trigger_kill_switch(
++                db, user_id=user_id,
++                reason=(f"Live Canary is ACTIVE but allowlist="
++                        f"{list(allow_list)!r} != ['tabby_installment']; "
++                        f"attempted {action!r} — canary_scope_drift_violation "
++                        "(rev33)"),
++                violation_type="canary_scope_drift_violation",
++                evidence=evidence_common,
++            )
++            raise Rev32Violation(
++                row_id=row_id, action=action,
++                violation_type="canary_scope_drift_violation",
++                reason=(f"Live Canary requires allowlist "
++                        f"== ['tabby_installment'] at write time; "
++                        f"found {list(allow_list)!r} — write forbidden "
++                        "(rev33)"),
++                evidence=evidence_common)
++
+     # ── rev32.1 (A): dead_lettered_at signal ─────────────────────
+     # Independent of pipeline_stage. Once a row was DEAD_LETTERed,
+     # any subsequent write is forbidden — even if state_machine
+diff --git a/backend/integrations/qoyod/sas_build_diagnostics.py b/backend/integrations/qoyod/sas_build_diagnostics.py
+index 3b052e1..a80e00b 100644
+--- a/backend/integrations/qoyod/sas_build_diagnostics.py
++++ b/backend/integrations/qoyod/sas_build_diagnostics.py
+@@ -133,6 +133,23 @@ REQUIRED_MARKERS: dict[str, str] = {
+     # MUST NOT be re-enabled while this marker is absent.
+     "rev32_1_dead_letter_hardening":
+         "rev32.1 — Dead-letter hardening",
++    # rev33 — Canary Scope Lock + SKIPPED Terminality (P0 for the
++    # 2026-07-05 Tabby-only canary scope leak: orders 269747616 →
++    # invoice #193 and 270054904 → invoice #194 were live-written
++    # despite payment_method ∈ {credit_card, tamara_installment}
++    # being OUTSIDE the ["tabby_installment"] allowlist). If absent,
++    # the deploy is missing (a) `post_skipped_history_write_violation`
++    # (any row with SKIPPED in stage_history is refused), (b)
++    # `canary_scope_drift_violation` (when
++    # selective_live_send_enabled=True the allowlist must equal
++    # exactly ["tabby_installment"] at write time), (c) pipeline-
++    # level `_live_write_permitted` allowlist mirror, (d)
++    # api_client-argument bypass denial in
++    # `process_customer_resolved_row`, (e) SKIPPED removed from
++    # `one_shot_reprocess._reset_row_to_stage` escape hatch. Live
++    # Canary MUST NOT be re-enabled while this marker is absent.
++    "rev33_canary_scope_lock":
++        "rev33 — Canary Scope Lock + SKIPPED Terminality",
+ }
+ 
+ 
+diff --git a/backend/tests/test_canary_live_send.py b/backend/tests/test_canary_live_send.py
+index 7af5bdc..61e1c3b 100644
+--- a/backend/tests/test_canary_live_send.py
++++ b/backend/tests/test_canary_live_send.py
+@@ -1662,11 +1662,13 @@ class TestSkippedPartialReset:
+         assert mock_pipe.call_count == 0
+ 
+     async def test_skipped_reset_uses_two_hop_state_machine(self):
+-        """When `permit_partial_invoice_created=True` and current=
+-        SKIPPED, `_reset_row_to_stage` must write TWO transitions:
+-        SKIPPED → RETRYING, then RETRYING → NORMALIZED."""
++        """rev33 makes SKIPPED absolutely terminal. The prior two-hop
++        canary escape hatch (SKIPPED → RETRYING → NORMALIZED) is
++        REMOVED. Any call to `_reset_row_to_stage` with a SKIPPED
++        current stage now raises `OneShotRefused("skipped_is_
++        terminal_rev33")` before any DB write."""
+         from integrations.qoyod.one_shot_reprocess import (
+-            _reset_row_to_stage,
++            _reset_row_to_stage, OneShotRefused,
+         )
+         writes: list[dict] = []
+ 
+@@ -1680,15 +1682,14 @@ class TestSkippedPartialReset:
+ 
+         row = {"id": "row-skp", "pipeline_stage": "SKIPPED",
+                "qoyod_invoice_id": None}
+-        await _reset_row_to_stage(
+-            _DB(), row, resume_stage="NORMALIZED",
+-            actor="canary:test",
+-            permit_partial_invoice_created=True)
+-        assert len(writes) == 2
+-        assert writes[0]["patch"]["$set"]["pipeline_stage"] == \
+-            "RETRYING"
+-        assert writes[1]["patch"]["$set"]["pipeline_stage"] == \
+-            "NORMALIZED"
++        with pytest.raises(OneShotRefused) as exc:
++            await _reset_row_to_stage(
++                _DB(), row, resume_stage="NORMALIZED",
++                actor="canary:test",
++                permit_partial_invoice_created=True)
++        assert exc.value.code == "skipped_is_terminal_rev33"
++        # rev33 invariant: NO db writes on refusal.
++        assert writes == []
+ 
+     async def test_skipped_reset_refuses_without_flag(self):
+         """Without the canary flag, SKIPPED still refuses — the
+@@ -1711,7 +1712,8 @@ class TestSkippedPartialReset:
+                 actor="operator",
+                 permit_partial_invoice_created=False)
+         assert exc.value.code in {"unsupported_current_stage",
+-                                  "invalid_transition_to_resume"}
++                                  "invalid_transition_to_resume",
++                                  "skipped_is_terminal_rev33"}
+ 
+     async def test_skipped_settings_untouched_on_refuse(self):
+         row = _canary_row()
+@@ -2171,10 +2173,13 @@ class TestE2EPartialSkippedResetTwoHopWireLevel:
+ 
+     async def test_direct_two_hop_writes_SKIPPED_RETRYING_NORMALIZED(
+             self):
+-        """Test `_reset_row_to_stage` directly with SKIPPED + flag
+-        True → writes SKIPPED→RETRYING, then RETRYING→NORMALIZED."""
++        """rev33 — SKIPPED is absolutely terminal. The historic
++        SKIPPED→RETRYING→NORMALIZED two-hop path is removed. Any
++        direct call to `_reset_row_to_stage` on a SKIPPED row raises
++        `OneShotRefused("skipped_is_terminal_rev33")` before any
++        state-machine transition is written."""
+         from integrations.qoyod.one_shot_reprocess import (
+-            _reset_row_to_stage,
++            _reset_row_to_stage, OneShotRefused,
+         )
+         writes: list[dict] = []
+ 
+@@ -2188,16 +2193,14 @@ class TestE2EPartialSkippedResetTwoHopWireLevel:
+ 
+         row = {"id": "row-2hop-skp", "pipeline_stage": "SKIPPED",
+                "qoyod_invoice_id": None}
+-        await _reset_row_to_stage(
+-            _DB(), row, resume_stage="NORMALIZED",
+-            actor="canary:test",
+-            permit_partial_invoice_created=True)
+-        stages = [
+-            (w["patch"].get("$set") or {}).get("pipeline_stage")
+-            for w in writes]
+-        assert stages == ["RETRYING", "NORMALIZED"], (
+-            f"Expected [RETRYING, NORMALIZED], got {stages}. "
+-            f"This proves the fix: reset uses the two-hop path.")
++        with pytest.raises(OneShotRefused) as exc:
++            await _reset_row_to_stage(
++                _DB(), row, resume_stage="NORMALIZED",
++                actor="canary:test",
++                permit_partial_invoice_created=True)
++        assert exc.value.code == "skipped_is_terminal_rev33"
++        assert writes == [], (
++            "rev33 invariant: NO DB writes on SKIPPED reset refusal.")
+ 
+     async def test_pipeline_error_response_carries_reset_path(self):
+         """When `_reset_row_to_stage` refuses transition, canary's
+diff --git a/backend/tests/test_selective_auto_send_gate.py b/backend/tests/test_selective_auto_send_gate.py
+index 2c3c820..f9373a7 100644
+--- a/backend/tests/test_selective_auto_send_gate.py
++++ b/backend/tests/test_selective_auto_send_gate.py
+@@ -418,12 +418,15 @@ async def test_get_api_client_scoped_write_allowance_when_gates_permit():
+     class _DB: pass
+     db = _DB()
+     # ALL gates permissive — the ONLY state that allows live writes.
++    # rev33 — the Tabby-only Canary invariant requires
++    # allowlist == ["tabby_installment"] at write time.
+     settings = {
+         "user_id":                       "main",
+         "dry_run_mode":                  False,
+         "production_writes_locked":      False,
+         "selective_live_send_enabled":   True,
+         "selective_auto_send_enabled":   True,
++        "selective_auto_send_allowed_payment_methods": ["tabby_installment"],
+     }
+     with patch.object(pmod, "get_api_key",
+                       AsyncMock(return_value="test-key")):
