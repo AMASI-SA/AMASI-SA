@@ -86,6 +86,7 @@ from integrations.qoyod.rev32_hardening import (
 # "rev32.1 — Dead-letter hardening"
 from integrations.qoyod.rev32_hardening import (
     BLOCKED_FOR_WRITE_STAGES as _REV32_1_BLOCKED_FOR_WRITE_STAGES,  # noqa: F401
+    stamp_dead_letter_evidence as _stamp_dead_letter_evidence,
 )
 
 
@@ -449,6 +450,14 @@ async def _dead_letter(
 
     Matches `webhook._dead_letter` so the operator sees identical
     semantics whether the failure happened in Day 3 or Day 4.
+
+    Iter-2026-02.rev32.1 — MUST persist `dead_lettered_at` on the row
+    at the DEAD_LETTER transition (via `_stamp_dead_letter_evidence`).
+    This timestamp is the independent signal rev32.1 uses to refuse
+    writes even if state_machine later rolls the stage back (e.g. a
+    retry path resumes at CUSTOMER_RESOLVED but leaves
+    `dead_lettered_at` set). Without this write, the whole rev32.1
+    (A) dead_letter guard is inert.
     """
     p1 = transition(from_stage=from_stage, to_stage=fail_stage,
                     actor="worker", error=error)
@@ -458,8 +467,22 @@ async def _dead_letter(
                     actor="worker",
                     note="auto-routed: no retry — manual review required",
                     existing_started_at=started_at)
+    _stamp_dead_letter_evidence(p2, fail_stage=fail_stage, error=error)
     await _apply(db, row_id, p2)
     return "DEAD_LETTER"
+
+
+def _stamp_dead_letter_evidence_local(
+    patch: dict, *, fail_stage: str, error: Optional[dict] = None,
+) -> dict:
+    """DEPRECATED shim — retained for import-graph stability during
+    the rev32.1 rollout. Prefer the module-level
+    `stamp_dead_letter_evidence` from rev32_hardening (imported as
+    `_stamp_dead_letter_evidence`). See rev32_hardening for the
+    canonical docstring.
+    """
+    return _stamp_dead_letter_evidence(
+        patch, fail_stage=fail_stage, error=error)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -738,6 +761,10 @@ async def process_normalized_row(
             actor="worker",
             note="totals mismatch is upstream — no auto-retry",
         )
+        # rev32.1 — stamp dead-letter evidence trio.
+        _stamp_dead_letter_evidence(
+            dead_patch, fail_stage="FAILED_VALIDATION",
+            error={"code": totals.code, "message": totals.message})
         await _apply(db, row["id"], dead_patch)
         return {
             "row_id":   row["id"],
@@ -838,6 +865,10 @@ async def process_normalized_row(
                 "rev29c fail-closed: no gate decision to persist; "
                 "refusing to advance past NORMALIZED."),
         }
+        # rev32.1 — stamp dead-letter evidence trio.
+        _stamp_dead_letter_evidence(
+            dl_patch, fail_stage="NORMALIZED",
+            error=dl_patch["$set"]["pipeline_error"])
         try:
             await _apply_atomic(
                 db, row["id"], dl_patch,

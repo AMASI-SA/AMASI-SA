@@ -39,6 +39,16 @@ from integrations.qoyod.webhook_token_store import (
 from integrations.qoyod.legacy_adapter import adapt as adapt_legacy
 from integrations.qoyod.eligibility import check_invoice_eligibility
 from integrations.qoyod.webhook_activity import record_webhook_event
+# ── Iter-2026-02.rev32.1 — Dead-letter evidence stamping ─────────
+# Every DEAD_LETTER transition (whether via `_dead_letter()` or
+# inline) MUST stamp the trio (`dead_lettered_at`,
+# `dead_letter_from_stage`, `dead_letter_reason`) so
+# `rev32_hardening.assert_final_write_permitted` can veto any
+# subsequent Qoyod write from a retry / reprocess / manual path.
+# rev32.1 — Dead-letter hardening
+from integrations.qoyod.rev32_hardening import (
+    stamp_dead_letter_evidence as _stamp_dead_letter_evidence,
+)
 
 
 # Connector key for the inbox row — matches the unique idempotency
@@ -487,6 +497,9 @@ async def _process_inbox_row(
                         actor="webhook",
                         note=f"contract v1.0 rule failed: {eligibility_err['code']}",
                         existing_started_at=started_at)
+        # rev32.1 — stamp dead-letter evidence trio.
+        _stamp_dead_letter_evidence(
+            p2, fail_stage="FAILED_VALIDATION", error=eligibility_err)
         await _apply(db, doc_filter=doc_filter, patch=p2)
         return ("DEAD_LETTER", eligibility_err)
 
@@ -588,6 +601,8 @@ async def _dead_letter(
                     note="auto-routed: validation/normalization failure "
                          "(no retry — manual review required)",
                     existing_started_at=started_at)
+    # rev32.1 — stamp dead-letter evidence trio.
+    _stamp_dead_letter_evidence(p2, fail_stage=fail_stage, error=error)
     await _apply(db, doc_filter=doc_filter, patch=p2)
     return ("DEAD_LETTER", error)
 
@@ -645,6 +660,9 @@ async def _handle_missing_items(
                         note="no line items and enricher disabled — "
                              "manual review required",
                         existing_started_at=started_at)
+        # rev32.1 — stamp dead-letter evidence trio.
+        _stamp_dead_letter_evidence(
+            p2, fail_stage="FAILED_VALIDATION", error=error)
         await _apply(db, doc_filter=doc_filter, patch=p2)
         return ("DEAD_LETTER", error)
 
@@ -675,6 +693,9 @@ async def _handle_missing_items(
                     actor="webhook",
                     note="enricher stub not implemented yet — manual review",
                     existing_started_at=started_at)
+    # rev32.1 — stamp dead-letter evidence trio.
+    _stamp_dead_letter_evidence(
+        p3, fail_stage="FAILED_ENRICHMENT", error=error)
     await _apply(db, doc_filter=doc_filter, patch=p3)
     return ("DEAD_LETTER", error)
 
