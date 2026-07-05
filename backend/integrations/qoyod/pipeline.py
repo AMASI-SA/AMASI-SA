@@ -86,6 +86,7 @@ from integrations.qoyod.rev32_hardening import (
 # "rev32.1 — Dead-letter hardening"
 from integrations.qoyod.rev32_hardening import (
     BLOCKED_FOR_WRITE_STAGES as _REV32_1_BLOCKED_FOR_WRITE_STAGES,  # noqa: F401
+    stamp_dead_letter_evidence as _stamp_dead_letter_evidence,
 )
 
 
@@ -471,32 +472,17 @@ async def _dead_letter(
     return "DEAD_LETTER"
 
 
-def _stamp_dead_letter_evidence(
+def _stamp_dead_letter_evidence_local(
     patch: dict, *, fail_stage: str, error: Optional[dict] = None,
 ) -> dict:
-    """Iter-2026-02.rev32.1 — Attach the dead-letter evidence trio
-    onto a DEAD_LETTER transition patch:
-
-      • `dead_lettered_at`     — ISO timestamp (independent of the
-        pipeline_stage field; survives state_machine rollback).
-      • `dead_letter_from_stage` — which FAILED_* / precursor stage
-        the row was in when it was routed to DEAD_LETTER.
-      • `dead_letter_reason`   — error.code or error.message so the
-        operator has a one-shot signal without opening pipeline_error.
-
-    Every direct DEAD_LETTER transition (whether via `_dead_letter()`
-    or via inline `transition(...to_stage="DEAD_LETTER"...)` calls)
-    MUST route through this helper. `assert_final_write_permitted`
-    reads `dead_lettered_at` and refuses ANY subsequent write —
-    that's the whole point of rev32.1 defense-in-depth.
+    """DEPRECATED shim — retained for import-graph stability during
+    the rev32.1 rollout. Prefer the module-level
+    `stamp_dead_letter_evidence` from rev32_hardening (imported as
+    `_stamp_dead_letter_evidence`). See rev32_hardening for the
+    canonical docstring.
     """
-    patch.setdefault("$set", {})["dead_lettered_at"] = _now()
-    patch["$set"]["dead_letter_from_stage"] = fail_stage
-    patch["$set"]["dead_letter_reason"] = (
-        (error or {}).get("code")
-        or (error or {}).get("message")
-        or "unspecified")
-    return patch
+    return _stamp_dead_letter_evidence(
+        patch, fail_stage=fail_stage, error=error)
 
 
 # ─────────────────────────────────────────────────────────────────────

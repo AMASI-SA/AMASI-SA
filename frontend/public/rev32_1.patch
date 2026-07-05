@@ -1,90 +1,164 @@
 diff --git a/backend/integrations/qoyod/pipeline.py b/backend/integrations/qoyod/pipeline.py
-index bbc8c51..af26491 100644
+index af26491..c7d84bf 100644
 --- a/backend/integrations/qoyod/pipeline.py
 +++ b/backend/integrations/qoyod/pipeline.py
-@@ -449,6 +449,14 @@ async def _dead_letter(
+@@ -86,6 +86,7 @@ from integrations.qoyod.rev32_hardening import (
+ # "rev32.1 — Dead-letter hardening"
+ from integrations.qoyod.rev32_hardening import (
+     BLOCKED_FOR_WRITE_STAGES as _REV32_1_BLOCKED_FOR_WRITE_STAGES,  # noqa: F401
++    stamp_dead_letter_evidence as _stamp_dead_letter_evidence,
+ )
  
-     Matches `webhook._dead_letter` so the operator sees identical
-     semantics whether the failure happened in Day 3 or Day 4.
-+
-+    Iter-2026-02.rev32.1 — MUST persist `dead_lettered_at` on the row
-+    at the DEAD_LETTER transition (via `_stamp_dead_letter_evidence`).
-+    This timestamp is the independent signal rev32.1 uses to refuse
-+    writes even if state_machine later rolls the stage back (e.g. a
-+    retry path resumes at CUSTOMER_RESOLVED but leaves
-+    `dead_lettered_at` set). Without this write, the whole rev32.1
-+    (A) dead_letter guard is inert.
-     """
-     p1 = transition(from_stage=from_stage, to_stage=fail_stage,
-                     actor="worker", error=error)
-@@ -458,10 +466,39 @@ async def _dead_letter(
-                     actor="worker",
-                     note="auto-routed: no retry — manual review required",
-                     existing_started_at=started_at)
-+    _stamp_dead_letter_evidence(p2, fail_stage=fail_stage, error=error)
-     await _apply(db, row_id, p2)
+ 
+@@ -471,32 +472,17 @@ async def _dead_letter(
      return "DEAD_LETTER"
  
  
-+def _stamp_dead_letter_evidence(
-+    patch: dict, *, fail_stage: str, error: Optional[dict] = None,
+-def _stamp_dead_letter_evidence(
++def _stamp_dead_letter_evidence_local(
+     patch: dict, *, fail_stage: str, error: Optional[dict] = None,
+ ) -> dict:
+-    """Iter-2026-02.rev32.1 — Attach the dead-letter evidence trio
+-    onto a DEAD_LETTER transition patch:
+-
+-      • `dead_lettered_at`     — ISO timestamp (independent of the
+-        pipeline_stage field; survives state_machine rollback).
+-      • `dead_letter_from_stage` — which FAILED_* / precursor stage
+-        the row was in when it was routed to DEAD_LETTER.
+-      • `dead_letter_reason`   — error.code or error.message so the
+-        operator has a one-shot signal without opening pipeline_error.
+-
+-    Every direct DEAD_LETTER transition (whether via `_dead_letter()`
+-    or via inline `transition(...to_stage="DEAD_LETTER"...)` calls)
+-    MUST route through this helper. `assert_final_write_permitted`
+-    reads `dead_lettered_at` and refuses ANY subsequent write —
+-    that's the whole point of rev32.1 defense-in-depth.
++    """DEPRECATED shim — retained for import-graph stability during
++    the rev32.1 rollout. Prefer the module-level
++    `stamp_dead_letter_evidence` from rev32_hardening (imported as
++    `_stamp_dead_letter_evidence`). See rev32_hardening for the
++    canonical docstring.
+     """
+-    patch.setdefault("$set", {})["dead_lettered_at"] = _now()
+-    patch["$set"]["dead_letter_from_stage"] = fail_stage
+-    patch["$set"]["dead_letter_reason"] = (
+-        (error or {}).get("code")
+-        or (error or {}).get("message")
+-        or "unspecified")
+-    return patch
++    return _stamp_dead_letter_evidence(
++        patch, fail_stage=fail_stage, error=error)
+ 
+ 
+ # ─────────────────────────────────────────────────────────────────────
+diff --git a/backend/integrations/qoyod/rev32_hardening.py b/backend/integrations/qoyod/rev32_hardening.py
+index 3947166..e842c97 100644
+--- a/backend/integrations/qoyod/rev32_hardening.py
++++ b/backend/integrations/qoyod/rev32_hardening.py
+@@ -845,3 +845,37 @@ def payment_method_from_payload(action: str, payload: Any) -> Optional[str]:
+     except Exception:  # noqa: BLE001
+         return None
+     return None
++
++
++# ─────────────────────────────────────────────────────────────────
++# rev32.1 — dead-letter evidence stamping (shared helper)
++# ─────────────────────────────────────────────────────────────────
++def stamp_dead_letter_evidence(
++    patch: dict, *,
++    fail_stage: str,
++    error: Optional[dict] = None,
 +) -> dict:
-+    """Iter-2026-02.rev32.1 — Attach the dead-letter evidence trio
-+    onto a DEAD_LETTER transition patch:
++    """Attach the dead-letter evidence trio onto a DEAD_LETTER
++    transition patch (public, module-level).
 +
-+      • `dead_lettered_at`     — ISO timestamp (independent of the
-+        pipeline_stage field; survives state_machine rollback).
-+      • `dead_letter_from_stage` — which FAILED_* / precursor stage
-+        the row was in when it was routed to DEAD_LETTER.
-+      • `dead_letter_reason`   — error.code or error.message so the
-+        operator has a one-shot signal without opening pipeline_error.
++      • `dead_lettered_at`        — ISO timestamp (independent of
++        pipeline_stage; survives state_machine rollback).
++      • `dead_letter_from_stage`  — precursor stage.
++      • `dead_letter_reason`      — error.code / error.message /
++        "unspecified".
 +
-+    Every direct DEAD_LETTER transition (whether via `_dead_letter()`
-+    or via inline `transition(...to_stage="DEAD_LETTER"...)` calls)
-+    MUST route through this helper. `assert_final_write_permitted`
-+    reads `dead_lettered_at` and refuses ANY subsequent write —
-+    that's the whole point of rev32.1 defense-in-depth.
++    Called by BOTH `pipeline._dead_letter()` and `webhook._dead_letter()`
++    (and every inline DEAD_LETTER transition) so `assert_final_write_
++    permitted` (A) can veto ANY subsequent Qoyod POST regardless of
++    which entry-point created the DEAD_LETTER state.
++
++    Pure — does NOT touch the DB. The caller applies the patch via
++    the same mechanism it uses for any other `transition(...)` patch.
 +    """
-+    patch.setdefault("$set", {})["dead_lettered_at"] = _now()
++    patch.setdefault("$set", {})["dead_lettered_at"] = _now_iso()
 +    patch["$set"]["dead_letter_from_stage"] = fail_stage
 +    patch["$set"]["dead_letter_reason"] = (
 +        (error or {}).get("code")
 +        or (error or {}).get("message")
 +        or "unspecified")
 +    return patch
-+
-+
- # ─────────────────────────────────────────────────────────────────────
- # Per-row processor
- # ─────────────────────────────────────────────────────────────────────
-@@ -738,6 +775,10 @@ async def process_normalized_row(
-             actor="worker",
-             note="totals mismatch is upstream — no auto-retry",
-         )
+diff --git a/backend/integrations/qoyod/webhook.py b/backend/integrations/qoyod/webhook.py
+index 27516da..9b3d09b 100644
+--- a/backend/integrations/qoyod/webhook.py
++++ b/backend/integrations/qoyod/webhook.py
+@@ -39,6 +39,16 @@ from integrations.qoyod.webhook_token_store import (
+ from integrations.qoyod.legacy_adapter import adapt as adapt_legacy
+ from integrations.qoyod.eligibility import check_invoice_eligibility
+ from integrations.qoyod.webhook_activity import record_webhook_event
++# ── Iter-2026-02.rev32.1 — Dead-letter evidence stamping ─────────
++# Every DEAD_LETTER transition (whether via `_dead_letter()` or
++# inline) MUST stamp the trio (`dead_lettered_at`,
++# `dead_letter_from_stage`, `dead_letter_reason`) so
++# `rev32_hardening.assert_final_write_permitted` can veto any
++# subsequent Qoyod write from a retry / reprocess / manual path.
++# rev32.1 — Dead-letter hardening
++from integrations.qoyod.rev32_hardening import (
++    stamp_dead_letter_evidence as _stamp_dead_letter_evidence,
++)
+ 
+ 
+ # Connector key for the inbox row — matches the unique idempotency
+@@ -487,6 +497,9 @@ async def _process_inbox_row(
+                         actor="webhook",
+                         note=f"contract v1.0 rule failed: {eligibility_err['code']}",
+                         existing_started_at=started_at)
 +        # rev32.1 — stamp dead-letter evidence trio.
 +        _stamp_dead_letter_evidence(
-+            dead_patch, fail_stage="FAILED_VALIDATION",
-+            error={"code": totals.code, "message": totals.message})
-         await _apply(db, row["id"], dead_patch)
-         return {
-             "row_id":   row["id"],
-@@ -838,6 +879,10 @@ async def process_normalized_row(
-                 "rev29c fail-closed: no gate decision to persist; "
-                 "refusing to advance past NORMALIZED."),
-         }
++            p2, fail_stage="FAILED_VALIDATION", error=eligibility_err)
+         await _apply(db, doc_filter=doc_filter, patch=p2)
+         return ("DEAD_LETTER", eligibility_err)
+ 
+@@ -588,6 +601,8 @@ async def _dead_letter(
+                     note="auto-routed: validation/normalization failure "
+                          "(no retry — manual review required)",
+                     existing_started_at=started_at)
++    # rev32.1 — stamp dead-letter evidence trio.
++    _stamp_dead_letter_evidence(p2, fail_stage=fail_stage, error=error)
+     await _apply(db, doc_filter=doc_filter, patch=p2)
+     return ("DEAD_LETTER", error)
+ 
+@@ -645,6 +660,9 @@ async def _handle_missing_items(
+                         note="no line items and enricher disabled — "
+                              "manual review required",
+                         existing_started_at=started_at)
 +        # rev32.1 — stamp dead-letter evidence trio.
 +        _stamp_dead_letter_evidence(
-+            dl_patch, fail_stage="NORMALIZED",
-+            error=dl_patch["$set"]["pipeline_error"])
-         try:
-             await _apply_atomic(
-                 db, row["id"], dl_patch,
++            p2, fail_stage="FAILED_VALIDATION", error=error)
+         await _apply(db, doc_filter=doc_filter, patch=p2)
+         return ("DEAD_LETTER", error)
+ 
+@@ -675,6 +693,9 @@ async def _handle_missing_items(
+                     actor="webhook",
+                     note="enricher stub not implemented yet — manual review",
+                     existing_started_at=started_at)
++    # rev32.1 — stamp dead-letter evidence trio.
++    _stamp_dead_letter_evidence(
++        p3, fail_stage="FAILED_ENRICHMENT", error=error)
+     await _apply(db, doc_filter=doc_filter, patch=p3)
+     return ("DEAD_LETTER", error)
+ 
 diff --git a/backend/tests/test_rev32_1_dead_letter_hardening.py b/backend/tests/test_rev32_1_dead_letter_hardening.py
 new file mode 100644
 index 0000000..0000001
 --- /dev/null
 +++ b/backend/tests/test_rev32_1_dead_letter_hardening.py
-@@ -0,0 +1,925 @@
+@@ -0,0 +1,1078 @@
 +"""Iter-2026-02.rev32.1 — Dead-letter hardening tests.
 +
 +RCA fixture: order 270589798 / trace_id=9d9414fc29344076896beadb70cafc0b
@@ -1010,3 +1084,156 @@ index 0000000..0000001
 +        f"DEAD_LETTER transitions ({dl_count}) exceed stamp calls "
 +        f"({stamp_count}) — an inline transition may be missing "
 +        "dead_letter evidence stamping")
++
++
++# ═════════════════════════════════════════════════════════════════
++# 13. webhook.py DEAD_LETTER transitions — scope extension
++# ═════════════════════════════════════════════════════════════════
++
++@pytest.mark.asyncio
++async def test_33_webhook_dead_letter_helper_persists_trio():
++    """webhook._dead_letter() MUST stamp the same trio as
++    pipeline._dead_letter(). Without it, retry/reprocess of a
++    webhook-created DEAD_LETTER row would bypass rev32.1 (A)."""
++    from integrations.qoyod.webhook import _dead_letter as webhook_dl
++
++    captured = []
++    async def _apply_capture(db_, *, doc_filter, patch):
++        captured.append({"filter": doc_filter,
++                         "set": (patch or {}).get("$set") or {}})
++
++    import integrations.qoyod.webhook as _webhook
++    with patch.object(_webhook, "_apply", _apply_capture):
++        await webhook_dl(
++            db=MagicMock(),
++            doc_filter={"id": "row-wh"},
++            from_stage="VALIDATED",
++            fail_stage="FAILED_NORMALIZATION",
++            error={"code": "adapter_no_items",
++                   "message": "no line items found"},
++        )
++    # Two hops.
++    assert len(captured) == 2
++    dead_set = captured[1]["set"]
++    assert "dead_lettered_at" in dead_set
++    assert dead_set["dead_letter_from_stage"] == "FAILED_NORMALIZATION"
++    assert dead_set["dead_letter_reason"] == "adapter_no_items"
++
++
++@pytest.mark.asyncio
++async def test_34_webhook_eligibility_dead_letter_stamps_trio():
++    """The inline eligibility-failure DEAD_LETTER path in webhook.py
++    (contract-v1.0 rule failed) MUST also stamp the trio."""
++    import inspect
++    from integrations.qoyod import webhook as _webhook
++    src = inspect.getsource(_webhook)
++    # This DEAD_LETTER transition sits inside eligibility_err block —
++    # verify the stamp call is present nearby (fuzz heuristic).
++    assert 'contract v1.0 rule failed' in src
++    # Locate the block and confirm stamp call follows within 10 lines.
++    idx = src.find('contract v1.0 rule failed')
++    window = src[idx:idx + 800]
++    assert '_stamp_dead_letter_evidence' in window, \
++        "eligibility DEAD_LETTER not stamped"
++
++
++@pytest.mark.asyncio
++async def test_35_webhook_missing_items_dead_letter_stamps_trio():
++    """The inline missing-items DEAD_LETTER (enricher disabled)
++    path MUST also stamp the trio."""
++    import inspect
++    from integrations.qoyod import webhook as _webhook
++    src = inspect.getsource(_webhook)
++    idx = src.find('no line items and enricher disabled')
++    assert idx != -1
++    window = src[idx:idx + 800]
++    assert '_stamp_dead_letter_evidence' in window, \
++        "missing-items DEAD_LETTER not stamped"
++
++
++@pytest.mark.asyncio
++async def test_36_webhook_enricher_stub_dead_letter_stamps_trio():
++    """The inline enricher-stub DEAD_LETTER path MUST also stamp."""
++    import inspect
++    from integrations.qoyod import webhook as _webhook
++    src = inspect.getsource(_webhook)
++    idx = src.find('enricher stub not implemented yet')
++    assert idx != -1
++    window = src[idx:idx + 800]
++    assert '_stamp_dead_letter_evidence' in window, \
++        "enricher-stub DEAD_LETTER not stamped"
++
++
++def test_37_webhook_all_dead_letter_transitions_stamped():
++    """Fuzz regression: every DEAD_LETTER transition in webhook.py
++    must have a corresponding stamp call in its 30-line window.
++    Prevents future direct-transition regressions."""
++    import inspect
++    from integrations.qoyod import webhook as _webhook
++    src = inspect.getsource(_webhook)
++    lines = src.split("\n")
++    dl_line_indices = [
++        i for i, ln in enumerate(lines)
++        if 'to_stage="DEAD_LETTER"' in ln]
++    assert len(dl_line_indices) == 4, (
++        f"expected 4 DEAD_LETTER transitions in webhook.py, "
++        f"found {len(dl_line_indices)}")
++    for li in dl_line_indices:
++        window = "\n".join(lines[li:li + 30])
++        assert '_stamp_dead_letter_evidence' in window, (
++            f"DEAD_LETTER transition at line ~{li+1} in webhook.py "
++            "is not followed by a `_stamp_dead_letter_evidence(...)` "
++            "call within 30 lines")
++
++
++def test_38_shared_helper_is_public_from_rev32_hardening():
++    """rev32.1 scope extension: the helper MUST be importable from
++    rev32_hardening (not just from pipeline). This is the single
++    source of truth used by pipeline.py AND webhook.py."""
++    from integrations.qoyod.rev32_hardening import (
++        stamp_dead_letter_evidence,
++    )
++    out = stamp_dead_letter_evidence(
++        {}, fail_stage="FAILED_CUSTOMER",
++        error={"code": "test"})
++    assert out["$set"]["dead_lettered_at"]
++    assert out["$set"]["dead_letter_from_stage"] == "FAILED_CUSTOMER"
++    assert out["$set"]["dead_letter_reason"] == "test"
++
++
++@pytest.mark.asyncio
++async def test_39_webhook_dead_letter_reason_fallback():
++    """webhook._dead_letter() `dead_letter_reason` follows the same
++    fallback chain (code → message → 'unspecified')."""
++    from integrations.qoyod.webhook import _dead_letter as webhook_dl
++    import integrations.qoyod.webhook as _webhook
++
++    async def _mk_captor():
++        caps = []
++        async def _apply_capture(db_, *, doc_filter, patch):
++            caps.append((patch or {}).get("$set") or {})
++        return caps, _apply_capture
++
++    # Case A: only message.
++    caps_a, upd_a = await _mk_captor()
++    with patch.object(_webhook, "_apply", upd_a):
++        await webhook_dl(
++            db=MagicMock(),
++            doc_filter={"id": "wh-a"},
++            from_stage="RECEIVED",
++            fail_stage="FAILED_VALIDATION",
++            error={"message": "hmac mismatch"},
++        )
++    assert caps_a[1]["dead_letter_reason"] == "hmac mismatch"
++
++    # Case B: empty.
++    caps_b, upd_b = await _mk_captor()
++    with patch.object(_webhook, "_apply", upd_b):
++        await webhook_dl(
++            db=MagicMock(),
++            doc_filter={"id": "wh-b"},
++            from_stage="RECEIVED",
++            fail_stage="FAILED_VALIDATION",
++            error={},
++        )
++    assert caps_b[1]["dead_letter_reason"] == "unspecified"

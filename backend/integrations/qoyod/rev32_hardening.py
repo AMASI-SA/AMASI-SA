@@ -845,3 +845,37 @@ def payment_method_from_payload(action: str, payload: Any) -> Optional[str]:
     except Exception:  # noqa: BLE001
         return None
     return None
+
+
+# ─────────────────────────────────────────────────────────────────
+# rev32.1 — dead-letter evidence stamping (shared helper)
+# ─────────────────────────────────────────────────────────────────
+def stamp_dead_letter_evidence(
+    patch: dict, *,
+    fail_stage: str,
+    error: Optional[dict] = None,
+) -> dict:
+    """Attach the dead-letter evidence trio onto a DEAD_LETTER
+    transition patch (public, module-level).
+
+      • `dead_lettered_at`        — ISO timestamp (independent of
+        pipeline_stage; survives state_machine rollback).
+      • `dead_letter_from_stage`  — precursor stage.
+      • `dead_letter_reason`      — error.code / error.message /
+        "unspecified".
+
+    Called by BOTH `pipeline._dead_letter()` and `webhook._dead_letter()`
+    (and every inline DEAD_LETTER transition) so `assert_final_write_
+    permitted` (A) can veto ANY subsequent Qoyod POST regardless of
+    which entry-point created the DEAD_LETTER state.
+
+    Pure — does NOT touch the DB. The caller applies the patch via
+    the same mechanism it uses for any other `transition(...)` patch.
+    """
+    patch.setdefault("$set", {})["dead_lettered_at"] = _now_iso()
+    patch["$set"]["dead_letter_from_stage"] = fail_stage
+    patch["$set"]["dead_letter_reason"] = (
+        (error or {}).get("code")
+        or (error or {}).get("message")
+        or "unspecified")
+    return patch

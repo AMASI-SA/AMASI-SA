@@ -923,3 +923,156 @@ async def test_32_inline_dead_letter_transitions_also_stamped():
         f"DEAD_LETTER transitions ({dl_count}) exceed stamp calls "
         f"({stamp_count}) — an inline transition may be missing "
         "dead_letter evidence stamping")
+
+
+# ═════════════════════════════════════════════════════════════════
+# 13. webhook.py DEAD_LETTER transitions — scope extension
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_33_webhook_dead_letter_helper_persists_trio():
+    """webhook._dead_letter() MUST stamp the same trio as
+    pipeline._dead_letter(). Without it, retry/reprocess of a
+    webhook-created DEAD_LETTER row would bypass rev32.1 (A)."""
+    from integrations.qoyod.webhook import _dead_letter as webhook_dl
+
+    captured = []
+    async def _apply_capture(db_, *, doc_filter, patch):
+        captured.append({"filter": doc_filter,
+                         "set": (patch or {}).get("$set") or {}})
+
+    import integrations.qoyod.webhook as _webhook
+    with patch.object(_webhook, "_apply", _apply_capture):
+        await webhook_dl(
+            db=MagicMock(),
+            doc_filter={"id": "row-wh"},
+            from_stage="VALIDATED",
+            fail_stage="FAILED_NORMALIZATION",
+            error={"code": "adapter_no_items",
+                   "message": "no line items found"},
+        )
+    # Two hops.
+    assert len(captured) == 2
+    dead_set = captured[1]["set"]
+    assert "dead_lettered_at" in dead_set
+    assert dead_set["dead_letter_from_stage"] == "FAILED_NORMALIZATION"
+    assert dead_set["dead_letter_reason"] == "adapter_no_items"
+
+
+@pytest.mark.asyncio
+async def test_34_webhook_eligibility_dead_letter_stamps_trio():
+    """The inline eligibility-failure DEAD_LETTER path in webhook.py
+    (contract-v1.0 rule failed) MUST also stamp the trio."""
+    import inspect
+    from integrations.qoyod import webhook as _webhook
+    src = inspect.getsource(_webhook)
+    # This DEAD_LETTER transition sits inside eligibility_err block —
+    # verify the stamp call is present nearby (fuzz heuristic).
+    assert 'contract v1.0 rule failed' in src
+    # Locate the block and confirm stamp call follows within 10 lines.
+    idx = src.find('contract v1.0 rule failed')
+    window = src[idx:idx + 800]
+    assert '_stamp_dead_letter_evidence' in window, \
+        "eligibility DEAD_LETTER not stamped"
+
+
+@pytest.mark.asyncio
+async def test_35_webhook_missing_items_dead_letter_stamps_trio():
+    """The inline missing-items DEAD_LETTER (enricher disabled)
+    path MUST also stamp the trio."""
+    import inspect
+    from integrations.qoyod import webhook as _webhook
+    src = inspect.getsource(_webhook)
+    idx = src.find('no line items and enricher disabled')
+    assert idx != -1
+    window = src[idx:idx + 800]
+    assert '_stamp_dead_letter_evidence' in window, \
+        "missing-items DEAD_LETTER not stamped"
+
+
+@pytest.mark.asyncio
+async def test_36_webhook_enricher_stub_dead_letter_stamps_trio():
+    """The inline enricher-stub DEAD_LETTER path MUST also stamp."""
+    import inspect
+    from integrations.qoyod import webhook as _webhook
+    src = inspect.getsource(_webhook)
+    idx = src.find('enricher stub not implemented yet')
+    assert idx != -1
+    window = src[idx:idx + 800]
+    assert '_stamp_dead_letter_evidence' in window, \
+        "enricher-stub DEAD_LETTER not stamped"
+
+
+def test_37_webhook_all_dead_letter_transitions_stamped():
+    """Fuzz regression: every DEAD_LETTER transition in webhook.py
+    must have a corresponding stamp call in its 30-line window.
+    Prevents future direct-transition regressions."""
+    import inspect
+    from integrations.qoyod import webhook as _webhook
+    src = inspect.getsource(_webhook)
+    lines = src.split("\n")
+    dl_line_indices = [
+        i for i, ln in enumerate(lines)
+        if 'to_stage="DEAD_LETTER"' in ln]
+    assert len(dl_line_indices) == 4, (
+        f"expected 4 DEAD_LETTER transitions in webhook.py, "
+        f"found {len(dl_line_indices)}")
+    for li in dl_line_indices:
+        window = "\n".join(lines[li:li + 30])
+        assert '_stamp_dead_letter_evidence' in window, (
+            f"DEAD_LETTER transition at line ~{li+1} in webhook.py "
+            "is not followed by a `_stamp_dead_letter_evidence(...)` "
+            "call within 30 lines")
+
+
+def test_38_shared_helper_is_public_from_rev32_hardening():
+    """rev32.1 scope extension: the helper MUST be importable from
+    rev32_hardening (not just from pipeline). This is the single
+    source of truth used by pipeline.py AND webhook.py."""
+    from integrations.qoyod.rev32_hardening import (
+        stamp_dead_letter_evidence,
+    )
+    out = stamp_dead_letter_evidence(
+        {}, fail_stage="FAILED_CUSTOMER",
+        error={"code": "test"})
+    assert out["$set"]["dead_lettered_at"]
+    assert out["$set"]["dead_letter_from_stage"] == "FAILED_CUSTOMER"
+    assert out["$set"]["dead_letter_reason"] == "test"
+
+
+@pytest.mark.asyncio
+async def test_39_webhook_dead_letter_reason_fallback():
+    """webhook._dead_letter() `dead_letter_reason` follows the same
+    fallback chain (code → message → 'unspecified')."""
+    from integrations.qoyod.webhook import _dead_letter as webhook_dl
+    import integrations.qoyod.webhook as _webhook
+
+    async def _mk_captor():
+        caps = []
+        async def _apply_capture(db_, *, doc_filter, patch):
+            caps.append((patch or {}).get("$set") or {})
+        return caps, _apply_capture
+
+    # Case A: only message.
+    caps_a, upd_a = await _mk_captor()
+    with patch.object(_webhook, "_apply", upd_a):
+        await webhook_dl(
+            db=MagicMock(),
+            doc_filter={"id": "wh-a"},
+            from_stage="RECEIVED",
+            fail_stage="FAILED_VALIDATION",
+            error={"message": "hmac mismatch"},
+        )
+    assert caps_a[1]["dead_letter_reason"] == "hmac mismatch"
+
+    # Case B: empty.
+    caps_b, upd_b = await _mk_captor()
+    with patch.object(_webhook, "_apply", upd_b):
+        await webhook_dl(
+            db=MagicMock(),
+            doc_filter={"id": "wh-b"},
+            from_stage="RECEIVED",
+            fail_stage="FAILED_VALIDATION",
+            error={},
+        )
+    assert caps_b[1]["dead_letter_reason"] == "unspecified"
