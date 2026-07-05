@@ -1,0 +1,708 @@
+"""Iter-2026-02.rev32.1 — Dead-letter hardening tests.
+
+RCA fixture: order 270589798 / trace_id=9d9414fc29344076896beadb70cafc0b
+              / invoice #192 / payment #163
+
+Under Rev32 v2, the pipeline `_get_api_client` guarded live writes,
+but the row leaked to قيود because a SEPARATE code path (retry /
+one_shot_reprocess / manual send / etc.) instantiated `QoyodAPIClient`
+directly and posted to Qoyod HTTP endpoints. The row had:
+
+    pipeline_stage_history:
+      CUSTOMER_RESOLVED → FAILED_PRODUCT → DEAD_LETTER
+      PRODUCT_RESOLVED  → INVOICE_CREATED → INVOICE_PAYMENT_CREATED
+                        → COMPLETED
+
+Rev32.1 adds:
+  (A) BLOCKED_FOR_WRITE_STAGES ⊇ TERMINAL_STAGES ∪ FAILED_*
+  (B) dead_lettered_at IS NOT NULL blocks ALL writes, independent
+      of the current pipeline_stage (defense-in-depth for stage
+      rollback via state_machine resume).
+  (C) Fail-CLOSED on missing row_worker_pipeline_sha in live.
+  (D) QoyodAPIClient write methods invoke rev32.1 pre-flight, so
+      ANY direct instantiation (not just pipeline._get_api_client)
+      is fenced.
+
+These tests are the acceptance suite for the 270589798 incident.
+"""
+from __future__ import annotations
+
+import sys
+from unittest.mock import MagicMock, AsyncMock, patch
+
+import pytest
+
+sys.path.insert(0, "/app/backend")
+
+
+# ── Shared helpers (mirror test_rev32 style) ──────────────────────
+def _mk_db(*, settings=None, row=None):
+    settings = dict(settings or {})
+    settings.setdefault("user_id", "main")
+    row = dict(row or {})
+    captured = {
+        "settings_patches":     [],
+        "inbox_patches":        [],
+        "kill_switch_inserts":  [],
+    }
+
+    async def _settings_find_one(f, proj=None):
+        return dict(settings)
+    async def _settings_update_one(f, u, upsert=False):
+        patch_ = (u or {}).get("$set") or {}
+        settings.update(patch_)
+        captured["settings_patches"].append(
+            {"filter": f, "set": patch_, "upsert": upsert})
+        return MagicMock(matched_count=1, modified_count=1)
+
+    async def _inbox_find_one(f, proj=None):
+        if not row:
+            return None
+        return dict(row)
+    async def _inbox_update_one(f, u):
+        patch_ = (u or {}).get("$set") or {}
+        for k, v in patch_.items():
+            row[k] = v
+        captured["inbox_patches"].append({"filter": f, "set": patch_})
+        return MagicMock(matched_count=1, modified_count=1)
+
+    async def _kse_insert_one(doc):
+        captured["kill_switch_inserts"].append(doc)
+        return MagicMock(inserted_id="fake")
+
+    db = MagicMock()
+    db.qoyod_settings         = MagicMock()
+    db.qoyod_settings.find_one = _settings_find_one
+    db.qoyod_settings.update_one = _settings_update_one
+    db.integration_inbox         = MagicMock()
+    db.integration_inbox.find_one = _inbox_find_one
+    db.integration_inbox.update_one = _inbox_update_one
+    db.rev32_kill_switch_events = MagicMock()
+    db.rev32_kill_switch_events.insert_one = _kse_insert_one
+
+    db._captured = captured
+    db._settings = settings
+    db._row      = row
+    return db
+
+
+def _live_settings():
+    return {
+        "user_id":                                     "main",
+        "dry_run_mode":                                False,
+        "production_writes_locked":                    False,
+        "selective_live_send_enabled":                 True,
+        "selective_auto_send_enabled":                 True,
+        "selective_auto_send_allowed_payment_methods": ["tabby_installment"],
+    }
+
+
+def _happy_row(*, pipeline_stage="PRODUCT_RESOLVED",
+               payment_method="tabby_installment",
+               worker_sha=None,
+               dead_lettered_at=None):
+    from integrations.qoyod.sas_worker_trace import _compute_pipeline_sha
+    sha = worker_sha or _compute_pipeline_sha()
+    row = {
+        "id":                        "row-happy",
+        "user_id":                   "main",
+        "trace_id":                  "trace-happy",
+        "pipeline_stage":            pipeline_stage,
+        "selective_auto_send_gate":  {"eligible": True,
+                                       "reason":  "all_checks_passed"},
+        "sas_worker_trace":          {"worker_pipeline_sha": sha},
+        "canonical_payload":         {"payment_method": payment_method},
+    }
+    if dead_lettered_at is not None:
+        row["dead_lettered_at"] = dead_lettered_at
+    return row
+
+
+# ═════════════════════════════════════════════════════════════════
+# 1. Constants + marker
+# ═════════════════════════════════════════════════════════════════
+
+def test_1_rev32_1_marker_registered_and_present():
+    from integrations.qoyod.sas_build_diagnostics import (
+        REQUIRED_MARKERS, build_diagnostics_report,
+    )
+    assert "rev32_1_dead_letter_hardening" in REQUIRED_MARKERS
+    r = build_diagnostics_report()
+    m = r["marker_check"]["markers"]["rev32_1_dead_letter_hardening"]
+    assert m["present"] is True
+    assert m["count"] >= 1
+    assert r["acceptance"]["code_matches_expected"] is True
+
+
+def test_2_blocked_for_write_stages_set_matches_spec():
+    """The set MUST include every FAILED_* stage listed in state_machine.py
+    plus the original TERMINAL_STAGES set."""
+    from integrations.qoyod.rev32_hardening import (
+        BLOCKED_FOR_WRITE_STAGES, TERMINAL_STAGES,
+    )
+    # Every terminal stage is blocked.
+    for s in TERMINAL_STAGES:
+        assert s in BLOCKED_FOR_WRITE_STAGES, f"{s} missing"
+    # All FAILED_* + PAYMENT_LINK_FAILED are blocked.
+    for s in ("FAILED_VALIDATION", "FAILED_NORMALIZATION",
+              "FAILED_ENRICHMENT", "FAILED_CUSTOMER", "FAILED_PRODUCT",
+              "FAILED_INVOICE", "FAILED_RECEIPT", "PAYMENT_LINK_FAILED"):
+        assert s in BLOCKED_FOR_WRITE_STAGES, f"{s} missing"
+
+
+def test_3_rev32_1_new_public_surface():
+    from integrations.qoyod.rev32_hardening import (
+        Rev32MissingRowContextError, assert_client_write_permitted,
+        payment_method_from_payload, BLOCKED_FOR_WRITE_STAGES,
+    )
+    assert callable(assert_client_write_permitted)
+    assert callable(payment_method_from_payload)
+    assert isinstance(BLOCKED_FOR_WRITE_STAGES, frozenset)
+    from integrations.qoyod.rev32_hardening import Rev32Violation
+    assert issubclass(Rev32MissingRowContextError, Rev32Violation)
+
+
+# ═════════════════════════════════════════════════════════════════
+# 2. FAILED_* stages block downstream write
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_4_failed_product_blocks_create_product():
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    row = _happy_row(pipeline_stage="FAILED_PRODUCT")
+    db = _mk_db(settings=_live_settings(), row=row)
+    with pytest.raises(Rev32Violation) as exc_info:
+        await assert_final_write_permitted(
+            db, "row-happy", action="create_product",
+            payment_method="tabby_installment", user_id="main")
+    assert exc_info.value.violation_type == \
+        "post_failed_stage_downstream_violation"
+    assert db._settings["production_writes_locked"] is True
+
+
+@pytest.mark.asyncio
+async def test_5_failed_product_blocks_create_invoice():
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    row = _happy_row(pipeline_stage="FAILED_PRODUCT")
+    db = _mk_db(settings=_live_settings(), row=row)
+    with pytest.raises(Rev32Violation) as exc_info:
+        await assert_final_write_permitted(
+            db, "row-happy", action="create_invoice",
+            payment_method="tabby_installment", user_id="main")
+    assert exc_info.value.violation_type == \
+        "post_failed_stage_downstream_violation"
+
+
+@pytest.mark.asyncio
+async def test_6_failed_product_blocks_create_invoice_payment():
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    row = _happy_row(pipeline_stage="FAILED_PRODUCT")
+    db = _mk_db(settings=_live_settings(), row=row)
+    with pytest.raises(Rev32Violation):
+        await assert_final_write_permitted(
+            db, "row-happy", action="create_invoice_payment",
+            payment_method="tabby_installment", user_id="main")
+
+
+@pytest.mark.asyncio
+async def test_7_all_failed_stages_block_all_write_actions():
+    """Matrix: every FAILED_* × every write action must raise."""
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+        BLOCKED_FOR_WRITE_STAGES, TERMINAL_STAGES,
+    )
+    failed_stages = BLOCKED_FOR_WRITE_STAGES - TERMINAL_STAGES
+    actions = ("create_customer", "create_product",
+               "create_invoice", "create_invoice_payment")
+    for stage in failed_stages:
+        for action in actions:
+            row = _happy_row(pipeline_stage=stage)
+            row["id"] = f"row-{stage.lower()}-{action}"
+            db = _mk_db(settings=dict(_live_settings()), row=row)
+            with pytest.raises(Rev32Violation) as exc_info:
+                await assert_final_write_permitted(
+                    db, row["id"], action=action,
+                    payment_method="tabby_installment",
+                    user_id="main")
+            assert exc_info.value.violation_type == \
+                "post_failed_stage_downstream_violation", \
+                f"stage={stage} action={action}"
+
+
+# ═════════════════════════════════════════════════════════════════
+# 3. DEAD_LETTER + dead_lettered_at signal
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_8_dead_letter_stage_blocks_all_writes():
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    for action in ("create_customer", "create_product",
+                   "create_invoice", "create_invoice_payment"):
+        row = _happy_row(pipeline_stage="DEAD_LETTER")
+        row["id"] = f"row-dl-{action}"
+        db = _mk_db(settings=dict(_live_settings()), row=row)
+        with pytest.raises(Rev32Violation) as exc_info:
+            await assert_final_write_permitted(
+                db, row["id"], action=action,
+                payment_method="tabby_installment", user_id="main")
+        # DEAD_LETTER stage → post_terminal_stage_downstream_violation.
+        assert exc_info.value.violation_type == \
+            "post_terminal_stage_downstream_violation", action
+
+
+@pytest.mark.asyncio
+async def test_9_dead_lettered_at_non_null_blocks_writes_even_if_stage_rolled_back():
+    """Critical rev32.1 defense-in-depth: even if state_machine rolls
+    pipeline_stage back to CUSTOMER_RESOLVED (or any non-terminal),
+    a non-null dead_lettered_at must still block."""
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    row = _happy_row(
+        pipeline_stage="CUSTOMER_RESOLVED",  # rolled back
+        dead_lettered_at="2026-07-05T02:00:00+00:00")
+    db = _mk_db(settings=_live_settings(), row=row)
+    with pytest.raises(Rev32Violation) as exc_info:
+        await assert_final_write_permitted(
+            db, "row-happy", action="create_invoice",
+            payment_method="tabby_installment", user_id="main")
+    assert exc_info.value.violation_type == \
+        "post_dead_letter_write_violation"
+    assert db._settings["production_writes_locked"] is True
+
+
+# ═════════════════════════════════════════════════════════════════
+# 4. Fail-CLOSED on missing worker pipeline sha (rev32.1 fix vs v2 bug)
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_10_missing_worker_sha_in_assert_final_write_permitted_now_blocks():
+    """The Prod 270589798 incident: row had sas_worker_trace={} which
+    yielded row_worker_pipeline_sha=None. Rev32 v2 was fail-OPEN on
+    missing sha inside `assert_final_write_permitted`. rev32.1 fixes."""
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    row = _happy_row()
+    row["sas_worker_trace"] = {}
+    db = _mk_db(settings=_live_settings(), row=row)
+    with pytest.raises(Rev32Violation) as exc_info:
+        await assert_final_write_permitted(
+            db, "row-happy", action="create_invoice",
+            payment_method="tabby_installment", user_id="main")
+    assert exc_info.value.violation_type == \
+        "stale_worker_live_write_violation"
+    # Kill switch fires + row flag persisted.
+    assert db._settings["production_writes_locked"] is True
+    ev = db._captured["kill_switch_inserts"][-1]
+    assert ev["violation_type"] == "stale_worker_live_write_violation"
+
+
+@pytest.mark.asyncio
+async def test_11_missing_current_pipeline_sha_blocks_writes():
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    row = _happy_row()
+    db = _mk_db(settings=_live_settings(), row=row)
+    # Patch _compute_pipeline_sha to return empty string.
+    with patch(
+        "integrations.qoyod.sas_worker_trace._compute_pipeline_sha",
+        return_value=""):
+        with pytest.raises(Rev32Violation) as exc_info:
+            await assert_final_write_permitted(
+                db, "row-happy", action="create_invoice",
+                payment_method="tabby_installment", user_id="main")
+    assert exc_info.value.violation_type == \
+        "missing_current_pipeline_sha_violation"
+
+
+# ═════════════════════════════════════════════════════════════════
+# 5. QoyodAPIClient direct write path — fenced by rev32.1
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_12_direct_create_invoice_without_row_context_blocks():
+    """A path (retry/reprocess/manual) that constructs
+    QoyodAPIClient(...) WITHOUT row_id must be refused by rev32.1
+    unless it explicitly opts into `allow_writes_without_row=True`."""
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.rev32_hardening import (
+        Rev32MissingRowContextError,
+    )
+    client = QoyodAPIClient("fake-key")  # no db, no row_id
+    with pytest.raises(Rev32MissingRowContextError):
+        await client.create_invoice({"invoice": {}}, idem="fake")
+
+
+@pytest.mark.asyncio
+async def test_13_direct_create_invoice_payment_without_row_context_blocks():
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.rev32_hardening import (
+        Rev32MissingRowContextError,
+    )
+    client = QoyodAPIClient("fake-key")
+    with pytest.raises(Rev32MissingRowContextError):
+        await client.create_invoice_payment(
+            {"invoice_payment": {}}, idem="fake")
+
+
+@pytest.mark.asyncio
+async def test_14_direct_create_customer_without_row_context_blocks():
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.rev32_hardening import (
+        Rev32MissingRowContextError,
+    )
+    client = QoyodAPIClient("fake-key")
+    with pytest.raises(Rev32MissingRowContextError):
+        await client.create_contact({"contact": {}}, idem="fake")
+
+
+@pytest.mark.asyncio
+async def test_15_direct_create_product_without_row_context_blocks():
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.rev32_hardening import (
+        Rev32MissingRowContextError,
+    )
+    client = QoyodAPIClient("fake-key")
+    with pytest.raises(Rev32MissingRowContextError):
+        await client.create_product({"product": {}}, idem="fake")
+
+
+@pytest.mark.asyncio
+async def test_16_direct_create_invoice_with_row_at_failed_product_blocks():
+    """The exact 270589798 scenario: a direct QoyodAPIClient with
+    row_id pointing to a row in FAILED_PRODUCT MUST refuse the POST."""
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.rev32_hardening import Rev32Violation
+    row = _happy_row(pipeline_stage="FAILED_PRODUCT")
+    db = _mk_db(settings=_live_settings(), row=row)
+    client = QoyodAPIClient(
+        "fake-key",
+        db=db, user_id="main",
+        row_id="row-happy", trace_id="trace-happy",
+    )
+    with pytest.raises(Rev32Violation) as exc_info:
+        await client.create_invoice({"invoice": {}}, idem="fake")
+    assert exc_info.value.violation_type == \
+        "post_failed_stage_downstream_violation"
+
+
+@pytest.mark.asyncio
+async def test_17_direct_create_invoice_with_row_at_dead_letter_blocks():
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.rev32_hardening import Rev32Violation
+    row = _happy_row(pipeline_stage="DEAD_LETTER")
+    db = _mk_db(settings=_live_settings(), row=row)
+    client = QoyodAPIClient(
+        "fake-key",
+        db=db, user_id="main",
+        row_id="row-happy", trace_id="trace-happy",
+    )
+    with pytest.raises(Rev32Violation) as exc_info:
+        await client.create_invoice_payment(
+            {"invoice_payment": {}}, idem="fake")
+    assert exc_info.value.violation_type == \
+        "post_terminal_stage_downstream_violation"
+
+
+@pytest.mark.asyncio
+async def test_18_direct_create_invoice_with_rolled_back_dead_lettered_at_blocks():
+    """Full RCA reproduction: row has stage rolled back to
+    CUSTOMER_RESOLVED but dead_lettered_at is set. Direct
+    QoyodAPIClient MUST refuse."""
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.rev32_hardening import Rev32Violation
+    row = _happy_row(
+        pipeline_stage="CUSTOMER_RESOLVED",
+        dead_lettered_at="2026-07-05T02:00:00+00:00")
+    db = _mk_db(settings=_live_settings(), row=row)
+    client = QoyodAPIClient(
+        "fake-key",
+        db=db, user_id="main",
+        row_id="row-happy", trace_id="trace-happy",
+    )
+    with pytest.raises(Rev32Violation) as exc_info:
+        await client.create_invoice({"invoice": {}}, idem="fake")
+    assert exc_info.value.violation_type == \
+        "post_dead_letter_write_violation"
+
+
+@pytest.mark.asyncio
+async def test_19_allow_writes_without_row_permits_probe_paths():
+    """Escape hatch for admin probes / migration flows that
+    legitimately write without a row (rare — must be intentional)."""
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    client = QoyodAPIClient(
+        "fake-key",
+        allow_writes_without_row=True,
+    )
+    # Should NOT raise Rev32MissingRowContextError. We patch _request
+    # to a no-op so no actual HTTP happens.
+    from unittest.mock import AsyncMock
+    client._request = AsyncMock(return_value={"ok": True})
+    result = await client.create_invoice({"invoice": {}}, idem="fake")
+    assert result == {"ok": True}
+
+
+# ═════════════════════════════════════════════════════════════════
+# 6. Acceptance fixture — order 270589798 exact reproduction
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_20_acceptance_fixture_order_270589798_impossible_under_rev32_1():
+    """Full acceptance: given the exact row state that leaked invoice
+    #192 / payment #163 on Prod (Rev32 v2), verify Rev32.1 refuses
+    every downstream write action, both via
+    `assert_final_write_permitted` AND via direct QoyodAPIClient
+    method calls."""
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    # Exact fixture from Prod RCA.
+    row_270589798 = {
+        "id":                       "row-270589798",
+        "user_id":                  "main",
+        "trace_id":                 "9d9414fc29344076896beadb70cafc0b",
+        "order_number":             "270589798",
+        # State after FAILED_PRODUCT → DEAD_LETTER (dead_lettered_at set)
+        # then rolled back to PRODUCT_RESOLVED by the leaky code path.
+        "pipeline_stage":           "PRODUCT_RESOLVED",
+        "dead_lettered_at":         "2026-07-05T02:15:00+00:00",
+        # sas_worker_trace missing — the row was built by a non-pipeline
+        # code path. row_worker_pipeline_sha=None.
+        "sas_worker_trace":         {},
+        "selective_auto_send_gate": {},
+        "canonical_payload":        {"payment_method": "tabby_installment"},
+    }
+    settings = _live_settings()
+
+    # ─ Guard #1: assert_final_write_permitted refuses every action.
+    for action in ("create_customer", "create_product",
+                   "create_invoice", "create_invoice_payment"):
+        db = _mk_db(settings=dict(settings), row=dict(row_270589798))
+        with pytest.raises(Rev32Violation) as exc_info:
+            await assert_final_write_permitted(
+                db, "row-270589798", action=action,
+                payment_method="tabby_installment", user_id="main")
+        # First violation caught is dead_lettered_at (rev32.1 A).
+        assert exc_info.value.violation_type == \
+            "post_dead_letter_write_violation", \
+            f"action={action} — expected dead_letter block first"
+        # Both switches flipped.
+        assert db._settings["production_writes_locked"] is True
+        assert db._settings["selective_live_send_enabled"] is False
+
+    # ─ Guard #2: direct QoyodAPIClient refuses too.
+    for method_name, action_hint in (
+        ("create_contact",         "create_customer"),
+        ("create_product",         "create_product"),
+        ("create_invoice",         "create_invoice"),
+        ("create_invoice_payment", "create_invoice_payment"),
+    ):
+        db = _mk_db(settings=dict(settings), row=dict(row_270589798))
+        client = QoyodAPIClient(
+            "fake-key",
+            db=db, user_id="main",
+            row_id="row-270589798",
+            trace_id="9d9414fc29344076896beadb70cafc0b",
+        )
+        method = getattr(client, method_name)
+        with pytest.raises(Rev32Violation) as exc_info:
+            await method({}, idem="fake")
+        assert exc_info.value.violation_type == \
+            "post_dead_letter_write_violation", \
+            f"direct client method={method_name} did not block"
+
+
+# ═════════════════════════════════════════════════════════════════
+# 7. Happy path still permits legitimate writes
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_21_happy_path_still_permits_writes_under_rev32_1():
+    """Regression: a valid row (correct sha, live settings, SAS gate
+    eligible, non-terminal stage, no dead_lettered_at) must still be
+    allowed to POST — rev32.1 must not over-block."""
+    import os
+    os.environ["QOYOD_API_BASE"] = "https://example.invalid"
+    from integrations.qoyod.api_client import QoyodAPIClient
+    row = _happy_row()  # PRODUCT_RESOLVED, correct sha, no dead-letter
+    db = _mk_db(settings=_live_settings(), row=row)
+    client = QoyodAPIClient(
+        "fake-key",
+        db=db, user_id="main",
+        row_id="row-happy", trace_id="trace-happy",
+    )
+    from unittest.mock import AsyncMock
+    client._request = AsyncMock(return_value={"invoice": {"id": 999}})
+    # No exception → HTTP was invoked (mocked).
+    result = await client.create_invoice(
+        {"invoice": {"payment_method": "tabby_installment"}}, idem="ok")
+    assert result == {"invoice": {"id": 999}}
+    # Settings unchanged; no kill-switch triggered.
+    assert db._settings["production_writes_locked"] is False
+    assert db._settings.get("kill_switch_triggered") in (None, False)
+
+
+# ═════════════════════════════════════════════════════════════════
+# 8. Diagnostics surface the new flags
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_22_row_diagnostics_surfaces_rev32_1_flags():
+    from integrations.qoyod.sas_build_diagnostics import row_diagnostics
+    row = _happy_row(pipeline_stage="COMPLETED")
+    row["trace_id"] = "trace-diag-32_1"
+    row["dead_lettered_at"] = "2026-07-05T02:15:00+00:00"
+    row["rev32_flags"] = {
+        "post_dead_letter_write_violation": True,
+        "post_failed_stage_downstream_violation": True,
+        "missing_current_pipeline_sha_violation": True,
+        "kill_switch_triggered": True,
+        "kill_switch_reason": "dead_lettered_at set",
+        "last_violation_type": "post_dead_letter_write_violation",
+    }
+
+    async def _find_one_by_trace(f, proj=None):
+        if f.get("trace_id") == "trace-diag-32_1":
+            return dict(row)
+        return None
+    async def _settings_find_one(f, proj=None):
+        return {"selective_auto_send_enabled": True, "dry_run_mode": False}
+
+    db = MagicMock()
+    db.integration_inbox = MagicMock()
+    db.integration_inbox.find_one = _find_one_by_trace
+    db.qoyod_settings = MagicMock()
+    db.qoyod_settings.find_one = _settings_find_one
+
+    result = await row_diagnostics(db, "trace-diag-32_1")
+    assert result["ok"] is True
+    d = result["diagnosis"]
+    assert d["post_dead_letter_write_violation"] is True
+    assert d["post_failed_stage_downstream_violation"] is True
+    assert d["missing_current_pipeline_sha_violation"] is True
+    assert d["dead_lettered_at"] == "2026-07-05T02:15:00+00:00"
+    assert d["kill_switch_triggered"] is True
+
+
+# ═════════════════════════════════════════════════════════════════
+# 9. payment_method_from_payload helper coverage
+# ═════════════════════════════════════════════════════════════════
+
+def test_23_payment_method_extractor():
+    from integrations.qoyod.rev32_hardening import payment_method_from_payload
+    assert payment_method_from_payload(
+        "create_invoice",
+        {"invoice": {"payment_method": "tabby_installment"}}) \
+        == "tabby_installment"
+    assert payment_method_from_payload(
+        "create_invoice",
+        {"invoice": {"payment_method_native": "mada"}}) == "mada"
+    assert payment_method_from_payload(
+        "create_customer", {"contact": {}}) is None
+    assert payment_method_from_payload(
+        "create_invoice_payment",
+        {"invoice_payment": {"invoice_id": 1, "amount": 100}}) is None
+    assert payment_method_from_payload("create_invoice", None) is None
+
+
+# ═════════════════════════════════════════════════════════════════
+# 10. Backward-compat — old test signatures still work
+# ═════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_24_dead_lettered_at_evidence_is_captured_in_kill_switch_audit():
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    row = _happy_row(
+        pipeline_stage="CUSTOMER_RESOLVED",
+        dead_lettered_at="2026-07-05T02:15:00+00:00")
+    db = _mk_db(settings=_live_settings(), row=row)
+    with pytest.raises(Rev32Violation):
+        await assert_final_write_permitted(
+            db, "row-happy", action="create_invoice",
+            payment_method="tabby_installment", user_id="main")
+    ev = db._captured["kill_switch_inserts"][-1]
+    assert ev["violation_type"] == "post_dead_letter_write_violation"
+    assert ev["evidence"]["dead_lettered_at"] == \
+        "2026-07-05T02:15:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_25_first_evidence_persisted_flag_on_row_matches_violation_type():
+    """rev32.1 persists the specific violation flag on the row so
+    /admin/diagnostics/row surfaces the exact cause."""
+    from integrations.qoyod.rev32_hardening import (
+        Rev32Violation, assert_final_write_permitted,
+    )
+    # Case A: dead-letter.
+    row = _happy_row(
+        pipeline_stage="CUSTOMER_RESOLVED",
+        dead_lettered_at="2026-07-05T02:15:00+00:00")
+    db = _mk_db(settings=_live_settings(), row=row)
+    with pytest.raises(Rev32Violation):
+        await assert_final_write_permitted(
+            db, "row-happy", action="create_invoice",
+            payment_method="tabby_installment", user_id="main")
+    flag_keys = set()
+    for p in db._captured["inbox_patches"]:
+        for k in p["set"]:
+            flag_keys.add(k)
+    assert any("post_dead_letter_write_violation" in k for k in flag_keys)
+
+    # Case B: FAILED_PRODUCT.
+    row2 = _happy_row(pipeline_stage="FAILED_PRODUCT")
+    row2["id"] = "row-fp"
+    db2 = _mk_db(settings=dict(_live_settings()), row=row2)
+    with pytest.raises(Rev32Violation):
+        await assert_final_write_permitted(
+            db2, "row-fp", action="create_invoice",
+            payment_method="tabby_installment", user_id="main")
+    flag_keys2 = set()
+    for p in db2._captured["inbox_patches"]:
+        for k in p["set"]:
+            flag_keys2.add(k)
+    assert any("post_failed_stage_downstream_violation" in k
+               for k in flag_keys2)
+
+
+# ═════════════════════════════════════════════════════════════════
+# 11. Rev32MissingRowContextError inherits Rev32Violation
+# ═════════════════════════════════════════════════════════════════
+
+def test_26_missing_row_context_is_rev32_violation():
+    from integrations.qoyod.rev32_hardening import (
+        Rev32MissingRowContextError, Rev32Violation,
+    )
+    assert issubclass(Rev32MissingRowContextError, Rev32Violation)
+    # So a caller catching Rev32Violation also catches the new error.

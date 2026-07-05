@@ -73,6 +73,20 @@ from integrations.qoyod.rev32_hardening import (
     is_stale_worker_row as _rev32_is_stale_worker_row,
     trigger_kill_switch as _rev32_trigger_kill_switch,
 )
+# ── Iter-2026-02.rev32.1 — Dead-letter hardening ─────────────────
+# RCA of order 270589798 / invoice #192 / payment #163 showed that
+# Rev32 v2 protected only the pipeline `_get_api_client` entry, but
+# other code paths (retry_payment_only, one_shot_reprocess, manual
+# send, approve_locked_payment, go_live) instantiate QoyodAPIClient
+# directly and were still able to POST to قيود after the row hit
+# FAILED_PRODUCT → DEAD_LETTER.  rev32.1 pushes the guard down to
+# `QoyodAPIClient.create_{customer,product,invoice,invoice_payment}`
+# and expands the blocked-stage set (see BLOCKED_FOR_WRITE_STAGES).
+# Marker text scanned by sas_build_diagnostics.REQUIRED_MARKERS:
+# "rev32.1 — Dead-letter hardening"
+from integrations.qoyod.rev32_hardening import (
+    BLOCKED_FOR_WRITE_STAGES as _REV32_1_BLOCKED_FOR_WRITE_STAGES,  # noqa: F401
+)
 
 
 def _now() -> datetime:
@@ -1174,10 +1188,24 @@ async def _get_api_client(
         key = await get_api_key(db, user_id)
         if not key:
             return None, False
+        # rev32.1 — Pass row_id/trace_id + user_id so the api_client
+        # write methods can invoke the rev32.1 pre-flight against a
+        # FRESH DB read. Without this, direct api_client callers
+        # bypass the guard.
+        trace_id_for_client = None
+        if row_id:
+            try:
+                _r = await db.integration_inbox.find_one(
+                    {"id": row_id}, {"trace_id": 1, "_id": 0})
+                trace_id_for_client = (_r or {}).get("trace_id")
+            except Exception:  # noqa: BLE001
+                trace_id_for_client = None
         return QoyodAPIClient(
             key,
             db=db, user_id=user_id,
             write_lock_enabled=False,
+            row_id=row_id,
+            trace_id=trace_id_for_client,
         ), False
     # All other paths → dry-run client. No real POST possible.
     return DryRunQoyodClient(), True
