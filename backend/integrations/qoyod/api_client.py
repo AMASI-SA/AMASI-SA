@@ -130,6 +130,18 @@ class QoyodAPIClient:
         db: Any = None,
         user_id: Optional[str] = None,
         write_lock_enabled: bool = False,
+        # ── Iter-2026-02.rev32.1 — Dead-letter hardening ───────────────
+        # `row_id` + `trace_id` let the write methods invoke the
+        # rev32.1 pre-flight guard against a FRESH read of the
+        # integration_inbox row. Every caller that legitimately writes
+        # (pipeline, retry, reprocess, manual send, approve_locked_
+        # payment, go_live, …) MUST pass these. Legacy admin probes
+        # that write without a row context must set
+        # `allow_writes_without_row=True` (audited via kill_switch
+        # collection). Everything else is fail-CLOSED.
+        row_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        allow_writes_without_row: bool = False,
     ):
         if not api_key:
             raise ValueError("Qoyod API key is required")
@@ -146,6 +158,10 @@ class QoyodAPIClient:
         self._db = db
         self._user_id = user_id
         self._write_lock_enabled = bool(write_lock_enabled)
+        # rev32.1 — Row-scoped fencing context.
+        self._row_id = row_id
+        self._trace_id = trace_id
+        self._allow_writes_without_row = bool(allow_writes_without_row)
 
     # Iter-293.4-rev5 — Public read-only view of the lock state so the
     # pipeline can honour the per-order approval bypass. Callers MUST
@@ -392,6 +408,38 @@ class QoyodAPIClient:
         return await self._request(
             "GET", "/customers", params={"page": page, "limit": limit})
 
+    async def _rev32_1_preflight(
+        self, *, action: str, payload: Any,
+    ) -> None:
+        """rev32.1 — Called at the top of every write method.
+        Delegates to `assert_client_write_permitted` which reads
+        FRESH settings + row from DB and enforces all rev32/32.1
+        conditions (BLOCKED_FOR_WRITE_STAGES, dead_lettered_at,
+        worker_pipeline_sha match, sas_gate eligible, allow-list,
+        live-write settings). ANY violation raises Rev32Violation
+        BEFORE the HTTP call is made.
+
+        Backward-compat: probes/admin paths that construct the
+        client without db/row_id but need to write MUST set
+        `allow_writes_without_row=True` at construction — otherwise
+        the write is refused.
+        """
+        # Local import to avoid a circular dependency at module load.
+        from integrations.qoyod.rev32_hardening import (
+            assert_client_write_permitted, payment_method_from_payload,
+        )
+        pm = payment_method_from_payload(action, payload)
+        await assert_client_write_permitted(
+            db=self._db,
+            row_id=self._row_id,
+            trace_id=self._trace_id,
+            user_id=self._user_id or "main",
+            action=action,
+            payment_method=pm,
+            allow_writes_without_row=self._allow_writes_without_row,
+            client_repr=repr(self),
+        )
+
     async def create_contact(self, payload: dict, *, idem: str) -> Any:
         """POST /customers — creates a customer record in Qoyod.
 
@@ -402,18 +450,26 @@ class QoyodAPIClient:
         We standardise on `/customers` for safety + consistency with
         `list_contacts`. The Python method name is kept to preserve
         call sites — the resource is logically the same entity."""
+        await self._rev32_1_preflight(action="create_customer", payload=payload)
         return await self._request(
             "POST", "/customers", json_body=payload, idempotency_key=idem)
 
     async def create_product(self, payload: dict, *, idem: str) -> Any:
+        await self._rev32_1_preflight(action="create_product", payload=payload)
         return await self._request(
             "POST", "/products", json_body=payload, idempotency_key=idem)
 
     async def create_invoice(self, payload: dict, *, idem: str) -> Any:
+        await self._rev32_1_preflight(action="create_invoice", payload=payload)
         return await self._request(
             "POST", "/invoices", json_body=payload, idempotency_key=idem)
 
     async def create_receipt(self, payload: dict, *, idem: str) -> Any:
+        # /receipts is legacy — not part of rev32/32.1 guarded actions
+        # (create_invoice_payment supersedes it). Left unguarded because
+        # GUARDED_WRITE_ACTIONS does not include it; if a future rev
+        # decides to fence receipts too, add it to
+        # rev32_hardening.GUARDED_WRITE_ACTIONS and here.
         return await self._request(
             "POST", "/receipts", json_body=payload, idempotency_key=idem)
 
@@ -435,6 +491,8 @@ class QoyodAPIClient:
                 "description":  "<optional>"
             }}
         """
+        await self._rev32_1_preflight(
+            action="create_invoice_payment", payload=payload)
         return await self._request(
             "POST", "/invoice_payments",
             json_body=payload, idempotency_key=idem)

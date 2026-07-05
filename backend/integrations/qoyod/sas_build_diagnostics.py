@@ -123,6 +123,16 @@ REQUIRED_MARKERS: dict[str, str] = {
     # MUST NOT be re-enabled while this marker is absent.
     "rev32_fail_closed_hardening":
         "rev32 — Fail-closed hardening",
+    # rev32.1 — Dead-letter hardening (order 270589798 RCA).
+    # If absent, the deploy is missing (a) BLOCKED_FOR_WRITE_STAGES
+    # (FAILED_* stages now block downstream writes), (b) fail-closed
+    # missing-sha check in assert_final_write_permitted, (c)
+    # dead_lettered_at signal (independent of pipeline_stage), (d)
+    # api_client-level write guard so direct QoyodAPIClient callers
+    # (retry/reprocess/manual/go_live/…) are fenced too. Live Canary
+    # MUST NOT be re-enabled while this marker is absent.
+    "rev32_1_dead_letter_hardening":
+        "rev32.1 — Dead-letter hardening",
 }
 
 
@@ -310,10 +320,11 @@ async def row_diagnostics(db, trace_id: str) -> dict:
         "payment_stage_expected": 1,
         "invoice_payment_required_for_method": 1,
         "posting_mode": 1,
-        # rev32 — Fail-closed hardening flags persisted on the row
-        # when a guard blocked a write. Surface all violation classes
-        # so `/admin/diagnostics/row` shows a definitive audit trail.
+        # rev32.1 — Dead-letter hardening flags.
         "rev32_flags": 1,
+        # rev32.1 — dead_lettered_at is checked independently of
+        # pipeline_stage by the api_client + assert_final_write_permitted.
+        "dead_lettered_at": 1,
         # Only the invoice_payment sub-key is needed for the preview
         # existence check; keep the projection tight.
         "qoyod_payloads.invoice_payment": 1,
@@ -656,6 +667,17 @@ async def row_diagnostics(db, trace_id: str) -> dict:
     rev32_kill_switch_reason = _rev32.get("kill_switch_reason")
     rev32_last_violation_type = _rev32.get("last_violation_type")
 
+    # ── rev32.1 — Dead-letter hardening diagnostic flags ─────────────
+    rev32_1_post_dead_letter_write_violation = bool(
+        _rev32.get("post_dead_letter_write_violation"))
+    rev32_1_post_failed_stage_downstream_violation = bool(
+        _rev32.get("post_failed_stage_downstream_violation"))
+    rev32_1_missing_current_pipeline_sha_violation = bool(
+        _rev32.get("missing_current_pipeline_sha_violation"))
+    rev32_1_missing_row_context_on_write_violation = bool(
+        _rev32.get("rev32_1_missing_row_context_on_write"))
+    row_dead_lettered_at = row.get("dead_lettered_at")
+
     return {
         "ok":                            True,
         "found":                         True,
@@ -719,5 +741,15 @@ async def row_diagnostics(db, trace_id: str) -> dict:
             "kill_switch_triggered":  rev32_kill_switch_triggered,
             "kill_switch_reason":     rev32_kill_switch_reason,
             "rev32_last_violation_type": rev32_last_violation_type,
+            # rev32.1 diagnostics.
+            "post_dead_letter_write_violation":
+                rev32_1_post_dead_letter_write_violation,
+            "post_failed_stage_downstream_violation":
+                rev32_1_post_failed_stage_downstream_violation,
+            "missing_current_pipeline_sha_violation":
+                rev32_1_missing_current_pipeline_sha_violation,
+            "rev32_1_missing_row_context_on_write_violation":
+                rev32_1_missing_row_context_on_write_violation,
+            "dead_lettered_at":       row_dead_lettered_at,
         },
     }

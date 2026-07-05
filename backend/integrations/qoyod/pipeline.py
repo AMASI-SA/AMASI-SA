@@ -73,6 +73,21 @@ from integrations.qoyod.rev32_hardening import (
     is_stale_worker_row as _rev32_is_stale_worker_row,
     trigger_kill_switch as _rev32_trigger_kill_switch,
 )
+# ── Iter-2026-02.rev32.1 — Dead-letter hardening ─────────────────
+# RCA of order 270589798 / invoice #192 / payment #163 showed that
+# Rev32 v2 protected only the pipeline `_get_api_client` entry, but
+# other code paths (retry_payment_only, one_shot_reprocess, manual
+# send, approve_locked_payment, go_live) instantiate QoyodAPIClient
+# directly and were still able to POST to قيود after the row hit
+# FAILED_PRODUCT → DEAD_LETTER.  rev32.1 pushes the guard down to
+# `QoyodAPIClient.create_{customer,product,invoice,invoice_payment}`
+# and expands the blocked-stage set (see BLOCKED_FOR_WRITE_STAGES).
+# Marker text scanned by sas_build_diagnostics.REQUIRED_MARKERS:
+# "rev32.1 — Dead-letter hardening"
+from integrations.qoyod.rev32_hardening import (
+    BLOCKED_FOR_WRITE_STAGES as _REV32_1_BLOCKED_FOR_WRITE_STAGES,  # noqa: F401
+    stamp_dead_letter_evidence as _stamp_dead_letter_evidence,
+)
 
 
 def _now() -> datetime:
@@ -435,6 +450,14 @@ async def _dead_letter(
 
     Matches `webhook._dead_letter` so the operator sees identical
     semantics whether the failure happened in Day 3 or Day 4.
+
+    Iter-2026-02.rev32.1 — MUST persist `dead_lettered_at` on the row
+    at the DEAD_LETTER transition (via `_stamp_dead_letter_evidence`).
+    This timestamp is the independent signal rev32.1 uses to refuse
+    writes even if state_machine later rolls the stage back (e.g. a
+    retry path resumes at CUSTOMER_RESOLVED but leaves
+    `dead_lettered_at` set). Without this write, the whole rev32.1
+    (A) dead_letter guard is inert.
     """
     p1 = transition(from_stage=from_stage, to_stage=fail_stage,
                     actor="worker", error=error)
@@ -444,8 +467,22 @@ async def _dead_letter(
                     actor="worker",
                     note="auto-routed: no retry — manual review required",
                     existing_started_at=started_at)
+    _stamp_dead_letter_evidence(p2, fail_stage=fail_stage, error=error)
     await _apply(db, row_id, p2)
     return "DEAD_LETTER"
+
+
+def _stamp_dead_letter_evidence_local(
+    patch: dict, *, fail_stage: str, error: Optional[dict] = None,
+) -> dict:
+    """DEPRECATED shim — retained for import-graph stability during
+    the rev32.1 rollout. Prefer the module-level
+    `stamp_dead_letter_evidence` from rev32_hardening (imported as
+    `_stamp_dead_letter_evidence`). See rev32_hardening for the
+    canonical docstring.
+    """
+    return _stamp_dead_letter_evidence(
+        patch, fail_stage=fail_stage, error=error)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -724,6 +761,10 @@ async def process_normalized_row(
             actor="worker",
             note="totals mismatch is upstream — no auto-retry",
         )
+        # rev32.1 — stamp dead-letter evidence trio.
+        _stamp_dead_letter_evidence(
+            dead_patch, fail_stage="FAILED_VALIDATION",
+            error={"code": totals.code, "message": totals.message})
         await _apply(db, row["id"], dead_patch)
         return {
             "row_id":   row["id"],
@@ -824,6 +865,10 @@ async def process_normalized_row(
                 "rev29c fail-closed: no gate decision to persist; "
                 "refusing to advance past NORMALIZED."),
         }
+        # rev32.1 — stamp dead-letter evidence trio.
+        _stamp_dead_letter_evidence(
+            dl_patch, fail_stage="NORMALIZED",
+            error=dl_patch["$set"]["pipeline_error"])
         try:
             await _apply_atomic(
                 db, row["id"], dl_patch,
@@ -1174,10 +1219,24 @@ async def _get_api_client(
         key = await get_api_key(db, user_id)
         if not key:
             return None, False
+        # rev32.1 — Pass row_id/trace_id + user_id so the api_client
+        # write methods can invoke the rev32.1 pre-flight against a
+        # FRESH DB read. Without this, direct api_client callers
+        # bypass the guard.
+        trace_id_for_client = None
+        if row_id:
+            try:
+                _r = await db.integration_inbox.find_one(
+                    {"id": row_id}, {"trace_id": 1, "_id": 0})
+                trace_id_for_client = (_r or {}).get("trace_id")
+            except Exception:  # noqa: BLE001
+                trace_id_for_client = None
         return QoyodAPIClient(
             key,
             db=db, user_id=user_id,
             write_lock_enabled=False,
+            row_id=row_id,
+            trace_id=trace_id_for_client,
         ), False
     # All other paths → dry-run client. No real POST possible.
     return DryRunQoyodClient(), True
