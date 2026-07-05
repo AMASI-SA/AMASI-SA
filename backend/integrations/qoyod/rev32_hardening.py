@@ -351,6 +351,14 @@ async def assert_final_write_permitted(
          "trace_id":                  1,
          "selective_auto_send_gate":  1,
          "sas_worker_trace":          1,
+         # rev33 — full stage_history so we can veto any row that
+         # was EVER marked SKIPPED. SKIPPED is absolute-terminal;
+         # even if a caller successfully reset the row to another
+         # stage (which rev33 also blocks upstream in
+         # one_shot_reprocess), the historical SKIPPED transition
+         # is proof that the SAS gate rejected the row and MUST
+         # forever prevent live writes.
+         "stage_history":             1,
          # rev32.1 — dead_lettered_at is a separate signal from
          # pipeline_stage. Even if state_machine rolls stage back
          # (e.g., FAILED_PRODUCT → CUSTOMER_RESOLVED via retry), the
@@ -405,6 +413,78 @@ async def assert_final_write_permitted(
         "current_pipeline_sha":    current_sha,
         "checked_at":              _now_iso(),
     }
+
+    # ── rev33 (X): SKIPPED in stage_history is a hard veto ──────
+    # RCA of leaks 269747616 (credit_card → invoice #193) and
+    # 270054904 (tamara_installment → invoice #194): a row that
+    # was marked SKIPPED by the SAS gate was later resurrected and
+    # driven through to a live write. rev33 makes SKIPPED absolute-
+    # terminal: even if the row's current pipeline_stage was reset
+    # to something else, the historical SKIPPED transition proves
+    # the SAS gate rejected the row and MUST forever prevent any
+    # Qoyod write. This is defense-in-depth on top of the
+    # `pipeline_stage in BLOCKED_FOR_WRITE_STAGES` check (which
+    # only looks at the CURRENT stage).
+    stage_history = row.get("stage_history") or []
+    if isinstance(stage_history, list):
+        for _entry in stage_history:
+            _to = None
+            if isinstance(_entry, dict):
+                _to = _entry.get("to_stage") or _entry.get("to")
+            if _to == "SKIPPED":
+                await _persist_violation_flag(
+                    db, row_id,
+                    flag_key="post_skipped_history_write_violation",
+                    evidence=evidence_common,
+                )
+                await trigger_kill_switch(
+                    db, user_id=user_id,
+                    reason=(f"Row {row_id!r} has SKIPPED in stage_history; "
+                            f"attempted {action!r} — "
+                            "post_skipped_history_write_violation (rev33)"),
+                    violation_type="post_skipped_history_write_violation",
+                    evidence=evidence_common,
+                )
+                raise Rev32Violation(
+                    row_id=row_id, action=action,
+                    violation_type="post_skipped_history_write_violation",
+                    reason=("row was marked SKIPPED at least once in "
+                            "stage_history — rev33 makes SKIPPED "
+                            "absolute-terminal; no writes permitted"),
+                    evidence=evidence_common)
+
+    # ── rev33 (Y): Canary scope invariant ───────────────────────
+    # When `selective_live_send_enabled=True`, the operator is in
+    # a Live-Canary window. rev33 requires the allowlist to be
+    # EXACTLY ["tabby_installment"] at write-time — not just at
+    # enable-time. This closes the drift window where a caller
+    # could widen the allowlist AFTER canary enable (via
+    # POST /admin/expand-selective-auto-send or direct MongoDB
+    # update) and slip a non-Tabby write through.
+    if bool(settings.get("selective_live_send_enabled", False)):
+        if list(allow_list) != ["tabby_installment"]:
+            await _persist_violation_flag(
+                db, row_id,
+                flag_key="canary_scope_drift_violation",
+                evidence=evidence_common,
+            )
+            await trigger_kill_switch(
+                db, user_id=user_id,
+                reason=(f"Live Canary is ACTIVE but allowlist="
+                        f"{list(allow_list)!r} != ['tabby_installment']; "
+                        f"attempted {action!r} — canary_scope_drift_violation "
+                        "(rev33)"),
+                violation_type="canary_scope_drift_violation",
+                evidence=evidence_common,
+            )
+            raise Rev32Violation(
+                row_id=row_id, action=action,
+                violation_type="canary_scope_drift_violation",
+                reason=(f"Live Canary requires allowlist "
+                        f"== ['tabby_installment'] at write time; "
+                        f"found {list(allow_list)!r} — write forbidden "
+                        "(rev33)"),
+                evidence=evidence_common)
 
     # ── rev32.1 (A): dead_lettered_at signal ─────────────────────
     # Independent of pipeline_stage. Once a row was DEAD_LETTERed,

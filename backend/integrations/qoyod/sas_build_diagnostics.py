@@ -133,6 +133,23 @@ REQUIRED_MARKERS: dict[str, str] = {
     # MUST NOT be re-enabled while this marker is absent.
     "rev32_1_dead_letter_hardening":
         "rev32.1 — Dead-letter hardening",
+    # rev33 — Canary Scope Lock + SKIPPED Terminality (P0 for the
+    # 2026-07-05 Tabby-only canary scope leak: orders 269747616 →
+    # invoice #193 and 270054904 → invoice #194 were live-written
+    # despite payment_method ∈ {credit_card, tamara_installment}
+    # being OUTSIDE the ["tabby_installment"] allowlist). If absent,
+    # the deploy is missing (a) `post_skipped_history_write_violation`
+    # (any row with SKIPPED in stage_history is refused), (b)
+    # `canary_scope_drift_violation` (when
+    # selective_live_send_enabled=True the allowlist must equal
+    # exactly ["tabby_installment"] at write time), (c) pipeline-
+    # level `_live_write_permitted` allowlist mirror, (d)
+    # api_client-argument bypass denial in
+    # `process_customer_resolved_row`, (e) SKIPPED removed from
+    # `one_shot_reprocess._reset_row_to_stage` escape hatch. Live
+    # Canary MUST NOT be re-enabled while this marker is absent.
+    "rev33_canary_scope_lock":
+        "rev33 — Canary Scope Lock + SKIPPED Terminality",
 }
 
 
