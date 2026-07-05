@@ -204,16 +204,22 @@ async def trigger_kill_switch(
 # (2) Terminal-stage hard stop
 # ─────────────────────────────────────────────────────────────────
 async def assert_not_at_terminal_stage(
-    db, row_id: str, *, expected_stage: str,
+    db, row_id: str, *,
+    expected_stage: str,
+    user_id: str = "main",
 ) -> None:
     """FRESH read of `pipeline_stage` from the DB. If it does not
     match `expected_stage` AND it IS in TERMINAL_STAGES, raise
-    Rev32Violation. Prevents a stale-worker snapshot from continuing
+    Rev32Violation AND fire the auto kill-switch + persist rev32
+    diagnostic flags. Prevents a stale-worker snapshot from continuing
     past SKIPPED / DEAD_LETTER / etc.
 
     Non-terminal mismatch is NOT raised here — that's the domain of
     `_apply_atomic` CAS. This guard only cares about the specific
     stale-worker-past-terminal class of failure the issue documents.
+
+    ChatGPT review blocker (Rev32 v2): terminal hard stop MUST fire
+    kill-switch + rev32_flags. Silent abort was insufficient.
     """
     if not row_id:
         return
@@ -227,6 +233,29 @@ async def assert_not_at_terminal_stage(
     if current == expected_stage:
         return
     if current in TERMINAL_STAGES:
+        evidence = {
+            "row_id":            row_id,
+            "expected_stage":    expected_stage,
+            "actual_stage":      current,
+            "trace_id":          doc.get("trace_id"),
+            "detected_by":       "assert_not_at_terminal_stage",
+            "checked_at":        _now_iso(),
+        }
+        # Persist row-level violation flags first (best-effort).
+        await _persist_violation_flag(
+            db, row_id,
+            flag_key="post_terminal_stage_downstream_violation",
+            evidence=evidence,
+        )
+        # Auto kill-switch: flip settings + audit trail.
+        await trigger_kill_switch(
+            db, user_id=user_id,
+            reason=(f"Row {row_id!r} already at terminal "
+                    f"{current!r}; downstream transition from "
+                    f"{expected_stage!r} refused (rev32)."),
+            violation_type="post_terminal_stage_downstream_violation",
+            evidence=evidence,
+        )
         raise Rev32Violation(
             row_id=row_id,
             action="downstream_transition",
@@ -235,12 +264,7 @@ async def assert_not_at_terminal_stage(
                 f"Row already at terminal stage {current!r}; "
                 f"downstream transition from {expected_stage!r} is "
                 "forbidden (rev32)."),
-            evidence={
-                "expected_stage":   expected_stage,
-                "actual_stage":     current,
-                "trace_id":         doc.get("trace_id"),
-                "checked_at":       _now_iso(),
-            },
+            evidence=evidence,
         )
 
 
@@ -483,29 +507,96 @@ async def _persist_violation_flag(
             row_id, flag_key, e)
 
 
-async def is_stale_worker_row(db, row_id: str) -> bool:
+async def is_stale_worker_row(
+    db, row_id: str, *,
+    live_context: bool = True,
+) -> tuple[bool, Optional[str], Optional[str]]:
     """Cheap check used by pipeline `_get_api_client` to force
-    DryRun when the row was built by a stale worker. Returns True
-    ONLY when a definitive mismatch is detected — never on missing
-    data (fail-safe: uncertain rows are permitted so the FRESH pipe
-    can process them normally)."""
+    DryRun when the row was built by a stale worker.
+
+    Returns (is_stale, row_sha, current_sha).
+
+    ChatGPT review blocker (Rev32 v2): missing worker sha in LIVE
+    context MUST be treated as stale (fail-CLOSED). Previously we
+    returned False on missing sha which allowed unmarked rows to
+    proceed to live POST — that's exactly how the Prod incident
+    happened (row had no sas_worker_trace but reached live).
+
+    Semantics:
+      • Both shas present + mismatch  → stale=True.
+      • row_sha missing in live_context=True → stale=True (fail-closed).
+      • row_sha == current_sha         → stale=False.
+      • current_sha missing            → stale=False (can't compare;
+        this is an infra bug, not a row problem).
+      • live_context=False (dry-run)   → stale=False (dry-run is
+        already safe; no point flagging).
+    """
     if not row_id:
-        return False
+        return False, None, None
     try:
         doc = await db.integration_inbox.find_one(
             {"id": row_id},
             {"sas_worker_trace.worker_pipeline_sha": 1, "_id": 0},
         )
     except Exception:  # noqa: BLE001
-        return False
+        return False, None, None
     if not doc:
-        return False
+        return False, None, None
     swt = doc.get("sas_worker_trace") or {}
     if not isinstance(swt, dict):
-        return False
+        swt = {}
     row_sha = swt.get("worker_pipeline_sha")
     from integrations.qoyod.sas_worker_trace import _compute_pipeline_sha
     current_sha = _compute_pipeline_sha()
-    if not row_sha or not current_sha:
-        return False
-    return row_sha != current_sha
+    if not current_sha:
+        # Cannot compare — infra bug, permit to avoid false positives.
+        return False, row_sha, current_sha
+    if not row_sha:
+        # Missing sha in live = BLOCKER (fail-closed). In dry-run
+        # context we permit because no real POST is possible anyway.
+        return (bool(live_context), row_sha, current_sha)
+    return (row_sha != current_sha), row_sha, current_sha
+
+
+async def flag_stale_worker_downgrade(
+    db, row_id: str, *,
+    row_sha: Optional[str],
+    current_sha: Optional[str],
+    user_id: str = "main",
+    trace_id: Optional[str] = None,
+    action_context: str = "get_api_client",
+) -> None:
+    """Called by `pipeline._get_api_client` when a stale-worker row
+    is downgraded to DryRun on the LIVE path. Fires the auto
+    kill-switch and persists rev32 diagnostic flags on the row.
+
+    ChatGPT review blocker (Rev32 v2): silent downgrade was
+    insufficient — the operator must see the incident AND the fail-
+    closed switches must flip so no other stale worker can slip
+    through until the deploy has been verified.
+    """
+    if not row_id:
+        return
+    evidence = {
+        "row_id":                  row_id,
+        "trace_id":                trace_id,
+        "action_context":          action_context,
+        "row_worker_pipeline_sha": row_sha,
+        "current_pipeline_sha":    current_sha,
+        "detected_by":             "flag_stale_worker_downgrade",
+        "sha_missing":             not bool(row_sha),
+        "checked_at":              _now_iso(),
+    }
+    await _persist_violation_flag(
+        db, row_id,
+        flag_key="stale_worker_live_write_violation",
+        evidence=evidence,
+    )
+    await trigger_kill_switch(
+        db, user_id=user_id,
+        reason=(f"Live-path row downgraded to DryRun (rev32): "
+                f"row_sha={row_sha!r} current_sha={current_sha!r} "
+                f"action_context={action_context!r}"),
+        violation_type="stale_worker_live_write_violation",
+        evidence=evidence,
+    )

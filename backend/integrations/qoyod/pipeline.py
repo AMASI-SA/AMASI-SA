@@ -69,6 +69,7 @@ from integrations.qoyod.rev32_hardening import (
     TERMINAL_STAGES as _REV32_TERMINAL_STAGES,
     assert_final_write_permitted as _rev32_assert_final_write_permitted,
     assert_not_at_terminal_stage as _rev32_assert_not_at_terminal_stage,
+    flag_stale_worker_downgrade as _rev32_flag_stale_worker_downgrade,
     is_stale_worker_row as _rev32_is_stale_worker_row,
     trigger_kill_switch as _rev32_trigger_kill_switch,
 )
@@ -918,6 +919,45 @@ async def process_normalized_row(
             "detail":   str(e),
             "trace_id": trace_id,
         }
+    # ── Rev32 guard #1: before resolve_customer (create_customer path)
+    # ChatGPT review blocker (Rev32 v2): guard MUST wrap ALL four
+    # write actions (create_customer, create_product, create_invoice,
+    # create_invoice_payment). Skipped when `_pipeline_is_dry_mode` is
+    # True — same rationale as invoice/payment guards downstream.
+    if not _pipeline_is_dry_mode:
+        pm_for_guard = (canonical.get("payment_method")
+                        or canonical.get("payment_method_native"))
+        try:
+            await _rev32_assert_final_write_permitted(
+                db, row["id"],
+                action="create_customer",
+                payment_method=pm_for_guard,
+                user_id=user_id,
+            )
+        except Rev32Violation as _v:
+            logger.error(
+                "rev32 create_customer_blocked row_id=%s trace_id=%s "
+                "violation_type=%s reason=%s",
+                row.get("id"), trace_id, _v.violation_type, _v.reason)
+            await _dead_letter(
+                db, row_id=row["id"],
+                from_stage="RULES_APPLIED",
+                fail_stage="FAILED_CUSTOMER",
+                error={
+                    "code":           "rev32_guard_blocked",
+                    "violation_type": _v.violation_type,
+                    "message":        _v.reason,
+                    "evidence":       _v.evidence,
+                },
+                started_at=row.get("pipeline_started_at"))
+            return {
+                "row_id":         row["id"],
+                "outcome":        "REV32_BLOCKED",
+                "reason":         _v.violation_type,
+                "violation_type": _v.violation_type,
+                "step":           "create_customer",
+                "trace_id":       trace_id,
+            }
     res: ResolutionResult = await resolve_customer(
         db, user_id, dto.customer,
         trace_id=trace_id,
@@ -1093,18 +1133,41 @@ async def _get_api_client(
     """
     permitted, _reason = _live_write_permitted(settings)
     # rev32 — Stale worker POST block.
+    #
+    # v2 (post-ChatGPT-review): missing worker sha in live context
+    # is treated as stale (fail-CLOSED). The downgrade now fires the
+    # auto kill-switch and persists row-level rev32_flags — silent
+    # downgrade was insufficient because operators had no signal
+    # that a stale worker slipped through.
     if permitted and scoped_write_allowance and row_id:
         try:
-            if await _rev32_is_stale_worker_row(db, row_id):
-                logger.error(
-                    "rev32 stale_worker_downgrade_to_dry row_id=%s",
-                    row_id)
-                return DryRunQoyodClient(), True
+            stale, row_sha, current_sha = await _rev32_is_stale_worker_row(
+                db, row_id, live_context=True)
         except Exception as _e:  # noqa: BLE001
             # Never break the pipeline for a diagnostic read.
             logger.warning(
                 "rev32 stale_worker_check_failed row_id=%s err=%s",
                 row_id, _e)
+            stale = False
+            row_sha = None
+            current_sha = None
+        if stale:
+            logger.error(
+                "rev32 stale_worker_downgrade_to_dry row_id=%s "
+                "row_sha=%s current_sha=%s",
+                row_id, row_sha, current_sha)
+            try:
+                await _rev32_flag_stale_worker_downgrade(
+                    db, row_id,
+                    row_sha=row_sha, current_sha=current_sha,
+                    user_id=user_id,
+                    action_context="_get_api_client",
+                )
+            except Exception as _e2:  # noqa: BLE001
+                logger.error(
+                    "rev32 stale_worker_flag_persist_failed row_id=%s "
+                    "err=%s", row_id, _e2)
+            return DryRunQoyodClient(), True
     # Live-write requires BOTH permission AND an explicit scoped ask.
     # Falling into dry-run for either omission is the safe default.
     if permitted and scoped_write_allowance:
@@ -1142,7 +1205,9 @@ async def process_customer_resolved_row(
     # (SKIPPED → PRODUCT_RESOLVED → INVOICE_CREATED → COMPLETED).
     try:
         await _rev32_assert_not_at_terminal_stage(
-            db, row["id"], expected_stage="CUSTOMER_RESOLVED")
+            db, row["id"],
+            expected_stage="CUSTOMER_RESOLVED",
+            user_id=row.get("user_id") or "main")
     except Rev32Violation as _v:
         logger.error(
             "rev32 terminal_stage_hard_stop_at_customer_resolved "
@@ -1236,7 +1301,31 @@ async def process_customer_resolved_row(
             )
             patch.setdefault("$set", {})[
                 "selective_auto_send_gate"] = _sas.to_log_dict()
-            await _apply(db, row["id"], patch)
+            # ChatGPT review blocker (Rev32 v2): CUSTOMER_RESOLVED →
+            # SKIPPED MUST be CAS. Previously used non-atomic `_apply`
+            # which could stomp on a concurrent worker that already
+            # transitioned the row (e.g. sas gate PARTIAL_FAILURE).
+            # `_apply_atomic` guards from_stage=CUSTOMER_RESOLVED so
+            # any concurrent race becomes a StaleStage abort, not a
+            # silent overwrite.
+            try:
+                await _apply_atomic(
+                    db, row["id"], patch,
+                    expected_from_stage="CUSTOMER_RESOLVED")
+            except _StaleStageError as _cas_e:
+                logger.warning(
+                    "sas_skipped_cas_lost row_id=%s trace_id=%s "
+                    "reason=%s — concurrent stage change: %s",
+                    row.get("id"), trace_id, _sas.reason, _cas_e)
+                return {
+                    "row_id":   row["id"],
+                    "outcome":  "STALE_STAGE_ABORT",
+                    "reason":   "sas_skipped_cas_lost",
+                    "detail":   (f"could not transition "
+                                 f"CUSTOMER_RESOLVED→SKIPPED: "
+                                 f"{_sas.reason}"),
+                    "trace_id": trace_id,
+                }
             return {
                 "row_id":  row["id"],
                 "outcome": "SKIPPED",
@@ -1268,7 +1357,8 @@ async def process_customer_resolved_row(
     if not client_provided:
         api_client, is_dry = await _get_api_client(
             db, user_id, settings,
-            scoped_write_allowance=_sas_gate_passed)
+            scoped_write_allowance=_sas_gate_passed,
+            row_id=row.get("id"))
         if api_client is None:
             await _dead_letter(
                 db, row_id=row["id"], from_stage="CUSTOMER_RESOLVED",
@@ -1306,6 +1396,43 @@ async def process_customer_resolved_row(
             "detail":   str(e),
             "trace_id": trace_id,
         }
+    # ── Rev32 guard #2: before resolve_products (create_product path)
+    # ChatGPT review blocker (Rev32 v2): guard MUST wrap ALL four
+    # write actions. Skipped when `_pipeline_is_dry_mode` is True.
+    if not _pipeline_is_dry_mode:
+        pm_for_guard = (canonical.get("payment_method")
+                        or canonical.get("payment_method_native"))
+        try:
+            await _rev32_assert_final_write_permitted(
+                db, row["id"],
+                action="create_product",
+                payment_method=pm_for_guard,
+                user_id=user_id,
+            )
+        except Rev32Violation as _v:
+            logger.error(
+                "rev32 create_product_blocked row_id=%s trace_id=%s "
+                "violation_type=%s reason=%s",
+                row.get("id"), trace_id, _v.violation_type, _v.reason)
+            await _dead_letter(
+                db, row_id=row["id"],
+                from_stage="CUSTOMER_RESOLVED",
+                fail_stage="FAILED_PRODUCT",
+                error={
+                    "code":           "rev32_guard_blocked",
+                    "violation_type": _v.violation_type,
+                    "message":        _v.reason,
+                    "evidence":       _v.evidence,
+                },
+                started_at=started_at)
+            return {
+                "row_id":         row["id"],
+                "outcome":        "REV32_BLOCKED",
+                "reason":         _v.violation_type,
+                "violation_type": _v.violation_type,
+                "step":           "create_product",
+                "trace_id":       trace_id,
+            }
     prod_res: ProductsResolutionResult = await resolve_products(
         db, user_id, canonical.get("items") or [], settings,
         trace_id=trace_id, api_client=api_client)
