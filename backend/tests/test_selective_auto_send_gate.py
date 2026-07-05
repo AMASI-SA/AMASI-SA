@@ -418,12 +418,15 @@ async def test_get_api_client_scoped_write_allowance_when_gates_permit():
     class _DB: pass
     db = _DB()
     # ALL gates permissive — the ONLY state that allows live writes.
+    # rev33 — the Tabby-only Canary invariant requires
+    # allowlist == ["tabby_installment"] at write time.
     settings = {
         "user_id":                       "main",
         "dry_run_mode":                  False,
         "production_writes_locked":      False,
         "selective_live_send_enabled":   True,
         "selective_auto_send_enabled":   True,
+        "selective_auto_send_allowed_payment_methods": ["tabby_installment"],
     }
     with patch.object(pmod, "get_api_key",
                       AsyncMock(return_value="test-key")):

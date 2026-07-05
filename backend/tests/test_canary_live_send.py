@@ -1662,11 +1662,13 @@ class TestSkippedPartialReset:
         assert mock_pipe.call_count == 0
 
     async def test_skipped_reset_uses_two_hop_state_machine(self):
-        """When `permit_partial_invoice_created=True` and current=
-        SKIPPED, `_reset_row_to_stage` must write TWO transitions:
-        SKIPPED → RETRYING, then RETRYING → NORMALIZED."""
+        """rev33 makes SKIPPED absolutely terminal. The prior two-hop
+        canary escape hatch (SKIPPED → RETRYING → NORMALIZED) is
+        REMOVED. Any call to `_reset_row_to_stage` with a SKIPPED
+        current stage now raises `OneShotRefused("skipped_is_
+        terminal_rev33")` before any DB write."""
         from integrations.qoyod.one_shot_reprocess import (
-            _reset_row_to_stage,
+            _reset_row_to_stage, OneShotRefused,
         )
         writes: list[dict] = []
 
@@ -1680,15 +1682,14 @@ class TestSkippedPartialReset:
 
         row = {"id": "row-skp", "pipeline_stage": "SKIPPED",
                "qoyod_invoice_id": None}
-        await _reset_row_to_stage(
-            _DB(), row, resume_stage="NORMALIZED",
-            actor="canary:test",
-            permit_partial_invoice_created=True)
-        assert len(writes) == 2
-        assert writes[0]["patch"]["$set"]["pipeline_stage"] == \
-            "RETRYING"
-        assert writes[1]["patch"]["$set"]["pipeline_stage"] == \
-            "NORMALIZED"
+        with pytest.raises(OneShotRefused) as exc:
+            await _reset_row_to_stage(
+                _DB(), row, resume_stage="NORMALIZED",
+                actor="canary:test",
+                permit_partial_invoice_created=True)
+        assert exc.value.code == "skipped_is_terminal_rev33"
+        # rev33 invariant: NO db writes on refusal.
+        assert writes == []
 
     async def test_skipped_reset_refuses_without_flag(self):
         """Without the canary flag, SKIPPED still refuses — the
@@ -1711,7 +1712,8 @@ class TestSkippedPartialReset:
                 actor="operator",
                 permit_partial_invoice_created=False)
         assert exc.value.code in {"unsupported_current_stage",
-                                  "invalid_transition_to_resume"}
+                                  "invalid_transition_to_resume",
+                                  "skipped_is_terminal_rev33"}
 
     async def test_skipped_settings_untouched_on_refuse(self):
         row = _canary_row()
@@ -2171,10 +2173,13 @@ class TestE2EPartialSkippedResetTwoHopWireLevel:
 
     async def test_direct_two_hop_writes_SKIPPED_RETRYING_NORMALIZED(
             self):
-        """Test `_reset_row_to_stage` directly with SKIPPED + flag
-        True → writes SKIPPED→RETRYING, then RETRYING→NORMALIZED."""
+        """rev33 — SKIPPED is absolutely terminal. The historic
+        SKIPPED→RETRYING→NORMALIZED two-hop path is removed. Any
+        direct call to `_reset_row_to_stage` on a SKIPPED row raises
+        `OneShotRefused("skipped_is_terminal_rev33")` before any
+        state-machine transition is written."""
         from integrations.qoyod.one_shot_reprocess import (
-            _reset_row_to_stage,
+            _reset_row_to_stage, OneShotRefused,
         )
         writes: list[dict] = []
 
@@ -2188,16 +2193,14 @@ class TestE2EPartialSkippedResetTwoHopWireLevel:
 
         row = {"id": "row-2hop-skp", "pipeline_stage": "SKIPPED",
                "qoyod_invoice_id": None}
-        await _reset_row_to_stage(
-            _DB(), row, resume_stage="NORMALIZED",
-            actor="canary:test",
-            permit_partial_invoice_created=True)
-        stages = [
-            (w["patch"].get("$set") or {}).get("pipeline_stage")
-            for w in writes]
-        assert stages == ["RETRYING", "NORMALIZED"], (
-            f"Expected [RETRYING, NORMALIZED], got {stages}. "
-            f"This proves the fix: reset uses the two-hop path.")
+        with pytest.raises(OneShotRefused) as exc:
+            await _reset_row_to_stage(
+                _DB(), row, resume_stage="NORMALIZED",
+                actor="canary:test",
+                permit_partial_invoice_created=True)
+        assert exc.value.code == "skipped_is_terminal_rev33"
+        assert writes == [], (
+            "rev33 invariant: NO DB writes on SKIPPED reset refusal.")
 
     async def test_pipeline_error_response_carries_reset_path(self):
         """When `_reset_row_to_stage` refuses transition, canary's
