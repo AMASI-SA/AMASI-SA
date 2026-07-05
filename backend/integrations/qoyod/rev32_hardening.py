@@ -81,6 +81,48 @@ TERMINAL_STAGES: frozenset[str] = frozenset({
 })
 
 
+# ── Iter-2026-02.rev32.1 — Dead-letter hardening ─────────────────
+# BLOCKED_FOR_WRITE_STAGES = TERMINAL_STAGES ∪ FAILED_* stages.
+# A row at any of these stages MUST NOT accept a new Qoyod write
+# (create_customer / create_product / create_invoice /
+# create_invoice_payment) — even from a legitimate retry path.
+#
+# Rationale (RCA of order 270589798, invoice #192, payment #163):
+# The row transitioned CUSTOMER_RESOLVED → FAILED_PRODUCT →
+# DEAD_LETTER; then a SEPARATE code path (retry/reprocess/manual
+# send) instantiated `QoyodAPIClient` directly and ran
+# PRODUCT_RESOLVED → INVOICE_CREATED → INVOICE_PAYMENT_CREATED →
+# COMPLETED, bypassing Rev32 v2 which only guarded the pipeline
+# `_get_api_client` entry point. rev32.1 pushes the guard down to
+# the api_client write methods so ANY code path is fenced.
+#
+# Note: FAILED_* stages are NOT truly terminal in state_machine.py
+# (they can resume via FAILURE_TO_RESUME). But for WRITE purposes,
+# they are hard-blocked — the state_machine's RETRY path re-enters
+# the pipeline which builds a fresh row-context. Any code that
+# tries to POST while the current stage is FAILED_* is either a
+# stale worker or a legacy path that must be revoked.
+BLOCKED_FOR_WRITE_STAGES: frozenset[str] = frozenset({
+    # Original terminal set.
+    "SKIPPED",
+    "COMPLETED",
+    "DEAD_LETTER",
+    "PARTIAL_FAILURE",
+    "COMPLETED_WITH_ROUNDING_WARNING",
+    "COMPLETED_INVOICE_ONLY",
+    # FAILED_* stages — no downstream write until state_machine
+    # resumes them explicitly.
+    "FAILED_VALIDATION",
+    "FAILED_NORMALIZATION",
+    "FAILED_ENRICHMENT",
+    "FAILED_CUSTOMER",
+    "FAILED_PRODUCT",
+    "FAILED_INVOICE",
+    "FAILED_RECEIPT",
+    "PAYMENT_LINK_FAILED",   # canonical name in state_machine.py
+})
+
+
 # ── Write actions guarded by `assert_final_write_permitted` ──────
 GUARDED_WRITE_ACTIONS: frozenset[str] = frozenset({
     "create_customer",
@@ -309,6 +351,13 @@ async def assert_final_write_permitted(
          "trace_id":                  1,
          "selective_auto_send_gate":  1,
          "sas_worker_trace":          1,
+         # rev32.1 — dead_lettered_at is a separate signal from
+         # pipeline_stage. Even if state_machine rolls stage back
+         # (e.g., FAILED_PRODUCT → CUSTOMER_RESOLVED via retry), the
+         # `dead_lettered_at` timestamp is only set when the row was
+         # DEAD_LETTERed; once set, it MUST NOT be cleared. Any
+         # subsequent write attempt is a rev32.1 violation.
+         "dead_lettered_at":          1,
          "canonical_payload.payment_method":        1,
          "canonical_payload.payment_method_native": 1,
          "_id":                       0},
@@ -319,6 +368,7 @@ async def assert_final_write_permitted(
         or (row.get("canonical_payload") or {}).get("payment_method_native"))
     trace_id = row.get("trace_id")
     stage = row.get("pipeline_stage")
+    dead_lettered_at = row.get("dead_lettered_at")
     swt = row.get("sas_worker_trace") or {}
     row_worker_sha = (
         swt.get("worker_pipeline_sha") if isinstance(swt, dict) else None)
@@ -338,6 +388,7 @@ async def assert_final_write_permitted(
         "trace_id":                    trace_id,
         "action":                      action,
         "pipeline_stage":              stage,
+        "dead_lettered_at":            dead_lettered_at,
         "payment_method":              row_pm,
         "allow_list":                  allow_list,
         "settings_snapshot": {
@@ -355,29 +406,105 @@ async def assert_final_write_permitted(
         "checked_at":              _now_iso(),
     }
 
-    # (7) terminal-stage check first — cheap, no downstream flag flip.
-    if stage in TERMINAL_STAGES:
+    # ── rev32.1 (A): dead_lettered_at signal ─────────────────────
+    # Independent of pipeline_stage. Once a row was DEAD_LETTERed,
+    # any subsequent write is forbidden — even if state_machine
+    # rolled the stage back via a retry path.
+    if dead_lettered_at:
         await _persist_violation_flag(
             db, row_id,
-            flag_key="post_terminal_stage_downstream_violation",
+            flag_key="post_dead_letter_write_violation",
             evidence=evidence_common,
         )
         await trigger_kill_switch(
             db, user_id=user_id,
-            reason=(f"Row {row_id!r} at terminal {stage!r} attempted "
-                    f"{action!r} — post_terminal_stage_downstream_violation"),
-            violation_type="post_terminal_stage_downstream_violation",
+            reason=(f"Row {row_id!r} was DEAD_LETTERed at "
+                    f"{dead_lettered_at!r}; attempted {action!r} — "
+                    "post_dead_letter_write_violation"),
+            violation_type="post_dead_letter_write_violation",
             evidence=evidence_common,
         )
         raise Rev32Violation(
             row_id=row_id, action=action,
-            violation_type="post_terminal_stage_downstream_violation",
-            reason=(f"row at terminal stage {stage!r} — write forbidden"),
+            violation_type="post_dead_letter_write_violation",
+            reason=(f"row was DEAD_LETTERed at {dead_lettered_at!r} — "
+                    "no further writes permitted (rev32.1)"),
             evidence=evidence_common)
 
-    # (8) Stale worker check — critical: any mismatch means the row
-    # was built by pre-rev32 code and MUST NOT trigger a live POST.
-    if row_worker_sha and current_sha and row_worker_sha != current_sha:
+    # ── rev32.1 (B): blocked-for-write stage set ─────────────────
+    # Wider than TERMINAL_STAGES — includes all FAILED_* stages so
+    # a row currently at FAILED_PRODUCT cannot be re-driven to
+    # create_invoice by a stale/legacy worker.
+    if stage in BLOCKED_FOR_WRITE_STAGES:
+        # Classify: terminal → post_terminal; failed → post_failed.
+        vio = ("post_terminal_stage_downstream_violation"
+               if stage in TERMINAL_STAGES
+               else "post_failed_stage_downstream_violation")
+        await _persist_violation_flag(
+            db, row_id,
+            flag_key=vio,
+            evidence=evidence_common,
+        )
+        await trigger_kill_switch(
+            db, user_id=user_id,
+            reason=(f"Row {row_id!r} at blocked-for-write stage "
+                    f"{stage!r} attempted {action!r} — {vio}"),
+            violation_type=vio,
+            evidence=evidence_common,
+        )
+        raise Rev32Violation(
+            row_id=row_id, action=action,
+            violation_type=vio,
+            reason=(f"row at blocked-for-write stage {stage!r} — "
+                    "write forbidden (rev32.1)"),
+            evidence=evidence_common)
+
+    # ── rev32.1 (C): worker sha checks — fail-CLOSED ─────────────
+    # v1 permitted missing sha (fail-open). v2 fixed
+    # `is_stale_worker_row` but forgot to fix the inline check here.
+    # rev32.1 unifies: missing OR mismatched OR missing current →
+    # blocker.
+    if not current_sha:
+        await _persist_violation_flag(
+            db, row_id,
+            flag_key="missing_current_pipeline_sha_violation",
+            evidence=evidence_common,
+        )
+        await trigger_kill_switch(
+            db, user_id=user_id,
+            reason=(f"current_pipeline_sha unavailable during {action!r} "
+                    f"— missing_current_pipeline_sha_violation"),
+            violation_type="missing_current_pipeline_sha_violation",
+            evidence=evidence_common,
+        )
+        raise Rev32Violation(
+            row_id=row_id, action=action,
+            violation_type="missing_current_pipeline_sha_violation",
+            reason=("cannot compute current_pipeline_sha — infra bug; "
+                    "fail-closed to prevent unverified writes"),
+            evidence=evidence_common)
+    if not row_worker_sha:
+        await _persist_violation_flag(
+            db, row_id,
+            flag_key="stale_worker_live_write_violation",
+            evidence=evidence_common,
+        )
+        await trigger_kill_switch(
+            db, user_id=user_id,
+            reason=(f"row_worker_pipeline_sha missing during {action!r} "
+                    "— stale_worker_live_write_violation (rev32.1 "
+                    "fail-closed on missing sha)"),
+            violation_type="stale_worker_live_write_violation",
+            evidence=evidence_common,
+        )
+        raise Rev32Violation(
+            row_id=row_id, action=action,
+            violation_type="stale_worker_live_write_violation",
+            reason=("row_worker_pipeline_sha missing — row was built "
+                    "by a stale/legacy code path with no sas_worker_"
+                    "trace; live write forbidden (rev32.1)"),
+            evidence=evidence_common)
+    if row_worker_sha != current_sha:
         await _persist_violation_flag(
             db, row_id,
             flag_key="stale_worker_live_write_violation",
@@ -600,3 +727,121 @@ async def flag_stale_worker_downgrade(
         violation_type="stale_worker_live_write_violation",
         evidence=evidence,
     )
+
+
+# ─────────────────────────────────────────────────────────────────
+# rev32.1 — api_client-layer write guard
+# ─────────────────────────────────────────────────────────────────
+# Called from inside `QoyodAPIClient.create_customer/product/invoice/
+# invoice_payment`. Ensures that ANY code path — pipeline, retry,
+# one_shot_reprocess, manual send, approve_locked_payment, go_live,
+# etc. — is fenced by rev32.1 before hitting Qoyod HTTP.
+#
+# Two contract shapes:
+#   • With full row context (db + row_id): delegate to
+#     `assert_final_write_permitted` (single source of truth).
+#   • Without row context AND `allow_writes_without_row=True`
+#     (probes / migration / cleanup): permit but LOG loudly for
+#     later audit.
+#   • Without row context AND allow flag False: FAIL-CLOSED with a
+#     dedicated `rev32_1_missing_row_context_on_write` violation.
+class Rev32MissingRowContextError(Rev32Violation):
+    """Raised by `assert_client_write_permitted` when a QoyodAPIClient
+    write method is called with neither row context nor an explicit
+    escape hatch. Prevents legacy paths from silently POSTing."""
+
+
+async def assert_client_write_permitted(
+    *,
+    db=None,
+    row_id: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    user_id: str = "main",
+    action: str,
+    payment_method: Optional[str] = None,
+    allow_writes_without_row: bool = False,
+    client_repr: Optional[str] = None,
+) -> None:
+    """rev32.1 unified pre-flight for `QoyodAPIClient` write methods.
+
+    Fail-CLOSED semantics: any missing context (db, row_id) raises
+    unless `allow_writes_without_row=True` — that flag is a
+    deliberate escape hatch for admin probes (Fresh-Start Cleanup,
+    integration diagnostics) that don't have a row.
+    """
+    if action not in GUARDED_WRITE_ACTIONS:
+        return  # only guard the four write actions listed
+    if not db or not row_id:
+        if allow_writes_without_row:
+            logger.warning(
+                "rev32.1 api_client_write_without_row_context "
+                "action=%s client=%s user_id=%s — permitted by "
+                "explicit escape hatch. AUDIT trail recommended.",
+                action, client_repr, user_id)
+            return
+        # Fail-closed: no db or no row_id AND no escape hatch → refuse.
+        evidence = {
+            "action":          action,
+            "payment_method":  payment_method,
+            "client_repr":     client_repr,
+            "user_id":         user_id,
+            "db_present":      bool(db),
+            "row_id_present":  bool(row_id),
+            "trace_id":        trace_id,
+            "checked_at":      _now_iso(),
+        }
+        # Best-effort audit even without db (may fail silently).
+        if db is not None:
+            try:
+                await trigger_kill_switch(
+                    db, user_id=user_id,
+                    reason=(f"rev32.1 api_client write attempted without "
+                            f"row_id for action={action!r} client={client_repr!r}"),
+                    violation_type="rev32_1_missing_row_context_on_write",
+                    evidence=evidence,
+                )
+            except Exception as _e:  # noqa: BLE001
+                logger.error(
+                    "rev32.1 missing_row_context_kill_switch_failed "
+                    "err=%s", _e)
+        logger.error(
+            "rev32.1 REV32_MISSING_ROW_CONTEXT action=%s client=%s "
+            "user_id=%s — refusing write",
+            action, client_repr, user_id)
+        raise Rev32MissingRowContextError(
+            row_id=row_id, action=action,
+            violation_type="rev32_1_missing_row_context_on_write",
+            reason=(f"QoyodAPIClient.{action}() called without row "
+                    f"context (db+row_id) and without "
+                    "allow_writes_without_row=True — rev32.1 fail-closed"),
+            evidence=evidence)
+    # Delegate to the full 8-condition guard (rev32.1-hardened).
+    await assert_final_write_permitted(
+        db, row_id,
+        action=action, payment_method=payment_method, user_id=user_id)
+
+
+def payment_method_from_payload(action: str, payload: Any) -> Optional[str]:
+    """Best-effort extraction of payment method from a Qoyod payload.
+    Used by `QoyodAPIClient` when the caller didn't pre-compute it.
+    Only meaningful for invoice payloads; contact/product payloads
+    don't carry a payment method — return None."""
+    try:
+        if not isinstance(payload, dict):
+            return None
+        # invoice: {"invoice": {..., "payment_method": "..."}}
+        inv = payload.get("invoice")
+        if isinstance(inv, dict):
+            pm = inv.get("payment_method") or inv.get("payment_method_native")
+            if pm:
+                return pm
+        # invoice_payment: nested under {"invoice_payment": {...}}
+        inv_pay = payload.get("invoice_payment")
+        if isinstance(inv_pay, dict):
+            # Payment method is not typically on the payment payload;
+            # the caller should pre-compute from the row. Return None
+            # here so the guard uses the row-side canonical_payload.
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    return None
