@@ -349,13 +349,32 @@ async def _reset_row_to_stage(
         # NORMALIZED but the worker hasn't picked it up yet).
         return
 
+    # rev33 — SKIPPED is ABSOLUTELY TERMINAL.
+    #
+    # RCA of leaks 269747616 (credit_card → invoice #193) and
+    # 270054904 (tamara_installment → invoice #194): SKIPPED rows
+    # were resurrected via `permit_partial_invoice_created=True`
+    # and driven through PRODUCT_RESOLVED → INVOICE_CREATED live
+    # during the 2026-07-05 Tabby-only canary window. The
+    # partial-IC escape hatch is now scoped to INVOICE_CREATED
+    # ONLY. A row that a worker (or the SAS gate) marked SKIPPED
+    # CANNOT be reset back to any earlier stage — full stop.
+    if current == "SKIPPED":
+        raise OneShotRefused(
+            "skipped_is_terminal_rev33",
+            "row is in stage 'SKIPPED'; rev33 makes SKIPPED "
+            "absolutely terminal — no reprocess/reset permitted. "
+            "If a SKIPPED row legitimately needs to be re-sent, "
+            "create a new inbox row from the source webhook payload.",
+            current_stage=current)
     if current not in _REPROCESSABLE_STAGES:
         # Canary partial-invoice-created escape hatch: allow reset
-        # from INVOICE_CREATED or SKIPPED IFF the row has no real
-        # Qoyod invoice (checked upstream by the caller via
-        # `allow_reset_from_partial_invoice_created`).
+        # from INVOICE_CREATED IFF the row has no real Qoyod
+        # invoice (checked upstream by the caller via
+        # `allow_reset_from_partial_invoice_created`). SKIPPED is
+        # NO LONGER in this escape hatch — see rev33 block above.
         if not (permit_partial_invoice_created
-                and current in ("INVOICE_CREATED", "SKIPPED")):
+                and current == "INVOICE_CREATED"):
             raise OneShotRefused(
                 "unsupported_current_stage",
                 f"row is in stage {current!r}; one-shot reprocess "
@@ -368,17 +387,18 @@ async def _reset_row_to_stage(
     # are not allowed to hop into RETRYING, so we just write the
     # resume_stage directly when applicable (defensive — most live
     # callers will see DEAD_LETTER / FAILED_* and use the two-hop path).
-    # Canary partial-IC / SKIPPED exception: these must ALSO go via
+    # Canary partial-IC exception: MUST ALSO go via
     # RETRYING (state machine forbids INVOICE_CREATED → NORMALIZED
-    # and SKIPPED → NORMALIZED direct; edges to RETRYING are
-    # registered in state_machine.py, gated business-side by this
-    # flag).
+    # direct; edges to RETRYING are registered in state_machine.py,
+    # gated business-side by this flag). rev33: SKIPPED is no
+    # longer part of this escape hatch — it is absolute-terminal
+    # and rejected before this point.
     needs_retry_hop = (
         (current in FAILURE_TO_RESUME)
         or (current in ("DEAD_LETTER", "PARTIAL_FAILURE",
                         "LOCKED_AWAITING_APPROVAL"))
         or (permit_partial_invoice_created
-            and current in ("INVOICE_CREATED", "SKIPPED")))
+            and current == "INVOICE_CREATED"))
     if needs_retry_hop:
         try:
             p1 = transition(

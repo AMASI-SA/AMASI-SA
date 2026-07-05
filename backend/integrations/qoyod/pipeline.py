@@ -88,6 +88,15 @@ from integrations.qoyod.rev32_hardening import (
     BLOCKED_FOR_WRITE_STAGES as _REV32_1_BLOCKED_FOR_WRITE_STAGES,  # noqa: F401
     stamp_dead_letter_evidence as _stamp_dead_letter_evidence,
 )
+# ── Iter-2026-07.rev33 — Canary Scope Lock + SKIPPED Terminality ─
+# P0 hotfix for the 2026-07-05 Tabby-only canary scope leak (orders
+# 269747616 → invoice #193 credit_card, 270054904 → invoice #194
+# tamara_installment). Live writes MUST require BOTH global gates
+# permit AND payment_method ∈ allowlist AND (when canary window is
+# active) allowlist == ["tabby_installment"] AND no historical
+# SKIPPED transition on the row. Marker text scanned by
+# sas_build_diagnostics.REQUIRED_MARKERS:
+# "rev33 — Canary Scope Lock + SKIPPED Terminality"
 
 
 def _now() -> datetime:
@@ -1107,7 +1116,11 @@ async def process_normalized_row(
 # Batch entry point — what the `/pipeline/process-normalized` endpoint
 # calls. Strict Day-4 ceiling: stops at CUSTOMER_RESOLVED.
 # ─────────────────────────────────────────────────────────────────────
-def _live_write_permitted(settings: dict) -> tuple[bool, str]:
+def _live_write_permitted(
+    settings: dict,
+    *,
+    payment_method: Optional[str] = None,
+) -> tuple[bool, str]:
     """Iter-2026-02.rev27 — SINGLE source of truth for whether the
     pipeline may perform any REAL Qoyod POST.
 
@@ -1124,6 +1137,16 @@ def _live_write_permitted(settings: dict) -> tuple[bool, str]:
       • selective_auto_send_enabled   = True    (SAS is the ONLY
                                                  automatic writer)
 
+    rev33 — When `payment_method` is supplied (recommended), the
+    caller's payment_method MUST be present in
+    `selective_auto_send_allowed_payment_methods`. AND when
+    `selective_live_send_enabled=True` (Live Canary window), the
+    allowlist MUST equal exactly `["tabby_installment"]`. This is
+    the pipeline-level mirror of the rev33 checks in
+    `rev32_hardening.assert_final_write_permitted` — belt-and-
+    suspenders so a caller cannot bypass by providing a live
+    `api_client` argument that skips `_get_api_client`.
+
     NOTE: The row-level SAS-gate `eligible=True` is a NECESSARY
     (already enforced upstream) but NOT SUFFICIENT condition. This
     function is the LAST line of defense before a real POST.
@@ -1136,6 +1159,19 @@ def _live_write_permitted(settings: dict) -> tuple[bool, str]:
         return False, "production_writes_locked_is_true"
     if not bool(settings.get("selective_auto_send_enabled", False)):
         return False, "selective_auto_send_enabled_is_false"
+    # rev33 — payment_method allowlist check (when caller supplies pm).
+    allow_list = list(
+        settings.get("selective_auto_send_allowed_payment_methods") or [])
+    # rev33 — Canary scope invariant: allowlist must be exactly Tabby.
+    if list(allow_list) != ["tabby_installment"]:
+        return False, ("canary_scope_drift_allowlist_not_exactly_"
+                       f"tabby (got {allow_list!r})")
+    if payment_method is not None:
+        if not payment_method:
+            return False, "payment_method_unresolvable"
+        if payment_method not in allow_list:
+            return (False,
+                    f"payment_method_{payment_method!r}_not_in_allowlist")
     return True, "all_gates_permit_live_write"
 
 
@@ -1427,6 +1463,36 @@ async def process_customer_resolved_row(
                 started_at=started_at)
             return {"row_id": row["id"], "outcome": "DEAD_LETTER",
                     "reason": "credentials_missing"}
+    else:
+        # rev33 — Force re-check when the caller passes an api_client.
+        # RCA of leaks 269747616 / 270054904: callers such as
+        # `one_shot_reprocess.reprocess_one_order` construct a LIVE
+        # QoyodAPIClient and pass it in via `api_client=…`, thereby
+        # skipping the `_get_api_client()` live-write gate entirely.
+        # Even though `_rev32_1_preflight` at the api_client layer
+        # still fires, the SAS gate re-eval above may have flipped
+        # `_sas_gate_passed=True` — but the pipeline should NEVER
+        # allow a live client here unless BOTH gates permit AND the
+        # row's payment_method is on the allowlist. Any mismatch →
+        # replace the caller's client with a DryRunQoyodClient.
+        from integrations.qoyod.invoice_builder import (
+            DryRunQoyodClient as _DryRunQoyodClient_pipeline,
+        )
+        if not isinstance(api_client, _DryRunQoyodClient_pipeline):
+            _pm_for_gate = (
+                canonical.get("payment_method")
+                or canonical.get("payment_method_native"))
+            _permit_live, _permit_reason = _live_write_permitted(
+                settings, payment_method=_pm_for_gate)
+            if (not _permit_live) or (not _sas_gate_passed):
+                logger.error(
+                    "rev33 api_client_argument_bypass_denied row_id=%s "
+                    "trace_id=%s permit_live=%s sas_gate_passed=%s "
+                    "reason=%s — forcing DryRunQoyodClient",
+                    row.get("id"), trace_id, _permit_live,
+                    _sas_gate_passed, _permit_reason)
+                api_client = _DryRunQoyodClient_pipeline()
+                is_dry = True
 
     # rev29c — Canonical dry-run mode signal for wording at this
     # stage. Same shape as the NORMALIZED-stage signal. Truthy if
