@@ -7,12 +7,17 @@
  * phase it ships in.
  */
 import { Link } from "react-router-dom";
+import QoyodProducts from "./QoyodProducts";
 
 export default function IntegrationPlaceholder({
   title, subtitle, phase = "Day 4-5", icon = "🚧",
   testid = "integration-placeholder",
   related = [],
 }) {
+  if (testid === "qoyod-products-placeholder") {
+    return <QoyodProducts />;
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6 md:p-10" dir="rtl" data-testid={testid}>
       <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-10 text-center">
