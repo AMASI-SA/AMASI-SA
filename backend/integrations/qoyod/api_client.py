@@ -16,7 +16,9 @@ whether to retry the WHOLE pipeline stage vs. only the HTTP call).
 """
 from __future__ import annotations
 
+import logging
 import os
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import httpx
@@ -35,6 +37,8 @@ from integrations.qoyod.write_lock import (
 # Bump whenever the Qoyod payload contract changes — helps trace the
 # exact Mezan build that produced a payload in case of incident.
 MEZAN_VERSION = os.environ.get("MEZAN_VERSION", "1.0.0-qoyod-mvp")
+
+logger = logging.getLogger(__name__)
 
 
 class QoyodAPIError(Exception):
@@ -265,6 +269,32 @@ class QoyodAPIClient:
             body = resp.json()
         except Exception:
             body = resp.text
+
+        # ── rev35 — Live-send audit trail ────────────────────────────
+        # Persist request + response for every REAL write so the
+        # operator can review the full canary evidence (request_body,
+        # response_body, status) without relying on Qoyod's UI.
+        # Never breaks the pipeline — best-effort insert.
+        if method.upper() in WRITE_METHODS and self._db is not None:
+            try:
+                await self._db.qoyod_live_send_audit.insert_one({
+                    "user_id":        self._user_id,
+                    "row_id":         self._row_id,
+                    "trace_id":       self._trace_id,
+                    "action":         classify_action(method, path),
+                    "method":         method.upper(),
+                    "path":           path,
+                    "request_body":   json_body,
+                    "response_status": resp.status_code,
+                    "response_body":  body,
+                    "ok":             200 <= resp.status_code < 300,
+                    "idempotency_key": idempotency_key,
+                    "at":             datetime.now(timezone.utc),
+                })
+            except Exception as _audit_err:  # noqa: BLE001
+                logger.error(
+                    "rev35 live_send_audit_persist_failed path=%s "
+                    "err=%s", path, _audit_err)
 
         if not 200 <= resp.status_code < 300:
             code, message = _classify(resp.status_code, body)

@@ -349,6 +349,7 @@ async def assert_final_write_permitted(
         {"id": row_id},
         {"pipeline_stage":            1,
          "trace_id":                  1,
+         "salla_order_number":        1,
          "selective_auto_send_gate":  1,
          "sas_worker_trace":          1,
          # rev33 — full stage_history so we can veto any row that
@@ -485,6 +486,73 @@ async def assert_final_write_permitted(
                         f"found {list(allow_list)!r} — write forbidden "
                         "(rev33)"),
                 evidence=evidence_common)
+
+    # ── rev35 (Z): Canary order budget (max_orders=1) ────────────
+    # During a Live-Canary window with an ARMED budget, EVERY
+    # guarded write must belong to an order that already holds a
+    # reserved slot (reserved atomically in pipeline._get_api_client).
+    # A write for an unreserved order means some path bypassed the
+    # reservation gate → hard violation + kill switch. This covers
+    # one-shot / retry / manual writers that mint their own client.
+    #
+    # Scope note: when NO budget doc exists (operator never armed),
+    # this layer logs and defers to the pre-rev35 guard chain —
+    # the AUTO pipeline is still fail-closed because
+    # `_get_api_client` refuses to mint a live client at all when
+    # the budget is not armed (CanaryBudgetHold).
+    if bool(settings.get("selective_live_send_enabled", False)):
+        from integrations.qoyod.canary_budget import is_order_reserved
+        _budget_doc = None
+        _budget_layer_ok = True
+        try:
+            _budget_doc = await db.qoyod_canary_budget.find_one(
+                {"user_id": user_id}, {"_id": 1})
+        except Exception as _budget_infra_err:  # noqa: BLE001
+            # Infrastructure/read error (or a legacy test stub without
+            # this collection). Log LOUDLY and defer to the pre-rev35
+            # guard chain — the authoritative budget gate is layer 1
+            # in pipeline._get_api_client which already refused to
+            # mint a live client unless the reservation succeeded.
+            _budget_layer_ok = False
+            logger.error(
+                "rev35 canary_budget_layer_read_failed user_id=%s "
+                "row_id=%s action=%s err=%s — layer skipped",
+                user_id, row_id, action, _budget_infra_err)
+        if _budget_layer_ok and _budget_doc is None:
+            logger.warning(
+                "rev35 canary_window_without_armed_budget user_id=%s "
+                "row_id=%s action=%s — budget layer skipped "
+                "(pipeline layer still fail-closed)",
+                user_id, row_id, action)
+        elif _budget_layer_ok:
+            _order_no = row.get("salla_order_number")
+            _reserved = await is_order_reserved(
+                db, user_id=user_id, order_number=_order_no)
+            if not _reserved:
+                _ev = {**evidence_common,
+                       "salla_order_number": _order_no}
+                await _persist_violation_flag(
+                    db, row_id,
+                    flag_key="canary_budget_violation",
+                    evidence=_ev,
+                )
+                await trigger_kill_switch(
+                    db, user_id=user_id,
+                    reason=(f"Live Canary is ACTIVE but order "
+                            f"{_order_no!r} holds NO reserved budget "
+                            f"slot; attempted {action!r} — "
+                            "canary_budget_violation "
+                            "(rev35, max_orders=1)"),
+                    violation_type="canary_budget_violation",
+                    evidence=_ev,
+                )
+                raise Rev32Violation(
+                    row_id=row_id, action=action,
+                    violation_type="canary_budget_violation",
+                    reason=(f"order {_order_no!r} is not reserved in "
+                            "the canary budget (max_orders=1) — write "
+                            "forbidden (rev35)"),
+                    evidence=_ev)
 
     # ── rev32.1 (A): dead_lettered_at signal ─────────────────────
     # Independent of pipeline_stage. Once a row was DEAD_LETTERed,

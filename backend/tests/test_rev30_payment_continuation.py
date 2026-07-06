@@ -355,6 +355,11 @@ def test_8_upstream_invariants_intact():
         "selective_live_send_enabled": True,
         "production_writes_locked": False,
         "selective_auto_send_enabled": True,
+        # rev33 — the canary-scope invariant requires the allowlist to
+        # be EXACTLY ['tabby_installment'] whenever live send is on.
+        # (Test updated post-rev33; the old settings dict predated it.)
+        "selective_auto_send_allowed_payment_methods": [
+            "tabby_installment"],
     })
     assert ok is True
 

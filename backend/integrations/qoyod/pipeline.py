@@ -865,10 +865,26 @@ async def process_normalized_row(
     # honouring dry_run_mode so the customer resolver doesn't reach
     # Qoyod when the operator is testing.
     if api_client is None:
-        api_client, _is_dry = await _get_api_client(
-            db, user_id, settings,
-            scoped_write_allowance=_sas_gate_passed,
-            row_id=row.get("id"))
+        from integrations.qoyod.canary_budget import (
+            CanaryBudgetHold as _CanaryBudgetHold_norm,
+        )
+        try:
+            api_client, _is_dry = await _get_api_client(
+                db, user_id, settings,
+                scoped_write_allowance=_sas_gate_passed,
+                row_id=row.get("id"))
+        except _CanaryBudgetHold_norm as _hold:
+            # rev35 — budget refused this order. HOLD: no stage
+            # transition, no DRY processing, no dead-letter. The row
+            # stays at NORMALIZED and resumes when the operator
+            # re-arms the budget (or disables the canary).
+            return {
+                "row_id":         row["id"],
+                "outcome":        "CANARY_BUDGET_HOLD",
+                "reason":         _hold.reason,
+                "order_number":   _hold.order_number,
+                "trace_id":       trace_id,
+            }
         if api_client is None:
             await _dead_letter(
                 db, row_id=row["id"], from_stage="NORMALIZED",
@@ -1329,13 +1345,51 @@ async def _get_api_client(
         # FRESH DB read. Without this, direct api_client callers
         # bypass the guard.
         trace_id_for_client = None
+        order_number_for_budget = None
         if row_id:
             try:
                 _r = await db.integration_inbox.find_one(
-                    {"id": row_id}, {"trace_id": 1, "_id": 0})
+                    {"id": row_id},
+                    {"trace_id": 1, "salla_order_number": 1, "_id": 0})
                 trace_id_for_client = (_r or {}).get("trace_id")
+                order_number_for_budget = (
+                    (_r or {}).get("salla_order_number"))
             except Exception:  # noqa: BLE001
                 trace_id_for_client = None
+        # ── rev35 — Canary order budget (max_orders=1) ──────────────
+        # A live client is minted ONLY after the order atomically
+        # reserves a budget slot (idempotent: invoice + payment of the
+        # SAME order consume ONE slot). Refusal → CanaryBudgetHold so
+        # the caller HOLDS the row at its current stage: no DRY
+        # processing (would re-pollute the ledger with DRY: ids), no
+        # dead-letter (would permanently veto the row per rev32.1).
+        # Fail-closed: missing budget doc or missing order context
+        # both refuse.
+        from integrations.qoyod.canary_budget import (
+            CanaryBudgetHold, reserve_canary_budget,
+        )
+        _budget_ok, _budget_reason = await reserve_canary_budget(
+            db, user_id=user_id, order_number=order_number_for_budget)
+        if not _budget_ok:
+            logger.warning(
+                "rev35 canary_budget_hold row_id=%s order=%s reason=%s",
+                row_id, order_number_for_budget, _budget_reason)
+            if row_id:
+                try:
+                    await db.integration_inbox.update_one(
+                        {"id": row_id},
+                        {"$set": {"canary_budget_hold": {
+                            "reason":       _budget_reason,
+                            "order_number": order_number_for_budget,
+                            "at":           datetime.now(timezone.utc),
+                            "detected_by":  "_get_api_client",
+                        }}})
+                except Exception as _e3:  # noqa: BLE001
+                    logger.error(
+                        "rev35 canary_budget_hold_persist_failed "
+                        "row_id=%s err=%s", row_id, _e3)
+            raise CanaryBudgetHold(
+                _budget_reason, order_number_for_budget)
         return QoyodAPIClient(
             key,
             db=db, user_id=user_id,
@@ -1519,10 +1573,25 @@ async def process_customer_resolved_row(
     client_provided = api_client is not None
     is_dry = is_dry_run_mode(settings)
     if not client_provided:
-        api_client, is_dry = await _get_api_client(
-            db, user_id, settings,
-            scoped_write_allowance=_sas_gate_passed,
-            row_id=row.get("id"))
+        from integrations.qoyod.canary_budget import (
+            CanaryBudgetHold as _CanaryBudgetHold_cr,
+        )
+        try:
+            api_client, is_dry = await _get_api_client(
+                db, user_id, settings,
+                scoped_write_allowance=_sas_gate_passed,
+                row_id=row.get("id"))
+        except _CanaryBudgetHold_cr as _hold:
+            # rev35 — budget refused this order. HOLD at
+            # CUSTOMER_RESOLVED: no transition, no DRY write, no
+            # dead-letter; resumable once the operator re-arms.
+            return {
+                "row_id":         row["id"],
+                "outcome":        "CANARY_BUDGET_HOLD",
+                "reason":         _hold.reason,
+                "order_number":   _hold.order_number,
+                "trace_id":       row.get("trace_id"),
+            }
         if api_client is None:
             await _dead_letter(
                 db, row_id=row["id"], from_stage="CUSTOMER_RESOLVED",

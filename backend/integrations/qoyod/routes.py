@@ -435,6 +435,15 @@ class DisableTabbyLiveCanaryBody(BaseModel):
     reason:        Optional[str] = Field(None, max_length=256)
 
 
+class CanaryBudgetArmBody(BaseModel):
+    """Iter-2026-02.rev35 — arm the single-order canary budget.
+    max_orders is HARD-CAPPED at 1 inside canary_budget.py."""
+    model_config = ConfigDict(extra="forbid")
+    confirm_token: str  = Field(..., min_length=1, max_length=128)
+    max_orders:    int  = Field(default=1, ge=1, le=1)
+    force_reset:   bool = Field(default=False)
+
+
 class DryPurgeExecuteBody(BaseModel):
     """Iter-2026-02.rev34 — gated DRY-purge execution. Refused unless
     confirm_token == dry_purge.CONFIRM_TOKEN."""
@@ -3055,6 +3064,95 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         except LiveCanaryRefused as exc:
             return {"ok": False, "outcome": "REFUSED",
                     "code": exc.code, "detail": exc.message}
+
+    # ── Iter-2026-02.rev35 — Canary order budget (max_orders=1) ─────
+    # The budget must be ARMED before any live send: with the canary
+    # window open, pipeline._get_api_client atomically reserves ONE
+    # slot for the first eligible order; every later order HOLDS
+    # (no DRY write, no dead-letter). rev32_hardening additionally
+    # hard-blocks any guarded write for an unreserved order.
+    @router.post("/admin/live-canary/budget/arm")
+    async def admin_canary_budget_arm(
+        body: CanaryBudgetArmBody = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.canary_budget import (
+            CanaryBudgetRefused, arm_canary_budget,
+        )
+        tenant = _tenant_id(user)
+        actor  = (getattr(user, "email", None) or "operator")
+        try:
+            return await arm_canary_budget(
+                db, user_id=tenant,
+                confirm_token=body.confirm_token,
+                max_orders=body.max_orders,
+                force_reset=body.force_reset,
+                actor=str(actor))
+        except CanaryBudgetRefused as exc:
+            return {"ok": False, "outcome": "REFUSED",
+                    "code": exc.code, "detail": str(exc)}
+
+    @router.get("/admin/live-canary/budget")
+    async def admin_canary_budget_status(user=Depends(current_user)):
+        """READ-ONLY budget state: armed?, used/remaining slots,
+        reserved order numbers."""
+        from integrations.qoyod.canary_budget import get_canary_budget
+        tenant = _tenant_id(user)
+        return await get_canary_budget(db, user_id=tenant)
+
+    @router.get("/admin/live-canary/first-run-report")
+    async def admin_canary_first_run_report(user=Depends(current_user)):
+        """READ-ONLY full evidence for every order that consumed a
+        canary budget slot: order_number, trace_id, invoice_id,
+        payment_id, request/response bodies (qoyod_live_send_audit),
+        live_send_gate result and rev32/35 flags."""
+        from integrations.qoyod.canary_budget import get_canary_budget
+        tenant = _tenant_id(user)
+        budget = await get_canary_budget(db, user_id=tenant)
+        orders = []
+        for order_no in budget.get("order_numbers") or []:
+            row = await db.integration_inbox.find_one(
+                {"user_id": tenant, "salla_order_number": order_no},
+                {"_id": 0, "id": 1, "trace_id": 1, "pipeline_stage": 1,
+                 "salla_order_number": 1, "qoyod_invoice_id": 1,
+                 "qoyod_customer_id": 1,
+                 "selective_auto_send_gate": 1, "rev32_flags": 1,
+                 "canary_budget_hold": 1,
+                 "canonical_payload.payment_method": 1,
+                 "canonical_payload.total_amount": 1},
+            ) or {}
+            ledger_inv = await db.qoyod_invoices.find_one(
+                {"user_id": tenant, "$or": [
+                    {"salla_order_number": order_no},
+                    {"salla_order_id": order_no}]},
+                {"_id": 0}) or {}
+            ledger_pay = await db.qoyod_invoice_payments.find_one(
+                {"user_id": tenant, "salla_order_number": order_no},
+                {"_id": 0}) or {}
+            audit = [a async for a in db.qoyod_live_send_audit.find(
+                {"user_id": tenant, "$or": [
+                    {"row_id": row.get("id")},
+                    {"trace_id": row.get("trace_id")}]},
+                {"_id": 0}).sort("at", 1).limit(20)]
+            orders.append({
+                "order_number":   order_no,
+                "trace_id":       row.get("trace_id"),
+                "pipeline_stage": row.get("pipeline_stage"),
+                "payment_method": (row.get("canonical_payload") or {}
+                                   ).get("payment_method"),
+                "total_amount":   (row.get("canonical_payload") or {}
+                                   ).get("total_amount"),
+                "invoice_id":     (ledger_inv.get("qoyod_invoice_id")
+                                   or row.get("qoyod_invoice_id")),
+                "invoice_ledger": ledger_inv,
+                "payment_id":     ledger_pay.get(
+                    "qoyod_invoice_payment_id"),
+                "payment_ledger": ledger_pay,
+                "live_send_gate": row.get("selective_auto_send_gate"),
+                "rev32_flags":    row.get("rev32_flags"),
+                "live_send_audit": audit,
+            })
+        return {"ok": True, "budget": budget, "orders": orders}
 
     # ── Iter-2026-02.rev18 — Force-reprocess a DRY-run row ──────────
     # Dedicated recovery endpoint for rows stuck at INVOICE_CREATED

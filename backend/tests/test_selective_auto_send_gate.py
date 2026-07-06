@@ -408,12 +408,16 @@ async def test_expand_rejects_hard_blocked_methods():
 #   (rev27) behaviour, not the removed (rev17) leak-prone behaviour.
 @pytest.mark.asyncio
 async def test_get_api_client_scoped_write_allowance_when_gates_permit():
-    """When all live-write gates are permissive AND
-    `scoped_write_allowance=True`, the returned client is a REAL
-    live client with write_lock_enabled=False. DB stays untouched."""
+    """rev35 — even with ALL live-write gates permissive AND
+    `scoped_write_allowance=True`, a live client is REFUSED when the
+    call carries no row/order context: the canary budget cannot
+    account an unknown order (fail-closed, CanaryBudgetHold).
+    The positive path (armed budget + reserved order → real live
+    client) is covered against real Mongo in
+    tests/test_canary_budget_rev35.py."""
     from unittest.mock import AsyncMock, patch
     from integrations.qoyod import pipeline as pmod
-    from integrations.qoyod.api_client import QoyodAPIClient
+    from integrations.qoyod.canary_budget import CanaryBudgetHold
 
     class _DB: pass
     db = _DB()
@@ -430,11 +434,10 @@ async def test_get_api_client_scoped_write_allowance_when_gates_permit():
     }
     with patch.object(pmod, "get_api_key",
                       AsyncMock(return_value="test-key")):
-        client_scoped, is_dry = await pmod._get_api_client(
-            db, "main", settings, scoped_write_allowance=True)
-        assert isinstance(client_scoped, QoyodAPIClient)
-        assert client_scoped.write_lock_enabled is False
-        assert is_dry is False
+        with pytest.raises(CanaryBudgetHold) as excinfo:
+            await pmod._get_api_client(
+                db, "main", settings, scoped_write_allowance=True)
+        assert excinfo.value.reason == "missing_order_number"
 
     # Settings dict UNCHANGED — no in-place mutation.
     assert settings["dry_run_mode"] is False
@@ -651,7 +654,7 @@ async def test_pipeline_grants_scoped_writes_when_gate_passes():
 
     async def _spy_get_api_client(
             db_, user_id_, settings_, *,
-            scoped_write_allowance=False):
+            scoped_write_allowance=False, row_id=None):
         captured["scoped_write_allowance"] = scoped_write_allowance
         return MagicMock(), False
 
@@ -744,7 +747,8 @@ async def test_pipeline_no_write_allowance_when_master_switch_off():
                "message": "intentional early exit"})
 
     captured: dict = {}
-    async def _spy(db_, u_, s_, *, scoped_write_allowance=False):
+    async def _spy(db_, u_, s_, *, scoped_write_allowance=False,
+                   row_id=None):
         captured["scoped_write_allowance"] = scoped_write_allowance
         return MagicMock(), False
     with patch.object(pmod, "SalesOrderDTO", return_value=dto), \

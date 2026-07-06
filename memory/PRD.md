@@ -6428,3 +6428,52 @@ Shipped:
 STATUS: awaiting user to deploy + run scrub plan on production, then
 explicit approval before scrub execute. AFTER all_pass=true →
 max_orders=1 canary task (approved earlier, still not started).
+
+---
+## 2026-02 — Rev35: Canary Order Budget max_orders=1 — CODE READY
+User cleared it after prod verify all_pass=true. Constraints honored:
+no reprocess/run-now/retry/backfill, no settings change, max ONE order,
+NOT order 270818906 before first-canary review.
+
+### Shipped
+- NEW `canary_budget.py`: qoyod_canary_budget per tenant
+  {max_orders(HARD-CAP=1), order_numbers[]}. arm (token
+  "ARM-CANARY-BUDGET", force_reset for used budgets), atomic
+  idempotent reserve (invoice+payment same order = 1 slot),
+  is_order_reserved. Fail-closed: no doc → refuse.
+- pipeline._get_api_client: reserves BEFORE minting live client;
+  refusal raises CanaryBudgetHold → both call sites HOLD the row
+  (outcome CANARY_BUDGET_HOLD, no stage change, no DRY write, no
+  dead-letter, flag canary_budget_hold persisted).
+- rev32_hardening.assert_final_write_permitted layer Z: when canary
+  window + budget ARMED, any guarded write for unreserved order →
+  canary_budget_violation + kill switch. (No budget doc → layer
+  skipped with loud log; layer 1 still fail-closed. Infra read
+  errors → skip with error log — keeps legacy fake-db tests valid.)
+- api_client._request: NEW qoyod_live_send_audit collection — every
+  REAL write persists request_body + response_body + status +
+  action/trace/row (best effort, never breaks pipeline).
+- Endpoints: POST /admin/live-canary/budget/arm (max_orders pydantic
+  le=1), GET /admin/live-canary/budget,
+  GET /admin/live-canary/first-run-report (order_number, trace_id,
+  invoice_id, payment_id, ledgers, live_send_gate, rev32_flags,
+  full request/response audit).
+- Tests: test_canary_budget_rev35.py 7/7 vs real Mongo; updated
+  stale tests (test_rev30 test_8 allowlist, selective_gate spy
+  row_id kwarg + rev35 contract test). Relevant suites: 281 passed.
+- NOTE: preview tenant "main" budget ARMED (0 used) via E2E test.
+
+### Production runbook (user executes)
+1. Deploy. 2. POST budget/arm. 3. POST live-canary/enable-tabby.
+4. ONE new Tabby order auto-sends (budget consumed; later orders
+   HOLD). 5. POST disable-tabby immediately after. 6. GET
+   first-run-report → send to agent for review.
+
+### Pending user question (asked before this task, unanswered)
+- OpenAI Chat integration: use case? model? Emergent key vs own key?
+  UI placement? (user pivoted to canary task without answering)
+
+### Known pre-existing failures (NOT rev35): legacy suites
+(test_qoyod_global_write_lock_iter293_4 rev32.1-era contract,
+test_preparation_iteration34, settlements/wallet/etc ~248 across
+full 3.4k suite — historical, unrelated modules).
