@@ -792,6 +792,75 @@ async def process_normalized_row(
                       (totals.details or {}).get("mezan_vat_diagnostics")}},
     )
 
+    # ── Iter-2026-07.rev33.2 — Canary Scope Business-Decision Skip ─
+    # RCA of order 269997994 (payment_method=mada, trace_id
+    # cf802d6f28444fea942e815bb590bf8c): under a Tabby-only Live
+    # Canary (allowlist=["tabby_installment"], selective_live_send_
+    # enabled=true), a non-allowlisted payment method was routed
+    # through the Rev32 create_customer guard and ended up at
+    # FAILED_CUSTOMER → DEAD_LETTER with a misleading
+    # `qoyod_write_locked` error on create_contact.
+    #
+    # A non-allowlisted payment method during an active canary is
+    # NOT a technical failure — it is a BUSINESS decision (out of
+    # scope for THIS canary window). Route to SKIPPED via CAS
+    # BEFORE `_get_api_client` is called and BEFORE any Qoyod HTTP
+    # write is attempted. Payload and audit evidence are preserved
+    # on the row via a `canary_scope_skip` sub-document for post-
+    # incident RCA.
+    #
+    # Guard scope: fires ONLY when Live Canary is active
+    # (`selective_live_send_enabled=true`). When canary is OFF, the
+    # pre-existing SAS-gate branch at NORMALIZED is the sole
+    # allowlist enforcer, and this check is a strict subset of that
+    # path — never fires. Positive control: tabby_installment rows
+    # remain unaffected (payment_method IS in allowlist).
+    if bool(settings.get("selective_live_send_enabled", False)):
+        pm_for_canary_check = (canonical.get("payment_method")
+                                or canonical.get("payment_method_native"))
+        _canary_permit, _canary_reason = _live_write_permitted(
+            settings, payment_method=pm_for_canary_check)
+        if (not _canary_permit
+                and "not_in_allowlist" in _canary_reason):
+            logger.info(
+                "rev33.2 canary_scope_skip row_id=%s trace_id=%s "
+                "payment_method=%r allowlist=%r",
+                row.get("id"), trace_id, pm_for_canary_check,
+                list(settings.get(
+                    "selective_auto_send_allowed_payment_methods")
+                    or []))
+            patch = transition(
+                from_stage="NORMALIZED", to_stage="SKIPPED",
+                actor="worker",
+                note=(f"rev33.2 canary_scope_skip: pm="
+                      f"{pm_for_canary_check!r} outside allowlist "
+                      "during Live Canary — no write attempted"),
+                existing_started_at=row.get("pipeline_started_at"),
+            )
+            patch.setdefault("$set", {})["canary_scope_skip"] = {
+                "reason":             _canary_reason,
+                "at":                 _now(),
+                "payment_method":     pm_for_canary_check,
+                "allowlist":          list(settings.get(
+                    "selective_auto_send_allowed_payment_methods")
+                    or []),
+                "stage_when_skipped": "NORMALIZED",
+                "detected_by":        "process_normalized_row",
+            }
+            try:
+                await _apply_atomic(
+                    db, row["id"], patch,
+                    expected_from_stage="NORMALIZED")
+            except _StaleStageError:
+                pass
+            return {
+                "row_id":         row["id"],
+                "outcome":        "SKIPPED",
+                "reason":         "canary_scope_skip_pm_not_in_allowlist",
+                "trace_id":       trace_id,
+                "payment_method": pm_for_canary_check,
+            }
+
     # If caller didn't pre-build an API client, build one now —
     # honouring dry_run_mode so the customer resolver doesn't reach
     # Qoyod when the operator is testing.
