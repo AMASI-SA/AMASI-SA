@@ -27,10 +27,13 @@ from integrations.qoyod.dry_purge import (
     ARCHIVE_COLLECTION,
     CONFIRM_TOKEN,
     RUNS_COLLECTION,
+    SCRUB_CONFIRM_TOKEN,
     DryPurgeRefused,
     build_dry_purge_plan,
+    build_payload_scrub_plan,
     build_safety_check,
     execute_dry_purge,
+    execute_payload_scrub,
     verify_dry_state,
 )
 
@@ -330,3 +333,88 @@ async def test_mixed_invoice_row_with_real_receipt_blocks(db):
     with pytest.raises(DryPurgeRefused):
         await execute_dry_purge(
             db, user_id=TENANT, confirm_token=CONFIRM_TOKEN, actor="t")
+
+# ─────────────────────────────────────────────────────────────────────
+# Iter-2026-02.rev34.2 — payload scrub (user directive: clean the 170
+# sendable rows holding stale DRY request_body snapshots — NO sending,
+# NO stage change, NO raw_payload touch)
+# ─────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_scrub_plan_counts_leaky_sendable_rows(db):
+    plan = await build_payload_scrub_plan(db, user_id=TENANT)
+    assert plan["ok"] is True
+    assert plan["count"] == 1                     # seeded inbox-row-1
+    s = plan["samples"][0]
+    assert s["salla_order_number"] == "ORD-DRY"
+    assert "invoice" in s["leaky_payload_keys"]
+    assert plan["expected_confirm_token"] == SCRUB_CONFIRM_TOKEN
+
+
+@pytest.mark.asyncio
+async def test_scrub_refuses_wrong_token_and_mutates_nothing(db):
+    with pytest.raises(DryPurgeRefused) as exc:
+        await execute_payload_scrub(
+            db, user_id=TENANT, confirm_token="WRONG", actor="t")
+    assert exc.value.code == "confirm_token_mismatch"
+    row = await db.integration_inbox.find_one(
+        {"user_id": TENANT, "id": "inbox-row-1"})
+    assert "invoice" in row["qoyod_payloads"]     # untouched
+
+
+@pytest.mark.asyncio
+async def test_scrub_cleans_payload_only_and_preserves_row(db):
+    before = await db.integration_inbox.find_one(
+        {"user_id": TENANT, "id": "inbox-row-1"})
+    summary = await execute_payload_scrub(
+        db, user_id=TENANT, confirm_token=SCRUB_CONFIRM_TOKEN,
+        actor="operator:test")
+    assert summary["scrubbed_rows"] == 1
+
+    after = await db.integration_inbox.find_one(
+        {"user_id": TENANT, "id": "inbox-row-1"})
+    # Poisoned snapshot gone…
+    assert "invoice" not in (after.get("qoyod_payloads") or {})
+    # …but the ORDER row itself is intact: same stage, same raw
+    # payload, same DRY sentinel fields (orders are never repaired
+    # here), plus a forensic marker.
+    assert after["pipeline_stage"] == before["pipeline_stage"]
+    assert after["raw_payload"] == before["raw_payload"]
+    assert after["qoyod_invoice_id"] == "DRY:invoice:dddd4444"
+    marker = after["rev34_payload_scrub"]
+    assert marker["run_id"] == summary["run_id"]
+    assert "invoice" in marker["scrubbed_keys"]
+
+    # Snapshot archived before removal.
+    arch = await db[ARCHIVE_COLLECTION].find_one({
+        "user_id": TENANT, "run_id": summary["run_id"],
+        "source_collection": "integration_inbox.qoyod_payloads"})
+    assert arch is not None
+    assert arch["doc"]["invoice"]["invoice"]["contact_id"] == \
+        "DRY:contact:cccc3333"
+    # Run summary persisted with kind=payload_scrub.
+    run = await db[RUNS_COLLECTION].find_one(
+        {"user_id": TENANT, "run_id": summary["run_id"]})
+    assert run["kind"] == "payload_scrub"
+
+
+@pytest.mark.asyncio
+async def test_full_flow_purge_then_scrub_gives_all_pass(db):
+    """The production acceptance path: purge → scrub → verify must
+    return all_pass=True WITHOUT touching pipeline_stage."""
+    await execute_dry_purge(
+        db, user_id=TENANT, confirm_token=CONFIRM_TOKEN, actor="t")
+    v_mid = await verify_dry_state(db, user_id=TENANT)
+    assert v_mid["all_pass"] is False   # snapshot leak still there
+    assert v_mid["checks"][
+        "sendable_rows_with_dry_request_body"]["count"] == 1
+
+    await execute_payload_scrub(
+        db, user_id=TENANT, confirm_token=SCRUB_CONFIRM_TOKEN, actor="t")
+    v = await verify_dry_state(db, user_id=TENANT)
+    assert v["checks"][
+        "sendable_rows_with_dry_request_body"]["count"] == 0
+    assert v["all_pass"] is True, v
+    # Row is still at its original sendable stage — nothing advanced.
+    row = await db.integration_inbox.find_one(
+        {"user_id": TENANT, "id": "inbox-row-1"})
+    assert row["pipeline_stage"] == "INVOICE_CREATED"

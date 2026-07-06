@@ -6405,3 +6405,26 @@ dry_run_mode=False (tenant main, preview DB).
   suite still green.
 - STATUS: production purge still NOT executed — awaiting user's plan
   output from https://mezansalla.com and explicit approval.
+
+### Rev34.2 — Payload Scrub (user directive after prod purge)
+Context: production execute succeeded (run_id
+b950f575760f49d38f0057d9531ad710, deleted=513 archived=513 repaired=5)
+but verify → all_pass=false: sendable_rows_with_dry_request_body=170
+(stale DRY snapshots in integration_inbox.qoyod_payloads.invoice).
+Analysis: qoyod_payloads.invoice is a WRITE-ONLY snapshot — pipeline
+rebuilds+overwrites it every run (~pipeline.py:1908); all readers are
+display/diagnostics only. Safe fix = archive + $unset the poisoned
+snapshot keys. NO send, NO stage change, NO raw_payload touch.
+Shipped:
+- dry_purge.py: build_payload_scrub_plan / execute_payload_scrub
+  (token "SCRUB-DRY-PAYLOADS", paired-meta keys removed together,
+  archive first, forensic marker rev34_payload_scrub on row, run
+  summary kind=payload_scrub in qoyod_dry_purge_runs).
+- routes.py: GET /admin/dry-purge/payload-scrub/plan,
+  POST /admin/dry-purge/payload-scrub/execute (409 on bad token).
+- Tests 13/13 (4 new: plan count, token refusal, row preserved
+  byte-level except payload keys+marker, full purge→scrub→verify
+  all_pass=true). Canary suite green. openapi 200.
+STATUS: awaiting user to deploy + run scrub plan on production, then
+explicit approval before scrub execute. AFTER all_pass=true →
+max_orders=1 canary task (approved earlier, still not started).

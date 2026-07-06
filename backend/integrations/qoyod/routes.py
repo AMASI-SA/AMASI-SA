@@ -1302,6 +1302,41 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         tenant = _tenant_id(user)
         return await verify_dry_state(db, user_id=tenant)
 
+    # ── Iter-2026-02.rev34.2 — payload scrub (plan → execute) ───────
+    # Cleans stale DRY request-body SNAPSHOTS off sendable inbox rows.
+    # Sends NOTHING to قيود, never changes pipeline_stage, never
+    # touches raw_payload or deletes an order. Snapshots are archived
+    # into qoyod_dry_purge_archive first; pipeline.py rebuilds them
+    # from the clean mappings on any future (user-approved) run.
+    @router.get("/admin/dry-purge/payload-scrub/plan")
+    async def admin_payload_scrub_plan(user=Depends(current_user)):
+        """READ-ONLY: rows whose stored qoyod_payloads.invoice still
+        leaks DRY/PREVIEW ids or product_id=None."""
+        from integrations.qoyod.dry_purge import build_payload_scrub_plan
+        tenant = _tenant_id(user)
+        return await build_payload_scrub_plan(db, user_id=tenant)
+
+    @router.post("/admin/dry-purge/payload-scrub/execute")
+    async def admin_payload_scrub_execute(
+        body: DryPurgeExecuteBody, user=Depends(current_user),
+    ):
+        """Gated scrub (confirm_token='SCRUB-DRY-PAYLOADS'): archive →
+        $unset poisoned snapshot keys inside qoyod_payloads only."""
+        from integrations.qoyod.dry_purge import (
+            DryPurgeRefused, execute_payload_scrub,
+        )
+        tenant = _tenant_id(user)
+        actor = f"operator:{getattr(user, 'email', tenant)}"
+        try:
+            return await execute_payload_scrub(
+                db, user_id=tenant,
+                confirm_token=body.confirm_token, actor=actor)
+        except DryPurgeRefused as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": exc.code, "detail": str(exc),
+                        **exc.extra})
+
     # ── Existing-Data Migration (read-only pre-flight) ──────────────
     attach_migration_routes(router, db, current_user, _tenant_id)
 

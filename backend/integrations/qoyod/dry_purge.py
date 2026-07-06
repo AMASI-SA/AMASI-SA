@@ -361,8 +361,176 @@ async def execute_dry_purge(
 
 
 # ─────────────────────────────────────────────────────────────────────
-# VERIFY — acceptance checks (read-only)
+# PAYLOAD SCRUB — Iter-2026-02.rev34.2 (user directive)
 # ─────────────────────────────────────────────────────────────────────
+# After the production purge, verify flagged sendable inbox rows whose
+# STORED request-body snapshot (`qoyod_payloads.invoice`) still holds
+# DRY:/PREVIEW: ids or product_id=None from the old dry runs.
+#
+# Those snapshots are WRITE-ONLY artefacts: pipeline.py rebuilds the
+# payload from the (now clean) mappings on every run and overwrites
+# the snapshot (see pipeline.py ~line 1908). Every reader
+# (eligible_orders, pending_classifier, monitors, one_shot audit) uses
+# them for DISPLAY only — nothing sends a stored snapshot to قيود.
+#
+# So the safe, limited fix is: archive the poisoned snapshot keys into
+# qoyod_dry_purge_archive, then $unset them from the row. The scrub:
+#   • sends NOTHING to قيود            • never changes pipeline_stage
+#   • never touches raw_payload        • never deletes the order row
+#   • never touches settings/canary
+
+SCRUB_CONFIRM_TOKEN = "SCRUB-DRY-PAYLOADS"
+
+# Snapshot keys written atomically together in pipeline.py — when a
+# leaky key is removed, its paired metadata goes with it.
+_PAIRED_META_KEYS = {
+    "invoice": ("invoice_snapshot_at", "invoice_diagnostics"),
+    "invoice_payment": ("invoice_payment_snapshot_at",
+                        "invoice_payment_fingerprint"),
+    "customer_request": ("customer_request_at",),
+    "invoice_blocked_preflight": ("invoice_blocked_at",),
+    "invoice_selective_blocked_payload": ("invoice_selective_blocked_at",),
+    "invoice_locked_payload": ("invoice_locked_at",),
+    "invoice_rev32_blocked_payload": ("invoice_rev32_blocked_at",),
+    "invoice_payment_selective_blocked_payload":
+        ("invoice_payment_selective_blocked_at",),
+    "invoice_payment_locked_payload": ("invoice_payment_locked_at",),
+    "invoice_payment_rev32_blocked_payload":
+        ("invoice_payment_rev32_blocked_at",),
+}
+
+
+def _scrub_scope_query(user_id: str) -> dict:
+    """Same scope as verify's sendable-rows check."""
+    return {
+        "user_id":        user_id,
+        "pipeline_stage": {"$nin": list(_TERMINAL_STAGES)},
+        "qoyod_payloads.invoice": {"$exists": True},
+    }
+
+
+def _leaky_payload_keys(payloads: dict) -> list[str]:
+    from integrations.qoyod.live_send_gate import _has_dry_or_preview_leak
+    return [k for k, v in (payloads or {}).items()
+            if _has_dry_or_preview_leak(v)]
+
+
+async def build_payload_scrub_plan(db, *, user_id: str) -> dict:
+    """READ-ONLY: the exact rows execute_payload_scrub would clean."""
+    count = 0
+    samples: list[dict] = []
+    async for r in db.integration_inbox.find(
+            _scrub_scope_query(user_id),
+            {"id": 1, "salla_order_number": 1, "trace_id": 1,
+             "pipeline_stage": 1, "qoyod_payloads": 1}
+    ).limit(_MAX_DOCS_PER_COLLECTION):
+        leaky = _leaky_payload_keys(r.get("qoyod_payloads") or {})
+        if "invoice" not in leaky:
+            continue
+        count += 1
+        if len(samples) < 20:
+            samples.append({
+                "salla_order_number": r.get("salla_order_number"),
+                "trace_id":           r.get("trace_id"),
+                "pipeline_stage":     r.get("pipeline_stage"),
+                "leaky_payload_keys": leaky,
+            })
+    return {
+        "ok":                     True,
+        "generated_at":           _now().isoformat(),
+        "count":                  count,
+        "samples":                samples,
+        "expected_confirm_token": SCRUB_CONFIRM_TOKEN,
+        "guarantees": [
+            "لا إرسال إلى قيود إطلاقاً",
+            "لا تغيير pipeline_stage ولا حذف أي طلب",
+            "raw_payload لا يُمسّ",
+            "كل snapshot يُؤرشف في qoyod_dry_purge_archive قبل الإزالة",
+            "الـ pipeline يعيد بناء الـ payload من الـ mappings النظيفة "
+            "عند أي معالجة مستقبلية معتمدة",
+        ],
+    }
+
+
+async def execute_payload_scrub(
+    db, *, user_id: str, confirm_token: str, actor: str = "operator",
+) -> dict:
+    if (confirm_token or "").strip() != SCRUB_CONFIRM_TOKEN:
+        raise DryPurgeRefused(
+            "confirm_token_mismatch",
+            f"Pass confirm_token='{SCRUB_CONFIRM_TOKEN}' to authorise "
+            "the payload scrub.")
+
+    run_id = uuid4().hex
+    now = _now()
+    scrubbed_rows = 0
+    scrubbed_keys_total = 0
+
+    async for r in db.integration_inbox.find(
+            _scrub_scope_query(user_id)
+    ).limit(_MAX_DOCS_PER_COLLECTION):
+        payloads = r.get("qoyod_payloads") or {}
+        leaky = _leaky_payload_keys(payloads)
+        if "invoice" not in leaky:
+            continue
+        # Leaky keys + their paired metadata (only if present).
+        to_remove: list[str] = []
+        for k in leaky:
+            to_remove.append(k)
+            for meta in _PAIRED_META_KEYS.get(k, ()):
+                if meta in payloads:
+                    to_remove.append(meta)
+        to_remove = list(dict.fromkeys(to_remove))
+
+        # 1. Archive FIRST.
+        await db[ARCHIVE_COLLECTION].insert_one({
+            "run_id":             run_id,
+            "user_id":            user_id,
+            "source_collection":  "integration_inbox.qoyod_payloads",
+            "source_object_id":   str(r.get("_id")),
+            "inbox_id":           r.get("id"),
+            "salla_order_number": r.get("salla_order_number"),
+            "trace_id":           r.get("trace_id"),
+            "pipeline_stage":     r.get("pipeline_stage"),
+            "purged_at":          now,
+            "purged_by":          actor,
+            "doc": {k: payloads[k] for k in to_remove if k in payloads},
+        })
+        # 2. $unset ONLY inside qoyod_payloads + a forensic marker.
+        #    Stage, raw_payload and every other field stay untouched.
+        await db.integration_inbox.update_one(
+            {"_id": r["_id"], "user_id": user_id},
+            {"$unset": {f"qoyod_payloads.{k}": "" for k in to_remove},
+             "$set": {"rev34_payload_scrub": {
+                 "run_id":        run_id,
+                 "scrubbed_at":   now,
+                 "scrubbed_by":   actor,
+                 "scrubbed_keys": to_remove,
+             }}})
+        scrubbed_rows += 1
+        scrubbed_keys_total += len(to_remove)
+
+    summary = {
+        "ok":                  True,
+        "kind":                "payload_scrub",
+        "run_id":              run_id,
+        "user_id":             user_id,
+        "executed_at":         now.isoformat(),
+        "executed_by":         actor,
+        "scrubbed_rows":       scrubbed_rows,
+        "scrubbed_keys_total": scrubbed_keys_total,
+        "archive_collection":  ARCHIVE_COLLECTION,
+        "note": (
+            "أُزيلت الـ snapshots الملوثة فقط من qoyod_payloads بعد "
+            "أرشفتها. لم يُرسل شيء إلى قيود، ولم تتغير أي مرحلة، ولم "
+            "يُمسّ أي raw_payload أو طلب."),
+    }
+    await db[RUNS_COLLECTION].insert_one({**summary, "executed_at": now})
+    summary.pop("_id", None)
+    return summary
+
+
+
 async def verify_dry_state(db, *, user_id: str) -> dict:
     """The four acceptance checks from the user's P0 directive:
       1. /products/dry-mappings would return count=0
