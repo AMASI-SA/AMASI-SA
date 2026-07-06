@@ -6322,3 +6322,22 @@ Regression: all 66 rev29/29b/29c/29d/30/31 tests still green
 لا Live جديد حتى المراجعة اليدوية
 لا تابي / لا مدى / لا باقي طرق الدفع
 ```
+
+---
+## 2026-02 — OpenAPI 500 Surgical Fix (openapi-fix)
+- Symptom: `/openapi.json` returned HTTP 500 → user thought live-canary
+  enable-tabby/disable-tabby endpoints were "missing". They were always
+  registered; Swagger generation was crashing.
+- Root cause: Pydantic V2 cannot resolve ForwardRef for BaseModel
+  classes defined INSIDE `make_qoyod_router` (local scope):
+  `_DismissPatch` (dismiss endpoint) and `_PaymentMethodProbeBody`
+  (payment-method-field-probe endpoint).
+- Fix (routes.py ONLY, +22/-13):
+  - `_DismissPatch` → module-scope `DismissPatchBody`; endpoint default
+    is now `Body(default_factory=DismissPatchBody)`.
+  - `_PaymentMethodProbeBody` → module-scope `PaymentMethodProbeBody`.
+  - No logic changes; live_canary.py untouched; no deploy; no settings.
+- Verified: `/openapi.json` = 200 (internal + external preview URL),
+  566 paths, enable-tabby / disable-tabby / dismiss / probe all present.
+- Note: `_RetryPaymentBody` (nested, UNUSED — endpoint uses module-level
+  `RetryPaymentOnlyBody`) left as-is per "surgical only" mandate.

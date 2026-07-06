@@ -435,6 +435,26 @@ class DisableTabbyLiveCanaryBody(BaseModel):
     reason:        Optional[str] = Field(None, max_length=256)
 
 
+class DismissPatchBody(BaseModel):
+    """Iter-290h — Optional note attached when an operator dismisses an
+    unallocated Qoyod receipt. Moved to module scope (was nested inside
+    make_qoyod_router) so Pydantic V2 can resolve the annotation while
+    generating /openapi.json."""
+    model_config = ConfigDict(extra="forbid")
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+class PaymentMethodProbeBody(BaseModel):
+    """Iter-290h.7 — Payment-method field probe (read-only). Moved to
+    module scope (was nested inside make_qoyod_router) so Pydantic V2
+    can resolve the annotation while generating /openapi.json."""
+    model_config = ConfigDict(extra="forbid")
+    empty_payment_method_invoice_id:   str = Field(
+        ..., min_length=1, max_length=64)
+    reference_invoice_id_with_payment: str = Field(
+        ..., min_length=1, max_length=64)
+
+
 # ─────────────────────────────────────────────────────────────────────
 def make_qoyod_router(db, current_user) -> APIRouter:
     router = APIRouter(
@@ -2705,14 +2725,10 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             max_receipts=max_receipts, max_invoices=max_invoices,
         )
 
-    class _DismissPatch(BaseModel):
-        model_config = ConfigDict(extra="forbid")
-        note: Optional[str] = Field(default=None, max_length=500)
-
     @router.post("/admin/unallocated-receipts/{receipt_id}/dismiss")
     async def admin_unallocated_receipt_dismiss(
         receipt_id: str,
-        body: _DismissPatch = _DismissPatch(),
+        body: DismissPatchBody = Body(default_factory=DismissPatchBody),
         user=Depends(current_user),
     ):
         """Iter-290h — Operator marks a Qoyod receipt as 'تمت المعالجة
@@ -2994,16 +3010,9 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                     **exc.extra}
 
     # ── Iter-290h.7 — Payment-method field probe (read-only) ────────
-    class _PaymentMethodProbeBody(BaseModel):
-        model_config = ConfigDict(extra="forbid")
-        empty_payment_method_invoice_id:   str = Field(
-            ..., min_length=1, max_length=64)
-        reference_invoice_id_with_payment: str = Field(
-            ..., min_length=1, max_length=64)
-
     @router.post("/admin/payment-method-field-probe")
     async def admin_payment_method_field_probe(
-        body: _PaymentMethodProbeBody, user=Depends(current_user),
+        body: PaymentMethodProbeBody, user=Depends(current_user),
     ):
         """Iter-290h.7 — Strictly READ-ONLY diagnostic. Calls
         `GET /invoices/{id}` on two قيود invoices (one with empty
