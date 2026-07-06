@@ -34,6 +34,7 @@ from typing import Optional
 
 from integrations.qoyod.pipeline import (
     process_pending_normalized,
+    process_pending_rules_applied,
     process_pending_customer_resolved,
 )
 from integrations.qoyod.dead_letter_requeue import (
@@ -86,13 +87,25 @@ async def _one_round(db, *, user_id: str, batch_limit: int) -> dict:
 
     n_results = await process_pending_normalized(
         db, user_id, limit=batch_limit)
+    # rev33.1 — Orphan-row recovery. Rows stuck at RULES_APPLIED
+    # (e.g. after a pod restart between the two CAS writes of
+    # `process_normalized_row`) are picked up here and driven the
+    # rest of the way to CUSTOMER_RESOLVED without re-running the
+    # SAS gate. Ordered AFTER `normalized` so a fresh row does not
+    # briefly show two entries in one tick.
+    ra_results = await process_pending_rules_applied(
+        db, user_id, limit=batch_limit)
     cr_results = await process_pending_customer_resolved(
         db, user_id, limit=batch_limit)
 
     def _summary(results):
         if not isinstance(results, dict):
             return {"processed": 0}
-        rows = results.get("rows") or []
+        # rev33.1 — Pipeline processors return `items`, not `rows`.
+        # Historical bug: `_summary` read `results.get("rows")` and
+        # always yielded 0 counts. Accept both keys so any older /
+        # newer caller sees the correct summary.
+        rows = results.get("items") or results.get("rows") or []
         outcomes: dict[str, int] = {}
         for r in rows:
             oc = r.get("outcome") or "unknown"
@@ -113,6 +126,7 @@ async def _one_round(db, *, user_id: str, batch_limit: int) -> dict:
             "failures": int(requeue_result.get("failures") or 0),
         },
         "normalized":         _summary(n_results),
+        "rules_applied":      _summary(ra_results),
         "customer_resolved":  _summary(cr_results),
         "at":                 _now().isoformat(),
     }
