@@ -3154,6 +3154,50 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             })
         return {"ok": True, "budget": budget, "orders": orders}
 
+    # ── Iter-2026-02.rev36 — Stale-Worker (Zombie) Detector ─────────
+    # READ-ONLY. Incident 2026-07-06: invoice 195/payment 166 written
+    # by a process running pre-rev24 code during the open canary
+    # window. This sweep surfaces any recent worker-driven row
+    # advancement missing the mandatory markers (worker sha /
+    # persisted SAS gate) — proof an old build is still polling.
+    @router.get("/admin/stale-worker-detector")
+    async def admin_stale_worker_detector(
+        hours: int = Query(24, ge=1, le=336),
+        limit: int = Query(2000, ge=1, le=5000),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.stale_worker_detector import (
+            scan_for_stale_workers,
+        )
+        tenant = _tenant_id(user)
+        return await scan_for_stale_workers(
+            db, user_id=tenant, hours=hours, limit=limit)
+
+    # ── Iter-2026-02.rev36 — Live-send audit viewer ──────────────────
+    # READ-ONLY window into qoyod_live_send_audit (rev35): every REAL
+    # write done by the CURRENT build is recorded there with full
+    # request/response. A real قيود write with NO row here = it was
+    # made by code older than rev35 (zombie corroboration).
+    @router.get("/admin/live-send-audit")
+    async def admin_live_send_audit(
+        limit: int = Query(50, ge=1, le=500),
+        trace_id: Optional[str] = Query(None),
+        path_contains: Optional[str] = Query(None),
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        q: dict = {"user_id": tenant}
+        if trace_id:
+            q["trace_id"] = trace_id
+        if path_contains:
+            q["path"] = {"$regex": path_contains, "$options": "i"}
+        rows = [r async for r in db.qoyod_live_send_audit.find(
+            q, {"_id": 0}).sort("at", -1).limit(limit)]
+        total = await db.qoyod_live_send_audit.count_documents(
+            {"user_id": tenant})
+        return {"ok": True, "count": len(rows),
+                "total_for_tenant": total, "rows": rows}
+
     # ── Iter-2026-02.rev18 — Force-reprocess a DRY-run row ──────────
     # Dedicated recovery endpoint for rows stuck at INVOICE_CREATED
     # with DRY:invoice:* sentinels. Refuses when a REAL قيود
